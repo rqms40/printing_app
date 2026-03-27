@@ -120,7 +120,7 @@ class PillTabBar extends StatelessWidget {
                                   '${tab.count}',
                                   style: AppTypography.caption.copyWith(
                                     color: isSelected
-                                        ? colors.accent
+                                        ? colors.onBackground
                                         : colors.onSurfaceDim,
                                     fontWeight: FontWeight.w600,
                                     fontSize: 11,

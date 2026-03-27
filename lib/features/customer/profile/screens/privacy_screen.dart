@@ -44,7 +44,7 @@ class PrivacyScreen extends StatelessWidget {
             _section(
               colors,
               'Overview',
-              'DarkastixPrint ("we", "our", or "us") is committed to protecting '
+              'GRID ("we", "our", or "us") is committed to protecting '
                   'your personal data in compliance with Republic Act No. 10173, '
                   'also known as the Data Privacy Act of 2012 of the Philippines, '
                   'and its Implementing Rules and Regulations. This Privacy Policy '
@@ -121,15 +121,15 @@ class PrivacyScreen extends StatelessWidget {
                   'Object: Object to the processing of your data for specific purposes.\n\n'
                   'Portability: Request your data in a structured, machine-readable format.\n\n'
                   'To exercise these rights, contact our Data Protection Officer at '
-                  'privacy@darkastixprint.com.',
+                  'privacy@gridprint.ph.',
             ),
             _section(
               colors,
               '7. Contact Information',
               'For privacy-related inquiries or concerns, please contact:\n\n'
                   'Data Protection Officer\n'
-                  'DarkastixPrint\n'
-                  'Email: privacy@darkastixprint.com\n'
+                  'GRID\n'
+                  'Email: privacy@gridprint.ph\n'
                   'Phone: +63 917 123 4567\n\n'
                   'You may also file a complaint with the National Privacy Commission '
                   'of the Philippines at https://www.privacy.gov.ph.',

@@ -14,7 +14,7 @@ class App extends ConsumerWidget {
     final themeMode = ref.watch(themeProvider);
 
     return MaterialApp.router(
-      title: 'DarkastixPrint',
+      title: 'GRID',
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: themeMode,

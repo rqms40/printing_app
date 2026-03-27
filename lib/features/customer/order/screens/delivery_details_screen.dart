@@ -109,7 +109,7 @@ class _DeliveryDetailsScreenState
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'DarkastixPrint Shop',
+                                  'GRID Print Shop',
                                   style: AppTypography.bodyBold
                                       .copyWith(color: colors.onBackground),
                                 ),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Animation duration & curve tokens for DarkastixPrint.
+/// Animation duration & curve tokens for GRID.
 class AppMotion {
   const AppMotion._();
 

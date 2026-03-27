@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Typography scale for DarkastixPrint.
+/// Typography scale for GRID.
 ///
 /// [display] uses Instrument Serif for brand/editorial moments only.
 /// All other headings and UI text use Satoshi (geometric sans-serif)

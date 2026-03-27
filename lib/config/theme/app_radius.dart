@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Border radius tokens for DarkastixPrint.
+/// Border radius tokens for GRID.
 class AppRadius {
   const AppRadius._();
 

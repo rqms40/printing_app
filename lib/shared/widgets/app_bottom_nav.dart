@@ -93,7 +93,7 @@ class AppBottomNav extends StatelessWidget {
                             final iconData =
                                 isActive ? item.activeIcon : item.icon;
                             final color = isActive
-                                ? colors.accent
+                                ? colors.onBackground
                                 : colors.onSurfaceDim;
                             if (iconData is IconData) {
                               return Icon(iconData, size: 22, color: color);
@@ -108,7 +108,7 @@ class AppBottomNav extends StatelessWidget {
                           item.label,
                           style: AppTypography.caption.copyWith(
                             color: isActive
-                                ? colors.accent
+                                ? colors.onBackground
                                 : colors.onSurfaceDim,
                             fontWeight:
                                 isActive ? FontWeight.w600 : FontWeight.w400,

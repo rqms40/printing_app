@@ -1,4 +1,4 @@
-/// Application-wide constants for DarkastixPrint.
+/// Application-wide constants for GRID.
 class AppConstants {
   const AppConstants._();
 

@@ -173,6 +173,8 @@ class _RevenueCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textColor = isDark ? colors.onBackground : colors.accentOnColor;
+
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
@@ -186,15 +188,14 @@ class _RevenueCard extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: (isDark ? colors.onBackground : colors.background)
-                  .withValues(alpha: 0.15),
+              color: textColor.withValues(alpha: 0.15),
               borderRadius: AppRadius.borderMd,
             ),
             child: Center(
               child: HugeIcon(
                 icon: HugeIcons.strokeRoundedMoneyReceive01,
                 size: 22,
-                color: isDark ? colors.onBackground : colors.background,
+                color: textColor,
               ),
             ),
           ),
@@ -207,8 +208,7 @@ class _RevenueCard extends StatelessWidget {
                 Text(
                   'Monthly Revenue',
                   style: AppTypography.caption.copyWith(
-                    color: (isDark ? colors.onBackground : colors.background)
-                        .withValues(alpha: 0.7),
+                    color: textColor.withValues(alpha: 0.7),
                     fontSize: 12,
                   ),
                 ),
@@ -216,7 +216,7 @@ class _RevenueCard extends StatelessWidget {
                 Text(
                   value,
                   style: AppTypography.h1.copyWith(
-                    color: isDark ? colors.onBackground : colors.background,
+                    color: textColor,
                   ),
                 ),
               ],
@@ -226,8 +226,7 @@ class _RevenueCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: (isDark ? colors.onBackground : colors.background)
-                  .withValues(alpha: 0.15),
+              color: textColor.withValues(alpha: 0.15),
               borderRadius: AppRadius.borderFull,
             ),
             child: Row(
@@ -236,13 +235,13 @@ class _RevenueCard extends StatelessWidget {
                 HugeIcon(
                   icon: HugeIcons.strokeRoundedArrowUp01,
                   size: 14,
-                  color: isDark ? colors.onBackground : colors.background,
+                  color: textColor,
                 ),
                 const SizedBox(width: 2),
                 Text(
                   '12%',
                   style: AppTypography.caption.copyWith(
-                    color: isDark ? colors.onBackground : colors.background,
+                    color: textColor,
                     fontWeight: FontWeight.w600,
                     fontSize: 12,
                   ),

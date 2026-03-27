@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Elevation shadow tokens for DarkastixPrint (light theme only).
+/// Elevation shadow tokens for GRID (light theme only).
 ///
 /// Dark theme uses surface lightening instead of shadows.
 class AppShadows {

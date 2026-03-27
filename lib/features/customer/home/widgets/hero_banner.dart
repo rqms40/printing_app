@@ -4,7 +4,7 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_shadows.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
-import 'package:printing_app/shared/widgets/app_illustrations.dart';
+import 'package:printing_app/shared/widgets/grid_logo.dart';
 
 /// Editorial hero banner with Instrument Serif display text.
 class HeroBanner extends StatelessWidget {
@@ -42,9 +42,9 @@ class HeroBanner extends StatelessWidget {
             bottom: -AppSpacing.sm,
             child: Opacity(
               opacity: 0.07,
-              child: PrinterIllustration(
+              child: GridLogo(
                 size: 140,
-                color: colors.onBackground,
+                foregroundColor: colors.onBackground,
               ),
             ),
           ),

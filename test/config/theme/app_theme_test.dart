@@ -7,22 +7,22 @@ import 'package:printing_app/config/theme/app_typography.dart';
 
 void main() {
   group('AppTheme', () {
-    test('light theme scaffold background is #FAFAFA', () {
+    test('light theme scaffold background is #FEFEFE', () {
       final theme = AppTheme.light;
-      expect(theme.scaffoldBackgroundColor, const Color(0xFFFAFAFA));
+      expect(theme.scaffoldBackgroundColor, const Color(0xFFFEFEFE));
     });
 
-    test('dark theme scaffold background is #121212', () {
+    test('dark theme scaffold background is #000000', () {
       final theme = AppTheme.dark;
-      expect(theme.scaffoldBackgroundColor, const Color(0xFF121212));
+      expect(theme.scaffoldBackgroundColor, const Color(0xFF000000));
     });
 
-    test('light theme accent is #1A1A1A', () {
-      expect(AppColors.light.accent, const Color(0xFF1A1A1A));
+    test('light theme accent is #FFDE58', () {
+      expect(AppColors.light.accent, const Color(0xFFFFDE58));
     });
 
-    test('dark theme accent is #F5F5F5', () {
-      expect(AppColors.dark.accent, const Color(0xFFF5F5F5));
+    test('dark theme accent is #FFDE58', () {
+      expect(AppColors.dark.accent, const Color(0xFFFFDE58));
     });
   });
 

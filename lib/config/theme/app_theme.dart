@@ -31,13 +31,9 @@ class AppTheme {
     final colorScheme = ColorScheme(
       brightness: brightness,
       primary: colors.accent,
-      onPrimary: brightness == Brightness.light
-          ? colors.surface
-          : colors.background,
+      onPrimary: colors.accentOnColor,
       secondary: colors.accentSoft,
-      onSecondary: brightness == Brightness.light
-          ? colors.surface
-          : colors.background,
+      onSecondary: colors.accentOnColor,
       error: colors.error,
       onError: colors.surface,
       surface: colors.surface,
@@ -79,9 +75,7 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: colors.accent,
-          foregroundColor: brightness == Brightness.light
-              ? colors.surface
-              : colors.background,
+          foregroundColor: colors.accentOnColor,
           minimumSize: const Size(double.infinity, 48),
           shape: RoundedRectangleBorder(
             borderRadius: AppRadius.borderMd,

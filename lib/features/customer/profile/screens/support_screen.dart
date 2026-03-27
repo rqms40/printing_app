@@ -64,8 +64,8 @@ class SupportScreen extends StatelessWidget {
             _ContactCard(
               icon: HugeIcons.strokeRoundedMail01,
               title: 'Email',
-              subtitle: 'support@darkastixprint.com',
-              onTap: () => _launchUrl('mailto:support@darkastixprint.com'),
+              subtitle: 'support@gridprint.ph',
+              onTap: () => _launchUrl('mailto:support@gridprint.ph'),
             ).animate()
               .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
               .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
@@ -73,8 +73,8 @@ class SupportScreen extends StatelessWidget {
             _ContactCard(
               icon: HugeIcons.strokeRoundedMessage01,
               title: 'Facebook Messenger',
-              subtitle: '@DarkastixPrint',
-              onTap: () => _launchUrl('https://m.me/DarkastixPrint'),
+              subtitle: '@GRIDPrintPH',
+              onTap: () => _launchUrl('https://m.me/GRIDPrintPH'),
             ).animate()
               .fadeIn(duration: 400.ms, delay: 180.ms, curve: Curves.easeOut)
               .slideY(begin: 0.03, duration: 400.ms, delay: 180.ms, curve: Curves.easeOut),

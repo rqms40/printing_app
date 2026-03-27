@@ -1,4 +1,4 @@
-/// Spacing tokens used throughout DarkastixPrint.
+/// Spacing tokens used throughout GRID.
 class AppSpacing {
   const AppSpacing._();
 

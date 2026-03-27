@@ -368,7 +368,7 @@ class OrderDetailScreen extends ConsumerWidget {
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
-                    'Pickup at DarkastixPrint shop',
+                    'Pickup at GRID Print shop',
                     style: AppTypography.body.copyWith(color: colors.onSurface),
                   ),
                 ),

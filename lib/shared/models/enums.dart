@@ -1,4 +1,4 @@
-/// All domain enums for DarkastixPrint with displayName extensions.
+/// All domain enums for GRID with displayName extensions.
 
 enum UserRole { customer, driver, admin }
 

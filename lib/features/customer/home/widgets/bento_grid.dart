@@ -10,7 +10,7 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
-import 'package:printing_app/shared/widgets/app_illustrations.dart';
+import 'package:printing_app/shared/widgets/grid_logo.dart';
 
 /// Premium bento grid for the customer home screen.
 ///
@@ -139,15 +139,15 @@ class _HeroTile extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          // Background illustration
+          // Background logo
           Positioned(
             right: -8,
             bottom: -8,
             child: Opacity(
               opacity: isDark ? 0.08 : 0.12,
-              child: PrinterIllustration(
+              child: GridLogo(
                 size: 120,
-                color: isDark ? colors.onBackground : colors.background,
+                foregroundColor: isDark ? colors.onBackground : colors.background,
               ),
             ),
           ),

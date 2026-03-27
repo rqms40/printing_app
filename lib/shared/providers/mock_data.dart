@@ -52,8 +52,8 @@ class MockData {
   static final User adminUser = User(
     id: 'usr_003',
     uid: 'firebase_uid_admin',
-    email: 'admin@darkastixprint.com',
-    fullName: 'Admin DarkastixPrint',
+    email: 'admin@gridprint.ph',
+    fullName: 'Admin GRID',
     phoneNumber: '+639191234567',
     role: UserRole.admin,
     isProfileComplete: true,
@@ -282,7 +282,7 @@ class MockData {
       deliveryOption: 'delivery',
       deliveryAddressId: 'addr_002',
       assignedDriverId: 'usr_002',
-      trackingLink: 'https://track.darkastixprint.com/ORD-10005',
+      trackingLink: 'https://track.gridprint.ph/ORD-10005',
       createdAt: _now.subtract(const Duration(days: 3)),
       updatedAt: _now.subtract(const Duration(minutes: 30)),
     ),
@@ -710,7 +710,7 @@ class MockData {
     AppNotification(
       id: 'notif_008',
       userId: 'usr_001',
-      title: 'Welcome to DarkastixPrint!',
+      title: 'Welcome to GRID!',
       message: 'Start your first order and enjoy premium printing services delivered to your doorstep.',
       type: 'promo',
       isRead: true,

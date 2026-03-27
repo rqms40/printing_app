@@ -9,7 +9,7 @@ import 'package:printing_app/config/theme/app_typography.dart';
 /// Button variants for [AppButton].
 enum AppButtonVariant { primary, secondary, ghost }
 
-/// Reusable button following the DarkastixPrint greyscale design system.
+/// Reusable button following the GRID design system.
 ///
 /// Three variants:
 /// - **primary** -- solid accent background, contrasting text.
@@ -129,10 +129,10 @@ class _AppButtonState extends State<AppButton> {
   Color _foregroundColor(AppColorSet colors) {
     switch (widget.variant) {
       case AppButtonVariant.primary:
-        return colors.background;
+        return colors.accentOnColor;
       case AppButtonVariant.secondary:
       case AppButtonVariant.ghost:
-        return colors.accent;
+        return colors.onBackground;
     }
   }
 
