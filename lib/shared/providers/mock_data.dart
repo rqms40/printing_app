@@ -499,20 +499,43 @@ class MockData {
   // ─── Location Updates (Manila GPS stream) ──────────────────────────
 
   static List<LocationUpdate> get locationUpdates {
-    // Simulates a driver moving from Makati to QC area
-    const baseLatitude = 14.5547;
-    const baseLongitude = 121.0244;
-    final updates = <LocationUpdate>[];
+    // Realistic route along actual Manila roads:
+    // GRID Print Shop (Makati, Ayala Ave) → QC (Katipunan Ave)
+    // Following: Ayala Ave → EDSA northbound → Ortigas → EDSA → Katipunan
+    const routeCoords = [
+      (14.5510, 121.0230), // Ayala Ave, Makati (start/shop)
+      (14.5535, 121.0280), // Ayala Ave near Greenbelt
+      (14.5570, 121.0320), // Ayala Ave → EDSA junction
+      (14.5620, 121.0340), // EDSA northbound, Guadalupe
+      (14.5680, 121.0360), // EDSA, Boni
+      (14.5730, 121.0380), // EDSA, Pioneer
+      (14.5790, 121.0390), // EDSA, Shaw Blvd junction
+      (14.5850, 121.0388), // EDSA, near Shangri-La
+      (14.5900, 121.0380), // EDSA, Ortigas Ave junction
+      (14.5960, 121.0375), // EDSA, Robinson Galleria
+      (14.6020, 121.0370), // EDSA, Santolan
+      (14.6080, 121.0380), // EDSA, Camp Crame
+      (14.6130, 121.0395), // EDSA, Aurora Blvd junction
+      (14.6180, 121.0400), // EDSA, GMA Kamuning
+      (14.6230, 121.0405), // EDSA, Timog junction
+      (14.6280, 121.0420), // EDSA, near Trinoma
+      (14.6310, 121.0440), // EDSA → turning east
+      (14.6340, 121.0480), // Approach to Katipunan
+      (14.6370, 121.0510), // Katipunan Ave, near Ateneo
+      (14.6400, 121.0530), // Katipunan Ave, Loyola Heights (destination)
+    ];
 
-    for (var i = 0; i < 20; i++) {
+    final updates = <LocationUpdate>[];
+    for (var i = 0; i < routeCoords.length; i++) {
+      final (lat, lng) = routeCoords[i];
       updates.add(LocationUpdate(
         id: 'loc_${i.toString().padLeft(3, '0')}',
         deliveryAssignmentId: 'da_001',
-        latitude: baseLatitude + (i * 0.004), // Moving north
-        longitude: baseLongitude + (i * 0.0005), // Slight east drift
-        speed: 25.0 + (i % 5) * 3.0,
-        heading: 10.0 + (i * 2.0),
-        timestamp: _now.subtract(Duration(minutes: (20 - i) * 2)),
+        latitude: lat,
+        longitude: lng,
+        speed: 25.0 + (i % 5) * 5.0,
+        heading: 10.0 + (i * 8.0),
+        timestamp: _now.subtract(Duration(minutes: (routeCoords.length - i) * 2)),
       ));
     }
 

@@ -136,7 +136,7 @@ class _DeliveryMapState extends State<DeliveryMap>
                     children: [
                       AnimatedBuilder(
                         animation: _pulseController,
-                        builder: (context, child) {
+                        builder: (context, _) {
                           return Opacity(
                             opacity: 0.4 + (_pulseController.value * 0.6),
                             child: Container(
