@@ -102,9 +102,7 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
               ),
             )
                 .animate()
-                .fadeIn(duration: 350.ms, curve: Curves.easeOut)
-                .slideY(
-                    begin: 0.02, duration: 350.ms, curve: Curves.easeOut),
+                .fadeIn(duration: 350.ms, curve: Curves.easeOut),
 
             // Pill tab selector
             Padding(
@@ -125,11 +123,6 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
             )
                 .animate()
                 .fadeIn(
-                    duration: 350.ms,
-                    delay: 60.ms,
-                    curve: Curves.easeOut)
-                .slideY(
-                    begin: 0.02,
                     duration: 350.ms,
                     delay: 60.ms,
                     curve: Curves.easeOut),
@@ -157,11 +150,6 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
             )
                 .animate()
                 .fadeIn(
-                    duration: 350.ms,
-                    delay: 120.ms,
-                    curve: Curves.easeOut)
-                .slideY(
-                    begin: 0.02,
                     duration: 350.ms,
                     delay: 120.ms,
                     curve: Curves.easeOut),

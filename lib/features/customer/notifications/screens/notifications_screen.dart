@@ -146,9 +146,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
               ),
             )
                 .animate()
-                .fadeIn(duration: 350.ms, curve: Curves.easeOut)
-                .slideY(
-                    begin: 0.02, duration: 350.ms, curve: Curves.easeOut),
+                .fadeIn(duration: 350.ms, curve: Curves.easeOut),
 
             const SizedBox(height: AppSpacing.sm),
 
