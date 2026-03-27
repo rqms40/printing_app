@@ -9,6 +9,6 @@ void main() {
     await tester.pumpAndSettle();
 
     // The login screen should be visible (unauthenticated state)
-    expect(find.textContaining('Log'), findsWidgets);
+    expect(find.textContaining('Welcome'), findsWidgets);
   });
 }
