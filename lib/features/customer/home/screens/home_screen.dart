@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -67,7 +67,7 @@ class HomeScreen extends ConsumerWidget {
               ServiceCard(
                 title: 'Paper Printing',
                 description: 'Documents, posters, banners & more',
-                icon: Iconsax.document_text,
+                icon: HugeIcons.strokeRoundedFile02,
                 onTap: () {
                   // TODO: Navigate to paper printing
                 },
@@ -78,7 +78,7 @@ class HomeScreen extends ConsumerWidget {
               ServiceCard(
                 title: '3D Printing',
                 description: 'Custom models, prototypes & figurines',
-                icon: Iconsax.box_1,
+                icon: HugeIcons.strokeRoundedPackageDelivered,
                 onTap: () {
                   // TODO: Navigate to 3D printing
                 },

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -81,17 +81,17 @@ class QueueOrderCard extends ConsumerWidget {
   IconData _categoryIcon() {
     switch (order.category.toLowerCase()) {
       case 'poster':
-        return Iconsax.image;
+        return HugeIcons.strokeRoundedImage01;
       case 'document':
-        return Iconsax.document_text;
+        return HugeIcons.strokeRoundedFile02;
       case 'report':
-        return Iconsax.clipboard_text;
+        return HugeIcons.strokeRoundedClipboard;
       case 'banner':
-        return Iconsax.flag;
+        return HugeIcons.strokeRoundedFlag01;
       case '3d print':
-        return Iconsax.box_1;
+        return HugeIcons.strokeRoundedPackageDelivered;
       default:
-        return Iconsax.document;
+        return HugeIcons.strokeRoundedFile01;
     }
   }
 
@@ -160,7 +160,7 @@ class QueueOrderCard extends ConsumerWidget {
               if (order.fileUrl != null)
                 IconButton(
                   icon: Icon(
-                    Iconsax.document_download,
+                    HugeIcons.strokeRoundedFileDownload,
                     size: 20,
                     color: colors.onSurfaceDim,
                   ),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -98,7 +98,7 @@ class FileUploadCard extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Iconsax.document_upload, size: 48, color: colors.onSurfaceDim),
+        Icon(HugeIcons.strokeRoundedFileUpload, size: 48, color: colors.onSurfaceDim),
         const SizedBox(height: AppSpacing.md),
         Text(
           'Tap to select file',
@@ -116,7 +116,7 @@ class FileUploadCard extends StatelessWidget {
   Widget _buildFileInfo(AppColorSet colors) {
     return Row(
       children: [
-        Icon(Iconsax.document_text_1, size: 40, color: colors.accent),
+        Icon(HugeIcons.strokeRoundedFileValidation, size: 40, color: colors.accent),
         const SizedBox(width: AppSpacing.md),
         Expanded(
           child: Column(

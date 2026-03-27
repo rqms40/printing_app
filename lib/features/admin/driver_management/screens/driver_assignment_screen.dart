@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -57,7 +57,7 @@ class _DriverAssignmentScreenState
             child: Row(
               children: [
                 Icon(
-                  Iconsax.filter,
+                  HugeIcons.strokeRoundedFilterHorizontal,
                   size: 18,
                   color: colors.onSurfaceDim,
                 ),
@@ -86,7 +86,7 @@ class _DriverAssignmentScreenState
                     body: _onlineOnly
                         ? 'No drivers are currently online.'
                         : 'No drivers registered yet.',
-                    icon: Iconsax.truck_fast,
+                    icon: HugeIcons.strokeRoundedDeliveryTruck02,
                   )
                 : ListView.separated(
                     padding: const EdgeInsets.all(AppSpacing.xl),

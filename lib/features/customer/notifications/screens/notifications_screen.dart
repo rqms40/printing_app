@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -46,7 +46,7 @@ class NotificationsScreen extends ConsumerWidget {
               heading: 'No notifications yet',
               body:
                   'You will receive notifications about your orders and deliveries here.',
-              icon: Iconsax.notification,
+              icon: HugeIcons.strokeRoundedNotification02,
             )
           : ListView.separated(
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
@@ -73,21 +73,21 @@ class _NotificationTile extends ConsumerWidget {
   IconData _iconForType(String type) {
     switch (type) {
       case 'order_update':
-        return Iconsax.document_text;
+        return HugeIcons.strokeRoundedFile02;
       case 'delivery_update':
-        return Iconsax.truck_fast;
+        return HugeIcons.strokeRoundedDeliveryTruck02;
       case 'delivery_assignment':
-        return Iconsax.truck;
+        return HugeIcons.strokeRoundedTruck;
       case 'payment':
-        return Iconsax.wallet;
+        return HugeIcons.strokeRoundedWallet01;
       case 'promo':
-        return Iconsax.discount_shape;
+        return HugeIcons.strokeRoundedDiscount;
       case 'admin_alert':
-        return Iconsax.shield_tick;
+        return HugeIcons.strokeRoundedShield01;
       case 'system':
-        return Iconsax.info_circle;
+        return HugeIcons.strokeRoundedInformationCircle;
       default:
-        return Iconsax.notification;
+        return HugeIcons.strokeRoundedNotification02;
     }
   }
 

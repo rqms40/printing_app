@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -107,7 +107,7 @@ class _AdminOrderDetailScreenState
                   const SizedBox(height: AppSpacing.sm),
                   Row(
                     children: [
-                      Icon(Iconsax.clock,
+                      Icon(HugeIcons.strokeRoundedClock01,
                           size: 16, color: colors.onSurfaceDim),
                       const SizedBox(width: AppSpacing.xs),
                       Text(
@@ -127,7 +127,7 @@ class _AdminOrderDetailScreenState
           if (showAssignDriver) ...[
             AppButton(
               label: 'Assign Driver',
-              icon: Iconsax.truck_fast,
+              icon: HugeIcons.strokeRoundedDeliveryTruck02,
               isFullWidth: true,
               onTap: () {
                 AssignmentDialog.show(context, orderId: order.id);
@@ -154,7 +154,7 @@ class _AdminOrderDetailScreenState
             AppCard(
               child: Row(
                 children: [
-                  Icon(Iconsax.document, size: 20, color: colors.onSurfaceDim),
+                  Icon(HugeIcons.strokeRoundedFile01, size: 20, color: colors.onSurfaceDim),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(

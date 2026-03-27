@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -56,7 +56,7 @@ class CategoryScreen extends ConsumerWidget {
                   children: [
                     Expanded(
                       child: _CategoryCard(
-                        icon: Iconsax.document_text,
+                        icon: HugeIcons.strokeRoundedFile02,
                         title: 'Paper Printing',
                         description: 'Documents, posters, photos',
                         onTap: () => _selectCategory(context, ref, 'paper'),
@@ -65,7 +65,7 @@ class CategoryScreen extends ConsumerWidget {
                     const SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: _CategoryCard(
-                        icon: Iconsax.box_1,
+                        icon: HugeIcons.strokeRoundedPackageDelivered,
                         title: '3D Printing',
                         description: 'Models, prototypes, figures',
                         onTap: () => _selectCategory(context, ref, '3d'),

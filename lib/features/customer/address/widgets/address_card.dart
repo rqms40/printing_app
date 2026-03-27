@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -34,7 +34,7 @@ class AddressCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Iconsax.location, size: 18, color: colors.accent),
+              Icon(HugeIcons.strokeRoundedLocation01, size: 18, color: colors.accent),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Row(
@@ -70,7 +70,7 @@ class AddressCard extends StatelessWidget {
               ),
               if (onEdit != null)
                 IconButton(
-                  icon: Icon(Iconsax.edit, size: 18, color: colors.onSurfaceDim),
+                  icon: Icon(HugeIcons.strokeRoundedEdit02, size: 18, color: colors.onSurfaceDim),
                   onPressed: onEdit,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(
@@ -80,7 +80,7 @@ class AddressCard extends StatelessWidget {
                 ),
               if (onDelete != null)
                 IconButton(
-                  icon: Icon(Iconsax.trash, size: 18, color: colors.error),
+                  icon: Icon(HugeIcons.strokeRoundedDelete02, size: 18, color: colors.error),
                   onPressed: onDelete,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(

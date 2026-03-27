@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -45,7 +45,7 @@ class ActiveDeliveryScreen extends ConsumerWidget {
         body: const EmptyState(
           heading: 'No active delivery',
           body: 'Accept a delivery assignment to start tracking.',
-          icon: Iconsax.truck_fast,
+          icon: HugeIcons.strokeRoundedDeliveryTruck02,
         ),
       );
     }
@@ -96,7 +96,7 @@ class ActiveDeliveryScreen extends ConsumerWidget {
                 // Customer name
                 Row(
                   children: [
-                    Icon(Iconsax.user, size: 18, color: colors.onSurface),
+                    Icon(HugeIcons.strokeRoundedUser, size: 18, color: colors.onSurface),
                     const SizedBox(width: AppSpacing.sm),
                     Text(
                       customer.fullName ?? 'Customer',
@@ -110,7 +110,7 @@ class ActiveDeliveryScreen extends ConsumerWidget {
                 // Phone
                 Row(
                   children: [
-                    Icon(Iconsax.call, size: 18, color: colors.onSurface),
+                    Icon(HugeIcons.strokeRoundedCall, size: 18, color: colors.onSurface),
                     const SizedBox(width: AppSpacing.sm),
                     Text(
                       customer.phoneNumber ?? 'No phone',
@@ -126,7 +126,7 @@ class ActiveDeliveryScreen extends ConsumerWidget {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Iconsax.location,
+                      Icon(HugeIcons.strokeRoundedLocation01,
                           size: 18, color: colors.onSurface),
                       const SizedBox(width: AppSpacing.sm),
                       Expanded(
@@ -280,7 +280,7 @@ class _SwipeToConfirmState extends State<_SwipeToConfirm> {
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
-                      Iconsax.verify,
+                      HugeIcons.strokeRoundedCheckmarkBadge01,
                       color: colors.background,
                       size: 24,
                     ),

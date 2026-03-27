@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -50,21 +50,21 @@ class SupportScreen extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.md),
             _ContactCard(
-              icon: Iconsax.call,
+              icon: HugeIcons.strokeRoundedCall,
               title: 'Phone',
               subtitle: '+63 917 123 4567',
               onTap: () => _launchUrl('tel:+639171234567'),
             ),
             const SizedBox(height: AppSpacing.sm),
             _ContactCard(
-              icon: Iconsax.sms,
+              icon: HugeIcons.strokeRoundedMail01,
               title: 'Email',
               subtitle: 'support@darkastixprint.com',
               onTap: () => _launchUrl('mailto:support@darkastixprint.com'),
             ),
             const SizedBox(height: AppSpacing.sm),
             _ContactCard(
-              icon: Iconsax.message,
+              icon: HugeIcons.strokeRoundedMessage01,
               title: 'Facebook Messenger',
               subtitle: '@DarkastixPrint',
               onTap: () => _launchUrl('https://m.me/DarkastixPrint'),
@@ -177,7 +177,7 @@ class _ContactCard extends StatelessWidget {
             ),
           ),
           Icon(
-            Iconsax.arrow_right_3,
+            HugeIcons.strokeRoundedArrowRight01,
             size: 18,
             color: colors.onSurfaceDim,
           ),

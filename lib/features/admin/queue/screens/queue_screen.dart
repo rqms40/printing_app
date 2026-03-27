@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -78,7 +78,7 @@ class _QueueScreenState extends ConsumerState<QueueScreen>
               controller: _searchController,
               hintText: 'Search by order ID...',
               prefixIcon: Icon(
-                Iconsax.search_normal,
+                HugeIcons.strokeRoundedSearch01,
                 size: 20,
                 color: colors.onSurfaceDim,
               ),
@@ -115,7 +115,7 @@ class _QueueScreenState extends ConsumerState<QueueScreen>
                           child: EmptyState(
                             heading: 'No orders found',
                             body: _emptyMessage(queueState.activeTab),
-                            icon: Iconsax.clipboard_close,
+                            icon: HugeIcons.strokeRoundedTaskRemove01,
                           ),
                         ),
                       ],

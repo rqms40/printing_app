@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -74,7 +74,7 @@ class _DeliveryMapState extends State<DeliveryMap>
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
-                    Iconsax.truck_fast,
+                    HugeIcons.strokeRoundedDeliveryTruck02,
                     size: 18,
                     color: colors.background,
                   ),
@@ -99,7 +99,7 @@ class _DeliveryMapState extends State<DeliveryMap>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  Iconsax.location,
+                  HugeIcons.strokeRoundedLocation01,
                   size: 32,
                   color: colors.error,
                 ),
@@ -167,7 +167,7 @@ class _DeliveryMapState extends State<DeliveryMap>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  Iconsax.map,
+                  HugeIcons.strokeRoundedMapsLocation01,
                   size: 48,
                   color: colors.onSurfaceDim,
                 ),

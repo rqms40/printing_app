@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -108,7 +108,7 @@ class DeliveryCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Iconsax.location, size: 16, color: colors.onSurfaceDim),
+                Icon(HugeIcons.strokeRoundedLocation01, size: 16, color: colors.onSurfaceDim),
                 const SizedBox(width: AppSpacing.xs),
                 Expanded(
                   child: Text(
@@ -144,7 +144,7 @@ class DeliveryCard extends StatelessWidget {
                     label: 'Decline',
                     variant: AppButtonVariant.ghost,
                     onTap: onDecline,
-                    icon: Iconsax.close_circle,
+                    icon: HugeIcons.strokeRoundedCancelCircle,
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
@@ -153,7 +153,7 @@ class DeliveryCard extends StatelessWidget {
                     label: 'Accept',
                     variant: AppButtonVariant.primary,
                     onTap: onAccept,
-                    icon: Iconsax.tick_circle,
+                    icon: HugeIcons.strokeRoundedCheckmarkCircle02,
                   ),
                 ),
               ],
@@ -167,7 +167,7 @@ class DeliveryCard extends StatelessWidget {
             const SizedBox(height: AppSpacing.sm),
             Row(
               children: [
-                Icon(Iconsax.truck_fast, size: 16, color: colors.info),
+                Icon(HugeIcons.strokeRoundedDeliveryTruck02, size: 16, color: colors.info),
                 const SizedBox(width: AppSpacing.xs),
                 Text(
                   assignment.status.displayName,

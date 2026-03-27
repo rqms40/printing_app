@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -40,7 +41,7 @@ class OfflineBanner extends StatelessWidget {
           child: Row(
             children: [
               const Icon(
-                Icons.wifi_off_rounded,
+                HugeIcons.strokeRoundedWifiDisconnected01,
                 size: 18,
                 color: Colors.black87,
               ),
@@ -55,7 +56,7 @@ class OfflineBanner extends StatelessWidget {
                 GestureDetector(
                   onTap: onDismiss,
                   child: const Icon(
-                    Icons.close,
+                    HugeIcons.strokeRoundedCancel01,
                     size: 18,
                     color: Colors.black87,
                   ),

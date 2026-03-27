@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -83,7 +84,7 @@ class OrderDetailScreen extends ConsumerWidget {
               AppCard(
                 child: Row(
                   children: [
-                    Icon(Icons.schedule, size: 20, color: colors.info),
+                    Icon(HugeIcons.strokeRoundedClock01, size: 20, color: colors.info),
                     const SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: Text(
@@ -129,7 +130,7 @@ class OrderDetailScreen extends ConsumerWidget {
                   // TODO: navigate to tracking screen
                 },
                 isFullWidth: true,
-                icon: Icons.location_on_outlined,
+                icon: HugeIcons.strokeRoundedLocation01,
               ),
             if (isCancellable)
               AppButton(
@@ -225,7 +226,7 @@ class OrderDetailScreen extends ConsumerWidget {
           const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
-              Icon(Icons.insert_drive_file_outlined,
+              Icon(HugeIcons.strokeRoundedFile01,
                   size: 20, color: colors.onSurfaceDim),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
@@ -340,7 +341,7 @@ class OrderDetailScreen extends ConsumerWidget {
           if (isPickup)
             Row(
               children: [
-                Icon(Icons.store_outlined, size: 20, color: colors.onSurfaceDim),
+                Icon(HugeIcons.strokeRoundedStore01, size: 20, color: colors.onSurfaceDim),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
@@ -354,7 +355,7 @@ class OrderDetailScreen extends ConsumerWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.location_on_outlined,
+                Icon(HugeIcons.strokeRoundedLocation01,
                     size: 20, color: colors.onSurfaceDim),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(

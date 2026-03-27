@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -167,7 +167,7 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
                             ),
                           ),
                           Icon(
-                            Iconsax.calendar,
+                            HugeIcons.strokeRoundedCalendar03,
                             size: 20,
                             color: colors.onSurfaceDim,
                           ),

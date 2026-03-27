@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -36,7 +36,7 @@ class AddressListScreen extends ConsumerWidget {
           ? const EmptyState(
               heading: 'No saved addresses',
               body: 'Add your delivery addresses to make ordering easier.',
-              icon: Iconsax.location,
+              icon: HugeIcons.strokeRoundedLocation01,
             )
           : ListView.separated(
               padding: const EdgeInsets.all(AppSpacing.md),
@@ -57,7 +57,7 @@ class AddressListScreen extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(
-                      Iconsax.trash,
+                      HugeIcons.strokeRoundedDelete02,
                       color: Colors.white,
                     ),
                   ),
@@ -124,7 +124,7 @@ class AddressListScreen extends ConsumerWidget {
                   ),
                 );
               },
-              icon: const Icon(Iconsax.add),
+              icon: const Icon(HugeIcons.strokeRoundedAdd01),
               label: Text(
                 'Add Address',
                 style: AppTypography.button.copyWith(color: colors.background),

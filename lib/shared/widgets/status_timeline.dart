@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -134,7 +135,7 @@ class StatusTimeline extends StatelessWidget {
           color: colors.accent,
         ),
         child: Icon(
-          Icons.check,
+          HugeIcons.strokeRoundedTick01,
           size: 14,
           color: colors.background,
         ),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -52,7 +52,7 @@ class DeliveriesScreen extends ConsumerWidget {
                       heading: 'No active deliveries',
                       body:
                           'New delivery assignments will appear here when assigned by admin.',
-                      icon: Iconsax.truck_fast,
+                      icon: HugeIcons.strokeRoundedDeliveryTruck02,
                     ),
                   ),
                 ],

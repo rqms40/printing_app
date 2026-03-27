@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -46,18 +46,18 @@ class CheckpointAction extends StatelessWidget {
   IconData get _actionIcon {
     switch (currentStatus) {
       case DeliveryStatus.assigned:
-        return Iconsax.tick_circle;
+        return HugeIcons.strokeRoundedCheckmarkCircle02;
       case DeliveryStatus.accepted:
-        return Iconsax.box;
+        return HugeIcons.strokeRoundedPackage;
       case DeliveryStatus.pickedUp:
-        return Iconsax.truck_fast;
+        return HugeIcons.strokeRoundedDeliveryTruck02;
       case DeliveryStatus.onTheWay:
-        return Iconsax.location;
+        return HugeIcons.strokeRoundedLocation01;
       case DeliveryStatus.arrived:
-        return Iconsax.verify;
+        return HugeIcons.strokeRoundedCheckmarkBadge01;
       case DeliveryStatus.delivered:
       case DeliveryStatus.declined:
-        return Iconsax.tick_circle;
+        return HugeIcons.strokeRoundedCheckmarkCircle02;
     }
   }
 

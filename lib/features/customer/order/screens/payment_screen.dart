@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -93,7 +93,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                   _paymentCard(
                     method: PaymentMethod.cod,
                     icon: null,
-                    iconData: Iconsax.money,
+                    iconData: HugeIcons.strokeRoundedMoney03,
                     label: 'Cash on Delivery',
                     subtitle: 'Pay when you receive your order',
                     colors: colors,
@@ -203,7 +203,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             ),
           ),
           if (isSelected)
-            Icon(Iconsax.tick_circle, size: 24, color: colors.accent),
+            Icon(HugeIcons.strokeRoundedCheckmarkCircle02, size: 24, color: colors.accent),
         ],
       ),
     );
@@ -240,7 +240,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                     color: colors.success.withValues(alpha: 0.15),
                   ),
                   child: Icon(
-                    Iconsax.tick_circle,
+                    HugeIcons.strokeRoundedCheckmarkCircle02,
                     size: 56,
                     color: colors.success,
                   ),

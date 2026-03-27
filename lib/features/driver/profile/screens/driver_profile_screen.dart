@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -101,21 +101,21 @@ class DriverProfileScreen extends ConsumerWidget {
               children: [
                 _buildInfoRow(
                   context,
-                  Iconsax.user,
+                  HugeIcons.strokeRoundedUser,
                   'Name',
                   user.fullName ?? 'Not set',
                 ),
                 const Divider(height: AppSpacing.lg),
                 _buildInfoRow(
                   context,
-                  Iconsax.sms,
+                  HugeIcons.strokeRoundedMail01,
                   'Email',
                   user.email,
                 ),
                 const Divider(height: AppSpacing.lg),
                 _buildInfoRow(
                   context,
-                  Iconsax.call,
+                  HugeIcons.strokeRoundedCall,
                   'Phone',
                   user.phoneNumber ?? 'Not set',
                 ),
@@ -136,14 +136,14 @@ class DriverProfileScreen extends ConsumerWidget {
               children: [
                 _buildInfoRow(
                   context,
-                  Iconsax.car,
+                  HugeIcons.strokeRoundedCar01,
                   'Vehicle Type',
                   driver.vehicleType.displayName,
                 ),
                 const Divider(height: AppSpacing.lg),
                 _buildInfoRow(
                   context,
-                  Iconsax.note,
+                  HugeIcons.strokeRoundedNote,
                   'Plate Number',
                   driver.plateNumber ?? 'Not set',
                 ),
@@ -157,7 +157,7 @@ class DriverProfileScreen extends ConsumerWidget {
             label: 'Edit Vehicle Info',
             variant: AppButtonVariant.secondary,
             isFullWidth: true,
-            icon: Iconsax.edit,
+            icon: HugeIcons.strokeRoundedEdit02,
             onTap: () {
               // Not implemented
             },
@@ -169,7 +169,7 @@ class DriverProfileScreen extends ConsumerWidget {
             label: 'Sign Out',
             variant: AppButtonVariant.ghost,
             isFullWidth: true,
-            icon: Iconsax.logout,
+            icon: HugeIcons.strokeRoundedLogout01,
             onTap: () {
               showDialog(
                 context: context,

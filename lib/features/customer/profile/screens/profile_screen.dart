@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -82,7 +82,7 @@ class ProfileScreen extends ConsumerWidget {
                 child: Column(
                   children: [
                     _MenuItem(
-                      icon: Iconsax.user,
+                      icon: HugeIcons.strokeRoundedUser,
                       title: 'Account Details',
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
@@ -92,7 +92,7 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                     Divider(height: 1, color: colors.outlineVariant),
                     _MenuItem(
-                      icon: Iconsax.location,
+                      icon: HugeIcons.strokeRoundedLocation01,
                       title: 'Saved Addresses',
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
@@ -102,7 +102,7 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                     Divider(height: 1, color: colors.outlineVariant),
                     _MenuToggle(
-                      icon: Iconsax.moon,
+                      icon: HugeIcons.strokeRoundedMoon02,
                       title: 'Dark Mode',
                       value: isDark,
                       onChanged: (_) {
@@ -118,7 +118,7 @@ class ProfileScreen extends ConsumerWidget {
                 child: Column(
                   children: [
                     _MenuItem(
-                      icon: Iconsax.message_question,
+                      icon: HugeIcons.strokeRoundedMessageQuestion,
                       title: 'Support & Help',
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
@@ -128,7 +128,7 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                     Divider(height: 1, color: colors.outlineVariant),
                     _MenuItem(
-                      icon: Iconsax.document_text,
+                      icon: HugeIcons.strokeRoundedFile02,
                       title: 'Terms of Service',
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
@@ -138,7 +138,7 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                     Divider(height: 1, color: colors.outlineVariant),
                     _MenuItem(
-                      icon: Iconsax.shield_tick,
+                      icon: HugeIcons.strokeRoundedShield01,
                       title: 'Privacy Policy',
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
@@ -153,7 +153,7 @@ class ProfileScreen extends ConsumerWidget {
               AppCard(
                 padding: EdgeInsets.zero,
                 child: _MenuItem(
-                  icon: Iconsax.logout,
+                  icon: HugeIcons.strokeRoundedLogout01,
                   title: 'Sign Out',
                   isDestructive: true,
                   onTap: () {
@@ -209,7 +209,7 @@ class _MenuItem extends StatelessWidget {
         style: AppTypography.body.copyWith(color: textColor),
       ),
       trailing: Icon(
-        Iconsax.arrow_right_3,
+        HugeIcons.strokeRoundedArrowRight01,
         size: 18,
         color: colors.onSurfaceDim,
       ),

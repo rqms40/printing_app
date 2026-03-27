@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -97,7 +97,7 @@ class _DeliveryDetailsScreenState
                     AppCard(
                       child: Row(
                         children: [
-                          Icon(Iconsax.shop, size: 32, color: colors.accent),
+                          Icon(HugeIcons.strokeRoundedStore01, size: 32, color: colors.accent),
                           const SizedBox(width: AppSpacing.md),
                           Expanded(
                             child: Column(
@@ -144,10 +144,10 @@ class _DeliveryDetailsScreenState
                               children: [
                                 Icon(
                                   addr.label == 'Home'
-                                      ? Iconsax.home_2
+                                      ? HugeIcons.strokeRoundedHome01
                                       : addr.label == 'Office'
-                                          ? Iconsax.building
-                                          : Iconsax.location,
+                                          ? HugeIcons.strokeRoundedBuilding03
+                                          : HugeIcons.strokeRoundedLocation01,
                                   size: 24,
                                   color: colors.onSurface,
                                 ),
@@ -176,7 +176,7 @@ class _DeliveryDetailsScreenState
                                   ),
                                 ),
                                 if (_selectedAddress?.id == addr.id)
-                                  Icon(Iconsax.tick_circle,
+                                  Icon(HugeIcons.strokeRoundedCheckmarkCircle02,
                                       size: 24, color: colors.accent),
                               ],
                             ),
@@ -187,7 +187,7 @@ class _DeliveryDetailsScreenState
                       label: 'Add New Address',
                       variant: AppButtonVariant.secondary,
                       isFullWidth: true,
-                      icon: Iconsax.add,
+                      icon: HugeIcons.strokeRoundedAdd01,
                       onTap: () {
                         // Placeholder for add address flow
                       },

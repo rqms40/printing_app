@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -46,7 +46,7 @@ class AdminProfileScreen extends ConsumerWidget {
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
-                    Iconsax.user,
+                    HugeIcons.strokeRoundedUser,
                     size: 32,
                     color: colors.onSurfaceDim,
                   ),
@@ -77,7 +77,7 @@ class AdminProfileScreen extends ConsumerWidget {
           AppCard(
             child: Row(
               children: [
-                Icon(Iconsax.info_circle,
+                Icon(HugeIcons.strokeRoundedInformationCircle,
                     size: 20, color: colors.onSurfaceDim),
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
@@ -107,7 +107,7 @@ class AdminProfileScreen extends ConsumerWidget {
           AppButton(
             label: 'Sign Out',
             variant: AppButtonVariant.secondary,
-            icon: Iconsax.logout,
+            icon: HugeIcons.strokeRoundedLogout01,
             isFullWidth: true,
             onTap: () {
               ConfirmationDialog.show(

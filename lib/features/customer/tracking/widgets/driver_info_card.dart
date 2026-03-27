@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -104,7 +104,7 @@ class DriverInfoCard extends StatelessWidget {
           // Phone number
           Row(
             children: [
-              Icon(Iconsax.call, size: 16, color: colors.onSurfaceDim),
+              Icon(HugeIcons.strokeRoundedCall, size: 16, color: colors.onSurfaceDim),
               const SizedBox(width: AppSpacing.sm),
               Text(
                 phoneNumber,
@@ -118,7 +118,7 @@ class DriverInfoCard extends StatelessWidget {
           // Call driver button
           AppButton(
             label: 'Call Driver',
-            icon: Iconsax.call,
+            icon: HugeIcons.strokeRoundedCall,
             variant: AppButtonVariant.secondary,
             isFullWidth: true,
             onTap: _callDriver,

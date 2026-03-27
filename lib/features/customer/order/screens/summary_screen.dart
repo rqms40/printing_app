@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -100,7 +100,7 @@ class SummaryScreen extends ConsumerWidget {
                     AppCard(
                       child: Row(
                         children: [
-                          Icon(Iconsax.document_text_1,
+                          Icon(HugeIcons.strokeRoundedFileValidation,
                               size: 32, color: colors.accent),
                           const SizedBox(width: AppSpacing.md),
                           Expanded(

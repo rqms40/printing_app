@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -63,7 +63,7 @@ class DeliveryDetailScreen extends ConsumerWidget {
         ),
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Iconsax.arrow_left, color: colors.onBackground),
+          icon: Icon(HugeIcons.strokeRoundedArrowLeft01, color: colors.onBackground),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
@@ -125,7 +125,7 @@ class DeliveryDetailScreen extends ConsumerWidget {
                         children: [
                           Row(
                             children: [
-                              Icon(Iconsax.location,
+                              Icon(HugeIcons.strokeRoundedLocation01,
                                   size: 18, color: colors.onSurface),
                               const SizedBox(width: AppSpacing.sm),
                               Expanded(
@@ -180,7 +180,7 @@ class DeliveryDetailScreen extends ConsumerWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Iconsax.map,
+                        Icon(HugeIcons.strokeRoundedMapsLocation01,
                             size: 48, color: colors.onSurfaceDim),
                         const SizedBox(height: AppSpacing.sm),
                         Text(
@@ -198,7 +198,7 @@ class DeliveryDetailScreen extends ConsumerWidget {
                     label: 'Navigate',
                     variant: AppButtonVariant.secondary,
                     isFullWidth: true,
-                    icon: Iconsax.routing,
+                    icon: HugeIcons.strokeRoundedRoute01,
                     onTap: () {
                       // Opens external navigation app (not implemented)
                     },

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -25,33 +26,33 @@ class StatusPicker extends StatelessWidget {
   IconData _iconForStatus(OrderStatus status) {
     switch (status) {
       case OrderStatus.orderPlaced:
-        return Icons.receipt_long_outlined;
+        return HugeIcons.strokeRoundedInvoice01;
       case OrderStatus.fileVerified:
-        return Icons.check_circle_outline;
+        return HugeIcons.strokeRoundedCheckmarkCircle02;
       case OrderStatus.fileDeclined:
-        return Icons.cancel_outlined;
+        return HugeIcons.strokeRoundedCancelCircle;
       case OrderStatus.printingInProgress:
-        return Icons.print_outlined;
+        return HugeIcons.strokeRoundedPrinter;
       case OrderStatus.finishingMounting:
-        return Icons.construction_outlined;
+        return HugeIcons.strokeRoundedSettings01;
       case OrderStatus.qualityChecked:
-        return Icons.verified_outlined;
+        return HugeIcons.strokeRoundedCheckmarkBadge01;
       case OrderStatus.readyForDispatch:
-        return Icons.inventory_2_outlined;
+        return HugeIcons.strokeRoundedPackageDelivered;
       case OrderStatus.driverAssigned:
-        return Icons.person_pin_outlined;
+        return HugeIcons.strokeRoundedUserAccount;
       case OrderStatus.pickedUp:
-        return Icons.local_shipping_outlined;
+        return HugeIcons.strokeRoundedDeliveryTruck02;
       case OrderStatus.onTheWay:
-        return Icons.delivery_dining_outlined;
+        return HugeIcons.strokeRoundedDeliveryTruck01;
       case OrderStatus.arrivedAtDestination:
-        return Icons.location_on_outlined;
+        return HugeIcons.strokeRoundedLocation01;
       case OrderStatus.delivered:
-        return Icons.done_all;
+        return HugeIcons.strokeRoundedTickDouble01;
       case OrderStatus.completedPickup:
-        return Icons.storefront_outlined;
+        return HugeIcons.strokeRoundedStore02;
       case OrderStatus.cancelled:
-        return Icons.block_outlined;
+        return HugeIcons.strokeRoundedCancel02;
     }
   }
 
@@ -81,7 +82,7 @@ class StatusPicker extends StatelessWidget {
               style: AppTypography.caption.copyWith(color: colors.onSurface),
             ),
             const SizedBox(width: AppSpacing.xs),
-            Icon(Icons.arrow_drop_down, size: 16, color: colors.onSurfaceDim),
+            Icon(HugeIcons.strokeRoundedArrowDown01, size: 16, color: colors.onSurfaceDim),
           ],
         ),
       ),

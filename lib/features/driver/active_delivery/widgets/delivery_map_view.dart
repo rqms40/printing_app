@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -66,7 +66,7 @@ class DeliveryMapView extends ConsumerWidget {
           Positioned(
             top: 40,
             left: 60,
-            child: Icon(Iconsax.truck_fast, size: 28, color: colors.info),
+            child: Icon(HugeIcons.strokeRoundedDeliveryTruck02, size: 28, color: colors.info),
           ),
 
           // Destination icon marker (bottom-right area)
@@ -74,7 +74,7 @@ class DeliveryMapView extends ConsumerWidget {
             bottom: 40,
             right: 60,
             child:
-                Icon(Iconsax.location, size: 28, color: colors.error),
+                Icon(HugeIcons.strokeRoundedLocation01, size: 28, color: colors.error),
           ),
         ],
       ),

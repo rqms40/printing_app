@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -64,31 +65,31 @@ class StatusBadge extends StatelessWidget {
         return _BadgeScheme(
           background: colors.success.withValues(alpha: 0.12),
           foreground: colors.success,
-          icon: Icons.check_circle_outline,
+          icon: HugeIcons.strokeRoundedCheckmarkCircle02,
         );
       case StatusBadgeVariant.error:
         return _BadgeScheme(
           background: colors.error.withValues(alpha: 0.12),
           foreground: colors.error,
-          icon: Icons.cancel_outlined,
+          icon: HugeIcons.strokeRoundedCancelCircle,
         );
       case StatusBadgeVariant.warning:
         return _BadgeScheme(
           background: colors.warning.withValues(alpha: 0.12),
           foreground: colors.warning,
-          icon: Icons.warning_amber_rounded,
+          icon: HugeIcons.strokeRoundedAlert02,
         );
       case StatusBadgeVariant.info:
         return _BadgeScheme(
           background: colors.info.withValues(alpha: 0.12),
           foreground: colors.info,
-          icon: Icons.info_outline,
+          icon: HugeIcons.strokeRoundedInformationCircle,
         );
       case StatusBadgeVariant.neutral:
         return _BadgeScheme(
           background: colors.onSurfaceDim.withValues(alpha: 0.12),
           foreground: colors.onSurfaceDim,
-          icon: Icons.circle_outlined,
+          icon: HugeIcons.strokeRoundedCircle,
         );
     }
   }

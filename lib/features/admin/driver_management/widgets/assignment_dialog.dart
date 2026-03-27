@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
@@ -75,7 +76,7 @@ class AssignmentDialog extends ConsumerWidget {
                       AppTypography.h3.copyWith(color: colors.onBackground),
                 ),
                 IconButton(
-                  icon: Icon(Icons.close, color: colors.onSurfaceDim),
+                  icon: Icon(HugeIcons.strokeRoundedCancel01, color: colors.onSurfaceDim),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ],

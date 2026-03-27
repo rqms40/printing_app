@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -54,17 +55,17 @@ class OrderCard extends StatelessWidget {
   IconData _categoryIcon() {
     switch (order.category.toLowerCase()) {
       case 'poster':
-        return Icons.image_outlined;
+        return HugeIcons.strokeRoundedImage01;
       case 'document':
-        return Icons.description_outlined;
+        return HugeIcons.strokeRoundedFile02;
       case 'report':
-        return Icons.summarize_outlined;
+        return HugeIcons.strokeRoundedNote;
       case 'banner':
-        return Icons.panorama_outlined;
+        return HugeIcons.strokeRoundedImage01;
       case '3d print':
-        return Icons.view_in_ar_outlined;
+        return HugeIcons.strokeRoundedPackage;
       default:
-        return Icons.print_outlined;
+        return HugeIcons.strokeRoundedPrinter;
     }
   }
 

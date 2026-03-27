@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -47,13 +48,13 @@ class OrdersScreen extends ConsumerWidget {
               ordersSelector: (notifier) => notifier.activeOrders,
               emptyHeading: 'No active orders',
               emptyBody: 'Your in-progress orders will appear here.',
-              emptyIcon: Icons.receipt_long_outlined,
+              emptyIcon: HugeIcons.strokeRoundedInvoice01,
             ),
             _OrdersTab(
               ordersSelector: (notifier) => notifier.completedOrders,
               emptyHeading: 'No completed orders',
               emptyBody: 'Your finished orders will appear here.',
-              emptyIcon: Icons.check_circle_outline,
+              emptyIcon: HugeIcons.strokeRoundedCheckmarkCircle02,
             ),
           ],
         ),
