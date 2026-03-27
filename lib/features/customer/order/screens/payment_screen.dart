@@ -167,18 +167,28 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       accentColor: isSelected ? colors.accent : null,
       child: Row(
         children: [
+          // Premium letter/icon container with subtle border ring
           Container(
-            width: 48,
-            height: 48,
+            width: 52,
+            height: 52,
             decoration: BoxDecoration(
               color: colors.surfaceVariant,
               borderRadius: AppRadius.borderMd,
+              border: Border.all(
+                color: isSelected
+                    ? colors.accent.withValues(alpha: 0.3)
+                    : colors.outline.withValues(alpha: 0.5),
+                width: 1.5,
+              ),
             ),
             child: Center(
               child: icon != null
                   ? Text(
                       icon,
-                      style: AppTypography.h2.copyWith(color: colors.accent),
+                      style: AppTypography.h1.copyWith(
+                        color: colors.accent,
+                        fontSize: 22,
+                      ),
                     )
                   : Icon(iconData, size: 24, color: colors.accent),
             ),

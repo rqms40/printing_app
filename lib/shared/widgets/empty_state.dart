@@ -3,14 +3,21 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
+import 'package:printing_app/shared/widgets/app_illustrations.dart';
+import 'package:printing_app/shared/widgets/icon_container.dart';
 
 /// Centered empty state placeholder with optional icon, heading, body, and CTA.
+///
+/// When [illustration] is provided it renders that widget instead of the icon.
+/// When neither [illustration] nor [icon] is provided, the default
+/// [EmptyBoxIllustration] is shown.
 class EmptyState extends StatelessWidget {
   const EmptyState({
     super.key,
     required this.heading,
     this.body,
     this.icon,
+    this.illustration,
     this.ctaLabel,
     this.onCtaTap,
   });
@@ -18,6 +25,11 @@ class EmptyState extends StatelessWidget {
   final String heading;
   final String? body;
   final IconData? icon;
+
+  /// Optional custom illustration widget shown above the heading.
+  /// Takes priority over [icon].
+  final Widget? illustration;
+
   final String? ctaLabel;
   final VoidCallback? onCtaTap;
 
@@ -31,16 +43,31 @@ class EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = _colors(context);
 
+    // Determine the visual element to display
+    final Widget visual;
+    if (illustration != null) {
+      visual = illustration!;
+    } else if (icon != null) {
+      visual = IconContainer(
+        icon: icon!,
+        size: IconContainerSize.xl,
+        iconColor: colors.onSurfaceDim,
+      );
+    } else {
+      visual = EmptyBoxIllustration(
+        size: 96,
+        color: colors.onSurfaceDim,
+      );
+    }
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (icon != null) ...[
-              Icon(icon, size: 64, color: colors.onSurfaceDim),
-              const SizedBox(height: AppSpacing.lg),
-            ],
+            visual,
+            const SizedBox(height: AppSpacing.lg),
             Text(
               heading,
               style: AppTypography.h2.copyWith(color: colors.onBackground),

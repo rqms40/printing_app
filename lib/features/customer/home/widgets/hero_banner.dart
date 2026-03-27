@@ -4,6 +4,7 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_shadows.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/shared/widgets/app_illustrations.dart';
 
 /// Editorial hero banner with Instrument Serif display text.
 class HeroBanner extends StatelessWidget {
@@ -33,21 +34,38 @@ class HeroBanner extends StatelessWidget {
         borderRadius: AppRadius.borderXl,
         boxShadow: isDark ? AppShadows.none : AppShadows.subtle,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Text(
-            'Professional printing,\ndelivered.',
-            style: AppTypography.display.copyWith(
-              color: colors.onBackground,
+          // Background decorative illustration
+          Positioned(
+            right: -AppSpacing.md,
+            bottom: -AppSpacing.sm,
+            child: Opacity(
+              opacity: 0.07,
+              child: PrinterIllustration(
+                size: 140,
+                color: colors.onBackground,
+              ),
             ),
           ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            'Paper and 3D printing services at your fingertips',
-            style: AppTypography.body.copyWith(
-              color: colors.onSurfaceDim,
-            ),
+          // Foreground text content
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Professional printing,\ndelivered.',
+                style: AppTypography.display.copyWith(
+                  color: colors.onBackground,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Paper and 3D printing services at your fingertips',
+                style: AppTypography.body.copyWith(
+                  color: colors.onSurfaceDim,
+                ),
+              ),
+            ],
           ),
         ],
       ),

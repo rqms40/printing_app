@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
-import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_shadows.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
+import 'package:printing_app/shared/widgets/icon_container.dart';
 
 /// A service category card with icon, title, and description.
 class ServiceCard extends StatelessWidget {
@@ -34,40 +34,51 @@ class ServiceCard extends StatelessWidget {
     return AppCard(
       shadow: AppShadows.low,
       onTap: onTap,
-      child: Row(
+      child: Column(
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: colors.surfaceVariant,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              icon,
-              size: 24,
-              color: colors.onBackground,
-            ),
+          Row(
+            children: [
+              IconContainer(
+                icon: icon,
+                size: IconContainerSize.lg,
+                shape: IconContainerShape.circle,
+                iconColor: colors.onBackground,
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: AppTypography.h3.copyWith(
+                        color: colors.onBackground,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      description,
+                      style: AppTypography.caption.copyWith(
+                        color: colors.onSurfaceDim,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: AppTypography.h3.copyWith(
-                    color: colors.onBackground,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  description,
-                  style: AppTypography.caption.copyWith(
-                    color: colors.onSurfaceDim,
-                  ),
-                ),
-              ],
+          const SizedBox(height: AppSpacing.md),
+          // Thin decorative accent line
+          Container(
+            height: 1,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  colors.accent.withValues(alpha: 0.0),
+                  colors.accent.withValues(alpha: 0.12),
+                  colors.accent.withValues(alpha: 0.0),
+                ],
+              ),
             ),
           ),
         ],

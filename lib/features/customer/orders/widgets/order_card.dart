@@ -6,6 +6,7 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
+import 'package:printing_app/shared/widgets/icon_container.dart';
 import 'package:printing_app/shared/widgets/status_badge.dart';
 import 'package:printing_app/utils/formatters.dart';
 
@@ -100,12 +101,13 @@ class OrderCard extends StatelessWidget {
           // Category + quantity x price
           Row(
             children: [
-              Icon(
-                _categoryIcon(),
-                size: 16,
-                color: colors.onSurfaceDim,
+              IconContainer(
+                icon: _categoryIcon(),
+                size: IconContainerSize.sm,
+                shape: IconContainerShape.circle,
+                iconColor: colors.onSurfaceDim,
               ),
-              const SizedBox(width: AppSpacing.xs),
+              const SizedBox(width: AppSpacing.sm),
               Text(
                 order.category,
                 style: AppTypography.caption.copyWith(

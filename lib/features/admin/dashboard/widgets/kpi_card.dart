@@ -3,6 +3,7 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
+import 'package:printing_app/shared/widgets/icon_container.dart';
 
 /// Compact KPI card for the admin dashboard grid.
 class KpiCard extends StatelessWidget {
@@ -33,14 +34,12 @@ class KpiCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: colors.surfaceVariant,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: 16, color: colors.onSurface),
+          IconContainer(
+            icon: icon,
+            size: IconContainerSize.md,
+            shape: IconContainerShape.circle,
+            backgroundColor: colors.accent.withValues(alpha: 0.08),
+            iconColor: colors.onSurface,
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(

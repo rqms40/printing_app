@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -8,6 +7,7 @@ import 'package:printing_app/features/customer/order/providers/order_provider.da
 import 'package:printing_app/features/customer/order/screens/paper_specs_screen.dart';
 import 'package:printing_app/features/customer/order/screens/three_d_specs_screen.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
+import 'package:printing_app/shared/widgets/app_illustrations.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
 
 /// Step 1/6 -- Category selection (Paper Printing or 3D Printing).
@@ -56,7 +56,10 @@ class CategoryScreen extends ConsumerWidget {
                   children: [
                     Expanded(
                       child: _CategoryCard(
-                        icon: HugeIcons.strokeRoundedFile02,
+                        illustration: PrinterIllustration(
+                          size: 80,
+                          color: colors.accent,
+                        ),
                         title: 'Paper Printing',
                         description: 'Documents, posters, photos',
                         onTap: () => _selectCategory(context, ref, 'paper'),
@@ -65,7 +68,10 @@ class CategoryScreen extends ConsumerWidget {
                     const SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: _CategoryCard(
-                        icon: HugeIcons.strokeRoundedPackageDelivered,
+                        illustration: ThreeDCubeIllustration(
+                          size: 80,
+                          color: colors.accent,
+                        ),
                         title: '3D Printing',
                         description: 'Models, prototypes, figures',
                         onTap: () => _selectCategory(context, ref, '3d'),
@@ -98,13 +104,13 @@ class CategoryScreen extends ConsumerWidget {
 
 class _CategoryCard extends StatelessWidget {
   const _CategoryCard({
-    required this.icon,
+    required this.illustration,
     required this.title,
     required this.description,
     required this.onTap,
   });
 
-  final IconData icon;
+  final Widget illustration;
   final String title;
   final String description;
   final VoidCallback onTap;
@@ -125,7 +131,7 @@ class _CategoryCard extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 48, color: colors.accent),
+          illustration,
           const SizedBox(height: AppSpacing.md),
           Text(
             title,
@@ -137,6 +143,16 @@ class _CategoryCard extends StatelessWidget {
             description,
             style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
             textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          // Decorative accent line
+          Container(
+            width: 32,
+            height: 1.5,
+            decoration: BoxDecoration(
+              color: colors.accent.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(1),
+            ),
           ),
         ],
       ),

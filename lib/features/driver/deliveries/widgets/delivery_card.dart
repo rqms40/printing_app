@@ -9,6 +9,7 @@ import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
+import 'package:printing_app/shared/widgets/icon_container.dart';
 import 'package:printing_app/shared/widgets/status_badge.dart';
 
 /// Card displaying a delivery assignment with order info, address, and action buttons.
@@ -108,8 +109,13 @@ class DeliveryCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(HugeIcons.strokeRoundedLocation01, size: 16, color: colors.onSurfaceDim),
-                const SizedBox(width: AppSpacing.xs),
+                IconContainer(
+                  icon: HugeIcons.strokeRoundedLocation01,
+                  size: IconContainerSize.sm,
+                  shape: IconContainerShape.circle,
+                  iconColor: colors.onSurfaceDim,
+                ),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
                     address!.fullAddress,
@@ -136,6 +142,20 @@ class DeliveryCard extends StatelessWidget {
 
           // Action buttons for 'assigned' status
           if (assignment.status == DeliveryStatus.assigned) ...[
+            const SizedBox(height: AppSpacing.sm),
+            // Separator line
+            Container(
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    colors.outline.withValues(alpha: 0.0),
+                    colors.outline.withValues(alpha: 0.4),
+                    colors.outline.withValues(alpha: 0.0),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: AppSpacing.md),
             Row(
               children: [
