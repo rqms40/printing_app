@@ -29,8 +29,8 @@ void main() {
       // The screen should render the AppBar title
       expect(find.text('Notifications'), findsOneWidget);
 
-      // Should have the "Read all" button
-      expect(find.text('Read all'), findsOneWidget);
+      // Should have the "Mark all as read" button
+      expect(find.text('Mark all as read'), findsOneWidget);
     });
 
     testWidgets('shows grouped notifications with time headers', (tester) async {
