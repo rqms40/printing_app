@@ -40,7 +40,7 @@ class LoginScreen extends ConsumerWidget {
                     icon: isDark
                         ? HugeIcons.strokeRoundedSun03
                         : HugeIcons.strokeRoundedMoon02,
-                    color: colors.onSurfaceDim,
+                    color: colors.brand,
                     size: 22,
                   ),
                   onPressed: () =>

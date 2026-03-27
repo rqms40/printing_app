@@ -317,7 +317,7 @@ class _CountTile extends StatelessWidget {
             Text(
               count,
               style: AppTypography.h1.copyWith(
-                color: colors.onBackground,
+                color: colors.brand,
               ),
             ),
             Text(
@@ -364,7 +364,7 @@ class _PromoTile extends StatelessWidget {
           HugeIcon(
             icon: HugeIcons.strokeRoundedDiscount,
             size: 20,
-            color: colors.onSurfaceDim,
+            color: colors.brand,
           ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(

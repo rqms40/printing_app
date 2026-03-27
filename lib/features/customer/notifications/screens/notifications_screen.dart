@@ -102,7 +102,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: colors.accent,
+                            color: colors.brand,
                             borderRadius: AppRadius.borderFull,
                           ),
                           child: Text(
@@ -130,13 +130,13 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                           HugeIcon(
                             icon: HugeIcons.strokeRoundedTickDouble01,
                             size: 14,
-                            color: colors.accent,
+                            color: colors.brand,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             'Mark all as read',
                             style: AppTypography.caption
-                                .copyWith(color: colors.accent),
+                                .copyWith(color: colors.brand),
                           ),
                         ],
                       ),

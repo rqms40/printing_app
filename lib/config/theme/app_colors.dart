@@ -12,8 +12,12 @@ import 'package:flutter/material.dart';
 class AppColors {
   const AppColors._();
 
-  /// Brand yellow — used ONLY in the GridLogo widget dot, never as UI accent.
-  static const Color brand = Color(0xFFFFDE58);
+  /// Brand yellow — logo dot + minimal UI touches (links, "See All", badges).
+  /// Light mode uses a deeper amber for contrast on white backgrounds.
+  /// Dark mode uses the brighter yellow since it reads well on black.
+  static const Color brandLight = Color(0xFFD4A017); // deep amber — readable on white
+  static const Color brandDark = Color(0xFFFFDE58);  // bright yellow — pops on black
+  static const Color brandLogo = Color(0xFFFFDE58);  // always bright in logo
 
   // ---------------------------------------------------------------------------
   // Light theme — warm whites, rich greys, black accent
@@ -33,6 +37,7 @@ class AppColors {
     accent: Color(0xFF1A1A1A),       // near-black — buttons, CTAs, active states
     accentSoft: Color(0xFF333333),    // pressed state
     accentOnColor: Color(0xFFFFFFFF), // white text on black accent bg
+    brand: Color(0xFFD4A017),         // deep amber — links, "See All", subtle highlights
     success: Color(0xFF2E7D32),
     error: Color(0xFFC62828),
     warning: Color(0xFFF57F17),
@@ -57,6 +62,7 @@ class AppColors {
     accent: Color(0xFFF0F0F0),       // near-white — buttons, CTAs, active states
     accentSoft: Color(0xFFD0D0D0),    // pressed state
     accentOnColor: Color(0xFF000000), // black text on white accent bg
+    brand: Color(0xFFFFDE58),         // bright yellow — links, "See All", subtle highlights
     success: Color(0xFF66BB6A),
     error: Color(0xFFEF5350),
     warning: Color(0xFFFFCA28),
@@ -90,6 +96,9 @@ class AppColorSet {
   final Color accentSoft;
   final Color accentOnColor;
 
+  /// Brand color for minimal highlights — links, badges, "See All" text.
+  final Color brand;
+
   // Semantic status
   final Color success;
   final Color error;
@@ -111,6 +120,7 @@ class AppColorSet {
     required this.accent,
     required this.accentSoft,
     required this.accentOnColor,
+    required this.brand,
     required this.success,
     required this.error,
     required this.warning,
