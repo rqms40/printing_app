@@ -108,7 +108,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                           child: Text(
                             '$unreadCount',
                             style: AppTypography.caption.copyWith(
-                              color: colors.background,
+                              color: colors.accentOnColor,
                               fontWeight: FontWeight.w700,
                               fontSize: 11,
                             ),

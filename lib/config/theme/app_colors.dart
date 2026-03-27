@@ -1,58 +1,66 @@
 import 'package:flutter/material.dart';
 
-/// GRID brand color palette.
+/// GRID color palette.
 ///
-/// Primary colors: Black (#000000), White (#FEFEFE),
-/// Yellow (#FFDE58), Dark Grey (#5B5B5B).
+/// Design philosophy: **Greyscale-dominant UI** with yellow (#FFDE58) reserved
+/// strictly for the brand logo dot. The UI accent is monochrome — black in
+/// light mode, white in dark mode — giving a refined, high-contrast feel
+/// without competing with the brand color.
+///
+/// Palette: Black (#000000), White (#FEFEFE), Dark Grey (#5B5B5B),
+/// Brand Yellow (#FFDE58 — logo only).
 class AppColors {
   const AppColors._();
 
+  /// Brand yellow — used ONLY in the GridLogo widget dot, never as UI accent.
+  static const Color brand = Color(0xFFFFDE58);
+
   // ---------------------------------------------------------------------------
-  // Light theme palette
+  // Light theme — warm whites, rich greys, black accent
   // ---------------------------------------------------------------------------
   static const light = AppColorSet(
-    background: Color(0xFFFEFEFE),
+    background: Color(0xFFF8F8F8),
     surface: Color(0xFFFFFFFF),
-    surfaceVariant: Color(0xFFF5F5F5),
-    surfaceDim: Color(0xFFEEEEEE),
+    surfaceVariant: Color(0xFFF0F0F0),
+    surfaceDim: Color(0xFFE8E8E8),
     surfaceHigh: Color(0xFFFFFFFF),
-    onBackground: Color(0xFF000000),
-    onSurface: Color(0xFF5B5B5B),
-    onSurfaceDim: Color(0xFF8A8A8A),
-    disabled: Color(0xFFBDBDBD),
-    outline: Color(0xFFE0E0E0),
-    outlineVariant: Color(0xFFF0F0F0),
-    accent: Color(0xFFFFDE58),
-    accentSoft: Color(0xFFFFE88A),
-    accentOnColor: Color(0xFF000000), // text on accent bg
-    success: Color(0xFF43A047),
-    error: Color(0xFFE53935),
-    warning: Color(0xFFF9A825),
-    info: Color(0xFF1E88E5),
+    onBackground: Color(0xFF1A1A1A),
+    onSurface: Color(0xFF4A4A4A),
+    onSurfaceDim: Color(0xFF7A7A7A),
+    disabled: Color(0xFFB0B0B0),
+    outline: Color(0xFFDCDCDC),
+    outlineVariant: Color(0xFFEEEEEE),
+    accent: Color(0xFF1A1A1A),       // near-black — buttons, CTAs, active states
+    accentSoft: Color(0xFF333333),    // pressed state
+    accentOnColor: Color(0xFFFFFFFF), // white text on black accent bg
+    success: Color(0xFF2E7D32),
+    error: Color(0xFFC62828),
+    warning: Color(0xFFF57F17),
+    info: Color(0xFF1565C0),
   );
 
   // ---------------------------------------------------------------------------
-  // Dark theme palette
+  // Dark theme — true black, elevated surfaces, white accent
   // ---------------------------------------------------------------------------
   static const dark = AppColorSet(
     background: Color(0xFF000000),
     surface: Color(0xFF141414),
     surfaceVariant: Color(0xFF1E1E1E),
-    surfaceDim: Color(0xFF141414),
+    surfaceDim: Color(0xFF0A0A0A),
     surfaceHigh: Color(0xFF2A2A2A),
-    onBackground: Color(0xFFFEFEFE),
-    onSurface: Color(0xFFD0D0D0),
-    onSurfaceDim: Color(0xFF8A8A8A),
-    disabled: Color(0xFF5B5B5B),
-    outline: Color(0xFF333333),
-    outlineVariant: Color(0xFF222222),
-    accent: Color(0xFFFFDE58),
-    accentSoft: Color(0xFFFFE88A),
-    accentOnColor: Color(0xFF000000), // text on accent bg
-    success: Color(0xFF81C784),
-    error: Color(0xFFEF9A9A),
-    warning: Color(0xFFFFE082),
-    info: Color(0xFF90CAF9),
+    onBackground: Color(0xFFF0F0F0),
+    onSurface: Color(0xFFCCCCCC),
+    onSurfaceDim: Color(0xFF808080),
+    disabled: Color(0xFF4A4A4A),
+    outline: Color(0xFF2E2E2E),
+    outlineVariant: Color(0xFF1E1E1E),
+    accent: Color(0xFFF0F0F0),       // near-white — buttons, CTAs, active states
+    accentSoft: Color(0xFFD0D0D0),    // pressed state
+    accentOnColor: Color(0xFF000000), // black text on white accent bg
+    success: Color(0xFF66BB6A),
+    error: Color(0xFFEF5350),
+    warning: Color(0xFFFFCA28),
+    info: Color(0xFF42A5F5),
   );
 
   // ---------------------------------------------------------------------------
