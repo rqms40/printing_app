@@ -28,6 +28,7 @@ dependencies:
   # UI & Animation
   fl_chart: ^0.70.2
   flutter_animate: ^4.5.2
+  flutter_staggered_grid_view: ^0.7.0
   shimmer: ^3.0.0
   hugeicons: ^1.1.5
   flutter_svg: ^2.0.17
