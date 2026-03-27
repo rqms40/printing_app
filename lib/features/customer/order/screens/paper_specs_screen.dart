@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
-import 'package:printing_app/features/customer/order/screens/upload_screen.dart';
 import 'package:printing_app/features/customer/order/widgets/spec_selector.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/paper_specs.dart';
@@ -190,8 +190,6 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
     notifier.setPageCount(pageCount);
     notifier.nextStep();
 
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const UploadScreen()),
-    );
+    context.push('/customer/order/upload');
   }
 }

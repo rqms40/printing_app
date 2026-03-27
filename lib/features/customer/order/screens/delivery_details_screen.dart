@@ -5,8 +5,8 @@ import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
-import 'package:printing_app/features/customer/order/screens/payment_screen.dart';
 import 'package:printing_app/shared/models/address.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
@@ -281,8 +281,6 @@ class _DeliveryDetailsScreenState
     }
     notifier.nextStep();
 
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const PaymentScreen()),
-    );
+    context.push('/customer/order/payment');
   }
 }

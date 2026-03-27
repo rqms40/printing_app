@@ -54,7 +54,7 @@ class HomeScreen extends ConsumerWidget {
                   ),
                   Text(
                     'Hello, Maria',
-                    style: AppTypography.h2.copyWith(
+                    style: AppTypography.h1.copyWith(
                       color: colors.onBackground,
                     ),
                   ),

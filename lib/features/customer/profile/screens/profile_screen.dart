@@ -1,16 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
-import 'package:printing_app/features/customer/address/screens/address_list_screen.dart';
 import 'package:printing_app/features/customer/profile/providers/profile_provider.dart';
-import 'package:printing_app/features/customer/profile/screens/account_details_screen.dart';
-import 'package:printing_app/features/customer/profile/screens/privacy_screen.dart';
-import 'package:printing_app/features/customer/profile/screens/support_screen.dart';
-import 'package:printing_app/features/customer/profile/screens/terms_screen.dart';
 import 'package:printing_app/shared/providers/theme_provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
@@ -88,21 +84,13 @@ class ProfileScreen extends ConsumerWidget {
                     _MenuItem(
                       icon: HugeIcons.strokeRoundedUser,
                       title: 'Account Details',
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const AccountDetailsScreen(),
-                        ),
-                      ),
+                      onTap: () => context.push('/customer/profile/account'),
                     ),
                     Divider(height: 1, color: colors.outlineVariant),
                     _MenuItem(
                       icon: HugeIcons.strokeRoundedLocation01,
                       title: 'Saved Addresses',
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const AddressListScreen(),
-                        ),
-                      ),
+                      onTap: () => context.push('/customer/addresses'),
                     ),
                     Divider(height: 1, color: colors.outlineVariant),
                     _MenuToggle(
@@ -127,31 +115,19 @@ class ProfileScreen extends ConsumerWidget {
                     _MenuItem(
                       icon: HugeIcons.strokeRoundedMessageQuestion,
                       title: 'Support & Help',
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const SupportScreen(),
-                        ),
-                      ),
+                      onTap: () => context.push('/customer/profile/support'),
                     ),
                     Divider(height: 1, color: colors.outlineVariant),
                     _MenuItem(
                       icon: HugeIcons.strokeRoundedFile02,
                       title: 'Terms of Service',
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const TermsScreen(),
-                        ),
-                      ),
+                      onTap: () => context.push('/customer/profile/terms'),
                     ),
                     Divider(height: 1, color: colors.outlineVariant),
                     _MenuItem(
                       icon: HugeIcons.strokeRoundedShield01,
                       title: 'Privacy Policy',
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const PrivacyScreen(),
-                        ),
-                      ),
+                      onTap: () => context.push('/customer/profile/privacy'),
                     ),
                   ],
                 ),

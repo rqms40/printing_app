@@ -5,8 +5,8 @@ import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/customer/address/providers/address_provider.dart';
-import 'package:printing_app/features/customer/address/screens/address_picker_screen.dart';
 import 'package:printing_app/features/customer/address/widgets/address_card.dart';
 import 'package:printing_app/shared/widgets/confirmation_dialog.dart';
 import 'package:printing_app/shared/widgets/empty_state.dart';
@@ -89,12 +89,7 @@ class AddressListScreen extends ConsumerWidget {
                   child: AddressCard(
                     address: address,
                     onEdit: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              AddressPickerScreen(existingAddress: address),
-                        ),
-                      );
+                      context.push('/customer/addresses/new');
                     },
                     onDelete: () {
                       ConfirmationDialog.show(
@@ -122,11 +117,7 @@ class AddressListScreen extends ConsumerWidget {
               backgroundColor: colors.accent,
               foregroundColor: colors.background,
               onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const AddressPickerScreen(),
-                  ),
-                );
+                context.push('/customer/addresses/new');
               },
               icon: const HugeIcon(icon: HugeIcons.strokeRoundedAdd01),
               label: Text(

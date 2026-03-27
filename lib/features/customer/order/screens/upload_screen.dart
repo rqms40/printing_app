@@ -6,8 +6,8 @@ import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
-import 'package:printing_app/features/customer/order/screens/summary_screen.dart';
 import 'package:printing_app/features/customer/order/widgets/file_upload_card.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
@@ -199,8 +199,6 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
         );
     ref.read(orderFlowProvider.notifier).nextStep();
 
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const SummaryScreen()),
-    );
+    context.push('/customer/order/summary');
   }
 }

@@ -4,8 +4,8 @@ import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/driver/deliveries/providers/deliveries_provider.dart';
-import 'package:printing_app/features/driver/deliveries/screens/delivery_detail_screen.dart';
 import 'package:printing_app/features/driver/deliveries/widgets/delivery_card.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -112,13 +112,7 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
                     order: order,
                     address: address,
                     onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => DeliveryDetailScreen(
-                            assignmentId: assignment.id,
-                          ),
-                        ),
-                      );
+                      context.push('/driver/deliveries/${assignment.id}');
                     },
                     onAccept: () =>
                         notifier.acceptAssignment(assignment.id),

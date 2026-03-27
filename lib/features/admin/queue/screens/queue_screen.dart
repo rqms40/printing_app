@@ -4,8 +4,8 @@ import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/admin/queue/providers/queue_provider.dart';
-import 'package:printing_app/features/admin/queue/screens/admin_order_detail_screen.dart';
 import 'package:printing_app/features/admin/queue/widgets/queue_order_card.dart';
 import 'package:printing_app/shared/widgets/app_text_field.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -77,9 +77,26 @@ class _QueueScreenState extends ConsumerState<QueueScreen>
 
     return Scaffold(
       backgroundColor: colors.background,
-      body: Column(
-        children: [
-          // Search bar
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Page title
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xl,
+                AppSpacing.lg,
+                AppSpacing.xl,
+                0,
+              ),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Order Queue',
+                  style: AppTypography.h1.copyWith(color: colors.onBackground),
+                ),
+              ),
+            ),
+            // Search bar
           Padding(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.xl,
@@ -148,13 +165,7 @@ class _QueueScreenState extends ConsumerState<QueueScreen>
                         return QueueOrderCard(
                           order: order,
                           onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => AdminOrderDetailScreen(
-                                  orderId: order.id,
-                                ),
-                              ),
-                            );
+                            context.push('/admin/queue/${order.id}');
                           },
                         );
                       },
@@ -163,6 +174,7 @@ class _QueueScreenState extends ConsumerState<QueueScreen>
                 .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
           ),
         ],
+        ),
       ),
     );
   }

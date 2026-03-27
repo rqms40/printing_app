@@ -29,13 +29,20 @@ class AdminProfileScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: colors.background,
-      body: ListView(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.xl,
-          vertical: AppSpacing.lg,
-        ),
-        children: [
-          // Admin info card
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.xl,
+            vertical: AppSpacing.lg,
+          ),
+          children: [
+            // Page title
+            Text(
+              'Profile',
+              style: AppTypography.h1.copyWith(color: colors.onBackground),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            // Admin info card
           AppCard(
             child: Column(
               children: [
@@ -127,6 +134,7 @@ class AdminProfileScreen extends ConsumerWidget {
             },
           ),
         ],
+        ),
       ),
     );
   }

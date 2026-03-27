@@ -5,8 +5,8 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:hugeicons/hugeicons.dart';
+import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
-import 'package:printing_app/features/auth/screens/register_screen.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/features/auth/widgets/auth_form.dart';
 import 'package:printing_app/shared/providers/theme_provider.dart';
@@ -89,11 +89,7 @@ class LoginScreen extends ConsumerWidget {
               Center(
                 child: GestureDetector(
                   onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const RegisterScreen(),
-                      ),
-                    );
+                    context.push('/auth/register');
                   },
                   child: Text.rich(
                     TextSpan(

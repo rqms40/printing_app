@@ -5,8 +5,8 @@ import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
-import 'package:printing_app/features/customer/order/screens/delivery_details_screen.dart';
 import 'package:printing_app/features/customer/order/widgets/price_breakdown.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
@@ -154,10 +154,7 @@ class SummaryScreen extends ConsumerWidget {
                 isFullWidth: true,
                 onTap: () {
                   ref.read(orderFlowProvider.notifier).nextStep();
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (_) => const DeliveryDetailsScreen()),
-                  );
+                  context.push('/customer/order/delivery');
                 },
               ),
             ),

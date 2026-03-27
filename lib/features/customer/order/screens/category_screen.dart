@@ -4,9 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
-import 'package:printing_app/features/customer/order/screens/paper_specs_screen.dart';
-import 'package:printing_app/features/customer/order/screens/three_d_specs_screen.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/app_illustrations.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
@@ -99,12 +98,10 @@ class CategoryScreen extends ConsumerWidget {
     ref.read(orderFlowProvider.notifier).setCategory(category);
     ref.read(orderFlowProvider.notifier).goToStep(1);
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => category == 'paper'
-            ? const PaperSpecsScreen()
-            : const ThreeDSpecsScreen(),
-      ),
+    context.push(
+      category == 'paper'
+          ? '/customer/order/paper-specs'
+          : '/customer/order/3d-specs',
     );
   }
 }

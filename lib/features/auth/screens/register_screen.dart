@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
-import 'package:printing_app/features/auth/screens/profile_setup_screen.dart';
 import 'package:printing_app/features/auth/widgets/auth_form.dart';
 
 /// Registration screen for new users.
@@ -22,11 +22,7 @@ class RegisterScreen extends ConsumerWidget {
     // Navigate to profile setup when registration succeeds.
     ref.listen<AuthState>(authProvider, (prev, next) {
       if (next.status == AuthStatus.profileIncomplete && prev?.status != next.status) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute<void>(
-            builder: (_) => const ProfileSetupScreen(),
-          ),
-        );
+        context.pushReplacement('/auth/profile-setup');
       }
     });
 
@@ -80,7 +76,7 @@ class RegisterScreen extends ConsumerWidget {
               // Switch to login
               Center(
                 child: GestureDetector(
-                  onTap: () => Navigator.of(context).pop(),
+                  onTap: () => context.pop(),
                   child: Text.rich(
                     TextSpan(
                       text: 'Already have an account? ',
