@@ -56,7 +56,7 @@ class _RecentOrdersSectionState extends State<RecentOrdersSection> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(viewportFraction: 0.85);
+    _pageController = PageController(viewportFraction: 0.88, padEnds: false);
   }
 
   @override
