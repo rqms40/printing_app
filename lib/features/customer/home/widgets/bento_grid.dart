@@ -64,10 +64,9 @@ class BentoGrid extends StatelessWidget {
                   begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
         ),
 
-        // 2. Paper Printing tile (2x1)
-        StaggeredGridTile.count(
+        // 2. Paper Printing tile (2x fit)
+        StaggeredGridTile.fit(
           crossAxisCellCount: 2,
-          mainAxisCellCount: 1,
           child: _ServiceTile(
             title: 'Paper\nPrinting',
             icon: HugeIcons.strokeRoundedFile02,
@@ -85,10 +84,9 @@ class BentoGrid extends StatelessWidget {
                   curve: Curves.easeOut),
         ),
 
-        // 3. 3D Printing tile (2x1)
-        StaggeredGridTile.count(
+        // 3. 3D Printing tile (2x fit)
+        StaggeredGridTile.fit(
           crossAxisCellCount: 2,
-          mainAxisCellCount: 1,
           child: _ServiceTile(
             title: '3D\nPrinting',
             icon: HugeIcons.strokeRoundedPackageDelivered,
@@ -106,10 +104,9 @@ class BentoGrid extends StatelessWidget {
                   curve: Curves.easeOut),
         ),
 
-        // 4. Quick Stats tile (2x1)
-        StaggeredGridTile.count(
+        // 4. Quick Stats tile (2x fit)
+        StaggeredGridTile.fit(
           crossAxisCellCount: 2,
-          mainAxisCellCount: 1,
           child: _StatsTile(
             activeOrderCount: activeOrderCount,
             colors: colors,
@@ -126,10 +123,9 @@ class BentoGrid extends StatelessWidget {
                   curve: Curves.easeOut),
         ),
 
-        // 5. Promo tile (2x1)
-        StaggeredGridTile.count(
+        // 5. Promo tile (2x fit)
+        StaggeredGridTile.fit(
           crossAxisCellCount: 2,
-          mainAxisCellCount: 1,
           child: _PromoTile(colors: colors, isDark: isDark)
               .animate()
               .fadeIn(
