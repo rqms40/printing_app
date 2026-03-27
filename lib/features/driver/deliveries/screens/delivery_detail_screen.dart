@@ -8,6 +8,7 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/shared/services/routing_service.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 import 'package:printing_app/features/driver/deliveries/providers/deliveries_provider.dart';
 import 'package:printing_app/features/driver/deliveries/widgets/checkpoint_action.dart';
@@ -174,39 +175,7 @@ class DeliveryDetailScreen extends ConsumerWidget {
                   // Map preview
                   _buildSectionLabel(context, 'MAP'),
                   const SizedBox(height: AppSpacing.sm),
-                  ClipRRect(
-                    borderRadius: AppRadius.borderMd,
-                    child: Container(
-                      height: 200,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                            color: colors.outline, width: 0.5),
-                        borderRadius: AppRadius.borderMd,
-                      ),
-                      child: ClipRRect(
-                        borderRadius: AppRadius.borderMd,
-                        child: FlutterMap(
-                          options: const MapOptions(
-                            initialCenter: MapHelpers.mapCenter,
-                            initialZoom: 12.0,
-                            interactionOptions:
-                                InteractionOptions(flags: 0),
-                          ),
-                          children: [
-                            MapHelpers.tileLayer(),
-                            MapHelpers.routePolyline(),
-                            MarkerLayer(
-                              markers: [
-                                MapHelpers.shopMarker(),
-                                MapHelpers.destinationMarker(),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+                  _RouteMapPreview(colors: colors),
                   const SizedBox(height: AppSpacing.sm),
 
                   // Navigate button
@@ -296,5 +265,74 @@ class DeliveryDetailScreen extends ConsumerWidget {
       case DeliveryStatus.declined:
         return StatusBadgeVariant.error;
     }
+  }
+}
+
+/// Static map preview that loads a real OSRM route.
+class _RouteMapPreview extends StatefulWidget {
+  const _RouteMapPreview({required this.colors});
+  final AppColorSet colors;
+
+  @override
+  State<_RouteMapPreview> createState() => _RouteMapPreviewState();
+}
+
+class _RouteMapPreviewState extends State<_RouteMapPreview> {
+  List<LatLng>? _routePoints;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRoute();
+  }
+
+  Future<void> _loadRoute() async {
+    final pts = await RoutingService.getRoute(
+      MapHelpers.shopPoint,
+      MapHelpers.destinationPoint,
+    );
+    if (mounted) setState(() => _routePoints = pts);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: AppRadius.borderMd,
+      child: Container(
+        height: 200,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          border: Border.all(color: widget.colors.outline, width: 0.5),
+          borderRadius: AppRadius.borderMd,
+        ),
+        child: ClipRRect(
+          borderRadius: AppRadius.borderMd,
+          child: _routePoints == null
+              ? Center(
+                  child: CircularProgressIndicator(
+                    color: widget.colors.accent,
+                    strokeWidth: 2,
+                  ),
+                )
+              : FlutterMap(
+                  options: const MapOptions(
+                    initialCenter: MapHelpers.mapCenter,
+                    initialZoom: 12.0,
+                    interactionOptions: InteractionOptions(flags: 0),
+                  ),
+                  children: [
+                    MapHelpers.tileLayer(),
+                    MapHelpers.routePolyline(_routePoints!),
+                    MarkerLayer(
+                      markers: [
+                        MapHelpers.shopMarker(),
+                        MapHelpers.destinationMarker(),
+                      ],
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
   }
 }
