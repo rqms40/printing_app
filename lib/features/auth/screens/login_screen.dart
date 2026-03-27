@@ -5,6 +5,7 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
+import 'package:printing_app/features/auth/screens/register_screen.dart';
 import 'package:printing_app/features/auth/widgets/auth_form.dart';
 
 /// Login screen -- the default entry point for unauthenticated users.
@@ -61,7 +62,7 @@ class LoginScreen extends ConsumerWidget {
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
-                        builder: (_) => const _RegisterScreenPlaceholder(),
+                        builder: (_) => const RegisterScreen(),
                       ),
                     );
                   },
@@ -175,16 +176,5 @@ class _DevRoleButton extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-// Temporary placeholder -- will be replaced by proper navigation once
-// RegisterScreen is wired via go_router.
-class _RegisterScreenPlaceholder extends StatelessWidget {
-  const _RegisterScreenPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: Text('Register')));
   }
 }
