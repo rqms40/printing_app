@@ -75,44 +75,49 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header row: h1 title + unread badge + Read all action
+            // Header
             Padding(
               padding: const EdgeInsets.only(
                 left: AppSpacing.xl,
                 right: AppSpacing.xl,
                 top: AppSpacing.lg,
-                bottom: AppSpacing.md,
+                bottom: AppSpacing.sm,
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Notifications',
-                    style: AppTypography.h1
-                        .copyWith(color: colors.onBackground),
-                  ),
-                  if (unreadCount > 0) ...[
-                    const SizedBox(width: AppSpacing.sm),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colors.accent,
-                        borderRadius: AppRadius.borderFull,
-                      ),
-                      child: Text(
-                        '$unreadCount',
-                        style: AppTypography.caption.copyWith(
-                          color: colors.background,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 11,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Notifications',
+                          style: AppTypography.h1
+                              .copyWith(color: colors.onBackground),
                         ),
                       ),
-                    ),
-                  ],
-                  const Spacer(),
-                  if (unreadCount > 0)
+                      if (unreadCount > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colors.accent,
+                            borderRadius: AppRadius.borderFull,
+                          ),
+                          child: Text(
+                            '$unreadCount',
+                            style: AppTypography.caption.copyWith(
+                              color: colors.background,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (unreadCount > 0) ...[
+                    const SizedBox(height: AppSpacing.xs),
                     GestureDetector(
                       onTap: () {
                         ref
@@ -124,18 +129,19 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                         children: [
                           HugeIcon(
                             icon: HugeIcons.strokeRoundedTickDouble01,
-                            size: 16,
+                            size: 14,
                             color: colors.accent,
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            'Read all',
+                            'Mark all as read',
                             style: AppTypography.caption
                                 .copyWith(color: colors.accent),
                           ),
                         ],
                       ),
                     ),
+                  ],
                 ],
               ),
             )

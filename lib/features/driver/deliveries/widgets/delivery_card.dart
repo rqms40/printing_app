@@ -193,26 +193,14 @@ class _DeliveryCardState extends State<DeliveryCard> {
                                 ),
                               ),
                               const SizedBox(width: 6),
-                              Text(
-                                visual.statusLabel,
-                                style: AppTypography.caption.copyWith(
-                                  color: visual.foreground,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const SizedBox(width: AppSpacing.sm),
-                              Text(
-                                '\u2022',
-                                style: TextStyle(
-                                  color: colors.disabled,
-                                  fontSize: 10,
-                                ),
-                              ),
-                              const SizedBox(width: AppSpacing.sm),
-                              Text(
-                                formatDate(widget.assignment.createdAt),
-                                style: AppTypography.caption.copyWith(
-                                  color: colors.onSurfaceDim,
+                              Flexible(
+                                child: Text(
+                                  '${visual.statusLabel} \u2022 ${formatDate(widget.assignment.createdAt)}',
+                                  style: AppTypography.caption.copyWith(
+                                    color: colors.onSurfaceDim,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
