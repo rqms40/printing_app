@@ -7,38 +7,22 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/driver/active_delivery/providers/location_provider.dart';
-import 'package:printing_app/shared/providers/mock_data.dart';
+import 'package:printing_app/shared/widgets/map_helpers.dart';
 
 /// Live delivery map for the driver's active delivery view.
 class DeliveryMapView extends ConsumerWidget {
   const DeliveryMapView({super.key});
 
-  AppColorSet _colors(BuildContext context) {
-    return Theme.of(context).brightness == Brightness.dark
-        ? AppColors.dark
-        : AppColors.light;
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colors = _colors(context);
+    final colors = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
     final location = ref.watch(locationProvider);
 
-    // Destination (QC)
-    const destinationPoint = LatLng(14.6340, 121.0347);
-
-    // Route from MockData location updates
-    final routePoints = MockData.locationUpdates
-        .map((loc) => LatLng(loc.latitude, loc.longitude))
-        .toList();
-
-    // Driver current position from location provider, or fallback
     final driverPoint = location != null
         ? LatLng(location.latitude, location.longitude)
-        : const LatLng(14.5547, 121.0244);
-
-    // Center between driver and destination
-    const mapCenter = LatLng(14.5940, 121.0296);
+        : MapHelpers.shopPoint;
 
     return ClipRRect(
       borderRadius: AppRadius.borderMd,
@@ -52,63 +36,19 @@ class DeliveryMapView extends ConsumerWidget {
           borderRadius: AppRadius.borderMd,
           child: Stack(
             children: [
-              // Real OpenStreetMap
               FlutterMap(
                 options: const MapOptions(
-                  initialCenter: mapCenter,
-                  initialZoom: 12.5,
+                  initialCenter: MapHelpers.mapCenter,
+                  initialZoom: 12.0,
                 ),
                 children: [
-                  TileLayer(
-                    urlTemplate:
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.gridprint.app',
-                  ),
-                  // Route polyline
-                  PolylineLayer(
-                    polylines: [
-                      Polyline(
-                        points: routePoints,
-                        color: colors.accent,
-                        strokeWidth: 3.0,
-                      ),
-                    ],
-                  ),
-                  // Markers
+                  MapHelpers.tileLayer(),
+                  MapHelpers.routePolyline(),
                   MarkerLayer(
                     markers: [
-                      // Driver current position
-                      Marker(
-                        point: driverPoint,
-                        width: 40,
-                        height: 40,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: colors.accent,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: colors.surface,
-                              width: 3,
-                            ),
-                          ),
-                          child: Icon(
-                            Icons.navigation,
-                            color: colors.surface,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                      // Destination marker
-                      Marker(
-                        point: destinationPoint,
-                        width: 36,
-                        height: 36,
-                        child: Icon(
-                          Icons.flag,
-                          color: colors.accent,
-                          size: 36,
-                        ),
-                      ),
+                      MapHelpers.shopMarker(),
+                      MapHelpers.destinationMarker(),
+                      MapHelpers.driverMarker(driverPoint),
                     ],
                   ),
                 ],
@@ -116,28 +56,35 @@ class DeliveryMapView extends ConsumerWidget {
 
               // "Live Tracking Active" badge
               Positioned(
-                top: AppSpacing.md,
-                left: AppSpacing.md,
+                top: AppSpacing.sm,
+                left: AppSpacing.sm,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.sm,
                     vertical: AppSpacing.xs,
                   ),
                   decoration: BoxDecoration(
-                    color: colors.surface,
+                    color: colors.surface.withValues(alpha: 0.95),
                     borderRadius: AppRadius.borderFull,
-                    border: Border.all(color: colors.outline, width: 0.5),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x20000000),
+                        blurRadius: 8,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _PulsingDot(color: colors.success),
+                      const _PulsingDot(color: kRouteColor),
                       const SizedBox(width: AppSpacing.xs),
                       Text(
                         'Live Tracking Active',
                         style: AppTypography.caption.copyWith(
                           color: colors.onSurface,
                           fontWeight: FontWeight.w600,
+                          fontSize: 11,
                         ),
                       ),
                     ],
@@ -152,10 +99,9 @@ class DeliveryMapView extends ConsumerWidget {
   }
 }
 
-/// A small dot that pulses to indicate live status.
+/// Pulsing dot indicator for live status.
 class _PulsingDot extends StatefulWidget {
   const _PulsingDot({required this.color});
-
   final Color color;
 
   @override
@@ -164,34 +110,32 @@ class _PulsingDot extends StatefulWidget {
 
 class _PulsingDotState extends State<_PulsingDot>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _animation;
+  late final AnimationController _c;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
+    _c = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     )..repeat(reverse: true);
-    _animation = Tween<double>(begin: 0.4, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _c.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return FadeTransition(
-      opacity: _animation,
+      opacity: Tween(begin: 0.4, end: 1.0).animate(
+        CurvedAnimation(parent: _c, curve: Curves.easeInOut),
+      ),
       child: Container(
-        width: 10,
-        height: 10,
+        width: 8,
+        height: 8,
         decoration: BoxDecoration(
           color: widget.color,
           shape: BoxShape.circle,

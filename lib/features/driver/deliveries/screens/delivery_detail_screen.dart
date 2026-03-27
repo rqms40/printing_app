@@ -8,6 +8,7 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/shared/widgets/map_helpers.dart';
 import 'package:printing_app/features/driver/deliveries/providers/deliveries_provider.dart';
 import 'package:printing_app/features/driver/deliveries/widgets/checkpoint_action.dart';
 import 'package:printing_app/shared/models/address.dart';
@@ -187,56 +188,18 @@ class DeliveryDetailScreen extends ConsumerWidget {
                         borderRadius: AppRadius.borderMd,
                         child: FlutterMap(
                           options: const MapOptions(
-                            initialCenter: LatLng(14.5940, 121.0296),
-                            initialZoom: 12.5,
+                            initialCenter: MapHelpers.mapCenter,
+                            initialZoom: 12.0,
                             interactionOptions:
                                 InteractionOptions(flags: 0),
                           ),
                           children: [
-                            TileLayer(
-                              urlTemplate:
-                                  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                              userAgentPackageName: 'com.gridprint.app',
-                            ),
-                            PolylineLayer(
-                              polylines: [
-                                Polyline(
-                                  points: const [
-                                    LatLng(14.5547, 121.0244),
-                                    LatLng(14.5700, 121.0270),
-                                    LatLng(14.5900, 121.0300),
-                                    LatLng(14.6100, 121.0330),
-                                    LatLng(14.6340, 121.0347),
-                                  ],
-                                  color: colors.accent,
-                                  strokeWidth: 3.0,
-                                ),
-                              ],
-                            ),
+                            MapHelpers.tileLayer(),
+                            MapHelpers.routePolyline(),
                             MarkerLayer(
                               markers: [
-                                // Pickup marker
-                                Marker(
-                                  point: const LatLng(14.5547, 121.0244),
-                                  width: 32,
-                                  height: 32,
-                                  child: Icon(
-                                    Icons.location_on,
-                                    color: colors.onSurface,
-                                    size: 32,
-                                  ),
-                                ),
-                                // Destination marker
-                                Marker(
-                                  point: const LatLng(14.6340, 121.0347),
-                                  width: 32,
-                                  height: 32,
-                                  child: Icon(
-                                    Icons.flag,
-                                    color: colors.accent,
-                                    size: 32,
-                                  ),
-                                ),
+                                MapHelpers.shopMarker(),
+                                MapHelpers.destinationMarker(),
                               ],
                             ),
                           ],

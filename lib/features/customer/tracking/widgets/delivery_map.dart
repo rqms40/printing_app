@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
-import 'package:printing_app/shared/providers/mock_data.dart';
+import 'package:printing_app/shared/widgets/map_helpers.dart';
 
-/// Live delivery tracking map showing shop, destination, and driver route.
+/// Customer delivery tracking map with bold route line and markers.
 class DeliveryMap extends StatefulWidget {
   const DeliveryMap({super.key});
 
@@ -40,19 +39,6 @@ class _DeliveryMapState extends State<DeliveryMap>
         ? AppColors.dark
         : AppColors.light;
 
-    // Shop / pickup point (Makati)
-    const shopPoint = LatLng(14.5547, 121.0244);
-    // Destination (QC)
-    const destinationPoint = LatLng(14.6340, 121.0347);
-
-    // Route from MockData location updates
-    final routePoints = MockData.locationUpdates
-        .map((loc) => LatLng(loc.latitude, loc.longitude))
-        .toList();
-
-    // Center the map between shop and destination
-    const mapCenter = LatLng(14.5940, 121.0296);
-
     return ClipRRect(
       borderRadius: AppRadius.borderLg,
       child: Container(
@@ -65,71 +51,42 @@ class _DeliveryMapState extends State<DeliveryMap>
           borderRadius: AppRadius.borderLg,
           child: Stack(
             children: [
-              // Real OpenStreetMap
               FlutterMap(
                 options: const MapOptions(
-                  initialCenter: mapCenter,
-                  initialZoom: 12.5,
+                  initialCenter: MapHelpers.mapCenter,
+                  initialZoom: 12.0,
                 ),
                 children: [
-                  TileLayer(
-                    urlTemplate:
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.gridprint.app',
-                  ),
-                  // Route polyline
-                  PolylineLayer(
-                    polylines: [
-                      Polyline(
-                        points: routePoints,
-                        color: colors.accent,
-                        strokeWidth: 3.0,
-                      ),
-                    ],
-                  ),
-                  // Markers
+                  MapHelpers.tileLayer(),
+                  MapHelpers.routePolyline(),
                   MarkerLayer(
                     markers: [
-                      // Shop / pickup marker
-                      Marker(
-                        point: shopPoint,
-                        width: 36,
-                        height: 36,
-                        child: Icon(
-                          Icons.location_on,
-                          color: colors.onSurface,
-                          size: 36,
-                        ),
-                      ),
-                      // Destination marker
-                      Marker(
-                        point: destinationPoint,
-                        width: 36,
-                        height: 36,
-                        child: Icon(
-                          Icons.flag,
-                          color: colors.accent,
-                          size: 36,
-                        ),
-                      ),
+                      MapHelpers.shopMarker(),
+                      MapHelpers.destinationMarker(),
                     ],
                   ),
                 ],
               ),
 
-              // "Live Tracking" badge with pulsing dot
+              // "Live Tracking" badge
               Positioned(
-                top: AppSpacing.md,
-                left: AppSpacing.md,
+                top: AppSpacing.sm,
+                left: AppSpacing.sm,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.sm,
                     vertical: AppSpacing.xs,
                   ),
                   decoration: BoxDecoration(
-                    color: colors.surface,
+                    color: colors.surface.withValues(alpha: 0.95),
                     borderRadius: AppRadius.borderFull,
-                    border: Border.all(color: colors.outline, width: 0.5),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x20000000),
+                        blurRadius: 8,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -142,8 +99,8 @@ class _DeliveryMapState extends State<DeliveryMap>
                             child: Container(
                               width: 8,
                               height: 8,
-                              decoration: BoxDecoration(
-                                color: colors.success,
+                              decoration: const BoxDecoration(
+                                color: kRouteColor,
                                 shape: BoxShape.circle,
                               ),
                             ),
@@ -156,6 +113,7 @@ class _DeliveryMapState extends State<DeliveryMap>
                         style: AppTypography.caption.copyWith(
                           color: colors.onSurface,
                           fontWeight: FontWeight.w600,
+                          fontSize: 11,
                         ),
                       ),
                     ],
