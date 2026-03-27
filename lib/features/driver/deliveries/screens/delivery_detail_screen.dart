@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -168,28 +170,78 @@ class DeliveryDetailScreen extends ConsumerWidget {
                     const SizedBox(height: AppSpacing.lg),
                   ],
 
-                  // Map preview placeholder
+                  // Map preview
                   _buildSectionLabel(context, 'MAP'),
                   const SizedBox(height: AppSpacing.sm),
-                  Container(
-                    height: 200,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: colors.surfaceVariant,
-                      borderRadius: AppRadius.borderMd,
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        HugeIcon(icon: HugeIcons.strokeRoundedMapsLocation01,
-                            size: 48, color: colors.onSurfaceDim),
-                        const SizedBox(height: AppSpacing.sm),
-                        Text(
-                          'Map Preview',
-                          style: AppTypography.body
-                              .copyWith(color: colors.onSurfaceDim),
+                  ClipRRect(
+                    borderRadius: AppRadius.borderMd,
+                    child: Container(
+                      height: 200,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                            color: colors.outline, width: 0.5),
+                        borderRadius: AppRadius.borderMd,
+                      ),
+                      child: ClipRRect(
+                        borderRadius: AppRadius.borderMd,
+                        child: FlutterMap(
+                          options: const MapOptions(
+                            initialCenter: LatLng(14.5940, 121.0296),
+                            initialZoom: 12.5,
+                            interactionOptions:
+                                InteractionOptions(flags: 0),
+                          ),
+                          children: [
+                            TileLayer(
+                              urlTemplate:
+                                  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                              userAgentPackageName: 'com.gridprint.app',
+                            ),
+                            PolylineLayer(
+                              polylines: [
+                                Polyline(
+                                  points: const [
+                                    LatLng(14.5547, 121.0244),
+                                    LatLng(14.5700, 121.0270),
+                                    LatLng(14.5900, 121.0300),
+                                    LatLng(14.6100, 121.0330),
+                                    LatLng(14.6340, 121.0347),
+                                  ],
+                                  color: colors.accent,
+                                  strokeWidth: 3.0,
+                                ),
+                              ],
+                            ),
+                            MarkerLayer(
+                              markers: [
+                                // Pickup marker
+                                Marker(
+                                  point: const LatLng(14.5547, 121.0244),
+                                  width: 32,
+                                  height: 32,
+                                  child: Icon(
+                                    Icons.location_on,
+                                    color: colors.onSurface,
+                                    size: 32,
+                                  ),
+                                ),
+                                // Destination marker
+                                Marker(
+                                  point: const LatLng(14.6340, 121.0347),
+                                  width: 32,
+                                  height: 32,
+                                  child: Icon(
+                                    Icons.flag,
+                                    color: colors.accent,
+                                    size: 32,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.sm),

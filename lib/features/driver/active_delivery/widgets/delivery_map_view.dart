@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hugeicons/hugeicons.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/driver/active_delivery/providers/location_provider.dart';
+import 'package:printing_app/shared/providers/mock_data.dart';
 
-/// Placeholder map container showing live tracking status and mock coordinates.
+/// Live delivery map for the driver's active delivery view.
 class DeliveryMapView extends ConsumerWidget {
   const DeliveryMapView({super.key});
 
@@ -22,61 +24,129 @@ class DeliveryMapView extends ConsumerWidget {
     final colors = _colors(context);
     final location = ref.watch(locationProvider);
 
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: colors.surfaceVariant,
-        borderRadius: AppRadius.borderMd,
-      ),
-      child: Stack(
-        children: [
-          // Main content
-          Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Pulsing dot + Live Tracking label
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _PulsingDot(color: colors.success),
-                    const SizedBox(width: AppSpacing.sm),
-                    Text(
-                      'Live Tracking Active',
-                      style: AppTypography.bodyBold
-                          .copyWith(color: colors.onSurface),
-                    ),
-                  ],
+    // Destination (QC)
+    const destinationPoint = LatLng(14.6340, 121.0347);
+
+    // Route from MockData location updates
+    final routePoints = MockData.locationUpdates
+        .map((loc) => LatLng(loc.latitude, loc.longitude))
+        .toList();
+
+    // Driver current position from location provider, or fallback
+    final driverPoint = location != null
+        ? LatLng(location.latitude, location.longitude)
+        : const LatLng(14.5547, 121.0244);
+
+    // Center between driver and destination
+    const mapCenter = LatLng(14.5940, 121.0296);
+
+    return ClipRRect(
+      borderRadius: AppRadius.borderMd,
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          border: Border.all(color: colors.outline, width: 0.5),
+          borderRadius: AppRadius.borderMd,
+        ),
+        child: ClipRRect(
+          borderRadius: AppRadius.borderMd,
+          child: Stack(
+            children: [
+              // Real OpenStreetMap
+              FlutterMap(
+                options: const MapOptions(
+                  initialCenter: mapCenter,
+                  initialZoom: 12.5,
                 ),
-                const SizedBox(height: AppSpacing.md),
-
-                // Mock coordinates
-                if (location != null)
-                  Text(
-                    '${location.latitude.toStringAsFixed(4)}, '
-                    '${location.longitude.toStringAsFixed(4)}',
-                    style: AppTypography.caption
-                        .copyWith(color: colors.onSurfaceDim),
+                children: [
+                  TileLayer(
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.gridprint.app',
                   ),
-              ],
-            ),
-          ),
+                  // Route polyline
+                  PolylineLayer(
+                    polylines: [
+                      Polyline(
+                        points: routePoints,
+                        color: colors.accent,
+                        strokeWidth: 3.0,
+                      ),
+                    ],
+                  ),
+                  // Markers
+                  MarkerLayer(
+                    markers: [
+                      // Driver current position
+                      Marker(
+                        point: driverPoint,
+                        width: 40,
+                        height: 40,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: colors.accent,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: colors.surface,
+                              width: 3,
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.navigation,
+                            color: colors.surface,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                      // Destination marker
+                      Marker(
+                        point: destinationPoint,
+                        width: 36,
+                        height: 36,
+                        child: Icon(
+                          Icons.flag,
+                          color: colors.accent,
+                          size: 36,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
 
-          // Driver icon marker (top-left area)
-          Positioned(
-            top: 40,
-            left: 60,
-            child: HugeIcon(icon: HugeIcons.strokeRoundedDeliveryTruck02, size: 28, color: colors.info),
+              // "Live Tracking Active" badge
+              Positioned(
+                top: AppSpacing.md,
+                left: AppSpacing.md,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm,
+                    vertical: AppSpacing.xs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.surface,
+                    borderRadius: AppRadius.borderFull,
+                    border: Border.all(color: colors.outline, width: 0.5),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _PulsingDot(color: colors.success),
+                      const SizedBox(width: AppSpacing.xs),
+                      Text(
+                        'Live Tracking Active',
+                        style: AppTypography.caption.copyWith(
+                          color: colors.onSurface,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-
-          // Destination icon marker (bottom-right area)
-          Positioned(
-            bottom: 40,
-            right: 60,
-            child:
-                HugeIcon(icon: HugeIcons.strokeRoundedLocation01, size: 28, color: colors.error),
-          ),
-        ],
+        ),
       ),
     );
   }

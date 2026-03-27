@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:hugeicons/hugeicons.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 
-/// Placeholder for Google Maps with a center pin for address picking.
+/// Interactive map for picking a delivery address by dragging the map
+/// under a fixed center pin.
 class MapPinPicker extends StatelessWidget {
   const MapPinPicker({super.key});
 
@@ -15,67 +17,74 @@ class MapPinPicker extends StatelessWidget {
         ? AppColors.dark
         : AppColors.light;
 
-    return Container(
-      width: double.infinity,
-      height: 200,
-      decoration: BoxDecoration(
-        color: colors.surfaceVariant,
-        borderRadius: AppRadius.borderLg,
-      ),
-      child: Stack(
-        children: [
-          // Grid pattern
-          CustomPaint(
-            size: const Size(double.infinity, 200),
-            painter: _GridPainter(color: colors.outline),
-          ),
-          // Center pin
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                HugeIcon(
-                  icon: HugeIcons.strokeRoundedLocation01,
-                  size: 40,
-                  color: colors.accent,
+    return ClipRRect(
+      borderRadius: AppRadius.borderLg,
+      child: Container(
+        width: double.infinity,
+        height: 200,
+        decoration: BoxDecoration(
+          border: Border.all(color: colors.outline, width: 0.5),
+          borderRadius: AppRadius.borderLg,
+        ),
+        child: ClipRRect(
+          borderRadius: AppRadius.borderLg,
+          child: Stack(
+            children: [
+              // Interactive OpenStreetMap
+              FlutterMap(
+                options: const MapOptions(
+                  initialCenter: LatLng(14.5547, 121.0244), // Manila / Makati
+                  initialZoom: 15.0,
                 ),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  'Drag map to set location',
-                  style: AppTypography.caption.copyWith(
-                    color: colors.onSurfaceDim,
+                children: [
+                  TileLayer(
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.gridprint.app',
+                  ),
+                ],
+              ),
+
+              // Center pin overlay — fixed position, map moves under it
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: Icon(
+                    Icons.location_on,
+                    size: 40,
+                    color: colors.accent,
                   ),
                 ),
-              ],
-            ),
+              ),
+
+              // "Drag map to set location" label at bottom
+              Positioned(
+                bottom: AppSpacing.sm,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm,
+                      vertical: AppSpacing.xs,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.surface.withValues(alpha: 0.9),
+                      borderRadius: AppRadius.borderFull,
+                    ),
+                    child: Text(
+                      'Drag map to set location',
+                      style: AppTypography.caption.copyWith(
+                        color: colors.onSurfaceDim,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
-}
-
-class _GridPainter extends CustomPainter {
-  _GridPainter({required this.color});
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color.withValues(alpha: 0.3)
-      ..strokeWidth = 0.5;
-
-    const spacing = 30.0;
-
-    for (var x = 0.0; x < size.width; x += spacing) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-    for (var y = 0.0; y < size.height; y += spacing) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
