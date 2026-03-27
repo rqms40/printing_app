@@ -7,14 +7,31 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
 import 'package:printing_app/shared/models/app_notification.dart';
 import 'package:printing_app/shared/widgets/empty_state.dart';
+import 'package:printing_app/shared/widgets/skeleton_screens.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/utils/formatters.dart';
 
-class NotificationsScreen extends ConsumerWidget {
+class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<NotificationsScreen> createState() =>
+      _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) setState(() => _isLoading = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final notifications = ref.watch(notificationsProvider);
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
@@ -42,7 +59,9 @@ class NotificationsScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: notifications.isEmpty
+      body: _isLoading
+          ? const NotificationListSkeleton()
+          : notifications.isEmpty
           ? const EmptyState(
               heading: 'No notifications yet',
               body:

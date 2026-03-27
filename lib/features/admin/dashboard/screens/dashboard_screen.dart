@@ -9,11 +9,19 @@ import 'package:printing_app/features/admin/dashboard/widgets/kpi_card.dart';
 import 'package:printing_app/features/admin/dashboard/widgets/sales_chart.dart';
 import 'package:printing_app/features/admin/dashboard/widgets/volume_chart.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:printing_app/shared/widgets/skeleton_screens.dart';
 import 'package:printing_app/utils/formatters.dart';
 
 /// Admin dashboard screen showing KPIs and charts.
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
+
+  @override
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  bool _isLoading = true;
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -22,7 +30,22 @@ class DashboardScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void initState() {
+    super.initState();
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) setState(() => _isLoading = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: _colors(context).background,
+        body: const DashboardSkeleton(),
+      );
+    }
+
     final colors = _colors(context);
     final kpis = ref.watch(dashboardKpisProvider);
 

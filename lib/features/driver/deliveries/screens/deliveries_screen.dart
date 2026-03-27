@@ -10,10 +10,18 @@ import 'package:printing_app/features/driver/deliveries/widgets/delivery_card.da
 import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/empty_state.dart';
+import 'package:printing_app/shared/widgets/skeleton_screens.dart';
 
 /// Screen displaying the driver's list of delivery assignments.
-class DeliveriesScreen extends ConsumerWidget {
+class DeliveriesScreen extends ConsumerStatefulWidget {
   const DeliveriesScreen({super.key});
+
+  @override
+  ConsumerState<DeliveriesScreen> createState() => _DeliveriesScreenState();
+}
+
+class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
+  bool _isLoading = true;
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -22,11 +30,34 @@ class DeliveriesScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void initState() {
+    super.initState();
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) setState(() => _isLoading = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final colors = _colors(context);
     final deliveriesState = ref.watch(deliveriesProvider);
     final notifier = ref.read(deliveriesProvider.notifier);
     final assignments = deliveriesState.filteredAssignments;
+
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: colors.background,
+        appBar: AppBar(
+          backgroundColor: colors.surface,
+          title: Text(
+            'Deliveries',
+            style: AppTypography.h3.copyWith(color: colors.onBackground),
+          ),
+          elevation: 0,
+        ),
+        body: const OrderListSkeleton(),
+      );
+    }
 
     return Scaffold(
       backgroundColor: colors.background,

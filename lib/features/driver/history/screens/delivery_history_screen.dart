@@ -10,12 +10,21 @@ import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/empty_state.dart';
+import 'package:printing_app/shared/widgets/skeleton_screens.dart';
 import 'package:printing_app/shared/widgets/status_badge.dart';
 import 'package:printing_app/utils/formatters.dart';
 
 /// Screen showing delivery history and earnings summary.
-class DeliveryHistoryScreen extends ConsumerWidget {
+class DeliveryHistoryScreen extends ConsumerStatefulWidget {
   const DeliveryHistoryScreen({super.key});
+
+  @override
+  ConsumerState<DeliveryHistoryScreen> createState() =>
+      _DeliveryHistoryScreenState();
+}
+
+class _DeliveryHistoryScreenState extends ConsumerState<DeliveryHistoryScreen> {
+  bool _isLoading = true;
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -24,8 +33,32 @@ class DeliveryHistoryScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void initState() {
+    super.initState();
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) setState(() => _isLoading = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final colors = _colors(context);
+
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: colors.background,
+        appBar: AppBar(
+          backgroundColor: colors.surface,
+          title: Text(
+            'History',
+            style: AppTypography.h3.copyWith(color: colors.onBackground),
+          ),
+          elevation: 0,
+        ),
+        body: const OrderListSkeleton(),
+      );
+    }
+
     final earnings = ref.watch(earningsProvider);
     final deliveriesState = ref.watch(deliveriesProvider);
 

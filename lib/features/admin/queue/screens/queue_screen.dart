@@ -10,6 +10,7 @@ import 'package:printing_app/features/admin/queue/widgets/queue_order_card.dart'
 import 'package:printing_app/shared/widgets/app_text_field.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/empty_state.dart';
+import 'package:printing_app/shared/widgets/skeleton_screens.dart';
 
 /// Admin order queue screen with tabbed filtering and search.
 class QueueScreen extends ConsumerStatefulWidget {
@@ -23,6 +24,7 @@ class _QueueScreenState extends ConsumerState<QueueScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   final _searchController = TextEditingController();
+  bool _isLoading = true;
 
   static const _tabs = [
     QueueTab.newOrders,
@@ -43,6 +45,9 @@ class _QueueScreenState extends ConsumerState<QueueScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: _tabs.length, vsync: this);
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) setState(() => _isLoading = false);
+    });
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
         ref.read(queueProvider.notifier).setTab(_tabs[_tabController.index]);
@@ -62,6 +67,13 @@ class _QueueScreenState extends ConsumerState<QueueScreen>
     final colors = _colors(context);
     final queueState = ref.watch(queueProvider);
     final filteredOrders = queueState.filteredOrders;
+
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: colors.background,
+        body: const OrderListSkeleton(),
+      );
+    }
 
     return Scaffold(
       backgroundColor: colors.background,

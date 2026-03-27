@@ -15,7 +15,7 @@ enum AppButtonVariant { primary, secondary, ghost }
 /// - **primary** -- solid accent background, contrasting text.
 /// - **secondary** -- transparent with 1px accent border.
 /// - **ghost** -- transparent, no border.
-class AppButton extends StatelessWidget {
+class AppButton extends StatefulWidget {
   const AppButton({
     super.key,
     required this.label,
@@ -36,35 +36,64 @@ class AppButton extends StatelessWidget {
   /// Can be [IconData] (Material) or HugeIcons SVG data (List).
   final dynamic icon;
 
+  @override
+  State<AppButton> createState() => _AppButtonState();
+}
+
+class _AppButtonState extends State<AppButton> {
+  bool _isPressed = false;
+
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
   }
 
-  bool get _effectivelyDisabled => isDisabled || onTap == null;
+  bool get _effectivelyDisabled =>
+      widget.isDisabled || widget.onTap == null;
 
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
 
-    return AnimatedOpacity(
-      duration: AppMotion.fast,
-      opacity: _effectivelyDisabled ? AppColors.disabledOpacity : 1.0,
-      child: SizedBox(
-        width: isFullWidth ? double.infinity : null,
-        height: 48,
-        child: Material(
-          color: _backgroundColor(colors),
-          shape: _shape(colors),
-          child: InkWell(
-            onTap: _effectivelyDisabled || isLoading ? null : onTap,
-            borderRadius: AppRadius.borderMd,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              child: Center(
-                widthFactor: isFullWidth ? null : 1.0,
-                child: _buildContent(colors),
+    return GestureDetector(
+      onTapDown: _effectivelyDisabled
+          ? null
+          : (_) => setState(() => _isPressed = true),
+      onTapUp: _effectivelyDisabled
+          ? null
+          : (_) => setState(() => _isPressed = false),
+      onTapCancel: _effectivelyDisabled
+          ? null
+          : () => setState(() => _isPressed = false),
+      child: AnimatedScale(
+        scale: _isPressed ? 0.97 : 1.0,
+        duration: _isPressed
+            ? const Duration(milliseconds: 100)
+            : const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+        child: AnimatedOpacity(
+          duration: AppMotion.fast,
+          opacity: _effectivelyDisabled ? AppColors.disabledOpacity : 1.0,
+          child: SizedBox(
+            width: widget.isFullWidth ? double.infinity : null,
+            height: 48,
+            child: Material(
+              color: _backgroundColor(colors),
+              shape: _shape(colors),
+              child: InkWell(
+                onTap: _effectivelyDisabled || widget.isLoading
+                    ? null
+                    : widget.onTap,
+                borderRadius: AppRadius.borderMd,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                  child: Center(
+                    widthFactor: widget.isFullWidth ? null : 1.0,
+                    child: _buildContent(colors),
+                  ),
+                ),
               ),
             ),
           ),
@@ -74,7 +103,7 @@ class AppButton extends StatelessWidget {
   }
 
   Color _backgroundColor(AppColorSet colors) {
-    switch (variant) {
+    switch (widget.variant) {
       case AppButtonVariant.primary:
         return colors.accent;
       case AppButtonVariant.secondary:
@@ -84,7 +113,7 @@ class AppButton extends StatelessWidget {
   }
 
   ShapeBorder _shape(AppColorSet colors) {
-    switch (variant) {
+    switch (widget.variant) {
       case AppButtonVariant.primary:
         return RoundedRectangleBorder(borderRadius: AppRadius.borderMd);
       case AppButtonVariant.secondary:
@@ -98,7 +127,7 @@ class AppButton extends StatelessWidget {
   }
 
   Color _foregroundColor(AppColorSet colors) {
-    switch (variant) {
+    switch (widget.variant) {
       case AppButtonVariant.primary:
         return colors.background;
       case AppButtonVariant.secondary:
@@ -108,7 +137,7 @@ class AppButton extends StatelessWidget {
   }
 
   Widget _buildContent(AppColorSet colors) {
-    if (isLoading) {
+    if (widget.isLoading) {
       return SizedBox(
         width: 20,
         height: 20,
@@ -121,17 +150,17 @@ class AppButton extends StatelessWidget {
 
     final textColor = _foregroundColor(colors);
     final textWidget = Text(
-      label,
+      widget.label,
       style: AppTypography.button.copyWith(color: textColor),
     );
 
-    if (icon != null) {
+    if (widget.icon != null) {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          icon is IconData
-              ? Icon(icon as IconData, size: 18, color: textColor)
-              : HugeIcon(icon: icon, size: 18, color: textColor),
+          widget.icon is IconData
+              ? Icon(widget.icon as IconData, size: 18, color: textColor)
+              : HugeIcon(icon: widget.icon, size: 18, color: textColor),
           const SizedBox(width: AppSpacing.sm),
           textWidget,
         ],

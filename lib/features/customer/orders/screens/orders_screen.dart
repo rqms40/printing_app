@@ -10,13 +10,29 @@ import 'package:printing_app/features/customer/orders/widgets/order_card.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/empty_state.dart';
+import 'package:printing_app/shared/widgets/skeleton_screens.dart';
 
 /// Customer orders screen with Active / Completed tabs.
-class OrdersScreen extends ConsumerWidget {
+class OrdersScreen extends ConsumerStatefulWidget {
   const OrdersScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OrdersScreen> createState() => _OrdersScreenState();
+}
+
+class _OrdersScreenState extends ConsumerState<OrdersScreen> {
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) setState(() => _isLoading = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
@@ -43,7 +59,9 @@ class OrdersScreen extends ConsumerWidget {
             ],
           ),
         ),
-        body: TabBarView(
+        body: _isLoading
+          ? const OrderListSkeleton()
+          : TabBarView(
           children: [
             _OrdersTab(
               ordersSelector: (notifier) => notifier.activeOrders,
