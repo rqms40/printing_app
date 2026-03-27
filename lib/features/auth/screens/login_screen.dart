@@ -6,6 +6,7 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/auth/screens/register_screen.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/features/auth/widgets/auth_form.dart';
 
 /// Login screen -- the default entry point for unauthenticated users.
@@ -35,14 +36,20 @@ class LoginScreen extends ConsumerWidget {
                 style: AppTypography.display.copyWith(
                   color: colors.onBackground,
                 ),
-              ),
+              )
+                  .animate()
+                  .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                  .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
               const SizedBox(height: AppSpacing.sm),
               Text(
                 'Sign in to continue',
                 style: AppTypography.bodyLarge.copyWith(
                   color: colors.onSurfaceDim,
                 ),
-              ),
+              )
+                  .animate()
+                  .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
+                  .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
 
               const SizedBox(height: AppSpacing.xxl),
 
@@ -52,7 +59,10 @@ class LoginScreen extends ConsumerWidget {
                 onSubmit: (email, password) {
                   ref.read(authProvider.notifier).login(email, password);
                 },
-              ),
+              )
+                  .animate()
+                  .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
+                  .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
 
               const SizedBox(height: AppSpacing.lg),
 
@@ -83,12 +93,17 @@ class LoginScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-              ),
+              )
+                  .animate()
+                  .fadeIn(duration: 400.ms, delay: 180.ms, curve: Curves.easeOut),
 
               const SizedBox(height: AppSpacing.xxxl),
 
               // Dev bypass section
-              _DevBypassSection(colors: colors),
+              _DevBypassSection(colors: colors)
+                  .animate()
+                  .fadeIn(duration: 400.ms, delay: 240.ms, curve: Curves.easeOut)
+                  .slideY(begin: 0.02, duration: 400.ms, delay: 240.ms, curve: Curves.easeOut),
 
               const SizedBox(height: AppSpacing.xl),
             ],

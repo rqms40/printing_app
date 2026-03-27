@@ -7,6 +7,7 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
 
 /// Provider managing the driver's availability toggle state.
@@ -86,7 +87,10 @@ class DriverProfileScreen extends ConsumerWidget {
                 ),
               ],
             ),
-          ),
+          )
+              .animate()
+              .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+              .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
           const SizedBox(height: AppSpacing.lg),
 
           // Profile info card
@@ -121,7 +125,10 @@ class DriverProfileScreen extends ConsumerWidget {
                 ),
               ],
             ),
-          ),
+          )
+              .animate()
+              .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
+              .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
           const SizedBox(height: AppSpacing.lg),
 
           // Vehicle info card
@@ -149,7 +156,10 @@ class DriverProfileScreen extends ConsumerWidget {
                 ),
               ],
             ),
-          ),
+          )
+              .animate()
+              .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
+              .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
           const SizedBox(height: AppSpacing.md),
 
           // Edit Vehicle Info button

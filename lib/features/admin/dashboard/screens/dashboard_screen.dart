@@ -8,6 +8,7 @@ import 'package:printing_app/features/admin/dashboard/providers/dashboard_provid
 import 'package:printing_app/features/admin/dashboard/widgets/kpi_card.dart';
 import 'package:printing_app/features/admin/dashboard/widgets/sales_chart.dart';
 import 'package:printing_app/features/admin/dashboard/widgets/volume_chart.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/utils/formatters.dart';
 
 /// Admin dashboard screen showing KPIs and charts.
@@ -43,7 +44,10 @@ class DashboardScreen extends ConsumerWidget {
             Text(
               'Dashboard',
               style: AppTypography.h1.copyWith(color: colors.onBackground),
-            ),
+            )
+                .animate()
+                .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
             const SizedBox(height: AppSpacing.lg),
 
             // 2x2 KPI grid
@@ -76,15 +80,24 @@ class DashboardScreen extends ConsumerWidget {
                   label: 'Revenue',
                 ),
               ],
-            ),
+            )
+                .animate()
+                .fadeIn(duration: 400.ms, delay: 80.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.03, duration: 400.ms, delay: 80.ms, curve: Curves.easeOut),
             const SizedBox(height: AppSpacing.lg),
 
             // Sales chart
-            const SalesChart(),
+            const SalesChart()
+                .animate()
+                .fadeIn(duration: 450.ms, delay: 240.ms, curve: Curves.easeOutCubic)
+                .slideY(begin: 0.04, duration: 450.ms, delay: 240.ms, curve: Curves.easeOutCubic),
             const SizedBox(height: AppSpacing.lg),
 
             // Volume chart
-            const VolumeChart(),
+            const VolumeChart()
+                .animate()
+                .fadeIn(duration: 450.ms, delay: 320.ms, curve: Curves.easeOutCubic)
+                .slideY(begin: 0.04, duration: 450.ms, delay: 320.ms, curve: Curves.easeOutCubic),
             const SizedBox(height: AppSpacing.lg),
           ],
         ),

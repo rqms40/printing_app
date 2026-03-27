@@ -8,6 +8,7 @@ import 'package:printing_app/features/admin/queue/providers/queue_provider.dart'
 import 'package:printing_app/features/admin/queue/screens/admin_order_detail_screen.dart';
 import 'package:printing_app/features/admin/queue/widgets/queue_order_card.dart';
 import 'package:printing_app/shared/widgets/app_text_field.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/empty_state.dart';
 
 /// Admin order queue screen with tabbed filtering and search.
@@ -86,7 +87,10 @@ class _QueueScreenState extends ConsumerState<QueueScreen>
                 ref.read(queueProvider.notifier).searchByOrderId(query);
               },
             ),
-          ),
+          )
+              .animate()
+              .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+              .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
 
           // Tab bar
           TabBar(
@@ -98,7 +102,9 @@ class _QueueScreenState extends ConsumerState<QueueScreen>
             indicatorColor: colors.accent,
             indicatorWeight: 2,
             tabs: _tabLabels.map((l) => Tab(text: l)).toList(),
-          ),
+          )
+              .animate()
+              .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
 
           // Order list
           Expanded(
@@ -141,7 +147,8 @@ class _QueueScreenState extends ConsumerState<QueueScreen>
                         );
                       },
                     ),
-            ),
+            ).animate()
+                .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
           ),
         ],
       ),

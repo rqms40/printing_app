@@ -8,6 +8,7 @@ import 'package:printing_app/features/customer/orders/providers/orders_provider.
 import 'package:printing_app/features/customer/orders/screens/order_detail_screen.dart';
 import 'package:printing_app/features/customer/orders/widgets/order_card.dart';
 import 'package:printing_app/shared/models/order.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/empty_state.dart';
 
 /// Customer orders screen with Active / Completed tabs.
@@ -57,7 +58,8 @@ class OrdersScreen extends ConsumerWidget {
               emptyIcon: HugeIcons.strokeRoundedCheckmarkCircle02,
             ),
           ],
-        ),
+        ).animate()
+            .fadeIn(duration: 400.ms, curve: Curves.easeOut),
       ),
     );
   }

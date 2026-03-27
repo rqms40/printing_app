@@ -15,6 +15,7 @@ import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/confirmation_dialog.dart';
 import 'package:printing_app/shared/widgets/status_badge.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/utils/formatters.dart';
 
 /// Detailed view of a single order.
@@ -77,7 +78,10 @@ class OrderDetailScreen extends ConsumerWidget {
                 order: order,
                 statusHistory: statusHistory,
               ),
-            ),
+            )
+                .animate()
+                .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
             const SizedBox(height: AppSpacing.md),
 
             // --- Estimated Completion ---
@@ -97,30 +101,48 @@ class OrderDetailScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-              ),
+              )
+                  .animate()
+                  .fadeIn(duration: 400.ms, delay: 80.ms, curve: Curves.easeOut)
+                  .slideY(begin: 0.03, duration: 400.ms, delay: 80.ms, curve: Curves.easeOut),
               const SizedBox(height: AppSpacing.md),
             ],
 
             // --- Specs Section ---
-            _buildSpecsSection(order, colors),
+            _buildSpecsSection(order, colors)
+                .animate()
+                .fadeIn(duration: 400.ms, delay: 160.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.03, duration: 400.ms, delay: 160.ms, curve: Curves.easeOut),
             const SizedBox(height: AppSpacing.md),
 
             // --- File Info ---
             if (order.fileName != null) ...[
-              _buildFileSection(order, colors),
+              _buildFileSection(order, colors)
+                  .animate()
+                  .fadeIn(duration: 400.ms, delay: 240.ms, curve: Curves.easeOut)
+                  .slideY(begin: 0.03, duration: 400.ms, delay: 240.ms, curve: Curves.easeOut),
               const SizedBox(height: AppSpacing.md),
             ],
 
             // --- Price Breakdown ---
-            _buildPriceSection(order, colors),
+            _buildPriceSection(order, colors)
+                .animate()
+                .fadeIn(duration: 400.ms, delay: 320.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.03, duration: 400.ms, delay: 320.ms, curve: Curves.easeOut),
             const SizedBox(height: AppSpacing.md),
 
             // --- Payment Info ---
-            _buildPaymentSection(order, colors),
+            _buildPaymentSection(order, colors)
+                .animate()
+                .fadeIn(duration: 400.ms, delay: 400.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.03, duration: 400.ms, delay: 400.ms, curve: Curves.easeOut),
             const SizedBox(height: AppSpacing.md),
 
             // --- Delivery Info ---
-            _buildDeliverySection(order, address, colors),
+            _buildDeliverySection(order, address, colors)
+                .animate()
+                .fadeIn(duration: 400.ms, delay: 480.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.03, duration: 400.ms, delay: 480.ms, curve: Curves.easeOut),
             const SizedBox(height: AppSpacing.lg),
 
             // --- Action Buttons ---

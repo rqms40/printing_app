@@ -8,6 +8,7 @@ import 'package:printing_app/features/driver/deliveries/providers/deliveries_pro
 import 'package:printing_app/features/driver/deliveries/screens/delivery_detail_screen.dart';
 import 'package:printing_app/features/driver/deliveries/widgets/delivery_card.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/empty_state.dart';
 
 /// Screen displaying the driver's list of delivery assignments.
@@ -92,7 +93,19 @@ class DeliveriesScreen extends ConsumerWidget {
                         notifier.acceptAssignment(assignment.id),
                     onDecline: () =>
                         notifier.declineAssignment(assignment.id),
-                  );
+                  )
+                      .animate()
+                      .fadeIn(
+                        duration: 400.ms,
+                        delay: (index * 60).ms,
+                        curve: Curves.easeOut,
+                      )
+                      .slideY(
+                        begin: 0.02,
+                        duration: 400.ms,
+                        delay: (index * 60).ms,
+                        curve: Curves.easeOut,
+                      );
                 },
               ),
       ),

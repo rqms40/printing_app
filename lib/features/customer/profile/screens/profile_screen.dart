@@ -12,6 +12,7 @@ import 'package:printing_app/features/customer/profile/screens/privacy_screen.da
 import 'package:printing_app/features/customer/profile/screens/support_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/terms_screen.dart';
 import 'package:printing_app/shared/providers/theme_provider.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/confirmation_dialog.dart';
 
@@ -74,7 +75,10 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-              ),
+              )
+                  .animate()
+                  .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                  .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
               const SizedBox(height: AppSpacing.lg),
               // Menu items
               AppCard(
@@ -111,7 +115,10 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-              ),
+              )
+                  .animate()
+                  .fadeIn(duration: 400.ms, delay: 50.ms, curve: Curves.easeOut)
+                  .slideY(begin: 0.03, duration: 400.ms, delay: 50.ms, curve: Curves.easeOut),
               const SizedBox(height: AppSpacing.md),
               AppCard(
                 padding: EdgeInsets.zero,
@@ -148,7 +155,10 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-              ),
+              )
+                  .animate()
+                  .fadeIn(duration: 400.ms, delay: 100.ms, curve: Curves.easeOut)
+                  .slideY(begin: 0.03, duration: 400.ms, delay: 100.ms, curve: Curves.easeOut),
               const SizedBox(height: AppSpacing.md),
               AppCard(
                 padding: EdgeInsets.zero,
@@ -172,7 +182,10 @@ class ProfileScreen extends ConsumerWidget {
                     );
                   },
                 ),
-              ),
+              )
+                  .animate()
+                  .fadeIn(duration: 400.ms, delay: 150.ms, curve: Curves.easeOut)
+                  .slideY(begin: 0.03, duration: 400.ms, delay: 150.ms, curve: Curves.easeOut),
               const SizedBox(height: AppSpacing.xxl),
             ],
           ),

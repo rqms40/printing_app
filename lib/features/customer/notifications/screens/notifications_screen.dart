@@ -7,6 +7,7 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
 import 'package:printing_app/shared/models/app_notification.dart';
 import 'package:printing_app/shared/widgets/empty_state.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/utils/formatters.dart';
 
 class NotificationsScreen extends ConsumerWidget {
@@ -58,7 +59,19 @@ class NotificationsScreen extends ConsumerWidget {
               ),
               itemBuilder: (context, index) {
                 final notification = notifications[index];
-                return _NotificationTile(notification: notification);
+                return _NotificationTile(notification: notification)
+                    .animate()
+                    .fadeIn(
+                      duration: 400.ms,
+                      delay: (index * 40).ms,
+                      curve: Curves.easeOut,
+                    )
+                    .slideY(
+                      begin: 0.02,
+                      duration: 400.ms,
+                      delay: (index * 40).ms,
+                      curve: Curves.easeOut,
+                    );
               },
             ),
     );
