@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hugeicons/hugeicons.dart';
-
 import 'package:printing_app/config/routes/page_transitions.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/shared/widgets/app_bottom_nav.dart';
@@ -152,23 +150,23 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           items: const [
             NavItem(
-              icon: HugeIcons.strokeRoundedHome01,
-              activeIcon: HugeIcons.strokeRoundedHome01,
+              icon: Icons.home_outlined,
+              activeIcon: Icons.home_rounded,
               label: 'Home',
             ),
             NavItem(
-              icon: HugeIcons.strokeRoundedFile02,
-              activeIcon: HugeIcons.strokeRoundedFileValidation,
+              icon: Icons.receipt_long_outlined,
+              activeIcon: Icons.receipt_long_rounded,
               label: 'Orders',
             ),
             NavItem(
-              icon: HugeIcons.strokeRoundedNotification02,
-              activeIcon: HugeIcons.strokeRoundedNotification03,
+              icon: Icons.notifications_none_rounded,
+              activeIcon: Icons.notifications_rounded,
               label: 'Alerts',
             ),
             NavItem(
-              icon: HugeIcons.strokeRoundedUser,
-              activeIcon: HugeIcons.strokeRoundedUserCheck01,
+              icon: Icons.person_outline_rounded,
+              activeIcon: Icons.person_rounded,
               label: 'Profile',
             ),
           ],
@@ -307,18 +305,18 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           items: const [
             NavItem(
-              icon: HugeIcons.strokeRoundedTruck,
-              activeIcon: HugeIcons.strokeRoundedTruckDelivery,
+              icon: Icons.local_shipping_outlined,
+              activeIcon: Icons.local_shipping_rounded,
               label: 'Deliveries',
             ),
             NavItem(
-              icon: HugeIcons.strokeRoundedClock01,
-              activeIcon: HugeIcons.strokeRoundedTime02,
+              icon: Icons.history_rounded,
+              activeIcon: Icons.history_rounded,
               label: 'History',
             ),
             NavItem(
-              icon: HugeIcons.strokeRoundedUser,
-              activeIcon: HugeIcons.strokeRoundedUserCheck01,
+              icon: Icons.person_outline_rounded,
+              activeIcon: Icons.person_rounded,
               label: 'Profile',
             ),
           ],
@@ -382,18 +380,18 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           items: const [
             NavItem(
-              icon: HugeIcons.strokeRoundedAnalytics01,
-              activeIcon: HugeIcons.strokeRoundedAnalytics02,
+              icon: Icons.dashboard_outlined,
+              activeIcon: Icons.dashboard_rounded,
               label: 'Dashboard',
             ),
             NavItem(
-              icon: HugeIcons.strokeRoundedTask01,
-              activeIcon: HugeIcons.strokeRoundedTaskDone01,
+              icon: Icons.list_alt_rounded,
+              activeIcon: Icons.list_alt_rounded,
               label: 'Queue',
             ),
             NavItem(
-              icon: HugeIcons.strokeRoundedUser,
-              activeIcon: HugeIcons.strokeRoundedUserCheck01,
+              icon: Icons.person_outline_rounded,
+              activeIcon: Icons.person_rounded,
               label: 'Profile',
             ),
           ],
