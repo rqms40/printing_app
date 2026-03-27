@@ -17,12 +17,14 @@ class DashboardKpis {
     required this.inProductionCount,
     required this.readyForPickupCount,
     required this.monthlyRevenue,
+    required this.deliveredCount,
   });
 
   final int newOrdersCount;
   final int inProductionCount;
   final int readyForPickupCount;
   final double monthlyRevenue;
+  final int deliveredCount;
 }
 
 /// Provider exposing dashboard KPI data from mock orders.
@@ -48,11 +50,18 @@ final dashboardKpisProvider = Provider<DashboardKpis>((ref) {
       .where((o) => o.paymentStatus == PaymentStatus.paid)
       .fold<double>(0, (sum, o) => sum + o.totalPrice);
 
+  final delivered = orders
+      .where((o) =>
+          o.orderStatus == OrderStatus.delivered ||
+          o.orderStatus == OrderStatus.completedPickup)
+      .length;
+
   return DashboardKpis(
     newOrdersCount: newOrders,
     inProductionCount: inProduction,
     readyForPickupCount: readyForPickup,
     monthlyRevenue: revenue,
+    deliveredCount: delivered,
   );
 });
 
