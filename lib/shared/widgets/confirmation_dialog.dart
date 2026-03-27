@@ -42,6 +42,7 @@ class ConfirmationDialog extends StatelessWidget {
   }) {
     return showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(
           top: Radius.circular(AppRadius.lg),
@@ -70,7 +71,7 @@ class ConfirmationDialog extends StatelessWidget {
     final colors = _colors(context);
 
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           mainAxisSize: MainAxisSize.min,
