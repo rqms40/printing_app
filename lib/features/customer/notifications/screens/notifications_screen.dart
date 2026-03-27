@@ -124,12 +124,19 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       body: _isLoading
           ? const NotificationListSkeleton()
           : notifications.isEmpty
-              ? EmptyState(
+              ? const EmptyState(
                   heading: 'All caught up',
                   body: 'You\'ll see order updates and delivery alerts here.',
                   icon: HugeIcons.strokeRoundedNotification02,
                 )
-              : _buildGroupedList(notifications, colors),
+              : RefreshIndicator(
+                  color: colors.accent,
+                  backgroundColor: colors.surface,
+                  onRefresh: () async {
+                    await Future.delayed(const Duration(milliseconds: 500));
+                  },
+                  child: _buildGroupedList(notifications, colors),
+                ),
     );
   }
 
@@ -141,6 +148,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
         orderedKeys.where((k) => groups.containsKey(k)).toList();
 
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
       itemCount: activeKeys.length,
       itemBuilder: (context, sectionIndex) {

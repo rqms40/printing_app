@@ -35,7 +35,14 @@ class HomeScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: colors.background,
       body: SafeArea(
-        child: SingleChildScrollView(
+        child: RefreshIndicator(
+          color: colors.accent,
+          backgroundColor: colors.surface,
+          onRefresh: () async {
+            await Future.delayed(const Duration(milliseconds: 500));
+          },
+          child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -75,7 +82,7 @@ class HomeScreen extends ConsumerWidget {
               const SizedBox(height: AppSpacing.lg),
 
               // Services section
-              SectionHeader(title: 'Services'),
+              const SectionHeader(title: 'Services'),
 
               ServiceCard(
                 title: 'Paper Printing',
@@ -114,6 +121,7 @@ class HomeScreen extends ConsumerWidget {
               const SizedBox(height: AppSpacing.lg),
             ],
           ),
+        ),
         ),
       ),
     );

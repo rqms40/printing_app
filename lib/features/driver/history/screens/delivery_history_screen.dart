@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
@@ -77,13 +76,25 @@ class _DeliveryHistoryScreenState extends ConsumerState<DeliveryHistoryScreen> {
         ),
         elevation: 0,
       ),
-      body: completedDeliveries.isEmpty
-          ? const EmptyState(
-              heading: 'No delivery history',
-              body: 'Completed deliveries will appear here.',
-              icon: HugeIcons.strokeRoundedClock01,
+      body: RefreshIndicator(
+        color: colors.accent,
+        backgroundColor: colors.surface,
+        onRefresh: () async {
+          await Future.delayed(const Duration(milliseconds: 500));
+        },
+        child: completedDeliveries.isEmpty
+          ? ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: const [
+                EmptyState(
+                  heading: 'No delivery history',
+                  body: 'Completed deliveries will appear here.',
+                  icon: HugeIcons.strokeRoundedClock01,
+                ),
+              ],
             )
           : ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(AppSpacing.md),
               children: [
                 // Earnings summary card
@@ -186,6 +197,7 @@ class _DeliveryHistoryScreenState extends ConsumerState<DeliveryHistoryScreen> {
                 }),
               ],
             ),
+      ),
     );
   }
 }

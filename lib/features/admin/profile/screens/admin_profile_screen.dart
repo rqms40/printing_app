@@ -26,116 +26,211 @@ class AdminProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = _colors(context);
     final admin = MockData.adminUser;
+    final initial = (admin.fullName?.isNotEmpty == true)
+        ? admin.fullName![0].toUpperCase()
+        : 'A';
 
     return Scaffold(
       backgroundColor: colors.background,
       body: SafeArea(
-        child: ListView(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.xl,
             vertical: AppSpacing.lg,
           ),
-          children: [
-            // Page title
-            Text(
-              'Profile',
-              style: AppTypography.h1.copyWith(color: colors.onBackground),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            // Admin info card
-          AppCard(
-            child: Column(
-              children: [
-                // Avatar
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: colors.surfaceVariant,
-                    shape: BoxShape.circle,
-                  ),
-                  child: HugeIcon(
-                    icon: HugeIcons.strokeRoundedUser,
-                    size: 32,
-                    color: colors.onSurfaceDim,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Text(
-                  admin.fullName ?? 'Admin',
-                  style:
-                      AppTypography.h2.copyWith(color: colors.onBackground),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  admin.email,
-                  style:
-                      AppTypography.body.copyWith(color: colors.onSurfaceDim),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                const StatusBadge(
-                  label: 'Admin',
-                  variant: StatusBadgeVariant.info,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Page title
+              Text(
+                'Profile',
+                style:
+                    AppTypography.h1.copyWith(color: colors.onBackground),
+              ),
+              const SizedBox(height: AppSpacing.lg),
 
-          // App version
-          AppCard(
-            child: Row(
-              children: [
-                HugeIcon(icon: HugeIcons.strokeRoundedInformationCircle,
-                    size: 20, color: colors.onSurfaceDim),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'DarkastixPrint Admin',
-                        style: AppTypography.bodyBold
-                            .copyWith(color: colors.onBackground),
+              // User info card with avatar, name, email, role badge
+              AppCard(
+                child: Column(
+                  children: [
+                    // Avatar with initial
+                    Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: colors.surfaceVariant,
+                        shape: BoxShape.circle,
                       ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        'Version 1.0.0',
-                        style: AppTypography.caption
-                            .copyWith(color: colors.onSurfaceDim),
+                      child: Center(
+                        child: Text(
+                          initial,
+                          style: AppTypography.display.copyWith(
+                            color: colors.accent,
+                          ),
+                        ),
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    Text(
+                      admin.fullName ?? 'Admin',
+                      style: AppTypography.h2
+                          .copyWith(color: colors.onBackground),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      admin.email,
+                      style: AppTypography.body
+                          .copyWith(color: colors.onSurfaceDim),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    const StatusBadge(
+                      label: 'Admin',
+                      variant: StatusBadgeVariant.info,
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xl),
+              )
+                  .animate()
+                  .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                  .slideY(
+                      begin: 0.03,
+                      duration: 400.ms,
+                      curve: Curves.easeOut),
+              const SizedBox(height: AppSpacing.lg),
 
-          // Sign out
-          AppButton(
-            label: 'Sign Out',
-            variant: AppButtonVariant.secondary,
-            icon: HugeIcons.strokeRoundedLogout01,
-            isFullWidth: true,
-            onTap: () {
-              ConfirmationDialog.show(
-                context,
-                title: 'Sign Out',
-                message: 'Are you sure you want to sign out?',
-                confirmLabel: 'Sign Out',
-                cancelLabel: 'Cancel',
-                onConfirm: () {
-                  ref.read(authProvider.notifier).logout();
-                  Navigator.of(context).pop();
+              // Contact details card
+              AppCard(
+                child: Column(
+                  children: [
+                    _buildInfoRow(
+                      context,
+                      HugeIcons.strokeRoundedMail01,
+                      'Email',
+                      admin.email,
+                    ),
+                    const Divider(height: AppSpacing.lg),
+                    _buildInfoRow(
+                      context,
+                      HugeIcons.strokeRoundedCall,
+                      'Phone',
+                      admin.phoneNumber ?? 'Not set',
+                    ),
+                  ],
+                ),
+              )
+                  .animate()
+                  .fadeIn(
+                      duration: 400.ms,
+                      delay: 60.ms,
+                      curve: Curves.easeOut)
+                  .slideY(
+                      begin: 0.03,
+                      duration: 400.ms,
+                      delay: 60.ms,
+                      curve: Curves.easeOut),
+              const SizedBox(height: AppSpacing.lg),
+
+              // App version
+              AppCard(
+                child: Row(
+                  children: [
+                    HugeIcon(
+                      icon: HugeIcons.strokeRoundedInformationCircle,
+                      size: 20,
+                      color: colors.onSurfaceDim,
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'DarkastixPrint Admin',
+                            style: AppTypography.bodyBold
+                                .copyWith(color: colors.onBackground),
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            'Version 1.0.0',
+                            style: AppTypography.caption
+                                .copyWith(color: colors.onSurfaceDim),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              )
+                  .animate()
+                  .fadeIn(
+                      duration: 400.ms,
+                      delay: 120.ms,
+                      curve: Curves.easeOut)
+                  .slideY(
+                      begin: 0.03,
+                      duration: 400.ms,
+                      delay: 120.ms,
+                      curve: Curves.easeOut),
+              const SizedBox(height: AppSpacing.xl),
+
+              // Sign out
+              AppButton(
+                label: 'Sign Out',
+                variant: AppButtonVariant.secondary,
+                icon: HugeIcons.strokeRoundedLogout01,
+                isFullWidth: true,
+                onTap: () {
+                  ConfirmationDialog.show(
+                    context,
+                    title: 'Sign Out',
+                    message: 'Are you sure you want to sign out?',
+                    confirmLabel: 'Sign Out',
+                    cancelLabel: 'Cancel',
+                    onConfirm: () {
+                      ref.read(authProvider.notifier).logout();
+                      Navigator.of(context).pop();
+                    },
+                    onCancel: () => Navigator.of(context).pop(),
+                  );
                 },
-                onCancel: () => Navigator.of(context).pop(),
-              );
-            },
+              ),
+            ],
           ),
-        ],
         ),
       ),
+    );
+  }
+
+  Widget _buildInfoRow(
+    BuildContext context,
+    dynamic icon,
+    String label,
+    String value,
+  ) {
+    final colors = _colors(context);
+    return Row(
+      children: [
+        HugeIcon(icon: icon, size: 20, color: colors.onSurfaceDim),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: AppTypography.caption
+                    .copyWith(color: colors.onSurfaceDim),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                value,
+                style: AppTypography.body
+                    .copyWith(color: colors.onBackground),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

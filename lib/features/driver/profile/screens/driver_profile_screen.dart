@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
+import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/models/enums.dart';
@@ -10,6 +11,8 @@ import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
+import 'package:printing_app/shared/widgets/app_text_field.dart';
+import 'package:printing_app/shared/widgets/confirmation_dialog.dart';
 
 /// Provider managing the driver's availability toggle state.
 final _driverAvailabilityProvider = StateProvider<bool>(
@@ -170,7 +173,65 @@ class DriverProfileScreen extends ConsumerWidget {
             isFullWidth: true,
             icon: HugeIcons.strokeRoundedEdit02,
             onTap: () {
-              // Not implemented
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(AppRadius.lg),
+                  ),
+                ),
+                builder: (_) => Padding(
+                  padding: EdgeInsets.only(
+                    left: AppSpacing.lg,
+                    right: AppSpacing.lg,
+                    top: AppSpacing.lg,
+                    bottom: MediaQuery.of(context).viewInsets.bottom +
+                        AppSpacing.lg,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Drag handle
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: colors.disabled,
+                            borderRadius: AppRadius.borderFull,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      Text(
+                        'Edit Vehicle Info',
+                        style: AppTypography.h3
+                            .copyWith(color: colors.onBackground),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      AppTextField(
+                        label: 'Vehicle Type',
+                        hintText: 'e.g. Motorcycle',
+                        controller: TextEditingController(),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      AppTextField(
+                        label: 'Plate Number',
+                        hintText: 'e.g. ABC 1234',
+                        controller: TextEditingController(),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      AppButton(
+                        label: 'Save Changes',
+                        onTap: () => Navigator.pop(context),
+                        isFullWidth: true,
+                      ),
+                    ],
+                  ),
+                ),
+              );
             },
           ),
           const SizedBox(height: AppSpacing.xxl),
@@ -182,41 +243,17 @@ class DriverProfileScreen extends ConsumerWidget {
             isFullWidth: true,
             icon: HugeIcons.strokeRoundedLogout01,
             onTap: () {
-              showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: Text(
-                    'Sign Out',
-                    style: AppTypography.h3
-                        .copyWith(color: colors.onBackground),
-                  ),
-                  content: Text(
-                    'Are you sure you want to sign out?',
-                    style: AppTypography.body
-                        .copyWith(color: colors.onSurface),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(),
-                      child: Text(
-                        'Cancel',
-                        style: AppTypography.button
-                            .copyWith(color: colors.onSurfaceDim),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.of(ctx).pop();
-                        ref.read(authProvider.notifier).logout();
-                      },
-                      child: Text(
-                        'Sign Out',
-                        style: AppTypography.button
-                            .copyWith(color: colors.error),
-                      ),
-                    ),
-                  ],
-                ),
+              ConfirmationDialog.show(
+                context,
+                title: 'Sign Out',
+                message: 'Are you sure you want to sign out?',
+                confirmLabel: 'Sign Out',
+                cancelLabel: 'Cancel',
+                onConfirm: () {
+                  ref.read(authProvider.notifier).logout();
+                  Navigator.of(context).pop();
+                },
+                onCancel: () => Navigator.of(context).pop(),
               );
             },
           ),
