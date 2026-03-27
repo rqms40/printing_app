@@ -21,6 +21,8 @@ void main() {
   group('DeliveriesScreen', () {
     testWidgets('renders deliveries list with mock data', (tester) async {
       await tester.pumpWidget(_wrap(const DeliveriesScreen()));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
 
       // The mock data contains assignments -- verify we see order IDs.
       // MockData has deliveries for ORD-10005, ORD-10004, ORD-10003.
@@ -56,6 +58,8 @@ void main() {
           ),
         ),
       );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
 
       // The default mock data has assignments, so we need to test
       // with a status filter that yields nothing.

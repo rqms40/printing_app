@@ -22,6 +22,8 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       await tester.pumpWidget(_wrap(const OrdersScreen()));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.text('Active'), findsOneWidget);
       expect(find.text('Completed'), findsOneWidget);
@@ -35,6 +37,8 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       await tester.pumpWidget(_wrap(const OrdersScreen()));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
 
       // Active tab is shown by default and should contain active order IDs.
       expect(find.text('ORD-10001'), findsOneWidget);
@@ -49,9 +53,12 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       await tester.pumpWidget(_wrap(const OrdersScreen()));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
 
       await tester.tap(find.text('Completed'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
 
       // Delivered and cancelled orders should appear.
       expect(find.text('ORD-10006'), findsOneWidget);
@@ -65,6 +72,8 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       await tester.pumpWidget(_wrap(const OrdersScreen()));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.text('My Orders'), findsOneWidget);
     });

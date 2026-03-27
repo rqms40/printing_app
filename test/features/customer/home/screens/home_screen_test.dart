@@ -22,6 +22,8 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       await tester.pumpWidget(_wrap(const HomeScreen()));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(
         find.textContaining('Professional printing,'),
@@ -43,6 +45,8 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       await tester.pumpWidget(_wrap(const HomeScreen()));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.text('Paper Printing'), findsOneWidget);
       expect(find.text('3D Printing'), findsOneWidget);
@@ -55,6 +59,8 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       await tester.pumpWidget(_wrap(const HomeScreen()));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.text('Recent Orders'), findsOneWidget);
       expect(find.text('See All'), findsOneWidget);
@@ -67,6 +73,8 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       await tester.pumpWidget(_wrap(const HomeScreen()));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.text('Hello, Maria'), findsOneWidget);
     });

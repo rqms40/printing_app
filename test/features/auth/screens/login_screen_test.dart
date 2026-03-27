@@ -17,12 +17,16 @@ void main() {
   group('LoginScreen', () {
     testWidgets('renders "Welcome back" heading', (tester) async {
       await tester.pumpWidget(_wrap(const LoginScreen()));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.text('Welcome back'), findsOneWidget);
     });
 
     testWidgets('renders email and password fields', (tester) async {
       await tester.pumpWidget(_wrap(const LoginScreen()));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.text('Email'), findsOneWidget);
       expect(find.text('Password'), findsOneWidget);
@@ -30,6 +34,8 @@ void main() {
 
     testWidgets('renders Sign In button', (tester) async {
       await tester.pumpWidget(_wrap(const LoginScreen()));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.text('Sign In'), findsOneWidget);
     });
@@ -37,6 +43,8 @@ void main() {
     testWidgets('dev bypass buttons are visible (Customer, Driver, Admin)',
         (tester) async {
       await tester.pumpWidget(_wrap(const LoginScreen()));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.text('DEV LOGIN'), findsOneWidget);
       expect(find.text('Customer'), findsOneWidget);
@@ -46,6 +54,8 @@ void main() {
 
     testWidgets('renders "Create one" navigation text', (tester) async {
       await tester.pumpWidget(_wrap(const LoginScreen()));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
 
       // The text lives inside a Text.rich with spans, so use textContaining.
       expect(
@@ -56,6 +66,8 @@ void main() {
 
     testWidgets('renders "Forgot password?" link', (tester) async {
       await tester.pumpWidget(_wrap(const LoginScreen()));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.text('Forgot password?'), findsOneWidget);
     });
