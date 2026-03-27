@@ -3,9 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 
+import 'package:printing_app/config/routes/page_transitions.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/shared/widgets/app_bottom_nav.dart';
 import 'package:printing_app/shared/widgets/scaffold_with_nav.dart';
+
+// ---------------------------------------------------------------------------
+// Splash screen
+// ---------------------------------------------------------------------------
+import 'package:printing_app/features/splash/screens/splash_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Auth screens
@@ -68,13 +74,17 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
-    initialLocation: '/auth/login',
+    initialLocation: '/splash',
     debugLogDiagnostics: true,
     redirect: (context, state) {
       final isAuth = authState.status == AuthStatus.authenticated;
       final isProfileIncomplete =
           authState.status == AuthStatus.profileIncomplete;
       final isOnAuth = state.matchedLocation.startsWith('/auth');
+      final isOnSplash = state.matchedLocation == '/splash';
+
+      // Let the splash screen through without redirect
+      if (isOnSplash) return null;
 
       // Unauthenticated users must go to login
       if (!isAuth && !isProfileIncomplete && !isOnAuth) {
@@ -103,19 +113,31 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       // -----------------------------------------------------------------------
+      // Splash screen
+      // -----------------------------------------------------------------------
+      GoRoute(
+        path: '/splash',
+        pageBuilder: (_, state) =>
+            fadeTransition(const SplashScreen(), state),
+      ),
+
+      // -----------------------------------------------------------------------
       // Auth routes
       // -----------------------------------------------------------------------
       GoRoute(
         path: '/auth/login',
-        builder: (_, _) => const LoginScreen(),
+        pageBuilder: (_, state) =>
+            fadeTransition(const LoginScreen(), state),
       ),
       GoRoute(
         path: '/auth/register',
-        builder: (_, _) => const RegisterScreen(),
+        pageBuilder: (_, state) =>
+            fadeTransition(const RegisterScreen(), state),
       ),
       GoRoute(
         path: '/auth/profile-setup',
-        builder: (_, _) => const ProfileSetupScreen(),
+        pageBuilder: (_, state) =>
+            fadeTransition(const ProfileSetupScreen(), state),
       ),
 
       // -----------------------------------------------------------------------
@@ -169,8 +191,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                 routes: [
                   GoRoute(
                     path: ':id',
-                    builder: (_, state) => OrderDetailScreen(
-                      orderId: state.pathParameters['id']!,
+                    pageBuilder: (_, state) => slideTransition(
+                      OrderDetailScreen(
+                        orderId: state.pathParameters['id']!,
+                      ),
+                      state,
                     ),
                   ),
                 ],
@@ -201,59 +226,73 @@ final routerProvider = Provider<GoRouter>((ref) {
       // -----------------------------------------------------------------------
       GoRoute(
         path: '/customer/order/new',
-        builder: (_, _) => const CategoryScreen(),
+        pageBuilder: (_, state) =>
+            slideUpTransition(const CategoryScreen(), state),
       ),
       GoRoute(
         path: '/customer/order/paper-specs',
-        builder: (_, _) => const PaperSpecsScreen(),
+        pageBuilder: (_, state) =>
+            slideUpTransition(const PaperSpecsScreen(), state),
       ),
       GoRoute(
         path: '/customer/order/3d-specs',
-        builder: (_, _) => const ThreeDSpecsScreen(),
+        pageBuilder: (_, state) =>
+            slideUpTransition(const ThreeDSpecsScreen(), state),
       ),
       GoRoute(
         path: '/customer/order/upload',
-        builder: (_, _) => const UploadScreen(),
+        pageBuilder: (_, state) =>
+            slideUpTransition(const UploadScreen(), state),
       ),
       GoRoute(
         path: '/customer/order/summary',
-        builder: (_, _) => const SummaryScreen(),
+        pageBuilder: (_, state) =>
+            slideUpTransition(const SummaryScreen(), state),
       ),
       GoRoute(
         path: '/customer/order/delivery',
-        builder: (_, _) => const DeliveryDetailsScreen(),
+        pageBuilder: (_, state) =>
+            slideUpTransition(const DeliveryDetailsScreen(), state),
       ),
       GoRoute(
         path: '/customer/order/payment',
-        builder: (_, _) => const PaymentScreen(),
+        pageBuilder: (_, state) =>
+            slideUpTransition(const PaymentScreen(), state),
       ),
       GoRoute(
         path: '/customer/orders/:id/track',
-        builder: (_, state) => const DeliveryTrackingScreen(),
+        pageBuilder: (_, state) =>
+            slideTransition(const DeliveryTrackingScreen(), state),
       ),
       GoRoute(
         path: '/customer/addresses',
-        builder: (_, _) => const AddressListScreen(),
+        pageBuilder: (_, state) =>
+            slideTransition(const AddressListScreen(), state),
       ),
       GoRoute(
         path: '/customer/addresses/new',
-        builder: (_, _) => const AddressPickerScreen(),
+        pageBuilder: (_, state) =>
+            slideTransition(const AddressPickerScreen(), state),
       ),
       GoRoute(
         path: '/customer/profile/account',
-        builder: (_, _) => const AccountDetailsScreen(),
+        pageBuilder: (_, state) =>
+            slideTransition(const AccountDetailsScreen(), state),
       ),
       GoRoute(
         path: '/customer/profile/support',
-        builder: (_, _) => const SupportScreen(),
+        pageBuilder: (_, state) =>
+            slideTransition(const SupportScreen(), state),
       ),
       GoRoute(
         path: '/customer/profile/terms',
-        builder: (_, _) => const TermsScreen(),
+        pageBuilder: (_, state) =>
+            slideTransition(const TermsScreen(), state),
       ),
       GoRoute(
         path: '/customer/profile/privacy',
-        builder: (_, _) => const PrivacyScreen(),
+        pageBuilder: (_, state) =>
+            slideTransition(const PrivacyScreen(), state),
       ),
 
       // -----------------------------------------------------------------------
