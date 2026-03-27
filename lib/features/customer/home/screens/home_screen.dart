@@ -1,15 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
-import 'package:printing_app/features/customer/home/widgets/hero_banner.dart';
+import 'package:printing_app/features/customer/home/widgets/bento_grid.dart';
 import 'package:printing_app/features/customer/home/widgets/recent_orders_section.dart';
-import 'package:printing_app/features/customer/home/widgets/service_card.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:printing_app/shared/widgets/section_header.dart';
 
 /// Customer home screen with editorial hero banner, service cards, and recent orders.
 class HomeScreen extends ConsumerWidget {
@@ -32,9 +28,9 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = _colors(context);
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      body: SafeArea(
+    return ColoredBox(
+      color: colors.background,
+      child: SafeArea(
         child: RefreshIndicator(
           color: colors.accent,
           backgroundColor: colors.surface,
@@ -73,42 +69,8 @@ class HomeScreen extends ConsumerWidget {
 
               const SizedBox(height: AppSpacing.lg),
 
-              // Hero banner
-              const HeroBanner()
-                  .animate()
-                  .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
-                  .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
-
-              const SizedBox(height: AppSpacing.lg),
-
-              // Services section
-              const SectionHeader(title: 'Services'),
-
-              ServiceCard(
-                title: 'Paper Printing',
-                description: 'Documents, posters, banners & more',
-                icon: HugeIcons.strokeRoundedFile02,
-                onTap: () {
-                  context.push('/customer/order/new');
-                },
-              )
-                  .animate()
-                  .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
-                  .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
-
-              const SizedBox(height: AppSpacing.md),
-
-              ServiceCard(
-                title: '3D Printing',
-                description: 'Custom models, prototypes & figurines',
-                icon: HugeIcons.strokeRoundedPackageDelivered,
-                onTap: () {
-                  context.push('/customer/order/new');
-                },
-              )
-                  .animate()
-                  .fadeIn(duration: 400.ms, delay: 180.ms, curve: Curves.easeOut)
-                  .slideY(begin: 0.03, duration: 400.ms, delay: 180.ms, curve: Curves.easeOut),
+              // Bento grid
+              const BentoGrid(),
 
               const SizedBox(height: AppSpacing.lg),
 
