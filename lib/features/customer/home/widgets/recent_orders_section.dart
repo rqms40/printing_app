@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -56,7 +57,7 @@ class RecentOrdersSection extends StatelessWidget {
           title: 'Recent Orders',
           actionLabel: 'See All',
           onAction: () {
-            // TODO: Navigate to orders list
+            context.go('/customer/orders');
           },
         ),
         if (recentOrders.isEmpty)
@@ -113,7 +114,7 @@ class _MiniOrderCard extends StatelessWidget {
       width: 200,
       child: AppCard(
         onTap: () {
-          // TODO: Navigate to order detail
+          context.push('/customer/orders/${order.id}');
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -69,7 +70,7 @@ class HomeScreen extends ConsumerWidget {
                 description: 'Documents, posters, banners & more',
                 icon: HugeIcons.strokeRoundedFile02,
                 onTap: () {
-                  // TODO: Navigate to paper printing
+                  context.push('/customer/order/new');
                 },
               ),
 
@@ -80,7 +81,7 @@ class HomeScreen extends ConsumerWidget {
                 description: 'Custom models, prototypes & figurines',
                 icon: HugeIcons.strokeRoundedPackageDelivered,
                 onTap: () {
-                  // TODO: Navigate to 3D printing
+                  context.push('/customer/order/new');
                 },
               ),
 

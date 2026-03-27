@@ -136,7 +136,9 @@ class _AuthFormState extends State<AuthForm> {
             alignment: Alignment.centerRight,
             child: GestureDetector(
               onTap: () {
-                // TODO: Forgot password flow
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Coming soon')),
+                );
               },
               child: Text(
                 'Forgot password?',

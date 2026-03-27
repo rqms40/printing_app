@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
@@ -127,7 +128,7 @@ class OrderDetailScreen extends ConsumerWidget {
               AppButton(
                 label: 'Track Delivery',
                 onTap: () {
-                  // TODO: navigate to tracking screen
+                  context.push('/customer/orders/${order.id}/track');
                 },
                 isFullWidth: true,
                 icon: HugeIcons.strokeRoundedLocation01,
