@@ -1,8 +1,10 @@
-# DarkastixPrint - Product Requirements Document (v2)
+# GRID - Product Requirements Document (v3)
+
+**Tagline:** TAP TO PLOT. Simplified. Printing.
 
 ## 1. Executive Summary
 
-DarkastixPrint is a premium mobile printing service platform built with Flutter that enables customers to order paper printing and 3D model printing services with real-time order tracking, driver-based delivery with live GPS map, multiple payment methods, and a refined, luxury-grade user experience. The platform uses a sophisticated **greyscale/monochrome design language** with strategic accent color — inspired by the restraint of Uber, Nothing Phone OS, and luxury e-commerce — delivering a UI that feels intentional, premium, and distinctly crafted.
+GRID is a premium mobile printing service platform built with Flutter that enables customers to order paper printing and 3D model printing services with real-time order tracking, driver-based delivery with live GPS map, multiple payment methods, and a refined, luxury-grade user experience. The platform uses a **greyscale-dominant UI with strategic brand yellow (#FFDE58) reserved for the logo and minimal accent touches** — inspired by the restraint of Uber, Nothing Phone OS, and luxury e-commerce — delivering a UI that feels intentional, premium, and distinctly crafted. The GRID identity is anchored by a 3x3 dot grid logo, where a single yellow dot represents the precision and simplicity of the brand.
 
 The platform serves three user roles: **customers** who place and track orders, **drivers** who handle delivery assignments with real-time GPS tracking, and **admins** who manage the printing queue, assign drivers, update statuses, and monitor business analytics.
 
@@ -16,7 +18,7 @@ The backend is a self-hosted **Serverpod** server (full-stack Dart), giving comp
 
 ## 2. Mission
 
-**Mission Statement:** Provide a seamless, visually refined mobile platform for ordering professional printing services with coordinated delivery — making paper and 3D printing as easy as ordering food delivery, complete with live driver tracking, with an interface that feels expensive and intentional.
+**Mission Statement:** TAP TO PLOT. Simplified. Printing. — GRID makes professional printing as easy as ordering food delivery, with coordinated driver delivery, live GPS tracking, and an interface that feels expensive and intentional.
 
 ### Core Principles
 
@@ -137,7 +139,13 @@ The backend is a self-hosted **Serverpod** server (full-stack Dart), giving comp
 **Technical**
 
 - Flutter 3.41.6 / Dart 3.11.4 with FVM
-- Serverpod backend with PostgreSQL (in `./server`)
+- Serverpod backend with PostgreSQL (in `./server`) — NOT YET STARTED
+- flutter_map + OpenStreetMap (free, no API key) for map views
+- OSRM for real road routing (free, no API key)
+- HugeIcons for stroke-rounded icon set (46K+ icons)
+- flutter_animate for micro-interactions and screen transitions
+- fl_chart for admin dashboard charts
+- flutter_staggered_grid_view for bento grid layouts
 - Serverpod ORM for type-safe database queries
 - WebSocket streams for real-time order updates
 - Serverpod file storage (S3-compatible or local)
@@ -145,7 +153,6 @@ The backend is a self-hosted **Serverpod** server (full-stack Dart), giving comp
 - Riverpod for client-side state management
 - Go Router for navigation
 - Local persistence with Hive/SharedPreferences for drafts
-- Google Maps Flutter SDK for map views (address picker + live driver tracking)
 - Geolocator for driver GPS tracking (position streaming during delivery)
 - Geocoding for address resolution (coordinates to/from human-readable addresses)
 
@@ -163,6 +170,7 @@ The backend is a self-hosted **Serverpod** server (full-stack Dart), giving comp
 - Auto-assignment algorithm (drivers auto-matched to orders by proximity)
 - Driver self-select / bidding on deliveries
 - Route optimization (multi-stop delivery planning)
+- Google Maps integration (using free OpenStreetMap instead)
 
 ---
 
@@ -270,15 +278,15 @@ The backend is a self-hosted **Serverpod** server (full-stack Dart), giving comp
 
 ```
 ┌──────────────────────┐         HTTP/JSON + WebSocket        ┌─────────────────────────┐
-│   Flutter App        │ <--------------------------------------->   Serverpod Server      │
+│   Flutter App        │ ◄──────────────────────────────────► │   Serverpod Server      │
 │   (Customer/Driver/  │                                      │   (Dart Backend)        │
 │    Admin)            │                                      │   Port 8080             │
 │                      │                                      │                         │
 │   - Riverpod         │                                      │   - Endpoints (API)     │
 │   - Go Router        │                                      │   - ORM (PostgreSQL)    │
-│   - Google Maps      │                                      │   - Streams (WebSocket) │
+│   - flutter_map      │                                      │   - Streams (WebSocket) │
 │   - Hive (offline)   │                                      │   - File Storage        │
-│   - Geolocator       │                                      │   - Auth Module         │
+│   - HugeIcons        │                                      │   - Auth Module         │
 └──────────────────────┘                                      │   - Task Scheduling     │
                                                               └────────────┬────────────┘
                                                                            │
@@ -291,7 +299,13 @@ The backend is a self-hosted **Serverpod** server (full-stack Dart), giving comp
                                           └─────────────────┘  └─────────────────┘  └─────────────────┘
 ```
 
-The Flutter app serves all three roles (Customer, Driver, Admin) within a single codebase, with role-based routing determining which feature set is presented. The Serverpod backend handles all business logic, data persistence, real-time communication, and file storage. External services include PostgreSQL for relational data, S3-compatible storage for uploaded files, and Firebase Cloud Messaging (FCM) with Apple Push Notification Service (APNs) for push notifications. Google Maps API is consumed directly by the Flutter client for map rendering, geocoding, and navigation.
+```
+External APIs:
+- OSRM (router.project-osrm.org) — Free driving directions, no API key
+- OpenStreetMap tiles — Free map rendering, no API key
+```
+
+The Flutter app serves all three roles (Customer, Driver, Admin) within a single codebase, with role-based routing determining which feature set is presented. The Serverpod backend handles all business logic, data persistence, real-time communication, and file storage. External services include PostgreSQL for relational data, S3-compatible storage for uploaded files, and Firebase Cloud Messaging (FCM) with Apple Push Notification Service (APNs) for push notifications. OpenStreetMap via flutter_map is used by the Flutter client for map rendering, with OSRM providing free driving route geometry.
 
 ### Directory Structure
 
@@ -531,7 +545,7 @@ printing_app/
 - **Repository Pattern** — Data access abstracted behind repository interfaces. Repositories handle the decision between local cache (Hive) and remote API (Serverpod client), enabling offline-first behavior and testability.
 - **Offline-First Drafts** — Hive local storage for draft orders, sync queue for pending actions. When connectivity is restored, queued actions are replayed in order. Conflict resolution favors server state.
 - **Location Streaming** — GPS coordinates streamed via WebSocket during active delivery only, with battery-conscious intervals (10-second updates during "on_the_way" phase). Streaming starts when the driver taps "On the Way" and stops when the driver taps "Arrived." No background location tracking outside active deliveries.
-- **Map Integration** — Google Maps for address picking (draggable pin with geocoding), delivery tracking (real-time driver position on customer's screen), and driver navigation (open destination in external maps app). Map style uses greyscale/silver theme to match the monochrome design language.
+- **Map Integration** — OpenStreetMap via flutter_map for address picking (draggable pin with geocoding), delivery tracking (real-time driver position on customer's screen), and driver navigation (open destination in external maps app). OSRM provides real road routing geometry. Map style uses greyscale tiles to match the monochrome design language.
 - **Checkpoint State Machine** — Driver delivery status follows a strict state machine: `assigned` -> `accepted` -> `picked_up` -> `on_the_way` -> `arrived` -> `delivered`. Each transition is validated server-side. Invalid transitions are rejected. The `declined` state is an alternative exit from `assigned` that triggers admin reassignment.
 
 ---
@@ -758,7 +772,7 @@ Each transition is validated server-side. The driver can only move forward throu
 **Purpose:** Save and manage delivery addresses with map precision for reliable driver navigation.
 
 **Key Features:**
-- Map pin picker (Google Maps) as the primary input method — full-screen map with a draggable center pin. As the user moves the map, the address auto-fills below via reverse geocoding
+- Map pin picker (OpenStreetMap via flutter_map) as the primary input method — full-screen map with a draggable center pin. As the user moves the map, the address auto-fills below via reverse geocoding
 - Editable address fields after geocoding: label (e.g., "Home," "Office"), full address, barangay, city, province, zip code
 - Mandatory landmark field ("near Jollibee on Main St," "blue gate beside sari-sari store") — landmarks are critical for Philippine delivery where street addresses are often insufficient
 - Save as default address — the default address is pre-selected during order checkout
@@ -843,37 +857,58 @@ Key references:
 
 | Token | Hex | Usage |
 |-------|-----|-------|
-| `background` | `#FAFAFA` | Page canvas |
+| `background` | `#F8F8F8` | Page canvas |
 | `surface` | `#FFFFFF` | Cards, bottom sheets |
-| `surfaceVariant` | `#F5F5F5` | Subtle sections, input backgrounds |
-| `surfaceDim` | `#EEEEEE` | Dividers, separators |
-| `onBackground` | `#121212` | Primary text |
-| `onSurface` | `#424242` | Secondary text |
-| `onSurfaceDim` | `#616161` | Tertiary / hint text (meets 4.5:1 on #FAFAFA) |
-| `disabled` | `#BDBDBD` | Disabled text, inactive icons |
-| `outline` | `#E0E0E0` | Borders, input outlines |
+| `surfaceVariant` | `#F0F0F0` | Subtle sections, input backgrounds |
+| `surfaceDim` | `#E8E8E8` | Dividers, separators |
+| `onBackground` | `#1A1A1A` | Primary text |
+| `onSurface` | `#4A4A4A` | Secondary text |
+| `onSurfaceDim` | `#7A7A7A` | Tertiary / hint text |
+| `disabled` | `#B0B0B0` | Disabled text, inactive icons |
+| `outline` | `#DCDCDC` | Borders, input outlines |
 | `outlineVariant` | `#EEEEEE` | Subtle dividers |
 | `accent` | `#1A1A1A` | Primary CTAs, active states (near-black) |
 | `accentSoft` | `#333333` | Pressed states |
+| `accentOnColor` | `#FFFFFF` | Text on accent background |
+| `brand` | `#D4A017` | Deep amber — "See All" links, badges, minimal highlights |
 
 #### Dark Theme
 
 | Token | Hex | Usage |
 |-------|-----|-------|
-| `background` | `#121212` | Page canvas (not pure black -- reduces eye strain) |
-| `surface` | `#1E1E1E` | Cards, bottom sheets (1dp elevation) |
-| `surfaceVariant` | `#2C2C2C` | Elevated cards, dialogs (6dp) |
-| `surfaceHigh` | `#333333` | Modals, top sheets (12dp) |
-| `onBackground` | `#F5F5F5` | Primary text (95% white) |
-| `onSurface` | `#E0E0E0` | Secondary text |
-| `onSurfaceDim` | `#BDBDBD` | Tertiary / hint text (meets 4.5:1 on #121212) |
-| `disabled` | `#616161` | Disabled text |
-| `outline` | `#424242` | Borders, dividers |
-| `outlineVariant` | `#303030` | Subtle separators |
-| `accent` | `#F5F5F5` | Primary CTAs, active states (near-white -- inverted from light theme) |
-| `accentSoft` | `#E0E0E0` | Pressed states |
+| `background` | `#000000` | Page canvas (true black for AMOLED) |
+| `surface` | `#141414` | Cards, bottom sheets |
+| `surfaceVariant` | `#1E1E1E` | Elevated cards, dialogs |
+| `surfaceHigh` | `#2A2A2A` | Modals, top sheets |
+| `onBackground` | `#F0F0F0` | Primary text |
+| `onSurface` | `#CCCCCC` | Secondary text |
+| `onSurfaceDim` | `#808080` | Tertiary / hint text |
+| `disabled` | `#4A4A4A` | Disabled text |
+| `outline` | `#2E2E2E` | Borders, dividers |
+| `outlineVariant` | `#1E1E1E` | Subtle separators |
+| `accent` | `#F0F0F0` | Primary CTAs, active states (near-white) |
+| `accentSoft` | `#D0D0D0` | Pressed states |
+| `accentOnColor` | `#000000` | Text on accent background |
+| `brand` | `#FFDE58` | Bright yellow — links, badges, minimal highlights |
 
-> **Note:** The accent color inverts between themes: near-black (#1A1A1A) in light mode, near-white (#F5F5F5) in dark mode. This ensures CTAs remain high-contrast in both modes.
+#### Brand Colors (used only in logo + 6 minimal UI touches)
+
+| Color | Hex | Usage |
+|-------|-----|-------|
+| `brandLight` | `#D4A017` | Deep amber for light mode (readable on white) |
+| `brandDark` | `#FFDE58` | Bright yellow for dark mode (pops on black) |
+| `brandLogo` | `#FFDE58` | Always bright yellow in the 3x3 dot grid logo |
+
+#### Brand Color Usage (6 places only)
+
+1. "See All" link text in section headers
+2. Notification unread count badge
+3. "Mark all as read" link
+4. Login dark mode toggle icon
+5. Active order count in home bento grid
+6. Promo discount icon
+
+> **Note:** The accent color inverts between themes: near-black (#1A1A1A) in light mode, near-white (#F0F0F0) in dark mode. The brand color (yellow) is used as punctuation — like the single colored dot in the GRID logo — never as a primary UI color.
 
 #### Semantic Status Colors (Desaturated)
 
@@ -931,15 +966,15 @@ In dark themes, shadows are invisible. Elevation is expressed through **surface 
 
 | Role | Font | Fallback |
 |------|------|----------|
-| Display / Headings | **Instrument Serif** | Georgia, serif |
-| Body / UI | **Satoshi** | system-ui, sans-serif |
+| Display (hero banners + splash only) | **Instrument Serif** | Georgia, serif |
+| Headings / Body / UI | **Satoshi** | system-ui, sans-serif |
 
-> **Why these fonts:** Instrument Serif adds editorial character to headings — it's unexpected in a mobile app context, creating a luxury editorial feel. Satoshi is geometric, modern, and highly legible at small sizes — perfect for UI text. The serif/sans pairing creates contrast and sophistication within the monochrome palette.
+> **Why these fonts:** Instrument Serif adds editorial character to hero banners and the splash screen — it's unexpected in a mobile app context, creating a luxury editorial feel. Satoshi is geometric, modern, and highly legible at all sizes — perfect for headings, body text, and UI elements. The serif is reserved for display-only contexts to keep the brand feeling premium without overuse.
 
 | Style | Font | Size | Weight | Letter Spacing | Usage |
 |-------|------|------|--------|-----------------|-------|
-| Display | Instrument Serif | 32px | 400 (Regular) | -0.5px | Hero headings |
-| H1 | Instrument Serif | 28px | 400 (Regular) | -0.3px | Page titles |
+| Display | Instrument Serif | 32px | 400 (Regular) | -0.5px | Hero banners + splash only |
+| H1 | Satoshi | 28px | 700 (Bold) | -0.3px | Page titles |
 | H2 | Satoshi | 24px | 700 (Bold) | 0px | Section titles |
 | H3 | Satoshi | 20px | 600 (Medium) | 0px | Card titles |
 | Body Large | Satoshi | 16px | 400 (Regular) | 0.1px | Primary body text |
@@ -1023,8 +1058,8 @@ All interactive elements must have a minimum touch target of **48x48dp** (Materi
 8. **Inputs** — Bottom-border style (not full box) for a cleaner, editorial feel. Full box only for search fields
 9. **Bottom Sheets** — Subtle drag handle, generous top radius, backdrop blur on dark theme
 10. **Skeleton Loading** — Subtle grey shimmer on grey background — low contrast, almost invisible shimmer for sophistication
-11. **Map Views** — Google Maps with custom greyscale map style (silver/retro mode to match monochrome aesthetic). Driver pin as a dark circle with directional indicator showing heading. Destination as accent-colored pin. Route line rendered in `onSurface` color. Map controls styled to match the app theme
-12. **Address Picker** — Full-screen map with a draggable center pin. As the user moves the map, the address auto-fills below the map via reverse geocoding. Editable fields and the landmark input appear in a bottom sheet that the user can expand. Confirm button at the bottom of the sheet
+11. **Map Views** — OpenStreetMap via flutter_map with greyscale tile styling to match monochrome aesthetic. OSRM provides real road routing geometry. Driver pin as a dark circle with directional indicator showing heading. Destination as accent-colored pin. Route line rendered in `onSurface` color. Map controls styled to match the app theme
+12. **Address Picker** — Full-screen OpenStreetMap via flutter_map with a draggable center pin. As the user moves the map, the address auto-fills below the map via reverse geocoding. Editable fields and the landmark input appear in a bottom sheet that the user can expand. Confirm button at the bottom of the sheet
 13. **Driver Status Actions** — Large pill-shaped buttons at the bottom of the screen for checkpoint actions. The current (next) action is highlighted with the accent color. Completed checkpoints shown as greyed-out checkmarks above. Swipe-to-confirm gesture required for "Delivered" to prevent accidental taps
 14. **Cancellation Dialog** — Confirmation bottom sheet with cancellation policy summary at the top, optional reason selector (chip group), and a destructive-styled cancel button using the Error semantic color. A secondary "Keep Order" button uses the standard outlined style
 
@@ -1041,22 +1076,34 @@ All interactive elements must have a minimum touch target of **48x48dp** (Materi
 | State Management | Riverpod | ^2.x (latest) | Compile-safe reactive state |
 | Navigation | GoRouter | ^14.x | Declarative routing with guards |
 | HTTP Client | Serverpod Client (generated) | — | Type-safe API calls |
-| Local Storage | Hive | ^4.x | Offline draft persistence |
+| Local Storage | Hive | ^2.2.3 (dependency present, integration pending) | Offline draft persistence |
 | Animations | flutter_animate | ^4.x | Declarative animations |
 | Charts | fl_chart | ^0.x (latest) | Admin dashboard charts |
 | File Picker | file_picker | ^8.x | File selection for uploads |
 | Image Handling | cached_network_image | ^3.x | Cached image loading |
-| Icons | Iconsax (line style) | latest | Consistent icon set |
+| Icons | hugeicons | ^1.1.5 | Primary icon package (46K+ stroke-rounded icons) |
+| Icon SVG Support | flutter_svg | ^2.0.17 | Required by hugeicons v1.x |
 | Fonts | Satoshi (bundled) + Instrument Serif (bundled) | — | Typography system |
 | Skeleton Loading | shimmer | ^3.x | Loading placeholders |
 | Connectivity | connectivity_plus | ^6.x | Network state detection |
 | Push Notifications | firebase_messaging | ^15.x | FCM push notifications |
 | Deep Linking | url_launcher | ^6.x | E-wallet and navigation app launches |
 | Date Utilities | intl | ^0.x (latest) | Currency and date formatting |
-| Google Maps | google_maps_flutter | ^2.x | Map views, address picker |
+| Maps | flutter_map | ^8.2.2 | OpenStreetMap-based map views, address picker |
+| Map Coordinates | latlong2 | ^0.9.1 | Geographic coordinate utilities for flutter_map |
+| Route Decoding | google_polyline_algorithm | ^3.1.0 | Decodes OSRM route geometry |
+| HTTP Client | http | ^1.2.2 | OSRM API calls |
+| Bento Grid | flutter_staggered_grid_view | ^0.7.0 | Staggered/bento grid layouts |
 | Geolocator | geolocator | ^12.x | GPS location tracking |
 | Geocoding | geocoding | ^3.x | Coordinates to/from address resolution |
 | Location Permission | permission_handler | ^11.x | Runtime permission management |
+
+### External Services (Free, No API Key)
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| OSRM (Open Source Routing Machine) | router.project-osrm.org | Free public routing API for real driving directions, no API key required |
+| OpenStreetMap tiles | tile.openstreetmap.org | Free map tile rendering, no API key required |
 
 ### Backend (Serverpod) -- in `./server`
 
@@ -1096,7 +1143,6 @@ All interactive elements must have a minimum touch target of **48x48dp** (Materi
 | Serverpod CLI | Code generation, migrations, deployment |
 | VS Code | Primary IDE with Flutter/Dart extensions |
 | Context7 MCP | Up-to-date library documentation during development |
-| Google Cloud Console | Maps API key management |
 
 ---
 
@@ -1834,10 +1880,6 @@ Existing Serverpod configuration with the following additions:
 ```yaml
 # config/production.yaml (additions)
 
-# Google Maps API
-google:
-  mapsApiKey: ${GOOGLE_MAPS_API_KEY}
-
 # Payment Webhooks
 payments:
   gcash:
@@ -1858,7 +1900,7 @@ Existing client configuration with the following additions:
 ```dart
 // lib/config/constants/api_constants.dart (additions)
 
-const String googleMapsApiKey = String.fromEnvironment('GOOGLE_MAPS_API_KEY');
+const String osrmBaseUrl = 'https://router.project-osrm.org';
 const int locationUpdateIntervalMs = 10000;  // 10 seconds during active delivery
 ```
 
@@ -1936,9 +1978,11 @@ The MVP is successful when:
 
 ## 16. Implementation Phases
 
-### Phase 1: UI Shell & Greyscale Design System
+### Phase 1: UI Shell & Greyscale Design System -- ✅ COMPLETE
 
 **Goal:** Build the complete visual layer with mock data. Every screen exists, navigates correctly, and looks premium.
+
+> **Completed 2026-03-27.** 34 screens across 3 roles, full design system, GoRouter navigation, skeleton loaders, entry animations, splash screen with animated GRID logo.
 
 **Deliverables:**
 - Design system: color tokens, typography scale, spacing system, component library
@@ -1951,7 +1995,7 @@ The MVP is successful when:
 - Order summary and payment selection
 - Order history list and order detail screens
 - Delivery tracking screen with mock map view
-- Address picker screen with Google Maps integration
+- Address picker screen with OpenStreetMap via flutter_map
 - Order cancellation confirmation dialog
 - Notifications screen
 - Settings screen
@@ -1963,9 +2007,11 @@ The MVP is successful when:
 - Driver screens built with mock data (deliveries list, active delivery map, history, profile)
 - Bottom navigation and routing for all three roles
 
-### Phase 2: Order Flow UI & Local Logic
+### Phase 2: Order Flow UI & Local Logic -- ✅ 95% COMPLETE
 
 **Goal:** Wire up local state management, form validation, draft persistence, and price calculation -- all without a backend.
+
+> **Completed 2026-03-28.** Full 6-step order flow with pricing engine, address management with map picker, order history, notifications. Remaining: Hive draft persistence, dark mode persistence.
 
 **Deliverables:**
 - State management setup (Riverpod providers)
@@ -1980,7 +2026,9 @@ The MVP is successful when:
 - Local notification scheduling
 - Offline state indicators
 
-### Phase 3: Serverpod Backend Setup
+### Phase 3: Serverpod Backend Setup -- NOT STARTED
+
+> **Prerequisite:** Phases 1-2 completion (done). Next step: Serverpod backend scaffolding.
 
 **Goal:** Stand up the server, define all models and endpoints, configure the database.
 
@@ -2003,7 +2051,9 @@ The MVP is successful when:
 - Health check endpoint
 - WebSocket stream setup for real-time updates
 
-### Phase 4: Client-Server Integration
+### Phase 4: Client-Server Integration -- NOT STARTED
+
+> **Prerequisite:** Phases 1-2 completion (done). Next step: Serverpod backend scaffolding.
 
 **Goal:** Connect every Flutter screen to its corresponding Serverpod endpoint. Replace all mock data with live data.
 
@@ -2026,7 +2076,9 @@ The MVP is successful when:
 - Offline queue with sync-on-reconnect
 - Error handling and retry logic on all network calls
 
-### Phase 5: Polish & Production Readiness
+### Phase 5: Polish & Production Readiness -- NOT STARTED
+
+> **Prerequisite:** Phases 1-2 completion (done). Next step: Serverpod backend scaffolding.
 
 **Goal:** Harden the app for real-world use. Performance, security, and reliability.
 
@@ -2035,7 +2087,7 @@ The MVP is successful when:
 - PostgreSQL backup automation (daily, 30-day retention)
 - Sentry error tracking integration (Flutter + Serverpod)
 - Location tracking battery optimization (adaptive intervals)
-- Map style customization (greyscale tile styling to match design system)
+- Map style customization (greyscale OpenStreetMap tile styling to match design system)
 - WCAG accessibility audit and fixes
 - Privacy policy and terms of service content (RA 10173 compliant)
 - CI/CD pipeline (GitHub Actions: lint, test, build)
@@ -2069,7 +2121,7 @@ The MVP is successful when:
 ### 17.2 Technical Improvements
 
 - **Location Data Archival** -- Move GPS breadcrumbs older than 30 days to cold storage to keep `location_updates` table performant
-- **Map Tile Caching** -- Reduce Google Maps API costs with offline tile caching for frequently viewed areas
+- **Map Tile Caching** -- Cache OpenStreetMap tiles for offline use in frequently viewed delivery areas
 - **Background Location Optimization** -- Adaptive GPS interval based on driver speed (slower updates when stationary, faster when moving)
 - **CDN for File Storage** -- Move uploaded files behind a CDN for faster downloads and reduced server load
 - **Database Read Replicas** -- Horizontal scaling for read-heavy admin analytics queries
@@ -2088,7 +2140,7 @@ The MVP is successful when:
 | **GCash/Maya integration** | Payment API instability or changes | Abstract payment behind interface; webhook verification with fallback to manual admin confirmation |
 | **Single admin bottleneck** | Orders pile up when admin is unavailable | Design admin UI for speed (bulk actions, keyboard shortcuts); post-MVP: auto-accept for repeat customers |
 | **Driver GPS battery drain** | Drivers avoid using the app | 10-second interval during active delivery only; stop tracking on arrive; background-optimized location provider |
-| **Google Maps API costs** | Unexpected bills as usage grows | Monitor API usage closely; implement tile caching; set billing alerts; consider Mapbox as fallback provider |
+| **OSRM public server rate limits** | Routing requests may be throttled at scale | Self-host OSRM instance for production; public server sufficient for development and early launch |
 | **Driver no-shows** | Orders stuck in "assigned" state | Auto-timeout: if driver doesn't accept within 10 minutes, auto-reassign; admin notification on timeout |
 | **Inaccurate GPS in urban Philippines** | Driver appears in wrong location on map | Use fused location provider; allow driver to manually mark "arrived"; customer confirmation step |
 | **Address inaccuracy** | Driver can't find customer location | Mandatory landmark field; customer phone visible to driver during delivery; "arrived" notification prompts customer to come out |
@@ -2109,7 +2161,13 @@ The MVP is successful when:
 | [Riverpod](https://riverpod.dev/) | State management |
 | [Hive](https://docs.hivedb.dev/) | Local storage for drafts and offline data |
 | [GoRouter](https://pub.dev/packages/go_router) | Declarative routing |
-| [Google Maps Flutter](https://pub.dev/packages/google_maps_flutter) | Map views for address picker and delivery tracking |
+| [flutter_map](https://pub.dev/packages/flutter_map) | OpenStreetMap-based map views for address picker and delivery tracking |
+| [latlong2](https://pub.dev/packages/latlong2) | Geographic coordinate utilities for flutter_map |
+| [google_polyline_algorithm](https://pub.dev/packages/google_polyline_algorithm) | Decodes OSRM route geometry |
+| [http](https://pub.dev/packages/http) | HTTP client for OSRM API calls |
+| [flutter_staggered_grid_view](https://pub.dev/packages/flutter_staggered_grid_view) | Bento grid layouts |
+| [hugeicons](https://pub.dev/packages/hugeicons) | Primary icon package (46K+ stroke-rounded icons) |
+| [flutter_svg](https://pub.dev/packages/flutter_svg) | SVG rendering, required by hugeicons v1.x |
 | [Geolocator](https://pub.dev/packages/geolocator) | GPS location access for driver tracking |
 | [Geocoding](https://pub.dev/packages/geocoding) | Address-to-coordinates and reverse geocoding |
 | [Permission Handler](https://pub.dev/packages/permission_handler) | Runtime permission management (location, camera, storage) |
@@ -2128,8 +2186,6 @@ The MVP is successful when:
 | Serverpod CLI | Backend code generation and deployment |
 | PostgreSQL >= 15 | Primary database |
 | Docker (optional) | Local development environment for server |
-| Google Maps API Key | Required for map views and geocoding |
-| Google Cloud Console | Maps API management and billing |
 | GCash Developer Account | Payment integration |
 | Maya Developer Account | Payment integration |
 | Sentry DSN | Error tracking (production) |
