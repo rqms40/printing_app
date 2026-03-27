@@ -357,13 +357,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       // -----------------------------------------------------------------------
       GoRoute(
         path: '/driver/deliveries/:id',
-        builder: (_, state) => DeliveryDetailScreen(
-          assignmentId: state.pathParameters['id']!,
+        pageBuilder: (_, state) => slideTransition(
+          DeliveryDetailScreen(
+            assignmentId: state.pathParameters['id']!,
+          ),
+          state,
         ),
       ),
       GoRoute(
         path: '/driver/deliveries/:id/active',
-        builder: (_, state) => const ActiveDeliveryScreen(),
+        pageBuilder: (_, state) =>
+            slideTransition(const ActiveDeliveryScreen(), state),
       ),
 
       // -----------------------------------------------------------------------
@@ -428,13 +432,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       // -----------------------------------------------------------------------
       GoRoute(
         path: '/admin/queue/:id',
-        builder: (_, state) => AdminOrderDetailScreen(
-          orderId: state.pathParameters['id']!,
+        pageBuilder: (_, state) => scaleTransition(
+          AdminOrderDetailScreen(
+            orderId: state.pathParameters['id']!,
+          ),
+          state,
         ),
       ),
       GoRoute(
         path: '/admin/drivers',
-        builder: (_, _) => const DriverAssignmentScreen(),
+        pageBuilder: (_, state) =>
+            scaleTransition(const DriverAssignmentScreen(), state),
       ),
     ],
   );
