@@ -57,8 +57,8 @@ class PillTabBar extends StatelessWidget {
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeOut,
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
+                  horizontal: 10,
+                  vertical: 8,
                 ),
                 decoration: BoxDecoration(
                   color: isSelected ? colors.surface : Colors.transparent,
@@ -74,44 +74,49 @@ class PillTabBar extends StatelessWidget {
                         ]
                       : null,
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      tab.label,
-                      style: (isSelected
-                              ? AppTypography.bodyBold
-                              : AppTypography.body)
-                          .copyWith(
-                        color: isSelected
-                            ? colors.onBackground
-                            : colors.onSurfaceDim,
-                      ),
-                    ),
-                    if (tab.count > 0) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 7, vertical: 1),
-                        decoration: BoxDecoration(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        tab.label,
+                        style: (isSelected
+                                ? AppTypography.bodyBold
+                                : AppTypography.body)
+                            .copyWith(
                           color: isSelected
-                              ? colors.accent.withValues(alpha: 0.1)
-                              : colors.onSurfaceDim.withValues(alpha: 0.1),
-                          borderRadius: AppRadius.borderFull,
+                              ? colors.onBackground
+                              : colors.onSurfaceDim,
                         ),
-                        child: Text(
-                          '${tab.count}',
-                          style: AppTypography.caption.copyWith(
+                        maxLines: 1,
+                      ),
+                      if (tab.count > 0) ...[
+                        const SizedBox(width: 5),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
                             color: isSelected
-                                ? colors.accent
-                                : colors.onSurfaceDim,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 11,
+                                ? colors.accent.withValues(alpha: 0.1)
+                                : colors.onSurfaceDim
+                                    .withValues(alpha: 0.1),
+                            borderRadius: AppRadius.borderFull,
+                          ),
+                          child: Text(
+                            '${tab.count}',
+                            style: AppTypography.caption.copyWith(
+                              color: isSelected
+                                  ? colors.accent
+                                  : colors.onSurfaceDim,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 11,
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
