@@ -181,7 +181,7 @@ class _DeliveryDetailsScreenState
                                   ),
                                 ),
                                 if (_selectedAddress?.id == addr.id)
-                                  HugeIcon(icon: HugeIcons.strokeRoundedCheckmarkCircle02,
+                                  Icon(Icons.check_circle_rounded,
                                       size: 24, color: colors.accent),
                               ],
                             ),

@@ -213,7 +213,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             ),
           ),
           if (isSelected)
-            HugeIcon(icon: HugeIcons.strokeRoundedCheckmarkCircle02, size: 24, color: colors.accent),
+            Icon(Icons.check_circle_rounded, size: 24, color: colors.accent),
         ],
       ),
     );
@@ -249,8 +249,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                     shape: BoxShape.circle,
                     color: colors.success.withValues(alpha: 0.15),
                   ),
-                  child: HugeIcon(
-                    icon: HugeIcons.strokeRoundedCheckmarkCircle02,
+                  child: Icon(
+                    Icons.check_circle_rounded,
                     size: 56,
                     color: colors.success,
                   ),

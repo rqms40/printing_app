@@ -45,7 +45,9 @@ class StatusBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          HugeIcon(icon: scheme.icon, size: 16, color: scheme.foreground),
+          scheme.icon is IconData
+              ? Icon(scheme.icon as IconData, size: 16, color: scheme.foreground)
+              : HugeIcon(icon: scheme.icon, size: 16, color: scheme.foreground),
           const SizedBox(width: AppSpacing.xs),
           Text(
             label,
@@ -65,31 +67,31 @@ class StatusBadge extends StatelessWidget {
         return _BadgeScheme(
           background: colors.success.withValues(alpha: 0.12),
           foreground: colors.success,
-          icon: HugeIcons.strokeRoundedCheckmarkCircle02,
+          icon: Icons.check_circle_rounded,
         );
       case StatusBadgeVariant.error:
         return _BadgeScheme(
           background: colors.error.withValues(alpha: 0.12),
           foreground: colors.error,
-          icon: HugeIcons.strokeRoundedCancelCircle,
+          icon: Icons.cancel_rounded,
         );
       case StatusBadgeVariant.warning:
         return _BadgeScheme(
           background: colors.warning.withValues(alpha: 0.12),
           foreground: colors.warning,
-          icon: HugeIcons.strokeRoundedAlert02,
+          icon: Icons.warning_rounded,
         );
       case StatusBadgeVariant.info:
         return _BadgeScheme(
           background: colors.info.withValues(alpha: 0.12),
           foreground: colors.info,
-          icon: HugeIcons.strokeRoundedInformationCircle,
+          icon: Icons.info_rounded,
         );
       case StatusBadgeVariant.neutral:
         return _BadgeScheme(
           background: colors.onSurfaceDim.withValues(alpha: 0.12),
           foreground: colors.onSurfaceDim,
-          icon: HugeIcons.strokeRoundedCircle,
+          icon: Icons.circle_outlined,
         );
     }
   }
