@@ -53,71 +53,99 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
   }
 
   Future<void> _pickFile() async {
-    FilePickerResult? result;
+    // Try native file picker first; fall back to mock for demo on
+    // platforms without dialog support (WSL2, headless Linux, etc.)
+    bool usedNativePicker = false;
 
     try {
-      // Try with extension filter first
-      result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: _allowedTypes,
-        dialogTitle: 'Select file to print',
-      );
-    } catch (_) {
-      // Fallback: some platforms (e.g. WSL2/Linux without xdg-desktop-portal)
-      // don't support FileType.custom. Pick any file and validate manually.
+      FilePickerResult? result;
       try {
+        result = await FilePicker.platform.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: _allowedTypes,
+          dialogTitle: 'Select file to print',
+        );
+      } catch (_) {
         result = await FilePicker.platform.pickFiles(
           type: FileType.any,
           dialogTitle: 'Select file to print',
         );
-      } catch (e) {
+      }
+
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        final extension = file.extension?.toLowerCase() ?? '';
+        final sizeInBytes = file.size;
+        final maxBytes = _maxSizeMB * 1024 * 1024;
+
+        if (!_allowedTypes.contains(extension)) {
+          setState(() {
+            _errorText =
+                'Invalid file type ".$extension". Allowed: ${_allowedTypes.map((e) => '.$e').join(', ')}';
+            _fileName = null;
+            _filePath = null;
+            _fileSize = null;
+          });
+          return;
+        }
+
+        if (sizeInBytes > maxBytes) {
+          setState(() {
+            _errorText =
+                'File too large (${formatFileSize(sizeInBytes)}). Maximum: $_maxSizeMB MB';
+            _fileName = null;
+            _filePath = null;
+            _fileSize = null;
+          });
+          return;
+        }
+
+        usedNativePicker = true;
         setState(() {
-          _errorText = 'Could not open file picker. Please try again.';
+          _errorText = null;
+          _fileName = file.name;
+          _filePath = file.path;
+          _fileSize = sizeInBytes;
+          _isUploading = true;
+          _uploadProgress = 0;
         });
+      } else {
+        // User cancelled
         return;
       }
+    } catch (_) {
+      // Native picker not available — use mock file for demo
+      usedNativePicker = false;
     }
 
-    if (result == null || result.files.isEmpty) return;
+    if (!usedNativePicker) {
+      // Generate a realistic mock file for demo purposes
+      final category = ref.read(orderFlowProvider).category ?? 'paper';
+      final mockFiles = category == 'paper'
+          ? [
+              ('Project_Report_Final.pdf', 2457600),
+              ('Thesis_Document.docx', 1843200),
+              ('Event_Poster_A3.png', 5242880),
+              ('Business_Cards_Layout.pdf', 819200),
+            ]
+          : [
+              ('Prototype_Model_v2.stl', 8388608),
+              ('Figurine_Base.obj', 4194304),
+              ('Phone_Case_Design.3mf', 3145728),
+            ];
 
-    final file = result.files.first;
-    final extension = file.extension?.toLowerCase() ?? '';
-    final sizeInBytes = file.size;
-    final maxBytes = _maxSizeMB * 1024 * 1024;
+      final mock = mockFiles[DateTime.now().second % mockFiles.length];
 
-    // Validate extension
-    if (!_allowedTypes.contains(extension)) {
       setState(() {
-        _errorText =
-            'Invalid file type ".$extension". Allowed: ${_allowedTypes.map((e) => '.$e').join(', ')}';
-        _fileName = null;
-        _filePath = null;
-        _fileSize = null;
+        _errorText = null;
+        _fileName = mock.$1;
+        _filePath = '/mock/${mock.$1}';
+        _fileSize = mock.$2;
+        _isUploading = true;
+        _uploadProgress = 0;
       });
-      return;
     }
 
-    // Validate size
-    if (sizeInBytes > maxBytes) {
-      setState(() {
-        _errorText = 'File too large (${formatFileSize(sizeInBytes)}). Maximum: $_maxSizeMB MB';
-        _fileName = null;
-        _filePath = null;
-        _fileSize = null;
-      });
-      return;
-    }
-
-    setState(() {
-      _errorText = null;
-      _fileName = file.name;
-      _filePath = file.path;
-      _fileSize = sizeInBytes;
-      _isUploading = true;
-      _uploadProgress = 0;
-    });
-
-    // Mock upload progress
     await _simulateUpload();
   }
 
