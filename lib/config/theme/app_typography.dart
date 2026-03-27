@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 
 /// Typography scale for DarkastixPrint.
 ///
-/// Display & headings use Instrument Serif; body & UI use Satoshi.
+/// [display] uses Instrument Serif for brand/editorial moments only.
+/// All other headings and UI text use Satoshi (geometric sans-serif)
+/// with weight differentiation for hierarchy.
 class AppTypography {
   const AppTypography._();
 
   static const String _instrumentSerif = 'InstrumentSerif';
   static const String _satoshi = 'Satoshi';
 
+  /// Brand / editorial display — Instrument Serif.
+  /// Use ONLY for hero banners and splash screen, not page titles.
   static const TextStyle display = TextStyle(
     fontFamily: _instrumentSerif,
     fontSize: 32,
@@ -16,13 +20,15 @@ class AppTypography {
     letterSpacing: -0.5,
   );
 
+  /// Page title — Satoshi Bold, clean and modern.
   static const TextStyle h1 = TextStyle(
-    fontFamily: _instrumentSerif,
+    fontFamily: _satoshi,
     fontSize: 28,
-    fontWeight: FontWeight.w400,
+    fontWeight: FontWeight.w700,
     letterSpacing: -0.3,
   );
 
+  /// Section title — Satoshi Bold.
   static const TextStyle h2 = TextStyle(
     fontFamily: _satoshi,
     fontSize: 24,
@@ -30,6 +36,7 @@ class AppTypography {
     letterSpacing: 0,
   );
 
+  /// Card / subsection title — Satoshi Medium.
   static const TextStyle h3 = TextStyle(
     fontFamily: _satoshi,
     fontSize: 20,

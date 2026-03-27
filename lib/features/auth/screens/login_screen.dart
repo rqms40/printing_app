@@ -52,7 +52,7 @@ class LoginScreen extends ConsumerWidget {
               // Heading
               Text(
                 'Welcome back',
-                style: AppTypography.display.copyWith(
+                style: AppTypography.h1.copyWith(
                   color: colors.onBackground,
                 ),
               )

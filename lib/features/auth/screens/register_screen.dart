@@ -42,7 +42,7 @@ class RegisterScreen extends ConsumerWidget {
                 children: [
                   Text(
                     'Create Account',
-                    style: AppTypography.display.copyWith(
+                    style: AppTypography.h1.copyWith(
                       color: colors.onBackground,
                     ),
                   ),

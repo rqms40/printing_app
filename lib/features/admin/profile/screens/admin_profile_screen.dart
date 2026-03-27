@@ -69,7 +69,7 @@ class AdminProfileScreen extends ConsumerWidget {
                         child: Center(
                           child: Text(
                             initial,
-                            style: AppTypography.display.copyWith(
+                            style: AppTypography.h1.copyWith(
                               color: colors.accent,
                             ),
                           ),

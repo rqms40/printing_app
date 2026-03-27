@@ -70,7 +70,7 @@ class ProfileScreen extends ConsumerWidget {
                             user?.fullName.isNotEmpty == true
                                 ? user!.fullName[0].toUpperCase()
                                 : '?',
-                            style: AppTypography.display.copyWith(
+                            style: AppTypography.h1.copyWith(
                               color: colors.accent,
                             ),
                           ),
