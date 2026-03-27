@@ -29,7 +29,7 @@ dependencies:
   fl_chart: ^0.70.2
   flutter_animate: ^4.5.2
   shimmer: ^3.0.0
-  iconsax_flutter: ^1.0.0
+  hugeicons: ^0.0.7
   cached_network_image: ^3.4.1
 
   # File handling
