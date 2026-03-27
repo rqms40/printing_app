@@ -56,7 +56,7 @@ class _RecentOrdersSectionState extends State<RecentOrdersSection> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(viewportFraction: 0.88, padEnds: false);
+    _pageController = PageController(viewportFraction: 0.88);
   }
 
   @override
@@ -96,6 +96,7 @@ class _RecentOrdersSectionState extends State<RecentOrdersSection> {
           SizedBox(
             height: 160,
             child: PageView.builder(
+              padEnds: false,
               controller: _pageController,
               itemCount: recentOrders.length,
               onPageChanged: (index) {
