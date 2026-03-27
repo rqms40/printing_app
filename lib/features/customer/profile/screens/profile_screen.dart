@@ -190,7 +190,7 @@ class _MenuItem extends StatelessWidget {
     this.isDestructive = false,
   });
 
-  final IconData icon;
+  final dynamic icon;
   final String title;
   final VoidCallback? onTap;
   final bool isDestructive;
@@ -203,13 +203,13 @@ class _MenuItem extends StatelessWidget {
     final textColor = isDestructive ? colors.error : colors.onSurface;
 
     return ListTile(
-      leading: Icon(icon, size: 20, color: textColor),
+      leading: HugeIcon(icon: icon, size: 20, color: textColor),
       title: Text(
         title,
         style: AppTypography.body.copyWith(color: textColor),
       ),
-      trailing: Icon(
-        HugeIcons.strokeRoundedArrowRight01,
+      trailing: HugeIcon(
+        icon: HugeIcons.strokeRoundedArrowRight01,
         size: 18,
         color: colors.onSurfaceDim,
       ),
@@ -230,7 +230,7 @@ class _MenuToggle extends StatelessWidget {
     required this.onChanged,
   });
 
-  final IconData icon;
+  final dynamic icon;
   final String title;
   final bool value;
   final ValueChanged<bool> onChanged;
@@ -242,7 +242,7 @@ class _MenuToggle extends StatelessWidget {
         : AppColors.light;
 
     return ListTile(
-      leading: Icon(icon, size: 20, color: colors.onSurface),
+      leading: HugeIcon(icon: icon, size: 20, color: colors.onSurface),
       title: Text(
         title,
         style: AppTypography.body.copyWith(color: colors.onSurface),

@@ -73,8 +73,8 @@ class _DeliveryMapState extends State<DeliveryMap>
                     color: colors.accent,
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    HugeIcons.strokeRoundedDeliveryTruck02,
+                  child: HugeIcon(
+                    icon: HugeIcons.strokeRoundedDeliveryTruck02,
                     size: 18,
                     color: colors.background,
                   ),
@@ -98,8 +98,8 @@ class _DeliveryMapState extends State<DeliveryMap>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  HugeIcons.strokeRoundedLocation01,
+                HugeIcon(
+                  icon: HugeIcons.strokeRoundedLocation01,
                   size: 32,
                   color: colors.error,
                 ),
@@ -166,8 +166,8 @@ class _DeliveryMapState extends State<DeliveryMap>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  HugeIcons.strokeRoundedMapsLocation01,
+                HugeIcon(
+                  icon: HugeIcons.strokeRoundedMapsLocation01,
                   size: 48,
                   color: colors.onSurfaceDim,
                 ),

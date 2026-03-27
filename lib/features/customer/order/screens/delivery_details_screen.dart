@@ -97,7 +97,7 @@ class _DeliveryDetailsScreenState
                     AppCard(
                       child: Row(
                         children: [
-                          Icon(HugeIcons.strokeRoundedStore01, size: 32, color: colors.accent),
+                          HugeIcon(icon: HugeIcons.strokeRoundedStore01, size: 32, color: colors.accent),
                           const SizedBox(width: AppSpacing.md),
                           Expanded(
                             child: Column(
@@ -142,8 +142,8 @@ class _DeliveryDetailsScreenState
                                 : null,
                             child: Row(
                               children: [
-                                Icon(
-                                  addr.label == 'Home'
+                                HugeIcon(
+                                  icon: addr.label == 'Home'
                                       ? HugeIcons.strokeRoundedHome01
                                       : addr.label == 'Office'
                                           ? HugeIcons.strokeRoundedBuilding03
@@ -176,7 +176,7 @@ class _DeliveryDetailsScreenState
                                   ),
                                 ),
                                 if (_selectedAddress?.id == addr.id)
-                                  Icon(HugeIcons.strokeRoundedCheckmarkCircle02,
+                                  HugeIcon(icon: HugeIcons.strokeRoundedCheckmarkCircle02,
                                       size: 24, color: colors.accent),
                               ],
                             ),

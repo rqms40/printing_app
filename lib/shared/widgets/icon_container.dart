@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 
@@ -44,7 +45,8 @@ class IconContainer extends StatelessWidget {
     this.iconColor,
   });
 
-  final IconData icon;
+  /// Can be [IconData] (Material) or HugeIcons SVG data (List).
+  final dynamic icon;
   final IconContainerSize size;
   final IconContainerShape shape;
 
@@ -79,7 +81,9 @@ class IconContainer extends StatelessWidget {
             : null,
       ),
       child: Center(
-        child: Icon(icon, size: size.iconSize, color: fg),
+        child: icon is IconData
+            ? Icon(icon as IconData, size: size.iconSize, color: fg)
+            : HugeIcon(icon: icon, size: size.iconSize, color: fg),
       ),
     );
   }

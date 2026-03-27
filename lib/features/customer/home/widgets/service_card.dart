@@ -18,7 +18,7 @@ class ServiceCard extends StatelessWidget {
 
   final String title;
   final String description;
-  final IconData icon;
+  final dynamic icon;
   final VoidCallback? onTap;
 
   AppColorSet _colors(BuildContext context) {

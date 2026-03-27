@@ -55,7 +55,7 @@ class StatusActionBar extends StatelessWidget {
     }
   }
 
-  IconData get _actionIcon {
+  dynamic get _actionIcon {
     switch (currentStatus) {
       case DeliveryStatus.accepted:
         return HugeIcons.strokeRoundedPackage;

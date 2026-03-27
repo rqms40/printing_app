@@ -85,7 +85,7 @@ class OrderDetailScreen extends ConsumerWidget {
               AppCard(
                 child: Row(
                   children: [
-                    Icon(HugeIcons.strokeRoundedClock01, size: 20, color: colors.info),
+                    HugeIcon(icon: HugeIcons.strokeRoundedClock01, size: 20, color: colors.info),
                     const SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: Text(
@@ -227,7 +227,7 @@ class OrderDetailScreen extends ConsumerWidget {
           const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
-              Icon(HugeIcons.strokeRoundedFile01,
+              HugeIcon(icon: HugeIcons.strokeRoundedFile01,
                   size: 20, color: colors.onSurfaceDim),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
@@ -342,7 +342,7 @@ class OrderDetailScreen extends ConsumerWidget {
           if (isPickup)
             Row(
               children: [
-                Icon(HugeIcons.strokeRoundedStore01, size: 20, color: colors.onSurfaceDim),
+                HugeIcon(icon: HugeIcons.strokeRoundedStore01, size: 20, color: colors.onSurfaceDim),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
@@ -356,7 +356,7 @@ class OrderDetailScreen extends ConsumerWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(HugeIcons.strokeRoundedLocation01,
+                HugeIcon(icon: HugeIcons.strokeRoundedLocation01,
                     size: 20, color: colors.onSurfaceDim),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(

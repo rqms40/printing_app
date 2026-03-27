@@ -100,7 +100,7 @@ class SummaryScreen extends ConsumerWidget {
                     AppCard(
                       child: Row(
                         children: [
-                          Icon(HugeIcons.strokeRoundedFileValidation,
+                          HugeIcon(icon: HugeIcons.strokeRoundedFileValidation,
                               size: 32, color: colors.accent),
                           const SizedBox(width: AppSpacing.md),
                           Expanded(

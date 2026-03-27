@@ -77,8 +77,8 @@ class _QueueScreenState extends ConsumerState<QueueScreen>
             child: AppTextField(
               controller: _searchController,
               hintText: 'Search by order ID...',
-              prefixIcon: Icon(
-                HugeIcons.strokeRoundedSearch01,
+              prefixIcon: HugeIcon(
+                icon: HugeIcons.strokeRoundedSearch01,
                 size: 20,
                 color: colors.onSurfaceDim,
               ),

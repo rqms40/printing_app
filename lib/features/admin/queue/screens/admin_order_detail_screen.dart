@@ -107,7 +107,7 @@ class _AdminOrderDetailScreenState
                   const SizedBox(height: AppSpacing.sm),
                   Row(
                     children: [
-                      Icon(HugeIcons.strokeRoundedClock01,
+                      HugeIcon(icon: HugeIcons.strokeRoundedClock01,
                           size: 16, color: colors.onSurfaceDim),
                       const SizedBox(width: AppSpacing.xs),
                       Text(
@@ -154,7 +154,7 @@ class _AdminOrderDetailScreenState
             AppCard(
               child: Row(
                 children: [
-                  Icon(HugeIcons.strokeRoundedFile01, size: 20, color: colors.onSurfaceDim),
+                  HugeIcon(icon: HugeIcons.strokeRoundedFile01, size: 20, color: colors.onSurfaceDim),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(

@@ -34,7 +34,7 @@ class AddressCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(HugeIcons.strokeRoundedLocation01, size: 18, color: colors.accent),
+              HugeIcon(icon: HugeIcons.strokeRoundedLocation01, size: 18, color: colors.accent),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Row(
@@ -70,7 +70,7 @@ class AddressCard extends StatelessWidget {
               ),
               if (onEdit != null)
                 IconButton(
-                  icon: Icon(HugeIcons.strokeRoundedEdit02, size: 18, color: colors.onSurfaceDim),
+                  icon: HugeIcon(icon: HugeIcons.strokeRoundedEdit02, size: 18, color: colors.onSurfaceDim),
                   onPressed: onEdit,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(
@@ -80,7 +80,7 @@ class AddressCard extends StatelessWidget {
                 ),
               if (onDelete != null)
                 IconButton(
-                  icon: Icon(HugeIcons.strokeRoundedDelete02, size: 18, color: colors.error),
+                  icon: HugeIcon(icon: HugeIcons.strokeRoundedDelete02, size: 18, color: colors.error),
                   onPressed: onDelete,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(

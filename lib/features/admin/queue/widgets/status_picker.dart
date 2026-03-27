@@ -23,7 +23,7 @@ class StatusPicker extends StatelessWidget {
         : AppColors.light;
   }
 
-  IconData _iconForStatus(OrderStatus status) {
+  dynamic _iconForStatus(OrderStatus status) {
     switch (status) {
       case OrderStatus.orderPlaced:
         return HugeIcons.strokeRoundedInvoice01;
@@ -82,7 +82,7 @@ class StatusPicker extends StatelessWidget {
               style: AppTypography.caption.copyWith(color: colors.onSurface),
             ),
             const SizedBox(width: AppSpacing.xs),
-            Icon(HugeIcons.strokeRoundedArrowDown01, size: 16, color: colors.onSurfaceDim),
+            HugeIcon(icon: HugeIcons.strokeRoundedArrowDown01, size: 16, color: colors.onSurfaceDim),
           ],
         ),
       ),
@@ -92,8 +92,8 @@ class StatusPicker extends StatelessWidget {
           value: status,
           child: Row(
             children: [
-              Icon(
-                _iconForStatus(status),
+              HugeIcon(
+                icon: _iconForStatus(status),
                 size: 18,
                 color: isSelected ? colors.accent : colors.onSurfaceDim,
               ),

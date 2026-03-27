@@ -74,7 +74,7 @@ class _OrdersTab extends ConsumerWidget {
   final List<Order> Function(OrdersNotifier notifier) ordersSelector;
   final String emptyHeading;
   final String emptyBody;
-  final IconData emptyIcon;
+  final dynamic emptyIcon;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

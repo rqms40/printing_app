@@ -166,8 +166,8 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
                                   : colors.onSurfaceDim,
                             ),
                           ),
-                          Icon(
-                            HugeIcons.strokeRoundedCalendar03,
+                          HugeIcon(
+                            icon: HugeIcons.strokeRoundedCalendar03,
                             size: 20,
                             color: colors.onSurfaceDim,
                           ),

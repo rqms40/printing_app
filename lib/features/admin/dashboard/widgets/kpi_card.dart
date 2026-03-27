@@ -14,7 +14,7 @@ class KpiCard extends StatelessWidget {
     required this.label,
   });
 
-  final IconData icon;
+  final dynamic icon;
   final String value;
   final String label;
 

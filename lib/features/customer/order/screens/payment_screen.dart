@@ -152,7 +152,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   Widget _paymentCard({
     required PaymentMethod method,
     String? icon,
-    IconData? iconData,
+    dynamic iconData,
     required String label,
     required String subtitle,
     required AppColorSet colors,
@@ -190,7 +190,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                         fontSize: 22,
                       ),
                     )
-                  : Icon(iconData, size: 24, color: colors.accent),
+                  : HugeIcon(icon: iconData!, size: 24, color: colors.accent),
             ),
           ),
           const SizedBox(width: AppSpacing.md),
@@ -213,7 +213,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             ),
           ),
           if (isSelected)
-            Icon(HugeIcons.strokeRoundedCheckmarkCircle02, size: 24, color: colors.accent),
+            HugeIcon(icon: HugeIcons.strokeRoundedCheckmarkCircle02, size: 24, color: colors.accent),
         ],
       ),
     );
@@ -249,8 +249,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                     shape: BoxShape.circle,
                     color: colors.success.withValues(alpha: 0.15),
                   ),
-                  child: Icon(
-                    HugeIcons.strokeRoundedCheckmarkCircle02,
+                  child: HugeIcon(
+                    icon: HugeIcons.strokeRoundedCheckmarkCircle02,
                     size: 56,
                     color: colors.success,
                   ),

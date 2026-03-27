@@ -70,7 +70,7 @@ class _NotificationTile extends ConsumerWidget {
 
   final AppNotification notification;
 
-  IconData _iconForType(String type) {
+  dynamic _iconForType(String type) {
     switch (type) {
       case 'order_update':
         return HugeIcons.strokeRoundedFile02;
@@ -131,8 +131,8 @@ class _NotificationTile extends ConsumerWidget {
                 color: colors.surfaceVariant,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Icon(
-                _iconForType(notification.type),
+              child: HugeIcon(
+                icon: _iconForType(notification.type),
                 size: 20,
                 color: isUnread ? colors.accent : colors.onSurfaceDim,
               ),

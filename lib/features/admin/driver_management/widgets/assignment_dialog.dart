@@ -76,7 +76,7 @@ class AssignmentDialog extends ConsumerWidget {
                       AppTypography.h3.copyWith(color: colors.onBackground),
                 ),
                 IconButton(
-                  icon: Icon(HugeIcons.strokeRoundedCancel01, color: colors.onSurfaceDim),
+                  icon: HugeIcon(icon: HugeIcons.strokeRoundedCancel01, color: colors.onSurfaceDim),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ],

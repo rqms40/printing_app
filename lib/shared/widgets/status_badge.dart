@@ -45,7 +45,7 @@ class StatusBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(scheme.icon, size: 16, color: scheme.foreground),
+          HugeIcon(icon: scheme.icon, size: 16, color: scheme.foreground),
           const SizedBox(width: AppSpacing.xs),
           Text(
             label,
@@ -104,5 +104,6 @@ class _BadgeScheme {
 
   final Color background;
   final Color foreground;
-  final IconData icon;
+  /// HugeIcons SVG data (List<List<dynamic>>).
+  final dynamic icon;
 }

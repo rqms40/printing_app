@@ -96,7 +96,7 @@ class ActiveDeliveryScreen extends ConsumerWidget {
                 // Customer name
                 Row(
                   children: [
-                    Icon(HugeIcons.strokeRoundedUser, size: 18, color: colors.onSurface),
+                    HugeIcon(icon: HugeIcons.strokeRoundedUser, size: 18, color: colors.onSurface),
                     const SizedBox(width: AppSpacing.sm),
                     Text(
                       customer.fullName ?? 'Customer',
@@ -110,7 +110,7 @@ class ActiveDeliveryScreen extends ConsumerWidget {
                 // Phone
                 Row(
                   children: [
-                    Icon(HugeIcons.strokeRoundedCall, size: 18, color: colors.onSurface),
+                    HugeIcon(icon: HugeIcons.strokeRoundedCall, size: 18, color: colors.onSurface),
                     const SizedBox(width: AppSpacing.sm),
                     Text(
                       customer.phoneNumber ?? 'No phone',
@@ -126,7 +126,7 @@ class ActiveDeliveryScreen extends ConsumerWidget {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(HugeIcons.strokeRoundedLocation01,
+                      HugeIcon(icon: HugeIcons.strokeRoundedLocation01,
                           size: 18, color: colors.onSurface),
                       const SizedBox(width: AppSpacing.sm),
                       Expanded(
@@ -279,8 +279,8 @@ class _SwipeToConfirmState extends State<_SwipeToConfirm> {
                       color: colors.accent,
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(
-                      HugeIcons.strokeRoundedCheckmarkBadge01,
+                    child: HugeIcon(
+                      icon: HugeIcons.strokeRoundedCheckmarkBadge01,
                       color: colors.background,
                       size: 24,
                     ),

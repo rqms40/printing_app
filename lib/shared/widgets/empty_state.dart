@@ -24,7 +24,8 @@ class EmptyState extends StatelessWidget {
 
   final String heading;
   final String? body;
-  final IconData? icon;
+  /// Can be [IconData] (Material) or HugeIcons SVG data (List).
+  final dynamic icon;
 
   /// Optional custom illustration widget shown above the heading.
   /// Takes priority over [icon].

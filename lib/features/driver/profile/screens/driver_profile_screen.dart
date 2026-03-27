@@ -217,14 +217,14 @@ class DriverProfileScreen extends ConsumerWidget {
 
   Widget _buildInfoRow(
     BuildContext context,
-    IconData icon,
+    dynamic icon,
     String label,
     String value,
   ) {
     final colors = _colors(context);
     return Row(
       children: [
-        Icon(icon, size: 20, color: colors.onSurfaceDim),
+        HugeIcon(icon: icon, size: 20, color: colors.onSurfaceDim),
         const SizedBox(width: AppSpacing.md),
         Expanded(
           child: Column(

@@ -53,7 +53,7 @@ class OrderCard extends StatelessWidget {
     }
   }
 
-  IconData _categoryIcon() {
+  dynamic _categoryIcon() {
     switch (order.category.toLowerCase()) {
       case 'poster':
         return HugeIcons.strokeRoundedImage01;

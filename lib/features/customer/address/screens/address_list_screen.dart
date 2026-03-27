@@ -56,8 +56,8 @@ class AddressListScreen extends ConsumerWidget {
                       color: colors.error,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(
-                      HugeIcons.strokeRoundedDelete02,
+                    child: const HugeIcon(
+                      icon: HugeIcons.strokeRoundedDelete02,
                       color: Colors.white,
                     ),
                   ),
@@ -124,7 +124,7 @@ class AddressListScreen extends ConsumerWidget {
                   ),
                 );
               },
-              icon: const Icon(HugeIcons.strokeRoundedAdd01),
+              icon: const HugeIcon(icon: HugeIcons.strokeRoundedAdd01),
               label: Text(
                 'Add Address',
                 style: AppTypography.button.copyWith(color: colors.background),

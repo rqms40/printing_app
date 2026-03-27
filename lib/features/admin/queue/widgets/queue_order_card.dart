@@ -78,7 +78,7 @@ class QueueOrderCard extends ConsumerWidget {
     }
   }
 
-  IconData _categoryIcon() {
+  dynamic _categoryIcon() {
     switch (order.category.toLowerCase()) {
       case 'poster':
         return HugeIcons.strokeRoundedImage01;
@@ -122,7 +122,7 @@ class QueueOrderCard extends ConsumerWidget {
                 variant: _badgeVariant(),
               ),
               const SizedBox(width: AppSpacing.sm),
-              Icon(_categoryIcon(), size: 18, color: colors.onSurfaceDim),
+              HugeIcon(icon: _categoryIcon(), size: 18, color: colors.onSurfaceDim),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
@@ -159,8 +159,8 @@ class QueueOrderCard extends ConsumerWidget {
               const Spacer(),
               if (order.fileUrl != null)
                 IconButton(
-                  icon: Icon(
-                    HugeIcons.strokeRoundedFileDownload,
+                  icon: HugeIcon(
+                    icon: HugeIcons.strokeRoundedFileDownload,
                     size: 20,
                     color: colors.onSurfaceDim,
                   ),

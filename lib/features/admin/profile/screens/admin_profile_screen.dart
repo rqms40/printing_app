@@ -45,8 +45,8 @@ class AdminProfileScreen extends ConsumerWidget {
                     color: colors.surfaceVariant,
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    HugeIcons.strokeRoundedUser,
+                  child: HugeIcon(
+                    icon: HugeIcons.strokeRoundedUser,
                     size: 32,
                     color: colors.onSurfaceDim,
                   ),
@@ -77,7 +77,7 @@ class AdminProfileScreen extends ConsumerWidget {
           AppCard(
             child: Row(
               children: [
-                Icon(HugeIcons.strokeRoundedInformationCircle,
+                HugeIcon(icon: HugeIcons.strokeRoundedInformationCircle,
                     size: 20, color: colors.onSurfaceDim),
                 const SizedBox(width: AppSpacing.md),
                 Expanded(

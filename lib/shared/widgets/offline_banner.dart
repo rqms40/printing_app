@@ -40,8 +40,8 @@ class OfflineBanner extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const Icon(
-                HugeIcons.strokeRoundedWifiDisconnected01,
+              const HugeIcon(
+                icon: HugeIcons.strokeRoundedWifiDisconnected01,
                 size: 18,
                 color: Colors.black87,
               ),
@@ -55,8 +55,8 @@ class OfflineBanner extends StatelessWidget {
               if (onDismiss != null)
                 GestureDetector(
                   onTap: onDismiss,
-                  child: const Icon(
-                    HugeIcons.strokeRoundedCancel01,
+                  child: const HugeIcon(
+                    icon: HugeIcons.strokeRoundedCancel01,
                     size: 18,
                     color: Colors.black87,
                   ),

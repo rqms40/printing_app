@@ -98,7 +98,7 @@ class FileUploadCard extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(HugeIcons.strokeRoundedFileUpload, size: 48, color: colors.onSurfaceDim),
+        HugeIcon(icon: HugeIcons.strokeRoundedFileUpload, size: 48, color: colors.onSurfaceDim),
         const SizedBox(height: AppSpacing.md),
         Text(
           'Tap to select file',
@@ -116,7 +116,7 @@ class FileUploadCard extends StatelessWidget {
   Widget _buildFileInfo(AppColorSet colors) {
     return Row(
       children: [
-        Icon(HugeIcons.strokeRoundedFileValidation, size: 40, color: colors.accent),
+        HugeIcon(icon: HugeIcons.strokeRoundedFileValidation, size: 40, color: colors.accent),
         const SizedBox(width: AppSpacing.md),
         Expanded(
           child: Column(

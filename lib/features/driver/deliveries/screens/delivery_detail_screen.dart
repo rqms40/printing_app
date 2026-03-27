@@ -63,7 +63,7 @@ class DeliveryDetailScreen extends ConsumerWidget {
         ),
         elevation: 0,
         leading: IconButton(
-          icon: Icon(HugeIcons.strokeRoundedArrowLeft01, color: colors.onBackground),
+          icon: HugeIcon(icon: HugeIcons.strokeRoundedArrowLeft01, color: colors.onBackground),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
@@ -125,7 +125,7 @@ class DeliveryDetailScreen extends ConsumerWidget {
                         children: [
                           Row(
                             children: [
-                              Icon(HugeIcons.strokeRoundedLocation01,
+                              HugeIcon(icon: HugeIcons.strokeRoundedLocation01,
                                   size: 18, color: colors.onSurface),
                               const SizedBox(width: AppSpacing.sm),
                               Expanded(
@@ -180,7 +180,7 @@ class DeliveryDetailScreen extends ConsumerWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(HugeIcons.strokeRoundedMapsLocation01,
+                        HugeIcon(icon: HugeIcons.strokeRoundedMapsLocation01,
                             size: 48, color: colors.onSurfaceDim),
                         const SizedBox(height: AppSpacing.sm),
                         Text(

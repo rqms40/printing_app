@@ -187,7 +187,7 @@ class DeliveryCard extends StatelessWidget {
             const SizedBox(height: AppSpacing.sm),
             Row(
               children: [
-                Icon(HugeIcons.strokeRoundedDeliveryTruck02, size: 16, color: colors.info),
+                HugeIcon(icon: HugeIcons.strokeRoundedDeliveryTruck02, size: 16, color: colors.info),
                 const SizedBox(width: AppSpacing.xs),
                 Text(
                   assignment.status.displayName,

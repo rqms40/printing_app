@@ -34,8 +34,8 @@ class MapPinPicker extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  HugeIcons.strokeRoundedLocation01,
+                HugeIcon(
+                  icon: HugeIcons.strokeRoundedLocation01,
                   size: 40,
                   color: colors.accent,
                 ),

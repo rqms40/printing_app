@@ -66,7 +66,7 @@ class DeliveryMapView extends ConsumerWidget {
           Positioned(
             top: 40,
             left: 60,
-            child: Icon(HugeIcons.strokeRoundedDeliveryTruck02, size: 28, color: colors.info),
+            child: HugeIcon(icon: HugeIcons.strokeRoundedDeliveryTruck02, size: 28, color: colors.info),
           ),
 
           // Destination icon marker (bottom-right area)
@@ -74,7 +74,7 @@ class DeliveryMapView extends ConsumerWidget {
             bottom: 40,
             right: 60,
             child:
-                Icon(HugeIcons.strokeRoundedLocation01, size: 28, color: colors.error),
+                HugeIcon(icon: HugeIcons.strokeRoundedLocation01, size: 28, color: colors.error),
           ),
         ],
       ),

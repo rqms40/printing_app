@@ -104,7 +104,7 @@ class DriverInfoCard extends StatelessWidget {
           // Phone number
           Row(
             children: [
-              Icon(HugeIcons.strokeRoundedCall, size: 16, color: colors.onSurfaceDim),
+              HugeIcon(icon: HugeIcons.strokeRoundedCall, size: 16, color: colors.onSurfaceDim),
               const SizedBox(width: AppSpacing.sm),
               Text(
                 phoneNumber,

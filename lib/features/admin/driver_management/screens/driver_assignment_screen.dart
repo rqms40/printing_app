@@ -56,8 +56,8 @@ class _DriverAssignmentScreenState
             ),
             child: Row(
               children: [
-                Icon(
-                  HugeIcons.strokeRoundedFilterHorizontal,
+                HugeIcon(
+                  icon: HugeIcons.strokeRoundedFilterHorizontal,
                   size: 18,
                   color: colors.onSurfaceDim,
                 ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_motion.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
@@ -32,7 +33,8 @@ class AppButton extends StatelessWidget {
   final bool isLoading;
   final bool isDisabled;
   final bool isFullWidth;
-  final IconData? icon;
+  /// Can be [IconData] (Material) or HugeIcons SVG data (List).
+  final dynamic icon;
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -127,7 +129,9 @@ class AppButton extends StatelessWidget {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 18, color: textColor),
+          icon is IconData
+              ? Icon(icon as IconData, size: 18, color: textColor)
+              : HugeIcon(icon: icon, size: 18, color: textColor),
           const SizedBox(width: AppSpacing.sm),
           textWidget,
         ],

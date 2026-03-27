@@ -131,7 +131,7 @@ class _ContactCard extends StatelessWidget {
     this.onTap,
   });
 
-  final IconData icon;
+  final dynamic icon;
   final String title;
   final String subtitle;
   final VoidCallback? onTap;
@@ -153,7 +153,7 @@ class _ContactCard extends StatelessWidget {
               color: colors.surfaceVariant,
               borderRadius: BorderRadius.circular(20),
             ),
-            child: Icon(icon, size: 20, color: colors.accent),
+            child: HugeIcon(icon: icon, size: 20, color: colors.accent),
           ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
@@ -176,8 +176,8 @@ class _ContactCard extends StatelessWidget {
               ],
             ),
           ),
-          Icon(
-            HugeIcons.strokeRoundedArrowRight01,
+          HugeIcon(
+            icon: HugeIcons.strokeRoundedArrowRight01,
             size: 18,
             color: colors.onSurfaceDim,
           ),

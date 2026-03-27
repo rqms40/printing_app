@@ -43,7 +43,7 @@ class CheckpointAction extends StatelessWidget {
   }
 
   /// Returns the icon for the next action.
-  IconData get _actionIcon {
+  dynamic get _actionIcon {
     switch (currentStatus) {
       case DeliveryStatus.assigned:
         return HugeIcons.strokeRoundedCheckmarkCircle02;

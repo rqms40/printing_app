@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -11,8 +12,11 @@ class NavItem {
     required this.label,
   });
 
-  final IconData icon;
-  final IconData activeIcon;
+  /// Can be [IconData] (Material) or HugeIcons SVG data (List).
+  final dynamic icon;
+
+  /// Can be [IconData] (Material) or HugeIcons SVG data (List).
+  final dynamic activeIcon;
   final String label;
 }
 
@@ -66,13 +70,18 @@ class AppBottomNav extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          isActive ? item.activeIcon : item.icon,
-                          size: 24,
-                          color: isActive
+                        Builder(builder: (context) {
+                          final iconData =
+                              isActive ? item.activeIcon : item.icon;
+                          final color = isActive
                               ? colors.accent
-                              : colors.onSurfaceDim,
-                        ),
+                              : colors.onSurfaceDim;
+                          if (iconData is IconData) {
+                            return Icon(iconData, size: 24, color: color);
+                          }
+                          return HugeIcon(
+                              icon: iconData, size: 24, color: color);
+                        }),
                         if (isActive) ...[
                           const SizedBox(height: AppSpacing.xs),
                           Text(

@@ -134,8 +134,8 @@ class StatusTimeline extends StatelessWidget {
           shape: BoxShape.circle,
           color: colors.accent,
         ),
-        child: Icon(
-          HugeIcons.strokeRoundedTick01,
+        child: HugeIcon(
+          icon: HugeIcons.strokeRoundedTick01,
           size: 14,
           color: colors.background,
         ),
