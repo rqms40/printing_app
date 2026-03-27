@@ -33,9 +33,9 @@ class DriverProfileScreen extends ConsumerWidget {
     final driver = MockData.driverProfileJuan;
     final user = MockData.driverJuan;
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      body: SafeArea(
+    return ColoredBox(
+      color: colors.background,
+      child: SafeArea(
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

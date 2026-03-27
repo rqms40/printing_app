@@ -45,17 +45,16 @@ class _DeliveryHistoryScreenState extends ConsumerState<DeliveryHistoryScreen> {
     final colors = _colors(context);
 
     if (_isLoading) {
-      return Scaffold(
-        backgroundColor: colors.background,
-        appBar: AppBar(
-          backgroundColor: colors.surface,
-          title: Text(
-            'History',
-            style: AppTypography.h3.copyWith(color: colors.onBackground),
+      return ColoredBox(
+        color: colors.background,
+        child: SafeArea(
+          child: Column(
+            children: [
+              _HistoryAppBar(colors: colors),
+              const Expanded(child: OrderListSkeleton()),
+            ],
           ),
-          elevation: 0,
         ),
-        body: const OrderListSkeleton(),
       );
     }
 
@@ -66,137 +65,161 @@ class _DeliveryHistoryScreenState extends ConsumerState<DeliveryHistoryScreen> {
         .where((a) => a.status == DeliveryStatus.delivered)
         .toList();
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      appBar: AppBar(
-        backgroundColor: colors.surface,
-        title: Text(
-          'History',
-          style: AppTypography.h3.copyWith(color: colors.onBackground),
-        ),
-        elevation: 0,
-      ),
-      body: RefreshIndicator(
-        color: colors.accent,
-        backgroundColor: colors.surface,
-        onRefresh: () async {
-          await Future.delayed(const Duration(milliseconds: 500));
-        },
-        child: completedDeliveries.isEmpty
-          ? ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: const [
-                EmptyState(
-                  heading: 'No delivery history',
-                  body: 'Completed deliveries will appear here.',
-                  icon: HugeIcons.strokeRoundedClock01,
-                ),
-              ],
-            )
-          : ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(AppSpacing.md),
-              children: [
-                // Earnings summary card
-                AppCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'EARNINGS',
-                        style: AppTypography.overline
-                            .copyWith(color: colors.onSurfaceDim),
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      Row(
-                        children: [
-                          _EarningsTile(
-                            label: 'Today',
-                            amount: earnings.today,
-                            colors: colors,
-                          ),
-                          _EarningsTile(
-                            label: 'This Week',
-                            amount: earnings.thisWeek,
-                            colors: colors,
-                          ),
-                          _EarningsTile(
-                            label: 'This Month',
-                            amount: earnings.thisMonth,
-                            colors: colors,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-
-                // Completed deliveries list
-                Text(
-                  'COMPLETED DELIVERIES',
-                  style: AppTypography.overline
-                      .copyWith(color: colors.onSurfaceDim),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-
-                ...completedDeliveries.map((assignment) {
-                  final order = MockData.orders.firstWhere(
-                    (o) => o.id == assignment.orderId,
-                    orElse: () => MockData.orders.first,
-                  );
-
-                  return Padding(
-                    padding:
-                        const EdgeInsets.only(bottom: AppSpacing.sm),
-                    child: AppCard(
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  order.orderId,
-                                  style: AppTypography.bodyBold.copyWith(
-                                      color: colors.onBackground),
-                                ),
-                                const SizedBox(height: AppSpacing.xs),
-                                Text(
-                                  assignment.deliveredAt != null
-                                      ? formatDate(
-                                          assignment.deliveredAt!)
-                                      : 'Completed',
-                                  style: AppTypography.caption.copyWith(
-                                      color: colors.onSurfaceDim),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.end,
+    return ColoredBox(
+      color: colors.background,
+      child: SafeArea(
+        child: Column(
+          children: [
+            _HistoryAppBar(colors: colors),
+            Expanded(
+              child: RefreshIndicator(
+                color: colors.accent,
+                backgroundColor: colors.surface,
+                onRefresh: () async {
+                  await Future.delayed(const Duration(milliseconds: 500));
+                },
+                child: completedDeliveries.isEmpty
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: const [
+                        EmptyState(
+                          heading: 'No delivery history',
+                          body: 'Completed deliveries will appear here.',
+                          icon: HugeIcons.strokeRoundedClock01,
+                        ),
+                      ],
+                    )
+                  : ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      children: [
+                        // Earnings summary card
+                        AppCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                formatCurrency(order.deliveryFee),
-                                style: AppTypography.bodyBold.copyWith(
-                                    color: colors.onBackground),
+                                'EARNINGS',
+                                style: AppTypography.overline
+                                    .copyWith(color: colors.onSurfaceDim),
                               ),
-                              const SizedBox(height: AppSpacing.xs),
-                              const StatusBadge(
-                                label: 'Completed',
-                                variant: StatusBadgeVariant.success,
+                              const SizedBox(height: AppSpacing.md),
+                              Row(
+                                children: [
+                                  _EarningsTile(
+                                    label: 'Today',
+                                    amount: earnings.today,
+                                    colors: colors,
+                                  ),
+                                  _EarningsTile(
+                                    label: 'This Week',
+                                    amount: earnings.thisWeek,
+                                    colors: colors,
+                                  ),
+                                  _EarningsTile(
+                                    label: 'This Month',
+                                    amount: earnings.thisMonth,
+                                    colors: colors,
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+
+                        // Completed deliveries list
+                        Text(
+                          'COMPLETED DELIVERIES',
+                          style: AppTypography.overline
+                              .copyWith(color: colors.onSurfaceDim),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+
+                        ...completedDeliveries.map((assignment) {
+                          final order = MockData.orders.firstWhere(
+                            (o) => o.id == assignment.orderId,
+                            orElse: () => MockData.orders.first,
+                          );
+
+                          return Padding(
+                            padding:
+                                const EdgeInsets.only(bottom: AppSpacing.sm),
+                            child: AppCard(
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          order.orderId,
+                                          style: AppTypography.bodyBold.copyWith(
+                                              color: colors.onBackground),
+                                        ),
+                                        const SizedBox(height: AppSpacing.xs),
+                                        Text(
+                                          assignment.deliveredAt != null
+                                              ? formatDate(
+                                                  assignment.deliveredAt!)
+                                              : 'Completed',
+                                          style: AppTypography.caption.copyWith(
+                                              color: colors.onSurfaceDim),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        formatCurrency(order.deliveryFee),
+                                        style: AppTypography.bodyBold.copyWith(
+                                            color: colors.onBackground),
+                                      ),
+                                      const SizedBox(height: AppSpacing.xs),
+                                      const StatusBadge(
+                                        label: 'Completed',
+                                        variant: StatusBadgeVariant.success,
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
                     ),
-                  );
-                }),
-              ],
+              ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Inline app-bar replacement so we avoid a nested Scaffold.
+class _HistoryAppBar extends StatelessWidget {
+  const _HistoryAppBar({required this.colors});
+
+  final AppColorSet colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: colors.surface,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xl,
+        vertical: AppSpacing.md,
+      ),
+      alignment: Alignment.centerLeft,
+      child: Text(
+        'History',
+        style: AppTypography.h3.copyWith(color: colors.onBackground),
       ),
     );
   }

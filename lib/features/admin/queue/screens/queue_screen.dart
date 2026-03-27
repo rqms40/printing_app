@@ -81,9 +81,9 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
     final filteredOrders = queueState.filteredOrders;
     final counts = _tabCounts(queueState);
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      body: SafeArea(
+    return ColoredBox(
+      color: colors.background,
+      child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

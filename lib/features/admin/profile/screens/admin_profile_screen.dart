@@ -24,9 +24,9 @@ class AdminProfileScreen extends ConsumerWidget {
         ? admin.fullName![0].toUpperCase()
         : 'A';
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      body: SafeArea(
+    return ColoredBox(
+      color: colors.background,
+      child: SafeArea(
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

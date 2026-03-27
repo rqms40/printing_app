@@ -63,9 +63,9 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
     final displayedAssignments =
         _selectedTab == 0 ? activeAssignments : completedAssignments;
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      body: SafeArea(
+    return ColoredBox(
+      color: colors.background,
+      child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

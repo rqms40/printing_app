@@ -40,18 +40,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Scaffold(
-        backgroundColor: _colors(context).background,
-        body: const DashboardSkeleton(),
+      return ColoredBox(
+        color: _colors(context).background,
+        child: const SafeArea(child: DashboardSkeleton()),
       );
     }
 
     final colors = _colors(context);
     final kpis = ref.watch(dashboardKpisProvider);
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      body: RefreshIndicator(
+    return ColoredBox(
+      color: colors.background,
+      child: SafeArea(
+        child: RefreshIndicator(
         color: colors.accent,
         onRefresh: () async {
           // In production, invalidate providers to re-fetch data.
@@ -124,6 +125,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             const SizedBox(height: AppSpacing.lg),
           ],
         ),
+      ),
       ),
     );
   }

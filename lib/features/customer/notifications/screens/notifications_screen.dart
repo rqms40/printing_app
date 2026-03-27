@@ -69,9 +69,9 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
         ? AppColors.dark
         : AppColors.light;
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      body: SafeArea(
+    return ColoredBox(
+      color: colors.background,
+      child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

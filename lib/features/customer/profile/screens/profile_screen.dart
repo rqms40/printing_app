@@ -23,9 +23,9 @@ class ProfileScreen extends ConsumerWidget {
         ? AppColors.dark
         : AppColors.light;
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      body: SafeArea(
+    return ColoredBox(
+      color: colors.background,
+      child: SafeArea(
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

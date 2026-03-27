@@ -50,9 +50,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     final activeCount = activeOrders.length;
     final completedCount = completedOrders.length;
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      body: SafeArea(
+    return ColoredBox(
+      color: colors.background,
+      child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
