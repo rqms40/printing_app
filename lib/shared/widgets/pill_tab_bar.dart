@@ -11,16 +11,10 @@ class PillTab {
   final int count;
 }
 
-/// Reusable pill-style tab selector matching the DarkastixPrint design system.
+/// Pill-style segmented tab selector with a smooth sliding indicator.
 ///
-/// Usage:
-/// ```dart
-/// PillTabBar(
-///   tabs: [PillTab(label: 'Active', count: 3), PillTab(label: 'Done')],
-///   selectedIndex: _selectedTab,
-///   onTabChanged: (i) => setState(() => _selectedTab = i),
-/// )
-/// ```
+/// Uses a single animated positioned indicator that slides behind the
+/// selected tab — no per-tab background animation, no flicker.
 class PillTabBar extends StatelessWidget {
   const PillTabBar({
     super.key,
@@ -38,90 +32,112 @@ class PillTabBar extends StatelessWidget {
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
+      height: 40,
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: colors.surfaceVariant,
         borderRadius: AppRadius.borderFull,
       ),
-      child: Row(
-        children: List.generate(tabs.length, (index) {
-          final tab = tabs[index];
-          final isSelected = index == selectedIndex;
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final tabWidth = constraints.maxWidth / tabs.length;
 
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => onTabChanged(index),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOut,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: isSelected ? colors.surface : Colors.transparent,
-                  borderRadius: AppRadius.borderFull,
-                  boxShadow: isSelected
-                      ? [
-                          BoxShadow(
-                            color:
-                                colors.onBackground.withValues(alpha: 0.06),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ]
-                      : null,
-                ),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        tab.label,
-                        style: (isSelected
-                                ? AppTypography.bodyBold
-                                : AppTypography.body)
-                            .copyWith(
-                          color: isSelected
-                              ? colors.onBackground
-                              : colors.onSurfaceDim,
-                        ),
-                        maxLines: 1,
+          return Stack(
+            children: [
+              // Sliding indicator
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOutCubic,
+                left: selectedIndex * tabWidth,
+                top: 0,
+                bottom: 0,
+                width: tabWidth,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: colors.surface,
+                    borderRadius: AppRadius.borderFull,
+                    boxShadow: [
+                      BoxShadow(
+                        color: (isDark ? Colors.black : colors.onBackground)
+                            .withValues(alpha: isDark ? 0.3 : 0.08),
+                        blurRadius: 6,
+                        offset: const Offset(0, 1),
                       ),
-                      if (tab.count > 0) ...[
-                        const SizedBox(width: 5),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? colors.accent.withValues(alpha: 0.1)
-                                : colors.onSurfaceDim
-                                    .withValues(alpha: 0.1),
-                            borderRadius: AppRadius.borderFull,
-                          ),
-                          child: Text(
-                            '${tab.count}',
-                            style: AppTypography.caption.copyWith(
-                              color: isSelected
-                                  ? colors.accent
-                                  : colors.onSurfaceDim,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
               ),
-            ),
+
+              // Tab labels
+              Row(
+                children: List.generate(tabs.length, (index) {
+                  final tab = tabs[index];
+                  final isSelected = index == selectedIndex;
+
+                  return Expanded(
+                    child: GestureDetector(
+                      onTap: () => onTabChanged(index),
+                      behavior: HitTestBehavior.opaque,
+                      child: Center(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Use AnimatedDefaultTextStyle for smooth font weight transition
+                            AnimatedDefaultTextStyle(
+                              duration: const Duration(milliseconds: 200),
+                              style: AppTypography.body.copyWith(
+                                color: isSelected
+                                    ? colors.onBackground
+                                    : colors.onSurfaceDim,
+                                fontWeight: isSelected
+                                    ? FontWeight.w700
+                                    : FontWeight.w400,
+                                fontSize: 13,
+                              ),
+                              child: Text(
+                                tab.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (tab.count > 0) ...[
+                              const SizedBox(width: 5),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? colors.accent.withValues(alpha: 0.12)
+                                      : colors.onSurfaceDim
+                                          .withValues(alpha: 0.08),
+                                  borderRadius: AppRadius.borderFull,
+                                ),
+                                child: Text(
+                                  '${tab.count}',
+                                  style: AppTypography.caption.copyWith(
+                                    color: isSelected
+                                        ? colors.accent
+                                        : colors.onSurfaceDim,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ],
           );
-        }),
+        },
       ),
     );
   }
