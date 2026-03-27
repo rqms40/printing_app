@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
-import 'package:printing_app/features/customer/orders/screens/order_detail_screen.dart';
 import 'package:printing_app/features/customer/orders/widgets/order_card.dart';
+import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/empty_state.dart';
 import 'package:printing_app/shared/widgets/skeleton_screens.dart';
 
-/// Customer orders screen with Active / Completed tabs.
+/// Customer orders screen with pill-style tab selector.
 class OrdersScreen extends ConsumerStatefulWidget {
   const OrdersScreen({super.key});
 
@@ -20,8 +22,10 @@ class OrdersScreen extends ConsumerStatefulWidget {
   ConsumerState<OrdersScreen> createState() => _OrdersScreenState();
 }
 
-class _OrdersScreenState extends ConsumerState<OrdersScreen> {
+class _OrdersScreenState extends ConsumerState<OrdersScreen>
+    with SingleTickerProviderStateMixin {
   bool _isLoading = true;
+  int _selectedTab = 0;
 
   @override
   void initState() {
@@ -37,72 +41,210 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
         ? AppColors.dark
         : AppColors.light;
 
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        backgroundColor: colors.background,
-        appBar: AppBar(
-          backgroundColor: colors.surface,
-          title: Text(
-            'My Orders',
-            style: AppTypography.h3.copyWith(color: colors.onBackground),
-          ),
-          bottom: TabBar(
-            labelColor: colors.onBackground,
-            unselectedLabelColor: colors.onSurfaceDim,
-            indicatorColor: colors.accent,
-            labelStyle: AppTypography.bodyBold,
-            unselectedLabelStyle: AppTypography.body,
-            tabs: const [
-              Tab(text: 'Active'),
-              Tab(text: 'Completed'),
-            ],
-          ),
-        ),
-        body: _isLoading
-          ? const OrderListSkeleton()
-          : TabBarView(
+    ref.watch(ordersProvider);
+    final notifier = ref.read(ordersProvider.notifier);
+    final activeOrders = notifier.activeOrders
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final completedOrders = notifier.completedOrders
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+    final activeCount = activeOrders.length;
+    final completedCount = completedOrders.length;
+
+    return Scaffold(
+      backgroundColor: colors.background,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _OrdersTab(
-              ordersSelector: (notifier) => notifier.activeOrders,
-              emptyHeading: 'No active orders',
-              emptyBody: 'Your in-progress orders will appear here.',
-              emptyIcon: HugeIcons.strokeRoundedInvoice01,
-            ),
-            _OrdersTab(
-              ordersSelector: (notifier) => notifier.completedOrders,
-              emptyHeading: 'No completed orders',
-              emptyBody: 'Your finished orders will appear here.',
-              emptyIcon: HugeIcons.strokeRoundedCheckmarkCircle02,
+            // Header
+            Padding(
+              padding: const EdgeInsets.only(
+                left: AppSpacing.xl,
+                right: AppSpacing.xl,
+                top: AppSpacing.lg,
+                bottom: AppSpacing.md,
+              ),
+              child: Text(
+                'My Orders',
+                style: AppTypography.h1.copyWith(color: colors.onBackground),
+              ),
+            ).animate()
+                .fadeIn(duration: 350.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.02, duration: 350.ms, curve: Curves.easeOut),
+
+            // Pill tab selector
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: colors.surfaceVariant,
+                  borderRadius: AppRadius.borderFull,
+                ),
+                child: Row(
+                  children: [
+                    _TabPill(
+                      label: 'Active',
+                      count: activeCount,
+                      isSelected: _selectedTab == 0,
+                      colors: colors,
+                      onTap: () => setState(() => _selectedTab = 0),
+                    ),
+                    _TabPill(
+                      label: 'Completed',
+                      count: completedCount,
+                      isSelected: _selectedTab == 1,
+                      colors: colors,
+                      onTap: () => setState(() => _selectedTab = 1),
+                    ),
+                  ],
+                ),
+              ),
+            ).animate()
+                .fadeIn(duration: 350.ms, delay: 60.ms, curve: Curves.easeOut)
+                .slideY(
+                    begin: 0.02,
+                    duration: 350.ms,
+                    delay: 60.ms,
+                    curve: Curves.easeOut),
+
+            const SizedBox(height: AppSpacing.md),
+
+            // Content
+            Expanded(
+              child: _isLoading
+                  ? const OrderListSkeleton()
+                  : AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 250),
+                      switchInCurve: Curves.easeOut,
+                      switchOutCurve: Curves.easeIn,
+                      child: _selectedTab == 0
+                          ? _OrdersList(
+                              key: const ValueKey('active'),
+                              orders: activeOrders,
+                              emptyHeading: 'No active orders',
+                              emptyBody:
+                                  'When you place an order, it will appear here.',
+                              emptyIcon: HugeIcons.strokeRoundedFile02,
+                              colors: colors,
+                            )
+                          : _OrdersList(
+                              key: const ValueKey('completed'),
+                              orders: completedOrders,
+                              emptyHeading: 'No completed orders',
+                              emptyBody: 'Your finished orders will show here.',
+                              emptyIcon:
+                                  HugeIcons.strokeRoundedCheckmarkCircle02,
+                              colors: colors,
+                            ),
+                    ),
             ),
           ],
-        ).animate()
-            .fadeIn(duration: 400.ms, curve: Curves.easeOut),
+        ),
       ),
     );
   }
 }
 
-class _OrdersTab extends ConsumerWidget {
-  const _OrdersTab({
-    required this.ordersSelector,
+/// A single pill tab in the segmented selector.
+class _TabPill extends StatelessWidget {
+  const _TabPill({
+    required this.label,
+    required this.count,
+    required this.isSelected,
+    required this.colors,
+    required this.onTap,
+  });
+
+  final String label;
+  final int count;
+  final bool isSelected;
+  final AppColorSet colors;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected ? colors.surface : Colors.transparent,
+            borderRadius: AppRadius.borderFull,
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: colors.onBackground.withValues(alpha: 0.06),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label,
+                style: (isSelected ? AppTypography.bodyBold : AppTypography.body)
+                    .copyWith(
+                  color: isSelected ? colors.onBackground : colors.onSurfaceDim,
+                ),
+              ),
+              if (count > 0) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? colors.accent.withValues(alpha: 0.1)
+                        : colors.onSurfaceDim.withValues(alpha: 0.1),
+                    borderRadius: AppRadius.borderFull,
+                  ),
+                  child: Text(
+                    '$count',
+                    style: AppTypography.caption.copyWith(
+                      color: isSelected
+                          ? colors.accent
+                          : colors.onSurfaceDim,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The list of order items for a given tab.
+class _OrdersList extends StatelessWidget {
+  const _OrdersList({
+    super.key,
+    required this.orders,
     required this.emptyHeading,
     required this.emptyBody,
     required this.emptyIcon,
+    required this.colors,
   });
 
-  final List<Order> Function(OrdersNotifier notifier) ordersSelector;
+  final List<Order> orders;
   final String emptyHeading;
   final String emptyBody;
   final dynamic emptyIcon;
+  final AppColorSet colors;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Watch the provider so we rebuild when state changes.
-    ref.watch(ordersProvider);
-    final notifier = ref.read(ordersProvider.notifier);
-    final orders = ordersSelector(notifier);
-
+  Widget build(BuildContext context) {
     if (orders.isEmpty) {
       return EmptyState(
         heading: emptyHeading,
@@ -111,29 +253,30 @@ class _OrdersTab extends ConsumerWidget {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: () async {
-        // Simulate pull-to-refresh delay; mock data stays the same.
-        await Future<void>.delayed(const Duration(milliseconds: 500));
-      },
-      child: ListView.separated(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        itemCount: orders.length,
-        separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
-        itemBuilder: (context, index) {
-          final order = orders[index];
-          return OrderCard(
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+      itemCount: orders.length,
+      itemBuilder: (context, index) {
+        final order = orders[index];
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: index < orders.length - 1 ? AppSpacing.sm : AppSpacing.xxl,
+          ),
+          child: OrderCard(
             order: order,
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => OrderDetailScreen(orderId: order.id),
-                ),
-              );
-            },
-          );
-        },
-      ),
+            onTap: () => context.push('/customer/orders/${order.id}'),
+          ).animate().fadeIn(
+                duration: 350.ms,
+                delay: (index * 50).ms,
+                curve: Curves.easeOut,
+              ).slideY(
+                begin: 0.02,
+                duration: 350.ms,
+                delay: (index * 50).ms,
+                curve: Curves.easeOut,
+              ),
+        );
+      },
     );
   }
 }
