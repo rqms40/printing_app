@@ -1,235 +1,376 @@
-# GRID — Next Steps Implementation Plan
+# GRID — Next Steps Implementation Plan (v2)
 
 **Date:** 2026-03-28
 **Status:** Phase 1-2 Complete (frontend demo), Phase 3+ Not Started
+**Backend Readiness Score:** 3.5/10 (models ready, zero server code)
 
 ---
 
-## Current State Summary
+## Current State
 
-- **136 Dart files**, 19K+ lines of code, 34 screens, 73 passing tests
-- **3 roles fully built:** Customer (11 screens), Driver (5), Admin (5), Auth (4)
-- **Design system:** Greyscale-dominant with GRID yellow brand accent, light/dark mode
-- **Maps:** OpenStreetMap + OSRM real road routing (free, no API key)
-- **All data is mock** — zero backend, zero persistence, zero real auth
+| Metric | Value |
+|--------|-------|
+| Dart files | 136 |
+| Lines of code | 19,333 |
+| Screens | 34 (11 customer, 5 driver, 5 admin, 4 auth, 9 order flow) |
+| Tests | 73 passing (12 test files, ~5% coverage) |
+| Providers | 13 Riverpod StateNotifiers (all mock data) |
+| Models | 13 data classes (99% aligned with PRD schema) |
+| Backend | 0% — no server directory exists |
 
 ---
 
-## Phase 2 Completion (Quick Wins — 1-2 days)
+## Phase 2 Completion — Quick Wins (1-2 days, no backend)
 
-These can be done NOW without any backend.
+### 2A. Hive Draft Order Persistence (4 hours)
 
-### 2A. Hive Draft Order Persistence
-**Goal:** Save in-progress orders locally so they survive app restart.
-**Files:** `main.dart`, new `draft_order_provider.dart`, update `order_provider.dart`
+**Use Hive CE (Community Edition)** — actively maintained fork with `@GenerateAdapters`.
+
+```yaml
+# Replace hive dependencies in pubspec.yaml:
+dependencies:
+  hive_ce: ^2.6.0
+  hive_ce_flutter: ^2.2.0
+dev_dependencies:
+  hive_ce_generator: ^1.7.0
+  build_runner: ^2.4.0
+```
+
 **Work:**
-1. Initialize Hive in `main.dart`
-2. Create a Hive type adapter for `DraftOrder` model
-3. Auto-save `orderFlowProvider` state to Hive on every change
-4. Resume draft on app launch if one exists
-5. Clear draft after successful order submission
+1. Initialize Hive in `main.dart`: `await Hive.initFlutter();`
+2. Create type adapter for `DraftOrder` with `@GenerateAdapters`
+3. Run `dart run build_runner build` to generate adapters
+4. Create `DraftOrderProvider` that reads/writes Hive box
+5. Auto-save `orderFlowProvider` state to Hive on every change
+6. On app launch, check for saved draft and offer to resume
+7. Clear draft after successful order submission
 
-### 2B. Dark Mode Persistence
-**Goal:** Remember user's theme preference across app restarts.
-**Files:** `theme_provider.dart`, `main.dart`
-**Work:**
-1. Use `SharedPreferences` (already in deps) to save theme mode
-2. Load saved preference on app startup in `ThemeNotifier`
-3. Add "Follow System" option alongside Light/Dark
+### 2B. Dark Mode Persistence (1 hour)
 
-### 2C. Connectivity Listener
-**Goal:** Show offline banner when network is unavailable.
-**Files:** New `connectivity_provider.dart`, update screens
 **Work:**
-1. Use `connectivity_plus` (already in deps) to listen for network changes
-2. Show `OfflineBanner` widget (already built) at top of screens when offline
-3. Queue draft orders for submission when back online
+1. Add `SharedPreferences` load/save to `ThemeNotifier`
+2. Load saved preference in `initState` (default: system theme)
+3. Save on toggle: `prefs.setString('themeMode', mode.name)`
+4. Add "Follow System" option alongside Light/Dark
+
+### 2C. Connectivity Listener (2 hours)
+
+**Work:**
+1. Create `ConnectivityProvider` using `connectivity_plus` (already in deps)
+2. Listen for network state changes
+3. Show `OfflineBanner` (already built) when offline
+4. Disable submit buttons when offline, show toast
 
 ---
 
 ## Phase 3: Serverpod Backend (2-3 weeks)
 
-### 3A. Scaffold Serverpod Project (Day 1)
-**Commands:**
+### 3A. Scaffold & Database (Days 1-2)
+
 ```bash
-serverpod create printing_app
-# Creates: printing_app_server/, printing_app_client/, printing_app_flutter/
+# Install Serverpod CLI
+dart pub global activate serverpod_cli
+
+# Create project (generates _server, _client, _flutter packages)
+serverpod create grid_print
+
+# Start PostgreSQL
+cd grid_print_server
+docker compose up -d
+
+# Apply initial migrations
+dart run bin/main.dart --apply-migrations
 ```
-**Work:**
-1. Configure PostgreSQL connection in `config/development.yaml`
-2. Set up Docker Compose for local PostgreSQL
-3. Define all 13 data models as Serverpod protocol files (`.spy.yaml`)
-4. Run `serverpod generate` to create client library
-5. Add `printing_app_client` as dependency in Flutter app's `pubspec.yaml`
 
-### 3B. Database Schema (Day 2)
-**Work:**
-1. Apply PRD Section 13 schema as Serverpod migrations
-2. All 11 tables: users, addresses, orders, paper_specs, three_d_specs, driver_profiles, delivery_assignments, location_updates, order_status_history, payment_transactions, notifications
-3. All 17 indexes from PRD
-4. `updated_at` trigger function
-5. Seed data for development
+**Database config** (`config/development.yaml`):
+```yaml
+database:
+  host: localhost
+  port: 5432
+  name: grid_print
+  user: postgres
+  requireSsl: false
+```
 
-### 3C. Auth Endpoints (Days 3-4)
-**Endpoints:** `AuthEndpoint`, `UserEndpoint`
-**Work:**
-1. Register with email/password (bcrypt hashing)
-2. Login with session token management
-3. Profile CRUD (getProfile, updateProfile, isProfileComplete)
-4. Role-based access control middleware
-5. Connect `authProvider` to real endpoints (replace mock)
+**Define all 13 models as `.spy.yaml` files** in `lib/src/models/`:
 
-### 3D. Order Endpoints (Days 5-7)
-**Endpoints:** `OrderEndpoint`, `FileEndpoint`
-**Work:**
-1. Create order with payload validation
-2. Get user orders (with status filtering)
-3. Cancel order (with policy enforcement)
-4. Order status history logging
-5. File upload to Serverpod Storage (S3-compatible)
-6. WebSocket stream for real-time order updates
-7. Connect `ordersProvider` and `orderFlowProvider` to real endpoints
+```yaml
+# Example: order.spy.yaml
+class: Order
+table: orders
+fields:
+  orderId: String
+  userId: int
+  category: String
+  fileUrl: String?
+  fileName: String?
+  quantity: int
+  totalPrice: double
+  deliveryFee: double
+  paymentMethod: String
+  paymentStatus: String, default="'pending'"
+  orderStatus: String, default="'order_placed'"
+  declineReason: String?
+  cancellationReason: String?
+  cancelledAt: DateTime?
+  deliveryOption: String, default="'pickup'"
+  deliveryAddressId: int?
+  assignedDriverId: int?
+  estimatedCompletionAt: DateTime?
+  adminNotes: String?
+  trackingLink: String?
+  createdAt: DateTime, default=now
+  updatedAt: DateTime, default=now
 
-### 3E. Address & Admin Endpoints (Days 8-9)
-**Endpoints:** `AddressEndpoint`, `AdminEndpoint`
-**Work:**
-1. Address CRUD with max 5 per user
-2. Dashboard KPI aggregation queries
-3. Sales/volume analytics (date-range queries)
-4. Order queue with status filtering
-5. Status update with audit trail logging
-6. Driver assignment
+indexes:
+  idx_orders_user_id:
+    fields: userId
+  idx_orders_status:
+    fields: orderStatus
+  idx_orders_user_status:
+    fields: userId, orderStatus
+  idx_orders_created:
+    fields: createdAt
+    type: btree
+```
 
-### 3F. Driver & Location Endpoints (Days 10-11)
-**Endpoints:** `DriverEndpoint`, `LocationEndpoint`
-**Work:**
-1. Driver profile management
-2. Delivery assignment lifecycle (accept/decline/checkpoint updates)
-3. GPS location streaming via WebSocket
-4. Earnings calculation
-5. Auto-timeout for unaccepted assignments (10 min)
+After defining all models: `serverpod generate && serverpod create-migration`
 
-### 3G. Notification & Payment Endpoints (Days 12-14)
-**Endpoints:** `NotificationEndpoint`, `PaymentEndpoint`
-**Work:**
-1. Create notifications on status changes (server-triggered)
-2. FCM push notification integration
-3. In-app notification streaming via WebSocket
-4. Payment method handling (GCash/Maya deep links, COD flag)
-5. Payment webhook endpoint with HMAC verification
-6. Refund initiation for cancelled orders
+### 3B. Auth Endpoints (Days 3-4)
+
+Use `serverpod_auth` module for email/password:
+
+```dart
+class AuthEndpoint extends Endpoint {
+  Future<UserInfo> register(Session session, String email, String password) async {
+    // Hash password with bcrypt
+    // Insert user into DB
+    // Create session token
+  }
+
+  Future<AuthResponse> login(Session session, String email, String password) async {
+    // Verify credentials
+    // Create session
+    // Return token + user info
+  }
+
+  Future<void> logout(Session session) async {
+    await session.close();
+  }
+}
+```
+
+**Wire to Flutter:** Replace `authProvider` mock login with Serverpod client call.
+
+### 3C. Order Endpoints (Days 5-7)
+
+```dart
+class OrderEndpoint extends Endpoint {
+  Future<Order> createOrder(Session session, CreateOrderPayload payload) async { ... }
+  Future<List<Order>> getUserOrders(Session session, {String? statusFilter}) async { ... }
+  Future<Order> cancelOrder(Session session, String orderId, {String? reason}) async { ... }
+  Future<List<OrderStatusHistory>> getOrderHistory(Session session, String orderId) async { ... }
+  Stream<Order> streamOrderUpdates(Session session, String orderId) async* { ... }
+}
+```
+
+### 3D. Address, Admin, File Endpoints (Days 8-9)
+
+- Address CRUD with max 5 per user constraint
+- Admin dashboard aggregation queries
+- Driver assignment logic
+- File upload to Serverpod Storage (S3-compatible)
+
+### 3E. Driver & Location Endpoints (Days 10-11)
+
+```dart
+class DriverEndpoint extends Endpoint {
+  Future<DeliveryAssignment> acceptAssignment(Session session, int id) async { ... }
+  Future<DeliveryAssignment> updateDeliveryStatus(Session session, int id, String status) async { ... }
+  Stream<DeliveryAssignment> streamActiveDelivery(Session session) async* { ... }
+}
+
+class LocationEndpoint extends Endpoint {
+  Future<void> updateLocation(Session session, double lat, double lng) async { ... }
+  Stream<LocationUpdate> streamDriverLocation(Session session, int assignmentId) async* { ... }
+}
+```
+
+### 3F. Notification & Payment Endpoints (Days 12-14)
+
+**FCM Setup:**
+```yaml
+# pubspec.yaml additions (Flutter app)
+dependencies:
+  firebase_core: ^3.12.0
+  firebase_messaging: ^15.2.0
+  flutter_local_notifications: ^18.0.0
+```
+
+```bash
+# Configure Firebase
+dart pub global activate flutterfire_cli
+flutterfire configure
+```
+
+**Payment: PayMongo (recommended for PH)**
+
+Why PayMongo:
+- Philippines-native, best GCash/Maya support
+- 2.0% per e-wallet transaction, no monthly fees
+- Simple Payment Intent API
+- Webhook support for server verification
+
+```dart
+// Server-side PayMongo integration
+class PaymentEndpoint extends Endpoint {
+  Future<Map<String, String>> createPaymentIntent(
+    Session session, int orderId, double amount,
+  ) async {
+    final response = await http.post(
+      Uri.parse('https://api.paymongo.com/v1/payment_intents'),
+      headers: {
+        'Authorization': 'Basic ${base64Encode(utf8.encode('$apiKey:'))}',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'data': { 'attributes': {
+          'amount': (amount * 100).toInt(), // centavos
+          'currency': 'PHP',
+          'payment_method_allowed': ['gcash', 'maya', 'card'],
+        }}
+      }),
+    );
+    // Return client key for Flutter to complete payment
+  }
+}
+```
 
 ---
 
 ## Phase 4: Client-Server Integration (1-2 weeks)
 
 ### 4A. Replace Mock Data with API Calls
-**Work for each provider:**
-1. Replace `MockData.xxx` with Serverpod client calls
-2. Convert `StateNotifier` to `AsyncNotifier` for server-synced state
-3. Add loading/error states to all data screens
-4. Implement retry logic for failed requests
+
+For each of the 13 providers:
+1. Add `serverpod_client` calls
+2. Convert `StateNotifier` → `AsyncNotifier` for server-synced state
+3. Add loading/error states
+4. Implement retry logic
 
 ### 4B. Real-Time Streams
-**Work:**
-1. WebSocket stream for order status updates (customer)
-2. WebSocket stream for order queue changes (admin)
-3. WebSocket stream for delivery assignments (driver)
-4. GPS location streaming (driver → customer)
 
-### 4C. File Upload Integration
-**Work:**
-1. Upload files to Serverpod Storage on order creation
-2. Progress tracking during upload
-3. File preview/download for admin
+```dart
+// Customer: watch order status
+final stream = client.order.streamOrderUpdates(orderId);
+await for (final order in stream) {
+  // Update UI with new status
+}
 
-### 4D. Offline Queue
-**Work:**
-1. Queue order submissions when offline
-2. Sync queue when connectivity restored
-3. Conflict resolution (last-write-wins for drafts)
+// Driver: GPS location streaming
+final locationStream = client.location.streamDriverLocation(assignmentId);
+```
+
+### 4C. Offline Queue
+
+1. Queue order submissions when offline (Hive)
+2. Sync on reconnection (connectivity_plus listener)
+3. Conflict resolution: last-write-wins for drafts
 
 ---
 
 ## Phase 5: Production Readiness (1 week)
 
-### 5A. Security
-- Rate limiting on auth endpoints (5/min/IP)
-- Payment webhook HMAC verification
-- Role-based endpoint guards
-- File upload MIME validation
-- Session token in flutter_secure_storage
-- RA 10173 (Philippine Data Privacy Act) compliance
+### Security
+- Rate limiting: 5 auth attempts/min/IP
+- PayMongo webhook HMAC signature verification
+- Role-based endpoint guards (customer ≠ admin ≠ driver)
+- File upload: MIME whitelist, 50MB paper / 200MB 3D limits
+- Session tokens in `flutter_secure_storage`
+- RA 10173 compliance (Philippine Data Privacy Act)
 
-### 5B. Testing
+### Testing (target: 5% → 60%+ coverage)
 - Unit tests for all Serverpod endpoints
-- Widget tests for all 34 screens (currently 12/34)
+- Widget tests for remaining 22 untested screens
 - Integration tests for order flow end-to-end
-- Load testing for concurrent orders
+- Provider tests for all 13 state managers
 
-### 5C. Deployment
-- SSL/TLS via nginx reverse proxy
-- PostgreSQL automated backups (daily, 30-day retention)
-- Sentry error tracking (Flutter + server)
-- Health check endpoint (/health)
-- CI/CD pipeline (GitHub Actions: lint, test, build, deploy)
+### Deployment
+- SSL/TLS via nginx + Let's Encrypt
+- PostgreSQL daily backups (30-day retention)
+- Sentry error tracking (Flutter + Serverpod)
+- Health check endpoint (`/health`)
+- CI/CD: GitHub Actions (lint → test → build → deploy)
 - Docker Compose for one-command server setup
 
-### 5D. App Store
-- App icon (GRID 3×3 dot logo)
-- Splash screen (already done — animated dot reveal)
-- Android: Google Play Store listing
-- iOS: App Store listing (requires macOS for build)
+### App Distribution
+- Android: Google Play Store
+- iOS: App Store (requires macOS build machine)
 - PWA: Web deployment with service worker
+- App icon: GRID 3×3 dot logo
 
 ---
 
 ## Phase 6: Post-MVP Enhancements
 
-### 6A. Payment Gateway (PayMongo recommended for PH)
-- GCash checkout via PayMongo API
-- Maya checkout via PayMongo API
-- Webhook verification
-- Refund processing
-
-### 6B. Push Notifications (Firebase)
-- FCM setup for Android/iOS/web
-- Notification permission handling
-- Background/foreground message handling
-- Topic-based subscriptions (per order)
-
-### 6C. Advanced Features
-- Auto-driver assignment (nearest available)
-- Distance-based delivery pricing
-- Customer ratings for drivers
-- In-app chat (customer ↔ driver)
-- Receipt/invoice PDF generation
-- Multi-language support (Filipino/English)
+| Feature | Priority | Effort |
+|---------|----------|--------|
+| Auto-driver assignment (nearest) | High | 3 days |
+| Distance-based delivery pricing | High | 2 days |
+| Customer ratings for drivers | Medium | 2 days |
+| In-app chat (customer ↔ driver) | Medium | 4 days |
+| Receipt/invoice PDF generation | Medium | 2 days |
+| Multi-language (Filipino/English) | Low | 3 days |
+| Loyalty points / referral codes | Low | 3 days |
+| Web admin panel | Low | 1 week |
 
 ---
 
 ## Priority Matrix
 
-| Priority | Task | Effort | Impact |
-|----------|------|--------|--------|
-| 🔴 Now | Hive draft persistence | 4 hours | High — prevents data loss |
-| 🔴 Now | Dark mode persistence | 1 hour | Medium — UX polish |
-| 🟡 Next | Serverpod scaffold | 1 day | Blocker for all backend work |
-| 🟡 Next | Auth endpoints | 2 days | Blocker for user management |
-| 🟡 Next | Order endpoints | 3 days | Core business logic |
-| 🟢 Later | Payment gateway | 2 days | Revenue enablement |
-| 🟢 Later | Push notifications | 2 days | Engagement |
-| 🟢 Later | CI/CD pipeline | 1 day | Dev productivity |
+| Priority | Task | Effort | Impact | Blocks |
+|----------|------|--------|--------|--------|
+| 🔴 **Now** | Hive draft persistence | 4h | High | Nothing |
+| 🔴 **Now** | Dark mode persistence | 1h | Medium | Nothing |
+| 🟡 **Next** | Serverpod scaffold + DB | 2 days | Critical | All backend |
+| 🟡 **Next** | Auth endpoints | 2 days | Critical | User management |
+| 🟡 **Next** | Order endpoints | 3 days | Critical | Core business |
+| 🟡 **Next** | File upload endpoint | 1 day | High | Order creation |
+| 🟠 **Soon** | Driver/Location endpoints | 2 days | High | Delivery tracking |
+| 🟠 **Soon** | PayMongo integration | 2 days | High | Revenue |
+| 🟠 **Soon** | FCM push notifications | 2 days | Medium | Engagement |
+| 🟢 **Later** | Test coverage (60%+) | 3 days | Medium | Quality |
+| 🟢 **Later** | CI/CD pipeline | 1 day | Medium | Dev velocity |
+| 🟢 **Later** | Production deployment | 2 days | Critical | Launch |
 
 ---
 
-## Estimated Timeline
+## Timeline
 
 | Phase | Duration | Status |
 |-------|----------|--------|
-| Phase 1: UI Shell | 3 days | ✅ COMPLETE |
-| Phase 2: Local Logic | 2 days | ✅ 95% (Hive + dark mode persistence remaining) |
+| Phase 1: UI Shell | 3 days | ✅ COMPLETE (2026-03-27) |
+| Phase 2: Local Logic | 2 days | ✅ 95% (Hive + dark persistence remaining) |
 | Phase 3: Backend | 2-3 weeks | ❌ NOT STARTED |
 | Phase 4: Integration | 1-2 weeks | ❌ NOT STARTED |
 | Phase 5: Production | 1 week | ❌ NOT STARTED |
 | **Total to MVP** | **5-7 weeks** | **Frontend demo ready** |
+
+---
+
+## Tech Stack Summary
+
+| Layer | Technology | Status |
+|-------|-----------|--------|
+| **Frontend** | Flutter 3.41.6 + Dart 3.11.4 | ✅ Complete |
+| **State** | Riverpod 2.6.1 | ✅ Complete (mock) |
+| **Navigation** | GoRouter 14.8.1 | ✅ Complete |
+| **Maps** | flutter_map + OpenStreetMap + OSRM | ✅ Complete (free) |
+| **Icons** | HugeIcons 1.1.5 + Material Icons | ✅ Complete |
+| **Local Storage** | Hive CE 2.6.0 | ⚠️ Dependency ready, not integrated |
+| **Backend** | Serverpod (latest) | ❌ Not started |
+| **Database** | PostgreSQL 15+ | ❌ Not started |
+| **Auth** | Serverpod Auth Module | ❌ Not started |
+| **Payments** | PayMongo (GCash/Maya/Card) | ❌ Not started |
+| **Push** | Firebase Cloud Messaging | ❌ Not started |
+| **Deployment** | Docker + nginx + Let's Encrypt | ❌ Not started |
