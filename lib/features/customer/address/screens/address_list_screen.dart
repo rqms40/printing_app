@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
@@ -45,6 +46,7 @@ class AddressListScreen extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.md),
               itemBuilder: (context, index) {
                 final address = addresses[index];
+                final delay = (index * 60).ms;
                 return Dismissible(
                   key: ValueKey(address.id),
                   direction: DismissDirection.endToStart,
@@ -110,7 +112,9 @@ class AddressListScreen extends ConsumerWidget {
                       );
                     },
                   ),
-                );
+                ).animate()
+                  .fadeIn(duration: 400.ms, delay: delay, curve: Curves.easeOut)
+                  .slideY(begin: 0.03, duration: 400.ms, delay: delay, curve: Curves.easeOut);
               },
             ),
       floatingActionButton: notifier.canAddMore

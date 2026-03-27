@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -33,7 +34,9 @@ class DeliveryTrackingScreen extends StatelessWidget {
               padding: EdgeInsets.all(AppSpacing.md),
               child: DeliveryMap(),
             ),
-          ),
+          ).animate()
+            .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+            .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
           // Driver info card at bottom
           const Padding(
             padding: EdgeInsets.fromLTRB(
@@ -43,7 +46,9 @@ class DeliveryTrackingScreen extends StatelessWidget {
               AppSpacing.md,
             ),
             child: DriverInfoCard(),
-          ),
+          ).animate()
+            .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
+            .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
         ],
       ),
     );

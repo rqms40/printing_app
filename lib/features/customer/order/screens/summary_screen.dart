@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
@@ -57,7 +58,9 @@ class SummaryScreen extends ConsumerWidget {
                     'Order Summary',
                     style:
                         AppTypography.h1.copyWith(color: colors.onBackground),
-                  ),
+                  ).animate()
+                    .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                    .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
                   const SizedBox(height: AppSpacing.lg),
 
                   // Specs card
@@ -92,7 +95,9 @@ class SummaryScreen extends ConsumerWidget {
                         _specRow('Quantity', '${state.quantity}', colors),
                       ],
                     ),
-                  ),
+                  ).animate()
+                    .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
+                    .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
                   const SizedBox(height: AppSpacing.md),
 
                   // File info card
@@ -129,7 +134,9 @@ class SummaryScreen extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.lg),
 
                   // Price breakdown
-                  _buildPriceBreakdown(state, isPaper),
+                  _buildPriceBreakdown(state, isPaper).animate()
+                    .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
+                    .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
                   const SizedBox(height: AppSpacing.xxl),
                 ],
               ),

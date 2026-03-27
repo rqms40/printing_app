@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -49,7 +50,9 @@ class CategoryScreen extends ConsumerWidget {
               Text(
                 'What would you\nlike to print?',
                 style: AppTypography.h1.copyWith(color: colors.onBackground),
-              ),
+              ).animate()
+                .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
               const SizedBox(height: AppSpacing.xl),
               Expanded(
                 child: Row(
@@ -63,7 +66,9 @@ class CategoryScreen extends ConsumerWidget {
                         title: 'Paper Printing',
                         description: 'Documents, posters, photos',
                         onTap: () => _selectCategory(context, ref, 'paper'),
-                      ),
+                      ).animate()
+                        .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
+                        .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
                     ),
                     const SizedBox(width: AppSpacing.md),
                     Expanded(
@@ -75,7 +80,9 @@ class CategoryScreen extends ConsumerWidget {
                         title: '3D Printing',
                         description: 'Models, prototypes, figures',
                         onTap: () => _selectCategory(context, ref, '3d'),
-                      ),
+                      ).animate()
+                        .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
+                        .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
                     ),
                   ],
                 ),

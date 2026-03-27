@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
@@ -143,7 +144,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                       'Upload Your File',
                       style: AppTypography.h1
                           .copyWith(color: colors.onBackground),
-                    ),
+                    ).animate()
+                      .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                      .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
                       'Accepted: ${_allowedTypes.map((e) => '.$e').join(', ')} (max $_maxSizeMB MB)',
@@ -158,7 +161,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                       errorText: _errorText,
                       isUploading: _isUploading,
                       uploadProgress: _uploadProgress,
-                    ),
+                    ).animate()
+                      .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
+                      .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
                   ],
                 ),
               ),
@@ -177,7 +182,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                 isDisabled: !_canContinue,
                 onTap: _canContinue ? _onContinue : null,
               ),
-            ),
+            ).animate()
+              .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
+              .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
           ],
         ),
       ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
@@ -74,7 +75,9 @@ class _DeliveryDetailsScreenState
                     'Delivery Details',
                     style:
                         AppTypography.h1.copyWith(color: colors.onBackground),
-                  ),
+                  ).animate()
+                    .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                    .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
                   const SizedBox(height: AppSpacing.lg),
 
                   // Toggle: Pickup / Delivery
@@ -90,7 +93,9 @@ class _DeliveryDetailsScreenState
                         _toggleOption('delivery', 'Delivery', colors),
                       ],
                     ),
-                  ),
+                  ).animate()
+                    .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
+                    .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
                   const SizedBox(height: AppSpacing.lg),
 
                   if (_deliveryOption == 'pickup') ...[

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -82,7 +83,9 @@ class _ThreeDSpecsScreenState extends ConsumerState<ThreeDSpecsScreen> {
                     '3D Print Specifications',
                     style:
                         AppTypography.h1.copyWith(color: colors.onBackground),
-                  ),
+                  ).animate()
+                    .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                    .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
                 ],
               ),
             ),
@@ -156,7 +159,9 @@ class _ThreeDSpecsScreenState extends ConsumerState<ThreeDSpecsScreen> {
                   const SizedBox(height: AppSpacing.xxl),
                 ],
               ),
-            ),
+            ).animate()
+              .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
+              .slideY(begin: 0.02, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
             Container(
               padding: const EdgeInsets.all(AppSpacing.lg),
               decoration: BoxDecoration(
@@ -170,7 +175,9 @@ class _ThreeDSpecsScreenState extends ConsumerState<ThreeDSpecsScreen> {
                 isFullWidth: true,
                 onTap: _onContinue,
               ),
-            ),
+            ).animate()
+              .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
+              .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
           ],
         ),
       ),

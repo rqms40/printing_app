@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
@@ -96,118 +97,138 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
               const SizedBox(height: AppSpacing.xxl),
 
               // Heading
-              Text(
-                'Complete Your Profile',
-                style: AppTypography.h1.copyWith(
-                  color: colors.onBackground,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'Tell us about yourself',
-                style: AppTypography.bodyLarge.copyWith(
-                  color: colors.onSurfaceDim,
-                ),
-              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Complete Your Profile',
+                    style: AppTypography.h1.copyWith(
+                      color: colors.onBackground,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Tell us about yourself',
+                    style: AppTypography.bodyLarge.copyWith(
+                      color: colors.onSurfaceDim,
+                    ),
+                  ),
+                ],
+              ).animate()
+                .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
 
               const SizedBox(height: AppSpacing.xxl),
 
               // Full name
-              AppTextField(
-                controller: _nameController,
-                label: 'Full Name',
-                hintText: 'e.g. Maria Santos',
-                textInputAction: TextInputAction.next,
-                errorText: _nameError,
-              ),
-              const SizedBox(height: AppSpacing.lg),
-
-              // Phone number
-              AppTextField(
-                controller: _phoneController,
-                label: 'Phone Number',
-                hintText: '+63 9XX XXX XXXX',
-                keyboardType: TextInputType.phone,
-                textInputAction: TextInputAction.done,
-              ),
-              const SizedBox(height: AppSpacing.lg),
-
-              // Date of birth
-              Text(
-                'Date of Birth',
-                style: AppTypography.caption.copyWith(
-                  color: colors.onSurfaceDim,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              GestureDetector(
-                onTap: _pickDate,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    vertical: AppSpacing.md,
-                  ),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(color: colors.outline),
-                    ),
-                  ),
-                  child: Text(
-                    _dateOfBirth != null
-                        ? '${_dateOfBirth!.month}/${_dateOfBirth!.day}/${_dateOfBirth!.year}'
-                        : 'Select date',
-                    style: AppTypography.body.copyWith(
-                      color: _dateOfBirth != null
-                          ? colors.onBackground
-                          : colors.onSurfaceDim,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-
-              // Gender
-              Text(
-                'Gender',
-                style: AppTypography.caption.copyWith(
-                  color: colors.onSurfaceDim,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Row(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  for (final gender in ['Male', 'Female', 'Other']) ...[
-                    if (gender != 'Male') const SizedBox(width: AppSpacing.sm),
-                    _GenderChip(
-                      label: gender,
-                      isSelected: _selectedGender == gender,
-                      colors: colors,
-                      onTap: () =>
-                          setState(() => _selectedGender = gender),
+                  AppTextField(
+                    controller: _nameController,
+                    label: 'Full Name',
+                    hintText: 'e.g. Maria Santos',
+                    textInputAction: TextInputAction.next,
+                    errorText: _nameError,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+
+                  // Phone number
+                  AppTextField(
+                    controller: _phoneController,
+                    label: 'Phone Number',
+                    hintText: '+63 9XX XXX XXXX',
+                    keyboardType: TextInputType.phone,
+                    textInputAction: TextInputAction.done,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+
+                  // Date of birth
+                  Text(
+                    'Date of Birth',
+                    style: AppTypography.caption.copyWith(
+                      color: colors.onSurfaceDim,
                     ),
-                  ],
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  GestureDetector(
+                    onTap: _pickDate,
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: AppSpacing.md,
+                      ),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(color: colors.outline),
+                        ),
+                      ),
+                      child: Text(
+                        _dateOfBirth != null
+                            ? '${_dateOfBirth!.month}/${_dateOfBirth!.day}/${_dateOfBirth!.year}'
+                            : 'Select date',
+                        style: AppTypography.body.copyWith(
+                          color: _dateOfBirth != null
+                              ? colors.onBackground
+                              : colors.onSurfaceDim,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+
+                  // Gender
+                  Text(
+                    'Gender',
+                    style: AppTypography.caption.copyWith(
+                      color: colors.onSurfaceDim,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Row(
+                    children: [
+                      for (final gender in ['Male', 'Female', 'Other']) ...[
+                        if (gender != 'Male') const SizedBox(width: AppSpacing.sm),
+                        _GenderChip(
+                          label: gender,
+                          isSelected: _selectedGender == gender,
+                          colors: colors,
+                          onTap: () =>
+                              setState(() => _selectedGender = gender),
+                        ),
+                      ],
+                    ],
+                  ),
                 ],
-              ),
+              ).animate()
+                .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
 
               const SizedBox(height: AppSpacing.xl),
 
               // Complete profile button
-              AppButton(
-                label: 'Complete Profile',
-                onTap: _submit,
-                variant: AppButtonVariant.primary,
-                isFullWidth: true,
-              ),
+              Column(
+                children: [
+                  AppButton(
+                    label: 'Complete Profile',
+                    onTap: _submit,
+                    variant: AppButtonVariant.primary,
+                    isFullWidth: true,
+                  ),
 
-              const SizedBox(height: AppSpacing.md),
+                  const SizedBox(height: AppSpacing.md),
 
-              // Skip button
-              AppButton(
-                label: 'Skip for now',
-                onTap: _skip,
-                variant: AppButtonVariant.ghost,
-                isFullWidth: true,
-              ),
+                  // Skip button
+                  AppButton(
+                    label: 'Skip for now',
+                    onTap: _skip,
+                    variant: AppButtonVariant.ghost,
+                    isFullWidth: true,
+                  ),
+                ],
+              ).animate()
+                .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
 
               const SizedBox(height: AppSpacing.xl),
             ],

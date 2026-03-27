@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
@@ -117,7 +118,9 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
                     controller: _nameController,
                     label: 'Full Name',
                     hintText: 'Enter your full name',
-                  ),
+                  ).animate()
+                    .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                    .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
                   const SizedBox(height: AppSpacing.lg),
                   AppTextField(
                     controller: _emailController,
@@ -230,7 +233,9 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
               isFullWidth: true,
               onTap: _save,
             ),
-          ),
+          ).animate()
+            .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
+            .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
         ],
       ),
     );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -41,7 +42,9 @@ class SupportScreen extends StatelessWidget {
             Text(
               'Support & Help',
               style: AppTypography.h1.copyWith(color: colors.onBackground),
-            ),
+            ).animate()
+              .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+              .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
             const SizedBox(height: AppSpacing.lg),
             // Contact cards
             Text(
@@ -54,21 +57,27 @@ class SupportScreen extends StatelessWidget {
               title: 'Phone',
               subtitle: '+63 917 123 4567',
               onTap: () => _launchUrl('tel:+639171234567'),
-            ),
+            ).animate()
+              .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
+              .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
             const SizedBox(height: AppSpacing.sm),
             _ContactCard(
               icon: HugeIcons.strokeRoundedMail01,
               title: 'Email',
               subtitle: 'support@darkastixprint.com',
               onTap: () => _launchUrl('mailto:support@darkastixprint.com'),
-            ),
+            ).animate()
+              .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
+              .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
             const SizedBox(height: AppSpacing.sm),
             _ContactCard(
               icon: HugeIcons.strokeRoundedMessage01,
               title: 'Facebook Messenger',
               subtitle: '@DarkastixPrint',
               onTap: () => _launchUrl('https://m.me/DarkastixPrint'),
-            ),
+            ).animate()
+              .fadeIn(duration: 400.ms, delay: 180.ms, curve: Curves.easeOut)
+              .slideY(begin: 0.03, duration: 400.ms, delay: 180.ms, curve: Curves.easeOut),
             const SizedBox(height: AppSpacing.xl),
             // FAQ section
             Text(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -40,19 +41,26 @@ class RegisterScreen extends ConsumerWidget {
               const SizedBox(height: AppSpacing.xxl),
 
               // Heading
-              Text(
-                'Create Account',
-                style: AppTypography.display.copyWith(
-                  color: colors.onBackground,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'Sign up to get started',
-                style: AppTypography.bodyLarge.copyWith(
-                  color: colors.onSurfaceDim,
-                ),
-              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Create Account',
+                    style: AppTypography.display.copyWith(
+                      color: colors.onBackground,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Sign up to get started',
+                    style: AppTypography.bodyLarge.copyWith(
+                      color: colors.onSurfaceDim,
+                    ),
+                  ),
+                ],
+              ).animate()
+                .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
 
               const SizedBox(height: AppSpacing.xxl),
 
@@ -63,7 +71,9 @@ class RegisterScreen extends ConsumerWidget {
                 onSubmit: (email, password) {
                   ref.read(authProvider.notifier).register(email, password);
                 },
-              ),
+              ).animate()
+                .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
 
               const SizedBox(height: AppSpacing.lg),
 
@@ -88,7 +98,9 @@ class RegisterScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-              ),
+              ).animate()
+                .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
 
               const SizedBox(height: AppSpacing.xl),
             ],

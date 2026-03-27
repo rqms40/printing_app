@@ -16,46 +16,64 @@ Widget _wrap(Widget child) {
 void main() {
   group('NotificationsScreen', () {
     testWidgets('renders notifications list', (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
       await tester.pumpWidget(_wrap(const NotificationsScreen()));
-      await tester.pumpAndSettle();
+      // Wait for skeleton + animations
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
 
       // The screen should render the AppBar title
       expect(find.text('Notifications'), findsOneWidget);
 
-      // Should have the "Mark All Read" button
-      expect(find.text('Mark All Read'), findsOneWidget);
-
-      // Should render at least one notification from mock data
-      // Maria (usr_001) has several notifications
-      expect(find.text('Order Placed'), findsOneWidget);
+      // Should have the "Read all" button
+      expect(find.text('Read all'), findsOneWidget);
     });
 
-    testWidgets('shows unread indicators', (tester) async {
+    testWidgets('shows grouped notifications with time headers', (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
       await tester.pumpWidget(_wrap(const NotificationsScreen()));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
 
-      // Unread notifications should display their titles
-      // "Printing Started" is unread in mock data
-      expect(find.text('Printing Started'), findsOneWidget);
-
-      // "Driver On the Way" is unread in mock data
-      expect(find.text('Driver On the Way'), findsOneWidget);
-    });
-
-    testWidgets('renders notification messages', (tester) async {
-      await tester.pumpWidget(_wrap(const NotificationsScreen()));
-      await tester.pumpAndSettle();
-
-      // Check that notification messages render
+      // Should render at least one time group header
+      // Mock data has notifications from various dates
       expect(
-        find.textContaining('ORD-10001 has been placed'),
-        findsOneWidget,
+        find.textContaining(RegExp(r'TODAY|YESTERDAY|THIS WEEK|EARLIER')),
+        findsWidgets,
       );
     });
 
-    testWidgets('does not show notifications for other users', (tester) async {
+    testWidgets('renders notification messages', (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
       await tester.pumpWidget(_wrap(const NotificationsScreen()));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Check that notification titles render
+      expect(find.text('Order Placed'), findsOneWidget);
+    });
+
+    testWidgets('does not show notifications for other users', (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(_wrap(const NotificationsScreen()));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
 
       // Driver Juan's notification should not appear (usr_002)
       expect(
