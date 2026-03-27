@@ -16,11 +16,13 @@ class NavItem {
   final String label;
 }
 
-/// Bottom navigation bar with proper iPhone safe area handling.
+/// Bottom navigation bar built on Flutter's [BottomAppBar] for proper
+/// safe area handling on all devices (iPhone home indicator, Android
+/// gesture bar, etc.).
 ///
-/// Uses `MediaQuery.viewPadding.bottom` directly to add padding for
-/// the home indicator on iPhone X+ (34px). This works even when a
-/// parent widget has consumed the SafeArea insets.
+/// [BottomAppBar] is the framework's recommended container for custom
+/// bottom navigation — it automatically respects device insets via
+/// [SafeArea] internally and integrates with [Scaffold.bottomNavigationBar].
 class AppBottomNav extends StatelessWidget {
   const AppBottomNav({
     super.key,
@@ -39,82 +41,82 @@ class AppBottomNav extends StatelessWidget {
         ? AppColors.dark
         : AppColors.light;
 
-    // iPhone home indicator: ~34px on iPhone X+, 0 on older/Android
-    final bottomInset = MediaQuery.of(context).viewPadding.bottom;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.surface,
-        border: Border(
-          top: BorderSide(color: colors.outline, width: 0.5),
+    return BottomAppBar(
+      color: colors.surface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      padding: EdgeInsets.zero,
+      height: null, // auto-size based on content + safe area
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(color: colors.outline, width: 0.5),
+          ),
         ),
-      ),
-      padding: EdgeInsets.only(
-        top: 6,
-        bottom: bottomInset > 0 ? bottomInset : 4,
-      ),
-      child: Row(
-        children: List.generate(items.length, (index) {
-          final item = items[index];
-          final isActive = index == currentIndex;
+        child: Padding(
+          padding: const EdgeInsets.only(top: 6, bottom: 4),
+          child: Row(
+            children: List.generate(items.length, (index) {
+              final item = items[index];
+              final isActive = index == currentIndex;
 
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => onTap(index),
-              behavior: HitTestBehavior.opaque,
-              child: SizedBox(
-                height: 52,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Icon with indicator pill
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      curve: Curves.easeOut,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isActive ? 16 : 0,
-                        vertical: isActive ? 4 : 0,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isActive
-                            ? colors.accent.withValues(alpha: 0.1)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Builder(builder: (context) {
-                        final iconData =
-                            isActive ? item.activeIcon : item.icon;
-                        final color = isActive
-                            ? colors.onBackground
-                            : colors.onSurfaceDim;
-                        if (iconData is IconData) {
-                          return Icon(iconData, size: 22, color: color);
-                        }
-                        return HugeIcon(
-                            icon: iconData, size: 22, color: color);
-                      }),
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => onTap(index),
+                  behavior: HitTestBehavior.opaque,
+                  child: SizedBox(
+                    height: 52,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeOut,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isActive ? 16 : 0,
+                            vertical: isActive ? 4 : 0,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? colors.accent.withValues(alpha: 0.1)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Builder(builder: (context) {
+                            final iconData =
+                                isActive ? item.activeIcon : item.icon;
+                            final color = isActive
+                                ? colors.onBackground
+                                : colors.onSurfaceDim;
+                            if (iconData is IconData) {
+                              return Icon(iconData, size: 22, color: color);
+                            }
+                            return HugeIcon(
+                                icon: iconData, size: 22, color: color);
+                          }),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          item.label,
+                          style: AppTypography.caption.copyWith(
+                            color: isActive
+                                ? colors.onBackground
+                                : colors.onSurfaceDim,
+                            fontWeight:
+                                isActive ? FontWeight.w600 : FontWeight.w400,
+                            fontSize: 11,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 2),
-                    // Label
-                    Text(
-                      item.label,
-                      style: AppTypography.caption.copyWith(
-                        color: isActive
-                            ? colors.onBackground
-                            : colors.onSurfaceDim,
-                        fontWeight:
-                            isActive ? FontWeight.w600 : FontWeight.w400,
-                        fontSize: 11,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          );
-        }),
+              );
+            }),
+          ),
+        ),
       ),
     );
   }
