@@ -4,6 +4,7 @@ import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
@@ -117,8 +118,8 @@ class AdminProfileScreen extends ConsumerWidget {
                 confirmLabel: 'Sign Out',
                 cancelLabel: 'Cancel',
                 onConfirm: () {
+                  ref.read(authProvider.notifier).logout();
                   Navigator.of(context).pop();
-                  // In production, navigate to login screen
                 },
                 onCancel: () => Navigator.of(context).pop(),
               );

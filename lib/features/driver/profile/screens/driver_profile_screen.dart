@@ -5,6 +5,7 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/models/enums.dart';
+import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -206,7 +207,7 @@ class DriverProfileScreen extends ConsumerWidget {
                     TextButton(
                       onPressed: () {
                         Navigator.of(ctx).pop();
-                        // Sign out logic not implemented
+                        ref.read(authProvider.notifier).logout();
                       },
                       child: Text(
                         'Sign Out',

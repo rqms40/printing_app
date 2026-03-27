@@ -116,7 +116,7 @@ class AssignmentDialog extends ConsumerWidget {
                             content: Text(
                               'Driver assigned successfully',
                               style: AppTypography.body
-                                  .copyWith(color: Colors.white),
+                                  .copyWith(color: colors.background),
                             ),
                             backgroundColor: colors.accent,
                           ),

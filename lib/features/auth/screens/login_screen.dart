@@ -4,10 +4,12 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/auth/screens/register_screen.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/features/auth/widgets/auth_form.dart';
+import 'package:printing_app/shared/providers/theme_provider.dart';
 
 /// Login screen -- the default entry point for unauthenticated users.
 class LoginScreen extends ConsumerWidget {
@@ -16,6 +18,8 @@ class LoginScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
+    final themeMode = ref.watch(themeProvider);
+    final isDark = themeMode == ThemeMode.dark;
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
@@ -28,7 +32,22 @@ class LoginScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: AppSpacing.xxl),
+              const SizedBox(height: AppSpacing.sm),
+              Align(
+                alignment: Alignment.centerRight,
+                child: IconButton(
+                  icon: HugeIcon(
+                    icon: isDark
+                        ? HugeIcons.strokeRoundedSun03
+                        : HugeIcons.strokeRoundedMoon02,
+                    color: colors.onSurfaceDim,
+                    size: 22,
+                  ),
+                  onPressed: () =>
+                      ref.read(themeProvider.notifier).toggle(),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
 
               // Heading
               Text(

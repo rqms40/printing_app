@@ -56,9 +56,9 @@ class AddressListScreen extends ConsumerWidget {
                       color: colors.error,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const HugeIcon(
+                    child: HugeIcon(
                       icon: HugeIcons.strokeRoundedDelete02,
-                      color: Colors.white,
+                      color: colors.background,
                     ),
                   ),
                   confirmDismiss: (_) async {
