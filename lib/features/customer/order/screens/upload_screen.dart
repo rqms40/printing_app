@@ -11,6 +11,7 @@ import 'package:printing_app/features/customer/order/providers/order_provider.da
 import 'package:printing_app/features/customer/order/widgets/file_upload_card.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
+import 'package:printing_app/utils/formatters.dart';
 
 /// Step 3/6 -- File upload.
 class UploadScreen extends ConsumerStatefulWidget {
@@ -52,10 +53,30 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
   }
 
   Future<void> _pickFile() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: _allowedTypes,
-    );
+    FilePickerResult? result;
+
+    try {
+      // Try with extension filter first
+      result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: _allowedTypes,
+        dialogTitle: 'Select file to print',
+      );
+    } catch (_) {
+      // Fallback: some platforms (e.g. WSL2/Linux without xdg-desktop-portal)
+      // don't support FileType.custom. Pick any file and validate manually.
+      try {
+        result = await FilePicker.platform.pickFiles(
+          type: FileType.any,
+          dialogTitle: 'Select file to print',
+        );
+      } catch (e) {
+        setState(() {
+          _errorText = 'Could not open file picker. Please try again.';
+        });
+        return;
+      }
+    }
 
     if (result == null || result.files.isEmpty) return;
 
@@ -68,7 +89,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
     if (!_allowedTypes.contains(extension)) {
       setState(() {
         _errorText =
-            'Invalid file type. Allowed: ${_allowedTypes.join(', ')}';
+            'Invalid file type ".$extension". Allowed: ${_allowedTypes.map((e) => '.$e').join(', ')}';
         _fileName = null;
         _filePath = null;
         _fileSize = null;
@@ -79,7 +100,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
     // Validate size
     if (sizeInBytes > maxBytes) {
       setState(() {
-        _errorText = 'File too large. Maximum size: $_maxSizeMB MB';
+        _errorText = 'File too large (${formatFileSize(sizeInBytes)}). Maximum: $_maxSizeMB MB';
         _fileName = null;
         _filePath = null;
         _fileSize = null;
