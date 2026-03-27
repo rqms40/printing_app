@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
+import 'package:printing_app/config/theme/app_radius.dart';
+import 'package:printing_app/config/theme/app_shadows.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/models/address.dart';
@@ -8,12 +10,15 @@ import 'package:printing_app/shared/models/delivery_assignment.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
-import 'package:printing_app/shared/widgets/app_card.dart';
-import 'package:printing_app/shared/widgets/icon_container.dart';
-import 'package:printing_app/shared/widgets/status_badge.dart';
+import 'package:printing_app/utils/formatters.dart';
 
-/// Card displaying a delivery assignment with order info, address, and action buttons.
-class DeliveryCard extends StatelessWidget {
+/// Delivery card with horizontal layout matching the OrderCard pattern.
+///
+/// Left: 48px status-tinted icon
+/// Center: Order ID + address summary, status dot + label + date
+/// Right: delivery fee + chevron
+/// Expandable accept/decline buttons for assigned status.
+class DeliveryCard extends StatefulWidget {
   const DeliveryCard({
     super.key,
     required this.assignment,
@@ -31,174 +36,273 @@ class DeliveryCard extends StatelessWidget {
   final VoidCallback? onAccept;
   final VoidCallback? onDecline;
 
+  @override
+  State<DeliveryCard> createState() => _DeliveryCardState();
+}
+
+class _DeliveryCardState extends State<DeliveryCard> {
+  bool _pressed = false;
+
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
   }
 
-  StatusBadgeVariant _badgeVariant(DeliveryStatus status) {
-    switch (status) {
+  _DeliveryVisual _visual(AppColorSet colors) {
+    switch (widget.assignment.status) {
       case DeliveryStatus.assigned:
-        return StatusBadgeVariant.warning;
+        return _DeliveryVisual(
+          HugeIcons.strokeRoundedNotification02,
+          colors.warning.withValues(alpha: 0.1),
+          colors.warning,
+          'Assigned',
+        );
       case DeliveryStatus.accepted:
+        return _DeliveryVisual(
+          HugeIcons.strokeRoundedCheckmarkCircle02,
+          colors.info.withValues(alpha: 0.1),
+          colors.info,
+          'Accepted',
+        );
       case DeliveryStatus.pickedUp:
-        return StatusBadgeVariant.info;
+        return _DeliveryVisual(
+          HugeIcons.strokeRoundedPackage,
+          colors.info.withValues(alpha: 0.1),
+          colors.info,
+          'Picked Up',
+        );
       case DeliveryStatus.onTheWay:
+        return _DeliveryVisual(
+          HugeIcons.strokeRoundedDeliveryTruck02,
+          colors.info.withValues(alpha: 0.1),
+          colors.info,
+          'On the Way',
+        );
       case DeliveryStatus.arrived:
-        return StatusBadgeVariant.info;
+        return _DeliveryVisual(
+          HugeIcons.strokeRoundedLocation01,
+          colors.success.withValues(alpha: 0.1),
+          colors.success,
+          'Arrived',
+        );
       case DeliveryStatus.delivered:
-        return StatusBadgeVariant.success;
+        return _DeliveryVisual(
+          HugeIcons.strokeRoundedCheckmarkCircle02,
+          colors.success.withValues(alpha: 0.1),
+          colors.success,
+          'Delivered',
+        );
       case DeliveryStatus.declined:
-        return StatusBadgeVariant.error;
-    }
-  }
-
-  Color? _accentColor(BuildContext context) {
-    final colors = _colors(context);
-    switch (assignment.status) {
-      case DeliveryStatus.assigned:
-        return colors.warning;
-      case DeliveryStatus.onTheWay:
-      case DeliveryStatus.arrived:
-        return colors.info;
-      case DeliveryStatus.delivered:
-        return colors.success;
-      default:
-        return null;
+        return _DeliveryVisual(
+          HugeIcons.strokeRoundedCancelCircle,
+          colors.error.withValues(alpha: 0.1),
+          colors.error,
+          'Declined',
+        );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
+    final visual = _visual(colors);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isAssigned = widget.assignment.status == DeliveryStatus.assigned;
 
-    return AppCard(
-      onTap: onTap,
-      accentColor: _accentColor(context),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header: Order ID + Status badge
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                order.orderId,
-                style: AppTypography.bodyBold
-                    .copyWith(color: colors.onBackground),
-              ),
-              StatusBadge(
-                label: assignment.status.displayName,
-                variant: _badgeVariant(assignment.status),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-
-          // Category
-          Text(
-            order.category,
-            style:
-                AppTypography.caption.copyWith(color: colors.onSurfaceDim),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-
-          // Address
-          if (address != null) ...[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                IconContainer(
-                  icon: HugeIcons.strokeRoundedLocation01,
-                  size: IconContainerSize.sm,
-                  shape: IconContainerShape.circle,
-                  iconColor: colors.onSurfaceDim,
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Text(
-                    address!.fullAddress,
-                    style: AppTypography.body
-                        .copyWith(color: colors.onSurface),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        widget.onTap?.call();
+      },
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.98 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+        child: Container(
+          decoration: BoxDecoration(
+            color: colors.surface,
+            borderRadius: AppRadius.borderMd,
+            boxShadow: isDark ? null : AppShadows.subtle,
+            border: Border.all(
+              color: colors.outline.withValues(alpha: 0.5),
+              width: 0.5,
             ),
-            if (address!.landmark != null) ...[
-              const SizedBox(height: AppSpacing.xs),
+          ),
+          child: Column(
+            children: [
+              // Main horizontal row
               Padding(
-                padding: const EdgeInsets.only(left: 20),
-                child: Text(
-                  address!.landmark!,
-                  style: AppTypography.caption
-                      .copyWith(color: colors.onSurfaceDim),
-                ),
-              ),
-            ],
-          ],
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: Row(
+                  children: [
+                    // Status icon with semantic background
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: visual.background,
+                        borderRadius: AppRadius.borderMd,
+                      ),
+                      child: Center(
+                        child: HugeIcon(
+                          icon: visual.icon,
+                          size: 22,
+                          color: visual.foreground,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
 
-          // Action buttons for 'assigned' status
-          if (assignment.status == DeliveryStatus.assigned) ...[
-            const SizedBox(height: AppSpacing.sm),
-            // Separator line
-            Container(
-              height: 1,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    colors.outline.withValues(alpha: 0.0),
-                    colors.outline.withValues(alpha: 0.4),
-                    colors.outline.withValues(alpha: 0.0),
+                    // Content
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Order ID + address summary
+                          Text(
+                            widget.order.orderId,
+                            style: AppTypography.bodyBold.copyWith(
+                              color: colors.onBackground,
+                            ),
+                          ),
+                          if (widget.address != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              widget.address!.fullAddress,
+                              style: AppTypography.caption.copyWith(
+                                color: colors.onSurfaceDim,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                          const SizedBox(height: 6),
+
+                          // Status dot + label + date
+                          Row(
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: visual.foreground,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                visual.statusLabel,
+                                style: AppTypography.caption.copyWith(
+                                  color: visual.foreground,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Text(
+                                '\u2022',
+                                style: TextStyle(
+                                  color: colors.disabled,
+                                  fontSize: 10,
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Text(
+                                formatDate(widget.assignment.createdAt),
+                                style: AppTypography.caption.copyWith(
+                                  color: colors.onSurfaceDim,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Price + chevron
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          formatCurrency(widget.order.deliveryFee),
+                          style: AppTypography.bodyBold.copyWith(
+                            color: colors.onBackground,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        HugeIcon(
+                          icon: HugeIcons.strokeRoundedArrowRight01,
+                          size: 16,
+                          color: colors.disabled,
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: AppButton(
-                    label: 'Decline',
-                    variant: AppButtonVariant.ghost,
-                    onTap: onDecline,
-                    icon: HugeIcons.strokeRoundedCancelCircle,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: AppButton(
-                    label: 'Accept',
-                    variant: AppButtonVariant.primary,
-                    onTap: onAccept,
-                    icon: HugeIcons.strokeRoundedCheckmarkCircle02,
-                  ),
-                ),
-              ],
-            ),
-          ],
 
-          // Current checkpoint for active statuses
-          if (assignment.status != DeliveryStatus.assigned &&
-              assignment.status != DeliveryStatus.declined &&
-              assignment.status != DeliveryStatus.delivered) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Row(
-              children: [
-                HugeIcon(icon: HugeIcons.strokeRoundedDeliveryTruck02, size: 16, color: colors.info),
-                const SizedBox(width: AppSpacing.xs),
-                Text(
-                  assignment.status.displayName,
-                  style:
-                      AppTypography.caption.copyWith(color: colors.info),
+              // Accept/Decline buttons for assigned status
+              if (isAssigned) ...[
+                Container(
+                  height: 1,
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        colors.outline.withValues(alpha: 0.0),
+                        colors.outline.withValues(alpha: 0.4),
+                        colors.outline.withValues(alpha: 0.0),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md,
+                    AppSpacing.sm,
+                    AppSpacing.md,
+                    AppSpacing.md,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: AppButton(
+                          label: 'Decline',
+                          variant: AppButtonVariant.ghost,
+                          onTap: widget.onDecline,
+                          icon: HugeIcons.strokeRoundedCancelCircle,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: AppButton(
+                          label: 'Accept',
+                          variant: AppButtonVariant.primary,
+                          onTap: widget.onAccept,
+                          icon: HugeIcons.strokeRoundedCheckmarkCircle02,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
-            ),
-          ],
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }
+}
+
+class _DeliveryVisual {
+  const _DeliveryVisual(
+      this.icon, this.background, this.foreground, this.statusLabel);
+
+  final dynamic icon;
+  final Color background;
+  final Color foreground;
+  final String statusLabel;
 }

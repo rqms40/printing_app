@@ -5,13 +5,12 @@ import 'package:go_router/go_router.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
-import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/features/customer/orders/widgets/order_card.dart';
-import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/empty_state.dart';
+import 'package:printing_app/shared/widgets/pill_tab_bar.dart';
 import 'package:printing_app/shared/widgets/skeleton_screens.dart';
 
 /// Customer orders screen with pill-style tab selector.
@@ -76,30 +75,13 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             // Pill tab selector
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-              child: Container(
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  color: colors.surfaceVariant,
-                  borderRadius: AppRadius.borderFull,
-                ),
-                child: Row(
-                  children: [
-                    _TabPill(
-                      label: 'Active',
-                      count: activeCount,
-                      isSelected: _selectedTab == 0,
-                      colors: colors,
-                      onTap: () => setState(() => _selectedTab = 0),
-                    ),
-                    _TabPill(
-                      label: 'Completed',
-                      count: completedCount,
-                      isSelected: _selectedTab == 1,
-                      colors: colors,
-                      onTap: () => setState(() => _selectedTab = 1),
-                    ),
-                  ],
-                ),
+              child: PillTabBar(
+                tabs: [
+                  PillTab(label: 'Active', count: activeCount),
+                  PillTab(label: 'Completed', count: completedCount),
+                ],
+                selectedIndex: _selectedTab,
+                onTabChanged: (i) => setState(() => _selectedTab = i),
               ),
             ).animate()
                 .fadeIn(duration: 350.ms, delay: 60.ms, curve: Curves.easeOut)
@@ -141,85 +123,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                     ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// A single pill tab in the segmented selector.
-class _TabPill extends StatelessWidget {
-  const _TabPill({
-    required this.label,
-    required this.count,
-    required this.isSelected,
-    required this.colors,
-    required this.onTap,
-  });
-
-  final String label;
-  final int count;
-  final bool isSelected;
-  final AppColorSet colors;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: isSelected ? colors.surface : Colors.transparent,
-            borderRadius: AppRadius.borderFull,
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: colors.onBackground.withValues(alpha: 0.06),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ]
-                : null,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                label,
-                style: (isSelected ? AppTypography.bodyBold : AppTypography.body)
-                    .copyWith(
-                  color: isSelected ? colors.onBackground : colors.onSurfaceDim,
-                ),
-              ),
-              if (count > 0) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? colors.accent.withValues(alpha: 0.1)
-                        : colors.onSurfaceDim.withValues(alpha: 0.1),
-                    borderRadius: AppRadius.borderFull,
-                  ),
-                  child: Text(
-                    '$count',
-                    style: AppTypography.caption.copyWith(
-                      color: isSelected
-                          ? colors.accent
-                          : colors.onSurfaceDim,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
         ),
       ),
     );

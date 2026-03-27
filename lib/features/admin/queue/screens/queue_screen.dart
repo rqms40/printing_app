@@ -6,13 +6,15 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/admin/queue/providers/queue_provider.dart';
+import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/features/admin/queue/widgets/queue_order_card.dart';
 import 'package:printing_app/shared/widgets/app_text_field.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/empty_state.dart';
+import 'package:printing_app/shared/widgets/pill_tab_bar.dart';
 import 'package:printing_app/shared/widgets/skeleton_screens.dart';
 
-/// Admin order queue screen with tabbed filtering and search.
+/// Admin order queue screen with pill-style tab selector and search.
 class QueueScreen extends ConsumerStatefulWidget {
   const QueueScreen({super.key});
 
@@ -20,11 +22,10 @@ class QueueScreen extends ConsumerStatefulWidget {
   ConsumerState<QueueScreen> createState() => _QueueScreenState();
 }
 
-class _QueueScreenState extends ConsumerState<QueueScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
+class _QueueScreenState extends ConsumerState<QueueScreen> {
   final _searchController = TextEditingController();
   bool _isLoading = true;
+  int _selectedTab = 0;
 
   static const _tabs = [
     QueueTab.newOrders,
@@ -33,147 +34,205 @@ class _QueueScreenState extends ConsumerState<QueueScreen>
     QueueTab.all,
   ];
 
-  static const _tabLabels = ['New', 'In Production', 'Done', 'All'];
-
-  AppColorSet _colors(BuildContext context) {
-    return Theme.of(context).brightness == Brightness.dark
-        ? AppColors.dark
-        : AppColors.light;
-  }
+  static const _tabLabels = ['New', 'Production', 'Done', 'All'];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabs.length, vsync: this);
     Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted) setState(() => _isLoading = false);
-    });
-    _tabController.addListener(() {
-      if (!_tabController.indexIsChanging) {
-        ref.read(queueProvider.notifier).setTab(_tabs[_tabController.index]);
-      }
     });
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
+  /// Compute counts for each tab from the full order list.
+  List<int> _tabCounts(QueueState queueState) {
+    final orders = queueState.orders;
+    final newCount = orders
+        .where((o) =>
+            o.orderStatus == OrderStatus.orderPlaced ||
+            o.orderStatus == OrderStatus.fileVerified)
+        .length;
+    final prodCount = orders
+        .where((o) =>
+            o.orderStatus == OrderStatus.printingInProgress ||
+            o.orderStatus == OrderStatus.finishingMounting ||
+            o.orderStatus == OrderStatus.qualityChecked)
+        .length;
+    final doneCount = orders
+        .where((o) =>
+            o.orderStatus == OrderStatus.delivered ||
+            o.orderStatus == OrderStatus.completedPickup)
+        .length;
+    return [newCount, prodCount, doneCount, orders.length];
+  }
+
   @override
   Widget build(BuildContext context) {
-    final colors = _colors(context);
+    final colors = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
     final queueState = ref.watch(queueProvider);
     final filteredOrders = queueState.filteredOrders;
-
-    if (_isLoading) {
-      return Scaffold(
-        backgroundColor: colors.background,
-        body: const OrderListSkeleton(),
-      );
-    }
+    final counts = _tabCounts(queueState);
 
     return Scaffold(
       backgroundColor: colors.background,
       body: SafeArea(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Page title
+            // Header
+            Padding(
+              padding: const EdgeInsets.only(
+                left: AppSpacing.xl,
+                right: AppSpacing.xl,
+                top: AppSpacing.lg,
+                bottom: AppSpacing.md,
+              ),
+              child: Text(
+                'Order Queue',
+                style:
+                    AppTypography.h1.copyWith(color: colors.onBackground),
+              ),
+            )
+                .animate()
+                .fadeIn(duration: 350.ms, curve: Curves.easeOut)
+                .slideY(
+                    begin: 0.02, duration: 350.ms, curve: Curves.easeOut),
+
+            // Pill tab selector
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+              child: PillTabBar(
+                tabs: List.generate(
+                  _tabLabels.length,
+                  (i) =>
+                      PillTab(label: _tabLabels[i], count: counts[i]),
+                ),
+                selectedIndex: _selectedTab,
+                onTabChanged: (i) {
+                  setState(() => _selectedTab = i);
+                  ref.read(queueProvider.notifier).setTab(_tabs[i]);
+                },
+              ),
+            )
+                .animate()
+                .fadeIn(
+                    duration: 350.ms,
+                    delay: 60.ms,
+                    curve: Curves.easeOut)
+                .slideY(
+                    begin: 0.02,
+                    duration: 350.ms,
+                    delay: 60.ms,
+                    curve: Curves.easeOut),
+
+            // Search bar
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.xl,
-                AppSpacing.lg,
+                AppSpacing.md,
                 AppSpacing.xl,
-                0,
+                AppSpacing.sm,
               ),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Order Queue',
-                  style: AppTypography.h1.copyWith(color: colors.onBackground),
+              child: AppTextField(
+                controller: _searchController,
+                hintText: 'Search by order ID...',
+                prefixIcon: HugeIcon(
+                  icon: HugeIcons.strokeRoundedSearch01,
+                  size: 20,
+                  color: colors.onSurfaceDim,
                 ),
+                onChanged: (query) {
+                  ref.read(queueProvider.notifier).searchByOrderId(query);
+                },
               ),
-            ),
-            // Search bar
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.xl,
-              AppSpacing.lg,
-              AppSpacing.xl,
-              AppSpacing.sm,
-            ),
-            child: AppTextField(
-              controller: _searchController,
-              hintText: 'Search by order ID...',
-              prefixIcon: HugeIcon(
-                icon: HugeIcons.strokeRoundedSearch01,
-                size: 20,
-                color: colors.onSurfaceDim,
-              ),
-              onChanged: (query) {
-                ref.read(queueProvider.notifier).searchByOrderId(query);
-              },
-            ),
-          )
-              .animate()
-              .fadeIn(duration: 400.ms, curve: Curves.easeOut)
-              .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
+            )
+                .animate()
+                .fadeIn(
+                    duration: 350.ms,
+                    delay: 120.ms,
+                    curve: Curves.easeOut)
+                .slideY(
+                    begin: 0.02,
+                    duration: 350.ms,
+                    delay: 120.ms,
+                    curve: Curves.easeOut),
 
-          // Tab bar
-          TabBar(
-            controller: _tabController,
-            labelColor: colors.accent,
-            unselectedLabelColor: colors.onSurfaceDim,
-            labelStyle: AppTypography.bodyBold,
-            unselectedLabelStyle: AppTypography.body,
-            indicatorColor: colors.accent,
-            indicatorWeight: 2,
-            tabs: _tabLabels.map((l) => Tab(text: l)).toList(),
-          )
-              .animate()
-              .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
+            const SizedBox(height: AppSpacing.sm),
 
-          // Order list
-          Expanded(
-            child: RefreshIndicator(
-              color: colors.accent,
-              onRefresh: () async {
-                await Future<void>.delayed(const Duration(milliseconds: 500));
-              },
-              child: filteredOrders.isEmpty
-                  ? ListView(
-                      children: [
-                        SizedBox(
-                          height: MediaQuery.of(context).size.height * 0.4,
-                          child: EmptyState(
-                            heading: 'No orders found',
-                            body: _emptyMessage(queueState.activeTab),
-                            icon: HugeIcons.strokeRoundedTaskRemove01,
-                          ),
-                        ),
-                      ],
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(AppSpacing.xl),
-                      itemCount: filteredOrders.length,
-                      separatorBuilder: (_, __) =>
-                          const SizedBox(height: AppSpacing.md),
-                      itemBuilder: (context, index) {
-                        final order = filteredOrders[index];
-                        return QueueOrderCard(
-                          order: order,
-                          onTap: () {
-                            context.push('/admin/queue/${order.id}');
-                          },
-                        );
+            // Order list
+            Expanded(
+              child: _isLoading
+                  ? const OrderListSkeleton()
+                  : RefreshIndicator(
+                      color: colors.accent,
+                      onRefresh: () async {
+                        await Future<void>.delayed(
+                            const Duration(milliseconds: 500));
                       },
+                      child: filteredOrders.isEmpty
+                          ? ListView(
+                              children: [
+                                SizedBox(
+                                  height:
+                                      MediaQuery.of(context).size.height *
+                                          0.4,
+                                  child: EmptyState(
+                                    heading: 'No orders found',
+                                    body: _emptyMessage(
+                                        queueState.activeTab),
+                                    icon:
+                                        HugeIcons.strokeRoundedTaskRemove01,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: AppSpacing.xl),
+                              itemCount: filteredOrders.length,
+                              itemBuilder: (context, index) {
+                                final order = filteredOrders[index];
+                                return Padding(
+                                  padding: EdgeInsets.only(
+                                    bottom: index <
+                                            filteredOrders.length - 1
+                                        ? AppSpacing.sm
+                                        : AppSpacing.xxl,
+                                  ),
+                                  child: QueueOrderCard(
+                                    order: order,
+                                    onTap: () {
+                                      context.push(
+                                          '/admin/queue/${order.id}');
+                                    },
+                                  )
+                                      .animate()
+                                      .fadeIn(
+                                        duration: 350.ms,
+                                        delay: (index * 50).ms,
+                                        curve: Curves.easeOut,
+                                      )
+                                      .slideY(
+                                        begin: 0.02,
+                                        duration: 350.ms,
+                                        delay: (index * 50).ms,
+                                        curve: Curves.easeOut,
+                                      ),
+                                );
+                              },
+                            ),
                     ),
-            ).animate()
-                .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
-          ),
-        ],
+            ),
+          ],
         ),
       ),
     );

@@ -42,11 +42,13 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     final groups = <String, List<AppNotification>>{};
 
     for (final n in notifications) {
-      final date = DateTime(n.createdAt.year, n.createdAt.month, n.createdAt.day);
+      final date =
+          DateTime(n.createdAt.year, n.createdAt.month, n.createdAt.day);
       String key;
       if (date == today || date.isAfter(today)) {
         key = 'Today';
-      } else if (date == yesterday || (date.isAfter(yesterday) && date.isBefore(today))) {
+      } else if (date == yesterday ||
+          (date.isAfter(yesterday) && date.isBefore(today))) {
         key = 'Yesterday';
       } else if (date.isAfter(weekAgo)) {
         key = 'This Week';
@@ -69,74 +71,106 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
 
     return Scaffold(
       backgroundColor: colors.background,
-      appBar: AppBar(
-        title: Row(
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Notifications',
-              style: AppTypography.h3.copyWith(color: colors.onBackground),
-            ),
-            if (unreadCount > 0) ...[
-              const SizedBox(width: AppSpacing.sm),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 2,
-                ),
-                decoration: BoxDecoration(
-                  color: colors.accent,
-                  borderRadius: AppRadius.borderFull,
-                ),
-                child: Text(
-                  '$unreadCount',
-                  style: AppTypography.caption.copyWith(
-                    color: colors.background,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 11,
-                  ),
-                ),
+            // Header row: h1 title + unread badge + Read all action
+            Padding(
+              padding: const EdgeInsets.only(
+                left: AppSpacing.xl,
+                right: AppSpacing.xl,
+                top: AppSpacing.lg,
+                bottom: AppSpacing.md,
               ),
-            ],
+              child: Row(
+                children: [
+                  Text(
+                    'Notifications',
+                    style: AppTypography.h1
+                        .copyWith(color: colors.onBackground),
+                  ),
+                  if (unreadCount > 0) ...[
+                    const SizedBox(width: AppSpacing.sm),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colors.accent,
+                        borderRadius: AppRadius.borderFull,
+                      ),
+                      child: Text(
+                        '$unreadCount',
+                        style: AppTypography.caption.copyWith(
+                          color: colors.background,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const Spacer(),
+                  if (unreadCount > 0)
+                    GestureDetector(
+                      onTap: () {
+                        ref
+                            .read(notificationsProvider.notifier)
+                            .markAllAsRead();
+                      },
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          HugeIcon(
+                            icon: HugeIcons.strokeRoundedTickDouble01,
+                            size: 16,
+                            color: colors.accent,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Read all',
+                            style: AppTypography.caption
+                                .copyWith(color: colors.accent),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            )
+                .animate()
+                .fadeIn(duration: 350.ms, curve: Curves.easeOut)
+                .slideY(
+                    begin: 0.02, duration: 350.ms, curve: Curves.easeOut),
+
+            const SizedBox(height: AppSpacing.sm),
+
+            // Content
+            Expanded(
+              child: _isLoading
+                  ? const NotificationListSkeleton()
+                  : notifications.isEmpty
+                      ? const EmptyState(
+                          heading: 'All caught up',
+                          body:
+                              'You\'ll see order updates and delivery alerts here.',
+                          icon: HugeIcons.strokeRoundedNotification02,
+                        )
+                      : RefreshIndicator(
+                          color: colors.accent,
+                          backgroundColor: colors.surface,
+                          onRefresh: () async {
+                            await Future.delayed(
+                                const Duration(milliseconds: 500));
+                          },
+                          child:
+                              _buildGroupedList(notifications, colors),
+                        ),
+            ),
           ],
         ),
-        backgroundColor: colors.background,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        iconTheme: IconThemeData(color: colors.onBackground),
-        actions: [
-          if (unreadCount > 0)
-            TextButton.icon(
-              onPressed: () {
-                ref.read(notificationsProvider.notifier).markAllAsRead();
-              },
-              icon: HugeIcon(
-                icon: HugeIcons.strokeRoundedTickDouble01,
-                size: 16,
-                color: colors.accent,
-              ),
-              label: Text(
-                'Read all',
-                style: AppTypography.caption.copyWith(color: colors.accent),
-              ),
-            ),
-        ],
       ),
-      body: _isLoading
-          ? const NotificationListSkeleton()
-          : notifications.isEmpty
-              ? const EmptyState(
-                  heading: 'All caught up',
-                  body: 'You\'ll see order updates and delivery alerts here.',
-                  icon: HugeIcons.strokeRoundedNotification02,
-                )
-              : RefreshIndicator(
-                  color: colors.accent,
-                  backgroundColor: colors.surface,
-                  onRefresh: () async {
-                    await Future.delayed(const Duration(milliseconds: 500));
-                  },
-                  child: _buildGroupedList(notifications, colors),
-                ),
     );
   }
 

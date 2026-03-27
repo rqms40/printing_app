@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
+import 'package:printing_app/config/theme/app_radius.dart';
+import 'package:printing_app/config/theme/app_shadows.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
-import 'package:printing_app/features/admin/queue/providers/queue_provider.dart';
-import 'package:printing_app/features/admin/queue/widgets/status_picker.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
-import 'package:printing_app/shared/widgets/app_card.dart';
-import 'package:printing_app/shared/widgets/status_badge.dart';
 import 'package:printing_app/utils/formatters.dart';
 
-/// Order card used in the admin queue list.
-class QueueOrderCard extends ConsumerWidget {
+/// Order card for the admin queue with horizontal layout matching the
+/// customer OrderCard pattern.
+///
+/// Left: 48px status-tinted icon
+/// Center: Order ID + customer name, status dot + label + date
+/// Right: price + chevron
+class QueueOrderCard extends StatefulWidget {
   const QueueOrderCard({
     super.key,
     required this.order,
@@ -23,160 +25,227 @@ class QueueOrderCard extends ConsumerWidget {
   final Order order;
   final VoidCallback? onTap;
 
+  @override
+  State<QueueOrderCard> createState() => _QueueOrderCardState();
+}
+
+class _QueueOrderCardState extends State<QueueOrderCard> {
+  bool _pressed = false;
+
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
   }
 
-  Color _statusColor(AppColorSet colors) {
-    switch (order.orderStatus) {
+  _QueueVisual _visual(AppColorSet colors) {
+    switch (widget.order.orderStatus) {
       case OrderStatus.orderPlaced:
       case OrderStatus.fileVerified:
-        return colors.info;
+        return _QueueVisual(
+          HugeIcons.strokeRoundedFile02,
+          colors.info.withValues(alpha: 0.1),
+          colors.info,
+          'New',
+        );
       case OrderStatus.printingInProgress:
       case OrderStatus.finishingMounting:
-        return colors.warning;
+        return _QueueVisual(
+          HugeIcons.strokeRoundedPrinter,
+          colors.warning.withValues(alpha: 0.1),
+          colors.warning,
+          'In Production',
+        );
       case OrderStatus.qualityChecked:
+        return _QueueVisual(
+          HugeIcons.strokeRoundedCheckmarkCircle02,
+          colors.warning.withValues(alpha: 0.1),
+          colors.warning,
+          'Quality Checked',
+        );
       case OrderStatus.readyForDispatch:
-        return colors.success;
-      case OrderStatus.fileDeclined:
-      case OrderStatus.cancelled:
-        return colors.error;
       case OrderStatus.driverAssigned:
+        return _QueueVisual(
+          HugeIcons.strokeRoundedPackage,
+          colors.success.withValues(alpha: 0.1),
+          colors.success,
+          'Ready',
+        );
       case OrderStatus.pickedUp:
       case OrderStatus.onTheWay:
       case OrderStatus.arrivedAtDestination:
-        return colors.info;
+        return _QueueVisual(
+          HugeIcons.strokeRoundedDeliveryTruck02,
+          colors.info.withValues(alpha: 0.1),
+          colors.info,
+          'In Delivery',
+        );
       case OrderStatus.delivered:
       case OrderStatus.completedPickup:
-        return colors.success;
-    }
-  }
-
-  StatusBadgeVariant _badgeVariant() {
-    switch (order.orderStatus) {
-      case OrderStatus.orderPlaced:
-      case OrderStatus.fileVerified:
-        return StatusBadgeVariant.info;
-      case OrderStatus.printingInProgress:
-      case OrderStatus.finishingMounting:
-        return StatusBadgeVariant.warning;
-      case OrderStatus.qualityChecked:
-      case OrderStatus.readyForDispatch:
-      case OrderStatus.delivered:
-      case OrderStatus.completedPickup:
-        return StatusBadgeVariant.success;
+        return _QueueVisual(
+          HugeIcons.strokeRoundedCheckmarkCircle02,
+          colors.success.withValues(alpha: 0.1),
+          colors.success,
+          'Completed',
+        );
       case OrderStatus.fileDeclined:
       case OrderStatus.cancelled:
-        return StatusBadgeVariant.error;
-      case OrderStatus.driverAssigned:
-      case OrderStatus.pickedUp:
-      case OrderStatus.onTheWay:
-      case OrderStatus.arrivedAtDestination:
-        return StatusBadgeVariant.info;
-    }
-  }
-
-  dynamic _categoryIcon() {
-    switch (order.category.toLowerCase()) {
-      case 'poster':
-        return HugeIcons.strokeRoundedImage01;
-      case 'document':
-        return HugeIcons.strokeRoundedFile02;
-      case 'report':
-        return HugeIcons.strokeRoundedClipboard;
-      case 'banner':
-        return HugeIcons.strokeRoundedFlag01;
-      case '3d print':
-        return HugeIcons.strokeRoundedPackageDelivered;
-      default:
-        return HugeIcons.strokeRoundedFile01;
+        return _QueueVisual(
+          HugeIcons.strokeRoundedCancelCircle,
+          colors.error.withValues(alpha: 0.1),
+          colors.error,
+          widget.order.orderStatus == OrderStatus.cancelled
+              ? 'Cancelled'
+              : 'Declined',
+        );
     }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final colors = _colors(context);
+    final visual = _visual(colors);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return AppCard(
-      accentColor: _statusColor(colors),
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Top row: order ID, status badge, category icon
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  order.orderId,
-                  style: AppTypography.bodyBold.copyWith(
-                    color: colors.onBackground,
-                    fontFamily: 'monospace',
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        widget.onTap?.call();
+      },
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.98 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+        child: Container(
+          decoration: BoxDecoration(
+            color: colors.surface,
+            borderRadius: AppRadius.borderMd,
+            boxShadow: isDark ? null : AppShadows.subtle,
+            border: Border.all(
+              color: colors.outline.withValues(alpha: 0.5),
+              width: 0.5,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Row(
+              children: [
+                // Status icon with semantic background
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: visual.background,
+                    borderRadius: AppRadius.borderMd,
+                  ),
+                  child: Center(
+                    child: HugeIcon(
+                      icon: visual.icon,
+                      size: 22,
+                      color: visual.foreground,
+                    ),
                   ),
                 ),
-              ),
-              StatusBadge(
-                label: order.orderStatus.displayName,
-                variant: _badgeVariant(),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              HugeIcon(icon: _categoryIcon(), size: 18, color: colors.onSurfaceDim),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
+                const SizedBox(width: AppSpacing.md),
 
-          // Customer name and pricing
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Customer ${order.userId}',
-                  style:
-                      AppTypography.body.copyWith(color: colors.onSurfaceDim),
-                ),
-              ),
-              Text(
-                '${order.quantity}x \u00B7 ${formatCurrency(order.totalPrice)}',
-                style: AppTypography.body.copyWith(color: colors.onSurface),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
+                // Content
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Order ID + customer name
+                      Text(
+                        widget.order.orderId,
+                        style: AppTypography.bodyBold.copyWith(
+                          color: colors.onBackground,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Customer ${widget.order.userId}',
+                        style: AppTypography.caption.copyWith(
+                          color: colors.onSurfaceDim,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
 
-          // Bottom row: status picker + file link
-          Row(
-            children: [
-              StatusPicker(
-                currentStatus: order.orderStatus,
-                onStatusSelected: (newStatus) {
-                  ref
-                      .read(queueProvider.notifier)
-                      .updateOrderStatus(order.id, newStatus);
-                },
-              ),
-              const Spacer(),
-              if (order.fileUrl != null)
-                IconButton(
-                  icon: HugeIcon(
-                    icon: HugeIcons.strokeRoundedFileDownload,
-                    size: 20,
-                    color: colors.onSurfaceDim,
-                  ),
-                  onPressed: () {
-                    // In production, open file URL
-                  },
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 32,
-                    minHeight: 32,
+                      // Status dot + label + date
+                      Row(
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: visual.foreground,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            visual.statusLabel,
+                            style: AppTypography.caption.copyWith(
+                              color: visual.foreground,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Text(
+                            '\u2022',
+                            style: TextStyle(
+                              color: colors.disabled,
+                              fontSize: 10,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Text(
+                            formatDate(widget.order.createdAt),
+                            style: AppTypography.caption.copyWith(
+                              color: colors.onSurfaceDim,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-            ],
+
+                // Price + chevron
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      formatCurrency(widget.order.totalPrice),
+                      style: AppTypography.bodyBold.copyWith(
+                        color: colors.onBackground,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    HugeIcon(
+                      icon: HugeIcons.strokeRoundedArrowRight01,
+                      size: 16,
+                      color: colors.disabled,
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ],
+        ),
       ),
     );
   }
+}
+
+class _QueueVisual {
+  const _QueueVisual(
+      this.icon, this.background, this.foreground, this.statusLabel);
+
+  final dynamic icon;
+  final Color background;
+  final Color foreground;
+  final String statusLabel;
 }
