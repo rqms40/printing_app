@@ -45,18 +45,24 @@ class PillTabBar extends StatelessWidget {
         color: colors.surfaceVariant,
         borderRadius: AppRadius.borderFull,
       ),
-      child: Row(
-        children: List.generate(tabs.length, (index) {
-          final tab = tabs[index];
-          final isSelected = index == selectedIndex;
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(tabs.length, (index) {
+            final tab = tabs[index];
+            final isSelected = index == selectedIndex;
 
-          return Expanded(
-            child: GestureDetector(
+            return GestureDetector(
               onTap: () => onTabChanged(index),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeOut,
-                padding: const EdgeInsets.symmetric(vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: isSelected ? colors.surface : Colors.transparent,
                   borderRadius: AppRadius.borderFull,
@@ -72,7 +78,7 @@ class PillTabBar extends StatelessWidget {
                       : null,
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       tab.label,
@@ -111,9 +117,9 @@ class PillTabBar extends StatelessWidget {
                   ],
                 ),
               ),
-            ),
-          );
-        }),
+            );
+          }),
+        ),
       ),
     );
   }

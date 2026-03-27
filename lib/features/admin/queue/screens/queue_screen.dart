@@ -8,7 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/admin/queue/providers/queue_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/features/admin/queue/widgets/queue_order_card.dart';
-import 'package:printing_app/shared/widgets/app_text_field.dart';
+import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/empty_state.dart';
 import 'package:printing_app/shared/widgets/pill_tab_bar.dart';
@@ -135,17 +135,50 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
                 AppSpacing.xl,
                 AppSpacing.sm,
               ),
-              child: AppTextField(
+              child: TextField(
                 controller: _searchController,
-                hintText: 'Search by order ID...',
-                prefixIcon: HugeIcon(
-                  icon: HugeIcons.strokeRoundedSearch01,
-                  size: 20,
-                  color: colors.onSurfaceDim,
-                ),
+                style: AppTypography.body
+                    .copyWith(color: colors.onBackground),
+                cursorColor: colors.accent,
                 onChanged: (query) {
                   ref.read(queueProvider.notifier).searchByOrderId(query);
                 },
+                decoration: InputDecoration(
+                  hintText: 'Search by order ID...',
+                  hintStyle: AppTypography.body
+                      .copyWith(color: colors.onSurfaceDim),
+                  prefixIcon: Padding(
+                    padding: const EdgeInsets.only(left: 14, right: 10),
+                    child: HugeIcon(
+                      icon: HugeIcons.strokeRoundedSearch01,
+                      size: 18,
+                      color: colors.onSurfaceDim,
+                    ),
+                  ),
+                  prefixIconConstraints: const BoxConstraints(
+                    minHeight: 20,
+                    minWidth: 20,
+                  ),
+                  filled: true,
+                  fillColor: colors.surfaceVariant,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.sm + 2,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: AppRadius.borderFull,
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: AppRadius.borderFull,
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: AppRadius.borderFull,
+                    borderSide:
+                        BorderSide(color: colors.accent, width: 1.5),
+                  ),
+                ),
               ),
             )
                 .animate()
