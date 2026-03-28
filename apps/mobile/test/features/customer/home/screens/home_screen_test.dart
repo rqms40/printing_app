@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/home/screens/home_screen.dart';
 
@@ -23,6 +24,15 @@ Widget _wrap(Widget child) {
 }
 
 void main() {
+  setUpAll(() async {
+    Hive.init('/tmp/hive_test_home_screen');
+    await Hive.openBox('draft_orders');
+  });
+
+  tearDownAll(() async {
+    await Hive.close();
+  });
+
   group('HomeScreen', () {
     testWidgets('renders bento grid hero text', (tester) async {
       tester.view.physicalSize = const Size(1080, 1920);
