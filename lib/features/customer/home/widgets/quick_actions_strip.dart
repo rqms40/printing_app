@@ -37,6 +37,7 @@ class QuickActionsStrip extends StatelessWidget {
       label: 'Track',
       icon: HugeIcons.strokeRoundedSearch01,
       route: '/customer/orders',
+      useGo: true,
     ),
   ];
 
@@ -93,6 +94,7 @@ class _QuickActionData {
   final String? route;
   final bool isPrimary;
   final bool isComingSoon;
+  final bool useGo;
 
   const _QuickActionData({
     required this.label,
@@ -100,6 +102,7 @@ class _QuickActionData {
     this.route,
     this.isPrimary = false,
     this.isComingSoon = false,
+    this.useGo = false,
   });
 }
 
@@ -141,7 +144,7 @@ class _QuickActionItem extends StatelessWidget {
           return;
         }
         if (data.route != null) {
-          context.push(data.route!);
+          data.useGo ? context.go(data.route!) : context.push(data.route!);
         }
       },
       child: SizedBox(
