@@ -85,7 +85,7 @@ flutter:
       fonts:
         - asset: assets/fonts/InstrumentSerif/InstrumentSerif-Regular.ttf
           weight: 400
-    - family: ArchivoBlack
+    - family: Archivo
       fonts:
-        - asset: assets/fonts/ArchivoBlack/ArchivoBlack-Regular.ttf
-          weight: 400
+        - asset: assets/fonts/ArchivoBlack/Archivo-ExtraBold.ttf
+          weight: 800

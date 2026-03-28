@@ -2,23 +2,23 @@ import 'package:flutter/material.dart';
 
 /// Typography scale for GRID.
 ///
-/// [display] uses Instrument Serif for brand/editorial moments only.
+/// [display] uses Archivo ExtraBold for authoritative brand moments.
 /// All other headings and UI text use Satoshi (geometric sans-serif)
 /// with weight differentiation for hierarchy.
 class AppTypography {
   const AppTypography._();
 
   static const String _instrumentSerif = 'InstrumentSerif';
-  static const String _archivoBlack = 'ArchivoBlack';
+  static const String _archivo = 'Archivo';
   static const String _satoshi = 'Satoshi';
 
-  /// Brand / editorial display — Archivo Black.
-  /// Heavy, authoritative sans-serif for hero banners and splash screen.
+  /// Brand / editorial display — Archivo ExtraBold.
+  /// Strong, authoritative sans-serif for hero banners and splash screen.
   static const TextStyle display = TextStyle(
-    fontFamily: _archivoBlack,
+    fontFamily: _archivo,
     fontSize: 32,
-    fontWeight: FontWeight.w400,
-    letterSpacing: -1.0,
+    fontWeight: FontWeight.w800,
+    letterSpacing: -0.7,
   );
 
   /// Elegant editorial style — Instrument Serif.
