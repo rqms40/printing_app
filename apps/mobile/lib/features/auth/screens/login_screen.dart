@@ -83,6 +83,17 @@ class LoginScreen extends ConsumerWidget {
                   .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
                   .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
 
+              // Error message
+              if (authState.errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.sm),
+                  child: Text(
+                    authState.errorMessage!,
+                    style: AppTypography.caption.copyWith(color: colors.error),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+
               const SizedBox(height: AppSpacing.lg),
 
               // Switch to register
