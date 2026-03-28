@@ -1,4 +1,4 @@
-name: Build & Release APK
+name: Build and Release APK
 
 on:
   push:
@@ -11,6 +11,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
 
     steps:
       - uses: actions/checkout@v4
@@ -28,6 +31,9 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
+
+      - name: Run tests
+        run: flutter test
 
       - name: Decode keystore
         env:
@@ -50,7 +56,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: build/app/outputs/flutter-apk/GRID-*.apk
+          files: apps/mobile/build/app/outputs/flutter-apk/GRID-*.apk
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
