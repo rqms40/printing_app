@@ -27,6 +27,11 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   List<Order> get completedOrders =>
       state.where((o) => _terminalStatuses.contains(o.orderStatus)).toList();
 
+  /// Add a new order to the top of the list.
+  void addOrder(Order order) {
+    state = [order, ...state];
+  }
+
   /// Cancel an order if it is in a cancellable status.
   void cancelOrder(String orderId) {
     state = [

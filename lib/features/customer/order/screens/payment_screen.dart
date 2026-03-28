@@ -8,6 +8,8 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
+import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
+import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
@@ -226,6 +228,34 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     await Future.delayed(const Duration(milliseconds: 1500));
 
     if (!mounted) return;
+
+    // Build the new order from flow state
+    final flowState = ref.read(orderFlowProvider);
+    final newOrder = Order(
+      id: 'ord_${DateTime.now().millisecondsSinceEpoch}',
+      orderId:
+          'ORD-${(10000 + DateTime.now().millisecond).toString().padLeft(5, '0')}',
+      userId: 'usr_001',
+      category: flowState.category ?? 'paper',
+      fileName: flowState.fileName,
+      fileUrl: flowState.filePath,
+      paperSpecs: flowState.paperSpecs,
+      threeDSpecs: flowState.threeDSpecs,
+      quantity: flowState.quantity,
+      totalPrice: flowState.totalPrice + flowState.deliveryFee,
+      deliveryFee: flowState.deliveryFee,
+      paymentMethod: flowState.paymentMethod ?? PaymentMethod.cod,
+      paymentStatus: PaymentStatus.paid,
+      orderStatus: OrderStatus.orderPlaced,
+      deliveryOption: flowState.deliveryOption,
+      deliveryAddressId: flowState.deliveryAddress?.id,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    // Add to orders list
+    ref.read(ordersProvider.notifier).addOrder(newOrder);
+
     setState(() {
       _isProcessing = false;
       _isSuccess = true;

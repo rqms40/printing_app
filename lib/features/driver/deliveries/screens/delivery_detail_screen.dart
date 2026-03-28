@@ -16,6 +16,7 @@ import 'package:printing_app/shared/models/address.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/status_badge.dart';
 import 'package:printing_app/utils/formatters.dart';
@@ -184,8 +185,16 @@ class DeliveryDetailScreen extends ConsumerWidget {
                     variant: AppButtonVariant.secondary,
                     isFullWidth: true,
                     icon: HugeIcons.strokeRoundedRoute01,
-                    onTap: () {
-                      // Opens external navigation app (not implemented)
+                    onTap: () async {
+                      // Open Google Maps with destination coordinates
+                      final lat = address?.latitude ?? 14.6400;
+                      final lng = address?.longitude ?? 121.0530;
+                      final url = Uri.parse(
+                          'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving');
+                      if (await canLaunchUrl(url)) {
+                        await launchUrl(url,
+                            mode: LaunchMode.externalApplication);
+                      }
                     },
                   ),
                   const SizedBox(height: AppSpacing.lg),

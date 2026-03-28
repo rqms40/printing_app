@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -29,6 +30,8 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = _colors(context);
+    final authState = ref.watch(authProvider);
+    final userName = authState.user?.fullName ?? 'there';
 
     return ColoredBox(
       color: colors.background,
@@ -58,7 +61,7 @@ class HomeScreen extends ConsumerWidget {
                     ),
                   ),
                   Text(
-                    'Hello, Maria',
+                    'Hello, $userName',
                     style: AppTypography.h1.copyWith(
                       color: colors.onBackground,
                     ),

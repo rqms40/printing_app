@@ -38,6 +38,9 @@ dependencies:
   # File handling
   file_picker: ^8.1.6
 
+  # Persistence
+  shared_preferences: ^2.3.4
+
   # Local storage
   hive: ^2.2.3
   hive_flutter: ^1.1.0

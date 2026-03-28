@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/home/screens/home_screen.dart';
 
 /// Wraps a widget in a minimal MaterialApp with ProviderScope for testing.
+/// Pre-seeds authProvider with a mock customer so greeting displays a name.
 Widget _wrap(Widget child) {
   return ProviderScope(
+    overrides: [
+      authProvider.overrideWith((_) {
+        final notifier = AuthNotifier();
+        notifier.devBypass('customer'); // sets fullName to 'Maria Santos'
+        return notifier;
+      }),
+    ],
     child: MaterialApp(
       theme: ThemeData(brightness: Brightness.light),
       home: child,
@@ -73,7 +82,7 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(milliseconds: 500));
 
-      expect(find.text('Hello, Maria'), findsOneWidget);
+      expect(find.text('Hello, Maria Santos'), findsOneWidget);
     });
   });
 }
