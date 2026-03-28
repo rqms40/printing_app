@@ -27,8 +27,8 @@ void main() {
   });
 
   group('AppTypography', () {
-    test('display uses InstrumentSerif font', () {
-      expect(AppTypography.display.fontFamily, 'InstrumentSerif');
+    test('display uses Poppins font', () {
+      expect(AppTypography.display.fontFamily, 'Poppins');
     });
   });
 

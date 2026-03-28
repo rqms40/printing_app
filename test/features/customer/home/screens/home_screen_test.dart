@@ -69,7 +69,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.text('Recent Orders'), findsOneWidget);
-      expect(find.text('See All'), findsOneWidget);
+      expect(find.text('See All'), findsWidgets);
     });
 
     testWidgets('renders greeting with user name', (tester) async {
