@@ -62,7 +62,7 @@ class RoutingService {
 
   /// Detailed fallback route: Makati (Ayala Ave) → QC (Katipunan Ave)
   /// Following actual road layout with curves and turns.
-  static final List<LatLng> _fallbackRoute = const [
+  static const List<LatLng> _fallbackRoute = [
     // Ayala Ave, Makati
     LatLng(14.5510, 121.0230),
     LatLng(14.5520, 121.0248),

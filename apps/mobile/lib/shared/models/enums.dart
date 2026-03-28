@@ -1,4 +1,5 @@
 /// All domain enums for GRID with displayName extensions.
+library;
 
 enum UserRole { customer, driver, admin }
 

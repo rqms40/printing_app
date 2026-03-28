@@ -85,7 +85,7 @@ class SupportScreen extends StatelessWidget {
               style: AppTypography.h3.copyWith(color: colors.onBackground),
             ),
             const SizedBox(height: AppSpacing.md),
-            _FaqItem(
+            const _FaqItem(
               question: 'How do I place an order?',
               answer:
                   'To place an order, go to the Home screen and tap "New Order". '
@@ -94,14 +94,14 @@ class SupportScreen extends StatelessWidget {
                   'proceed to payment. You will receive a confirmation once your '
                   'order is placed.',
             ),
-            _FaqItem(
+            const _FaqItem(
               question: 'What payment methods are accepted?',
               answer:
                   'We accept GCash, Maya (formerly PayMaya), and Cash on Delivery (COD). '
                   'For GCash and Maya, you will be redirected to complete the payment '
                   'through the respective app. COD is available for delivery orders only.',
             ),
-            _FaqItem(
+            const _FaqItem(
               question: 'How long does printing take?',
               answer:
                   'Standard document printing typically takes 1-2 hours. Poster and '
@@ -109,7 +109,7 @@ class SupportScreen extends StatelessWidget {
                   '3D printing orders can take 4-24 hours depending on complexity. '
                   'You will receive notifications as your order progresses.',
             ),
-            _FaqItem(
+            const _FaqItem(
               question: 'Can I cancel my order?',
               answer:
                   'You can cancel your order as long as printing has not yet started. '
@@ -117,7 +117,7 @@ class SupportScreen extends StatelessWidget {
                   'Refunds for cancelled orders paid via GCash or Maya are processed '
                   'within 3-5 business days.',
             ),
-            _FaqItem(
+            const _FaqItem(
               question: 'What file formats are supported?',
               answer:
                   'For document and poster printing, we support PDF, JPEG, PNG, and '

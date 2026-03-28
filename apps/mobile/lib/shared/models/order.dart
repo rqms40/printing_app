@@ -115,7 +115,7 @@ class Order {
 
   @override
   String toString() =>
-      'Order($orderId, ${orderStatus.displayName}, ${category})';
+      'Order($orderId, ${orderStatus.displayName}, $category)';
 
   @override
   bool operator ==(Object other) =>

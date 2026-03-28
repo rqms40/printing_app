@@ -42,7 +42,7 @@ class AddressListScreen extends ConsumerWidget {
           : ListView.separated(
               padding: const EdgeInsets.all(AppSpacing.md),
               itemCount: addresses.length,
-              separatorBuilder: (_, __) =>
+              separatorBuilder: (_, _) =>
                   const SizedBox(height: AppSpacing.md),
               itemBuilder: (context, index) {
                 final address = addresses[index];

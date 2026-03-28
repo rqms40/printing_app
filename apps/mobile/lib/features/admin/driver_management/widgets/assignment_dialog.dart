@@ -100,7 +100,7 @@ class AssignmentDialog extends ConsumerWidget {
                 child: ListView.separated(
                   shrinkWrap: true,
                   itemCount: availableDrivers.length,
-                  separatorBuilder: (_, __) =>
+                  separatorBuilder: (_, _) =>
                       Divider(color: colors.outlineVariant),
                   itemBuilder: (context, index) {
                     final driver = availableDrivers[index];

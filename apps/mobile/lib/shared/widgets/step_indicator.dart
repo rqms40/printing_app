@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
-import 'package:printing_app/config/theme/app_spacing.dart';
 
 /// Horizontal step indicator for multi-step order flows.
 ///

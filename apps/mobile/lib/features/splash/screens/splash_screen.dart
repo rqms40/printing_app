@@ -53,7 +53,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       9,
       (_) => AnimationController(
         vsync: this,
-        duration: Duration(milliseconds: _dotDuration),
+        duration: const Duration(milliseconds: _dotDuration),
       ),
     );
 
@@ -83,7 +83,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     for (int i = 0; i < 9; i++) {
       if (!mounted) return;
       _dotControllers[i].forward();
-      await Future.delayed(Duration(milliseconds: _dotDelay));
+      await Future.delayed(const Duration(milliseconds: _dotDelay));
     }
 
     // Wait a moment after all dots are lit
@@ -164,8 +164,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     }
 
     const logoSize = 80.0;
-    final dotSize = logoSize / 4.2;
-    final spacing = logoSize / 12;
+    const dotSize = logoSize / 4.2;
+    const spacing = logoSize / 12;
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -185,7 +185,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: List.generate(3, (row) {
                     return Padding(
-                      padding: EdgeInsets.symmetric(vertical: spacing / 2),
+                      padding: const EdgeInsets.symmetric(vertical: spacing / 2),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: List.generate(3, (col) {
@@ -194,7 +194,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
                           return Padding(
                             padding:
-                                EdgeInsets.symmetric(horizontal: spacing / 2),
+                                const EdgeInsets.symmetric(horizontal: spacing / 2),
                             child: _DotAnimator(
                               animation: CurvedAnimation(
                                 parent: _dotControllers[ctrlIndex],

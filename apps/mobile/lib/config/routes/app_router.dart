@@ -69,7 +69,7 @@ final _rootNavigatorKey = GlobalKey<NavigatorState>();
 // ---------------------------------------------------------------------------
 class _AuthChangeNotifier extends ChangeNotifier {
   _AuthChangeNotifier(this._ref) {
-    _ref.listen(authProvider, (_, __) => notifyListeners());
+    _ref.listen(authProvider, (_, _) => notifyListeners());
   }
   final Ref _ref;
 }

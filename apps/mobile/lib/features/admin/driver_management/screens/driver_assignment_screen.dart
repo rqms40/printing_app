@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
@@ -72,7 +71,7 @@ class _DriverAssignmentScreenState
                 Switch.adaptive(
                   value: _onlineOnly,
                   onChanged: (v) => setState(() => _onlineOnly = v),
-                  activeColor: colors.accent,
+                  activeTrackColor: colors.accent,
                 ),
               ],
             ),
@@ -92,7 +91,7 @@ class _DriverAssignmentScreenState
                 : ListView.separated(
                     padding: const EdgeInsets.all(AppSpacing.xl),
                     itemCount: drivers.length,
-                    separatorBuilder: (_, __) =>
+                    separatorBuilder: (_, _) =>
                         Divider(color: colors.outlineVariant),
                     itemBuilder: (context, index) {
                       return DriverListTile(

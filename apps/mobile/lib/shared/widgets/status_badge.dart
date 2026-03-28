@@ -106,6 +106,6 @@ class _BadgeScheme {
 
   final Color background;
   final Color foreground;
-  /// HugeIcons SVG data (List<List<dynamic>>).
+  /// HugeIcons SVG data (`List<List<dynamic>>`).
   final dynamic icon;
 }
