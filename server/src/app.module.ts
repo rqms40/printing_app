@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { OrdersModule } from './orders/orders.module';
@@ -15,6 +17,12 @@ import { FilesModule } from './files/files.module';
   imports: [
     // Environment variables
     ConfigModule.forRoot({ isGlobal: true }),
+
+    // Rate limiting
+    ThrottlerModule.forRoot([{
+      ttl: 60000, // 1 minute
+      limit: 30,  // 30 requests per minute
+    }]),
 
     // Database
     TypeOrmModule.forRootAsync({
@@ -41,6 +49,9 @@ import { FilesModule } from './files/files.module';
     HealthModule,
     PaymentsModule,
     FilesModule,
+  ],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

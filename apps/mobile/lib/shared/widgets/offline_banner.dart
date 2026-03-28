@@ -4,17 +4,23 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 
-/// Full-width banner indicating no internet connection.
+/// Full-width banner indicating no internet connection or API unavailability.
 ///
-/// Uses the warning semantic color. Optionally dismissible.
+/// Uses the warning semantic color by default. When [useInfoColor] is true,
+/// the info semantic color is used instead (e.g. for "demo mode" banners).
+/// Optionally dismissible.
 class OfflineBanner extends StatelessWidget {
   const OfflineBanner({
     super.key,
     this.message = 'No internet connection',
     this.onDismiss,
+    this.useInfoColor = false,
   });
 
   final String message;
+
+  /// When true, uses the info color instead of warning.
+  final bool useInfoColor;
 
   /// If provided, a close button is shown and this callback is invoked on tap.
   final VoidCallback? onDismiss;
@@ -30,7 +36,7 @@ class OfflineBanner extends StatelessWidget {
     final colors = _colors(context);
 
     return Material(
-      color: colors.warning,
+      color: useInfoColor ? colors.info : colors.warning,
       child: SafeArea(
         bottom: false,
         child: Padding(

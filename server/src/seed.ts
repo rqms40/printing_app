@@ -15,6 +15,12 @@ async function seed() {
 
   console.log('🌱 Seeding GRID database...\n');
 
+  // Check if database already has data
+  const [existingUsers] = await ds.query('SELECT count(*) FROM users');
+  if (parseInt(existingUsers.count) > 0) {
+    console.log('⚠️  Database already has data. Running full reset...');
+  }
+
   // ─── Users ──────────────────────────────────────────────────────────
   const passwordHash = await bcrypt.hash('password123', 10);
 
@@ -63,7 +69,19 @@ async function seed() {
   await ds.query('DELETE FROM driver_profiles');
   await ds.query('DELETE FROM file_metadata');
   await ds.query('DELETE FROM users');
+
+  // Reset all sequences so IDs start fresh
   await ds.query("SELECT setval('users_id_seq', 1, false)");
+  await ds.query("SELECT setval('orders_id_seq', 1, false)");
+  await ds.query("SELECT setval('addresses_id_seq', 1, false)");
+  await ds.query("SELECT setval('notifications_id_seq', 1, false)");
+  await ds.query("SELECT setval('payment_transactions_id_seq', 1, false)");
+  await ds.query("SELECT setval('delivery_assignments_id_seq', 1, false)");
+  await ds.query("SELECT setval('order_status_history_id_seq', 1, false)");
+  await ds.query("SELECT setval('paper_specs_id_seq', 1, false)");
+  await ds.query("SELECT setval('three_d_specs_id_seq', 1, false)");
+  await ds.query("SELECT setval('driver_profiles_id_seq', 1, false)");
+  await ds.query("SELECT setval('file_metadata_id_seq', 1, false)");
 
   for (const u of users) {
     await ds.query(
