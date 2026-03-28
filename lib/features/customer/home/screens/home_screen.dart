@@ -4,6 +4,8 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/home/widgets/bento_grid.dart';
+import 'package:printing_app/features/customer/home/widgets/popular_prints_section.dart';
+import 'package:printing_app/features/customer/home/widgets/quick_actions_strip.dart';
 import 'package:printing_app/features/customer/home/widgets/recent_orders_section.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
@@ -81,6 +83,22 @@ class HomeScreen extends ConsumerWidget {
                   .slideY(begin: 0.03, duration: 400.ms, delay: 240.ms, curve: Curves.easeOut),
 
               const SizedBox(height: AppSpacing.lg),
+
+              // Quick actions strip
+              const QuickActionsStrip()
+                  .animate()
+                  .fadeIn(duration: 400.ms, delay: 320.ms, curve: Curves.easeOut)
+                  .slideY(begin: 0.03, duration: 400.ms, delay: 320.ms, curve: Curves.easeOut),
+
+              const SizedBox(height: AppSpacing.lg),
+
+              // Popular prints carousel
+              const PopularPrintsSection()
+                  .animate()
+                  .fadeIn(duration: 400.ms, delay: 400.ms, curve: Curves.easeOut)
+                  .slideY(begin: 0.03, duration: 400.ms, delay: 400.ms, curve: Curves.easeOut),
+
+              const SizedBox(height: AppSpacing.xxl),
             ],
           ),
         ),
