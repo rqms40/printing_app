@@ -8,11 +8,11 @@ GRID is a premium mobile printing service platform built with Flutter that enabl
 
 The platform serves three user roles: **customers** who place and track orders, **drivers** who handle delivery assignments with real-time GPS tracking, and **admins** who manage the printing queue, assign drivers, update statuses, and monitor business analytics.
 
-The backend is a self-hosted **Serverpod** server (full-stack Dart), giving complete control over infrastructure, data, and scaling — no third-party BaaS dependency.
+The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular architecture that supports multiple applications (mobile app, IoT kiosks, partner APIs), built-in MQTT transport for IoT devices, and massive TypeScript developer ecosystem. PostgreSQL remains the database.
 
-**MVP Goal:** Deliver a polished, premium-feeling mobile app with complete order-to-delivery workflow — including driver assignment, checkpoint-based status updates, and live GPS tracking during delivery — real-time status tracking, file upload, multi-payment support, and an admin dashboard — all powered by a self-hosted Serverpod backend with PostgreSQL.
+**MVP Goal:** Deliver a polished, premium-feeling mobile app with complete order-to-delivery workflow — including driver assignment, checkpoint-based status updates, and live GPS tracking during delivery — real-time status tracking, file upload, multi-payment support, and an admin dashboard — all powered by a self-hosted NestJS backend with PostgreSQL.
 
-> **Note:** When developing this app, use the `/frontend-design` skill for all UI work to ensure high design quality with a refined monochrome aesthetic. The first phases focus on building the UI shell; the backend (Serverpod) will be developed later in `./server`.
+> **Note:** When developing this app, use the `/frontend-design` skill for all UI work to ensure high design quality with a refined monochrome aesthetic. The first phases focus on building the UI shell; the backend (NestJS) will be developed later in `./server`.
 
 ---
 
@@ -23,7 +23,7 @@ The backend is a self-hosted **Serverpod** server (full-stack Dart), giving comp
 ### Core Principles
 
 1. **Greyscale-First Design** — Monochrome palette with warm grey undertones. One accent color used like punctuation, not paint. Typography and spacing carry the visual weight.
-2. **Full-Stack Dart** — Flutter frontend + Serverpod backend. Shared models, type safety end-to-end, single language across the stack.
+2. **Scalable Platform Backend** — NestJS (TypeScript) backend with modular architecture. One backend serves multiple clients: Flutter mobile app, IoT kiosks (MQTT), partner APIs. PostgreSQL for relational data, Redis for caching, S3 for file storage.
 3. **Own the Infrastructure** — Self-hosted backend with full control over data, scaling, and pricing.
 4. **Real-Time Everything** — Live order status updates via WebSocket streams. Customers always know where their order stands.
 5. **Offline Resilient** — Draft orders persist locally. Queue actions when offline, sync when reconnected.
@@ -139,17 +139,17 @@ The backend is a self-hosted **Serverpod** server (full-stack Dart), giving comp
 **Technical**
 
 - Flutter 3.41.6 / Dart 3.11.4 with FVM
-- Serverpod backend with PostgreSQL (in `./server`) — NOT YET STARTED
+- NestJS backend with PostgreSQL (in `./server`) — NOT YET STARTED
 - flutter_map + OpenStreetMap (free, no API key) for map views
 - OSRM for real road routing (free, no API key)
 - HugeIcons for stroke-rounded icon set (46K+ icons)
 - flutter_animate for micro-interactions and screen transitions
 - fl_chart for admin dashboard charts
 - flutter_staggered_grid_view for bento grid layouts
-- Serverpod ORM for type-safe database queries
-- WebSocket streams for real-time order updates
-- Serverpod file storage (S3-compatible or local)
-- Serverpod authentication module
+- TypeORM for type-safe database queries
+- WebSocket Gateway for real-time order updates
+- S3-compatible storage (AWS S3 / MinIO) for file uploads
+- NestJS Passport.js + JWT authentication
 - Riverpod for client-side state management
 - Go Router for navigation
 - Local persistence with Hive/SharedPreferences for drafts
@@ -277,24 +277,27 @@ The backend is a self-hosted **Serverpod** server (full-stack Dart), giving comp
 ### High-Level Architecture
 
 ```
-┌──────────────────────┐         HTTP/JSON + WebSocket        ┌─────────────────────────┐
-│   Flutter App        │ ◄──────────────────────────────────► │   Serverpod Server      │
-│   (Customer/Driver/  │                                      │   (Dart Backend)        │
-│    Admin)            │                                      │   Port 8080             │
+┌──────────────────────┐                                      ┌─────────────────────────┐
+│   Flutter App        │         REST / WebSocket             │   NestJS Server         │
+│   (Customer/Driver/  │ ◄──────────────────────────────────► │   (TypeScript Backend)  │
+│    Admin)            │                                      │   Port 3000             │
 │                      │                                      │                         │
-│   - Riverpod         │                                      │   - Endpoints (API)     │
-│   - Go Router        │                                      │   - ORM (PostgreSQL)    │
-│   - flutter_map      │                                      │   - Streams (WebSocket) │
-│   - Hive (offline)   │                                      │   - File Storage        │
-│   - HugeIcons        │                                      │   - Auth Module         │
+│   - Riverpod         │                                      │   - REST Controllers    │
+│   - Go Router        │                                      │   - TypeORM (PostgreSQL)│
+│   - flutter_map      │                                      │   - WebSocket Gateway   │
+│   - Hive (offline)   │                                      │   - JWT Auth (Passport) │
+│   - HugeIcons        │                                      │   - File Upload (Multer)│
 └──────────────────────┘                                      │   - Task Scheduling     │
-                                                              └────────────┬────────────┘
-                                                                           │
+                                                              │   - MQTT (IoT ready)    │
+         ┌────────────────────┐                               └────────────┬────────────┘
+         │  IoT Kiosks        │        MQTT                                │
+         │  (Future)          │ ◄─────────────────────────────────────────►│
+         └────────────────────┘                                            │
                                                     ┌──────────────────────┼──────────────────────┐
                                                     │                      │                      │
                                                     ▼                      ▼                      ▼
                                           ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-                                          │   PostgreSQL     │  │   S3 Storage    │  │   FCM / APNs    │
+                                          │   PostgreSQL     │  │   S3 / MinIO    │  │   FCM / APNs    │
                                           │   (Database)     │  │   (Files)       │  │   (Push)        │
                                           └─────────────────┘  └─────────────────┘  └─────────────────┘
 ```
@@ -305,7 +308,7 @@ External APIs:
 - OpenStreetMap tiles — Free map rendering, no API key
 ```
 
-The Flutter app serves all three roles (Customer, Driver, Admin) within a single codebase, with role-based routing determining which feature set is presented. The Serverpod backend handles all business logic, data persistence, real-time communication, and file storage. External services include PostgreSQL for relational data, S3-compatible storage for uploaded files, and Firebase Cloud Messaging (FCM) with Apple Push Notification Service (APNs) for push notifications. OpenStreetMap via flutter_map is used by the Flutter client for map rendering, with OSRM providing free driving route geometry.
+The Flutter app serves all three roles (Customer, Driver, Admin) within a single codebase, with role-based routing determining which feature set is presented. The NestJS backend handles all business logic, data persistence, real-time communication, and file storage. External services include PostgreSQL for relational data, S3-compatible storage (MinIO / AWS S3) for uploaded files, and Firebase Cloud Messaging (FCM) with Apple Push Notification Service (APNs) for push notifications. OpenStreetMap via flutter_map is used by the Flutter client for map rendering, with OSRM providing free driving route geometry.
 
 ### Directory Structure
 
@@ -476,7 +479,7 @@ printing_app/
 │   │   │   ├── empty_state.dart
 │   │   │   └── confirmation_dialog.dart
 │   │   ├── models/
-│   │   │   └── (generated by Serverpod — shared via printing_app_client)
+│   │   │   └── (API contract via OpenAPI/Swagger auto-generated docs)
 │   │   └── services/
 │   │       ├── connectivity_service.dart
 │   │       ├── local_storage_service.dart
@@ -487,37 +490,57 @@ printing_app/
 │       ├── validators.dart          # Input validation helpers
 │       └── file_helpers.dart        # File picking & validation
 │
-├── server/                          # Serverpod backend (created later)
-│   ├── printing_app_server/
-│   │   ├── lib/src/
-│   │   │   ├── endpoints/
-│   │   │   │   ├── auth_endpoint.dart
-│   │   │   │   ├── user_endpoint.dart
-│   │   │   │   ├── order_endpoint.dart
-│   │   │   │   ├── file_endpoint.dart
-│   │   │   │   ├── payment_endpoint.dart
-│   │   │   │   ├── notification_endpoint.dart
-│   │   │   │   ├── admin_endpoint.dart
-│   │   │   │   ├── driver_endpoint.dart
-│   │   │   │   ├── delivery_endpoint.dart
-│   │   │   │   ├── address_endpoint.dart
-│   │   │   │   └── location_endpoint.dart
-│   │   │   └── generated/
-│   │   │       └── protocol.dart
-│   │   ├── config/
-│   │   │   ├── development.yaml
-│   │   │   ├── staging.yaml
-│   │   │   └── production.yaml
-│   │   └── deploy/
-│   │       └── docker-compose.yaml
-│   │
-│   ├── printing_app_client/         # Auto-generated client library
-│   │   └── lib/
-│   │       └── src/protocol/
-│   │
-│   └── printing_app_flutter/        # Serverpod Flutter integration
-│       └── lib/
-│           └── printing_app_flutter.dart
+├── server/                              # NestJS backend
+│   ├── src/
+│   │   ├── main.ts                     # App entry point
+│   │   ├── app.module.ts               # Root module
+│   │   ├── auth/                       # Auth module (Passport + JWT)
+│   │   │   ├── auth.controller.ts
+│   │   │   ├── auth.service.ts
+│   │   │   ├── auth.module.ts
+│   │   │   ├── jwt.strategy.ts
+│   │   │   └── guards/
+│   │   ├── users/                      # User module
+│   │   │   ├── users.controller.ts
+│   │   │   ├── users.service.ts
+│   │   │   ├── users.module.ts
+│   │   │   └── entities/user.entity.ts
+│   │   ├── orders/                     # Order module
+│   │   │   ├── orders.controller.ts
+│   │   │   ├── orders.service.ts
+│   │   │   ├── orders.gateway.ts       # WebSocket for real-time updates
+│   │   │   ├── orders.module.ts
+│   │   │   └── entities/
+│   │   ├── drivers/                    # Driver module
+│   │   │   ├── drivers.controller.ts
+│   │   │   ├── drivers.service.ts
+│   │   │   ├── drivers.module.ts
+│   │   │   └── entities/
+│   │   ├── payments/                   # Payment module (PayMongo)
+│   │   │   ├── payments.controller.ts
+│   │   │   ├── payments.service.ts
+│   │   │   ├── payments.module.ts
+│   │   │   └── webhooks/
+│   │   ├── notifications/              # FCM push notifications
+│   │   │   ├── notifications.service.ts
+│   │   │   └── notifications.module.ts
+│   │   ├── files/                      # File upload (S3/MinIO)
+│   │   │   ├── files.controller.ts
+│   │   │   └── files.service.ts
+│   │   ├── location/                   # GPS tracking + WebSocket
+│   │   │   ├── location.gateway.ts     # WebSocket for live tracking
+│   │   │   └── location.module.ts
+│   │   └── common/                     # Shared utilities
+│   │       ├── guards/role.guard.ts
+│   │       ├── decorators/
+│   │       └── interceptors/
+│   ├── test/
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── nest-cli.json
+│   ├── .env
+│   ├── docker-compose.yml              # PostgreSQL + Redis + MinIO
+│   └── Dockerfile
 │
 ├── assets/
 │   ├── images/
@@ -541,8 +564,10 @@ printing_app/
 - **Feature-First Architecture** — Code organized by feature (auth, order, admin, driver), not by type. Each feature directory contains its own screens, providers, and widgets, keeping related code co-located and enabling independent development.
 - **Riverpod State Management** — Compile-safe, testable, no BuildContext dependency. Providers are scoped to features and composed when cross-feature data is needed. AsyncNotifier for server-synced state, StateNotifier for local-only state.
 - **GoRouter Navigation** — Declarative routing with deep link support and auth guards. Role-based redirect logic determines which shell (customer, driver, admin) is presented after authentication.
-- **Serverpod Code Generation** — Shared models between client and server, type-safe API calls. Protocol files define data classes once; code generation creates serialization, database mapping, and client stubs automatically.
-- **Repository Pattern** — Data access abstracted behind repository interfaces. Repositories handle the decision between local cache (Hive) and remote API (Serverpod client), enabling offline-first behavior and testability.
+- **REST + WebSocket API** — NestJS controllers expose REST endpoints consumed by Flutter via dio/http. Real-time updates via WebSocket Gateway (@nestjs/websockets). OpenAPI/Swagger docs auto-generated.
+- **Modular Architecture** — NestJS modules allow the backend to serve multiple clients (mobile app, IoT kiosks, partner APIs) from a single codebase. Each domain (orders, drivers, payments) is an independent module.
+- **IoT Ready** — Built-in MQTT transport for future kiosk integration. Kiosks can publish print jobs and subscribe to status updates via MQTT broker.
+- **Repository Pattern** — Data access abstracted behind repository interfaces. Repositories handle the decision between local cache (Hive) and remote API (dio HTTP client + WebSocket), enabling offline-first behavior and testability.
 - **Offline-First Drafts** — Hive local storage for draft orders, sync queue for pending actions. When connectivity is restored, queued actions are replayed in order. Conflict resolution favors server state.
 - **Location Streaming** — GPS coordinates streamed via WebSocket during active delivery only, with battery-conscious intervals (10-second updates during "on_the_way" phase). Streaming starts when the driver taps "On the Way" and stops when the driver taps "Arrived." No background location tracking outside active deliveries.
 - **Map Integration** — OpenStreetMap via flutter_map for address picking (draggable pin with geocoding), delivery tracking (real-time driver position on customer's screen), and driver navigation (open destination in external maps app). OSRM provides real road routing geometry. Map style uses greyscale tiles to match the monochrome design language.
@@ -565,7 +590,7 @@ printing_app/
 - Role-based routing (customer vs driver vs admin)
 
 **Key Features:**
-- Serverpod auth module for session management
+- NestJS Passport.js + JWT authentication for session management
 - Profile completeness check before accessing main app
 - Persistent auth session (survives app restart)
 - Developer bypass logins for testing (one per role: customer, driver, admin)
@@ -664,7 +689,7 @@ Alternative exits:
 
 **Key Features:**
 - Visual status timeline with step indicators
-- Real-time updates via Serverpod WebSocket streams
+- Real-time updates via NestJS WebSocket Gateway
 - Status badge with greyscale tones + accent for active step
 - Push notification on each status transition
 - Decline reason displayed when applicable
@@ -688,7 +713,7 @@ Alternative exits:
 **Implementation:**
 - In-app notification list with read/unread state
 - FCM push notifications for background alerts
-- Server-triggered via Serverpod when admin updates status or driver updates delivery checkpoint
+- Server-triggered via NestJS when admin updates status or driver updates delivery checkpoint
 
 ### 7.7 Draft Orders (Offline)
 
@@ -716,7 +741,7 @@ Alternative exits:
 - Order volume bar chart (6-month, count)
 
 **Key Features:**
-- Real-time data via Serverpod streams
+- Real-time data via NestJS WebSocket Gateway
 - Refresh on pull-down
 - Date range selector for charts
 
@@ -1075,7 +1100,7 @@ All interactive elements must have a minimum touch target of **48x48dp** (Materi
 | Language | Dart | 3.11.4 | Primary language |
 | State Management | Riverpod | ^2.x (latest) | Compile-safe reactive state |
 | Navigation | GoRouter | ^14.x | Declarative routing with guards |
-| HTTP Client | Serverpod Client (generated) | — | Type-safe API calls |
+| HTTP Client | dio | ^5.x | REST API calls to NestJS backend |
 | Local Storage | Hive | ^2.2.3 (dependency present, integration pending) | Offline draft persistence |
 | Animations | flutter_animate | ^4.x | Declarative animations |
 | Charts | fl_chart | ^0.x (latest) | Admin dashboard charts |
@@ -1105,42 +1130,50 @@ All interactive elements must have a minimum touch target of **48x48dp** (Materi
 | OSRM (Open Source Routing Machine) | router.project-osrm.org | Free public routing API for real driving directions, no API key required |
 | OpenStreetMap tiles | tile.openstreetmap.org | Free map tile rendering, no API key required |
 
-### Backend (Serverpod) -- in `./server`
+### Backend (NestJS) — in `./server`
 
 | Component | Technology | Version |
 |-----------|------------|---------|
-| Framework | Serverpod | ^2.x (latest) |
-| Language | Dart | 3.11.4 |
+| Framework | NestJS | ^10.x (latest LTS) |
+| Language | TypeScript | ^5.x |
+| Runtime | Node.js | ^20.x (LTS) |
+| Database ORM | TypeORM | ^0.3.x |
 | Database | PostgreSQL | 15+ |
-| ORM | Serverpod ORM (built-in) | — |
-| Real-Time | Serverpod Streams (WebSocket) | — |
-| Auth | serverpod_auth_server | — |
-| File Storage | Serverpod Storage (S3-compatible or local) | — |
-| Task Scheduling | Serverpod Future Calls | — |
+| Auth | Passport.js + JWT | @nestjs/passport ^10.x |
+| Real-Time | WebSocket Gateway | @nestjs/websockets |
+| IoT | MQTT Transport | @nestjs/microservices |
+| File Storage | S3-compatible (MinIO / AWS S3) | @aws-sdk/client-s3 |
+| Task Scheduling | @nestjs/schedule | ^4.x |
+| Validation | class-validator + class-transformer | latest |
+| API Docs | Swagger / OpenAPI | @nestjs/swagger |
+| Caching | Redis | @nestjs/cache-manager |
 | Containerization | Docker + Docker Compose | — |
 
-### Why Serverpod?
+### Why NestJS?
 
-| Consideration | Serverpod | Dart Frog | Node.js (Express) | Firebase |
-|---------------|-----------|-----------|-------------------|----------|
-| **Language** | Dart (shared with Flutter) | Dart | JavaScript/TS | N/A (BaaS) |
-| **ORM** | Built-in, type-safe | None (BYO) | Prisma/TypeORM | Firestore (NoSQL) |
-| **Real-Time** | Built-in WebSocket streams | Manual | Socket.io | Built-in |
-| **File Storage** | Built-in (S3/local) | Manual | Manual | Built-in |
-| **Auth** | Built-in module | BYO | Passport.js | Built-in |
-| **Code Gen** | Shared models client+server | None | None | None |
-| **Self-Hosted** | Yes | Yes | Yes | No (Google-owned) |
-| **Cost Control** | Full control | Full control | Full control | Pay-per-use, can spike |
+| Consideration | NestJS | Serverpod | Express.js | Firebase |
+|---------------|--------|-----------|-----------|----------|
+| **Language** | TypeScript | Dart | JavaScript/TS | N/A (BaaS) |
+| **ORM** | TypeORM/Prisma | Built-in | Prisma/TypeORM | Firestore (NoSQL) |
+| **Real-Time** | WebSocket Gateway | Built-in streams | Socket.io | Built-in |
+| **IoT / MQTT** | **Built-in transport** | None | Manual | None |
+| **Microservices** | **First-class (gRPC, MQTT, Redis, Kafka)** | None | Manual | None |
+| **API Docs** | **Auto-generated OpenAPI/Swagger** | None | Manual | None |
+| **Multi-App** | **Modular architecture** | Single app | Manual | Per-project |
+| **Self-Hosted** | Yes | Yes | Yes | No |
+| **Scale** | **Horizontal (workers + load balancer)** | Vertical | Horizontal | Auto |
+| **Community** | **Massive (TypeScript)** | Small | Massive | Large |
+| **Hiring** | **Easy (TS devs everywhere)** | Hard (Dart backend devs rare) | Easy | Easy |
 
-**Decision:** Serverpod — full-stack Dart, batteries-included, shared type-safe models between client and server.
+**Decision:** NestJS — modular TypeScript backend that scales from a single printing app to a platform serving mobile apps, IoT kiosks, and partner APIs. Massive developer ecosystem, enterprise-proven, built-in IoT support.
 
 ### Development Tools
 
 | Tool | Purpose |
 |------|---------|
 | FVM | Flutter version management |
-| Docker | PostgreSQL + Serverpod dev environment |
-| Serverpod CLI | Code generation, migrations, deployment |
+| Docker | PostgreSQL + Redis + MinIO dev environment |
+| NestJS CLI | Project scaffolding, module generation |
 | VS Code | Primary IDE with Flutter/Dart extensions |
 | Context7 MCP | Up-to-date library documentation during development |
 
@@ -1227,7 +1260,7 @@ Other Screens (Stack):
 - Admin role -> redirect to `/admin/dashboard`
 ## 11. Data Models
 
-All data models are defined as Serverpod serializable classes. Models marked **(keep)** are unchanged from v1. Models marked **(update)** have new or modified fields. Models marked **(NEW)** are entirely new.
+All data models are defined as TypeORM entities. Models marked **(keep)** are unchanged from v1. Models marked **(update)** have new or modified fields. Models marked **(NEW)** are entirely new.
 
 ### User (update)
 
@@ -1460,137 +1493,104 @@ class DraftOrder {
 
 ---
 
-## 12. API Specification (Serverpod Endpoints)
+## 12. API Specification (NestJS REST + WebSocket API)
 
-All endpoints require an authenticated `Session` unless otherwise noted. Role-based guards enforce that customers cannot access admin/driver endpoints and vice versa. Streaming endpoints use Serverpod's built-in WebSocket support.
+All endpoints require a valid JWT token in the `Authorization: Bearer <token>` header unless otherwise noted. Role-based guards enforce that customers cannot access admin/driver endpoints and vice versa. Real-time endpoints use NestJS WebSocket Gateway.
 
-### AuthEndpoint (keep)
+### AuthController
 
-```dart
-class AuthEndpoint extends Endpoint {
-  Future<UserInfo> register(Session session, String email, String password);
-  Future<AuthResponse> login(Session session, String email, String password);
-  Future<void> logout(Session session);
-}
+```
+POST   /api/auth/register     → Register with email/password
+POST   /api/auth/login        → Login, returns JWT token
+POST   /api/auth/logout       → Invalidate session
 ```
 
-### UserEndpoint (keep)
+### UsersController
 
-```dart
-class UserEndpoint extends Endpoint {
-  Future<User> getProfile(Session session);
-  Future<User> updateProfile(Session session, User user);
-  Future<bool> isProfileComplete(Session session);
-}
+```
+GET    /api/users/profile     → Get current user profile
+PUT    /api/users/profile     → Update profile
+GET    /api/users/complete    → Check profile completeness
 ```
 
-### OrderEndpoint (update)
+### OrdersController
 
-Added `cancelOrder`, `getOrderHistory`, `streamOrderUpdates`, and `streamUserOrders`. The `getUserOrders` method now accepts an optional status filter.
-
-```dart
-class OrderEndpoint extends Endpoint {
-  Future<Order> createOrder(Session session, CreateOrderPayload payload);
-  Future<List<Order>> getUserOrders(Session session, {String? statusFilter});
-  Future<Order> getOrder(Session session, String orderId);
-  Future<Order> cancelOrder(Session session, String orderId, {String? reason});
-  Future<List<OrderStatusHistory>> getOrderHistory(Session session, String orderId);
-  Stream<Order> streamOrderUpdates(Session session, String orderId);
-  Stream<List<Order>> streamUserOrders(Session session);
-}
+```
+POST   /api/orders            → Create new order
+GET    /api/orders            → Get user's orders (filter by status)
+GET    /api/orders/:id        → Get single order
+DELETE /api/orders/:id        → Cancel order
+GET    /api/orders/:id/history → Get status change history
+WS     /ws/orders/:id         → Real-time order status stream
 ```
 
-### AddressEndpoint (NEW)
+### AddressesController
 
-Full CRUD for customer delivery addresses with default address management.
-
-```dart
-class AddressEndpoint extends Endpoint {
-  Future<List<Address>> getAddresses(Session session);
-  Future<Address> createAddress(Session session, Address address);
-  Future<Address> updateAddress(Session session, Address address);
-  Future<void> deleteAddress(Session session, int addressId);
-  Future<Address> setDefaultAddress(Session session, int addressId);
-}
+```
+GET    /api/addresses          → List saved addresses
+POST   /api/addresses          → Create address
+PUT    /api/addresses/:id      → Update address
+DELETE /api/addresses/:id      → Delete address
+PATCH  /api/addresses/:id/default → Set as default
 ```
 
-### AdminEndpoint (update)
+### AdminController
 
-Added `assignDriver`, `getAvailableDrivers`, `getSalesAnalytics`, and `streamOrderQueue`. The `updateOrderStatus` method now accepts optional `declineReason` and `estimatedCompletion`.
-
-```dart
-class AdminEndpoint extends Endpoint {
-  Future<DashboardStats> getDashboardStats(Session session);
-  Future<List<Order>> getAllOrders(Session session, {String? statusFilter});
-  Future<Order> updateOrderStatus(Session session, String orderId, String newStatus, {String? declineReason, DateTime? estimatedCompletion});
-  Future<Order> assignDriver(Session session, String orderId, int driverId);
-  Future<List<DriverProfile>> getAvailableDrivers(Session session);
-  Future<SalesAnalytics> getSalesAnalytics(Session session, DateTime startDate, DateTime endDate);
-  Stream<List<Order>> streamOrderQueue(Session session);
-}
+```
+GET    /api/admin/dashboard    → Dashboard KPI stats
+GET    /api/admin/orders       → All orders (with filters)
+PATCH  /api/admin/orders/:id/status → Update order status
+POST   /api/admin/orders/:id/assign → Assign driver
+GET    /api/admin/drivers      → Available drivers
+GET    /api/admin/analytics    → Sales analytics
+WS     /ws/admin/queue         → Real-time order queue stream
 ```
 
-### DriverEndpoint (NEW)
+### DriversController
 
-All driver-facing operations: profile management, assignment lifecycle, delivery history, and earnings.
-
-```dart
-class DriverEndpoint extends Endpoint {
-  Future<DriverProfile> getDriverProfile(Session session);
-  Future<DriverProfile> updateDriverProfile(Session session, DriverProfile profile);
-  Future<void> setAvailability(Session session, bool isAvailable);
-  Future<List<DeliveryAssignment>> getAssignments(Session session, {String? statusFilter});
-  Future<DeliveryAssignment> acceptAssignment(Session session, int assignmentId);
-  Future<DeliveryAssignment> declineAssignment(Session session, int assignmentId, String reason);
-  Future<DeliveryAssignment> updateDeliveryStatus(Session session, int assignmentId, String newStatus);
-  Future<List<DeliveryAssignment>> getDeliveryHistory(Session session, {int? limit, int? offset});
-  Future<EarningsSummary> getEarnings(Session session, DateTime startDate, DateTime endDate);
-  Stream<DeliveryAssignment> streamActiveDelivery(Session session);
-}
+```
+GET    /api/drivers/profile    → Driver profile
+PUT    /api/drivers/profile    → Update profile
+PATCH  /api/drivers/availability → Set online/offline
+GET    /api/drivers/assignments → Current assignments
+POST   /api/drivers/assignments/:id/accept  → Accept
+POST   /api/drivers/assignments/:id/decline → Decline
+PATCH  /api/drivers/assignments/:id/status  → Update checkpoint
+GET    /api/drivers/history    → Delivery history
+GET    /api/drivers/earnings   → Earnings summary
+WS     /ws/drivers/active      → Active delivery stream
 ```
 
-### LocationEndpoint (NEW)
+### LocationController
 
-Handles GPS location updates from drivers and streams them to customers tracking a delivery.
-
-```dart
-class LocationEndpoint extends Endpoint {
-  Future<void> updateLocation(Session session, double latitude, double longitude, {double? speed, double? heading});
-  Stream<LocationUpdate> streamDriverLocation(Session session, int deliveryAssignmentId);
-}
+```
+POST   /api/location/update    → Push GPS coordinates
+WS     /ws/location/:assignmentId → Stream driver location
 ```
 
-### FileEndpoint (keep)
+### FilesController
 
-```dart
-class FileEndpoint extends Endpoint {
-  Future<String> uploadFile(Session session, Stream<List<int>> fileStream, String fileName, String category);
-  Future<String> getFileUrl(Session session, String filePath);
-}
+```
+POST   /api/files/upload       → Upload file (multipart)
+GET    /api/files/:id/url      → Get file download URL
 ```
 
-### NotificationEndpoint (keep)
+### NotificationsController
 
-```dart
-class NotificationEndpoint extends Endpoint {
-  Future<List<AppNotification>> getNotifications(Session session);
-  Future<void> markAsRead(Session session, int notificationId);
-  Future<void> markAllAsRead(Session session);
-  Stream<AppNotification> streamNotifications(Session session);
-}
+```
+GET    /api/notifications      → List notifications
+PATCH  /api/notifications/:id/read → Mark as read
+PATCH  /api/notifications/read-all → Mark all as read
+WS     /ws/notifications       → Real-time notification stream
 ```
 
-### PaymentEndpoint (update)
+### PaymentsController
 
-Added `handlePaymentWebhook` for server-side payment verification and `initiateRefund` for cancellation refunds.
-
-```dart
-class PaymentEndpoint extends Endpoint {
-  Future<Order> confirmPayment(Session session, String orderId, String method);
-  Future<Order> markCodPaid(Session session, String orderId);
-  Future<void> handlePaymentWebhook(Session session, String provider, Map<String, dynamic> payload);
-  Future<PaymentTransaction> initiateRefund(Session session, String orderId);
-}
+```
+POST   /api/payments/intent    → Create payment intent (PayMongo)
+POST   /api/payments/cod       → Mark COD paid
+POST   /api/payments/webhook   → PayMongo webhook (no auth)
+POST   /api/payments/refund    → Initiate refund
 ```
 
 ---
@@ -1850,7 +1850,7 @@ CREATE INDEX idx_notifications_created ON notifications(created_at DESC);
 
 #### In Scope
 
-- **Authentication:** Email/password with session tokens via Serverpod auth module
+- **Authentication:** Email/password with JWT tokens via NestJS Passport.js
 - **Session storage:** Tokens stored in `flutter_secure_storage` (not plain Hive or SharedPreferences)
 - **Role-based access control:** Server-side endpoint guards enforce `customer`, `driver`, and `admin` separation -- no client-side-only role checks
 - **HTTPS:** All client-server communication over TLS
@@ -1875,22 +1875,32 @@ CREATE INDEX idx_notifications_created ON notifications(created_at DESC);
 
 ### 14.2 Server Configuration
 
-Existing Serverpod configuration with the following additions:
+NestJS environment configuration via `.env` file:
 
-```yaml
-# config/production.yaml (additions)
+```env
+# .env
+DATABASE_URL=postgresql://postgres:password@localhost:5432/grid_print
+JWT_SECRET=your-jwt-secret
+JWT_EXPIRATION=7d
 
-# Payment Webhooks
-payments:
-  gcash:
-    webhookSecret: ${GCASH_WEBHOOK_SECRET}
-  maya:
-    webhookSecret: ${MAYA_WEBHOOK_SECRET}
+# PayMongo
+PAYMONGO_SECRET_KEY=sk_test_xxx
+PAYMONGO_WEBHOOK_SECRET=whsec_xxx
+
+# S3 / MinIO
+S3_ENDPOINT=http://localhost:9000
+S3_BUCKET=grid-print-files
+S3_ACCESS_KEY=minioadmin
+S3_SECRET_KEY=minioadmin
+
+# FCM
+FIREBASE_SERVICE_ACCOUNT=./firebase-service-account.json
+
+# OSRM
+OSRM_BASE_URL=https://router.project-osrm.org
 
 # Location Tracking
-location:
-  updateIntervalSeconds: 10
-  maxStaleSeconds: 60
+LOCATION_UPDATE_INTERVAL_MS=10000
 ```
 
 ### 14.3 Client Configuration
@@ -1906,13 +1916,27 @@ const int locationUpdateIntervalMs = 10000;  // 10 seconds during active deliver
 
 ### 14.4 Deployment
 
-Existing deployment configuration applies. Additional production requirements:
+```
+Development:
+- Flutter app: `fvm flutter run`
+- NestJS server: `npm run start:dev` (auto-reload)
+- PostgreSQL + Redis + MinIO: `docker-compose up -d`
+
+Production:
+- NestJS on Docker (VPS) or cloud (Railway, Render, AWS ECS)
+- PostgreSQL managed instance (Supabase, Neon, AWS RDS)
+- Redis for caching and WebSocket scaling
+- S3/MinIO for file storage
+- nginx reverse proxy with SSL
+```
+
+Additional production requirements:
 
 - **SSL/TLS:** Reverse proxy via nginx or Caddy with Let's Encrypt auto-renewal
 - **Secrets management:** Environment variables via `.env` files (excluded from git via `.gitignore`) or a dedicated secrets manager
 - **Database backups:** PostgreSQL automated backups -- daily snapshots with 30-day retention
 - **Health monitoring:** Health check endpoint (`/health`) for uptime monitoring and alerting
-- **Error tracking:** Sentry integration for both Flutter client and Serverpod server -- crash reporting, performance monitoring, and breadcrumb trails
+- **Error tracking:** Sentry integration for both Flutter client and NestJS server -- crash reporting, performance monitoring, and breadcrumb trails
 
 ---
 
@@ -2026,36 +2050,38 @@ The MVP is successful when:
 - Local notification scheduling
 - Offline state indicators
 
-### Phase 3: Serverpod Backend Setup -- NOT STARTED
+### Phase 3: NestJS Backend Setup -- NOT STARTED
 
-> **Prerequisite:** Phases 1-2 completion (done). Next step: Serverpod backend scaffolding.
+> **Prerequisite:** Phases 1-2 completion (done). Next step: NestJS backend scaffolding.
 
 **Goal:** Stand up the server, define all models and endpoints, configure the database.
 
 **Deliverables:**
-- Serverpod project initialization and configuration
-- All data models defined as Serverpod serializable classes
+- NestJS project scaffolded with `@nestjs/cli`
+- TypeORM entities with migrations for all tables and indexes
 - PostgreSQL schema migration with all tables and indexes
-- Auth endpoints (register, login, logout)
+- JWT authentication with Passport.js (register, login, logout)
 - User profile endpoints
 - Order CRUD endpoints with status management
 - Address CRUD endpoints
-- File upload endpoint with cloud storage integration
-- Driver profile and delivery assignment models
+- File upload endpoint with S3/MinIO storage integration
+- Driver profile and delivery assignment entities
 - Driver endpoints (profile, assignments, status updates)
-- Location streaming endpoints
+- WebSocket Gateway for real-time updates (orders, location, notifications)
 - Order status history logging
 - Payment webhook endpoint with signature verification
 - Notification creation and delivery logic
 - Rate limiting middleware on auth and upload endpoints
 - Health check endpoint
-- WebSocket stream setup for real-time updates
+- @nestjs/schedule for task scheduling
+- OpenAPI/Swagger documentation auto-generated
+- MQTT transport configured for future IoT integration
 
 ### Phase 4: Client-Server Integration -- NOT STARTED
 
-> **Prerequisite:** Phases 1-2 completion (done). Next step: Serverpod backend scaffolding.
+> **Prerequisite:** Phases 1-3 completion. Next step: Connect Flutter to NestJS backend.
 
-**Goal:** Connect every Flutter screen to its corresponding Serverpod endpoint. Replace all mock data with live data.
+**Goal:** Connect every Flutter screen to its corresponding NestJS endpoint. Replace all mock data with live data.
 
 **Deliverables:**
 - Auth flow connected to server (register, login, session management)
@@ -2078,14 +2104,14 @@ The MVP is successful when:
 
 ### Phase 5: Polish & Production Readiness -- NOT STARTED
 
-> **Prerequisite:** Phases 1-2 completion (done). Next step: Serverpod backend scaffolding.
+> **Prerequisite:** Phases 1-4 completion.
 
 **Goal:** Harden the app for real-world use. Performance, security, and reliability.
 
 **Deliverables:**
 - SSL/TLS configuration via reverse proxy
 - PostgreSQL backup automation (daily, 30-day retention)
-- Sentry error tracking integration (Flutter + Serverpod)
+- Sentry error tracking integration (Flutter + NestJS)
 - Location tracking battery optimization (adaptive intervals)
 - Map style customization (greyscale OpenStreetMap tile styling to match design system)
 - WCAG accessibility audit and fixes
@@ -2126,7 +2152,10 @@ The MVP is successful when:
 - **CDN for File Storage** -- Move uploaded files behind a CDN for faster downloads and reduced server load
 - **Database Read Replicas** -- Horizontal scaling for read-heavy admin analytics queries
 - **WebSocket Connection Pooling** -- Optimize concurrent real-time connections for scale
-- **API Versioning** -- Version endpoints to support backward-compatible client updates
+- **IoT Kiosk Integration** -- NestJS MQTT transport for self-service printing kiosks. Kiosks publish print jobs via MQTT, subscribe to status updates.
+- **API Versioning** -- `/api/v1/` for mobile, `/api/v2/` for kiosk, `/api/v3/` for partner integrations.
+- **Microservice Extraction** -- Split monolith into independent services (orders, payments, notifications) when traffic warrants it.
+- **GraphQL API** -- Add @nestjs/graphql for partner integrations requiring flexible queries.
 
 ---
 
@@ -2134,9 +2163,10 @@ The MVP is successful when:
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| **Serverpod learning curve** | Slower initial development | Invest in Serverpod documentation study upfront; build proof-of-concept for streaming and auth before full development |
+| **NestJS + TypeScript learning curve** | Slower if team is Dart-only | NestJS has extensive documentation, large community, and similar patterns to Angular. TypeScript skills are transferable across web ecosystem |
 | **File upload size/reliability** | Failed uploads frustrate users | Chunked upload with resume capability; clear progress indicator; retry logic; client-side size validation before upload |
-| **Real-time sync complexity** | Stale data, race conditions | Serverpod's built-in streaming handles WebSocket lifecycle; optimistic UI updates with server reconciliation |
+| **Real-time sync complexity** | Stale data, race conditions | NestJS WebSocket Gateway handles WebSocket lifecycle; optimistic UI updates with server reconciliation |
+| **Language boundary (Dart ↔ TypeScript)** | Serialization mismatches between client/server models | Use OpenAPI/Swagger as the contract. Generate TypeScript types from Dart models or vice versa. API-first development with shared schema definitions |
 | **GCash/Maya integration** | Payment API instability or changes | Abstract payment behind interface; webhook verification with fallback to manual admin confirmation |
 | **Single admin bottleneck** | Orders pile up when admin is unavailable | Design admin UI for speed (bulk actions, keyboard shortcuts); post-MVP: auto-accept for repeat customers |
 | **Driver GPS battery drain** | Drivers avoid using the app | 10-second interval during active delivery only; stop tracking on arrive; background-optimized location provider |
@@ -2157,7 +2187,15 @@ The MVP is successful when:
 | Package | Purpose |
 |---------|---------|
 | [Flutter](https://flutter.dev/docs) | Cross-platform mobile framework |
-| [Serverpod](https://docs.serverpod.dev/) | Full-stack Dart backend framework |
+| [NestJS](https://docs.nestjs.com) | TypeScript backend framework |
+| [TypeORM](https://typeorm.io) | Database ORM for PostgreSQL |
+| [Passport.js](http://www.passportjs.org) | Authentication strategies |
+| [@nestjs/websockets](https://docs.nestjs.com/websockets/gateways) | Real-time WebSocket communication |
+| [@nestjs/microservices](https://docs.nestjs.com/microservices/basics) | MQTT transport for IoT |
+| [@nestjs/swagger](https://docs.nestjs.com/openapi/introduction) | Auto-generated API documentation |
+| [@nestjs/schedule](https://docs.nestjs.com/techniques/task-scheduling) | Cron jobs and task scheduling |
+| [class-validator](https://github.com/typestack/class-validator) | DTO validation |
+| [PayMongo API](https://developers.paymongo.com) | Philippine payment gateway |
 | [Riverpod](https://riverpod.dev/) | State management |
 | [Hive](https://docs.hivedb.dev/) | Local storage for drafts and offline data |
 | [GoRouter](https://pub.dev/packages/go_router) | Declarative routing |
@@ -2183,9 +2221,12 @@ The MVP is successful when:
 |-------------|---------|
 | Flutter SDK >= 3.19 | Mobile app development |
 | Dart SDK >= 3.3 | Language runtime |
-| Serverpod CLI | Backend code generation and deployment |
-| PostgreSQL >= 15 | Primary database |
-| Docker (optional) | Local development environment for server |
+| Node.js | >= 20.x (LTS) |
+| npm or pnpm | Package manager |
+| NestJS CLI | `npm i -g @nestjs/cli` |
+| PostgreSQL | 15+ |
+| Redis | 7+ (caching, WebSocket scaling) |
+| Docker | 20+ (for local services) |
 | GCash Developer Account | Payment integration |
 | Maya Developer Account | Payment integration |
 | Sentry DSN | Error tracking (production) |
