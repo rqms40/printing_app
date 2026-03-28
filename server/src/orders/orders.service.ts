@@ -2,11 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Order } from './entities/order.entity';
+import { OrdersGateway } from './orders.gateway';
 
 @Injectable()
 export class OrdersService {
   constructor(
     @InjectRepository(Order) private ordersRepo: Repository<Order>,
+    private ordersGateway: OrdersGateway,
   ) {}
 
   async findByUser(userId: number): Promise<Order[]> {
@@ -29,6 +31,8 @@ export class OrdersService {
 
   async updateStatus(id: number, status: string): Promise<Order> {
     await this.ordersRepo.update(id, { orderStatus: status as any });
-    return this.ordersRepo.findOneOrFail({ where: { id } });
+    const order = await this.ordersRepo.findOneOrFail({ where: { id } });
+    this.ordersGateway.notifyOrderUpdate(order.orderId, order);
+    return order;
   }
 }

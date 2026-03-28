@@ -6,6 +6,7 @@ import { DeliveryAssignment, DeliveryStatus } from './entities/delivery-assignme
 import { Order } from '../orders/entities/order.entity';
 import { UpdateDriverProfileDto } from './dto/update-profile.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
+import { LocationGateway } from './location.gateway';
 
 // Valid state transitions for delivery status
 const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
@@ -24,6 +25,7 @@ export class DriversService {
     @InjectRepository(DriverProfile) private profileRepo: Repository<DriverProfile>,
     @InjectRepository(DeliveryAssignment) private assignmentRepo: Repository<DeliveryAssignment>,
     @InjectRepository(Order) private orderRepo: Repository<Order>,
+    private locationGateway: LocationGateway,
   ) {}
 
   async getProfile(userId: number): Promise<DriverProfile> {
@@ -49,7 +51,23 @@ export class DriversService {
     profile.lastLatitude = dto.latitude;
     profile.lastLongitude = dto.longitude;
     profile.lastLocationUpdate = new Date();
-    return this.profileRepo.save(profile);
+    const saved = await this.profileRepo.save(profile);
+
+    // Broadcast location to all active delivery assignments
+    const activeAssignments = await this.assignmentRepo.find({
+      where: { driverId: profile.id },
+    });
+    for (const assignment of activeAssignments) {
+      if (![DeliveryStatus.DELIVERED, DeliveryStatus.DECLINED].includes(assignment.status)) {
+        this.locationGateway.broadcastLocation(String(assignment.id), {
+          latitude: dto.latitude,
+          longitude: dto.longitude,
+          timestamp: profile.lastLocationUpdate,
+        });
+      }
+    }
+
+    return saved;
   }
 
   async getAssignments(userId: number): Promise<DeliveryAssignment[]> {

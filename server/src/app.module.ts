@@ -8,6 +8,8 @@ import { AddressesModule } from './addresses/addresses.module';
 import { DriversModule } from './drivers/drivers.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { HealthModule } from './health/health.module';
+import { PaymentsModule } from './payments/payments.module';
+import { FilesModule } from './files/files.module';
 
 @Module({
   imports: [
@@ -37,6 +39,8 @@ import { HealthModule } from './health/health.module';
     DriversModule,
     NotificationsModule,
     HealthModule,
+    PaymentsModule,
+    FilesModule,
   ],
 })
 export class AppModule {}

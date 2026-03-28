@@ -5,11 +5,12 @@ import { DeliveryAssignment } from './entities/delivery-assignment.entity';
 import { Order } from '../orders/entities/order.entity';
 import { DriversService } from './drivers.service';
 import { DriversController } from './drivers.controller';
+import { LocationGateway } from './location.gateway';
 
 @Module({
   imports: [TypeOrmModule.forFeature([DriverProfile, DeliveryAssignment, Order])],
   controllers: [DriversController],
-  providers: [DriversService],
-  exports: [DriversService],
+  providers: [DriversService, LocationGateway],
+  exports: [DriversService, LocationGateway],
 })
 export class DriversModule {}

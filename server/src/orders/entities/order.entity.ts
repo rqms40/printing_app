@@ -1,5 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
+import { Address } from '../../addresses/entities/address.entity';
 
 export enum OrderStatus {
   ORDER_PLACED = 'order_placed',
@@ -67,6 +68,35 @@ export class Order {
 
   @Column({ name: 'estimated_completion_at', type: 'timestamp', nullable: true })
   estimatedCompletionAt: Date;
+
+  @Column({ name: 'decline_reason', nullable: true, type: 'text' })
+  declineReason: string;
+
+  @Column({ name: 'cancellation_reason', nullable: true, type: 'text' })
+  cancellationReason: string;
+
+  @Column({ name: 'cancelled_at', type: 'timestamp', nullable: true })
+  cancelledAt: Date;
+
+  @Column({ name: 'delivery_address_id', nullable: true })
+  deliveryAddressId: number;
+
+  @ManyToOne(() => Address)
+  @JoinColumn({ name: 'delivery_address_id' })
+  deliveryAddress: Address;
+
+  @Column({ name: 'assigned_driver_id', nullable: true })
+  assignedDriverId: number;
+
+  @ManyToOne(() => User)
+  @JoinColumn({ name: 'assigned_driver_id' })
+  assignedDriver: User;
+
+  @Column({ name: 'admin_notes', nullable: true, type: 'text' })
+  adminNotes: string;
+
+  @Column({ name: 'tracking_link', nullable: true, type: 'text' })
+  trackingLink: string;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
