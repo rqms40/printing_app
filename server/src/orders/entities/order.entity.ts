@@ -1,4 +1,13 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Index,
+} from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { Address } from '../../addresses/entities/address.entity';
 
@@ -51,7 +60,13 @@ export class Order {
   @Column({ name: 'total_price', type: 'decimal', precision: 10, scale: 2 })
   totalPrice: number;
 
-  @Column({ name: 'delivery_fee', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({
+    name: 'delivery_fee',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    default: 0,
+  })
   deliveryFee: number;
 
   @Column({ name: 'payment_method' })
@@ -60,13 +75,22 @@ export class Order {
   @Column({ name: 'payment_status', default: 'pending' })
   paymentStatus: string;
 
-  @Column({ name: 'order_status', type: 'enum', enum: OrderStatus, default: OrderStatus.ORDER_PLACED })
+  @Column({
+    name: 'order_status',
+    type: 'enum',
+    enum: OrderStatus,
+    default: OrderStatus.ORDER_PLACED,
+  })
   orderStatus: OrderStatus;
 
   @Column({ name: 'delivery_option', default: 'pickup' })
   deliveryOption: string;
 
-  @Column({ name: 'estimated_completion_at', type: 'timestamp', nullable: true })
+  @Column({
+    name: 'estimated_completion_at',
+    type: 'timestamp',
+    nullable: true,
+  })
   estimatedCompletionAt: Date;
 
   @Column({ name: 'decline_reason', nullable: true, type: 'text' })

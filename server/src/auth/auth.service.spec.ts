@@ -41,9 +41,15 @@ describe('AuthService', () => {
     it('should create user and return JWT token', async () => {
       (usersService.create as jest.Mock).mockResolvedValue(mockUser);
 
-      const result = await authService.register('test@example.com', 'password123');
+      const result = await authService.register(
+        'test@example.com',
+        'password123',
+      );
 
-      expect(usersService.create).toHaveBeenCalledWith('test@example.com', 'password123');
+      expect(usersService.create).toHaveBeenCalledWith(
+        'test@example.com',
+        'password123',
+      );
       expect(result.access_token).toBe('mock-jwt-token');
       expect(result.user).not.toHaveProperty('passwordHash');
       expect(result.user).toHaveProperty('email', 'test@example.com');
@@ -59,9 +65,9 @@ describe('AuthService', () => {
         new ConflictException('Email already registered'),
       );
 
-      await expect(authService.register('test@example.com', 'password123')).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(
+        authService.register('test@example.com', 'password123'),
+      ).rejects.toThrow(ConflictException);
     });
   });
 
@@ -83,17 +89,17 @@ describe('AuthService', () => {
       const userWithHash = { ...mockUser, passwordHash: hashedPassword };
       (usersService.findByEmail as jest.Mock).mockResolvedValue(userWithHash);
 
-      await expect(authService.login('test@example.com', 'wrong-password')).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        authService.login('test@example.com', 'wrong-password'),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('should throw UnauthorizedException for nonexistent email', async () => {
       (usersService.findByEmail as jest.Mock).mockResolvedValue(null);
 
-      await expect(authService.login('nobody@example.com', 'password123')).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        authService.login('nobody@example.com', 'password123'),
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 });

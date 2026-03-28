@@ -3,8 +3,29 @@ import { AppModule } from './app.module';
 import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 
+interface CountRow {
+  count: string;
+}
+
+interface IdRow {
+  id: number;
+}
+
+interface OrderRow {
+  id: number;
+  order_id: string;
+}
+
+function typedQuery<T>(
+  ds: DataSource,
+  sql: string,
+  params?: unknown[],
+): Promise<T[]> {
+  return ds.query(sql, params);
+}
+
 /**
- * Database seed script — creates demo data for all 3 roles.
+ * Database seed script -- creates demo data for all 3 roles.
  *
  * Run: npx ts-node -r tsconfig-paths/register src/seed.ts
  * Or:  npm run seed
@@ -16,7 +37,10 @@ async function seed() {
   console.log('🌱 Seeding GRID database...\n');
 
   // Check if database already has data
-  const [existingUsers] = await ds.query('SELECT count(*) FROM users');
+  const [existingUsers] = await typedQuery<CountRow>(
+    ds,
+    'SELECT count(*) FROM users',
+  );
   if (parseInt(existingUsers.count) > 0) {
     console.log('⚠️  Database already has data. Running full reset...');
   }
@@ -87,16 +111,31 @@ async function seed() {
     await ds.query(
       `INSERT INTO users (email, password_hash, full_name, phone_number, gender, role, is_profile_complete, is_active)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [u.email, u.password_hash, u.full_name, u.phone_number, u.gender, u.role, u.is_profile_complete, u.is_active],
+      [
+        u.email,
+        u.password_hash,
+        u.full_name,
+        u.phone_number,
+        u.gender,
+        u.role,
+        u.is_profile_complete,
+        u.is_active,
+      ],
     );
   }
   console.log('✅ 3 users created (maria/customer, juan/driver, admin)');
 
   // Get user IDs
-  const [maria] = await ds.query("SELECT id FROM users WHERE email = 'maria@gridprint.ph'");
-  const [juan] = await ds.query("SELECT id FROM users WHERE email = 'juan@gridprint.ph'");
-  const mariaId = maria.id;
-  const juanId = juan.id;
+  const [maria] = await typedQuery<IdRow>(
+    ds,
+    "SELECT id FROM users WHERE email = 'maria@gridprint.ph'",
+  );
+  const [juan] = await typedQuery<IdRow>(
+    ds,
+    "SELECT id FROM users WHERE email = 'juan@gridprint.ph'",
+  );
+  const mariaId: number = maria.id;
+  const juanId: number = juan.id;
 
   // ─── Addresses ──────────────────────────────────────────────────────
   const addresses = [
@@ -122,8 +161,8 @@ async function seed() {
       province: 'Metro Manila',
       zip_code: '1108',
       landmark: 'Beside Ateneo gate',
-      latitude: 14.6400,
-      longitude: 121.0530,
+      latitude: 14.64,
+      longitude: 121.053,
       is_default: false,
     },
   ];
@@ -132,7 +171,19 @@ async function seed() {
     await ds.query(
       `INSERT INTO addresses (user_id, label, full_address, barangay, city, province, zip_code, landmark, latitude, longitude, is_default)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-      [a.user_id, a.label, a.full_address, a.barangay, a.city, a.province, a.zip_code, a.landmark, a.latitude, a.longitude, a.is_default],
+      [
+        a.user_id,
+        a.label,
+        a.full_address,
+        a.barangay,
+        a.city,
+        a.province,
+        a.zip_code,
+        a.landmark,
+        a.latitude,
+        a.longitude,
+        a.is_default,
+      ],
     );
   }
   console.log('✅ 2 addresses created for Maria');
@@ -147,28 +198,105 @@ async function seed() {
 
   // ─── Orders ─────────────────────────────────────────────────────────
   const orders = [
-    { order_id: 'ORD-10001', category: 'paper', quantity: 2, total_price: 120, delivery_fee: 50, payment_method: 'gcash', payment_status: 'paid', order_status: 'order_placed', delivery_option: 'delivery' },
-    { order_id: 'ORD-10002', category: 'paper', quantity: 1, total_price: 80, delivery_fee: 0, payment_method: 'maya', payment_status: 'paid', order_status: 'printing_in_progress', delivery_option: 'pickup' },
-    { order_id: 'ORD-10003', category: '3d', quantity: 1, total_price: 350, delivery_fee: 50, payment_method: 'cod', payment_status: 'pending', order_status: 'quality_checked', delivery_option: 'delivery' },
-    { order_id: 'ORD-10004', category: 'paper', quantity: 5, total_price: 250, delivery_fee: 50, payment_method: 'gcash', payment_status: 'paid', order_status: 'on_the_way', delivery_option: 'delivery' },
-    { order_id: 'ORD-10005', category: 'paper', quantity: 1, total_price: 45, delivery_fee: 0, payment_method: 'maya', payment_status: 'paid', order_status: 'delivered', delivery_option: 'pickup' },
-    { order_id: 'ORD-10006', category: '3d', quantity: 2, total_price: 580, delivery_fee: 50, payment_method: 'gcash', payment_status: 'refunded', order_status: 'cancelled', delivery_option: 'delivery' },
+    {
+      order_id: 'ORD-10001',
+      category: 'paper',
+      quantity: 2,
+      total_price: 120,
+      delivery_fee: 50,
+      payment_method: 'gcash',
+      payment_status: 'paid',
+      order_status: 'order_placed',
+      delivery_option: 'delivery',
+    },
+    {
+      order_id: 'ORD-10002',
+      category: 'paper',
+      quantity: 1,
+      total_price: 80,
+      delivery_fee: 0,
+      payment_method: 'maya',
+      payment_status: 'paid',
+      order_status: 'printing_in_progress',
+      delivery_option: 'pickup',
+    },
+    {
+      order_id: 'ORD-10003',
+      category: '3d',
+      quantity: 1,
+      total_price: 350,
+      delivery_fee: 50,
+      payment_method: 'cod',
+      payment_status: 'pending',
+      order_status: 'quality_checked',
+      delivery_option: 'delivery',
+    },
+    {
+      order_id: 'ORD-10004',
+      category: 'paper',
+      quantity: 5,
+      total_price: 250,
+      delivery_fee: 50,
+      payment_method: 'gcash',
+      payment_status: 'paid',
+      order_status: 'on_the_way',
+      delivery_option: 'delivery',
+    },
+    {
+      order_id: 'ORD-10005',
+      category: 'paper',
+      quantity: 1,
+      total_price: 45,
+      delivery_fee: 0,
+      payment_method: 'maya',
+      payment_status: 'paid',
+      order_status: 'delivered',
+      delivery_option: 'pickup',
+    },
+    {
+      order_id: 'ORD-10006',
+      category: '3d',
+      quantity: 2,
+      total_price: 580,
+      delivery_fee: 50,
+      payment_method: 'gcash',
+      payment_status: 'refunded',
+      order_status: 'cancelled',
+      delivery_option: 'delivery',
+    },
   ];
 
   for (const o of orders) {
     await ds.query(
       `INSERT INTO orders (order_id, user_id, category, quantity, total_price, delivery_fee, payment_method, payment_status, order_status, delivery_option, file_name)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-      [o.order_id, mariaId, o.category, o.quantity, o.total_price, o.delivery_fee, o.payment_method, o.payment_status, o.order_status, o.delivery_option, `${o.category === 'paper' ? 'document' : 'model'}_${o.order_id.slice(-3)}.${o.category === 'paper' ? 'pdf' : 'stl'}`],
+      [
+        o.order_id,
+        mariaId,
+        o.category,
+        o.quantity,
+        o.total_price,
+        o.delivery_fee,
+        o.payment_method,
+        o.payment_status,
+        o.order_status,
+        o.delivery_option,
+        `${o.category === 'paper' ? 'document' : 'model'}_${o.order_id.slice(-3)}.${o.category === 'paper' ? 'pdf' : 'stl'}`,
+      ],
     );
   }
   console.log('✅ 6 orders created for Maria (various statuses)');
 
   // Get order IDs
-  const orderRows = await ds.query("SELECT id, order_id FROM orders ORDER BY id");
+  const orderRows = await typedQuery<OrderRow>(
+    ds,
+    'SELECT id, order_id FROM orders ORDER BY id',
+  );
 
   // ─── Paper Specs ────────────────────────────────────────────────────
-  const paperOrderIds = orderRows.filter((r: any) => ['ORD-10001', 'ORD-10002', 'ORD-10004', 'ORD-10005'].includes(r.order_id));
+  const paperOrderIds: OrderRow[] = orderRows.filter((r: OrderRow) =>
+    ['ORD-10001', 'ORD-10002', 'ORD-10004', 'ORD-10005'].includes(r.order_id),
+  );
   for (const o of paperOrderIds) {
     await ds.query(
       `INSERT INTO paper_specs (order_id, paper_size, color_mode, media_type, print_sides, binding)
@@ -179,7 +307,9 @@ async function seed() {
   console.log('✅ Paper specs added to 4 orders');
 
   // ─── 3D Specs ───────────────────────────────────────────────────────
-  const threeDOrderIds = orderRows.filter((r: any) => ['ORD-10003', 'ORD-10006'].includes(r.order_id));
+  const threeDOrderIds: OrderRow[] = orderRows.filter((r: OrderRow) =>
+    ['ORD-10003', 'ORD-10006'].includes(r.order_id),
+  );
   for (const o of threeDOrderIds) {
     await ds.query(
       `INSERT INTO three_d_specs (order_id, file_format, material, color, infill_percentage, layer_height, supports)
@@ -191,10 +321,16 @@ async function seed() {
 
   // ─── Delivery Assignment ────────────────────────────────────────────
   // Get driver profile ID (FK references driver_profiles, not users)
-  const [driverProfile] = await ds.query("SELECT id FROM driver_profiles WHERE user_id = $1", [juanId]);
-  const driverProfileId = driverProfile.id;
+  const [driverProfile] = await typedQuery<IdRow>(
+    ds,
+    'SELECT id FROM driver_profiles WHERE user_id = $1',
+    [juanId],
+  );
+  const driverProfileId: number = driverProfile.id;
 
-  const onTheWayOrder = orderRows.find((r: any) => r.order_id === 'ORD-10004');
+  const onTheWayOrder: OrderRow | undefined = orderRows.find(
+    (r: OrderRow) => r.order_id === 'ORD-10004',
+  );
   if (onTheWayOrder) {
     await ds.query(
       `INSERT INTO delivery_assignments (order_id, driver_id, status, accepted_at, picked_up_at, on_the_way_at)
@@ -202,19 +338,73 @@ async function seed() {
       [onTheWayOrder.id, driverProfileId, 'on_the_way'],
     );
     // Update order with assigned driver
-    await ds.query('UPDATE orders SET assigned_driver_id = $1 WHERE id = $2', [juanId, onTheWayOrder.id]);
-    console.log('✅ Delivery assignment created (ORD-10004 → Juan, on_the_way)');
+    await ds.query('UPDATE orders SET assigned_driver_id = $1 WHERE id = $2', [
+      juanId,
+      onTheWayOrder.id,
+    ]);
+    console.log(
+      '✅ Delivery assignment created (ORD-10004 → Juan, on_the_way)',
+    );
   }
 
   // ─── Notifications ──────────────────────────────────────────────────
   const notifications = [
-    { user_id: mariaId, order_ref: 'ORD-10001', title: 'Order Placed', message: 'Your order ORD-10001 has been placed successfully.', type: 'order_update', is_read: false },
-    { user_id: mariaId, order_ref: 'ORD-10002', title: 'Printing Started', message: 'Your order ORD-10002 is now being printed.', type: 'order_update', is_read: false },
-    { user_id: mariaId, order_ref: 'ORD-10004', title: 'Driver On The Way', message: 'Juan is delivering your order ORD-10004.', type: 'delivery_update', is_read: false },
-    { user_id: mariaId, order_ref: 'ORD-10005', title: 'Order Completed', message: 'Your order ORD-10005 has been picked up. Thank you!', type: 'order_update', is_read: true },
-    { user_id: mariaId, order_ref: 'ORD-10006', title: 'Refund Processed', message: 'Your refund for ORD-10006 has been processed.', type: 'payment', is_read: true },
-    { user_id: mariaId, order_ref: null, title: 'Welcome to GRID!', message: 'Start your first order and enjoy premium printing.', type: 'promo', is_read: true },
-    { user_id: juanId, order_ref: 'ORD-10004', title: 'New Delivery', message: 'You have been assigned to deliver ORD-10004.', type: 'delivery_assignment', is_read: true },
+    {
+      user_id: mariaId,
+      order_ref: 'ORD-10001' as string | null,
+      title: 'Order Placed',
+      message: 'Your order ORD-10001 has been placed successfully.',
+      type: 'order_update',
+      is_read: false,
+    },
+    {
+      user_id: mariaId,
+      order_ref: 'ORD-10002' as string | null,
+      title: 'Printing Started',
+      message: 'Your order ORD-10002 is now being printed.',
+      type: 'order_update',
+      is_read: false,
+    },
+    {
+      user_id: mariaId,
+      order_ref: 'ORD-10004' as string | null,
+      title: 'Driver On The Way',
+      message: 'Juan is delivering your order ORD-10004.',
+      type: 'delivery_update',
+      is_read: false,
+    },
+    {
+      user_id: mariaId,
+      order_ref: 'ORD-10005' as string | null,
+      title: 'Order Completed',
+      message: 'Your order ORD-10005 has been picked up. Thank you!',
+      type: 'order_update',
+      is_read: true,
+    },
+    {
+      user_id: mariaId,
+      order_ref: 'ORD-10006' as string | null,
+      title: 'Refund Processed',
+      message: 'Your refund for ORD-10006 has been processed.',
+      type: 'payment',
+      is_read: true,
+    },
+    {
+      user_id: mariaId,
+      order_ref: null as string | null,
+      title: 'Welcome to GRID!',
+      message: 'Start your first order and enjoy premium printing.',
+      type: 'promo',
+      is_read: true,
+    },
+    {
+      user_id: juanId,
+      order_ref: 'ORD-10004' as string | null,
+      title: 'New Delivery',
+      message: 'You have been assigned to deliver ORD-10004.',
+      type: 'delivery_assignment',
+      is_read: true,
+    },
   ];
 
   for (const n of notifications) {
@@ -227,7 +417,9 @@ async function seed() {
   console.log('✅ 7 notifications created');
 
   // ─── Payment Transactions ───────────────────────────────────────────
-  const paidOrders = orderRows.filter((r: any) => ['ORD-10001', 'ORD-10002', 'ORD-10004', 'ORD-10005'].includes(r.order_id));
+  const paidOrders: OrderRow[] = orderRows.filter((r: OrderRow) =>
+    ['ORD-10001', 'ORD-10002', 'ORD-10004', 'ORD-10005'].includes(r.order_id),
+  );
   for (const o of paidOrders) {
     await ds.query(
       `INSERT INTO payment_transactions (order_id, payment_method, amount, status)

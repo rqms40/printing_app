@@ -10,7 +10,7 @@ export class CreatePaymentIntentDto {
   @IsString()
   paymentMethod: string;
 
-  @ApiProperty({ example: 250.00 })
+  @ApiProperty({ example: 250.0 })
   @IsNumber()
   @Min(1)
   amount: number;

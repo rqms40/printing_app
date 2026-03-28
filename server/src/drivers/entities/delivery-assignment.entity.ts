@@ -1,4 +1,13 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Index,
+} from 'typeorm';
 import { DriverProfile } from './driver-profile.entity';
 import { Order } from '../../orders/entities/order.entity';
 
@@ -34,7 +43,11 @@ export class DeliveryAssignment {
   @JoinColumn({ name: 'driver_id' })
   driver: DriverProfile;
 
-  @Column({ type: 'enum', enum: DeliveryStatus, default: DeliveryStatus.ASSIGNED })
+  @Column({
+    type: 'enum',
+    enum: DeliveryStatus,
+    default: DeliveryStatus.ASSIGNED,
+  })
   status: DeliveryStatus;
 
   @Column({ name: 'assigned_at', type: 'timestamp', default: () => 'NOW()' })

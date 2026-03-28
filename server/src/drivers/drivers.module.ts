@@ -8,7 +8,9 @@ import { DriversController } from './drivers.controller';
 import { LocationGateway } from './location.gateway';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([DriverProfile, DeliveryAssignment, Order])],
+  imports: [
+    TypeOrmModule.forFeature([DriverProfile, DeliveryAssignment, Order]),
+  ],
   controllers: [DriversController],
   providers: [DriversService, LocationGateway],
   exports: [DriversService, LocationGateway],

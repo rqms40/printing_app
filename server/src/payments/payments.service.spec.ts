@@ -49,14 +49,19 @@ describe('PaymentsService', () => {
         status: 'pending',
       });
       expect(result.transaction).toEqual(mockTxn);
-      expect(result.checkoutUrl).toContain('https://checkout.paymongo.com/mock/');
+      expect(result.checkoutUrl).toContain(
+        'https://checkout.paymongo.com/mock/',
+      );
       expect(result.checkoutUrl).toContain(String(mockTxn.id));
     });
   });
 
   describe('confirmPayment', () => {
     it('should mark transaction as success when pending', async () => {
-      const pendingTxn = { ...mockTxn, status: 'pending' } as PaymentTransaction;
+      const pendingTxn = {
+        ...mockTxn,
+        status: 'pending',
+      } as PaymentTransaction;
       txnRepo.findOne.mockResolvedValue(pendingTxn);
       txnRepo.save.mockImplementation(async (t) => t as PaymentTransaction);
 
@@ -68,20 +73,30 @@ describe('PaymentsService', () => {
     it('should throw NotFoundException if transaction not found', async () => {
       txnRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.confirmPayment(999)).rejects.toThrow(NotFoundException);
+      await expect(service.confirmPayment(999)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should throw BadRequestException if transaction is not pending', async () => {
-      const successTxn = { ...mockTxn, status: 'success' } as PaymentTransaction;
+      const successTxn = {
+        ...mockTxn,
+        status: 'success',
+      } as PaymentTransaction;
       txnRepo.findOne.mockResolvedValue(successTxn);
 
-      await expect(service.confirmPayment(1)).rejects.toThrow(BadRequestException);
+      await expect(service.confirmPayment(1)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 
   describe('initiateRefund', () => {
     it('should mark successful transaction as refunded', async () => {
-      const successTxn = { ...mockTxn, status: 'success' } as PaymentTransaction;
+      const successTxn = {
+        ...mockTxn,
+        status: 'success',
+      } as PaymentTransaction;
       txnRepo.findOne.mockResolvedValue(successTxn);
       txnRepo.save.mockImplementation(async (t) => t as PaymentTransaction);
 
@@ -93,14 +108,21 @@ describe('PaymentsService', () => {
     it('should throw NotFoundException if transaction not found', async () => {
       txnRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.initiateRefund(999)).rejects.toThrow(NotFoundException);
+      await expect(service.initiateRefund(999)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should throw BadRequestException if transaction is not successful', async () => {
-      const pendingTxn = { ...mockTxn, status: 'pending' } as PaymentTransaction;
+      const pendingTxn = {
+        ...mockTxn,
+        status: 'pending',
+      } as PaymentTransaction;
       txnRepo.findOne.mockResolvedValue(pendingTxn);
 
-      await expect(service.initiateRefund(1)).rejects.toThrow(BadRequestException);
+      await expect(service.initiateRefund(1)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 });

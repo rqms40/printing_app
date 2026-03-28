@@ -1,4 +1,10 @@
-import { WebSocketGateway, WebSocketServer, SubscribeMessage, MessageBody, ConnectedSocket } from '@nestjs/websockets';
+import {
+  WebSocketGateway,
+  WebSocketServer,
+  SubscribeMessage,
+  MessageBody,
+  ConnectedSocket,
+} from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 
 @WebSocketGateway({ namespace: '/ws/location', cors: { origin: '*' } })
@@ -7,19 +13,28 @@ export class LocationGateway {
   server: Server;
 
   @SubscribeMessage('subscribe')
-  handleSubscribe(@MessageBody() assignmentId: string, @ConnectedSocket() client: Socket) {
-    client.join(`delivery_${assignmentId}`);
+  handleSubscribe(
+    @MessageBody() assignmentId: string,
+    @ConnectedSocket() socket: Socket,
+  ) {
+    void socket.join(`delivery_${assignmentId}`);
     return { event: 'subscribed', data: { assignmentId } };
   }
 
   @SubscribeMessage('updateLocation')
   handleLocationUpdate(
-    @MessageBody() data: { assignmentId: string; latitude: number; longitude: number },
-    @ConnectedSocket() client: Socket,
+    @MessageBody()
+    data: { assignmentId: string; latitude: number; longitude: number },
+    @ConnectedSocket() _client: Socket,
   ) {
     // Broadcast to customers watching this delivery
-    this.server.to(`delivery_${data.assignmentId}`).emit('locationUpdate', data);
-    return { event: 'locationBroadcasted', data: { assignmentId: data.assignmentId } };
+    this.server
+      .to(`delivery_${data.assignmentId}`)
+      .emit('locationUpdate', data);
+    return {
+      event: 'locationBroadcasted',
+      data: { assignmentId: data.assignmentId },
+    };
   }
 
   // Called by DriversService when driver sends GPS update

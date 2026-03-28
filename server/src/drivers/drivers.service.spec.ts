@@ -4,7 +4,10 @@ import { Repository } from 'typeorm';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { DriversService } from './drivers.service';
 import { DriverProfile } from './entities/driver-profile.entity';
-import { DeliveryAssignment, DeliveryStatus } from './entities/delivery-assignment.entity';
+import {
+  DeliveryAssignment,
+  DeliveryStatus,
+} from './entities/delivery-assignment.entity';
 import { Order } from '../orders/entities/order.entity';
 import { LocationGateway } from './location.gateway';
 
@@ -54,7 +57,10 @@ describe('DriversService', () => {
       providers: [
         DriversService,
         { provide: getRepositoryToken(DriverProfile), useValue: profileRepo },
-        { provide: getRepositoryToken(DeliveryAssignment), useValue: assignmentRepo },
+        {
+          provide: getRepositoryToken(DeliveryAssignment),
+          useValue: assignmentRepo,
+        },
         { provide: getRepositoryToken(Order), useValue: orderRepo },
         { provide: LocationGateway, useValue: locationGateway },
       ],
@@ -69,7 +75,9 @@ describe('DriversService', () => {
 
       const result = await service.getProfile(1);
 
-      expect(profileRepo.findOne).toHaveBeenCalledWith({ where: { userId: 1 } });
+      expect(profileRepo.findOne).toHaveBeenCalledWith({
+        where: { userId: 1 },
+      });
       expect(result).toEqual(mockProfile);
     });
 
@@ -82,7 +90,10 @@ describe('DriversService', () => {
 
   describe('setAvailability', () => {
     it('should toggle driver to online', async () => {
-      profileRepo.findOne.mockResolvedValue({ ...mockProfile, isAvailable: false } as DriverProfile);
+      profileRepo.findOne.mockResolvedValue({
+        ...mockProfile,
+        isAvailable: false,
+      } as DriverProfile);
       profileRepo.save.mockImplementation(async (p) => p as DriverProfile);
 
       const result = await service.setAvailability(1, true);
@@ -92,7 +103,10 @@ describe('DriversService', () => {
     });
 
     it('should toggle driver to offline', async () => {
-      profileRepo.findOne.mockResolvedValue({ ...mockProfile, isAvailable: true } as DriverProfile);
+      profileRepo.findOne.mockResolvedValue({
+        ...mockProfile,
+        isAvailable: true,
+      } as DriverProfile);
       profileRepo.save.mockImplementation(async (p) => p as DriverProfile);
 
       const result = await service.setAvailability(1, false);
@@ -104,10 +118,18 @@ describe('DriversService', () => {
   describe('updateDeliveryStatus', () => {
     it('should transition from ASSIGNED to ACCEPTED', async () => {
       profileRepo.findOne.mockResolvedValue(mockProfile);
-      assignmentRepo.findOne.mockResolvedValue({ ...mockAssignment } as DeliveryAssignment);
-      assignmentRepo.save.mockImplementation(async (a) => a as DeliveryAssignment);
+      assignmentRepo.findOne.mockResolvedValue({
+        ...mockAssignment,
+      } as DeliveryAssignment);
+      assignmentRepo.save.mockImplementation(
+        async (a) => a as DeliveryAssignment,
+      );
 
-      const result = await service.updateDeliveryStatus(1, 100, DeliveryStatus.ACCEPTED);
+      const result = await service.updateDeliveryStatus(
+        1,
+        100,
+        DeliveryStatus.ACCEPTED,
+      );
 
       expect(result.status).toBe(DeliveryStatus.ACCEPTED);
       expect(result.acceptedAt).toBeDefined();
@@ -115,11 +137,18 @@ describe('DriversService', () => {
 
     it('should transition from ASSIGNED to DECLINED', async () => {
       profileRepo.findOne.mockResolvedValue(mockProfile);
-      assignmentRepo.findOne.mockResolvedValue({ ...mockAssignment } as DeliveryAssignment);
-      assignmentRepo.save.mockImplementation(async (a) => a as DeliveryAssignment);
+      assignmentRepo.findOne.mockResolvedValue({
+        ...mockAssignment,
+      } as DeliveryAssignment);
+      assignmentRepo.save.mockImplementation(
+        async (a) => a as DeliveryAssignment,
+      );
 
       const result = await service.updateDeliveryStatus(
-        1, 100, DeliveryStatus.DECLINED, 'Too far',
+        1,
+        100,
+        DeliveryStatus.DECLINED,
+        'Too far',
       );
 
       expect(result.status).toBe(DeliveryStatus.DECLINED);
@@ -128,7 +157,9 @@ describe('DriversService', () => {
 
     it('should throw BadRequestException on invalid transition ASSIGNED -> DELIVERED', async () => {
       profileRepo.findOne.mockResolvedValue(mockProfile);
-      assignmentRepo.findOne.mockResolvedValue({ ...mockAssignment } as DeliveryAssignment);
+      assignmentRepo.findOne.mockResolvedValue({
+        ...mockAssignment,
+      } as DeliveryAssignment);
 
       await expect(
         service.updateDeliveryStatus(1, 100, DeliveryStatus.DELIVERED),
@@ -150,36 +181,73 @@ describe('DriversService', () => {
 
     it('should follow full valid transition chain', async () => {
       profileRepo.findOne.mockResolvedValue(mockProfile);
-      assignmentRepo.save.mockImplementation(async (a) => a as DeliveryAssignment);
+      assignmentRepo.save.mockImplementation(
+        async (a) => a as DeliveryAssignment,
+      );
 
       // ASSIGNED -> ACCEPTED
-      const assigned = { ...mockAssignment, status: DeliveryStatus.ASSIGNED } as DeliveryAssignment;
+      const assigned = {
+        ...mockAssignment,
+        status: DeliveryStatus.ASSIGNED,
+      } as DeliveryAssignment;
       assignmentRepo.findOne.mockResolvedValue(assigned);
-      const accepted = await service.updateDeliveryStatus(1, 100, DeliveryStatus.ACCEPTED);
+      const accepted = await service.updateDeliveryStatus(
+        1,
+        100,
+        DeliveryStatus.ACCEPTED,
+      );
       expect(accepted.status).toBe(DeliveryStatus.ACCEPTED);
 
       // ACCEPTED -> PICKED_UP
-      const acceptedAssignment = { ...mockAssignment, status: DeliveryStatus.ACCEPTED } as DeliveryAssignment;
+      const acceptedAssignment = {
+        ...mockAssignment,
+        status: DeliveryStatus.ACCEPTED,
+      } as DeliveryAssignment;
       assignmentRepo.findOne.mockResolvedValue(acceptedAssignment);
-      const pickedUp = await service.updateDeliveryStatus(1, 100, DeliveryStatus.PICKED_UP);
+      const pickedUp = await service.updateDeliveryStatus(
+        1,
+        100,
+        DeliveryStatus.PICKED_UP,
+      );
       expect(pickedUp.status).toBe(DeliveryStatus.PICKED_UP);
 
       // PICKED_UP -> ON_THE_WAY
-      const pickedUpAssignment = { ...mockAssignment, status: DeliveryStatus.PICKED_UP } as DeliveryAssignment;
+      const pickedUpAssignment = {
+        ...mockAssignment,
+        status: DeliveryStatus.PICKED_UP,
+      } as DeliveryAssignment;
       assignmentRepo.findOne.mockResolvedValue(pickedUpAssignment);
-      const otw = await service.updateDeliveryStatus(1, 100, DeliveryStatus.ON_THE_WAY);
+      const otw = await service.updateDeliveryStatus(
+        1,
+        100,
+        DeliveryStatus.ON_THE_WAY,
+      );
       expect(otw.status).toBe(DeliveryStatus.ON_THE_WAY);
 
       // ON_THE_WAY -> ARRIVED
-      const otwAssignment = { ...mockAssignment, status: DeliveryStatus.ON_THE_WAY } as DeliveryAssignment;
+      const otwAssignment = {
+        ...mockAssignment,
+        status: DeliveryStatus.ON_THE_WAY,
+      } as DeliveryAssignment;
       assignmentRepo.findOne.mockResolvedValue(otwAssignment);
-      const arrived = await service.updateDeliveryStatus(1, 100, DeliveryStatus.ARRIVED);
+      const arrived = await service.updateDeliveryStatus(
+        1,
+        100,
+        DeliveryStatus.ARRIVED,
+      );
       expect(arrived.status).toBe(DeliveryStatus.ARRIVED);
 
       // ARRIVED -> DELIVERED
-      const arrivedAssignment = { ...mockAssignment, status: DeliveryStatus.ARRIVED } as DeliveryAssignment;
+      const arrivedAssignment = {
+        ...mockAssignment,
+        status: DeliveryStatus.ARRIVED,
+      } as DeliveryAssignment;
       assignmentRepo.findOne.mockResolvedValue(arrivedAssignment);
-      const delivered = await service.updateDeliveryStatus(1, 100, DeliveryStatus.DELIVERED);
+      const delivered = await service.updateDeliveryStatus(
+        1,
+        100,
+        DeliveryStatus.DELIVERED,
+      );
       expect(delivered.status).toBe(DeliveryStatus.DELIVERED);
       expect(delivered.deliveredAt).toBeDefined();
     });

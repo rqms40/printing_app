@@ -1,8 +1,15 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DriverProfile } from './entities/driver-profile.entity';
-import { DeliveryAssignment, DeliveryStatus } from './entities/delivery-assignment.entity';
+import {
+  DeliveryAssignment,
+  DeliveryStatus,
+} from './entities/delivery-assignment.entity';
 import { Order } from '../orders/entities/order.entity';
 import { UpdateDriverProfileDto } from './dto/update-profile.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
@@ -22,8 +29,10 @@ const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
 @Injectable()
 export class DriversService {
   constructor(
-    @InjectRepository(DriverProfile) private profileRepo: Repository<DriverProfile>,
-    @InjectRepository(DeliveryAssignment) private assignmentRepo: Repository<DeliveryAssignment>,
+    @InjectRepository(DriverProfile)
+    private profileRepo: Repository<DriverProfile>,
+    @InjectRepository(DeliveryAssignment)
+    private assignmentRepo: Repository<DeliveryAssignment>,
     @InjectRepository(Order) private orderRepo: Repository<Order>,
     private locationGateway: LocationGateway,
   ) {}
@@ -34,19 +43,28 @@ export class DriversService {
     return profile;
   }
 
-  async updateProfile(userId: number, dto: UpdateDriverProfileDto): Promise<DriverProfile> {
+  async updateProfile(
+    userId: number,
+    dto: UpdateDriverProfileDto,
+  ): Promise<DriverProfile> {
     const profile = await this.getProfile(userId);
     Object.assign(profile, dto);
     return this.profileRepo.save(profile);
   }
 
-  async setAvailability(userId: number, isAvailable: boolean): Promise<DriverProfile> {
+  async setAvailability(
+    userId: number,
+    isAvailable: boolean,
+  ): Promise<DriverProfile> {
     const profile = await this.getProfile(userId);
     profile.isAvailable = isAvailable;
     return this.profileRepo.save(profile);
   }
 
-  async updateLocation(userId: number, dto: UpdateLocationDto): Promise<DriverProfile> {
+  async updateLocation(
+    userId: number,
+    dto: UpdateLocationDto,
+  ): Promise<DriverProfile> {
     const profile = await this.getProfile(userId);
     profile.lastLatitude = dto.latitude;
     profile.lastLongitude = dto.longitude;
@@ -58,7 +76,11 @@ export class DriversService {
       where: { driverId: profile.id },
     });
     for (const assignment of activeAssignments) {
-      if (![DeliveryStatus.DELIVERED, DeliveryStatus.DECLINED].includes(assignment.status)) {
+      if (
+        ![DeliveryStatus.DELIVERED, DeliveryStatus.DECLINED].includes(
+          assignment.status,
+        )
+      ) {
         this.locationGateway.broadcastLocation(String(assignment.id), {
           latitude: dto.latitude,
           longitude: dto.longitude,
@@ -152,7 +174,9 @@ export class DriversService {
     });
   }
 
-  async getEarnings(userId: number): Promise<{ total: number; deliveries: number }> {
+  async getEarnings(
+    userId: number,
+  ): Promise<{ total: number; deliveries: number }> {
     const profile = await this.getProfile(userId);
     const deliveredAssignments = await this.assignmentRepo.find({
       where: { driverId: profile.id, status: DeliveryStatus.DELIVERED },

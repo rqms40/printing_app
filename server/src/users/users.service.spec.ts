@@ -43,7 +43,9 @@ describe('UsersService', () => {
       const result = await service.findByEmail('test@example.com');
 
       expect(result).toEqual(mockUser);
-      expect(repo.findOne).toHaveBeenCalledWith({ where: { email: 'test@example.com' } });
+      expect(repo.findOne).toHaveBeenCalledWith({
+        where: { email: 'test@example.com' },
+      });
     });
 
     it('should return null when not found', async () => {
@@ -82,7 +84,10 @@ describe('UsersService', () => {
       );
       // Verify the passwordHash is a bcrypt hash, not plaintext
       const createCall = repo.create.mock.calls[0][0] as any;
-      const isHashed = await bcrypt.compare('password123', createCall.passwordHash);
+      const isHashed = await bcrypt.compare(
+        'password123',
+        createCall.passwordHash,
+      );
       expect(isHashed).toBe(true);
       expect(repo.save).toHaveBeenCalledWith(mockUser);
       expect(result).toEqual(mockUser);
@@ -91,9 +96,9 @@ describe('UsersService', () => {
     it('should throw ConflictException if email exists', async () => {
       repo.findOne.mockResolvedValue(mockUser); // existing user found
 
-      await expect(service.create('test@example.com', 'password123')).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(
+        service.create('test@example.com', 'password123'),
+      ).rejects.toThrow(ConflictException);
     });
   });
 
@@ -103,7 +108,9 @@ describe('UsersService', () => {
       repo.update.mockResolvedValue(undefined as any);
       repo.findOneOrFail.mockResolvedValue(updatedUser);
 
-      const result = await service.updateProfile(1, { email: 'new@example.com' } as Partial<User>);
+      const result = await service.updateProfile(1, {
+        email: 'new@example.com',
+      } as Partial<User>);
 
       expect(repo.update).toHaveBeenCalledWith(1, { email: 'new@example.com' });
       expect(repo.findOneOrFail).toHaveBeenCalledWith({ where: { id: 1 } });

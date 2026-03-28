@@ -1,7 +1,11 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { AddressesService } from './addresses.service';
 import { Address } from './entities/address.entity';
 
@@ -60,10 +64,16 @@ describe('AddressesService', () => {
       repo.create.mockReturnValue(mockAddress);
       repo.save.mockResolvedValue(mockAddress);
 
-      const dto = { label: 'Home', street: '123 Main St', isDefault: false } as any;
+      const dto = {
+        label: 'Home',
+        street: '123 Main St',
+        isDefault: false,
+      } as any;
       const result = await service.create(1, dto);
 
-      expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ userId: 1 }));
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 1 }),
+      );
       expect(repo.save).toHaveBeenCalled();
       expect(result).toEqual(mockAddress);
     });
@@ -83,7 +93,11 @@ describe('AddressesService', () => {
       repo.create.mockReturnValue(addressWithDefault);
       repo.save.mockResolvedValue(addressWithDefault);
 
-      const dto = { label: 'Home', street: '123 Main St', isDefault: false } as any;
+      const dto = {
+        label: 'Home',
+        street: '123 Main St',
+        isDefault: false,
+      } as any;
       await service.create(1, dto);
 
       // clearDefault should be called, and isDefault should be set to true

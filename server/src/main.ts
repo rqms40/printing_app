@@ -12,11 +12,13 @@ async function bootstrap() {
   app.use(helmet());
 
   // Global validation pipe
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    transform: true,
-    forbidNonWhitelisted: true,
-  }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      forbidNonWhitelisted: true,
+    }),
+  );
 
   // Global exception filter
   app.useGlobalFilters(new AllExceptionsFilter());
@@ -42,4 +44,4 @@ async function bootstrap() {
   console.log(`🟢 GRID API running on http://localhost:${port}`);
   console.log(`📚 Swagger docs at http://localhost:${port}/docs`);
 }
-bootstrap();
+void bootstrap();

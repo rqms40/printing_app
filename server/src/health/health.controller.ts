@@ -13,7 +13,9 @@ export class HealthController {
     try {
       await this.dataSource.query('SELECT 1');
       dbStatus = 'connected';
-    } catch (_) {}
+    } catch {
+      /* DB probe failed -- return disconnected */
+    }
 
     return {
       status: 'ok',

@@ -1,4 +1,12 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 
 @Entity('driver_profiles')
@@ -25,10 +33,22 @@ export class DriverProfile {
   @Column({ name: 'is_available', default: false })
   isAvailable: boolean;
 
-  @Column({ name: 'last_latitude', type: 'decimal', precision: 10, scale: 7, nullable: true })
+  @Column({
+    name: 'last_latitude',
+    type: 'decimal',
+    precision: 10,
+    scale: 7,
+    nullable: true,
+  })
   lastLatitude: number;
 
-  @Column({ name: 'last_longitude', type: 'decimal', precision: 10, scale: 7, nullable: true })
+  @Column({
+    name: 'last_longitude',
+    type: 'decimal',
+    precision: 10,
+    scale: 7,
+    nullable: true,
+  })
   lastLongitude: number;
 
   @Column({ name: 'last_location_update', type: 'timestamp', nullable: true })

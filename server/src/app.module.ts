@@ -19,10 +19,12 @@ import { FilesModule } from './files/files.module';
     ConfigModule.forRoot({ isGlobal: true }),
 
     // Rate limiting
-    ThrottlerModule.forRoot([{
-      ttl: 60000, // 1 minute
-      limit: 30,  // 30 requests per minute
-    }]),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000, // 1 minute
+        limit: 30, // 30 requests per minute
+      },
+    ]),
 
     // Database
     TypeOrmModule.forRootAsync({
@@ -50,8 +52,6 @@ import { FilesModule } from './files/files.module';
     PaymentsModule,
     FilesModule,
   ],
-  providers: [
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
-  ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

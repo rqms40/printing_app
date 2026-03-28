@@ -1,4 +1,11 @@
-import { IsString, IsNumber, IsOptional, IsBoolean, Min, ValidateNested } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsBoolean,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -30,7 +37,7 @@ export class CreateOrderDto {
   @Min(1)
   quantity: number;
 
-  @ApiProperty({ example: 150.00 })
+  @ApiProperty({ example: 150.0 })
   @IsNumber()
   totalPrice: number;
 

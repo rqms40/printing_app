@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { RequestWithUser } from '../common/interfaces/request-with-user';
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -12,20 +13,23 @@ export class UsersController {
   constructor(private usersService: UsersService) {}
 
   @Get('profile')
-  async getProfile(@Request() req: any) {
+  async getProfile(@Request() req: RequestWithUser) {
     const user = await this.usersService.findById(req.user.sub);
     if (!user) return null;
-    const { passwordHash, ...result } = user;
+    const { passwordHash: _ph1, ...result } = user;
     return result;
   }
 
   @Put('profile')
-  async updateProfile(@Request() req: any, @Body() dto: UpdateProfileDto) {
+  async updateProfile(
+    @Request() req: RequestWithUser,
+    @Body() dto: UpdateProfileDto,
+  ) {
     const { dateOfBirth, ...rest } = dto;
     const data: Record<string, any> = { ...rest };
     if (dateOfBirth) data.dateOfBirth = new Date(dateOfBirth);
     const user = await this.usersService.updateProfile(req.user.sub, data);
-    const { passwordHash, ...result } = user;
+    const { passwordHash: _ph2, ...result } = user;
     return result;
   }
 }

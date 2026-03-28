@@ -10,7 +10,10 @@ export class FilesService {
     private fileRepo: Repository<FileMetadata>,
   ) {}
 
-  async storeMetadata(file: Express.Multer.File, uploadedBy?: number): Promise<FileMetadata> {
+  async storeMetadata(
+    file: Express.Multer.File,
+    uploadedBy?: number,
+  ): Promise<FileMetadata> {
     // MVP: generate a mock URL — replace with S3/R2 upload later
     const mockUrl = `/uploads/${Date.now()}_${file.originalname}`;
 

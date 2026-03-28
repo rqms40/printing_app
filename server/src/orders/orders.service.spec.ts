@@ -121,7 +121,10 @@ describe('OrdersService', () => {
       const result = await service.updateStatus(1, 'printing');
 
       expect(repo.update).toHaveBeenCalledWith(1, { orderStatus: 'printing' });
-      expect(gateway.notifyOrderUpdate).toHaveBeenCalledWith(mockOrder.orderId, mockOrder);
+      expect(gateway.notifyOrderUpdate).toHaveBeenCalledWith(
+        mockOrder.orderId,
+        mockOrder,
+      );
       expect(result).toEqual(mockOrder);
     });
   });

@@ -1,10 +1,22 @@
-import { Controller, Get, Post, Patch, Param, Body, UseGuards, Request, Query, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Param,
+  Body,
+  UseGuards,
+  Request,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
+import { RequestWithUser } from '../common/interfaces/request-with-user';
 
 @ApiTags('orders')
 @ApiBearerAuth()
@@ -14,12 +26,12 @@ export class OrdersController {
   constructor(private ordersService: OrdersService) {}
 
   @Get()
-  getOrders(@Request() req: any) {
+  getOrders(@Request() req: RequestWithUser) {
     return this.ordersService.findByUser(req.user.sub);
   }
 
   @Get(':id')
-  async getOrder(@Request() req: any, @Param('id') id: number) {
+  async getOrder(@Request() req: RequestWithUser, @Param('id') id: number) {
     const order = await this.ordersService.findById(id);
     if (!order) throw new NotFoundException('Order not found');
     if (order.userId !== req.user.sub && req.user.role !== 'admin') {
@@ -29,7 +41,7 @@ export class OrdersController {
   }
 
   @Post()
-  createOrder(@Request() req: any, @Body() dto: CreateOrderDto) {
+  createOrder(@Request() req: RequestWithUser, @Body() dto: CreateOrderDto) {
     return this.ordersService.create({ ...dto, userId: req.user.sub });
   }
 

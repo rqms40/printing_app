@@ -9,7 +9,14 @@ import { OrdersController } from './orders.controller';
 import { OrdersGateway } from './orders.gateway';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Order, PaperSpec, ThreeDSpec, OrderStatusHistory])],
+  imports: [
+    TypeOrmModule.forFeature([
+      Order,
+      PaperSpec,
+      ThreeDSpec,
+      OrderStatusHistory,
+    ]),
+  ],
   providers: [OrdersService, OrdersGateway],
   controllers: [OrdersController],
   exports: [OrdersService, OrdersGateway],

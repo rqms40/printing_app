@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PaymentTransaction } from './entities/payment-transaction.entity';
@@ -11,7 +15,9 @@ export class PaymentsService {
     private txnRepo: Repository<PaymentTransaction>,
   ) {}
 
-  async createIntent(dto: CreatePaymentIntentDto): Promise<{ transaction: PaymentTransaction; checkoutUrl: string }> {
+  async createIntent(
+    dto: CreatePaymentIntentDto,
+  ): Promise<{ transaction: PaymentTransaction; checkoutUrl: string }> {
     const txn = this.txnRepo.create({
       orderId: dto.orderId,
       paymentMethod: dto.paymentMethod,
@@ -30,25 +36,34 @@ export class PaymentsService {
     const txn = await this.txnRepo.findOne({ where: { id } });
     if (!txn) throw new NotFoundException('Payment transaction not found');
     if (txn.status !== 'pending') {
-      throw new BadRequestException(`Cannot confirm transaction with status '${txn.status}'`);
+      throw new BadRequestException(
+        `Cannot confirm transaction with status '${txn.status}'`,
+      );
     }
     txn.status = 'success';
     return this.txnRepo.save(txn);
   }
 
-  async handleWebhook(payload: any): Promise<PaymentTransaction> {
-    const externalRefId = payload?.data?.attributes?.reference_number;
+  async handleWebhook(
+    payload: Record<string, any>,
+  ): Promise<PaymentTransaction> {
+    const data = payload?.data as Record<string, any> | undefined;
+    const attributes = data?.attributes as Record<string, any> | undefined;
+    const externalRefId = attributes?.reference_number as string | undefined;
     if (!externalRefId) {
-      throw new BadRequestException('Invalid webhook payload: missing reference_number');
+      throw new BadRequestException(
+        'Invalid webhook payload: missing reference_number',
+      );
     }
 
     const txn = await this.txnRepo.findOne({
       where: { externalReferenceId: externalRefId },
     });
-    if (!txn) throw new NotFoundException('Transaction not found for reference');
+    if (!txn)
+      throw new NotFoundException('Transaction not found for reference');
 
     txn.webhookPayload = payload;
-    const eventType = payload?.data?.attributes?.type;
+    const eventType = attributes?.type as string | undefined;
     if (eventType === 'payment.paid') {
       txn.status = 'success';
     } else if (eventType === 'payment.failed') {

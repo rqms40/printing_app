@@ -1,4 +1,10 @@
-import { WebSocketGateway, WebSocketServer, SubscribeMessage, MessageBody, ConnectedSocket } from '@nestjs/websockets';
+import {
+  WebSocketGateway,
+  WebSocketServer,
+  SubscribeMessage,
+  MessageBody,
+  ConnectedSocket,
+} from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 
 @WebSocketGateway({ namespace: '/ws/orders', cors: { origin: '*' } })
@@ -7,8 +13,11 @@ export class OrdersGateway {
   server: Server;
 
   @SubscribeMessage('subscribe')
-  handleSubscribe(@MessageBody() orderId: string, @ConnectedSocket() client: Socket) {
-    client.join(`order_${orderId}`);
+  handleSubscribe(
+    @MessageBody() orderId: string,
+    @ConnectedSocket() client: Socket,
+  ) {
+    void client.join(`order_${orderId}`);
     return { event: 'subscribed', data: { orderId } };
   }
 

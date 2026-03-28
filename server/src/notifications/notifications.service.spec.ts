@@ -76,20 +76,27 @@ describe('NotificationsService', () => {
 
   describe('markAsRead', () => {
     it('should set isRead to true', async () => {
-      const unreadNotif = { ...mockNotification, isRead: false } as Notification;
+      const unreadNotif = {
+        ...mockNotification,
+        isRead: false,
+      } as Notification;
       repo.findOne.mockResolvedValue(unreadNotif);
       repo.save.mockImplementation(async (n) => n as Notification);
 
       const result = await service.markAsRead(1, 1);
 
-      expect(repo.findOne).toHaveBeenCalledWith({ where: { id: 1, userId: 1 } });
+      expect(repo.findOne).toHaveBeenCalledWith({
+        where: { id: 1, userId: 1 },
+      });
       expect(result.isRead).toBe(true);
     });
 
     it('should throw NotFoundException if notification not found', async () => {
       repo.findOne.mockResolvedValue(null);
 
-      await expect(service.markAsRead(999, 1)).rejects.toThrow(NotFoundException);
+      await expect(service.markAsRead(999, 1)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -112,7 +119,9 @@ describe('NotificationsService', () => {
 
       const result = await service.getUnreadCount(1);
 
-      expect(repo.count).toHaveBeenCalledWith({ where: { userId: 1, isRead: false } });
+      expect(repo.count).toHaveBeenCalledWith({
+        where: { userId: 1, isRead: false },
+      });
       expect(result).toBe(5);
     });
 

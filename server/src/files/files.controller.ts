@@ -1,8 +1,19 @@
-import { Controller, Post, Get, Param, UseGuards, UseInterceptors, UploadedFile, ParseIntPipe, Request } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Param,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  ParseIntPipe,
+  Request,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiTags, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FilesService } from './files.service';
+import { RequestWithUser } from '../common/interfaces/request-with-user';
 
 @ApiTags('files')
 @ApiBearerAuth()
@@ -14,7 +25,10 @@ export class FilesController {
   @Post('upload')
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file'))
-  uploadFile(@UploadedFile() file: Express.Multer.File, @Request() req: any) {
+  uploadFile(
+    @UploadedFile() file: Express.Multer.File,
+    @Request() req: RequestWithUser,
+  ) {
     return this.filesService.storeMetadata(file, req.user?.sub);
   }
 

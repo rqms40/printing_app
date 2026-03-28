@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Address } from './entities/address.entity';
@@ -27,7 +32,9 @@ export class AddressesService {
   async create(userId: number, dto: CreateAddressDto): Promise<Address> {
     const count = await this.addressRepo.count({ where: { userId } });
     if (count >= this.MAX_ADDRESSES) {
-      throw new BadRequestException(`Maximum of ${this.MAX_ADDRESSES} addresses allowed`);
+      throw new BadRequestException(
+        `Maximum of ${this.MAX_ADDRESSES} addresses allowed`,
+      );
     }
 
     // If this is the first address or isDefault is true, handle default logic
@@ -40,7 +47,11 @@ export class AddressesService {
     return this.addressRepo.save(address);
   }
 
-  async update(id: number, userId: number, dto: UpdateAddressDto): Promise<Address> {
+  async update(
+    id: number,
+    userId: number,
+    dto: UpdateAddressDto,
+  ): Promise<Address> {
     const address = await this.findAndVerifyOwnership(id, userId);
 
     if (dto.isDefault) {
@@ -64,10 +75,16 @@ export class AddressesService {
   }
 
   private async clearDefault(userId: number): Promise<void> {
-    await this.addressRepo.update({ userId, isDefault: true }, { isDefault: false });
+    await this.addressRepo.update(
+      { userId, isDefault: true },
+      { isDefault: false },
+    );
   }
 
-  private async findAndVerifyOwnership(id: number, userId: number): Promise<Address> {
+  private async findAndVerifyOwnership(
+    id: number,
+    userId: number,
+  ): Promise<Address> {
     const address = await this.addressRepo.findOne({ where: { id } });
     if (!address) {
       throw new NotFoundException('Address not found');
