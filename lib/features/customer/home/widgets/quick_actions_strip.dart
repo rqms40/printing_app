@@ -13,28 +13,28 @@ class QuickActionsStrip extends StatelessWidget {
 
   static const _actions = <_QuickActionData>[
     _QuickActionData(
-      label: 'New\nOrder',
+      label: 'New Order',
       icon: HugeIcons.strokeRoundedAdd01,
       route: '/customer/order/new',
       isPrimary: true,
     ),
     _QuickActionData(
-      label: 'Reprint\nLast',
+      label: 'Reprint',
       icon: HugeIcons.strokeRoundedRepeat,
       isComingSoon: true,
     ),
     _QuickActionData(
-      label: 'Upload\nFile',
+      label: 'Upload',
       icon: HugeIcons.strokeRoundedUpload03,
       route: '/customer/order/new',
     ),
     _QuickActionData(
-      label: 'Scan\nQR',
+      label: 'Scan QR',
       icon: HugeIcons.strokeRoundedQrCode,
       isComingSoon: true,
     ),
     _QuickActionData(
-      label: 'Track\nOrder',
+      label: 'Track',
       icon: HugeIcons.strokeRoundedSearch01,
       route: '/customer/orders',
     ),
@@ -55,12 +55,12 @@ class QuickActionsStrip extends StatelessWidget {
       children: [
         const SectionHeader(title: 'Quick Actions'),
         SizedBox(
-          height: 90,
+          height: 84,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.none,
             itemCount: _actions.length,
-            separatorBuilder: (_, _) =>
-                const SizedBox(width: AppSpacing.md),
+            separatorBuilder: (_, _) => const SizedBox(width: 20),
             itemBuilder: (context, index) {
               final action = _actions[index];
               return _QuickActionItem(
@@ -70,13 +70,13 @@ class QuickActionsStrip extends StatelessWidget {
                   .animate()
                   .fadeIn(
                     duration: 400.ms,
-                    delay: (50 * index).ms,
+                    delay: (60 * index).ms,
                     curve: Curves.easeOut,
                   )
                   .slideY(
-                    begin: 0.15,
+                    begin: 0.12,
                     duration: 400.ms,
-                    delay: (50 * index).ms,
+                    delay: (60 * index).ms,
                     curve: Curves.easeOut,
                   );
             },
@@ -114,20 +114,30 @@ class _QuickActionItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return GestureDetector(
       onTap: () {
         if (data.isComingSoon) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Coming soon!',
-                style: AppTypography.body.copyWith(color: colors.accentOnColor),
+          ScaffoldMessenger.of(context)
+            ..clearSnackBars()
+            ..showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Coming soon!',
+                  style:
+                      AppTypography.body.copyWith(color: colors.accentOnColor),
+                ),
+                backgroundColor: colors.accent,
+                behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 1),
+                margin: const EdgeInsets.fromLTRB(
+                    AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.sm),
+                ),
               ),
-              backgroundColor: colors.accent,
-              behavior: SnackBarBehavior.floating,
-              duration: const Duration(seconds: 1),
-            ),
-          );
+            );
           return;
         }
         if (data.route != null) {
@@ -135,41 +145,48 @@ class _QuickActionItem extends StatelessWidget {
         }
       },
       child: SizedBox(
-        width: 72,
+        width: 64,
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
+            // Icon circle
             Container(
-              width: 56,
-              height: 56,
+              width: 52,
+              height: 52,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: data.isPrimary ? colors.brand : colors.surface,
+                color: data.isPrimary
+                    ? colors.brand
+                    : isDark
+                        ? colors.surfaceVariant
+                        : colors.surfaceDim,
                 border: data.isPrimary
                     ? null
                     : Border.all(
-                        color: colors.outline,
-                        width: 1.5,
+                        color: colors.outline.withValues(alpha: 0.6),
                       ),
               ),
-              child: HugeIcon(
-                icon: data.icon,
-                size: 22,
-                color: data.isPrimary
-                    ? colors.accentOnColor
-                    : colors.onSurfaceDim,
+              child: Center(
+                child: HugeIcon(
+                  icon: data.icon,
+                  size: 20,
+                  color: data.isPrimary
+                      ? colors.accentOnColor
+                      : colors.onSurface,
+                ),
               ),
             ),
             const SizedBox(height: AppSpacing.sm),
+            // Single-line label
             Text(
               data.label,
               style: AppTypography.caption.copyWith(
-                color: colors.onSurfaceDim,
-                fontWeight: FontWeight.w500,
-                fontSize: 11,
-                height: 1.3,
+                color: data.isPrimary ? colors.onBackground : colors.onSurfaceDim,
+                fontWeight: data.isPrimary ? FontWeight.w600 : FontWeight.w500,
               ),
               textAlign: TextAlign.center,
-              maxLines: 2,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
