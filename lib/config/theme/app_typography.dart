@@ -2,23 +2,23 @@ import 'package:flutter/material.dart';
 
 /// Typography scale for GRID.
 ///
-/// [display] uses Archivo ExtraBold for authoritative brand moments.
+/// [display] uses Poppins ExtraBold for clean, modern brand moments.
 /// All other headings and UI text use Satoshi (geometric sans-serif)
 /// with weight differentiation for hierarchy.
 class AppTypography {
   const AppTypography._();
 
   static const String _instrumentSerif = 'InstrumentSerif';
-  static const String _archivo = 'Archivo';
+  static const String _poppins = 'Poppins';
   static const String _satoshi = 'Satoshi';
 
-  /// Brand / editorial display — Archivo ExtraBold.
-  /// Strong, authoritative sans-serif for hero banners and splash screen.
+  /// Brand / editorial display — Poppins ExtraBold.
+  /// Geometric, clean, modern. Trustworthy authority for hero banners.
   static const TextStyle display = TextStyle(
-    fontFamily: _archivo,
+    fontFamily: _poppins,
     fontSize: 32,
     fontWeight: FontWeight.w800,
-    letterSpacing: -0.7,
+    letterSpacing: -0.3,
   );
 
   /// Elegant editorial style — Instrument Serif.

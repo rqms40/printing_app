@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Font Weight Comparison</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;500;600;700;800;900&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0a;
+    color: #f0f0f0;
+    font-family: -apple-system, sans-serif;
+    padding: 32px;
+  }
+
+  h1 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    color: #FFDE58;
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+  .sub {
+    color: #666;
+    font-size: 14px;
+    margin-bottom: 36px;
+    line-height: 1.6;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    max-width: 900px;
+  }
+
+  .card {
+    background: #141414;
+    border-radius: 20px;
+    overflow: hidden;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .card:hover { border-color: #333; }
+  .card.selected { border-color: #FFDE58; }
+
+  .tile {
+    background: #1E1E1E;
+    padding: 24px 20px;
+    min-height: 160px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    position: relative;
+  }
+
+  .letter {
+    position: absolute;
+    top: 12px; left: 14px;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: rgba(255,222,88,0.15);
+    color: #FFDE58;
+    font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .hero-text {
+    font-size: 23px;
+    line-height: 1.0;
+    color: #f0f0f0;
+  }
+  .hero-sub {
+    font-size: 11px;
+    color: rgba(240,240,240,0.45);
+    margin-top: 6px;
+    font-family: -apple-system, sans-serif;
+  }
+
+  .info { padding: 14px 18px; }
+  .name { font-size: 13px; font-weight: 700; color: #f0f0f0; }
+  .desc {
+    font-size: 12px; color: #808080;
+    margin-top: 4px; line-height: 1.4;
+  }
+
+  .tag {
+    display: inline-block;
+    font-size: 9px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    margin-left: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .tag-current { color: #ff6b6b; background: rgba(255,107,107,0.1); }
+  .tag-rec { color: #51cf66; background: rgba(81,207,102,0.1); }
+
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+</style>
+<script>
+function toggleSelect(el) {
+  document.querySelectorAll('.card').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  if (window.__sp_helper) window.__sp_helper.recordClick(el);
+}
+</script>
+</head>
+<body>
+
+<h1>Weight Comparison</h1>
+<p class="sub">Archivo Black (current) is ultra-heavy. Archivo comes in many weights. Or keep Instrument Serif for elegance. Click your pick.</p>
+
+<div class="grid">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="tile">
+      <div class="letter">A</div>
+      <div class="hero-text" style="font-family:'Archivo Black',sans-serif; letter-spacing:-1px;">
+        Professional<br>printing,<br>delivered.
+      </div>
+      <div class="hero-sub">Paper & 3D printing services</div>
+    </div>
+    <div class="info">
+      <div class="name">Archivo Black <span class="tag tag-current">Current</span></div>
+      <div class="desc">Ultra-heavy. Maximum authority. Bold industrial feel. Only one weight available.</div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="tile">
+      <div class="letter">B</div>
+      <div class="hero-text" style="font-family:'Archivo',sans-serif; font-weight:900; letter-spacing:-0.8px;">
+        Professional<br>printing,<br>delivered.
+      </div>
+      <div class="hero-sub">Paper & 3D printing services</div>
+    </div>
+    <div class="info">
+      <div class="name">Archivo 900 (Black weight)</div>
+      <div class="desc">Same family but variable — very heavy, slightly less extreme than Archivo Black. Can use other weights too.</div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="tile">
+      <div class="letter">C</div>
+      <div class="hero-text" style="font-family:'Archivo',sans-serif; font-weight:800; letter-spacing:-0.7px;">
+        Professional<br>printing,<br>delivered.
+      </div>
+      <div class="hero-sub">Paper & 3D printing services</div>
+    </div>
+    <div class="info">
+      <div class="name">Archivo ExtraBold (800) <span class="tag tag-rec">Recommended</span></div>
+      <div class="desc">Strong but not extreme. Confident authority without being overwhelming. Best balance for a service brand.</div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="d" onclick="toggleSelect(this)">
+    <div class="tile">
+      <div class="letter">D</div>
+      <div class="hero-text" style="font-family:'Archivo',sans-serif; font-weight:700; letter-spacing:-0.5px;">
+        Professional<br>printing,<br>delivered.
+      </div>
+      <div class="hero-sub">Paper & 3D printing services</div>
+    </div>
+    <div class="info">
+      <div class="name">Archivo Bold (700)</div>
+      <div class="desc">Solid and confident. Clean authority without heaviness. Modern and professional.</div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="e" onclick="toggleSelect(this)">
+    <div class="tile">
+      <div class="letter">E</div>
+      <div class="hero-text" style="font-family:'Archivo',sans-serif; font-weight:600; letter-spacing:-0.3px;">
+        Professional<br>printing,<br>delivered.
+      </div>
+      <div class="hero-sub">Paper & 3D printing services</div>
+    </div>
+    <div class="info">
+      <div class="name">Archivo SemiBold (600)</div>
+      <div class="desc">Lighter touch. Elegant yet structured. More refined, less imposing.</div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="f" onclick="toggleSelect(this)">
+    <div class="tile">
+      <div class="letter">F</div>
+      <div class="hero-text" style="font-family:'DM Serif Display',serif; font-weight:400; letter-spacing:-0.3px;">
+        Professional<br>printing,<br>delivered.
+      </div>
+      <div class="hero-sub">Paper & 3D printing services</div>
+    </div>
+    <div class="info">
+      <div class="name">Instrument Serif (original)</div>
+      <div class="desc">Thin, editorial elegance. What was there before. Soft and delicate.</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

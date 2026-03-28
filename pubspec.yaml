@@ -85,7 +85,7 @@ flutter:
       fonts:
         - asset: assets/fonts/InstrumentSerif/InstrumentSerif-Regular.ttf
           weight: 400
-    - family: Archivo
+    - family: Poppins
       fonts:
-        - asset: assets/fonts/ArchivoBlack/Archivo-ExtraBold.ttf
+        - asset: assets/fonts/Poppins/Poppins-ExtraBold.ttf
           weight: 800

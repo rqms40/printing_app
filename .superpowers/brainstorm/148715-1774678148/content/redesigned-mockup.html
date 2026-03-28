@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GRID Home Screen — Redesigned</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #111;
+    display: flex;
+    justify-content: center;
+    padding: 24px;
+    font-family: -apple-system, 'Segoe UI', sans-serif;
+    min-height: 100vh;
+  }
+
+  .wrapper {
+    display: flex;
+    align-items: flex-start;
+    gap: 48px;
+  }
+
+  /* Phone frame */
+  .phone {
+    width: 375px;
+    background: #000;
+    border-radius: 44px;
+    padding: 14px;
+    box-shadow: 0 25px 80px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.08);
+  }
+
+  .screen {
+    background: #000;
+    border-radius: 34px;
+    overflow-y: auto;
+    max-height: 82vh;
+    scrollbar-width: thin;
+    scrollbar-color: #222 transparent;
+  }
+  .screen::-webkit-scrollbar { width: 3px; }
+  .screen::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+  .status-bar {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 24px;
+    font-size: 12px;
+    color: #F0F0F0;
+    font-weight: 600;
+  }
+
+  .content { padding: 0 20px 100px; }
+
+  /* Greeting */
+  .greeting { padding: 4px 0 20px; }
+  .greeting .sub { font-size: 14px; color: #808080; }
+  .greeting .name {
+    font-size: 28px; color: #F0F0F0; font-weight: 700;
+    font-family: 'Satoshi', -apple-system, sans-serif;
+    letter-spacing: -0.3px;
+  }
+
+  /* Existing sections faded */
+  .existing {
+    opacity: 0.3;
+    pointer-events: none;
+    position: relative;
+  }
+  .existing-tag {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(255,255,255,0.1);
+    backdrop-filter: blur(4px);
+    color: #F0F0F0; font-size: 10px;
+    padding: 5px 12px; border-radius: 20px;
+    z-index: 2; white-space: nowrap;
+    letter-spacing: 0.8px; text-transform: uppercase; font-weight: 600;
+  }
+  .bento { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; }
+  .bento-tile { background: #141414; border-radius: 12px; height: 72px; }
+  .bento-tile.hero { grid-column: span 2; height: 96px; }
+  .recent-row { display: flex; gap: 8px; }
+  .recent-card { background: #141414; border-radius: 12px; height: 72px; flex: 0 0 260px; }
+
+  /* Section divider */
+  .divider {
+    display: flex; align-items: center; gap: 12px;
+    margin: 24px 0 20px;
+  }
+  .divider::before, .divider::after {
+    content: ''; flex: 1; height: 1px;
+    background: linear-gradient(90deg, transparent, #FFDE58, transparent);
+    opacity: 0.4;
+  }
+  .divider span {
+    font-size: 9px; color: #FFDE58; text-transform: uppercase;
+    letter-spacing: 2px; font-weight: 700;
+  }
+
+  /* ====== QUICK ACTIONS (Redesigned) ====== */
+  .section-title {
+    font-size: 24px; font-weight: 700; color: #F0F0F0;
+    margin-bottom: 12px; letter-spacing: -0.1px;
+  }
+
+  .quick-actions {
+    display: flex; gap: 20px;
+    overflow-x: auto; padding-bottom: 4px;
+    scrollbar-width: none;
+    margin-bottom: 24px;
+  }
+  .quick-actions::-webkit-scrollbar { display: none; }
+
+  .qa-item {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 8px;
+    min-width: 64px;
+  }
+
+  .qa-circle {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    transition: transform 0.15s ease;
+    background: #1E1E1E;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .qa-circle:hover { transform: scale(1.05); }
+  .qa-circle.primary {
+    background: #FFDE58;
+    border: none;
+  }
+  .qa-circle.primary svg { stroke: #000; }
+
+  .qa-label {
+    font-size: 12px; color: #808080;
+    text-align: center; font-weight: 500;
+    white-space: nowrap;
+  }
+  .qa-label.primary-label {
+    color: #F0F0F0; font-weight: 600;
+  }
+
+  /* ====== POPULAR PRINTS (Redesigned with images) ====== */
+  .prints-row {
+    display: flex; gap: 12px;
+    overflow-x: auto; padding-bottom: 8px;
+    scrollbar-width: none;
+  }
+  .prints-row::-webkit-scrollbar { display: none; }
+
+  .print-card {
+    flex: 0 0 140px;
+    background: #141414;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.06);
+    transition: transform 0.15s ease;
+  }
+  .print-card:hover { transform: scale(1.02); }
+
+  .print-img {
+    height: 110px;
+    overflow: hidden;
+    position: relative;
+  }
+  .print-img img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .print-img::after {
+    content: '';
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 40px;
+    background: linear-gradient(transparent, rgba(20,20,20,0.6));
+  }
+
+  .print-body { padding: 8px 12px 10px; }
+  .print-title {
+    font-size: 13px; font-weight: 700; color: #F0F0F0;
+    margin-bottom: 2px;
+  }
+  .print-price {
+    font-size: 12px;
+  }
+  .print-price .amt { color: #FFDE58; font-weight: 600; }
+  .print-price .unit { color: #666; }
+
+  /* Side notes */
+  .notes {
+    width: 220px; padding-top: 80px;
+    display: flex; flex-direction: column; gap: 20px;
+  }
+  .note {
+    padding: 14px 16px;
+    background: rgba(255,222,88,0.06);
+    border-left: 3px solid #FFDE58;
+    border-radius: 0 10px 10px 0;
+    font-size: 12px; color: #aaa; line-height: 1.6;
+  }
+  .note strong {
+    color: #FFDE58; display: block; margin-bottom: 4px;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+
+  @media (max-width: 700px) {
+    .notes { display: none; }
+    .wrapper { justify-content: center; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="phone">
+      <div class="screen">
+        <div class="status-bar">
+          <span>9:41</span>
+          <span>●●● WiFi 🔋</span>
+        </div>
+
+        <div class="content">
+          <!-- Greeting -->
+          <div class="greeting">
+            <div class="sub">Good morning,</div>
+            <div class="name">Hello, Maria</div>
+          </div>
+
+          <!-- Existing: Bento -->
+          <div class="existing">
+            <div class="existing-tag">Existing · Bento Grid</div>
+            <div class="bento">
+              <div class="bento-tile hero"></div>
+              <div class="bento-tile"></div>
+              <div class="bento-tile"></div>
+              <div class="bento-tile"></div>
+              <div class="bento-tile"></div>
+            </div>
+          </div>
+
+          <!-- Existing: Recent Orders -->
+          <div class="existing">
+            <div class="existing-tag">Existing · Recent Orders</div>
+            <div style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+              <div style="font-size:16px;font-weight:700;color:#F0F0F0;">Recent Orders</div>
+              <div style="font-size:12px;color:#666;">See All</div>
+            </div>
+            <div class="recent-row">
+              <div class="recent-card"></div>
+              <div class="recent-card"></div>
+            </div>
+          </div>
+
+          <div class="divider"><span>Redesigned</span></div>
+
+          <!-- QUICK ACTIONS — Polished -->
+          <div class="section-title">Quick Actions</div>
+          <div class="quick-actions">
+            <div class="qa-item">
+              <div class="qa-circle primary">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+              </div>
+              <div class="qa-label primary-label">New Order</div>
+            </div>
+            <div class="qa-item">
+              <div class="qa-circle">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#808080" stroke-width="2" stroke-linecap="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+              </div>
+              <div class="qa-label">Reprint</div>
+            </div>
+            <div class="qa-item">
+              <div class="qa-circle">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#808080" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+              </div>
+              <div class="qa-label">Upload</div>
+            </div>
+            <div class="qa-item">
+              <div class="qa-circle">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#808080" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+              </div>
+              <div class="qa-label">Scan QR</div>
+            </div>
+            <div class="qa-item">
+              <div class="qa-circle">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#808080" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              </div>
+              <div class="qa-label">Track</div>
+            </div>
+          </div>
+
+          <!-- POPULAR PRINTS — Real images -->
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <div class="section-title" style="margin-bottom:0">Popular Prints</div>
+            <div style="font-size:14px;color:#D4A017;font-weight:500;">See All</div>
+          </div>
+          <div class="prints-row">
+            <div class="print-card">
+              <div class="print-img">
+                <img src="https://images.unsplash.com/photo-1568667256549-094345857637?w=400&h=300&fit=crop&q=80" alt="Documents" loading="lazy">
+              </div>
+              <div class="print-body">
+                <div class="print-title">Documents</div>
+                <div class="print-price"><span class="amt">from ₱3</span> <span class="unit">/ page</span></div>
+              </div>
+            </div>
+            <div class="print-card">
+              <div class="print-img">
+                <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=300&fit=crop&q=80" alt="ID Photos" loading="lazy">
+              </div>
+              <div class="print-body">
+                <div class="print-title">ID Photos</div>
+                <div class="print-price"><span class="amt">from ₱15</span> <span class="unit">/ set</span></div>
+              </div>
+            </div>
+            <div class="print-card">
+              <div class="print-img">
+                <img src="https://images.unsplash.com/photo-1561070791-2526d30994b5?w=400&h=300&fit=crop&q=80" alt="Posters" loading="lazy">
+              </div>
+              <div class="print-body">
+                <div class="print-title">Posters</div>
+                <div class="print-price"><span class="amt">from ₱45</span> <span class="unit">/ pc</span></div>
+              </div>
+            </div>
+            <div class="print-card">
+              <div class="print-img">
+                <img src="https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400&h=300&fit=crop&q=80" alt="Thesis Bind" loading="lazy">
+              </div>
+              <div class="print-body">
+                <div class="print-title">Thesis Bind</div>
+                <div class="print-price"><span class="amt">from ₱120</span> <span class="unit">/ copy</span></div>
+              </div>
+            </div>
+            <div class="print-card">
+              <div class="print-img">
+                <img src="https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=400&h=300&fit=crop&q=80" alt="3D Prints" loading="lazy">
+              </div>
+              <div class="print-body">
+                <div class="print-title">3D Prints</div>
+                <div class="print-price"><span class="amt">from ₱150</span> <span class="unit">/ model</span></div>
+              </div>
+            </div>
+            <div class="print-card">
+              <div class="print-img">
+                <img src="https://images.unsplash.com/photo-1635048424329-a9bfb146d7aa?w=400&h=300&fit=crop&q=80" alt="Stickers" loading="lazy">
+              </div>
+              <div class="print-body">
+                <div class="print-title">Stickers</div>
+                <div class="print-price"><span class="amt">from ₱25</span> <span class="unit">/ sheet</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom nav -->
+          <div style="display:flex;justify-content:space-around;padding:24px 0 8px;margin-top:20px;border-top:1px solid #1a1a1a;">
+            <div style="width:24px;height:24px;border-radius:50%;background:#FFDE58;"></div>
+            <div style="width:24px;height:24px;border-radius:50%;background:#222;"></div>
+            <div style="width:24px;height:24px;border-radius:50%;background:#222;"></div>
+            <div style="width:24px;height:24px;border-radius:50%;background:#222;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <strong>Quick Actions — Refined</strong>
+        Single-line labels. Filled surfaceVariant backgrounds instead of harsh outlines. Subtler, more consistent with GRID's greyscale aesthetic.
+      </div>
+      <div class="note">
+        <strong>Popular Prints — Real Images</strong>
+        CachedNetworkImage from Unsplash replaces crude Flutter paintings. Gradient overlay at bottom for text readability. Proper BoxFit.cover with error/placeholder states.
+      </div>
+      <div class="note">
+        <strong>Overflow Prevention</strong>
+        Expanded text body in cards, maxLines + ellipsis on all text, clipBehavior: Clip.none on ListViews for press animation room, fixed SizedBox heights.
+      </div>
+      <div class="note">
+        <strong>Consistency</strong>
+        Uses AppRadius.borderXl (16px) for cards matching premium feel. AppTypography.caption for prices. SectionHeader widget reused throughout. Colors from AppColorSet only.
+      </div>
+    </div>
+  </div>
+</body>
+</html>
