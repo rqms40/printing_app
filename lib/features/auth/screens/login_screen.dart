@@ -18,11 +18,9 @@ class LoginScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
-    final themeMode = ref.watch(themeProvider);
-    final isDark = themeMode == ThemeMode.dark;
-    final colors = Theme.of(context).brightness == Brightness.dark
-        ? AppColors.dark
-        : AppColors.light;
+    ref.watch(themeProvider); // rebuild when theme changes
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = isDark ? AppColors.dark : AppColors.light;
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -44,7 +42,9 @@ class LoginScreen extends ConsumerWidget {
                     size: 22,
                   ),
                   onPressed: () =>
-                      ref.read(themeProvider.notifier).toggle(),
+                      ref.read(themeProvider.notifier).toggleFrom(
+                        Theme.of(context).brightness,
+                      ),
                 ),
               ),
               const SizedBox(height: AppSpacing.md),

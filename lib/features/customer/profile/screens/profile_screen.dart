@@ -17,11 +17,9 @@ class ProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(profileProvider);
-    final themeMode = ref.watch(themeProvider);
-    final isDark = themeMode == ThemeMode.dark;
-    final colors = Theme.of(context).brightness == Brightness.dark
-        ? AppColors.dark
-        : AppColors.light;
+    ref.watch(themeProvider); // rebuild when theme changes
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = isDark ? AppColors.dark : AppColors.light;
 
     return ColoredBox(
       color: colors.background,
@@ -137,7 +135,9 @@ class ProfileScreen extends ConsumerWidget {
                 title: 'Dark Mode',
                 value: isDark,
                 onChanged: (_) {
-                  ref.read(themeProvider.notifier).toggle();
+                  ref.read(themeProvider.notifier).toggleFrom(
+                    Theme.of(context).brightness,
+                  );
                 },
                 colors: colors,
               ),

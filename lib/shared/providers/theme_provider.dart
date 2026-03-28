@@ -26,8 +26,11 @@ class ThemeNotifier extends StateNotifier<ThemeMode> {
     await prefs.setString(_key, mode.name);
   }
 
-  Future<void> toggle() async {
-    final newMode = state == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+  /// Toggle between light and dark. If currently in `system` mode,
+  /// switches to the opposite of whatever the system is currently using.
+  Future<void> toggleFrom(Brightness currentBrightness) async {
+    final newMode =
+        currentBrightness == Brightness.dark ? ThemeMode.light : ThemeMode.dark;
     await setThemeMode(newMode);
   }
 
