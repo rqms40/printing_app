@@ -53,19 +53,16 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   void _submit() {
     if (!_validate()) return;
     ref.read(authProvider.notifier).completeProfile(
-          _nameController.text.trim(),
-          _phoneController.text.trim(),
-          _selectedGender,
-          _dateOfBirth,
+          fullName: _nameController.text.trim(),
+          phone: _phoneController.text.trim(),
+          gender: _selectedGender,
+          dob: _dateOfBirth,
         );
   }
 
   void _skip() {
     ref.read(authProvider.notifier).completeProfile(
-          ref.read(authProvider).user?.email ?? 'User',
-          '',
-          '',
-          null,
+          fullName: ref.read(authProvider).user?.email ?? 'User',
         );
   }
 

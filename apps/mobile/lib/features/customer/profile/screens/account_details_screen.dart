@@ -77,10 +77,10 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
 
   void _save() {
     ref.read(authProvider.notifier).completeProfile(
-          _nameController.text.trim(),
-          _phoneController.text.trim(),
-          _selectedGender ?? '',
-          _dateOfBirth,
+          fullName: _nameController.text.trim(),
+          phone: _phoneController.text.trim(),
+          gender: _selectedGender ?? '',
+          dob: _dateOfBirth,
         );
 
     ScaffoldMessenger.of(context).showSnackBar(

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/auth/providers/auth_provider.dart';
 
 /// Splash screen with animated GRID logo.
 ///
@@ -11,15 +13,15 @@ import 'package:printing_app/config/theme/app_typography.dart';
 ///      (pale) then filling to its final color
 ///   2. After all 9 dots are lit, "GRID" wordmark fades in below
 ///   3. Subtitle fades in
-///   4. Everything fades out → navigate to login
-class SplashScreen extends StatefulWidget {
+///   4. Everything fades out → navigate (auto-login or login screen)
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen>
+class _SplashScreenState extends ConsumerState<SplashScreen>
     with TickerProviderStateMixin {
   // Animation controllers for each dot + wordmark + fadeout
   late final List<AnimationController> _dotControllers;
@@ -105,7 +107,25 @@ class _SplashScreenState extends State<SplashScreen>
     await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
 
-    context.go('/auth/login');
+    // Try auto-login before navigating
+    await ref.read(authProvider.notifier).tryAutoLogin();
+    if (!mounted) return;
+
+    final authState = ref.read(authProvider);
+    if (authState.status == AuthStatus.authenticated) {
+      final role = authState.user!.role;
+      if (role == 'driver') {
+        context.go('/driver/deliveries');
+      } else if (role == 'admin') {
+        context.go('/admin/dashboard');
+      } else {
+        context.go('/customer/home');
+      }
+    } else if (authState.status == AuthStatus.profileIncomplete) {
+      context.go('/auth/profile-setup');
+    } else {
+      context.go('/auth/login');
+    }
   }
 
   @override

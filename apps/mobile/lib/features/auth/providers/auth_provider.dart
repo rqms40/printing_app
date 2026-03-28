@@ -1,4 +1,7 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing_app/shared/services/api_client.dart';
+import 'package:printing_app/shared/services/token_storage.dart';
 
 // ---------------------------------------------------------------------------
 // Auth status
@@ -93,31 +96,61 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> login(String email, String password) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
-    await Future.delayed(const Duration(milliseconds: 800));
-    state = AuthState(
-      status: AuthStatus.authenticated,
-      user: AuthUser(
-        id: '1',
-        email: email,
-        fullName: 'Maria Santos',
-        role: 'customer',
-        isProfileComplete: true,
-      ),
-    );
+    try {
+      final response = await ApiClient.instance.post('/auth/login', data: {
+        'email': email,
+        'password': password,
+      });
+      final data = response.data as Map<String, dynamic>;
+      await TokenStorage.saveToken(data['access_token'] as String);
+      final user = _parseUser(data['user'] as Map<String, dynamic>);
+      state = AuthState(
+        status: user.isProfileComplete
+            ? AuthStatus.authenticated
+            : AuthStatus.profileIncomplete,
+        user: user,
+      );
+    } on DioException catch (e) {
+      final message = e.response?.data is Map
+          ? (e.response!.data as Map)['message']?.toString() ?? 'Login failed'
+          : 'Login failed';
+      state = state.copyWith(isLoading: false, errorMessage: message);
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Connection error. Check your network.',
+      );
+    }
   }
 
   Future<void> register(String email, String password) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
-    await Future.delayed(const Duration(milliseconds: 800));
-    state = AuthState(
-      status: AuthStatus.profileIncomplete,
-      user: AuthUser(
-        id: '1',
-        email: email,
-        fullName: '',
-        role: 'customer',
-      ),
-    );
+    try {
+      final response = await ApiClient.instance.post('/auth/register', data: {
+        'email': email,
+        'password': password,
+      });
+      final data = response.data as Map<String, dynamic>;
+      await TokenStorage.saveToken(data['access_token'] as String);
+      final user = _parseUser(data['user'] as Map<String, dynamic>);
+      state = AuthState(
+        status: user.isProfileComplete
+            ? AuthStatus.authenticated
+            : AuthStatus.profileIncomplete,
+        user: user,
+      );
+    } on DioException catch (e) {
+      final message = e.response?.data is Map
+          ? (e.response!.data as Map)['message']?.toString() ??
+              'Registration failed'
+          : 'Registration failed';
+      state = state.copyWith(isLoading: false, errorMessage: message);
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Connection error. Check your network.',
+      );
+    }
   }
 
   void devBypass(String role) {
@@ -150,25 +183,71 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
   }
 
-  void completeProfile(
-    String fullName,
-    String phone,
-    String gender,
+  Future<void> completeProfile({
+    required String fullName,
+    String? phone,
+    String? gender,
     DateTime? dob,
-  ) {
-    state = AuthState(
-      status: AuthStatus.authenticated,
-      user: state.user!.copyWith(
-        fullName: fullName,
-        phone: phone,
-        gender: gender,
-        dateOfBirth: dob,
-        isProfileComplete: true,
-      ),
-    );
+  }) async {
+    state = state.copyWith(isLoading: true);
+    try {
+      final response = await ApiClient.instance.put('/users/profile', data: {
+        'fullName': fullName,
+        if (phone != null && phone.isNotEmpty) 'phoneNumber': phone,
+        if (gender != null && gender.isNotEmpty) 'gender': gender,
+        if (dob != null) 'dateOfBirth': dob.toIso8601String(),
+      });
+      final user = _parseUser(response.data as Map<String, dynamic>);
+      state = AuthState(
+        status: AuthStatus.authenticated,
+        user: user.copyWith(isProfileComplete: true),
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Failed to update profile',
+      );
+    }
   }
 
-  void logout() => state = AuthState.unauthenticated();
+  Future<void> logout() async {
+    await TokenStorage.clearToken();
+    state = AuthState.unauthenticated();
+  }
+
+  Future<void> tryAutoLogin() async {
+    final hasToken = await TokenStorage.hasToken();
+    if (!hasToken) return;
+
+    try {
+      final response = await ApiClient.instance.get('/users/profile');
+      final user = _parseUser(response.data as Map<String, dynamic>);
+      state = AuthState(
+        status: user.isProfileComplete
+            ? AuthStatus.authenticated
+            : AuthStatus.profileIncomplete,
+        user: user,
+      );
+    } catch (_) {
+      await TokenStorage.clearToken();
+      // Token expired or invalid — stay unauthenticated
+    }
+  }
+
+  AuthUser _parseUser(Map<String, dynamic> json) {
+    return AuthUser(
+      id: json['id'].toString(),
+      email: json['email'] as String,
+      fullName: (json['fullName'] as String?) ?? '',
+      role: json['role'] as String? ?? 'customer',
+      isProfileComplete: json['isProfileComplete'] as bool? ?? false,
+      phone: json['phoneNumber'] as String?,
+      gender: json['gender'] as String?,
+      dateOfBirth: json['dateOfBirth'] != null
+          ? DateTime.tryParse(json['dateOfBirth'] as String)
+          : null,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
