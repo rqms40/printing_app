@@ -13,11 +13,14 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await DraftStorageService.init();
 
-  // Initialize API client with platform-appropriate base URL
+  // Initialize API client with platform-appropriate base URL.
+  // Android emulator uses 10.0.2.2 to reach host machine's localhost.
+  // All other platforms (web, desktop, iOS simulator) use localhost directly.
+  final isAndroid = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
   ApiClient.instance.init(
-    baseUrl: kIsWeb
-        ? 'http://localhost:3000/api'
-        : 'http://10.0.2.2:3000/api', // Android emulator
+    baseUrl: isAndroid
+        ? 'http://10.0.2.2:3000/api'
+        : 'http://localhost:3000/api',
   );
 
   // Check if the API server is reachable; app works with mock data if not.
