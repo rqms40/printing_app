@@ -1,7 +1,10 @@
-import { Controller, Get, Post, Patch, Param, Body, UseGuards, Request, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Body, UseGuards, Request, Query, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { OrdersService } from './orders.service';
+import { CreateOrderDto } from './dto/create-order.dto';
+import { UpdateStatusDto } from './dto/update-status.dto';
 
 @ApiTags('orders')
 @ApiBearerAuth()
@@ -16,17 +19,24 @@ export class OrdersController {
   }
 
   @Get(':id')
-  getOrder(@Param('id') id: number) {
-    return this.ordersService.findById(id);
+  async getOrder(@Request() req: any, @Param('id') id: number) {
+    const order = await this.ordersService.findById(id);
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.userId !== req.user.sub && req.user.role !== 'admin') {
+      throw new ForbiddenException('You can only view your own orders');
+    }
+    return order;
   }
 
   @Post()
-  createOrder(@Request() req: any, @Body() body: any) {
-    return this.ordersService.create({ ...body, userId: req.user.sub });
+  createOrder(@Request() req: any, @Body() dto: CreateOrderDto) {
+    return this.ordersService.create({ ...dto, userId: req.user.sub });
   }
 
   @Patch(':id/status')
-  updateStatus(@Param('id') id: number, @Body('status') status: string) {
-    return this.ordersService.updateStatus(id, status);
+  @Roles('admin')
+  @UseGuards(RolesGuard)
+  updateStatus(@Param('id') id: number, @Body() dto: UpdateStatusDto) {
+    return this.ordersService.updateStatus(id, dto.status);
   }
 }

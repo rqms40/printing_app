@@ -21,7 +21,8 @@ export class OrdersService {
   }
 
   async create(data: Partial<Order>): Promise<Order> {
-    const orderId = `ORD-${Date.now().toString().slice(-5).padStart(5, '0')}`;
+    const count = await this.ordersRepo.count();
+    const orderId = `ORD-${(10001 + count).toString().padStart(5, '0')}`;
     const order = this.ordersRepo.create({ ...data, orderId });
     return this.ordersRepo.save(order);
   }

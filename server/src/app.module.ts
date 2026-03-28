@@ -21,7 +21,7 @@ import { OrdersModule } from './orders/orders.module';
         password: config.get<string>('DATABASE_PASSWORD', 'postgres'),
         database: config.get<string>('DATABASE_NAME', 'grid_print'),
         autoLoadEntities: true,
-        synchronize: true, // TODO: disable in production, use migrations
+        synchronize: config.get<string>('NODE_ENV') !== 'production',
       }),
     }),
 
