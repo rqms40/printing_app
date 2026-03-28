@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing_app/shared/services/api_client.dart';
 
-/// Mock earnings data for the driver.
+/// Earnings data for the driver.
 class EarningsData {
   const EarningsData({
     required this.today,
@@ -13,10 +14,35 @@ class EarningsData {
   final double thisMonth;
 }
 
-final earningsProvider = Provider<EarningsData>(
-  (ref) => const EarningsData(
-    today: 450.0,
-    thisWeek: 2350.0,
-    thisMonth: 8900.0,
-  ),
+class EarningsNotifier extends StateNotifier<EarningsData> {
+  EarningsNotifier()
+      : super(const EarningsData(today: 0, thisWeek: 0, thisMonth: 0)) {
+    _fetchEarnings();
+  }
+
+  Future<void> _fetchEarnings() async {
+    try {
+      final response = await ApiClient.instance.get('/drivers/earnings');
+      final json = response.data as Map<String, dynamic>;
+      state = EarningsData(
+        today: (json['today'] as num?)?.toDouble() ?? 0,
+        thisWeek: (json['thisWeek'] as num?)?.toDouble() ?? 0,
+        thisMonth: (json['thisMonth'] as num?)?.toDouble() ?? 0,
+      );
+    } catch (_) {
+      // Offline fallback with mock values
+      state = const EarningsData(
+        today: 450.0,
+        thisWeek: 2350.0,
+        thisMonth: 8900.0,
+      );
+    }
+  }
+
+  Future<void> refreshEarnings() async => _fetchEarnings();
+}
+
+final earningsProvider =
+    StateNotifierProvider<EarningsNotifier, EarningsData>(
+  (ref) => EarningsNotifier(),
 );

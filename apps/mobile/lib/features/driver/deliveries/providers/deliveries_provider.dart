@@ -2,6 +2,43 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/shared/models/delivery_assignment.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
+import 'package:printing_app/shared/services/api_client.dart';
+
+DeliveryStatus _parseDeliveryStatus(String value) {
+  return DeliveryStatus.values.firstWhere(
+    (e) => e.name == value,
+    orElse: () => DeliveryStatus.assigned,
+  );
+}
+
+DateTime? _parseDateNullable(dynamic value) {
+  if (value is String) return DateTime.parse(value);
+  return null;
+}
+
+DateTime _parseDate(dynamic value) {
+  if (value is String) return DateTime.parse(value);
+  return DateTime.now();
+}
+
+DeliveryAssignment _parseAssignment(Map<String, dynamic> json) {
+  return DeliveryAssignment(
+    id: json['id'] as String? ?? json['_id'] as String? ?? '',
+    orderId: json['orderId'] as String? ?? '',
+    driverId: json['driverId'] as String? ?? '',
+    status: _parseDeliveryStatus(json['status'] as String? ?? 'assigned'),
+    assignedAt: _parseDateNullable(json['assignedAt']),
+    acceptedAt: _parseDateNullable(json['acceptedAt']),
+    pickedUpAt: _parseDateNullable(json['pickedUpAt']),
+    onTheWayAt: _parseDateNullable(json['onTheWayAt']),
+    arrivedAt: _parseDateNullable(json['arrivedAt']),
+    deliveredAt: _parseDateNullable(json['deliveredAt']),
+    declineReason: json['declineReason'] as String?,
+    proofPhotoUrl: json['proofPhotoUrl'] as String?,
+    createdAt: _parseDate(json['createdAt']),
+    updatedAt: _parseDate(json['updatedAt']),
+  );
+}
 
 /// State for the deliveries list.
 class DeliveriesState {
@@ -53,9 +90,27 @@ class DeliveriesState {
 
 class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
   DeliveriesNotifier()
-      : super(DeliveriesState(
-          assignments: List.from(MockData.deliveryAssignments),
-        ));
+      : super(const DeliveriesState(assignments: [])) {
+    _fetchAssignments();
+  }
+
+  Future<void> _fetchAssignments() async {
+    try {
+      final response = await ApiClient.instance.get('/drivers/assignments');
+      final data = response.data as List<dynamic>;
+      final assignments = data
+          .map((json) => _parseAssignment(json as Map<String, dynamic>))
+          .toList();
+      state = state.copyWith(assignments: assignments);
+    } catch (_) {
+      // Offline fallback
+      state = state.copyWith(
+        assignments: List.from(MockData.deliveryAssignments),
+      );
+    }
+  }
+
+  Future<void> refreshAssignments() async => _fetchAssignments();
 
   /// Filter assignments by status. Pass null to clear filter.
   void filterByStatus(DeliveryStatus? status) {
@@ -63,7 +118,11 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
   }
 
   /// Accept an assignment. Transitions assigned -> accepted.
-  void acceptAssignment(String assignmentId) {
+  Future<void> acceptAssignment(String assignmentId) async {
+    try {
+      await ApiClient.instance.patch('/drivers/assignments/$assignmentId/accept');
+    } catch (_) {}
+    // Update local state regardless
     _updateAssignment(assignmentId, (a) {
       if (a.status != DeliveryStatus.assigned) return a;
       return a.copyWith(
@@ -75,7 +134,11 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
   }
 
   /// Decline an assignment. Transitions assigned -> declined.
-  void declineAssignment(String assignmentId) {
+  Future<void> declineAssignment(String assignmentId) async {
+    try {
+      await ApiClient.instance.patch('/drivers/assignments/$assignmentId/decline');
+    } catch (_) {}
+    // Update local state regardless
     _updateAssignment(assignmentId, (a) {
       if (a.status != DeliveryStatus.assigned) return a;
       return a.copyWith(
@@ -88,7 +151,11 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
 
   /// Advance the delivery to the next checkpoint status.
   /// State machine: assigned -> accepted -> pickedUp -> onTheWay -> arrived -> delivered
-  void advanceCheckpoint(String assignmentId) {
+  Future<void> advanceCheckpoint(String assignmentId) async {
+    try {
+      await ApiClient.instance.patch('/drivers/assignments/$assignmentId/advance');
+    } catch (_) {}
+    // Update local state regardless
     _updateAssignment(assignmentId, (a) {
       final now = DateTime.now();
       switch (a.status) {
@@ -129,12 +196,9 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
     });
   }
 
-  /// Reset to mock data (for pull-to-refresh).
-  void reset() {
-    state = DeliveriesState(
-      assignments: List.from(MockData.deliveryAssignments),
-      filterStatus: state.filterStatus,
-    );
+  /// Refresh from API (for pull-to-refresh).
+  Future<void> reset() async {
+    await _fetchAssignments();
   }
 
   void _updateAssignment(
