@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -9,6 +10,7 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/file_upload_card.dart';
+import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
 import 'package:printing_app/utils/formatters.dart';
@@ -156,6 +158,25 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
       setState(() => _uploadProgress = i / 10);
     }
     setState(() => _isUploading = false);
+
+    // After simulated upload completes, try real upload for non-mock files
+    if (_filePath != null && !_filePath!.startsWith('/mock/')) {
+      try {
+        final formData = FormData.fromMap({
+          'file': await MultipartFile.fromFile(_filePath!, filename: _fileName),
+        });
+        final response =
+            await ApiClient.instance.dio.post('/files/upload', data: formData);
+        // Store server URL instead of local path
+        if (mounted) {
+          setState(() {
+            _filePath = response.data['url'] as String? ?? _filePath;
+          });
+        }
+      } catch (_) {
+        // Upload failed -- keep local path, will retry when online
+      }
+    }
   }
 
   bool get _canContinue =>

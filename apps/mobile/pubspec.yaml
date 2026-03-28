@@ -54,6 +54,9 @@ dependencies:
   # HTTP client
   dio: ^5.7.0
 
+  # WebSocket
+  socket_io_client: ^3.0.2
+
   # Networking & Utilities
   connectivity_plus: ^6.1.2
   url_launcher: ^6.3.1
@@ -74,10 +77,6 @@ flutter:
     - assets/icons/
     - assets/animations/
 
-  # TODO: Download actual font files:
-  # - Satoshi: https://www.fontshare.com/fonts/satoshi (Regular, Medium, Bold)
-  # - Instrument Serif: https://fonts.google.com/specimen/Instrument+Serif (Regular)
-  # Current .ttf files are empty placeholders.
   fonts:
     - family: Satoshi
       fonts:

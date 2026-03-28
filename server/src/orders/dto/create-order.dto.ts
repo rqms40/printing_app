@@ -1,5 +1,24 @@
-import { IsString, IsNumber, IsOptional, Min } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsBoolean, Min, ValidateNested } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+
+export class PaperSpecsDto {
+  @IsString() paperSize: string;
+  @IsString() colorMode: string;
+  @IsString() mediaType: string;
+  @IsString() printSides: string;
+  @IsString() @IsOptional() binding?: string;
+}
+
+export class ThreeDSpecsDto {
+  @IsString() fileFormat: string;
+  @IsString() material: string;
+  @IsString() color: string;
+  @IsNumber() infillPercentage: number;
+  @IsNumber() layerHeight: number;
+  @IsBoolean() supports: boolean;
+  @IsString() @IsOptional() notes?: string;
+}
 
 export class CreateOrderDto {
   @ApiProperty({ example: 'paper', enum: ['paper', '3d'] })
@@ -36,4 +55,16 @@ export class CreateOrderDto {
   @IsOptional()
   @IsString()
   fileUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PaperSpecsDto)
+  paperSpecs?: PaperSpecsDto;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ThreeDSpecsDto)
+  threeDSpecs?: ThreeDSpecsDto;
 }

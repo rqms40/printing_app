@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
@@ -5,6 +6,7 @@ import 'package:printing_app/shared/models/paper_specs.dart';
 import 'package:printing_app/shared/models/three_d_specs.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/services/api_client.dart';
+import 'package:printing_app/shared/services/websocket_service.dart';
 
 /// Terminal statuses that mark an order as completed/done.
 const _terminalStatuses = {
@@ -156,6 +158,25 @@ Order _parseOrder(Map<String, dynamic> json) {
 class OrdersNotifier extends StateNotifier<List<Order>> {
   OrdersNotifier() : super([]) {
     _fetchOrders();
+    _connectWebSocket();
+  }
+
+  Future<void> _connectWebSocket() async {
+    try {
+      await WebSocketService.instance.connectOrders(
+        onOrderUpdate: (data) {
+          if (data is Map<String, dynamic>) {
+            final updated = _parseOrder(data);
+            state = [
+              for (final order in state)
+                if (order.orderId == updated.orderId) updated else order,
+            ];
+          }
+        },
+      );
+    } catch (e) {
+      debugPrint('WebSocket connection failed: $e');
+    }
   }
 
   /// Orders that are still in progress (non-terminal statuses).
@@ -191,6 +212,26 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
         'deliveryOption': order.deliveryOption,
         'fileName': order.fileName,
         'fileUrl': order.fileUrl,
+        'paperSpecs': order.paperSpecs != null
+            ? {
+                'paperSize': order.paperSpecs!.paperSize.name,
+                'colorMode': order.paperSpecs!.colorMode.name,
+                'mediaType': order.paperSpecs!.mediaType.name,
+                'printSides': order.paperSpecs!.printSides.name,
+                'binding': order.paperSpecs!.binding.name,
+              }
+            : null,
+        'threeDSpecs': order.threeDSpecs != null
+            ? {
+                'fileFormat': order.threeDSpecs!.fileFormat.name,
+                'material': order.threeDSpecs!.material.name,
+                'color': order.threeDSpecs!.color,
+                'infillPercentage': order.threeDSpecs!.infillPercentage,
+                'layerHeight': order.threeDSpecs!.layerHeight,
+                'supports': order.threeDSpecs!.supports,
+                'notes': order.threeDSpecs!.notes,
+              }
+            : null,
       });
       final newOrder = _parseOrder(response.data as Map<String, dynamic>);
       state = [newOrder, ...state];

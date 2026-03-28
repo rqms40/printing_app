@@ -3,11 +3,15 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OrdersService } from './orders.service';
 import { Order } from './entities/order.entity';
+import { PaperSpec } from './entities/paper-specs.entity';
+import { ThreeDSpec } from './entities/three-d-specs.entity';
 import { OrdersGateway } from './orders.gateway';
 
 describe('OrdersService', () => {
   let service: OrdersService;
   let repo: jest.Mocked<Partial<Repository<Order>>>;
+  let paperSpecsRepo: jest.Mocked<Partial<Repository<PaperSpec>>>;
+  let threeDSpecsRepo: jest.Mocked<Partial<Repository<ThreeDSpec>>>;
   let gateway: Partial<OrdersGateway>;
 
   const mockOrder = {
@@ -28,6 +32,14 @@ describe('OrdersService', () => {
       update: jest.fn(),
       count: jest.fn(),
     };
+    paperSpecsRepo = {
+      create: jest.fn(),
+      save: jest.fn(),
+    };
+    threeDSpecsRepo = {
+      create: jest.fn(),
+      save: jest.fn(),
+    };
     gateway = {
       notifyOrderUpdate: jest.fn(),
     };
@@ -36,6 +48,8 @@ describe('OrdersService', () => {
       providers: [
         OrdersService,
         { provide: getRepositoryToken(Order), useValue: repo },
+        { provide: getRepositoryToken(PaperSpec), useValue: paperSpecsRepo },
+        { provide: getRepositoryToken(ThreeDSpec), useValue: threeDSpecsRepo },
         { provide: OrdersGateway, useValue: gateway },
       ],
     }).compile();

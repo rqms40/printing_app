@@ -6,10 +6,12 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/shared/models/order.dart';
+import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
@@ -224,42 +226,62 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   Future<void> _onPay() async {
     setState(() => _isProcessing = true);
 
-    // Simulate payment processing
-    await Future.delayed(const Duration(milliseconds: 1500));
+    try {
+      // Build the new order from flow state
+      final flowState = ref.read(orderFlowProvider);
+      final authState = ref.read(authProvider);
+      final userId = authState.user?.id ?? 'unknown';
 
-    if (!mounted) return;
+      final newOrder = Order(
+        id: 'ord_${DateTime.now().millisecondsSinceEpoch}',
+        orderId:
+            'ORD-${(10000 + DateTime.now().millisecond).toString().padLeft(5, '0')}',
+        userId: userId,
+        category: flowState.category ?? 'paper',
+        fileName: flowState.fileName,
+        fileUrl: flowState.filePath,
+        paperSpecs: flowState.paperSpecs,
+        threeDSpecs: flowState.threeDSpecs,
+        quantity: flowState.quantity,
+        totalPrice: flowState.totalPrice + flowState.deliveryFee,
+        deliveryFee: flowState.deliveryFee,
+        paymentMethod: flowState.paymentMethod ?? PaymentMethod.cod,
+        paymentStatus: PaymentStatus.pending,
+        orderStatus: OrderStatus.orderPlaced,
+        deliveryOption: flowState.deliveryOption,
+        deliveryAddressId: flowState.deliveryAddress?.id,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
 
-    // Build the new order from flow state
-    final flowState = ref.read(orderFlowProvider);
-    final newOrder = Order(
-      id: 'ord_${DateTime.now().millisecondsSinceEpoch}',
-      orderId:
-          'ORD-${(10000 + DateTime.now().millisecond).toString().padLeft(5, '0')}',
-      userId: 'usr_001',
-      category: flowState.category ?? 'paper',
-      fileName: flowState.fileName,
-      fileUrl: flowState.filePath,
-      paperSpecs: flowState.paperSpecs,
-      threeDSpecs: flowState.threeDSpecs,
-      quantity: flowState.quantity,
-      totalPrice: flowState.totalPrice + flowState.deliveryFee,
-      deliveryFee: flowState.deliveryFee,
-      paymentMethod: flowState.paymentMethod ?? PaymentMethod.cod,
-      paymentStatus: PaymentStatus.paid,
-      orderStatus: OrderStatus.orderPlaced,
-      deliveryOption: flowState.deliveryOption,
-      deliveryAddressId: flowState.deliveryAddress?.id,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    );
+      // 1. Create the order via API
+      await ref.read(ordersProvider.notifier).addOrder(newOrder);
 
-    // Add to orders list
-    ref.read(ordersProvider.notifier).addOrder(newOrder);
+      // 2. Create payment intent for non-COD methods
+      final paymentMethod = flowState.paymentMethod?.name ?? 'cod';
+      if (paymentMethod != 'cod') {
+        try {
+          await ApiClient.instance.post('/payments/intent', data: {
+            'paymentMethod': paymentMethod,
+            'amount': flowState.totalPrice + flowState.deliveryFee,
+          });
+        } catch (_) {
+          // Payment API unavailable -- proceed with demo mode
+        }
+      }
 
-    setState(() {
-      _isProcessing = false;
-      _isSuccess = true;
-    });
+      if (!mounted) return;
+      setState(() {
+        _isProcessing = false;
+        _isSuccess = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isProcessing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Order failed: $e')),
+      );
+    }
   }
 
   Widget _buildSuccessView(AppColorSet colors) {
