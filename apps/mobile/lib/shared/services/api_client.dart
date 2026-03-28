@@ -1,0 +1,78 @@
+import 'package:dio/dio.dart';
+import 'token_storage.dart';
+
+/// Centralized API client for all NestJS backend calls.
+///
+/// - Auto-attaches JWT token to requests
+/// - Handles 401 (clears token)
+/// - Configurable base URL
+class ApiClient {
+  ApiClient._();
+
+  static final ApiClient instance = ApiClient._();
+
+  static const String _defaultBaseUrl = 'http://10.0.2.2:3000/api'; // Android emulator
+  // For web/desktop: 'http://localhost:3000/api'
+  // For iOS simulator: 'http://localhost:3000/api'
+
+  late final Dio _dio;
+  bool _initialized = false;
+
+  /// Call once at app startup.
+  void init({String? baseUrl}) {
+    if (_initialized) return;
+
+    _dio = Dio(BaseOptions(
+      baseUrl: baseUrl ?? _defaultBaseUrl,
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 10),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    ));
+
+    // Attach JWT token to every request
+    _dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) async {
+        final token = await TokenStorage.getToken();
+        if (token != null) {
+          options.headers['Authorization'] = 'Bearer $token';
+        }
+        handler.next(options);
+      },
+      onError: (error, handler) async {
+        if (error.response?.statusCode == 401) {
+          await TokenStorage.clearToken();
+          // The auth provider will detect this and redirect to login
+        }
+        handler.next(error);
+      },
+    ));
+
+    _initialized = true;
+  }
+
+  Dio get dio {
+    if (!_initialized) {
+      throw StateError('ApiClient not initialized. Call ApiClient.instance.init() first.');
+    }
+    return _dio;
+  }
+
+  // Convenience methods
+  Future<Response<T>> get<T>(String path, {Map<String, dynamic>? queryParameters}) =>
+      dio.get<T>(path, queryParameters: queryParameters);
+
+  Future<Response<T>> post<T>(String path, {dynamic data}) =>
+      dio.post<T>(path, data: data);
+
+  Future<Response<T>> put<T>(String path, {dynamic data}) =>
+      dio.put<T>(path, data: data);
+
+  Future<Response<T>> patch<T>(String path, {dynamic data}) =>
+      dio.patch<T>(path, data: data);
+
+  Future<Response<T>> delete<T>(String path) =>
+      dio.delete<T>(path);
+}

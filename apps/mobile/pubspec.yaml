@@ -51,6 +51,9 @@ dependencies:
   google_polyline_algorithm: ^3.1.0
   http: ^1.2.2
 
+  # HTTP client
+  dio: ^5.7.0
+
   # Networking & Utilities
   connectivity_plus: ^6.1.2
   url_launcher: ^6.3.1
