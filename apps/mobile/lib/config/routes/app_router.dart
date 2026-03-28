@@ -65,16 +65,29 @@ import 'package:printing_app/features/admin/profile/screens/admin_profile_screen
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
 // ---------------------------------------------------------------------------
-// Router provider
+// Listenable that notifies GoRouter when auth state changes
+// ---------------------------------------------------------------------------
+class _AuthChangeNotifier extends ChangeNotifier {
+  _AuthChangeNotifier(this._ref) {
+    _ref.listen(authProvider, (_, __) => notifyListeners());
+  }
+  final Ref _ref;
+}
+
+// ---------------------------------------------------------------------------
+// Router provider — created ONCE, refreshes on auth changes
 // ---------------------------------------------------------------------------
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authProvider);
+  final authNotifier = _AuthChangeNotifier(ref);
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/splash',
     debugLogDiagnostics: true,
+    refreshListenable: authNotifier,
     redirect: (context, state) {
+      // Read (not watch!) current auth state at redirect time
+      final authState = ref.read(authProvider);
       final isAuth = authState.status == AuthStatus.authenticated;
       final isProfileIncomplete =
           authState.status == AuthStatus.profileIncomplete;
