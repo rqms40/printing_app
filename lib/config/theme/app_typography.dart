@@ -9,11 +9,21 @@ class AppTypography {
   const AppTypography._();
 
   static const String _instrumentSerif = 'InstrumentSerif';
+  static const String _archivoBlack = 'ArchivoBlack';
   static const String _satoshi = 'Satoshi';
 
-  /// Brand / editorial display — Instrument Serif.
-  /// Use ONLY for hero banners and splash screen, not page titles.
+  /// Brand / editorial display — Archivo Black.
+  /// Heavy, authoritative sans-serif for hero banners and splash screen.
   static const TextStyle display = TextStyle(
+    fontFamily: _archivoBlack,
+    fontSize: 32,
+    fontWeight: FontWeight.w400,
+    letterSpacing: -1.0,
+  );
+
+  /// Elegant editorial style — Instrument Serif.
+  /// Use for decorative/accent text where a softer serif feel is needed.
+  static const TextStyle displaySerif = TextStyle(
     fontFamily: _instrumentSerif,
     fontSize: 32,
     fontWeight: FontWeight.w400,

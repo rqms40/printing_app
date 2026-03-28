@@ -162,8 +162,8 @@ class _HeroTile extends StatelessWidget {
                   'Professional\nprinting,\ndelivered.',
                   style: AppTypography.display.copyWith(
                     color: isDark ? colors.onBackground : colors.background,
-                    height: 1.05,
-                    fontSize: 26,
+                    height: 1.0,
+                    fontSize: 24,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.xs),
