@@ -15,7 +15,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AddressesService } from './addresses.service';
 import { CreateAddressDto } from './dto/create-address.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
-import { RequestWithUser } from '../common/interfaces/request-with-user';
+import type { RequestWithUser } from '../common/interfaces/request-with-user';
 
 @ApiTags('addresses')
 @ApiBearerAuth()

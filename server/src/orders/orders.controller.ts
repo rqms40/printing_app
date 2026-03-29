@@ -16,7 +16,7 @@ import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
-import { RequestWithUser } from '../common/interfaces/request-with-user';
+import type { RequestWithUser } from '../common/interfaces/request-with-user';
 
 @ApiTags('orders')
 @ApiBearerAuth()
