@@ -10,7 +10,6 @@ import {
 } from "@ant-design/icons";
 import { useParams } from "react-router";
 import { useState } from "react";
-import type { Order } from "@/types/order";
 import type { OrderStatus } from "@/types/enums";
 import {
   ORDER_STATUS_TRANSITIONS,
@@ -61,7 +60,7 @@ export function OrderShow() {
     });
   };
 
-  const handleAssignDriver = (driverId: string) => {
+  const handleAssignDriver = (_driverId: string) => {
     message.success("Driver assigned");
     setDriverModalOpen(false);
   };
