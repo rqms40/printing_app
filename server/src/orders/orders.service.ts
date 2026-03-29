@@ -60,6 +60,9 @@ export class OrdersService {
       await this.threeDSpecsRepo.save(spec);
     }
 
+    // Notify via WebSocket — admin queue sees new orders in real-time
+    void this.ordersGateway.notifyOrderUpdate(savedOrder.orderId, savedOrder);
+
     return savedOrder;
   }
 

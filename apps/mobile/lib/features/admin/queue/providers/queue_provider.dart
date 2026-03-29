@@ -4,7 +4,9 @@ import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/models/paper_specs.dart';
 import 'package:printing_app/shared/models/three_d_specs.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
+import 'package:flutter/foundation.dart';
 import 'package:printing_app/shared/services/api_client.dart';
+import 'package:printing_app/shared/services/websocket_service.dart';
 
 /// Tabs for the order queue screen.
 enum QueueTab { newOrders, inProduction, done, all }
@@ -198,6 +200,22 @@ class QueueState {
 class QueueNotifier extends StateNotifier<QueueState> {
   QueueNotifier() : super(const QueueState(orders: [])) {
     _fetchOrders();
+    _connectWebSocket();
+  }
+
+  Future<void> _connectWebSocket() async {
+    try {
+      await WebSocketService.instance.connectOrders(
+        onOrderUpdate: (data) {
+          if (data is Map<String, dynamic>) {
+            // Refresh full list when any order changes (new or updated)
+            _fetchOrders();
+          }
+        },
+      );
+    } catch (e) {
+      debugPrint('Admin WS failed: $e');
+    }
   }
 
   Future<void> _fetchOrders() async {

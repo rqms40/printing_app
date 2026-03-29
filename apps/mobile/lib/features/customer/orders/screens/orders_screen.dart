@@ -30,11 +30,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   void initState() {
     super.initState();
     Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        // Refresh orders from API every time screen opens
-        ref.read(ordersProvider.notifier).refreshOrders();
-      }
+      if (mounted) setState(() => _isLoading = false);
     });
   }
 
