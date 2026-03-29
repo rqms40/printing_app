@@ -26,7 +26,7 @@ export function KpiCard({ title, value, prefix, color }: KpiCardProps) {
         prefix={prefix}
         valueStyle={{
           color: "#F0F0F0",
-          fontFamily: "Geist",
+          fontFamily: "DM Sans",
           fontSize: 22,
           whiteSpace: "nowrap",
           overflow: "hidden",

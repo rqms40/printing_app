@@ -15,7 +15,7 @@ export const gridTheme: ThemeConfig = {
     colorError: "#EF5350",
     colorWarning: "#FFCA28",
     colorInfo: "#42A5F5",
-    fontFamily: "'Geist', -apple-system, BlinkMacSystemFont, sans-serif",
+    fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
     borderRadius: 8,
   },
   components: {
