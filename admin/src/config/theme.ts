@@ -36,5 +36,22 @@ export const gridTheme: ThemeConfig = {
     Card: {
       colorBgContainer: "#141414",
     },
+    Modal: {
+      contentBg: "#1E1E1E",
+      headerBg: "#1E1E1E",
+      footerBg: "#1E1E1E",
+    },
+    Dropdown: {
+      colorBgElevated: "#1E1E1E",
+    },
+    Select: {
+      colorBgElevated: "#1E1E1E",
+    },
+    Popover: {
+      colorBgElevated: "#1E1E1E",
+    },
+    Tooltip: {
+      colorBgSpotlight: "#2A2A2A",
+    },
   },
 };
