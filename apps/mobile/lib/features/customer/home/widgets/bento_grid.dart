@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -13,8 +14,8 @@ import 'package:printing_app/shared/widgets/grid_logo.dart';
 
 /// Premium bento grid for the customer home screen.
 ///
-/// Uses IntrinsicHeight for each row so tiles size naturally
-/// based on content — no fixed heights, no overflow.
+/// Uses LayoutBuilder to get available width and computes cell sizes
+/// so the StaggeredGrid tiles never overflow.
 class BentoGrid extends StatelessWidget {
   const BentoGrid({super.key});
 
@@ -31,63 +32,64 @@ class BentoGrid extends StatelessWidget {
             o.orderStatus != OrderStatus.cancelled)
         .length;
 
-    return Column(
-      children: [
-        // Row 1: Hero (tall) + two service tiles stacked
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Hero tile — takes 60% width
-              Expanded(
-                flex: 3,
-                child: _HeroTile(colors: colors, isDark: isDark)
-                    .animate()
-                    .fadeIn(duration: 400.ms, curve: Curves.easeOut),
-              ),
-              const SizedBox(width: 10),
-              // Service tiles stacked — 40% width
-              Expanded(
-                flex: 2,
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: _ServiceTile(
-                        title: 'Paper\nPrinting',
-                        icon: HugeIcons.strokeRoundedFile02,
-                        colors: colors,
-                        isDark: isDark,
-                        onTap: () => context.push('/customer/order/new'),
-                      )
-                          .animate()
-                          .fadeIn(duration: 400.ms, delay: 80.ms, curve: Curves.easeOut),
-                    ),
-                    const SizedBox(height: 10),
-                    Expanded(
-                      child: _ServiceTile(
-                        title: '3D\nPrinting',
-                        icon: HugeIcons.strokeRoundedPackageDelivered,
-                        colors: colors,
-                        isDark: isDark,
-                        onTap: () => context.push('/customer/order/new'),
-                      )
-                          .animate()
-                          .fadeIn(duration: 400.ms, delay: 140.ms, curve: Curves.easeOut),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        // Row 2: Count tile + Promo banner
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Active orders count
-              _CountTile(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Compute cell height based on available width so tiles are proportional
+        final totalWidth = constraints.maxWidth;
+        final cellWidth = (totalWidth - 30) / 4; // 4 columns, 3 gaps of 10px
+        final cellHeight = cellWidth; // square cells
+
+        return StaggeredGrid.extent(
+          maxCrossAxisExtent: cellHeight,
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          children: [
+            // 1. Hero tile (2×2)
+            StaggeredGridTile.count(
+              crossAxisCellCount: 2,
+              mainAxisCellCount: 2,
+              child: _HeroTile(colors: colors, isDark: isDark)
+                  .animate()
+                  .fadeIn(duration: 400.ms, curve: Curves.easeOut),
+            ),
+
+            // 2. Paper Printing tile (2×1)
+            StaggeredGridTile.count(
+              crossAxisCellCount: 2,
+              mainAxisCellCount: 1,
+              child: _ServiceTile(
+                title: 'Paper\nPrinting',
+                icon: HugeIcons.strokeRoundedFile02,
+                colors: colors,
+                isDark: isDark,
+                onTap: () => context.push('/customer/order/new'),
+              )
+                  .animate()
+                  .fadeIn(
+                      duration: 400.ms, delay: 80.ms, curve: Curves.easeOut),
+            ),
+
+            // 3. 3D Printing tile (2×1)
+            StaggeredGridTile.count(
+              crossAxisCellCount: 2,
+              mainAxisCellCount: 1,
+              child: _ServiceTile(
+                title: '3D\nPrinting',
+                icon: HugeIcons.strokeRoundedPackageDelivered,
+                colors: colors,
+                isDark: isDark,
+                onTap: () => context.push('/customer/order/new'),
+              )
+                  .animate()
+                  .fadeIn(
+                      duration: 400.ms, delay: 140.ms, curve: Curves.easeOut),
+            ),
+
+            // 4. Active Orders (1×1)
+            StaggeredGridTile.count(
+              crossAxisCellCount: 1,
+              mainAxisCellCount: 1,
+              child: _CountTile(
                 count: '$activeOrderCount',
                 label: 'Active',
                 colors: colors,
@@ -95,18 +97,22 @@ class BentoGrid extends StatelessWidget {
                 onTap: () => context.go('/customer/orders'),
               )
                   .animate()
-                  .fadeIn(duration: 400.ms, delay: 200.ms, curve: Curves.easeOut),
-              const SizedBox(width: 10),
-              // Promo
-              Expanded(
-                child: _PromoTile(colors: colors, isDark: isDark)
-                    .animate()
-                    .fadeIn(duration: 400.ms, delay: 240.ms, curve: Curves.easeOut),
-              ),
-            ],
-          ),
-        ),
-      ],
+                  .fadeIn(
+                      duration: 400.ms, delay: 200.ms, curve: Curves.easeOut),
+            ),
+
+            // 5. Promo tile (3×1)
+            StaggeredGridTile.count(
+              crossAxisCellCount: 3,
+              mainAxisCellCount: 1,
+              child: _PromoTile(colors: colors, isDark: isDark)
+                  .animate()
+                  .fadeIn(
+                      duration: 400.ms, delay: 240.ms, curve: Curves.easeOut),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -125,7 +131,7 @@ class _HeroTile extends StatelessWidget {
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         color: isDark ? colors.surfaceVariant : colors.accent,
-        borderRadius: AppRadius.borderLg,
+        borderRadius: AppRadius.borderXl,
       ),
       child: Stack(
         children: [
@@ -135,7 +141,7 @@ class _HeroTile extends StatelessWidget {
             child: Opacity(
               opacity: isDark ? 0.08 : 0.12,
               child: GridLogo(
-                size: 100,
+                size: 110,
                 foregroundColor: isDark ? colors.onBackground : colors.background,
               ),
             ),
@@ -148,17 +154,15 @@ class _HeroTile extends StatelessWidget {
                 'Professional\nprinting,\ndelivered.',
                 style: AppTypography.display.copyWith(
                   color: isDark ? colors.onBackground : colors.background,
-                  height: 1.05,
-                  fontSize: 22,
+                  height: 1.1,
                 ),
               ),
-              const SizedBox(height: AppSpacing.xs),
+              const SizedBox(height: AppSpacing.sm),
               Text(
-                'Paper & 3D printing',
+                'Paper & 3D services\nat your fingertips',
                 style: AppTypography.caption.copyWith(
                   color: (isDark ? colors.onBackground : colors.background)
                       .withValues(alpha: 0.7),
-                  fontSize: 11,
                 ),
               ),
             ],
@@ -170,7 +174,7 @@ class _HeroTile extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Service Tile — icon + title, vertical layout
+// Service Tile
 // ---------------------------------------------------------------------------
 class _ServiceTile extends StatefulWidget {
   const _ServiceTile({
@@ -208,10 +212,10 @@ class _ServiceTileState extends State<_ServiceTile> {
         duration: const Duration(milliseconds: 100),
         curve: Curves.easeOut,
         child: Container(
-          padding: const EdgeInsets.all(AppSpacing.sm),
+          padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
             color: widget.colors.surface,
-            borderRadius: AppRadius.borderLg,
+            borderRadius: AppRadius.borderXl,
             boxShadow: widget.isDark ? null : AppShadows.subtle,
             border: widget.isDark
                 ? Border.all(
@@ -223,16 +227,25 @@ class _ServiceTileState extends State<_ServiceTile> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              HugeIcon(
-                icon: widget.icon,
-                size: 20,
-                color: widget.colors.onSurfaceDim,
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: widget.colors.surfaceVariant,
+                  borderRadius: AppRadius.borderMd,
+                ),
+                child: Center(
+                  child: HugeIcon(
+                    icon: widget.icon,
+                    size: 18,
+                    color: widget.colors.onBackground,
+                  ),
+                ),
               ),
               Text(
                 widget.title,
                 style: AppTypography.bodyBold.copyWith(
                   color: widget.colors.onBackground,
-                  fontSize: 13,
                   height: 1.2,
                 ),
               ),
@@ -267,11 +280,10 @@ class _CountTile extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 72,
         padding: const EdgeInsets.all(AppSpacing.sm),
         decoration: BoxDecoration(
           color: colors.surface,
-          borderRadius: AppRadius.borderLg,
+          borderRadius: AppRadius.borderXl,
           boxShadow: isDark ? null : AppShadows.subtle,
           border: isDark
               ? Border.all(
@@ -283,7 +295,7 @@ class _CountTile extends StatelessWidget {
           children: [
             Text(
               count,
-              style: AppTypography.h3.copyWith(
+              style: AppTypography.h2.copyWith(
                 color: colors.brand,
               ),
             ),
@@ -291,7 +303,7 @@ class _CountTile extends StatelessWidget {
               label,
               style: AppTypography.caption.copyWith(
                 color: colors.onSurfaceDim,
-                fontSize: 10,
+                fontSize: 11,
               ),
             ),
           ],
@@ -312,56 +324,29 @@ class _PromoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: isDark
-            ? colors.surfaceVariant
-            : colors.accent.withValues(alpha: 0.05),
-        borderRadius: AppRadius.borderLg,
-        border: Border.all(
-          color: colors.outline.withValues(alpha: 0.3),
-          width: 0.5,
-        ),
+            ? colors.surfaceHigh
+            : colors.accent.withValues(alpha: 0.06),
+        borderRadius: AppRadius.borderXl,
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          HugeIcon(
-            icon: HugeIcons.strokeRoundedDiscount,
-            size: 20,
-            color: colors.brand,
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  '20% off large format',
-                  style: AppTypography.bodyBold.copyWith(
-                    color: colors.onBackground,
-                    fontSize: 12,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  'Limited time offer',
-                  style: AppTypography.caption.copyWith(
-                    color: colors.onSurfaceDim,
-                    fontSize: 10,
-                  ),
-                ),
-              ],
+          Text(
+            'FEATURED',
+            style: AppTypography.overline.copyWith(
+              color: colors.onSurfaceDim,
             ),
           ),
-          HugeIcon(
-            icon: HugeIcons.strokeRoundedArrowRight01,
-            size: 14,
-            color: colors.disabled,
+          Text(
+            '20% off\nlarge format',
+            style: AppTypography.bodyBold.copyWith(
+              color: colors.onBackground,
+              height: 1.2,
+            ),
           ),
         ],
       ),

@@ -49,7 +49,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.textContaining('Paper & 3D printing'),
+        find.textContaining('Paper & 3D'),
         findsOneWidget,
       );
     });
