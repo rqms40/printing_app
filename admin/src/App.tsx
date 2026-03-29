@@ -16,17 +16,24 @@ import { ConfigProvider, App as AntdApp } from "antd";
 import {
   ShoppingCartOutlined,
   DashboardOutlined,
+  CarOutlined,
+  TeamOutlined,
+  ShoppingOutlined,
 } from "@ant-design/icons";
 
 import { gridTheme } from "@/config/theme";
 import { authProvider } from "@/providers/auth-provider";
 import { gridDataProvider } from "@/providers/data-provider";
 import { GridLogo } from "@/components/grid-logo";
+import { CustomHeader } from "@/components/header";
 
 import { LoginPage } from "@/pages/login";
 import { DashboardPage } from "@/pages/dashboard";
 import { OrderList } from "@/pages/orders/list";
 import { OrderShow } from "@/pages/orders/show";
+import { DriverList } from "@/pages/drivers/list";
+import { UserList } from "@/pages/users/list";
+import { ProductList } from "@/pages/products/list";
 
 function App() {
   return (
@@ -56,6 +63,30 @@ function App() {
                   icon: <ShoppingCartOutlined />,
                 },
               },
+              {
+                name: "drivers",
+                list: "/drivers",
+                meta: {
+                  label: "Drivers",
+                  icon: <CarOutlined />,
+                },
+              },
+              {
+                name: "users",
+                list: "/users",
+                meta: {
+                  label: "Users",
+                  icon: <TeamOutlined />,
+                },
+              },
+              {
+                name: "products",
+                list: "/products",
+                meta: {
+                  label: "Products",
+                  icon: <ShoppingOutlined />,
+                },
+              },
             ]}
             options={{
               syncWithLocation: true,
@@ -74,6 +105,7 @@ function App() {
                     fallback={<CatchAllNavigate to="/login" />}
                   >
                     <ThemedLayoutV2
+                      Header={() => <CustomHeader />}
                       Title={({ collapsed }) => (
                         <ThemedTitleV2
                           collapsed={collapsed}
@@ -92,6 +124,9 @@ function App() {
                   <Route index element={<OrderList />} />
                   <Route path="show/:id" element={<OrderShow />} />
                 </Route>
+                <Route path="/drivers" element={<DriverList />} />
+                <Route path="/users" element={<UserList />} />
+                <Route path="/products" element={<ProductList />} />
               </Route>
 
               <Route
