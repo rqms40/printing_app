@@ -1,12 +1,24 @@
 import { useGetIdentity, useLogout } from "@refinedev/core";
-import { Layout, Avatar, Dropdown, Typography, Space } from "antd";
-import { LogoutOutlined } from "@ant-design/icons";
+import { Layout, Avatar, Dropdown, Typography, Space, Modal } from "antd";
+import { LogoutOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
 
 const { Text } = Typography;
 
 export function CustomHeader() {
   const { data: identity } = useGetIdentity<{ name: string; email: string }>();
   const { mutate: logout } = useLogout();
+
+  const handleLogout = () => {
+    Modal.confirm({
+      title: "Sign Out",
+      icon: <ExclamationCircleOutlined />,
+      content: "Are you sure you want to sign out?",
+      okText: "Sign Out",
+      okButtonProps: { danger: true },
+      cancelText: "Cancel",
+      onOk: () => logout(),
+    });
+  };
 
   const menuItems = [
     {
@@ -29,7 +41,7 @@ export function CustomHeader() {
       label: "Sign Out",
       icon: <LogoutOutlined />,
       danger: true,
-      onClick: () => logout(),
+      onClick: handleLogout,
     },
   ];
 
@@ -42,7 +54,7 @@ export function CustomHeader() {
         display: "flex",
         alignItems: "center",
         justifyContent: "flex-end",
-        height: 56,
+        height: 64,
       }}
     >
       <Dropdown menu={{ items: menuItems }} trigger={["click"]} placement="bottomRight">
