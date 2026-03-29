@@ -5,6 +5,13 @@ const TOKEN_KEY = "grid_admin_token";
 
 export const authProvider: AuthProvider = {
   login: async ({ email, password }) => {
+    // Mock login (works without backend)
+    if (email === "admin@grid.ph" && password === "admin123") {
+      localStorage.setItem(TOKEN_KEY, "mock-jwt-token");
+      return { success: true, redirectTo: "/" };
+    }
+
+    // Real API login
     try {
       const response = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
@@ -23,10 +30,6 @@ export const authProvider: AuthProvider = {
       localStorage.setItem(TOKEN_KEY, data.accessToken);
       return { success: true, redirectTo: "/" };
     } catch {
-      if (email === "admin@grid.ph" && password === "admin123") {
-        localStorage.setItem(TOKEN_KEY, "mock-jwt-token");
-        return { success: true, redirectTo: "/" };
-      }
       return {
         success: false,
         error: { name: "Login Failed", message: "Cannot reach server" },
