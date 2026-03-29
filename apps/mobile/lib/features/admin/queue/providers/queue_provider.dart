@@ -9,9 +9,22 @@ import 'package:printing_app/shared/services/api_client.dart';
 /// Tabs for the order queue screen.
 enum QueueTab { newOrders, inProduction, done, all }
 
+/// Convert camelCase enum name to snake_case for the server.
+String _toSnakeCase(String input) {
+  return input.replaceAllMapped(
+    RegExp(r'[A-Z]'),
+    (m) => '_${m.group(0)!.toLowerCase()}',
+  );
+}
+
 OrderStatus _parseOrderStatus(String value) {
+  // Handle snake_case from server (e.g. 'order_placed' → 'orderPlaced')
+  final camelCase = value.replaceAllMapped(
+    RegExp(r'_([a-z])'),
+    (m) => m.group(1)!.toUpperCase(),
+  );
   return OrderStatus.values.firstWhere(
-    (e) => e.name == value,
+    (e) => e.name == camelCase,
     orElse: () => OrderStatus.orderPlaced,
   );
 }
@@ -214,7 +227,7 @@ class QueueNotifier extends StateNotifier<QueueState> {
   Future<void> updateOrderStatus(String orderId, OrderStatus newStatus) async {
     try {
       await ApiClient.instance.patch('/admin/orders/$orderId/status', data: {
-        'status': newStatus.name,
+        'status': _toSnakeCase(newStatus.name),
       });
     } catch (_) {}
     // Update local state regardless

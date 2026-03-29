@@ -22,8 +22,13 @@ const _cancellableStatuses = {
 };
 
 OrderStatus _parseOrderStatus(String value) {
+  // Handle snake_case from server (e.g. 'order_placed' → 'orderPlaced')
+  final camelCase = value.replaceAllMapped(
+    RegExp(r'_([a-z])'),
+    (m) => m.group(1)!.toUpperCase(),
+  );
   return OrderStatus.values.firstWhere(
-    (e) => e.name == value,
+    (e) => e.name == camelCase,
     orElse: () => OrderStatus.orderPlaced,
   );
 }

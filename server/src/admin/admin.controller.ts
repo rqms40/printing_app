@@ -77,7 +77,6 @@ export class AdminController {
   async getAllOrders() {
     return this.ordersRepo.find({
       order: { createdAt: 'DESC' },
-      relations: ['user'],
     });
   }
 
@@ -127,5 +126,31 @@ export class AdminController {
         { month: 'Mar', value: 55 },
       ],
     };
+  }
+
+  // Sales trend data (Flutter calls this endpoint)
+  @Get('dashboard/sales')
+  async getSales() {
+    return [
+      { month: 'Oct', value: 45200 },
+      { month: 'Nov', value: 52800 },
+      { month: 'Dec', value: 68500 },
+      { month: 'Jan', value: 41300 },
+      { month: 'Feb', value: 57900 },
+      { month: 'Mar', value: 63400 },
+    ];
+  }
+
+  // Order volume data (Flutter calls this endpoint)
+  @Get('dashboard/volume')
+  async getVolume() {
+    return [
+      { month: 'Oct', value: 38 },
+      { month: 'Nov', value: 45 },
+      { month: 'Dec', value: 62 },
+      { month: 'Jan', value: 35 },
+      { month: 'Feb', value: 48 },
+      { month: 'Mar', value: 55 },
+    ];
   }
 }
