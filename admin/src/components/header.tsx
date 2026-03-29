@@ -1,10 +1,11 @@
 import { useGetIdentity, useLogout } from "@refinedev/core";
-import { Layout, Avatar, Dropdown, Typography, Space, Modal } from "antd";
+import { Layout, Avatar, Dropdown, Typography, Space, Modal, theme } from "antd";
 import { LogoutOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
 
 const { Text } = Typography;
 
 export function CustomHeader() {
+  const { token } = theme.useToken();
   const { data: identity } = useGetIdentity<{ name: string; email: string }>();
   const { mutate: logout } = useLogout();
 
@@ -25,10 +26,10 @@ export function CustomHeader() {
       key: "info",
       label: (
         <div style={{ padding: "4px 0" }}>
-          <Text strong style={{ color: "#F0F0F0", display: "block" }}>
+          <Text strong style={{ color: token.colorText, display: "block" }}>
             {identity?.name ?? "Admin"}
           </Text>
-          <Text style={{ color: "#808080", fontSize: 12 }}>
+          <Text style={{ color: token.colorTextSecondary, fontSize: 12 }}>
             {identity?.email ?? ""}
           </Text>
         </div>
@@ -48,13 +49,13 @@ export function CustomHeader() {
   return (
     <Layout.Header
       style={{
-        background: "#0A0A0A",
-        borderBottom: "1px solid #1E1E1E",
-        padding: "0 24px",
+        backgroundColor: token.colorBgElevated,
+        borderBottom: `1px solid ${token.colorBorder}`,
+        padding: "0px 24px",
         display: "flex",
         alignItems: "center",
         justifyContent: "flex-end",
-        height: 64,
+        height: "64px",
         position: "sticky",
         top: 0,
         zIndex: 1,
@@ -73,7 +74,7 @@ export function CustomHeader() {
           >
             {identity?.name?.charAt(0)?.toUpperCase() ?? "A"}
           </Avatar>
-          <Text style={{ color: "#F0F0F0", fontSize: 13 }}>
+          <Text style={{ color: token.colorText, fontSize: 13 }}>
             {identity?.name ?? "Admin"}
           </Text>
         </Space>
