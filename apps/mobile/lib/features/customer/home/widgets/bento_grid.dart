@@ -155,17 +155,19 @@ class _HeroTile extends StatelessWidget {
             children: [
               Text(
                 'Professional\nprinting,\ndelivered.',
-                style: AppTypography.display.copyWith(
+                style: AppTypography.h3.copyWith(
                   color: isDark ? colors.onBackground : colors.background,
-                  height: 1.1,
+                  height: 1.15,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: AppSpacing.sm),
+              const SizedBox(height: 4),
               Text(
-                'Paper & 3D services\nat your fingertips',
+                'Paper & 3D services',
                 style: AppTypography.caption.copyWith(
                   color: (isDark ? colors.onBackground : colors.background)
                       .withValues(alpha: 0.7),
+                  fontSize: 10,
                 ),
               ),
             ],
