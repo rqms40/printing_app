@@ -1,6 +1,6 @@
 import { List } from "@refinedev/antd";
 import { Table, Tag, Avatar, Space, Typography, Input, Tooltip } from "antd";
-import { SearchOutlined, EnvironmentOutlined } from "@ant-design/icons";
+import { SearchOutlined, EnvironmentOutlined, CarOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { mockDrivers } from "@/providers/mock-data";
 import type { DriverProfile } from "@/types/driver";
@@ -14,11 +14,6 @@ const VEHICLE_COLORS: Record<string, string> = {
   car: "blue",
 };
 
-const VEHICLE_ICONS: Record<string, string> = {
-  motorcycle: "🏍️",
-  bicycle: "🚲",
-  car: "🚗",
-};
 
 export function DriverList() {
   const [search, setSearch] = useState("");
@@ -101,8 +96,8 @@ export function DriverList() {
             title="Vehicle"
             width={140}
             render={(v: string) => (
-              <Tag color={VEHICLE_COLORS[v] ?? "default"}>
-                {VEHICLE_ICONS[v] ?? ""} {v.charAt(0).toUpperCase() + v.slice(1)}
+              <Tag color={VEHICLE_COLORS[v] ?? "default"} icon={<CarOutlined />}>
+                {v.charAt(0).toUpperCase() + v.slice(1)}
               </Tag>
             )}
             filters={[
@@ -128,7 +123,7 @@ export function DriverList() {
             width={100}
             render={(available: boolean) => (
               <Tag color={available ? "green" : "default"}>
-                {available ? "● Online" : "○ Offline"}
+                {available ? "Online" : "Offline"}
               </Tag>
             )}
             filters={[

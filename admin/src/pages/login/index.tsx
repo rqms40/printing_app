@@ -73,7 +73,7 @@ export function LoginPage() {
             <span
               style={{
                 color: "#F0F0F0",
-                fontFamily: "Satoshi, sans-serif",
+                fontFamily: "Inter, sans-serif",
                 fontWeight: 700,
                 fontSize: 14,
                 letterSpacing: 6,

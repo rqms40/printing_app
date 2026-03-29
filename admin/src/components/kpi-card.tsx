@@ -20,7 +20,7 @@ export function KpiCard({ title, value, prefix, color }: KpiCardProps) {
         title={<span style={{ color: "#808080" }}>{title}</span>}
         value={value}
         prefix={prefix}
-        valueStyle={{ color: "#F0F0F0", fontFamily: "Satoshi" }}
+        valueStyle={{ color: "#F0F0F0", fontFamily: "Inter" }}
       />
     </Card>
   );

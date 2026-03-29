@@ -1,6 +1,6 @@
 import { List } from "@refinedev/antd";
 import { Table, Tag, Typography, Button, Space, Input, Switch, Tooltip } from "antd";
-import { EditOutlined, PlusOutlined, SearchOutlined } from "@ant-design/icons";
+import { EditOutlined, PlusOutlined, SearchOutlined, FileTextOutlined, AppstoreOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { formatCurrency } from "@/utils/format";
 
@@ -93,7 +93,7 @@ export function ProductList() {
             width={100}
             render={(v: string) => (
               <Tag color={v === "paper" ? "blue" : "purple"}>
-                {v === "paper" ? "📄 Paper" : "🧊 3D"}
+                {v === "paper" ? <><FileTextOutlined /> Paper</> : <><AppstoreOutlined /> 3D</>}
               </Tag>
             )}
             filters={[
