@@ -156,10 +156,11 @@ class _HeroTile extends StatelessWidget {
           ),
           // Content
           Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
+            padding: const EdgeInsets.all(AppSpacing.md),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   'Professional\nprinting,\ndelivered.',
@@ -289,24 +290,27 @@ class _CountTile extends StatelessWidget {
                   color: colors.outline.withValues(alpha: 0.5), width: 0.5)
               : null,
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              count,
-              style: AppTypography.h2.copyWith(
-                color: colors.brand,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                count,
+                style: AppTypography.h2.copyWith(
+                  color: colors.brand,
+                ),
               ),
-            ),
-            Text(
-              label,
-              style: AppTypography.caption.copyWith(
-                color: colors.onSurfaceDim,
-                fontSize: 10,
+              Text(
+                label,
+                style: AppTypography.caption.copyWith(
+                  color: colors.onSurfaceDim,
+                  fontSize: 10,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -350,6 +354,7 @@ class _PromoTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   '20% off large format prints',
