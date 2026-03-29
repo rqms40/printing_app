@@ -127,14 +127,17 @@ class _HeroTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: isDark ? colors.surfaceVariant : colors.accent,
-        borderRadius: AppRadius.borderXl,
-      ),
-      child: Stack(
-        children: [
+    return ClipRRect(
+      borderRadius: AppRadius.borderXl,
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: isDark ? colors.surfaceVariant : colors.accent,
+          borderRadius: AppRadius.borderXl,
+        ),
+        child: Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
           Positioned(
             right: -8,
             bottom: -8,
@@ -168,6 +171,7 @@ class _HeroTile extends StatelessWidget {
             ],
           ),
         ],
+      ),
       ),
     );
   }
@@ -211,7 +215,9 @@ class _ServiceTileState extends State<_ServiceTile> {
         scale: _pressed ? 0.97 : 1.0,
         duration: const Duration(milliseconds: 100),
         curve: Curves.easeOut,
-        child: Container(
+        child: ClipRRect(
+          borderRadius: AppRadius.borderXl,
+          child: Container(
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
             color: widget.colors.surface,
@@ -252,6 +258,7 @@ class _ServiceTileState extends State<_ServiceTile> {
             ],
           ),
         ),
+        ),
       ),
     );
   }
@@ -279,7 +286,9 @@ class _CountTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: ClipRRect(
+        borderRadius: AppRadius.borderXl,
+        child: Container(
         padding: const EdgeInsets.all(AppSpacing.sm),
         decoration: BoxDecoration(
           color: colors.surface,
@@ -309,6 +318,7 @@ class _CountTile extends StatelessWidget {
           ],
         ),
       ),
+      ),
     );
   }
 }
@@ -323,7 +333,9 @@ class _PromoTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return ClipRRect(
+      borderRadius: AppRadius.borderXl,
+      child: Container(
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: isDark
@@ -349,6 +361,7 @@ class _PromoTile extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }
