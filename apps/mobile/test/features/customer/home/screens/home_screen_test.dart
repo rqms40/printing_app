@@ -35,7 +35,7 @@ void main() {
 
   group('HomeScreen', () {
     testWidgets('renders bento grid hero text', (tester) async {
-      tester.view.physicalSize = const Size(1080, 1920);
+      tester.view.physicalSize = const Size(1080, 3200);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -55,7 +55,7 @@ void main() {
     });
 
     testWidgets('renders bento grid service tiles', (tester) async {
-      tester.view.physicalSize = const Size(1080, 1920);
+      tester.view.physicalSize = const Size(1080, 3200);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -69,7 +69,7 @@ void main() {
     });
 
     testWidgets('renders recent orders section', (tester) async {
-      tester.view.physicalSize = const Size(1080, 1920);
+      tester.view.physicalSize = const Size(1080, 3200);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -83,7 +83,7 @@ void main() {
     });
 
     testWidgets('renders greeting with user name', (tester) async {
-      tester.view.physicalSize = const Size(1080, 1920);
+      tester.view.physicalSize = const Size(1080, 3200);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);

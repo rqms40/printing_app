@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -44,78 +43,82 @@ class BentoGrid extends StatelessWidget {
             o.orderStatus != OrderStatus.cancelled)
         .length;
 
-    return StaggeredGrid.count(
-      crossAxisCount: 4,
-      mainAxisSpacing: 10,
-      crossAxisSpacing: 10,
+    return Column(
       children: [
-        // Hero tile (2×2) — brand statement
-        StaggeredGridTile.count(
-          crossAxisCellCount: 2,
-          mainAxisCellCount: 2,
-          child: _HeroTile(colors: colors, isDark: isDark)
-              .animate()
-              .fadeIn(duration: 400.ms, curve: Curves.easeOut),
+        // Row 1: Hero + Service tiles
+        SizedBox(
+          height: 190,
+          child: Row(
+            children: [
+              // Hero tile
+              Expanded(
+                child: _HeroTile(colors: colors, isDark: isDark)
+                    .animate()
+                    .fadeIn(duration: 400.ms, curve: Curves.easeOut),
+              ),
+              const SizedBox(width: 10),
+              // Service tiles stacked
+              SizedBox(
+                width: 140,
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: _ServiceTile(
+                        title: 'Paper Printing',
+                        subtitle: 'Docs & posters',
+                        icon: HugeIcons.strokeRoundedFile02,
+                        colors: colors,
+                        isDark: isDark,
+                        onTap: () => context.push('/customer/order/new'),
+                      )
+                          .animate()
+                          .fadeIn(duration: 400.ms, delay: 80.ms, curve: Curves.easeOut),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: _ServiceTile(
+                        title: '3D Printing',
+                        subtitle: 'Models & prototypes',
+                        icon: HugeIcons.strokeRoundedPackageDelivered,
+                        colors: colors,
+                        isDark: isDark,
+                        onTap: () => context.push('/customer/order/new'),
+                      )
+                          .animate()
+                          .fadeIn(duration: 400.ms, delay: 140.ms, curve: Curves.easeOut),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-
-        // Paper Printing (2×1)
-        StaggeredGridTile.count(
-          crossAxisCellCount: 2,
-          mainAxisCellCount: 1,
-          child: _ServiceTile(
-            title: 'Paper Printing',
-            subtitle: 'Docs & posters',
-            icon: HugeIcons.strokeRoundedFile02,
-            colors: colors,
-            isDark: isDark,
-            onTap: () => context.push('/customer/order/new'),
-          )
-              .animate()
-              .fadeIn(
-                  duration: 400.ms, delay: 80.ms, curve: Curves.easeOut),
-        ),
-
-        // 3D Printing (2×1)
-        StaggeredGridTile.count(
-          crossAxisCellCount: 2,
-          mainAxisCellCount: 1,
-          child: _ServiceTile(
-            title: '3D Printing',
-            subtitle: 'Models & prototypes',
-            icon: HugeIcons.strokeRoundedPackageDelivered,
-            colors: colors,
-            isDark: isDark,
-            onTap: () => context.push('/customer/order/new'),
-          )
-              .animate()
-              .fadeIn(
-                  duration: 400.ms, delay: 140.ms, curve: Curves.easeOut),
-        ),
-
-        // Active Orders (1×1)
-        StaggeredGridTile.count(
-          crossAxisCellCount: 1,
-          mainAxisCellCount: 1,
-          child: _CountTile(
-            count: '$activeOrderCount',
-            label: 'Active',
-            colors: colors,
-            isDark: isDark,
-            onTap: () => context.go('/customer/orders'),
-          )
-              .animate()
-              .fadeIn(
-                  duration: 400.ms, delay: 200.ms, curve: Curves.easeOut),
-        ),
-
-        // Featured Promo (3×1)
-        StaggeredGridTile.count(
-          crossAxisCellCount: 3,
-          mainAxisCellCount: 1,
-          child: _PromoTile(colors: colors, isDark: isDark)
-              .animate()
-              .fadeIn(
-                  duration: 400.ms, delay: 240.ms, curve: Curves.easeOut),
+        const SizedBox(height: 10),
+        // Row 2: Count + Promo
+        SizedBox(
+          height: 60,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 80,
+                child: _CountTile(
+                  count: '$activeOrderCount',
+                  label: 'Active',
+                  colors: colors,
+                  isDark: isDark,
+                  onTap: () => context.go('/customer/orders'),
+                )
+                    .animate()
+                    .fadeIn(duration: 400.ms, delay: 200.ms, curve: Curves.easeOut),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _PromoTile(colors: colors, isDark: isDark)
+                    .animate()
+                    .fadeIn(duration: 400.ms, delay: 240.ms, curve: Curves.easeOut),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -224,7 +227,7 @@ class _ServiceTileState extends State<_ServiceTile> {
         duration: const Duration(milliseconds: 100),
         curve: Curves.easeOut,
         child: Container(
-          padding: const EdgeInsets.all(AppSpacing.md),
+          padding: const EdgeInsets.all(AppSpacing.sm),
           decoration: BoxDecoration(
             color: widget.colors.surface,
             borderRadius: AppRadius.borderLg,
@@ -235,42 +238,17 @@ class _ServiceTileState extends State<_ServiceTile> {
                     width: 0.5)
                 : null,
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      widget.title,
-                      style: AppTypography.bodyBold.copyWith(
-                        color: widget.colors.onBackground,
-                        fontSize: 13,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      widget.subtitle,
-                      style: AppTypography.caption.copyWith(
-                        color: widget.colors.onSurfaceDim,
-                        fontSize: 11,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
+          child: Center(
+            child: Text(
+              widget.title,
+              style: AppTypography.bodyBold.copyWith(
+                color: widget.colors.onBackground,
+                fontSize: 13,
               ),
-              const SizedBox(width: AppSpacing.sm),
-              HugeIcon(
-                icon: widget.icon,
-                size: 22,
-                color: widget.colors.onSurfaceDim,
-              ),
-            ],
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ),
       ),
@@ -313,10 +291,11 @@ class _CountTile extends StatelessWidget {
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               count,
-              style: AppTypography.h1.copyWith(
+              style: AppTypography.h2.copyWith(
                 color: colors.brand,
               ),
             ),
@@ -324,7 +303,7 @@ class _CountTile extends StatelessWidget {
               label,
               style: AppTypography.caption.copyWith(
                 color: colors.onSurfaceDim,
-                fontSize: 11,
+                fontSize: 10,
               ),
             ),
           ],

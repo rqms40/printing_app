@@ -25,9 +25,13 @@ class NotificationService {
   /// Call once at app startup.
   static Future<void> init() async {
     try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
+      // Check if Firebase is already initialized
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+      }
+      debugPrint('Firebase initialized successfully');
     } catch (e) {
       debugPrint('Firebase init skipped on this platform: $e');
       return;
