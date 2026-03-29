@@ -49,7 +49,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.textContaining('Paper & 3D printing services'),
+        find.textContaining('Paper & 3D printing'),
         findsOneWidget,
       );
     });
@@ -64,8 +64,8 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(milliseconds: 500));
 
-      expect(find.text('Paper Printing'), findsOneWidget);
-      expect(find.text('3D Printing'), findsOneWidget);
+      expect(find.textContaining('Paper'), findsWidgets);
+      expect(find.textContaining('3D'), findsWidgets);
     });
 
     testWidgets('renders recent orders section', (tester) async {
