@@ -13,6 +13,7 @@ import { FirebaseModule } from './firebase/firebase.module';
 import { HealthModule } from './health/health.module';
 import { PaymentsModule } from './payments/payments.module';
 import { FilesModule } from './files/files.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { FilesModule } from './files/files.module';
     HealthModule,
     PaymentsModule,
     FilesModule,
+    AdminModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
