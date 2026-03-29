@@ -11,12 +11,8 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/widgets/grid_logo.dart';
-import 'package:printing_app/shared/widgets/icon_container.dart';
 
-/// Bento grid — restored to original design with overflow protection.
-///
-/// Uses LayoutBuilder + StaggeredGrid.extent so cell sizes adapt to
-/// screen width. All tiles wrapped in ClipRRect to prevent overflow.
+/// Bento grid — exact design from commit a4c58c8 with ClipRRect overflow protection.
 class BentoGrid extends StatelessWidget {
   const BentoGrid({super.key});
 
@@ -33,88 +29,65 @@ class BentoGrid extends StatelessWidget {
             o.orderStatus != OrderStatus.cancelled)
         .length;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final cellSize = (constraints.maxWidth - 30) / 4;
-
-        return StaggeredGrid.extent(
-          maxCrossAxisExtent: cellSize,
-          mainAxisSpacing: AppSpacing.md,
-          crossAxisSpacing: AppSpacing.md,
-          children: [
-            // 1. Hero tile (2×2)
-            StaggeredGridTile.count(
-              crossAxisCellCount: 2,
-              mainAxisCellCount: 2,
-              child: _HeroTile(colors: colors, isDark: isDark)
-                  .animate()
-                  .fadeIn(duration: 400.ms, curve: Curves.easeOut),
-            ),
-
-            // 2. Paper Printing (2×1) — icon + title
-            StaggeredGridTile.count(
-              crossAxisCellCount: 2,
-              mainAxisCellCount: 1,
-              child: _ServiceTile(
-                title: 'Paper\nPrinting',
-                subtitle: 'Docs & posters',
-                icon: HugeIcons.strokeRoundedFile02,
-                colors: colors,
-                isDark: isDark,
-                onTap: () => context.push('/customer/order/new'),
-              )
-                  .animate()
-                  .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
-            ),
-
-            // 3. 3D Printing (2×1) — icon + title
-            StaggeredGridTile.count(
-              crossAxisCellCount: 2,
-              mainAxisCellCount: 1,
-              child: _ServiceTile(
-                title: '3D\nPrinting',
-                subtitle: 'Models & prototypes',
-                icon: HugeIcons.strokeRoundedPackageDelivered,
-                colors: colors,
-                isDark: isDark,
-                onTap: () => context.push('/customer/order/new'),
-              )
-                  .animate()
-                  .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
-            ),
-
-            // 4. Stats tile (2×1) — icon + count + label
-            StaggeredGridTile.count(
-              crossAxisCellCount: 2,
-              mainAxisCellCount: 1,
-              child: _StatsTile(
-                activeOrderCount: activeOrderCount,
-                colors: colors,
-                isDark: isDark,
-                onTap: () => context.go('/customer/orders'),
-              )
-                  .animate()
-                  .fadeIn(duration: 400.ms, delay: 180.ms, curve: Curves.easeOut),
-            ),
-
-            // 5. Promo tile (2×1)
-            StaggeredGridTile.count(
-              crossAxisCellCount: 2,
-              mainAxisCellCount: 1,
-              child: _PromoTile(colors: colors, isDark: isDark)
-                  .animate()
-                  .fadeIn(duration: 400.ms, delay: 240.ms, curve: Curves.easeOut),
-            ),
-          ],
-        );
-      },
+    return StaggeredGrid.count(
+      crossAxisCount: 4,
+      mainAxisSpacing: 10,
+      crossAxisSpacing: 10,
+      children: [
+        StaggeredGridTile.count(
+          crossAxisCellCount: 2,
+          mainAxisCellCount: 2,
+          child: _HeroTile(colors: colors, isDark: isDark)
+              .animate()
+              .fadeIn(duration: 400.ms, curve: Curves.easeOut),
+        ),
+        StaggeredGridTile.count(
+          crossAxisCellCount: 2,
+          mainAxisCellCount: 1,
+          child: _ServiceTile(
+            title: 'Paper Printing',
+            subtitle: 'Docs & posters',
+            icon: HugeIcons.strokeRoundedFile02,
+            colors: colors,
+            isDark: isDark,
+            onTap: () => context.push('/customer/order/new'),
+          ).animate().fadeIn(duration: 400.ms, delay: 80.ms, curve: Curves.easeOut),
+        ),
+        StaggeredGridTile.count(
+          crossAxisCellCount: 2,
+          mainAxisCellCount: 1,
+          child: _ServiceTile(
+            title: '3D Printing',
+            subtitle: 'Models & prototypes',
+            icon: HugeIcons.strokeRoundedPackageDelivered,
+            colors: colors,
+            isDark: isDark,
+            onTap: () => context.push('/customer/order/new'),
+          ).animate().fadeIn(duration: 400.ms, delay: 140.ms, curve: Curves.easeOut),
+        ),
+        StaggeredGridTile.count(
+          crossAxisCellCount: 1,
+          mainAxisCellCount: 1,
+          child: _CountTile(
+            count: '$activeOrderCount',
+            label: 'Active',
+            colors: colors,
+            isDark: isDark,
+            onTap: () => context.go('/customer/orders'),
+          ).animate().fadeIn(duration: 400.ms, delay: 200.ms, curve: Curves.easeOut),
+        ),
+        StaggeredGridTile.count(
+          crossAxisCellCount: 3,
+          mainAxisCellCount: 1,
+          child: _PromoTile(colors: colors, isDark: isDark)
+              .animate()
+              .fadeIn(duration: 400.ms, delay: 240.ms, curve: Curves.easeOut),
+        ),
+      ],
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// Hero Tile — brand text + GridLogo watermark
-// ---------------------------------------------------------------------------
 class _HeroTile extends StatelessWidget {
   const _HeroTile({required this.colors, required this.isDark});
   final AppColorSet colors;
@@ -123,53 +96,48 @@ class _HeroTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: AppRadius.borderXl,
+      borderRadius: AppRadius.borderLg,
       child: Container(
-        padding: const EdgeInsets.all(AppSpacing.lg),
         decoration: BoxDecoration(
           color: isDark ? colors.surfaceVariant : colors.accent,
-          borderRadius: AppRadius.borderXl,
+          borderRadius: AppRadius.borderLg,
         ),
         child: Stack(
           clipBehavior: Clip.hardEdge,
           children: [
             Positioned(
-              right: -AppSpacing.sm,
-              bottom: -AppSpacing.sm,
+              right: -8, bottom: -8,
               child: Opacity(
-                opacity: 0.07,
-                child: GridLogo(
-                  size: 110,
-                  foregroundColor: isDark ? colors.onBackground : colors.background,
-                ),
+                opacity: isDark ? 0.08 : 0.12,
+                child: GridLogo(size: 120, foregroundColor: isDark ? colors.onBackground : colors.background),
               ),
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Flexible(
-                  child: Text(
-                    'Professional\nprinting,\ndelivered.',
-                    style: AppTypography.h2.copyWith(
-                      color: isDark ? colors.onBackground : colors.background,
-                      height: 1.1,
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Flexible(
+                    child: Text(
+                      'Professional\nprinting,\ndelivered.',
+                      style: AppTypography.display.copyWith(
+                        color: isDark ? colors.onBackground : colors.background,
+                        height: 1.0, fontSize: 24,
+                      ),
+                      maxLines: 3, overflow: TextOverflow.ellipsis,
                     ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 3,
                   ),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  'Paper & 3D printing\nservices',
-                  style: AppTypography.caption.copyWith(
-                    color: (isDark ? colors.onBackground : colors.background)
-                        .withValues(alpha: 0.7),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Paper & 3D printing services',
+                    style: AppTypography.caption.copyWith(
+                      color: (isDark ? colors.onBackground : colors.background).withValues(alpha: 0.7),
+                    ),
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),
@@ -178,19 +146,8 @@ class _HeroTile extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Service Tile — IconContainer top + title bottom (original design)
-// ---------------------------------------------------------------------------
 class _ServiceTile extends StatefulWidget {
-  const _ServiceTile({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.colors,
-    required this.isDark,
-    this.onTap,
-  });
-
+  const _ServiceTile({required this.title, required this.subtitle, required this.icon, required this.colors, required this.isDark, this.onTap});
   final String title;
   final String subtitle;
   final dynamic icon;
@@ -209,61 +166,37 @@ class _ServiceTileState extends State<_ServiceTile> {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) {
-        setState(() => _pressed = false);
-        widget.onTap?.call();
-      },
+      onTapUp: (_) { setState(() => _pressed = false); widget.onTap?.call(); },
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(
         scale: _pressed ? 0.97 : 1.0,
         duration: const Duration(milliseconds: 100),
         curve: Curves.easeOut,
         child: ClipRRect(
-          borderRadius: AppRadius.borderXl,
+          borderRadius: AppRadius.borderLg,
           child: Container(
             padding: const EdgeInsets.all(AppSpacing.md),
             decoration: BoxDecoration(
               color: widget.colors.surface,
-              borderRadius: AppRadius.borderXl,
+              borderRadius: AppRadius.borderLg,
               boxShadow: widget.isDark ? null : AppShadows.subtle,
-              border: widget.isDark
-                  ? Border.all(color: widget.colors.outline, width: 0.5)
-                  : null,
+              border: widget.isDark ? Border.all(color: widget.colors.outline.withValues(alpha: 0.5), width: 0.5) : null,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Row(
               children: [
-                IconContainer(
-                  icon: widget.icon,
-                  size: IconContainerSize.md,
-                  shape: IconContainerShape.rounded,
-                  iconColor: widget.colors.onBackground,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(widget.title, style: AppTypography.bodyBold.copyWith(color: widget.colors.onBackground, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 2),
+                      Text(widget.subtitle, style: AppTypography.caption.copyWith(color: widget.colors.onSurfaceDim, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      widget.title,
-                      style: AppTypography.bodyBold.copyWith(
-                        color: widget.colors.onBackground,
-                        height: 1.2,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      widget.subtitle,
-                      style: AppTypography.caption.copyWith(
-                        color: widget.colors.onSurfaceDim,
-                        fontSize: 10,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
+                const SizedBox(width: AppSpacing.sm),
+                HugeIcon(icon: widget.icon, size: 22, color: widget.colors.onSurfaceDim),
               ],
             ),
           ),
@@ -273,18 +206,10 @@ class _ServiceTileState extends State<_ServiceTile> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Stats Tile — IconContainer top + count + label bottom
-// ---------------------------------------------------------------------------
-class _StatsTile extends StatelessWidget {
-  const _StatsTile({
-    required this.activeOrderCount,
-    required this.colors,
-    required this.isDark,
-    this.onTap,
-  });
-
-  final int activeOrderCount;
+class _CountTile extends StatelessWidget {
+  const _CountTile({required this.count, required this.label, required this.colors, required this.isDark, this.onTap});
+  final String count;
+  final String label;
   final AppColorSet colors;
   final bool isDark;
   final VoidCallback? onTap;
@@ -294,49 +219,24 @@ class _StatsTile extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: ClipRRect(
-        borderRadius: AppRadius.borderXl,
+        borderRadius: AppRadius.borderLg,
         child: Container(
-          padding: const EdgeInsets.all(AppSpacing.md),
+          padding: const EdgeInsets.all(AppSpacing.sm),
           decoration: BoxDecoration(
             color: colors.surface,
-            borderRadius: AppRadius.borderXl,
+            borderRadius: AppRadius.borderLg,
             boxShadow: isDark ? null : AppShadows.subtle,
-            border: isDark
-                ? Border.all(color: colors.outline, width: 0.5)
-                : null,
+            border: isDark ? Border.all(color: colors.outline.withValues(alpha: 0.5), width: 0.5) : null,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconContainer(
-                icon: HugeIcons.strokeRoundedPackage,
-                size: IconContainerSize.md,
-                shape: IconContainerShape.rounded,
-                iconColor: colors.onBackground,
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '$activeOrderCount',
-                    style: AppTypography.h2.copyWith(
-                      color: colors.brand,
-                    ),
-                  ),
-                  Text(
-                    'Active orders',
-                    style: AppTypography.caption.copyWith(
-                      color: colors.onSurfaceDim,
-                      fontSize: 10,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ],
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(count, style: AppTypography.h1.copyWith(color: colors.brand)),
+                Text(label, style: AppTypography.caption.copyWith(color: colors.onSurfaceDim, fontSize: 11)),
+              ],
+            ),
           ),
         ),
       ),
@@ -344,9 +244,6 @@ class _StatsTile extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Promo Tile — "FEATURED" overline + offer text
-// ---------------------------------------------------------------------------
 class _PromoTile extends StatelessWidget {
   const _PromoTile({required this.colors, required this.isDark});
   final AppColorSet colors;
@@ -355,34 +252,29 @@ class _PromoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: AppRadius.borderXl,
+      borderRadius: AppRadius.borderLg,
       child: Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
         decoration: BoxDecoration(
-          color: isDark
-              ? colors.surfaceHigh
-              : colors.accent.withValues(alpha: 0.06),
-          borderRadius: AppRadius.borderXl,
+          color: isDark ? colors.surfaceVariant : colors.accent.withValues(alpha: 0.05),
+          borderRadius: AppRadius.borderLg,
+          border: Border.all(color: colors.outline.withValues(alpha: 0.3), width: 0.5),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: Row(
           children: [
-            Text(
-              'FEATURED',
-              style: AppTypography.overline.copyWith(
-                color: colors.onSurfaceDim,
+            HugeIcon(icon: HugeIcons.strokeRoundedDiscount, size: 20, color: colors.brand),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('20% off large format prints', style: AppTypography.bodyBold.copyWith(color: colors.onBackground, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text('Limited time offer', style: AppTypography.caption.copyWith(color: colors.onSurfaceDim, fontSize: 11)),
+                ],
               ),
             ),
-            Text(
-              '20% off\nlarge format',
-              style: AppTypography.bodyBold.copyWith(
-                color: colors.onBackground,
-                height: 1.2,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
+            HugeIcon(icon: HugeIcons.strokeRoundedArrowRight01, size: 16, color: colors.disabled),
           ],
         ),
       ),
