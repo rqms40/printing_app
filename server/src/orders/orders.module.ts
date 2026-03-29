@@ -7,6 +7,7 @@ import { OrderStatusHistory } from './entities/order-status-history.entity';
 import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
 import { OrdersGateway } from './orders.gateway';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { OrdersGateway } from './orders.gateway';
       ThreeDSpec,
       OrderStatusHistory,
     ]),
+    UsersModule,
   ],
   providers: [OrdersService, OrdersGateway],
   controllers: [OrdersController],

@@ -9,6 +9,7 @@ import { OrdersModule } from './orders/orders.module';
 import { AddressesModule } from './addresses/addresses.module';
 import { DriversModule } from './drivers/drivers.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { FirebaseModule } from './firebase/firebase.module';
 import { HealthModule } from './health/health.module';
 import { PaymentsModule } from './payments/payments.module';
 import { FilesModule } from './files/files.module';
@@ -40,6 +41,9 @@ import { FilesModule } from './files/files.module';
         synchronize: config.get<string>('NODE_ENV') !== 'production',
       }),
     }),
+
+    // Firebase (global — push notifications)
+    FirebaseModule,
 
     // Feature modules
     AuthModule,

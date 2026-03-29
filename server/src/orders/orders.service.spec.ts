@@ -6,6 +6,8 @@ import { Order } from './entities/order.entity';
 import { PaperSpec } from './entities/paper-specs.entity';
 import { ThreeDSpec } from './entities/three-d-specs.entity';
 import { OrdersGateway } from './orders.gateway';
+import { FirebaseService } from '../firebase/firebase.service';
+import { UsersService } from '../users/users.service';
 
 describe('OrdersService', () => {
   let service: OrdersService;
@@ -13,6 +15,8 @@ describe('OrdersService', () => {
   let paperSpecsRepo: jest.Mocked<Partial<Repository<PaperSpec>>>;
   let threeDSpecsRepo: jest.Mocked<Partial<Repository<ThreeDSpec>>>;
   let gateway: Partial<OrdersGateway>;
+  let firebaseService: Partial<FirebaseService>;
+  let usersService: Partial<UsersService>;
 
   const mockOrder = {
     id: 1,
@@ -43,6 +47,14 @@ describe('OrdersService', () => {
     gateway = {
       notifyOrderUpdate: jest.fn(),
     };
+    firebaseService = {
+      sendToDevice: jest.fn().mockResolvedValue('msg-id'),
+      sendToMultiple: jest.fn().mockResolvedValue(undefined),
+      isAvailable: true,
+    };
+    usersService = {
+      getFcmToken: jest.fn().mockResolvedValue(null),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -51,6 +63,8 @@ describe('OrdersService', () => {
         { provide: getRepositoryToken(PaperSpec), useValue: paperSpecsRepo },
         { provide: getRepositoryToken(ThreeDSpec), useValue: threeDSpecsRepo },
         { provide: OrdersGateway, useValue: gateway },
+        { provide: FirebaseService, useValue: firebaseService },
+        { provide: UsersService, useValue: usersService },
       ],
     }).compile();
 
