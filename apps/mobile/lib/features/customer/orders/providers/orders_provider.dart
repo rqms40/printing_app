@@ -132,29 +132,29 @@ DateTime? _parseDateNullable(dynamic value) {
 
 Order _parseOrder(Map<String, dynamic> json) {
   return Order(
-    id: json['id'] as String? ?? json['_id'] as String? ?? '',
-    orderId: json['orderId'] as String? ?? '',
-    userId: json['userId'] as String? ?? '',
-    category: json['category'] as String? ?? '',
-    fileUrl: json['fileUrl'] as String?,
-    fileName: json['fileName'] as String?,
+    id: json['id']?.toString() ?? '',
+    orderId: json['orderId']?.toString() ?? '',
+    userId: json['userId']?.toString() ?? '',
+    category: json['category']?.toString() ?? '',
+    fileUrl: json['fileUrl']?.toString(),
+    fileName: json['fileName']?.toString(),
     paperSpecs: _parsePaperSpecs(json['paperSpecs'] as Map<String, dynamic>?),
     threeDSpecs: _parseThreeDSpecs(json['threeDSpecs'] as Map<String, dynamic>?),
-    quantity: (json['quantity'] as num?)?.toInt() ?? 1,
-    totalPrice: (json['totalPrice'] as num?)?.toDouble() ?? 0,
-    deliveryFee: (json['deliveryFee'] as num?)?.toDouble() ?? 0,
-    paymentMethod: _parsePaymentMethod(json['paymentMethod'] as String? ?? 'cod'),
-    paymentStatus: _parsePaymentStatus(json['paymentStatus'] as String? ?? 'pending'),
-    orderStatus: _parseOrderStatus(json['orderStatus'] as String? ?? 'orderPlaced'),
-    declineReason: json['declineReason'] as String?,
-    cancellationReason: json['cancellationReason'] as String?,
+    quantity: int.tryParse(json['quantity']?.toString() ?? '1') ?? 1,
+    totalPrice: double.tryParse(json['totalPrice']?.toString() ?? '0') ?? 0,
+    deliveryFee: double.tryParse(json['deliveryFee']?.toString() ?? '0') ?? 0,
+    paymentMethod: _parsePaymentMethod(json['paymentMethod']?.toString() ?? 'cod'),
+    paymentStatus: _parsePaymentStatus(json['paymentStatus']?.toString() ?? 'pending'),
+    orderStatus: _parseOrderStatus(json['orderStatus']?.toString() ?? 'orderPlaced'),
+    declineReason: json['declineReason']?.toString(),
+    cancellationReason: json['cancellationReason']?.toString(),
     cancelledAt: _parseDateNullable(json['cancelledAt']),
-    deliveryOption: json['deliveryOption'] as String? ?? 'delivery',
-    deliveryAddressId: json['deliveryAddressId'] as String?,
-    assignedDriverId: json['assignedDriverId'] as String?,
+    deliveryOption: json['deliveryOption']?.toString() ?? 'delivery',
+    deliveryAddressId: json['deliveryAddressId']?.toString(),
+    assignedDriverId: json['assignedDriverId']?.toString(),
     estimatedCompletionAt: _parseDateNullable(json['estimatedCompletionAt']),
-    adminNotes: json['adminNotes'] as String?,
-    trackingLink: json['trackingLink'] as String?,
+    adminNotes: json['adminNotes']?.toString(),
+    trackingLink: json['trackingLink']?.toString(),
     createdAt: _parseDate(json['createdAt']),
     updatedAt: _parseDate(json['updatedAt']),
   );
@@ -197,8 +197,9 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       final response = await ApiClient.instance.get('/orders');
       final data = response.data as List<dynamic>;
       state = data.map((json) => _parseOrder(json as Map<String, dynamic>)).toList();
-    } catch (_) {
-      // Offline fallback
+      debugPrint('OrdersProvider: Loaded ${state.length} orders from API');
+    } catch (e) {
+      debugPrint('OrdersProvider: API failed ($e), using MockData');
       state = List.of(MockData.orders);
     }
   }
