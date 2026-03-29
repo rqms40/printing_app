@@ -109,6 +109,7 @@ function App() {
                       Header={() => <CustomHeader />}
                       Sider={() => (
                         <ThemedSiderV2
+                          fixed
                           Title={({ collapsed }) => (
                             <ThemedTitleV2
                               collapsed={collapsed}

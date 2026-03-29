@@ -57,7 +57,7 @@ export function CustomHeader() {
         height: 64,
         position: "sticky",
         top: 0,
-        zIndex: 999,
+        zIndex: 1,
       }}
     >
       <Dropdown menu={{ items: menuItems }} trigger={["click"]} placement="bottomRight">
