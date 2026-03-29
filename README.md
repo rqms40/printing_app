@@ -6,6 +6,7 @@ A premium printing service delivery platform — paper and 3D printing as easy a
 
 [![Mobile CI](https://github.com/rqms40/printing_app/actions/workflows/ci-mobile.yml/badge.svg)](https://github.com/rqms40/printing_app/actions/workflows/ci-mobile.yml)
 [![Server CI](https://github.com/rqms40/printing_app/actions/workflows/ci-server.yml/badge.svg)](https://github.com/rqms40/printing_app/actions/workflows/ci-server.yml)
+[![Admin CI](https://github.com/rqms40/printing_app/actions/workflows/ci-admin.yml/badge.svg)](https://github.com/rqms40/printing_app/actions/workflows/ci-admin.yml)
 
 ---
 
@@ -14,7 +15,8 @@ A premium printing service delivery platform — paper and 3D printing as easy a
 ```mermaid
 graph TB
     subgraph Clients
-        A[Flutter Mobile App<br/>Customer / Driver / Admin]
+        A[Flutter Mobile App<br/>Customer / Driver]
+        AA[Refine Admin Dashboard<br/>React + Ant Design]
         B[IoT Kiosk<br/>Future]
     end
 
@@ -38,6 +40,7 @@ graph TB
 
     A -->|REST + JWT| C
     A -->|WebSocket| D
+    AA -->|REST + JWT| C
     B -.->|MQTT| C
     C --> E
     C --> F
@@ -53,7 +56,7 @@ graph TB
 
 ```mermaid
 flowchart LR
-    subgraph Customer
+    subgraph Customer[Customer - Flutter App]
         C1[Browse] --> C2[Configure Specs]
         C2 --> C3[Upload File]
         C3 --> C4[Select Delivery]
@@ -61,13 +64,13 @@ flowchart LR
         C5 --> C6[Track Order]
     end
 
-    subgraph Admin
+    subgraph Admin[Admin - Refine Dashboard]
         A1[Dashboard<br/>KPIs + Charts] --> A2[Order Queue]
         A2 --> A3[Update Status]
         A3 --> A4[Assign Driver]
     end
 
-    subgraph Driver
+    subgraph Driver[Driver - Flutter App]
         D1[Receive Assignment] --> D2[Accept/Decline]
         D2 --> D3[Pick Up]
         D3 --> D4[Navigate + GPS]
@@ -114,20 +117,31 @@ stateDiagram-v2
 ```
 grid/
 ├── apps/
-│   └── mobile/              # Flutter app (Customer, Driver, Admin)
+│   └── mobile/              # Flutter app (Customer + Driver)
 │       ├── lib/
 │       │   ├── config/      # Theme, routes, constants
 │       │   ├── features/    # Feature-first modules
 │       │   │   ├── auth/    # Login, register, profile
 │       │   │   ├── customer/# Home, orders, notifications, tracking
 │       │   │   ├── driver/  # Deliveries, active delivery, history
-│       │   │   └── admin/   # Dashboard, queue, driver management
+│       │   │   └── admin/   # Mobile admin screens (legacy)
 │       │   ├── shared/      # Widgets, models, providers, services
 │       │   └── utils/       # Formatters, validators, pricing
 │       └── test/            # 140 tests
 │
+├── admin/                   # Refine admin dashboard (React)
+│   ├── src/
+│   │   ├── pages/           # Dashboard, Orders, Drivers, Users, Products
+│   │   ├── components/      # Header, KPI Card, Status Badge, Logo
+│   │   ├── providers/       # Auth, Data, Mock Data
+│   │   ├── config/          # Theme (Ant Design), Constants
+│   │   └── styles/          # Global CSS
+│   ├── package.json         # Vite + React + Refine + Ant Design
+│   └── vite.config.ts
+│
 ├── server/                  # NestJS backend
 │   ├── src/
+│   │   ├── admin/           # Admin-only endpoints (dashboard, queue)
 │   │   ├── auth/            # JWT + Passport
 │   │   ├── users/           # Profile management
 │   │   ├── orders/          # CRUD + WebSocket
@@ -136,6 +150,7 @@ grid/
 │   │   ├── payments/        # PayMongo integration
 │   │   ├── notifications/   # In-app + FCM
 │   │   ├── files/           # File upload
+│   │   ├── firebase/        # Firebase Admin SDK
 │   │   ├── health/          # Health check + DB probe
 │   │   └── common/          # Guards, filters, interfaces
 │   ├── test/                # 48 tests
@@ -144,13 +159,13 @@ grid/
 │   └── .env.example         # Environment variables template
 │
 ├── packages/
-│   └── api-types/           # Shared API type definitions
+│   └── api-types/           # Shared API type definitions (planned)
 │
 ├── docs/
 │   ├── PRD.md               # Product Requirements (v3)
 │   └── superpowers/         # Design specs + plans
 │
-├── .github/workflows/       # CI/CD (mobile + server + release)
+├── .github/workflows/       # CI/CD (mobile + server + admin + release)
 ├── Makefile                  # Common commands
 └── README.md
 ```
@@ -159,19 +174,22 @@ grid/
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| **Mobile** | Flutter 3.41.6 + Dart 3.11.4 | Cross-platform app |
-| **State** | Riverpod 2.6.1 | Reactive state management |
-| **Navigation** | GoRouter 14.8.1 | Declarative routing with auth guards |
+| **Mobile** | Flutter 3.41.6 + Dart 3.11.4 | Customer + Driver app |
+| **Admin** | React + Refine + Ant Design | Admin dashboard (web) |
+| **State (mobile)** | Riverpod 2.6.1 | Reactive state management |
+| **State (admin)** | Refine data providers | REST data fetching + caching |
+| **Navigation** | GoRouter (mobile) / React Router (admin) | Declarative routing |
 | **Maps** | flutter_map + OpenStreetMap | Free maps, no API key |
 | **Routing** | OSRM | Free driving directions |
-| **Icons** | HugeIcons + Material | 46K+ stroke-rounded icons |
+| **Icons** | HugeIcons (mobile) / Ant Design Icons (admin) | Icon sets |
 | **Backend** | NestJS 11 + TypeScript | Modular REST + WebSocket API |
 | **Database** | PostgreSQL 15 | Relational data |
 | **Auth** | Passport.js + JWT | Stateless authentication |
 | **Security** | Helmet + Throttler | HTTP headers + rate limiting |
 | **Payments** | PayMongo | GCash, Maya, Card (Philippines) |
+| **Push** | Firebase Cloud Messaging | Push notifications |
 | **Real-time** | Socket.IO | Order tracking + driver GPS |
-| **CI/CD** | GitHub Actions | Automated lint → test → build |
+| **CI/CD** | GitHub Actions | Automated lint, test, build |
 | **Container** | Docker | Production deployment |
 
 ## Quick Start
@@ -203,6 +221,11 @@ npm run start:dev   # http://localhost:3000/docs (Swagger)
 cd apps/mobile
 fvm flutter pub get
 fvm flutter run
+
+# 5. Start admin dashboard (new terminal)
+cd admin
+npm install
+npm run dev         # http://localhost:5173
 ```
 
 ### Demo Credentials
@@ -213,7 +236,38 @@ fvm flutter run
 | Driver | juan@gridprint.ph | password123 |
 | Admin | admin@gridprint.ph | password123 |
 
-> Dev bypass buttons on the login screen also work without a server.
+> Mobile app also has dev bypass buttons on the login screen for quick testing without a server.
+
+## Apps
+
+### Mobile (`apps/mobile/`)
+Flutter app serving Customer + Driver roles with 34 screens:
+- Order placement with paper/3D specs configuration
+- Real-time delivery tracking with OpenStreetMap + OSRM routing
+- Offline draft persistence with Hive
+- Push notifications via Firebase Cloud Messaging
+- Dark mode with system theme detection
+
+### Admin Dashboard (`admin/`)
+Refine + React web dashboard for shop administrators:
+- Dashboard with KPI cards and charts (orders, revenue, production)
+- Order queue with tabs (New / In Production / Done / All), search, status updates
+- Order detail with status timeline, driver assignment, audit trail
+- Driver management with availability tracking
+- User management
+- Product catalog
+- Dark theme with DM Sans font
+- Mock data fallback when server is offline
+
+### Server (`server/`)
+NestJS backend providing REST API + WebSocket:
+- 11 modules: Admin, Auth, Users, Orders, Addresses, Drivers, Payments, Notifications, Files, Firebase, Health
+- 11 database entities with TypeORM
+- JWT authentication with role-based access control (customer/driver/admin)
+- WebSocket gateways for real-time order updates + driver GPS
+- Firebase Admin SDK for push notifications
+- Rate limiting (Helmet + Throttler)
+- Swagger API docs at `/docs`
 
 ## Testing
 
@@ -223,6 +277,9 @@ cd apps/mobile && fvm flutter test
 
 # Server (48 tests)
 cd server && npm test
+
+# Admin
+cd admin && npm run build  # Type check
 
 # Lint
 cd apps/mobile && fvm flutter analyze
@@ -249,11 +306,12 @@ git push origin v1.0.0  # Triggers GitHub Actions → APK release
 
 - [x] Phase 1: UI Shell (34 screens, 3 roles)
 - [x] Phase 2: Local Logic (Hive drafts, dark mode, connectivity)
-- [x] Phase 3: NestJS Backend (10 modules, 11 entities)
+- [x] Phase 3: NestJS Backend (11 modules, 11 entities)
 - [x] Phase 4: Flutter ↔ API Integration
-- [x] CI/CD Pipelines
-- [x] Test Suite (188 tests)
-- [ ] Firebase FCM Push Notifications
+- [x] Phase 5: Admin Dashboard (Refine + React)
+- [x] CI/CD Pipelines (mobile + server + admin)
+- [x] Firebase Push Notifications
+- [x] Test Suite (188+ tests)
 - [ ] PayMongo Live Integration
 - [ ] S3/R2 File Storage
 - [ ] Production Deployment
