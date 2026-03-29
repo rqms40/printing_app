@@ -1,7 +1,7 @@
 import { Show } from "@refinedev/antd";
 import {
-  Card, Descriptions, Typography, Button, Select, Modal,
-  Input, Table, Space, message, Row, Col, Timeline,
+  Card, Descriptions, Typography, Button, Select, App, Modal,
+  Input, Table, Space, Row, Col, Timeline,
 } from "antd";
 import {
   ExclamationCircleOutlined,
@@ -32,6 +32,7 @@ const { TextArea } = Input;
 
 export function OrderShow() {
   const { id } = useParams<{ id: string }>();
+  const { modal, message } = App.useApp();
   const order = mockOrders.find((o) => o.id === id);
   const history = mockStatusHistory.filter((h) => h.order_id === id);
   const availableDrivers = mockDrivers.filter((d) => d.is_available);
@@ -50,7 +51,7 @@ export function OrderShow() {
     order.order_status === "driver_assigned";
 
   const handleStatusChange = (newStatus: OrderStatus) => {
-    Modal.confirm({
+    modal.confirm({
       title: "Update Status",
       icon: <ExclamationCircleOutlined />,
       content: `Change status to "${statusLabel(newStatus)}"?`,

@@ -1,16 +1,17 @@
 import { useGetIdentity, useLogout } from "@refinedev/core";
-import { Layout, Avatar, Dropdown, Typography, Space, Modal, theme } from "antd";
+import { Layout, Avatar, Dropdown, Typography, Space, App, theme } from "antd";
 import { LogoutOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
 
 const { Text } = Typography;
 
 export function CustomHeader() {
   const { token } = theme.useToken();
+  const { modal } = App.useApp();
   const { data: identity } = useGetIdentity<{ name: string; email: string }>();
   const { mutate: logout } = useLogout();
 
   const handleLogout = () => {
-    Modal.confirm({
+    modal.confirm({
       title: "Sign Out",
       icon: <ExclamationCircleOutlined />,
       content: "Are you sure you want to sign out?",
