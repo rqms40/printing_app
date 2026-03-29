@@ -1,6 +1,7 @@
 import { Refine, Authenticated } from "@refinedev/core";
 import {
   ThemedLayoutV2,
+  ThemedSiderV2,
   ThemedTitleV2,
   useNotificationProvider,
   ErrorComponent,
@@ -106,11 +107,16 @@ function App() {
                   >
                     <ThemedLayoutV2
                       Header={() => <CustomHeader />}
-                      Title={({ collapsed }) => (
-                        <ThemedTitleV2
-                          collapsed={collapsed}
-                          text="GRID Admin"
-                          icon={<GridLogo size={collapsed ? 28 : 24} />}
+                      Sider={() => (
+                        <ThemedSiderV2
+                          Title={({ collapsed }) => (
+                            <ThemedTitleV2
+                              collapsed={collapsed}
+                              text="GRID Admin"
+                              icon={<GridLogo size={collapsed ? 28 : 24} />}
+                            />
+                          )}
+                          render={({ items }) => <>{items}</>}
                         />
                       )}
                     >
