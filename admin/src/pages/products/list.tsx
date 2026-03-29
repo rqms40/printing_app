@@ -141,7 +141,6 @@ export function ProductList() {
           <Table.Column
             title=""
             width={60}
-            fixed="right"
             render={() => (
               <Button
                 type="text"

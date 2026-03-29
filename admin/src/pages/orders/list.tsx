@@ -167,7 +167,7 @@ export function OrderList() {
           <Table.Column
             title=""
             width={50}
-            fixed="right"
+
             render={(_: unknown, record: Order) => (
               <Tooltip title="View Details">
                 <EyeOutlined
