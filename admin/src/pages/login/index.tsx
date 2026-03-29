@@ -23,96 +23,78 @@ export function LoginPage() {
     <div
       style={{
         minHeight: "100vh",
-        background: "#000000",
         display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
+        background: "#000000",
       }}
     >
-      {/* Subtle grid pattern background */}
+      {/* Left panel — branding */}
       <div
         style={{
-          position: "fixed",
-          inset: 0,
-          backgroundImage:
-            "radial-gradient(circle at 1px 1px, #1A1A1A 1px, transparent 0)",
-          backgroundSize: "40px 40px",
-          opacity: 0.5,
-          pointerEvents: "none",
-        }}
-      />
-
-      <div
-        style={{
-          position: "relative",
-          width: "100%",
-          maxWidth: 380,
-          padding: "0 24px",
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          background: "#0A0A0A",
+          borderRight: "1px solid #1E1E1E",
+          padding: 40,
         }}
       >
-        {/* Logo + Title */}
-        <div style={{ textAlign: "center", marginBottom: 48 }}>
-          <GridLogo size={56} />
-          <div
-            style={{
-              marginTop: 16,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-            }}
-          >
-            <div
-              style={{
-                width: 32,
-                height: 1,
-                background:
-                  "linear-gradient(90deg, transparent, #333)",
-              }}
-            />
-            <span
-              style={{
-                color: "#F0F0F0",
-                fontFamily: "Inter, sans-serif",
-                fontWeight: 700,
-                fontSize: 14,
-                letterSpacing: 6,
-                textTransform: "uppercase",
-              }}
-            >
-              Admin
-            </span>
-            <div
-              style={{
-                width: 32,
-                height: 1,
-                background:
-                  "linear-gradient(90deg, #333, transparent)",
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Login Card */}
-        <div
+        <GridLogo size={64} />
+        <Text
           style={{
-            background: "#0A0A0A",
-            border: "1px solid #1E1E1E",
-            borderRadius: 16,
-            padding: "40px 32px 32px",
+            color: "#F0F0F0",
+            fontWeight: 700,
+            fontSize: 28,
+            letterSpacing: 8,
+            marginTop: 20,
           }}
         >
+          GRID
+        </Text>
+        <Text
+          style={{
+            color: "#555",
+            fontSize: 13,
+            marginTop: 8,
+            letterSpacing: 1,
+          }}
+        >
+          Printing Services
+        </Text>
+      </div>
+
+      {/* Right panel — form */}
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 40,
+        }}
+      >
+        <div style={{ width: "100%", maxWidth: 340 }}>
           <Text
             style={{
               display: "block",
-              color: "#808080",
-              fontSize: 13,
-              marginBottom: 24,
-              textAlign: "center",
-              letterSpacing: 0.5,
+              color: "#F0F0F0",
+              fontWeight: 600,
+              fontSize: 20,
+              marginBottom: 4,
             }}
           >
-            Sign in to manage orders and operations
+            Admin Sign In
+          </Text>
+          <Text
+            style={{
+              display: "block",
+              color: "#666",
+              fontSize: 13,
+              marginBottom: 32,
+            }}
+          >
+            Enter your credentials to continue
           </Text>
 
           <Form
@@ -126,36 +108,36 @@ export function LoginPage() {
           >
             <Form.Item
               name="email"
+              label={<Text style={{ color: "#808080", fontSize: 12 }}>Email</Text>}
               rules={[{ required: true, message: "Email is required" }]}
             >
               <Input
                 prefix={<MailOutlined style={{ color: "#555" }} />}
-                placeholder="Email"
-                size="large"
+                placeholder="admin@grid.ph"
                 style={{
                   background: "#141414",
                   border: "1px solid #2E2E2E",
-                  borderRadius: 10,
+                  borderRadius: 8,
                   color: "#F0F0F0",
-                  height: 48,
+                  height: 44,
                 }}
               />
             </Form.Item>
 
             <Form.Item
               name="password"
+              label={<Text style={{ color: "#808080", fontSize: 12 }}>Password</Text>}
               rules={[{ required: true, message: "Password is required" }]}
             >
               <Input.Password
                 prefix={<LockOutlined style={{ color: "#555" }} />}
-                placeholder="Password"
-                size="large"
+                placeholder="Enter password"
                 style={{
                   background: "#141414",
                   border: "1px solid #2E2E2E",
-                  borderRadius: 10,
+                  borderRadius: 8,
                   color: "#F0F0F0",
-                  height: 48,
+                  height: 44,
                 }}
               />
             </Form.Item>
@@ -180,15 +162,13 @@ export function LoginPage() {
                 htmlType="submit"
                 loading={isLoading}
                 block
-                size="large"
                 style={{
-                  height: 48,
-                  borderRadius: 10,
-                  fontWeight: 700,
-                  fontSize: 15,
-                  letterSpacing: 1,
+                  height: 44,
+                  borderRadius: 8,
+                  fontWeight: 600,
+                  fontSize: 14,
                   background: "#FFDE58",
-                  color: "#000000",
+                  color: "#000",
                   border: "none",
                 }}
               >
@@ -197,20 +177,6 @@ export function LoginPage() {
             </Form.Item>
           </Form>
         </div>
-
-        {/* Footer */}
-        <Text
-          style={{
-            display: "block",
-            textAlign: "center",
-            color: "#333",
-            fontSize: 11,
-            marginTop: 32,
-            letterSpacing: 0.5,
-          }}
-        >
-          GRID Printing Services &middot; Admin Dashboard
-        </Text>
       </div>
     </div>
   );
