@@ -31,3 +31,21 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/* Fixed sidebar + header, only content scrolls */
+.ant-layout {
+  min-height: 100vh;
+}
+
+.ant-layout .ant-layout-sider {
+  position: fixed !important;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 1000;
+  overflow-y: auto;
+}
+
+.ant-layout .ant-layout-content {
+  overflow-y: auto;
+}
