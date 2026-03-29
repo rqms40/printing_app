@@ -13,7 +13,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiTags, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FilesService } from './files.service';
-import { RequestWithUser } from '../common/interfaces/request-with-user';
+import type { RequestWithUser } from '../common/interfaces/request-with-user';
 
 @ApiTags('files')
 @ApiBearerAuth()

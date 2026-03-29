@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
-import { RequestWithUser } from '../common/interfaces/request-with-user';
+import type { RequestWithUser } from '../common/interfaces/request-with-user';
 
 @ApiTags('users')
 @ApiBearerAuth()

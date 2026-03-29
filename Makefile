@@ -50,6 +50,13 @@ test: ## Run all tests
 	cd apps/mobile && fvm flutter test
 	@if [ -f server/package.json ]; then cd server && npm test; fi
 
+lint: ## Run all linters (check before push)
+	cd apps/mobile && fvm flutter analyze lib/
+	cd server && npm run lint:check
+
+pre-push: lint test ## Full check before pushing (lint + test)
+	@echo "✅ All checks passed — safe to push"
+
 clean: ## Clean all build artifacts
 	cd apps/mobile && fvm flutter clean
 	@if [ -d server/dist ]; then rm -rf server/dist; fi

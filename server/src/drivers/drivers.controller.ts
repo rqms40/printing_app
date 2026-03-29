@@ -14,7 +14,7 @@ import { DriversService } from './drivers.service';
 import { UpdateDriverProfileDto } from './dto/update-profile.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { UpdateDeliveryStatusDto } from './dto/update-delivery-status.dto';
-import { RequestWithUser } from '../common/interfaces/request-with-user';
+import type { RequestWithUser } from '../common/interfaces/request-with-user';
 
 @ApiTags('drivers')
 @ApiBearerAuth()
