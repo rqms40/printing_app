@@ -40,7 +40,11 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
   void initState() {
     super.initState();
     Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        // Refresh orders from API every time queue screen opens
+        ref.read(queueProvider.notifier).refreshOrders();
+      }
     });
   }
 

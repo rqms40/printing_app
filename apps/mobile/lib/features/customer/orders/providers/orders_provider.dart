@@ -241,8 +241,9 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       });
       final newOrder = _parseOrder(response.data as Map<String, dynamic>);
       state = [newOrder, ...state];
-    } catch (_) {
-      // Offline: add locally
+      debugPrint('OrdersProvider: Order created via API: ${newOrder.orderId}');
+    } catch (e) {
+      debugPrint('OrdersProvider: API create failed ($e), adding locally');
       state = [order, ...state];
     }
   }

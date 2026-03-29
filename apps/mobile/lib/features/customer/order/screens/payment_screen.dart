@@ -270,6 +270,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         }
       }
 
+      // Refresh orders list from API to get server-generated data
+      await ref.read(ordersProvider.notifier).refreshOrders();
+
       if (!mounted) return;
       setState(() {
         _isProcessing = false;
