@@ -172,7 +172,7 @@ export function ProductList() {
               <Row gutter={[12, 10]}>
                 <Col span={12}>
                   <Text style={S.label}>Base Rate</Text>
-                  <Text style={{ ...S.value, color: '#34d399', display: 'block' }}>{formatCurrency(cat.base_rate)}/page</Text>
+                  <Text style={{ ...S.value, color: '#34d399', display: 'block' }}>{formatCurrency(cat.base_rate)}/{cat.slug === '3d' ? 'gram' : 'page'}</Text>
                 </Col>
                 <Col span={12}>
                   <Text style={S.label}>Max File</Text>
@@ -205,7 +205,8 @@ export function ProductList() {
                 </Button>
                 <Button size="small" icon={<ArrowRightOutlined />}
                   onClick={() => navigate(`/products-addons?category_id=${cat.id}`)}
-                  style={{ background: '#1A1A1A', borderColor: '#333', color: '#F0F0F0' }}>
+                  style={{ background: '#1A1A1A', borderColor: '#333', color: '#F0F0F0', flex: 1 }}>
+                  Addons
                 </Button>
               </Space>
             </Card>
