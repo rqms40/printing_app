@@ -134,6 +134,7 @@ export function ProductOptionsPage() {
       if (axios.isAxiosError(err)) {
         void message.error(err.response?.data?.message ?? 'Create failed');
       }
+      // form.validateFields() rejection is handled inline by Ant Design — no extra message needed
     } finally {
       setSaving(false);
     }
@@ -171,7 +172,7 @@ export function ProductOptionsPage() {
           precision={3}
           defaultValue={v}
           style={{ width: 80 }}
-          onBlur={(e) => handleInlineEdit(record, 'multiplier', parseFloat(e.target.value))}
+          onBlur={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v)) handleInlineEdit(record, 'multiplier', v); }}
         />
       ),
     },
@@ -187,7 +188,7 @@ export function ProductOptionsPage() {
           precision={2}
           defaultValue={v}
           style={{ width: 75 }}
-          onBlur={(e) => handleInlineEdit(record, 'fixed_fee', parseFloat(e.target.value))}
+          onBlur={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v)) handleInlineEdit(record, 'fixed_fee', v); }}
         />
       ),
     }] : []),
@@ -203,7 +204,7 @@ export function ProductOptionsPage() {
           precision={2}
           defaultValue={v}
           style={{ width: 75 }}
-          onBlur={(e) => handleInlineEdit(record, 'unit_cost', parseFloat(e.target.value))}
+          onBlur={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v)) handleInlineEdit(record, 'unit_cost', v); }}
         />
       ),
     }] : []),
@@ -217,7 +218,7 @@ export function ProductOptionsPage() {
           min={1}
           defaultValue={v}
           style={{ width: 80 }}
-          onBlur={(e) => handleInlineEdit(record, 'estimated_grams', parseInt(e.target.value))}
+          onBlur={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v)) handleInlineEdit(record, 'estimated_grams', v); }}
         />
       ),
     }] : []),
