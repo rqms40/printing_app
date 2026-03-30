@@ -30,7 +30,7 @@ export class ServiceAddon {
   name: string;
 
   @Column({ type: 'text', nullable: true })
-  description: string;
+  description: string | null;
 
   @Column({ type: 'decimal', precision: 10, scale: 2, transformer: numberTransformer })
   price: number;

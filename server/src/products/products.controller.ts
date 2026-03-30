@@ -1,7 +1,7 @@
 // server/src/products/products.controller.ts
 import {
   Controller, Get, Post, Patch, Delete,
-  Param, Body, Query, UseGuards,
+  Param, Body, Query, UseGuards, ParseIntPipe,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -23,8 +23,8 @@ export class ProductsController {
   // ─── Categories (public reads, admin writes) ──────────────────────
 
   @Get('categories')
-  findAllCategories() {
-    return this.productsService.findAllCategories();
+  findAllCategories(@Query('include_inactive') includeInactive?: string) {
+    return this.productsService.findAllCategories(includeInactive === 'true');
   }
 
   // IMPORTANT: declare ':slug/pricing' before ':id' — different segment count, no conflict
@@ -34,7 +34,7 @@ export class ProductsController {
   }
 
   @Get('categories/:id')
-  findCategory(@Param('id') id: number) {
+  findCategory(@Param('id', ParseIntPipe) id: number) {
     return this.productsService.findCategoryById(id);
   }
 
@@ -50,7 +50,7 @@ export class ProductsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Patch('categories/:id')
-  updateCategory(@Param('id') id: number, @Body() dto: UpdateCategoryDto) {
+  updateCategory(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCategoryDto) {
     return this.productsService.updateCategory(id, dto);
   }
 
@@ -58,7 +58,7 @@ export class ProductsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Delete('categories/:id')
-  deleteCategory(@Param('id') id: number) {
+  deleteCategory(@Param('id', ParseIntPipe) id: number) {
     return this.productsService.deleteCategory(id);
   }
 
@@ -96,7 +96,7 @@ export class ProductsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Patch('options/:id')
-  updateOption(@Param('id') id: number, @Body() dto: UpdateSpecOptionDto) {
+  updateOption(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateSpecOptionDto) {
     return this.productsService.updateOption(id, dto);
   }
 
@@ -104,7 +104,7 @@ export class ProductsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Delete('options/:id')
-  deleteOption(@Param('id') id: number) {
+  deleteOption(@Param('id', ParseIntPipe) id: number) {
     return this.productsService.deleteOption(id);
   }
 
@@ -128,7 +128,7 @@ export class ProductsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Patch('addons/:id')
-  updateAddon(@Param('id') id: number, @Body() dto: UpdateAddonDto) {
+  updateAddon(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateAddonDto) {
     return this.productsService.updateAddon(id, dto);
   }
 
@@ -136,7 +136,7 @@ export class ProductsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Delete('addons/:id')
-  deleteAddon(@Param('id') id: number) {
+  deleteAddon(@Param('id', ParseIntPipe) id: number) {
     return this.productsService.deleteAddon(id);
   }
 }

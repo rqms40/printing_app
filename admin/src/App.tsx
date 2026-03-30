@@ -20,7 +20,6 @@ import {
   CarOutlined,
   TeamOutlined,
   ShoppingOutlined,
-  PlusSquareOutlined,
 } from "@ant-design/icons";
 
 import { gridTheme } from "@/config/theme";
@@ -83,12 +82,21 @@ function App() {
                   icon: <TeamOutlined />,
                 },
               },
+              // "products" is a collapsible group only — no list route
               {
                 name: "products",
-                list: "/products",
                 meta: {
                   label: "Products",
                   icon: <ShoppingOutlined />,
+                },
+              },
+              // Children — no icons so ThemedSiderV2 won't render them
+              {
+                name: "products-categories",
+                list: "/products",
+                meta: {
+                  label: "Categories",
+                  parent: "products",
                 },
               },
               {
@@ -97,7 +105,6 @@ function App() {
                 meta: {
                   label: "Addons",
                   parent: "products",
-                  icon: <PlusSquareOutlined />,
                 },
               },
             ]}

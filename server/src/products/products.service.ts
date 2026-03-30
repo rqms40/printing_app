@@ -28,8 +28,9 @@ export class ProductsService {
 
   // ─── Categories ──────────────────────────────────────────────────────
 
-  findAllCategories(): Promise<ServiceCategory[]> {
-    return this.catRepo.find({ where: { isActive: true }, order: { sortOrder: 'ASC', id: 'ASC' } });
+  findAllCategories(includeInactive = false): Promise<ServiceCategory[]> {
+    const where = includeInactive ? {} : { isActive: true };
+    return this.catRepo.find({ where, order: { sortOrder: 'ASC', id: 'ASC' } });
   }
 
   findCategoryById(id: number): Promise<ServiceCategory> {

@@ -48,7 +48,7 @@ export function ProductList() {
 
   const fetchCategories = async () => {
     try {
-      const res = await axiosInstance.get<ServiceCategory[]>(`${API_URL}/products/categories`);
+      const res = await axiosInstance.get<ServiceCategory[]>(`${API_URL}/products/categories?include_inactive=true`);
       setCategories(res.data);
     } catch {
       setCategories(mockCategories);
