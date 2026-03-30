@@ -15,7 +15,7 @@ export class PaperSpec {
   @Column({ name: 'order_id', unique: true })
   orderId: number;
 
-  @OneToOne(() => Order)
+  @OneToOne(() => Order, (o) => o.paperSpec)
   @JoinColumn({ name: 'order_id' })
   order: Order;
 

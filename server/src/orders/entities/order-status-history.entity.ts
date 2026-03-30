@@ -18,7 +18,7 @@ export class OrderStatusHistory {
   @Column({ name: 'order_id' })
   orderId: number;
 
-  @ManyToOne(() => Order)
+  @ManyToOne(() => Order, (o) => o.statusHistory)
   @JoinColumn({ name: 'order_id' })
   order: Order;
 

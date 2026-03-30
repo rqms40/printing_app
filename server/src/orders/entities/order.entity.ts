@@ -5,11 +5,16 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
+  OneToOne,
+  OneToMany,
   JoinColumn,
   Index,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { Address } from '../../addresses/entities/address.entity';
+import { PaperSpec } from './paper-specs.entity';
+import { ThreeDSpec } from './three-d-specs.entity';
+import { OrderStatusHistory } from './order-status-history.entity';
 
 export enum OrderStatus {
   ORDER_PLACED = 'order_placed',
@@ -127,4 +132,13 @@ export class Order {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @OneToOne(() => PaperSpec, (spec) => spec.order, { nullable: true, eager: false })
+  paperSpec: PaperSpec | null;
+
+  @OneToOne(() => ThreeDSpec, (spec) => spec.order, { nullable: true, eager: false })
+  threeDSpec: ThreeDSpec | null;
+
+  @OneToMany(() => OrderStatusHistory, (h) => h.order)
+  statusHistory: OrderStatusHistory[];
 }

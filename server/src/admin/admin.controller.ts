@@ -6,6 +6,7 @@ import {
   Param,
   Body,
   UseGuards,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -16,6 +17,7 @@ import { UpdateStatusDto } from '../orders/dto/update-status.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
+import { User } from '../users/entities/user.entity';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -28,7 +30,63 @@ export class AdminController {
     private driversService: DriversService,
     @InjectRepository(Order)
     private ordersRepo: Repository<Order>,
+    @InjectRepository(User)
+    private usersRepo: Repository<User>,
   ) {}
+
+  private mapOrder(o: Order) {
+    return {
+      id: o.id,
+      order_id: o.orderId,
+      user_id: o.userId,
+      category: o.category,
+      file_url: o.fileUrl ?? null,
+      file_name: o.fileName ?? null,
+      quantity: o.quantity,
+      total_price: Number(o.totalPrice),
+      delivery_fee: Number(o.deliveryFee),
+      payment_method: o.paymentMethod,
+      payment_status: o.paymentStatus,
+      order_status: o.orderStatus,
+      delivery_option: o.deliveryOption,
+      admin_notes: o.adminNotes ?? null,
+      decline_reason: o.declineReason ?? null,
+      cancellation_reason: o.cancellationReason ?? null,
+      estimated_completion_at: o.estimatedCompletionAt ?? null,
+      assigned_driver_id: o.assignedDriverId ?? null,
+      created_at: o.createdAt,
+      updated_at: o.updatedAt,
+      paper_specs: o.paperSpec
+        ? {
+            paper_size: o.paperSpec.paperSize,
+            color_mode: o.paperSpec.colorMode,
+            media_type: o.paperSpec.mediaType,
+            print_sides: o.paperSpec.printSides,
+            binding: o.paperSpec.binding,
+          }
+        : null,
+      three_d_specs: o.threeDSpec
+        ? {
+            file_format: o.threeDSpec.fileFormat,
+            material: o.threeDSpec.material,
+            color: o.threeDSpec.color,
+            infill_percentage: o.threeDSpec.infillPercentage,
+            layer_height: Number(o.threeDSpec.layerHeight),
+            supports: o.threeDSpec.supports,
+            notes: o.threeDSpec.notes ?? null,
+          }
+        : null,
+      status_history: (o.statusHistory ?? []).map((h) => ({
+        id: h.id,
+        order_id: h.orderId,
+        from_status: h.fromStatus,
+        to_status: h.toStatus,
+        changed_by_user_id: h.changedByUserId,
+        notes: h.notes ?? null,
+        created_at: h.createdAt,
+      })),
+    };
+  }
 
   // Dashboard KPIs
   @Get('dashboard')
@@ -75,34 +133,73 @@ export class AdminController {
   // All orders (not filtered by user)
   @Get('orders')
   async getAllOrders() {
-    return this.ordersRepo.find({
+    const orders = await this.ordersRepo.find({
       order: { createdAt: 'DESC' },
+      relations: ['paperSpec', 'threeDSpec'],
     });
+    return orders.map((o) => this.mapOrder(o));
+  }
+
+  // Single order detail
+  @Get('orders/:id')
+  async getOrder(@Param('id', ParseIntPipe) id: number) {
+    const order = await this.ordersRepo.findOneOrFail({
+      where: { id },
+      relations: ['paperSpec', 'threeDSpec', 'statusHistory'],
+    });
+    return this.mapOrder(order);
   }
 
   // Update any order's status
   @Patch('orders/:id/status')
   async updateOrderStatus(
-    @Param('id') id: number,
+    @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateStatusDto,
   ) {
     return this.ordersService.updateStatus(id, dto.status);
   }
 
+  // Update admin notes
+  @Patch('orders/:id/notes')
+  async updateNotes(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('adminNotes') adminNotes: string,
+  ) {
+    await this.ordersRepo.update(id, { adminNotes });
+    return { success: true };
+  }
+
   // Assign driver to order
   @Post('orders/:id/assign')
   async assignDriver(
-    @Param('id') id: number,
+    @Param('id', ParseIntPipe) id: number,
     @Body('driverId') driverId: number,
   ) {
     await this.ordersRepo.update(id, { assignedDriverId: driverId });
     return this.ordersRepo.findOneOrFail({ where: { id } });
   }
 
-  // Available drivers
+  // All drivers with user info
   @Get('drivers')
-  async getAvailableDrivers() {
-    return this.driversService.getAvailableDrivers();
+  async getAllDrivers() {
+    return this.driversService.getAllDriversWithUser();
+  }
+
+  // All users
+  @Get('users')
+  async getAllUsers() {
+    const users = await this.usersRepo.find({ order: { createdAt: 'DESC' } });
+    return users.map((u) => ({
+      id: u.id,
+      full_name: u.fullName ?? null,
+      email: u.email,
+      phone_number: u.phoneNumber ?? null,
+      role: u.role,
+      is_active: u.isActive,
+      is_profile_complete: u.isProfileComplete,
+      created_at: u.createdAt,
+      updated_at: u.updatedAt,
+    }));
   }
 
   // Sales analytics (mock 6-month data for now)

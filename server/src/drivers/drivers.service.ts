@@ -41,6 +41,28 @@ export class DriversService {
     return this.profileRepo.find({ where: { isAvailable: true } });
   }
 
+  async getAllDriversWithUser() {
+    const profiles = await this.profileRepo.find({
+      relations: ['user'],
+      order: { createdAt: 'DESC' },
+    });
+    return profiles.map((p) => ({
+      id: p.id,
+      user_id: p.userId,
+      full_name: p.user?.fullName ?? null,
+      email: p.user?.email ?? null,
+      vehicle_type: p.vehicleType,
+      plate_number: p.plateNumber ?? null,
+      license_number: p.licenseNumber ?? null,
+      is_available: p.isAvailable,
+      last_latitude: p.lastLatitude ? Number(p.lastLatitude) : null,
+      last_longitude: p.lastLongitude ? Number(p.lastLongitude) : null,
+      last_location_update: p.lastLocationUpdate ?? null,
+      created_at: p.createdAt,
+      updated_at: p.updatedAt,
+    }));
+  }
+
   async getProfile(userId: number): Promise<DriverProfile> {
     const profile = await this.profileRepo.findOne({ where: { userId } });
     if (!profile) throw new NotFoundException('Driver profile not found');
