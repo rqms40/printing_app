@@ -6,20 +6,25 @@ import {
 } from 'typeorm';
 import { ServiceCategory } from './service-category.entity';
 
+const numberTransformer = {
+  to: (value: number | null) => value,
+  from: (value: string | null) => (value == null ? null : parseFloat(value)),
+};
+
 @Entity('service_addons')
 export class ServiceAddon {
   @PrimaryGeneratedColumn()
   id: number;
 
   @Column({ name: 'category_id', nullable: true })
-  categoryId: number;
+  categoryId: number | null;
 
   @ManyToOne(() => ServiceCategory, (cat) => cat.addons, {
     nullable: true,
     onDelete: 'SET NULL',
   })
   @JoinColumn({ name: 'category_id' })
-  category: ServiceCategory;
+  category: ServiceCategory | null;
 
   @Column({ length: 100 })
   name: string;
@@ -27,7 +32,7 @@ export class ServiceAddon {
   @Column({ type: 'text', nullable: true })
   description: string;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  @Column({ type: 'decimal', precision: 10, scale: 2, transformer: numberTransformer })
   price: number;
 
   @Column({ name: 'price_type', length: 20 })

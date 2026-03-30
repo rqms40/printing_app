@@ -6,6 +6,11 @@ import {
 import { SpecOption } from './spec-option.entity';
 import { ServiceAddon } from './service-addon.entity';
 
+const numberTransformer = {
+  to: (value: number | null) => value,
+  from: (value: string | null) => (value == null ? null : parseFloat(value)),
+};
+
 @Entity('service_categories')
 export class ServiceCategory {
   @PrimaryGeneratedColumn()
@@ -18,12 +23,12 @@ export class ServiceCategory {
   slug: string;
 
   @Column({ type: 'text', nullable: true })
-  description: string;
+  description: string | null;
 
   @Column({ length: 50, nullable: true })
-  icon: string;
+  icon: string | null;
 
-  @Column({ name: 'base_rate', type: 'decimal', precision: 10, scale: 2 })
+  @Column({ name: 'base_rate', type: 'decimal', precision: 10, scale: 2, transformer: numberTransformer })
   baseRate: number;
 
   @Column({ name: 'max_file_size_mb', default: 50 })

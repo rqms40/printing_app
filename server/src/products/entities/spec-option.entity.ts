@@ -6,6 +6,11 @@ import {
 } from 'typeorm';
 import { ServiceCategory } from './service-category.entity';
 
+const numberTransformer = {
+  to: (value: number | null) => value,
+  from: (value: string | null) => (value == null ? null : parseFloat(value)),
+};
+
 @Entity('spec_options')
 @Unique('uq_spec_option', ['categoryId', 'optionGroup', 'value'])
 export class SpecOption {
@@ -29,17 +34,17 @@ export class SpecOption {
   @Column({ length: 50 })
   value: string;
 
-  @Column({ type: 'decimal', precision: 6, scale: 3, default: 1.0 })
+  @Column({ type: 'decimal', precision: 6, scale: 3, default: 1.0, transformer: numberTransformer })
   multiplier: number;
 
-  @Column({ name: 'fixed_fee', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'fixed_fee', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: numberTransformer })
   fixedFee: number;
 
-  @Column({ name: 'unit_cost', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'unit_cost', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: numberTransformer })
   unitCost: number;
 
   @Column({ name: 'estimated_grams', type: 'int', nullable: true })
-  estimatedGrams: number;
+  estimatedGrams: number | null;
 
   @Column({ name: 'is_default', default: false })
   isDefault: boolean;
