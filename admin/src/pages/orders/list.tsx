@@ -1,13 +1,22 @@
 import { List } from "@refinedev/antd";
 import { Table, Input, Radio, Space, Badge, Tag, Tooltip } from "antd";
 import { SearchOutlined, EyeOutlined } from "@ant-design/icons";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import type { Order } from "@/types/order";
 import type { OrderStatus, PaymentStatus } from "@/types/enums";
 import { StatusBadge } from "@/components/status-badge";
 import { formatCurrency, formatRelativeTime, formatDate } from "@/utils/format";
 import { mockOrders } from "@/providers/mock-data";
+import { API_URL } from "@/config/constants";
+
+const axiosInstance = axios.create();
+axiosInstance.interceptors.request.use((config) => {
+  const token = localStorage.getItem('grid_admin_token');
+  if (token) config.headers['Authorization'] = `Bearer ${token}`;
+  return config;
+});
 
 type TabFilter = "new" | "production" | "done" | "all";
 
@@ -28,9 +37,18 @@ const PAYMENT_COLORS: Record<PaymentStatus, string> = {
 export function OrderList() {
   const [activeTab, setActiveTab] = useState<TabFilter>("all");
   const [search, setSearch] = useState("");
+  const [orders, setOrders] = useState<Order[]>(mockOrders);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  let filtered = mockOrders;
+  useEffect(() => {
+    void axiosInstance.get<Order[]>(`${API_URL}/admin/orders`)
+      .then(res => setOrders(res.data))
+      .catch(() => { /* keep mock fallback already in state */ })
+      .finally(() => setLoading(false));
+  }, []);
+
+  let filtered = orders;
   const tabStatuses = TAB_STATUSES[activeTab];
   if (tabStatuses) {
     filtered = filtered.filter((o) => tabStatuses.includes(o.order_status));
@@ -42,10 +60,10 @@ export function OrderList() {
   }
 
   const counts = {
-    new: mockOrders.filter((o) => TAB_STATUSES.new!.includes(o.order_status)).length,
-    production: mockOrders.filter((o) => TAB_STATUSES.production!.includes(o.order_status)).length,
-    done: mockOrders.filter((o) => TAB_STATUSES.done!.includes(o.order_status)).length,
-    all: mockOrders.length,
+    new: orders.filter((o) => TAB_STATUSES.new!.includes(o.order_status)).length,
+    production: orders.filter((o) => TAB_STATUSES.production!.includes(o.order_status)).length,
+    done: orders.filter((o) => TAB_STATUSES.done!.includes(o.order_status)).length,
+    all: orders.length,
   };
 
   return (
@@ -93,6 +111,7 @@ export function OrderList() {
           dataSource={filtered}
           rowKey="id"
           size="middle"
+          loading={loading}
           scroll={{ x: 800 }}
           onRow={(record) => ({
             onClick: () => navigate(`/orders/show/${record.id}`),
