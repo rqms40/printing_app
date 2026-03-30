@@ -1,11 +1,13 @@
 import React, { useState } from "react";
 import {
   Table, Tag, Avatar, Space, Typography, Input, Tooltip,
-  Card, Badge, List, Button, Row, Col
+  Card, Badge, Button, Row, Col, Segmented, Statistic,
 } from "antd";
 import {
   SearchOutlined, EnvironmentOutlined, CarOutlined,
-  UserAddOutlined, DropboxOutlined, DollarOutlined, ClockCircleOutlined,
+  UserAddOutlined, DropboxOutlined,
+  ClockCircleOutlined, CheckCircleOutlined,
+  ExpandOutlined, CompressOutlined,
 } from "@ant-design/icons";
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L, { DivIcon } from 'leaflet';
@@ -24,405 +26,520 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: Error | null}> {
-  constructor(props: {children: React.ReactNode}) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error };
-  }
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error("Drivers Page Error:", error, errorInfo);
-  }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div style={{ padding: 40, color: 'white' }}>
-          <h2>Something went wrong in the Drivers panel.</h2>
-          <pre style={{ color: 'red', whiteSpace: 'pre-wrap' }}>{this.state.error?.message}</pre>
-          <pre style={{ color: '#aaa', fontSize: 12 }}>{this.state.error?.stack}</pre>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
 /* ─── Map Icon helpers ───────────────────────────────────────────── */
-const createIcon = (color: string) =>
+const createIcon = (color: string, size = 14) =>
   new DivIcon({
-    className: 'custom-map-icon',
-    html: `<div style="background:${color};width:16px;height:16px;border-radius:50%;border:3px solid white;box-shadow:0 0 8px rgba(0,0,0,0.5)"></div>`,
-    iconSize: [22, 22],
-    iconAnchor: [11, 11],
+    className: '',
+    html: `<div style="
+      background:${color};
+      width:${size}px;height:${size}px;
+      border-radius:50%;
+      border:2.5px solid rgba(255,255,255,0.9);
+      box-shadow:0 0 0 3px ${color}33, 0 2px 8px rgba(0,0,0,0.4);
+    "></div>`,
+    iconSize: [size + 6, size + 6],
+    iconAnchor: [(size + 6) / 2, (size + 6) / 2],
   });
 
 const availableIcon = createIcon('#34d399');
 const busyIcon      = createIcon('#60a5fa');
 
 const VEHICLE_COLORS: Record<string, string> = {
-  motorcycle: 'gold',
-  bicycle:    'green',
-  car:        'blue',
+  motorcycle: '#FFCA28',
+  bicycle:    '#66BB6A',
+  car:        '#42A5F5',
 };
 
-/* ─── Cost & Earnings Sidebar ────────────────────────────────────── */
-const CostSidebar: React.FC = () => {
-  const totalPayout     = mockDeliveries.reduce((a, d) => a + d.earnings, 0);
-  const pendingCount    = mockDeliveries.filter(d =>
-    ['Assigned', 'Accepted', 'Picked Up', 'On the Way'].includes(d.status)
-  ).length;
-  const recentEarnings  = mockDeliveries.filter(d => d.earnings > 0).slice(0, 3);
-
-  const metricCard = (icon: React.ReactNode, label: string, value: string, color: string) => (
-    <Card
-      style={{ background: '#1f1f1f', border: '1px solid #2E2E2E', borderRadius: 10, marginBottom: 10 }}
-      styles={{ body: { padding: 16 } }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ background: `${color}1a`, padding: 10, borderRadius: 8 }}>
-          {icon}
-        </div>
-        <div>
-          <Text style={{ color: '#808080', fontSize: 12, display: 'block' }}>{label}</Text>
-          <Text strong style={{ color, fontSize: 18 }}>{value}</Text>
-        </div>
-      </div>
-    </Card>
-  );
-
-  return (
-    <>
-      {metricCard(
-        <DollarOutlined style={{ color: '#34d399', fontSize: 18 }} />,
-        'Total Payouts Resolved',
-        `₱${totalPayout.toFixed(2)}`,
-        '#34d399'
-      )}
-      {metricCard(
-        <ClockCircleOutlined style={{ color: '#FFCA28', fontSize: 18 }} />,
-        'Active Rider Costs',
-        `₱${(pendingCount * 90).toFixed(2)}`,
-        '#FFCA28'
-      )}
-
-      {/* Recent Earnings Log */}
-      <Card
-        title={<Text style={{ color: '#808080', fontSize: 13 }}>Recent Earnings Log</Text>}
-        style={{ background: '#141414', border: '1px solid #2E2E2E', borderRadius: 10 }}
-        styles={{ body: { padding: '0 16px' }, header: { borderBottom: '1px solid #2E2E2E', padding: '10px 16px', minHeight: 'auto' } }}
-      >
-        {recentEarnings.map(d => (
-          <div
-            key={d.id}
-            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              borderBottom: '1px solid #2A2A2A', padding: '10px 0' }}
-          >
-            <div>
-              <Text style={{ color: '#F0F0F0', fontSize: 13, display: 'block', fontWeight: 500 }}>{d.order_id}</Text>
-              <Text style={{ color: '#808080', fontSize: 11 }}>{d.date}</Text>
-            </div>
-            <Text strong style={{ color: '#34d399', fontSize: 14 }}>+₱{d.earnings.toFixed(2)}</Text>
-          </div>
-        ))}
-      </Card>
-    </>
-  );
-};
-
-/* ─── Dispatch Queue ─────────────────────────────────────────────── */
-const DispatchQueuePanel: React.FC = () => {
-  const readyOrders    = mockOrders.filter(o => o.order_status === 'ready_for_dispatch');
-  const availDrivers   = mockDrivers.filter(d => d.is_available);
-  const [assigning, setAssigning] = useState<string | null>(null);
-
-  return (
-    <Card
-      title={<Text style={{ color: '#F0F0F0', fontWeight: 600 }}>Dispatch Queue</Text>}
-      extra={
-        <Badge
-          count={`${readyOrders.length} Pending`}
-          style={{ backgroundColor: '#FFDE58', color: '#141414', fontWeight: 700 }}
-        />
-      }
-      style={{ background: '#141414', border: '1px solid #2E2E2E', borderRadius: 10, height: '100%' }}
-      styles={{ body: { padding: 12, overflowY: 'auto', maxHeight: 380 } }}
-    >
-      {readyOrders.length === 0 ? (
-        <Text type="secondary">No orders waiting for dispatch.</Text>
-      ) : (
-        <List
-          dataSource={readyOrders}
-          renderItem={order => (
-            <List.Item
-              style={{ background: '#1f1f1f', borderRadius: 8, marginBottom: 10,
-                padding: 12, border: '1px solid #2E2E2E', display: 'block' }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                <div>
-                  <Text strong style={{ color: '#F0F0F0', display: 'block' }}>{order.order_id}</Text>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    Delivery Fee: ₱{order.delivery_fee.toFixed(2)}
-                  </Text>
-                </div>
-                <div style={{ background: 'rgba(34, 197, 94, 0.1)', padding: '6px 8px', borderRadius: 8 }}>
-                  <DropboxOutlined style={{ color: '#22c55e', fontSize: 18 }} />
-                </div>
-              </div>
-
-              {assigning === order.order_id ? (
-                <div>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
-                    Select Rider:
-                  </Text>
-                  <List
-                    size="small"
-                    dataSource={availDrivers}
-                    renderItem={driver => (
-                      <List.Item
-                        style={{ cursor: 'pointer', background: '#2E2E2E', borderRadius: 6,
-                          marginBottom: 4, padding: '6px 10px', border: 'none' }}
-                        onClick={() => setAssigning(null)}
-                      >
-                        <Space direction="vertical" size={0}>
-                          <Text style={{ fontSize: 13, color: '#F0F0F0' }}>{driver.full_name}</Text>
-                          <Text type="secondary" style={{ fontSize: 11 }}>
-                            {driver.vehicle_type} • {driver.plate_number}
-                          </Text>
-                        </Space>
-                      </List.Item>
-                    )}
-                  />
-                  <div style={{ textAlign: 'center', marginTop: 6 }}>
-                    <Button type="text" size="small" onClick={() => setAssigning(null)}
-                      style={{ color: '#808080' }}>Cancel</Button>
-                  </div>
-                </div>
-              ) : (
-                <Button
-                  block ghost
-                  icon={<UserAddOutlined />}
-                  onClick={() => setAssigning(order.order_id)}
-                  style={{ borderColor: '#FFDE58', color: '#FFDE58', marginTop: 4 }}
-                >
-                  Assign Rider
-                </Button>
-              )}
-            </List.Item>
-          )}
-        />
-      )}
-    </Card>
-  );
+/* ─── Styles ────────────────────────────────────────────────────── */
+const S = {
+  card: {
+    background: '#141414',
+    border: '1px solid #2E2E2E',
+    borderRadius: 12,
+  } as React.CSSProperties,
+  cardInner: {
+    background: '#1A1A1A',
+    border: '1px solid #252525',
+    borderRadius: 10,
+  } as React.CSSProperties,
+  metricValue: {
+    color: '#F0F0F0',
+    fontSize: 22,
+    fontWeight: 700,
+    lineHeight: 1.1,
+    fontFamily: "'DM Sans', sans-serif",
+  } as React.CSSProperties,
+  metricLabel: {
+    color: '#666',
+    fontSize: 11,
+    fontWeight: 500,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.5px',
+  } as React.CSSProperties,
+  sectionTitle: {
+    color: '#F0F0F0',
+    fontWeight: 600,
+    fontSize: 15,
+    margin: 0,
+  } as React.CSSProperties,
 };
 
 /* ─── Main Drivers Page ──────────────────────────────────────────── */
 export function DriverList() {
   const [search, setSearch] = useState('');
-  const onlineCount = mockDrivers.filter(d => d.is_available).length;
+  const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'offline'>('all');
+  const [mapExpanded, setMapExpanded] = useState(false);
 
-  const filtered = search
-    ? mockDrivers.filter(
-        d => d.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-             d.plate_number?.toLowerCase().includes(search.toLowerCase())
-      )
-    : mockDrivers;
+  const onlineCount  = mockDrivers.filter(d => d.is_available).length;
+  const offlineCount = mockDrivers.length - onlineCount;
+  const totalPayout  = mockDeliveries.reduce((a, d) => a + d.earnings, 0);
+  const activeTrips  = mockDeliveries.filter(d =>
+    ['Assigned', 'Accepted', 'Picked Up', 'On the Way'].includes(d.status)
+  ).length;
+  const readyOrders  = mockOrders.filter(o => o.order_status === 'ready_for_dispatch');
+
+  const filtered = mockDrivers.filter(d => {
+    const matchesSearch = !search ||
+      d.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+      d.plate_number?.toLowerCase().includes(search.toLowerCase());
+    const matchesStatus =
+      statusFilter === 'all' ? true :
+      statusFilter === 'online' ? d.is_available :
+      !d.is_available;
+    return matchesSearch && matchesStatus;
+  });
 
   const mapCenter: [number, number] = [7.132836, 125.610605];
 
   return (
-    <ErrorBoundary>
-      <div style={{ paddingBottom: 40 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 40 }}>
 
-      {/* ── Header ───────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 24 }}>
-        <Title level={3} style={{ color: '#F0F0F0', margin: 0 }}>Drivers Panel</Title>
-        <Space style={{ marginTop: 6 }}>
-          <Tag color="green" style={{ fontSize: 13, padding: '2px 10px' }}>
-            {onlineCount} Online
-          </Tag>
-          <Tag color="default" style={{ fontSize: 13, padding: '2px 10px' }}>
-            {mockDrivers.length - onlineCount} Offline
-          </Tag>
-        </Space>
+      {/* ── Header Row ─────────────────────────────────────────── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <Title level={3} style={{ color: '#F0F0F0', margin: 0, marginBottom: 4 }}>
+            Drivers
+          </Title>
+          <Space size={8}>
+            <Badge status="success" text={<Text style={{ color: '#808080', fontSize: 13 }}>{onlineCount} Online</Text>} />
+            <Badge status="default" text={<Text style={{ color: '#808080', fontSize: 13 }}>{offlineCount} Offline</Text>} />
+          </Space>
+        </div>
       </div>
 
-      {/* ── Top Section: Map (left) + Cost/Dispatch (right) ──────── */}
-      <Row gutter={[20, 20]} style={{ marginBottom: 24 }}>
-
-        {/* Live Tracking Map */}
-        <Col xs={24} lg={15}>
-          <Card
-            title={
-              <Space>
-                <CarOutlined style={{ color: '#FFDE58' }} />
-                <Text style={{ color: '#F0F0F0', fontWeight: 600 }}>Rider Live Tracking</Text>
-              </Space>
-            }
-            style={{ background: '#1f1f1f', border: '1px solid #2E2E2E', borderRadius: 12, height: '100%' }}
-            styles={{ body: { padding: 0, overflow: 'hidden', borderRadius: '0 0 12px 12px', minHeight: 420 } }}
-          >
-            <MapContainer
-              center={mapCenter}
-              zoom={13}
-              style={{ height: 440, width: '100%', borderRadius: '0 0 12px 12px' }}
-            >
-              <TileLayer
-                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                attribution='&copy; OSM &copy; CARTO'
-              />
-              {mockDrivers
-                .filter(d => d.last_latitude && d.last_longitude)
-                .map(d => (
-                  <Marker
-                    key={d.id}
-                    position={[d.last_latitude!, d.last_longitude!]}
-                    icon={d.is_available ? availableIcon : busyIcon}
-                  >
-                    <Popup>
-                      <div style={{ color: '#000' }}>
-                        <b>{d.full_name}</b><br />
-                        {d.vehicle_type} — {d.plate_number}<br />
-                        Status: {d.is_available ? 'Available' : 'Busy'}
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
-            </MapContainer>
+      {/* ── Metric Strip ───────────────────────────────────────── */}
+      <Row gutter={[12, 12]}>
+        <Col xs={12} sm={6}>
+          <Card style={S.card} styles={{ body: { padding: '16px 20px' } }}>
+            <Statistic
+              title={<span style={S.metricLabel}>Total Drivers</span>}
+              value={mockDrivers.length}
+              valueStyle={S.metricValue}
+              prefix={<CarOutlined style={{ color: '#FFDE58', fontSize: 16, marginRight: 4 }} />}
+            />
           </Card>
         </Col>
-
-        {/* Right column: Cost Tracker + Dispatch Queue */}
-        <Col xs={24} lg={9}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
-            <CostSidebar />
-            <DispatchQueuePanel />
-          </div>
+        <Col xs={12} sm={6}>
+          <Card style={S.card} styles={{ body: { padding: '16px 20px' } }}>
+            <Statistic
+              title={<span style={S.metricLabel}>Active Trips</span>}
+              value={activeTrips}
+              valueStyle={S.metricValue}
+              prefix={<EnvironmentOutlined style={{ color: '#42A5F5', fontSize: 16, marginRight: 4 }} />}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={6}>
+          <Card style={S.card} styles={{ body: { padding: '16px 20px' } }}>
+            <Statistic
+              title={<span style={S.metricLabel}>Total Payouts</span>}
+              value={totalPayout}
+              precision={2}
+              prefix={<span style={{ color: '#34d399', fontSize: 16, marginRight: 2 }}>₱</span>}
+              valueStyle={{ ...S.metricValue, color: '#34d399' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={6}>
+          <Card style={S.card} styles={{ body: { padding: '16px 20px' } }}>
+            <Statistic
+              title={<span style={S.metricLabel}>Awaiting Dispatch</span>}
+              value={readyOrders.length}
+              valueStyle={{ ...S.metricValue, color: '#FFDE58' }}
+              prefix={<ClockCircleOutlined style={{ color: '#FFDE58', fontSize: 16, marginRight: 4 }} />}
+            />
+          </Card>
         </Col>
       </Row>
 
-      {/* ── Driver List Table ─────────────────────────────────────── */}
-      <Card
-        title={<Text style={{ color: '#F0F0F0', fontWeight: 600, fontSize: 15 }}>All Drivers</Text>}
-        extra={
-          <Input
-            placeholder="Search by name or plate..."
-            prefix={<SearchOutlined style={{ color: '#555' }} />}
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            allowClear
-            style={{ width: 260 }}
-          />
-        }
-        style={{ background: '#1f1f1f', border: '1px solid #2E2E2E', borderRadius: 12 }}
-        styles={{ header: { borderBottom: '1px solid #2E2E2E' } }}
-      >
+      {/* ── Map + Dispatch Row ─────────────────────────────────── */}
+      <Row gutter={[16, 16]}>
+
+        {/* Live Map */}
+        <Col xs={24} lg={mapExpanded ? 24 : 16}>
+          <Card
+            style={{ ...S.card, overflow: 'hidden' }}
+            styles={{
+              header: { borderBottom: '1px solid #2E2E2E', padding: '12px 20px', minHeight: 'auto' },
+              body: { padding: 0 },
+            }}
+            title={
+              <Space size={8}>
+                <EnvironmentOutlined style={{ color: '#FFDE58', fontSize: 14 }} />
+                <span style={{ color: '#F0F0F0', fontWeight: 600, fontSize: 14 }}>Live Tracking</span>
+              </Space>
+            }
+            extra={
+              <Button
+                type="text"
+                size="small"
+                icon={mapExpanded ? <CompressOutlined /> : <ExpandOutlined />}
+                onClick={() => setMapExpanded(v => !v)}
+                style={{ color: '#808080' }}
+              />
+            }
+          >
+            <div style={{ position: 'relative', zIndex: 0, height: mapExpanded ? 500 : 340, width: '100%', isolation: 'isolate' }}>
+              <MapContainer
+                center={mapCenter}
+                zoom={13}
+                style={{ height: '100%', width: '100%' }}
+                zoomControl={false}
+              >
+                <TileLayer
+                  url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                  attribution='&copy; OSM &copy; CARTO'
+                />
+                {mockDrivers
+                  .filter(d => d.last_latitude && d.last_longitude)
+                  .map(d => (
+                    <Marker
+                      key={d.id}
+                      position={[d.last_latitude!, d.last_longitude!]}
+                      icon={d.is_available ? availableIcon : busyIcon}
+                    >
+                      <Popup>
+                        <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 13, lineHeight: 1.6 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>{d.full_name}</div>
+                          <div style={{ color: '#666' }}>
+                            {d.vehicle_type} &middot; {d.plate_number}
+                          </div>
+                          <Tag color={d.is_available ? 'green' : 'default'} style={{ marginTop: 4 }}>
+                            {d.is_available ? 'Available' : 'On delivery'}
+                          </Tag>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  ))}
+              </MapContainer>
+
+              {/* Map legend overlay */}
+              <div style={{
+                position: 'absolute', bottom: 12, left: 12, zIndex: 1000,
+                background: 'rgba(20,20,20,0.9)', backdropFilter: 'blur(8px)',
+                borderRadius: 8, padding: '8px 14px',
+                display: 'flex', gap: 16, fontSize: 12, color: '#A0A0A0',
+                border: '1px solid #2E2E2E',
+              }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#34d399', display: 'inline-block' }} />
+                  Available
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#60a5fa', display: 'inline-block' }} />
+                  On delivery
+                </span>
+              </div>
+            </div>
+          </Card>
+        </Col>
+
+        {/* Dispatch Queue */}
+        {!mapExpanded && (
+          <Col xs={24} lg={8}>
+            <DispatchPanel readyOrders={readyOrders} />
+          </Col>
+        )}
+      </Row>
+
+      {/* ── Driver Table ───────────────────────────────────────── */}
+      <div className="drivers-table-section">
+        {/* Toolbar */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '14px 20px', flexWrap: 'wrap', gap: 10,
+        }}>
+          <span style={S.sectionTitle}>All Drivers</span>
+          <Space size={12} wrap>
+            <Segmented
+              size="small"
+              value={statusFilter}
+              onChange={v => setStatusFilter(v as typeof statusFilter)}
+              options={[
+                { label: `All (${mockDrivers.length})`, value: 'all' },
+                { label: `Online (${onlineCount})`, value: 'online' },
+                { label: `Offline (${offlineCount})`, value: 'offline' },
+              ]}
+              style={{ background: '#1A1A1A' }}
+            />
+            <Input
+              placeholder="Search name or plate..."
+              prefix={<SearchOutlined style={{ color: '#555' }} />}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              allowClear
+              style={{ width: 200 }}
+              size="small"
+            />
+          </Space>
+        </div>
+
+        {/* Table */}
         <Table
           dataSource={filtered}
           rowKey="id"
           size="middle"
-          scroll={{ x: 700 }}
-          pagination={{
-            pageSize: 20,
-            showTotal: (total) => <span style={{ color: '#808080' }}>{total} drivers</span>,
-          }}
+          scroll={{ x: 640 }}
+          pagination={false}
         >
-          {/* Driver */}
           <Table.Column
             title="Driver"
-            width={220}
+            width={240}
             render={(_: unknown, record: DriverProfile) => (
-              <Space>
-                <Avatar
-                  size={40}
-                  style={{
-                    background: record.is_available ? '#1A2E1A' : '#2A2A2A',
-                    color: record.is_available ? '#66BB6A' : '#808080',
-                    fontWeight: 700,
-                    border: `2px solid ${record.is_available ? '#66BB6A' : '#333'}`,
-                  }}
-                >
-                  {record.full_name?.charAt(0) ?? '?'}
-                </Avatar>
+              <Space size={12}>
+                <div style={{ position: 'relative' }}>
+                  <Avatar
+                    size={38}
+                    style={{
+                      background: record.is_available ? '#132B13' : '#1E1E1E',
+                      color: record.is_available ? '#66BB6A' : '#666',
+                      fontWeight: 700,
+                      fontSize: 15,
+                    }}
+                  >
+                    {record.full_name?.charAt(0) ?? '?'}
+                  </Avatar>
+                  <span style={{
+                    position: 'absolute', bottom: 0, right: 0,
+                    width: 10, height: 10, borderRadius: '50%',
+                    background: record.is_available ? '#34d399' : '#444',
+                    border: '2px solid #141414',
+                  }} />
+                </div>
                 <div>
-                  <Text strong style={{ color: '#F0F0F0', display: 'block' }}>
+                  <Text strong style={{ color: '#F0F0F0', display: 'block', fontSize: 13.5, lineHeight: 1.3 }}>
                     {record.full_name ?? 'Unknown'}
                   </Text>
-                  <Text style={{ color: '#808080', fontSize: 11 }}>ID: {record.user_id}</Text>
+                  <Text style={{ color: '#666', fontSize: 11.5 }}>ID: {record.user_id}</Text>
                 </div>
               </Space>
             )}
           />
 
-          {/* Vehicle */}
           <Table.Column
             dataIndex="vehicle_type"
             title="Vehicle"
-            width={140}
-            render={(v: string) => (
-              <Tag color={VEHICLE_COLORS[v] ?? 'default'} icon={<CarOutlined />}>
-                {v.charAt(0).toUpperCase() + v.slice(1)}
-              </Tag>
-            )}
-            filters={[
-              { text: 'Motorcycle', value: 'motorcycle' },
-              { text: 'Bicycle',    value: 'bicycle'    },
-              { text: 'Car',        value: 'car'        },
-            ]}
-            onFilter={(value, record: DriverProfile) => record.vehicle_type === value}
-          />
-
-          {/* Plate */}
-          <Table.Column
-            dataIndex="plate_number"
-            title="Plate"
-            width={120}
-            render={(v?: string) => (
-              <span style={{ fontFamily: 'monospace', fontWeight: 500, color: '#F0F0F0' }}>
-                {v ?? '—'}
-              </span>
+            width={150}
+            render={(v: string, record: DriverProfile) => (
+              <Space size={8}>
+                <CarOutlined style={{ color: VEHICLE_COLORS[v] ?? '#808080', fontSize: 15 }} />
+                <div>
+                  <Text style={{ color: '#F0F0F0', display: 'block', fontSize: 13, textTransform: 'capitalize' }}>
+                    {v}
+                  </Text>
+                  <Text style={{ color: '#666', fontSize: 11.5, fontFamily: 'monospace' }}>
+                    {record.plate_number ?? '—'}
+                  </Text>
+                </div>
+              </Space>
             )}
           />
 
-          {/* Status */}
           <Table.Column
             dataIndex="is_available"
             title="Status"
             width={110}
             render={(available: boolean) => (
-              <Tag color={available ? 'green' : 'default'}>
+              <Tag
+                color={available ? 'green' : 'default'}
+                style={{ borderRadius: 10, fontSize: 12, padding: '1px 10px' }}
+              >
                 {available ? 'Online' : 'Offline'}
               </Tag>
             )}
-            filters={[
-              { text: 'Online',  value: true  },
-              { text: 'Offline', value: false },
-            ]}
-            onFilter={(value, record: DriverProfile) => record.is_available === value}
           />
 
-          {/* Last Active */}
+          <Table.Column
+            title="Deliveries"
+            width={100}
+            render={(_: unknown, record: DriverProfile) => {
+              const count = mockDeliveries.filter(d => d.driver_id === record.id).length;
+              const earned = mockDeliveries
+                .filter(d => d.driver_id === record.id)
+                .reduce((a, d) => a + d.earnings, 0);
+              return (
+                <div>
+                  <Text style={{ color: '#F0F0F0', display: 'block', fontSize: 13 }}>{count} trips</Text>
+                  <Text style={{ color: '#34d399', fontSize: 11.5 }}>₱{earned.toFixed(0)}</Text>
+                </div>
+              );
+            }}
+          />
+
           <Table.Column
             dataIndex="last_location_update"
-            title="Last Active"
-            width={160}
-            render={(v?: string) =>
-              v ? (
-                <Tooltip title={formatDateTime(v)}>
+            title="Last Seen"
+            width={140}
+            render={(v: string | undefined, record: DriverProfile) =>
+              record.last_latitude ? (
+                <Tooltip title={v ? formatDateTime(v) : 'Location available'}>
                   <Space size={4}>
-                    <EnvironmentOutlined style={{ color: '#808080', fontSize: 12 }} />
-                    <span style={{ color: '#A0A0A0' }}>{formatRelativeTime(v)}</span>
+                    <EnvironmentOutlined style={{ color: '#555', fontSize: 12 }} />
+                    <span style={{ color: '#808080', fontSize: 12.5 }}>
+                      {v ? formatRelativeTime(v) : 'GPS active'}
+                    </span>
                   </Space>
                 </Tooltip>
               ) : (
-                <span style={{ color: '#555' }}>—</span>
+                <span style={{ color: '#444', fontSize: 12.5 }}>No location</span>
               )
             }
           />
         </Table>
-      </Card>
+      </div>
     </div>
-    </ErrorBoundary>
   );
 }
+
+/* ─── Dispatch Panel ─────────────────────────────────────────────── */
+const DispatchPanel: React.FC<{ readyOrders: typeof mockOrders }> = ({ readyOrders }) => {
+  const availDrivers = mockDrivers.filter(d => d.is_available);
+  const [assigning, setAssigning] = useState<string | null>(null);
+
+  return (
+    <Card
+      style={{
+        background: '#141414',
+        border: '1px solid #2E2E2E',
+        borderRadius: 12,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+      styles={{
+        header: { borderBottom: '1px solid #2E2E2E', padding: '12px 20px', minHeight: 'auto' },
+        body: { padding: 12, flex: 1, overflowY: 'auto', maxHeight: 280 },
+      }}
+      title={
+        <span style={{ color: '#F0F0F0', fontWeight: 600, fontSize: 14 }}>Dispatch Queue</span>
+      }
+      extra={
+        readyOrders.length > 0 && (
+          <Badge
+            count={readyOrders.length}
+            style={{ backgroundColor: '#FFDE58', color: '#141414', fontWeight: 700, fontSize: 11 }}
+          />
+        )
+      }
+    >
+      {readyOrders.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '32px 16px' }}>
+          <CheckCircleOutlined style={{ fontSize: 28, color: '#333', marginBottom: 8 }} />
+          <Text style={{ display: 'block', color: '#555', fontSize: 13 }}>
+            All orders dispatched
+          </Text>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {readyOrders.map(order => (
+            <div
+              key={order.order_id}
+              style={{
+                background: '#1A1A1A',
+                borderRadius: 10,
+                padding: 14,
+                border: '1px solid #252525',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div>
+                  <Text strong style={{ color: '#F0F0F0', display: 'block', fontSize: 13.5 }}>
+                    {order.order_id}
+                  </Text>
+                  <Text style={{ color: '#666', fontSize: 11.5 }}>
+                    Fee: ₱{order.delivery_fee.toFixed(0)}
+                  </Text>
+                </div>
+                <div style={{
+                  background: 'rgba(34, 197, 94, 0.08)',
+                  padding: '5px 7px',
+                  borderRadius: 8,
+                }}>
+                  <DropboxOutlined style={{ color: '#34d399', fontSize: 16 }} />
+                </div>
+              </div>
+
+              {assigning === order.order_id ? (
+                <div>
+                  <Text style={{ color: '#666', fontSize: 11, display: 'block', marginBottom: 6 }}>
+                    Select rider:
+                  </Text>
+                  {availDrivers.map(driver => (
+                    <div
+                      key={driver.id}
+                      onClick={() => setAssigning(null)}
+                      style={{
+                        cursor: 'pointer',
+                        background: '#222',
+                        borderRadius: 8,
+                        padding: '8px 10px',
+                        marginBottom: 4,
+                        border: '1px solid transparent',
+                        transition: 'border-color 0.15s',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.borderColor = '#FFDE58')}
+                      onMouseLeave={e => (e.currentTarget.style.borderColor = 'transparent')}
+                    >
+                      <Text style={{ fontSize: 13, color: '#F0F0F0', display: 'block' }}>
+                        {driver.full_name}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: '#666' }}>
+                        {driver.vehicle_type} &middot; {driver.plate_number}
+                      </Text>
+                    </div>
+                  ))}
+                  <Button
+                    type="text"
+                    size="small"
+                    block
+                    onClick={() => setAssigning(null)}
+                    style={{ color: '#666', marginTop: 4, fontSize: 12 }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  block
+                  ghost
+                  size="small"
+                  icon={<UserAddOutlined />}
+                  onClick={() => setAssigning(order.order_id)}
+                  style={{
+                    borderColor: '#333',
+                    color: '#FFDE58',
+                    borderRadius: 8,
+                    height: 32,
+                    fontSize: 12.5,
+                  }}
+                >
+                  Assign Rider
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+};

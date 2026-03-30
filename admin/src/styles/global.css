@@ -12,3 +12,23 @@ body {
   min-height: 100vh;
 }
 
+/* ── Drivers table section ── */
+.drivers-table-section {
+  background: #141414;
+  border: 1px solid #2E2E2E;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.drivers-table-section .ant-table {
+  border-radius: 0 !important;
+}
+.drivers-table-section .ant-table-container {
+  border-radius: 0 !important;
+}
+.drivers-table-section .ant-table-thead > tr > th {
+  border-radius: 0 !important;
+}
+.drivers-table-section .ant-table-wrapper {
+  border-radius: 0 !important;
+}
+
