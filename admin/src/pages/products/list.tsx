@@ -238,6 +238,9 @@ export function ProductList() {
           <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Description</Text>} name="description">
             <Input.TextArea rows={2} placeholder="Short description..." />
           </Form.Item>
+          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Icon (Ant Design icon name)</Text>} name="icon">
+            <Input placeholder="FileTextOutlined" />
+          </Form.Item>
           <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Base Rate (₱)</Text>} name="base_rate" rules={[{ required: true }]}>
             <InputNumber min={0.01} step={0.01} style={{ width: '100%' }} prefix="₱" />
           </Form.Item>
