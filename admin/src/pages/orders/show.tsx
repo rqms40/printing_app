@@ -1,7 +1,7 @@
 import { Show } from "@refinedev/antd";
 import {
   Card, Descriptions, Typography, Button, Select, App, Modal,
-  Input, Table, Space, Row, Col, Timeline,
+  Input, Table, Space, Row, Col, Timeline, Spin,
 } from "antd";
 import {
   ExclamationCircleOutlined,
@@ -9,7 +9,8 @@ import {
   StopOutlined,
 } from "@ant-design/icons";
 import { useParams } from "react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import axios from "axios";
 import type { OrderStatus } from "@/types/enums";
 import {
   ORDER_STATUS_TRANSITIONS,
@@ -21,30 +22,47 @@ import {
   formatDateTime,
   statusLabel,
 } from "@/utils/format";
-import {
-  mockOrders,
-  mockDrivers,
-  mockStatusHistory,
-} from "@/providers/mock-data";
+import type { Order, OrderStatusHistory } from "@/types/order";
+import { API_URL } from "@/config/constants";
 
 const { Text } = Typography;
 const { TextArea } = Input;
 
+const axiosInstance = axios.create();
+axiosInstance.interceptors.request.use((config) => {
+  const token = localStorage.getItem('grid_admin_token');
+  if (token) config.headers['Authorization'] = `Bearer ${token}`;
+  return config;
+});
+
 export function OrderShow() {
   const { id } = useParams<{ id: string }>();
   const { modal, message } = App.useApp();
-  const order = mockOrders.find((o) => o.id === id);
-  const history = mockStatusHistory.filter((h) => h.order_id === id);
-  const availableDrivers = mockDrivers.filter((d) => d.is_available);
+  const [order, setOrder] = useState<(Order & { status_history?: OrderStatusHistory[] }) | null>(null);
+  const [availableDrivers, setAvailableDrivers] = useState<{ id: number; full_name: string; vehicle_type: string; plate_number: string | null; is_available?: boolean }[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [driverModalOpen, setDriverModalOpen] = useState(false);
   const [declineModalOpen, setDeclineModalOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
 
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      axiosInstance.get(`${API_URL}/admin/orders/${id}`).then(r => setOrder(r.data)).catch(() => {}),
+      axiosInstance.get(`${API_URL}/admin/drivers`).then(r => setAvailableDrivers(r.data)).catch(() => {}),
+    ]).finally(() => setLoading(false));
+  }, [id]);
+
+  if (loading) {
+    return <Show title="Order"><div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}><Spin size="large" /></div></Show>;
+  }
+
   if (!order) {
     return <Show title="Order Not Found"><Text>Order not found.</Text></Show>;
   }
 
+  const history = order.status_history ?? [];
   const validNextStatuses = ORDER_STATUS_TRANSITIONS[order.order_status];
   const canAssignDriver =
     order.order_status === "ready_for_dispatch" ||
@@ -55,25 +73,46 @@ export function OrderShow() {
       title: "Update Status",
       icon: <ExclamationCircleOutlined />,
       content: `Change status to "${statusLabel(newStatus)}"?`,
-      onOk: () => {
-        message.success(`Status updated to ${statusLabel(newStatus)}`);
+      onOk: async () => {
+        try {
+          await axiosInstance.patch(`${API_URL}/admin/orders/${id}/status`, { status: newStatus });
+          void message.success(`Status updated to ${statusLabel(newStatus)}`);
+          const res = await axiosInstance.get(`${API_URL}/admin/orders/${id}`);
+          setOrder(res.data);
+        } catch {
+          void message.error('Failed to update status');
+        }
       },
     });
   };
 
-  const handleAssignDriver = (_driverId: string) => {
-    message.success("Driver assigned");
-    setDriverModalOpen(false);
+  const handleAssignDriver = async (driverId: number) => {
+    try {
+      await axiosInstance.post(`${API_URL}/admin/orders/${id}/assign`, { driverId });
+      void message.success("Driver assigned");
+      setDriverModalOpen(false);
+      const res = await axiosInstance.get(`${API_URL}/admin/orders/${id}`);
+      setOrder(res.data);
+    } catch {
+      void message.error('Failed to assign driver');
+    }
   };
 
-  const handleDecline = () => {
+  const handleDecline = async () => {
     if (!declineReason.trim()) {
-      message.error("Please provide a reason");
+      void message.error("Please provide a reason");
       return;
     }
-    message.success("Order declined");
-    setDeclineModalOpen(false);
-    setDeclineReason("");
+    try {
+      await axiosInstance.patch(`${API_URL}/admin/orders/${id}/status`, { status: 'file_declined', notes: declineReason });
+      void message.success("Order declined");
+      setDeclineModalOpen(false);
+      setDeclineReason("");
+      const res = await axiosInstance.get(`${API_URL}/admin/orders/${id}`);
+      setOrder(res.data);
+    } catch {
+      void message.error('Failed to decline order');
+    }
   };
 
   return (
@@ -172,9 +211,16 @@ export function OrderShow() {
             rows={3}
             defaultValue={order.admin_notes ?? ""}
             placeholder="Internal notes (not visible to customer)..."
-            onBlur={(e) => {
-              if (e.target.value !== (order.admin_notes ?? "")) {
-                message.success("Notes saved");
+            onBlur={async (e) => {
+              const newNotes = e.target.value;
+              if (newNotes !== (order.admin_notes ?? "")) {
+                try {
+                  await axiosInstance.patch(`${API_URL}/admin/orders/${id}/notes`, { adminNotes: newNotes });
+                  void message.success("Notes saved");
+                  setOrder({ ...order, admin_notes: newNotes });
+                } catch {
+                  void message.error('Failed to save notes');
+                }
               }
             }}
           />
@@ -227,7 +273,7 @@ export function OrderShow() {
           <Table.Column dataIndex="plate_number" title="Plate" />
           <Table.Column
             title=""
-            render={(_: unknown, record: { id: string }) => (
+            render={(_: unknown, record: { id: number; full_name: string; vehicle_type: string; plate_number: string | null }) => (
               <Button
                 type="primary"
                 size="small"
