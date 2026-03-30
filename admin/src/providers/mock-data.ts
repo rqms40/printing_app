@@ -1,6 +1,7 @@
 import type { DashboardKPIs, ChartDataPoint } from "@/types/dashboard";
 import type { Order } from "@/types/order";
 import type { DriverProfile } from "@/types/driver";
+import type { ServiceCategory, SpecOption, ServiceAddon } from "@/types/products";
 
 export const mockKPIs: DashboardKPIs = {
   new_orders_count: 5,
@@ -268,5 +269,80 @@ export const mockStatusHistory = [
     to_status: "printing_in_progress",
     changed_by_user_id: "admin_001",
     created_at: "2026-03-29T11:30:00Z",
+  },
+];
+
+// ─── Mock Products ───────────────────────────────────────────────────────────
+
+export const mockCategories: ServiceCategory[] = [
+  {
+    id: '1',
+    name: 'Paper Printing',
+    slug: 'paper',
+    description: 'Standard and large-format paper printing',
+    icon: 'FileTextOutlined',
+    base_rate: 2.0,
+    max_file_size_mb: 50,
+    allowed_extensions: ['pdf', 'png', 'jpg', 'jpeg', 'docx'],
+    is_active: true,
+    sort_order: 1,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: '2',
+    name: '3D Printing',
+    slug: '3d',
+    description: 'FDM 3D printing with PLA, ABS, and PETG materials',
+    icon: 'AppstoreOutlined',
+    base_rate: 50.0,
+    max_file_size_mb: 200,
+    allowed_extensions: ['stl', 'obj', '3mf'],
+    is_active: true,
+    sort_order: 2,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  },
+];
+
+export const mockSpecOptions: SpecOption[] = [
+  { id: '1',  category_id: '1', option_group: 'paper_size', label: 'A5', value: 'a5', multiplier: 0.8, fixed_fee: 0, unit_cost: 0, is_default: false, is_active: true, sort_order: 10, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '2',  category_id: '1', option_group: 'paper_size', label: 'A4', value: 'a4', multiplier: 1.0, fixed_fee: 0, unit_cost: 0, is_default: true,  is_active: true, sort_order: 20, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '3',  category_id: '1', option_group: 'paper_size', label: 'A3', value: 'a3', multiplier: 1.5, fixed_fee: 0, unit_cost: 0, is_default: false, is_active: true, sort_order: 30, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '4',  category_id: '1', option_group: 'color_mode', label: 'Black & White', value: 'black_and_white', multiplier: 1.0, fixed_fee: 0, unit_cost: 0, is_default: true,  is_active: true, sort_order: 10, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '5',  category_id: '1', option_group: 'color_mode', label: 'Full Color',    value: 'full_color',      multiplier: 2.5, fixed_fee: 0, unit_cost: 0, is_default: false, is_active: true, sort_order: 20, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '6',  category_id: '1', option_group: 'binding', label: 'None',    value: 'none',    multiplier: 1.0, fixed_fee: 0,  unit_cost: 0, is_default: true,  is_active: true, sort_order: 10, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '7',  category_id: '1', option_group: 'binding', label: 'Spiral',  value: 'spiral',  multiplier: 1.0, fixed_fee: 25, unit_cost: 0, is_default: false, is_active: true, sort_order: 30, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '8',  category_id: '2', option_group: 'material', label: 'PLA',  value: 'pla',  multiplier: 1.0, fixed_fee: 0, unit_cost: 3.0, is_default: true,  is_active: true, sort_order: 10, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '9',  category_id: '2', option_group: 'material', label: 'ABS',  value: 'abs',  multiplier: 1.0, fixed_fee: 0, unit_cost: 3.0, is_default: false, is_active: true, sort_order: 20, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '10', category_id: '2', option_group: 'material', label: 'PETG', value: 'petg', multiplier: 1.0, fixed_fee: 0, unit_cost: 4.0, is_default: false, is_active: true, sort_order: 30, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '11', category_id: '2', option_group: 'infill', label: '10%', value: 'infill_10', multiplier: 1.0, fixed_fee: 0, unit_cost: 0, estimated_grams: 20,  is_default: true,  is_active: true, sort_order: 10, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '12', category_id: '2', option_group: 'infill', label: '20%', value: 'infill_20', multiplier: 1.0, fixed_fee: 0, unit_cost: 0, estimated_grams: 40,  is_default: false, is_active: true, sort_order: 20, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '13', category_id: '2', option_group: 'infill', label: '50%', value: 'infill_50', multiplier: 1.0, fixed_fee: 0, unit_cost: 0, estimated_grams: 100, is_default: false, is_active: true, sort_order: 30, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+];
+
+export const mockAddons: ServiceAddon[] = [
+  {
+    id: '1',
+    category_id: '1',
+    name: 'Lamination (A4)',
+    description: 'Matte or glossy lamination for A4 sheets',
+    price: 20.0,
+    price_type: 'per_unit',
+    is_active: true,
+    sort_order: 10,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: '2',
+    name: 'Rush Processing',
+    description: 'Priority queue processing, ready in 2 hours',
+    price: 150.0,
+    price_type: 'flat',
+    is_active: true,
+    sort_order: 20,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
   },
 ];
