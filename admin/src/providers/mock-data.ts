@@ -161,6 +161,8 @@ export const mockDrivers: DriverProfile[] = [
     vehicle_type: "motorcycle",
     plate_number: "ABC-1234",
     is_available: true,
+    last_latitude: 7.1338,
+    last_longitude: 125.6120,
     created_at: "2026-01-15T00:00:00Z",
     updated_at: "2026-03-29T10:00:00Z",
   },
@@ -171,6 +173,8 @@ export const mockDrivers: DriverProfile[] = [
     vehicle_type: "motorcycle",
     plate_number: "XYZ-5678",
     is_available: true,
+    last_latitude: 7.1400,
+    last_longitude: 125.6180,
     created_at: "2026-02-01T00:00:00Z",
     updated_at: "2026-03-29T09:00:00Z",
   },
@@ -181,9 +185,70 @@ export const mockDrivers: DriverProfile[] = [
     vehicle_type: "car",
     plate_number: "DEF-9012",
     is_available: false,
+    last_latitude: 7.1290,
+    last_longitude: 125.6030,
     created_at: "2026-02-20T00:00:00Z",
     updated_at: "2026-03-29T08:00:00Z",
   },
+];
+
+export interface DeliveryAssignment {
+  id: string;
+  order_id: string;
+  driver_id: string;
+  status: string;
+  earnings: number;
+  date: string;
+}
+
+export const mockDeliveries: DeliveryAssignment[] = [
+  {
+    id: "da_001",
+    order_id: "ORD-00147",
+    driver_id: "drv_001",
+    status: "On the Way",
+    earnings: 120,
+    date: "Mar 27, 2026",
+  },
+  {
+    id: "da_002",
+    order_id: "ORD-00148",
+    driver_id: "drv_001",
+    status: "Delivered",
+    earnings: 150,
+    date: "Mar 26, 2026",
+  },
+  {
+    id: "da_005",
+    order_id: "ORD-00149",
+    driver_id: "drv_002",
+    status: "Picked Up",
+    earnings: 90,
+    date: "Mar 27, 2026",
+  },
+  {
+    id: "da_004",
+    order_id: "ORD-00150",
+    driver_id: "drv_003",
+    status: "Declined",
+    earnings: 0,
+    date: "Mar 27, 2026",
+  }
+];
+
+export const mockStorageData = [
+  { size: "A5", type: "Student", value: 350 },
+  { size: "A5", type: "Employee", value: 80 },
+  { size: "A4", type: "Student", value: 1800 },
+  { size: "A4", type: "Employee", value: 1250 },
+  { size: "A3", type: "Student", value: 240 },
+  { size: "A3", type: "Employee", value: 410 },
+  { size: "A2", type: "Student", value: 90 },
+  { size: "A2", type: "Employee", value: 280 },
+  { size: "A1", type: "Student", value: 40 },
+  { size: "A1", type: "Employee", value: 150 },
+  { size: "Poster(20x30in)", type: "Student", value: 120 },
+  { size: "Poster(20x30in)", type: "Employee", value: 300 },
 ];
 
 export const mockStatusHistory = [
