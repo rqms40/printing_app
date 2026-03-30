@@ -1,8 +1,9 @@
 import type { OrderStatus } from "@/types/enums";
 import { ORDER_STATUS_LABELS } from "@/types/enums";
 
-export function formatCurrency(amount: number): string {
-  return `₱${amount.toLocaleString("en-PH", {
+export function formatCurrency(amount: number | string | null | undefined): string {
+  const n = Number(amount) || 0;
+  return `₱${n.toLocaleString("en-PH", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
