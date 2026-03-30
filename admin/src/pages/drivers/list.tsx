@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Table, Tag, Avatar, Space, Typography, Input, Tooltip,
-  Card, Badge, Button, Row, Col, Segmented, Statistic,
+  Card, Badge, Button, Row, Col, Segmented, Statistic, App,
 } from "antd";
 import {
   SearchOutlined, EnvironmentOutlined, CarOutlined,
@@ -12,11 +12,36 @@ import {
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L, { DivIcon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { mockDrivers, mockOrders, mockDeliveries } from "@/providers/mock-data";
-import type { DriverProfile } from "@/types/driver";
+import axios from 'axios';
+import { mockDeliveries } from "@/providers/mock-data";
+import { API_URL } from '@/config/constants';
 import { formatDateTime, formatRelativeTime } from "@/utils/format";
 
 const { Text, Title } = Typography;
+
+/* ─── Axios instance with auth interceptor ───────────────────────── */
+const axiosInstance = axios.create();
+axiosInstance.interceptors.request.use((config) => {
+  const token = localStorage.getItem('grid_admin_token');
+  if (token) config.headers['Authorization'] = `Bearer ${token}`;
+  return config;
+});
+
+/* ─── API Driver type ────────────────────────────────────────────── */
+interface ApiDriver {
+  id: number;
+  user_id: number;
+  full_name: string | null;
+  email: string | null;
+  vehicle_type: string;
+  plate_number: string | null;
+  is_available: boolean;
+  last_latitude: number | null;
+  last_longitude: number | null;
+  last_location_update: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 // Fix leaflet default icon issue in React
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -86,19 +111,44 @@ const S = {
 
 /* ─── Main Drivers Page ──────────────────────────────────────────── */
 export function DriverList() {
+  const { message } = App.useApp();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'offline'>('all');
   const [mapExpanded, setMapExpanded] = useState(false);
+  const [drivers, setDrivers] = useState<ApiDriver[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loadingDrivers, setLoadingDrivers] = useState(true);
 
-  const onlineCount  = mockDrivers.filter(d => d.is_available).length;
-  const offlineCount = mockDrivers.length - onlineCount;
+  useEffect(() => {
+    void axiosInstance.get(`${API_URL}/admin/drivers`)
+      .then(r => setDrivers(r.data as ApiDriver[]))
+      .catch(() => {})
+      .finally(() => setLoadingDrivers(false));
+    void axiosInstance.get(`${API_URL}/admin/orders`)
+      .then(r => setOrders(r.data))
+      .catch(() => {});
+  }, []);
+
+  const handleAssignDriver = async (orderId: number | string, driverId: number) => {
+    try {
+      await axiosInstance.post(`${API_URL}/admin/orders/${orderId}/assign`, { driverId });
+      void message.success('Driver assigned successfully');
+      const res = await axiosInstance.get(`${API_URL}/admin/orders`);
+      setOrders(res.data);
+    } catch {
+      void message.error('Failed to assign driver');
+    }
+  };
+
+  const onlineCount  = drivers.filter(d => d.is_available).length;
+  const offlineCount = drivers.length - onlineCount;
   const totalPayout  = mockDeliveries.reduce((a, d) => a + d.earnings, 0);
   const activeTrips  = mockDeliveries.filter(d =>
     ['Assigned', 'Accepted', 'Picked Up', 'On the Way'].includes(d.status)
   ).length;
-  const readyOrders  = mockOrders.filter(o => o.order_status === 'ready_for_dispatch');
+  const readyOrders  = orders.filter(o => o.order_status === 'ready_for_dispatch');
 
-  const filtered = mockDrivers.filter(d => {
+  const filtered = drivers.filter(d => {
     const matchesSearch = !search ||
       d.full_name?.toLowerCase().includes(search.toLowerCase()) ||
       d.plate_number?.toLowerCase().includes(search.toLowerCase());
@@ -133,7 +183,7 @@ export function DriverList() {
           <Card style={S.card} styles={{ body: { padding: '16px 20px' } }}>
             <Statistic
               title={<span style={S.metricLabel}>Total Drivers</span>}
-              value={mockDrivers.length}
+              value={drivers.length}
               valueStyle={S.metricValue}
               prefix={<CarOutlined style={{ color: '#FFDE58', fontSize: 16, marginRight: 4 }} />}
             />
@@ -210,7 +260,7 @@ export function DriverList() {
                   url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
                   attribution='&copy; OSM &copy; CARTO'
                 />
-                {mockDrivers
+                {drivers
                   .filter(d => d.last_latitude && d.last_longitude)
                   .map(d => (
                     <Marker
@@ -257,7 +307,11 @@ export function DriverList() {
         {/* Dispatch Queue */}
         {!mapExpanded && (
           <Col xs={24} lg={8}>
-            <DispatchPanel readyOrders={readyOrders} />
+            <DispatchPanel
+              readyOrders={readyOrders}
+              availDrivers={drivers.filter(d => d.is_available)}
+              onAssign={handleAssignDriver}
+            />
           </Col>
         )}
       </Row>
@@ -276,7 +330,7 @@ export function DriverList() {
               value={statusFilter}
               onChange={v => setStatusFilter(v as typeof statusFilter)}
               options={[
-                { label: `All (${mockDrivers.length})`, value: 'all' },
+                { label: `All (${drivers.length})`, value: 'all' },
                 { label: `Online (${onlineCount})`, value: 'online' },
                 { label: `Offline (${offlineCount})`, value: 'offline' },
               ]}
@@ -301,11 +355,12 @@ export function DriverList() {
           size="middle"
           scroll={{ x: 640 }}
           pagination={false}
+          loading={loadingDrivers}
         >
           <Table.Column
             title="Driver"
             width={240}
-            render={(_: unknown, record: DriverProfile) => (
+            render={(_: unknown, record: ApiDriver) => (
               <Space size={12}>
                 <div style={{ position: 'relative' }}>
                   <Avatar
@@ -340,7 +395,7 @@ export function DriverList() {
             dataIndex="vehicle_type"
             title="Vehicle"
             width={150}
-            render={(v: string, record: DriverProfile) => (
+            render={(v: string, record: ApiDriver) => (
               <Space size={8}>
                 <CarOutlined style={{ color: VEHICLE_COLORS[v] ?? '#808080', fontSize: 15 }} />
                 <div>
@@ -372,10 +427,10 @@ export function DriverList() {
           <Table.Column
             title="Deliveries"
             width={100}
-            render={(_: unknown, record: DriverProfile) => {
-              const count = mockDeliveries.filter(d => d.driver_id === record.id).length;
+            render={(_: unknown, record: ApiDriver) => {
+              const count = mockDeliveries.filter(d => d.driver_id === String(record.id)).length;
               const earned = mockDeliveries
-                .filter(d => d.driver_id === record.id)
+                .filter(d => d.driver_id === String(record.id))
                 .reduce((a, d) => a + d.earnings, 0);
               return (
                 <div>
@@ -390,7 +445,7 @@ export function DriverList() {
             dataIndex="last_location_update"
             title="Last Seen"
             width={140}
-            render={(v: string | undefined, record: DriverProfile) =>
+            render={(v: string | undefined, record: ApiDriver) =>
               record.last_latitude ? (
                 <Tooltip title={v ? formatDateTime(v) : 'Location available'}>
                   <Space size={4}>
@@ -412,9 +467,20 @@ export function DriverList() {
 }
 
 /* ─── Dispatch Panel ─────────────────────────────────────────────── */
-const DispatchPanel: React.FC<{ readyOrders: typeof mockOrders }> = ({ readyOrders }) => {
-  const availDrivers = mockDrivers.filter(d => d.is_available);
+const DispatchPanel: React.FC<{
+  readyOrders: any[];
+  availDrivers: ApiDriver[];
+  onAssign: (orderId: number | string, driverId: number) => Promise<void>;
+}> = ({ readyOrders, availDrivers, onAssign }) => {
   const [assigning, setAssigning] = useState<string | null>(null);
+  const [assigningInProgress, setAssigningInProgress] = useState(false);
+
+  const handleDriverSelect = async (orderId: number | string, driverId: number) => {
+    setAssigningInProgress(true);
+    await onAssign(orderId, driverId);
+    setAssigning(null);
+    setAssigningInProgress(false);
+  };
 
   return (
     <Card
@@ -453,7 +519,7 @@ const DispatchPanel: React.FC<{ readyOrders: typeof mockOrders }> = ({ readyOrde
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {readyOrders.map(order => (
             <div
-              key={order.order_id}
+              key={order.order_id ?? order.id}
               style={{
                 background: '#1A1A1A',
                 borderRadius: 10,
@@ -464,10 +530,12 @@ const DispatchPanel: React.FC<{ readyOrders: typeof mockOrders }> = ({ readyOrde
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <div>
                   <Text strong style={{ color: '#F0F0F0', display: 'block', fontSize: 13.5 }}>
-                    {order.order_id}
+                    {order.order_id ?? order.id}
                   </Text>
                   <Text style={{ color: '#666', fontSize: 11.5 }}>
-                    Fee: ₱{order.delivery_fee.toFixed(0)}
+                    {order.delivery_fee != null
+                      ? `Fee: ₱${Number(order.delivery_fee).toFixed(0)}`
+                      : `Total: ₱${Number(order.total_price ?? 0).toFixed(0)}`}
                   </Text>
                 </div>
                 <div style={{
@@ -479,7 +547,7 @@ const DispatchPanel: React.FC<{ readyOrders: typeof mockOrders }> = ({ readyOrde
                 </div>
               </div>
 
-              {assigning === order.order_id ? (
+              {assigning === (order.order_id ?? order.id) ? (
                 <div>
                   <Text style={{ color: '#666', fontSize: 11, display: 'block', marginBottom: 6 }}>
                     Select rider:
@@ -487,17 +555,18 @@ const DispatchPanel: React.FC<{ readyOrders: typeof mockOrders }> = ({ readyOrde
                   {availDrivers.map(driver => (
                     <div
                       key={driver.id}
-                      onClick={() => setAssigning(null)}
+                      onClick={() => !assigningInProgress && void handleDriverSelect(order.id ?? order.order_id, driver.id)}
                       style={{
-                        cursor: 'pointer',
+                        cursor: assigningInProgress ? 'not-allowed' : 'pointer',
                         background: '#222',
                         borderRadius: 8,
                         padding: '8px 10px',
                         marginBottom: 4,
                         border: '1px solid transparent',
                         transition: 'border-color 0.15s',
+                        opacity: assigningInProgress ? 0.5 : 1,
                       }}
-                      onMouseEnter={e => (e.currentTarget.style.borderColor = '#FFDE58')}
+                      onMouseEnter={e => !assigningInProgress && (e.currentTarget.style.borderColor = '#FFDE58')}
                       onMouseLeave={e => (e.currentTarget.style.borderColor = 'transparent')}
                     >
                       <Text style={{ fontSize: 13, color: '#F0F0F0', display: 'block' }}>
@@ -513,6 +582,7 @@ const DispatchPanel: React.FC<{ readyOrders: typeof mockOrders }> = ({ readyOrde
                     size="small"
                     block
                     onClick={() => setAssigning(null)}
+                    disabled={assigningInProgress}
                     style={{ color: '#666', marginTop: 4, fontSize: 12 }}
                   >
                     Cancel
@@ -524,7 +594,7 @@ const DispatchPanel: React.FC<{ readyOrders: typeof mockOrders }> = ({ readyOrde
                   ghost
                   size="small"
                   icon={<UserAddOutlined />}
-                  onClick={() => setAssigning(order.order_id)}
+                  onClick={() => setAssigning(order.order_id ?? order.id)}
                   style={{
                     borderColor: '#333',
                     color: '#FFDE58',
