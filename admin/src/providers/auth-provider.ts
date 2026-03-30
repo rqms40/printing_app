@@ -20,7 +20,7 @@ export const authProvider: AuthProvider = {
       }
 
       const data = await response.json();
-      localStorage.setItem(TOKEN_KEY, data.accessToken);
+      localStorage.setItem(TOKEN_KEY, data.access_token);
       return { success: true, redirectTo: "/" };
     } catch {
       return {
