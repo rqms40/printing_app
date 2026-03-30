@@ -2,16 +2,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsString, IsNumber, IsInt, IsPositive,
-  IsOptional, IsBoolean, MaxLength, Matches,
+  IsOptional, IsBoolean, MaxLength, Matches, IsNotEmpty,
 } from 'class-validator';
 
 export class CreateCategoryDto {
   @ApiProperty({ example: 'Paper Printing' })
-  @IsString() @MaxLength(100)
+  @IsNotEmpty() @IsString() @MaxLength(100)
   name: string;
 
   @ApiProperty({ example: 'paper', description: 'Lowercase alphanumeric + hyphens' })
-  @IsString() @MaxLength(50) @Matches(/^[a-z0-9-]+$/, { message: 'slug must be lowercase alphanumeric with hyphens' })
+  @IsNotEmpty() @IsString() @MaxLength(50) @Matches(/^[a-z0-9-]+$/, { message: 'slug must be lowercase alphanumeric with hyphens' })
   slug: string;
 
   @ApiPropertyOptional()
@@ -31,7 +31,7 @@ export class CreateCategoryDto {
   maxFileSizeMb: number;
 
   @ApiProperty({ example: '["pdf","png","jpg"]', description: 'JSON array string of allowed file extensions' })
-  @IsString()
+  @IsNotEmpty() @IsString()
   allowedExtensions: string;
 
   @ApiPropertyOptional({ default: true })

@@ -3,7 +3,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsArray, IsInt, IsPositive, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
-class ReorderItemDto {
+export class ReorderItemDto {
   @IsInt() @IsPositive() id: number;
   @IsInt() sortOrder: number;
 }

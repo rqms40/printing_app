@@ -2,7 +2,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsString, IsNumber, IsInt, IsPositive,
-  IsOptional, IsBoolean, MaxLength, IsIn,
+  IsOptional, IsBoolean, MaxLength, IsIn, IsNotEmpty,
 } from 'class-validator';
 
 export class CreateAddonDto {
@@ -11,7 +11,7 @@ export class CreateAddonDto {
   categoryId?: number;
 
   @ApiProperty({ example: 'Lamination' })
-  @IsString() @MaxLength(100)
+  @IsNotEmpty() @IsString() @MaxLength(100)
   name: string;
 
   @ApiPropertyOptional()
@@ -23,7 +23,7 @@ export class CreateAddonDto {
   price: number;
 
   @ApiProperty({ enum: ['flat', 'per_unit'], example: 'per_unit' })
-  @IsString() @IsIn(['flat', 'per_unit'])
+  @IsNotEmpty() @IsString() @IsIn(['flat', 'per_unit'])
   priceType: string;
 
   @ApiPropertyOptional({ default: true })
