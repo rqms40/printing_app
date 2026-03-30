@@ -1,5 +1,5 @@
-import React, { Component, ErrorInfo, ReactNode, useState, useMemo } from 'react';
-import { Row, Col, Card, Typography, Table, Tag, Alert, Radio } from "antd";
+import React, { Component, ErrorInfo, ReactNode, useState, useMemo, useEffect } from 'react';
+import { Row, Col, Card, Typography, Table, Tag, Alert, Radio, Spin } from "antd";
 import {
   FileTextOutlined,
   PrinterOutlined,
@@ -7,11 +7,13 @@ import {
   CheckCircleOutlined,
   ArrowUpOutlined,
 } from "@ant-design/icons";
+import axios from 'axios';
 import { StatusBadge } from "@/components/status-badge";
 import { formatCurrency, formatRelativeTime } from "@/utils/format";
 import { mockKPIs, mockOrders } from "@/providers/mock-data";
 import type { Order } from "@/types/order";
 import type { OrderStatus } from "@/types/enums";
+import { API_URL } from "@/config/constants";
 import {
   AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid,
@@ -21,6 +23,14 @@ import {
 const { Title, Text } = Typography;
 
 type FilterPeriod = '7D' | '30D' | '6M';
+
+/* ─── Axios instance with auth interceptor ───────────────────────── */
+const axiosInstance = axios.create();
+axiosInstance.interceptors.request.use((config) => {
+  const token = localStorage.getItem('grid_admin_token');
+  if (token) config.headers['Authorization'] = `Bearer ${token}`;
+  return config;
+});
 
 /* ─── Error Boundary ──────────────────────────────────────────────── */
 class ErrorBoundary extends Component<{children: ReactNode}, {hasError: boolean, error: Error | null}> {
@@ -51,7 +61,10 @@ const tooltipStyle = {
 };
 
 /* ─── Sales Trend Chart ──────────────────────────────────────────── */
-const SalesTrendChart: React.FC<{ period: FilterPeriod }> = ({ period }) => {
+const SalesTrendChart: React.FC<{
+  period: FilterPeriod;
+  apiSalesData?: { month: string; value: number }[];
+}> = ({ period, apiSalesData }) => {
   const data = useMemo(() => {
     if (period === '7D') return [
       { name: 'Mon', revenue: 4200 }, { name: 'Tue', revenue: 3800 },
@@ -61,12 +74,17 @@ const SalesTrendChart: React.FC<{ period: FilterPeriod }> = ({ period }) => {
     if (period === '30D') return Array.from({ length: 10 }, (_, i) => ({
       name: `W${i + 1}`, revenue: Math.floor(Math.random() * 15000) + 8000,
     }));
+    // 6M
+    if (apiSalesData && apiSalesData.length > 0) {
+      return apiSalesData.map(({ month, value }) => ({ name: month, revenue: value }));
+    }
+    // fallback to static
     return [
       { name: 'Oct', revenue: 32000 }, { name: 'Nov', revenue: 38500 },
       { name: 'Dec', revenue: 41000 }, { name: 'Jan', revenue: 35200 },
       { name: 'Feb', revenue: 42800 }, { name: 'Mar', revenue: 45200 },
     ];
-  }, [period]);
+  }, [period, apiSalesData]);
 
   return (
     <Card
@@ -96,7 +114,10 @@ const SalesTrendChart: React.FC<{ period: FilterPeriod }> = ({ period }) => {
 };
 
 /* ─── Order Volume Chart ─────────────────────────────────────────── */
-const OrderVolumeChart: React.FC<{ period: FilterPeriod }> = ({ period }) => {
+const OrderVolumeChart: React.FC<{
+  period: FilterPeriod;
+  apiVolumeData?: { month: string; value: number }[];
+}> = ({ period, apiVolumeData }) => {
   const data = useMemo(() => {
     if (period === '7D') return [
       { name: 'Mon', count: 120 }, { name: 'Tue', count: 150 },
@@ -106,12 +127,17 @@ const OrderVolumeChart: React.FC<{ period: FilterPeriod }> = ({ period }) => {
     if (period === '30D') return Array.from({ length: 10 }, (_, i) => ({
       name: `W${i + 1}`, count: Math.floor(Math.random() * 200) + 50,
     }));
+    // 6M
+    if (apiVolumeData && apiVolumeData.length > 0) {
+      return apiVolumeData.map(({ month, value }) => ({ name: month, count: value }));
+    }
+    // fallback to static
     return [
       { name: 'Oct', count: 85 }, { name: 'Nov', count: 102 },
       { name: 'Dec', count: 115 }, { name: 'Jan', count: 94 },
       { name: 'Feb', count: 110 }, { name: 'Mar', count: 128 },
     ];
-  }, [period]);
+  }, [period, apiVolumeData]);
 
   return (
     <Card
@@ -167,10 +193,52 @@ const StorageChartRecharts: React.FC = () => {
 /* ─── Main Dashboard Page ────────────────────────────────────────── */
 export function DashboardPage() {
   const [period, setPeriod] = useState<FilterPeriod>('7D');
-  const kpis = mockKPIs;
-  const recentOrders = mockOrders.slice(0, 5);
+  const [kpis, setKpis] = useState(mockKPIs);
+  const [recentOrders, setRecentOrders] = useState<Order[]>(mockOrders.slice(0, 5));
+  const [analyticsData, setAnalyticsData] = useState<{
+    sales: { month: string; value: number }[];
+    volume: { month: string; value: number }[];
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [dashRes, analyticsRes, ordersRes] = await Promise.all([
+          axiosInstance.get(`${API_URL}/admin/dashboard`),
+          axiosInstance.get(`${API_URL}/admin/analytics`),
+          axiosInstance.get(`${API_URL}/admin/orders`),
+        ]);
+        const d = dashRes.data;
+        setKpis({
+          new_orders_count: d.newOrdersCount,
+          in_production_count: d.inProductionCount,
+          ready_for_pickup_count: d.readyForPickupCount,
+          delivered_count: d.deliveredCount,
+          monthly_revenue: d.monthlyRevenue,
+        });
+        setAnalyticsData({
+          sales: (analyticsRes.data.sales as { month: string; value: number }[]).map(
+            ({ month, value }) => ({ month, value })
+          ),
+          volume: (analyticsRes.data.volume as { month: string; value: number }[]).map(
+            ({ month, value }) => ({ month, value })
+          ),
+        });
+        setRecentOrders((ordersRes.data as Order[]).slice(0, 5));
+      } catch {
+        // keep mock fallback values already set in state
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
 
   const cardStyle = { background: '#1f1f1f', border: '1px solid #2E2E2E', borderRadius: 12 };
+
+  if (loading) {
+    return <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}><Spin size="large" /></div>;
+  }
 
   return (
     <ErrorBoundary>
@@ -321,10 +389,10 @@ export function DashboardPage() {
         {/* ── Row 3: Sales Trend + Order Volume charts ───────────── */}
         <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
           <Col xs={24} lg={12}>
-            <SalesTrendChart period={period} />
+            <SalesTrendChart period={period} apiSalesData={analyticsData?.sales} />
           </Col>
           <Col xs={24} lg={12}>
-            <OrderVolumeChart period={period} />
+            <OrderVolumeChart period={period} apiVolumeData={analyticsData?.volume} />
           </Col>
         </Row>
 
