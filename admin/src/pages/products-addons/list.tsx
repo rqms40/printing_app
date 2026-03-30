@@ -65,7 +65,6 @@ export function AddonList() {
       description: addon.description,
       price: addon.price,
       priceType: addon.price_type,
-      isActive: addon.is_active,
       sortOrder: addon.sort_order,
     });
     setModalOpen(true);
@@ -163,10 +162,16 @@ export function AddonList() {
             title="Price"
             width={120}
             render={(_: unknown, record: ServiceAddon) => (
-              <div>
-                <Text style={{ color: '#34d399', fontWeight: 600, display: 'block' }}>{formatCurrency(record.price)}</Text>
-                <Text style={{ color: '#666', fontSize: 11 }}>{record.price_type === 'flat' ? 'flat fee' : 'per unit'}</Text>
-              </div>
+              <Text style={{ color: '#34d399', fontWeight: 600 }}>{formatCurrency(record.price)}</Text>
+            )}
+          />
+          <Table.Column
+            title="Price Type"
+            width={110}
+            render={(_: unknown, record: ServiceAddon) => (
+              record.price_type === 'flat'
+                ? <Tag style={{ background: '#1A1A1A', borderColor: '#444', color: '#A0A0A0' }}>Flat Fee</Tag>
+                : <Tag style={{ background: '#1A1A1A', borderColor: '#444', color: '#A0A0A0' }}>Per Unit</Tag>
             )}
           />
           <Table.Column
@@ -233,9 +238,6 @@ export function AddonList() {
               <Select.Option value="flat">Flat fee (once per order)</Select.Option>
               <Select.Option value="per_unit">Per unit</Select.Option>
             </Select>
-          </Form.Item>
-          <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Active</Text>} name="isActive" valuePropName="checked" initialValue={true}>
-            <Switch />
           </Form.Item>
           <Form.Item label={<Text style={{ color: '#A0A0A0' }}>Sort Order</Text>} name="sortOrder" initialValue={99}>
             <InputNumber min={0} style={{ width: '100%' }} />
