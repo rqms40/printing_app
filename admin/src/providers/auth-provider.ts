@@ -5,13 +5,6 @@ const TOKEN_KEY = "grid_admin_token";
 
 export const authProvider: AuthProvider = {
   login: async ({ email, password }) => {
-    // Mock login (works without backend)
-    if (email === "admin@grid.ph" && password === "admin123") {
-      localStorage.setItem(TOKEN_KEY, "mock-jwt-token");
-      return { success: true, redirectTo: "/" };
-    }
-
-    // Real API login
     try {
       const response = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
@@ -48,12 +41,8 @@ export const authProvider: AuthProvider = {
       return { authenticated: false, redirectTo: "/login" };
     }
 
-    if (token === "mock-jwt-token") {
-      return { authenticated: true };
-    }
-
     try {
-      const response = await fetch(`${API_URL}/auth/me`, {
+      const response = await fetch(`${API_URL}/users/profile`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -82,12 +71,8 @@ export const authProvider: AuthProvider = {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) return null;
 
-    if (token === "mock-jwt-token") {
-      return { id: "1", name: "Admin User", email: "admin@grid.ph" };
-    }
-
     try {
-      const response = await fetch(`${API_URL}/auth/me`, {
+      const response = await fetch(`${API_URL}/users/profile`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) return null;
