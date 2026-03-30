@@ -1,9 +1,9 @@
 // server/src/products/products.service.ts
 import {
-  Injectable, NotFoundException, ConflictException, BadRequestException,
+  Injectable, ConflictException, BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull } from 'typeorm';
+import { Repository, IsNull, FindOptionsWhere } from 'typeorm';
 import { ServiceCategory } from './entities/service-category.entity';
 import { SpecOption } from './entities/spec-option.entity';
 import { ServiceAddon } from './entities/service-addon.entity';
@@ -69,13 +69,20 @@ export class ProductsService {
       });
     }
 
+    let allowedExtensions: string[];
+    try {
+      allowedExtensions = JSON.parse(category.allowedExtensions) as string[];
+    } catch {
+      allowedExtensions = [];
+    }
+
     return {
       id: category.id,
       name: category.name,
       slug: category.slug,
       base_rate: Number(category.baseRate),
       max_file_size_mb: category.maxFileSizeMb,
-      allowed_extensions: JSON.parse(category.allowedExtensions) as string[],
+      allowed_extensions: allowedExtensions,
       groups,
       addons,
     };
@@ -109,7 +116,7 @@ export class ProductsService {
   // ─── Spec Options ────────────────────────────────────────────────────
 
   findOptions(categoryId?: number, optionGroup?: string): Promise<SpecOption[]> {
-    const where: Partial<SpecOption> = {};
+    const where: FindOptionsWhere<SpecOption> = {};
     if (categoryId) where.categoryId = categoryId;
     if (optionGroup) where.optionGroup = optionGroup;
     return this.optRepo.find({ where, order: { optionGroup: 'ASC', sortOrder: 'ASC', id: 'ASC' } });
