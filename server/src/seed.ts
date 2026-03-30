@@ -82,6 +82,10 @@ async function seed() {
   ];
 
   // Clear existing data (order matters for FK constraints)
+  // Product tables (clear before others)
+  await ds.query('DELETE FROM spec_options');
+  await ds.query('DELETE FROM service_addons');
+  await ds.query('DELETE FROM service_categories');
   await ds.query('DELETE FROM notifications');
   await ds.query('DELETE FROM payment_transactions');
   await ds.query('DELETE FROM delivery_assignments');
@@ -106,6 +110,9 @@ async function seed() {
   await ds.query("SELECT setval('three_d_specs_id_seq', 1, false)");
   await ds.query("SELECT setval('driver_profiles_id_seq', 1, false)");
   await ds.query("SELECT setval('file_metadata_id_seq', 1, false)");
+  await ds.query("SELECT setval('service_categories_id_seq', 1, false)");
+  await ds.query("SELECT setval('spec_options_id_seq', 1, false)");
+  await ds.query("SELECT setval('service_addons_id_seq', 1, false)");
 
   for (const u of users) {
     await ds.query(
@@ -428,6 +435,101 @@ async function seed() {
     );
   }
   console.log('✅ 4 payment transactions created');
+
+  // ─── Service Categories ─────────────────────────────────────────────
+  await ds.query(
+    `INSERT INTO service_categories (name, slug, description, icon, base_rate, max_file_size_mb, allowed_extensions, is_active, sort_order)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    ['Paper Printing', 'paper', 'Standard and large-format paper printing', 'FileTextOutlined', 2.00, 50, '["pdf","png","jpg","jpeg","docx"]', true, 1],
+  );
+  await ds.query(
+    `INSERT INTO service_categories (name, slug, description, icon, base_rate, max_file_size_mb, allowed_extensions, is_active, sort_order)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    ['3D Printing', '3d', 'FDM 3D printing with PLA, ABS, and PETG materials', 'AppstoreOutlined', 50.00, 200, '["stl","obj","3mf"]', true, 2],
+  );
+  console.log('✅ 2 service categories created (paper, 3d)');
+
+  interface IdRow2 { id: number; }
+  const [paperCat] = await ds.query<IdRow2[]>('SELECT id FROM service_categories WHERE slug = $1', ['paper']);
+  const [threeDCat] = await ds.query<IdRow2[]>('SELECT id FROM service_categories WHERE slug = $1', ['3d']);
+  const paperId: number = paperCat.id;
+  const tdId: number = threeDCat.id;
+
+  // ─── Paper Spec Options ─────────────────────────────────────────────
+  const paperOptions = [
+    // paper_size
+    [paperId, 'paper_size', 'A5', 'a5', 0.800, 0, 0, null, false, true, 10],
+    [paperId, 'paper_size', 'A4', 'a4', 1.000, 0, 0, null, true,  true, 20],
+    [paperId, 'paper_size', 'A3', 'a3', 1.500, 0, 0, null, false, true, 30],
+    [paperId, 'paper_size', 'A2', 'a2', 2.500, 0, 0, null, false, true, 40],
+    [paperId, 'paper_size', 'A1', 'a1', 4.000, 0, 0, null, false, true, 50],
+    [paperId, 'paper_size', '20×30in', 'twenty_by_thirty', 3.000, 0, 0, null, false, true, 60],
+    [paperId, 'paper_size', 'Custom', 'custom', 2.000, 0, 0, null, false, true, 70],
+    // color_mode
+    [paperId, 'color_mode', 'Black & White', 'black_and_white', 1.000, 0, 0, null, true,  true, 10],
+    [paperId, 'color_mode', 'Full Color',    'full_color',      2.500, 0, 0, null, false, true, 20],
+    // media_type
+    [paperId, 'media_type', 'Matte',  'matte',  1.000, 0, 0, null, true,  true, 10],
+    [paperId, 'media_type', 'Glossy', 'glossy', 1.300, 0, 0, null, false, true, 20],
+    // print_sides
+    [paperId, 'print_sides', 'Front Only',   'front_only',   1.000, 0, 0, null, true,  true, 10],
+    [paperId, 'print_sides', 'Back-to-Back', 'back_to_back', 1.800, 0, 0, null, false, true, 20],
+    // binding
+    [paperId, 'binding', 'None',    'none',    1.000,  0.00, 0, null, true,  true, 10],
+    [paperId, 'binding', 'Staple',  'staple',  1.000, 10.00, 0, null, false, true, 20],
+    [paperId, 'binding', 'Spiral',  'spiral',  1.000, 25.00, 0, null, false, true, 30],
+    [paperId, 'binding', 'Premium', 'premium', 1.000, 50.00, 0, null, false, true, 40],
+  ];
+  for (const o of paperOptions) {
+    await ds.query(
+      `INSERT INTO spec_options (category_id, option_group, label, value, multiplier, fixed_fee, unit_cost, estimated_grams, is_default, is_active, sort_order)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      o,
+    );
+  }
+  console.log('✅ 17 paper spec options created');
+
+  // ─── 3D Spec Options ────────────────────────────────────────────────
+  const tdOptions = [
+    // file_format
+    [tdId, 'file_format', 'STL', 'stl',      1.0, 0, 0.00, null, true,  true, 10],
+    [tdId, 'file_format', 'OBJ', 'obj',      1.0, 0, 0.00, null, false, true, 20],
+    [tdId, 'file_format', '3MF', 'three_mf', 1.0, 0, 0.00, null, false, true, 30],
+    // material
+    [tdId, 'material', 'PLA',  'pla',  1.0, 0, 3.00, null, true,  true, 10],
+    [tdId, 'material', 'ABS',  'abs',  1.0, 0, 3.00, null, false, true, 20],
+    [tdId, 'material', 'PETG', 'petg', 1.0, 0, 4.00, null, false, true, 30],
+    // infill
+    [tdId, 'infill', '10%',  'infill_10',  1.0, 0, 0, 20,  true,  true, 10],
+    [tdId, 'infill', '20%',  'infill_20',  1.0, 0, 0, 40,  false, true, 20],
+    [tdId, 'infill', '50%',  'infill_50',  1.0, 0, 0, 100, false, true, 30],
+    [tdId, 'infill', '100%', 'infill_100', 1.0, 0, 0, 200, false, true, 40],
+    // layer_height
+    [tdId, 'layer_height', '0.1mm', 'layer_01', 1.0, 0, 0, null, false, true, 10],
+    [tdId, 'layer_height', '0.2mm', 'layer_02', 1.0, 0, 0, null, true,  true, 20],
+    [tdId, 'layer_height', '0.3mm', 'layer_03', 1.0, 0, 0, null, false, true, 30],
+  ];
+  for (const o of tdOptions) {
+    await ds.query(
+      `INSERT INTO spec_options (category_id, option_group, label, value, multiplier, fixed_fee, unit_cost, estimated_grams, is_default, is_active, sort_order)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      o,
+    );
+  }
+  console.log('✅ 13 3D spec options created');
+
+  // ─── Service Addons ─────────────────────────────────────────────────
+  await ds.query(
+    `INSERT INTO service_addons (category_id, name, description, price, price_type, is_active, sort_order)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    [paperId, 'Lamination (A4)', 'Matte or glossy lamination for A4 sheets', 20.00, 'per_unit', true, 10],
+  );
+  await ds.query(
+    `INSERT INTO service_addons (category_id, name, description, price, price_type, is_active, sort_order)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    [null, 'Rush Processing', 'Priority queue processing, ready in 2 hours', 150.00, 'flat', true, 20],
+  );
+  console.log('✅ 2 service addons created');
 
   console.log('\n🎉 Seed complete!\n');
   console.log('Login credentials (all use password: password123):');
