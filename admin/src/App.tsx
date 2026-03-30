@@ -20,6 +20,7 @@ import {
   CarOutlined,
   TeamOutlined,
   ShoppingOutlined,
+  PlusSquareOutlined,
 } from "@ant-design/icons";
 
 import { gridTheme } from "@/config/theme";
@@ -35,6 +36,8 @@ import { OrderShow } from "@/pages/orders/show";
 import { DriverList } from "@/pages/drivers/list";
 import { UserList } from "@/pages/users/list";
 import { ProductList } from "@/pages/products/list";
+import { ProductOptionsPage } from "@/pages/products/options";
+import { AddonList } from "@/pages/products-addons/list";
 
 function App() {
   return (
@@ -88,6 +91,15 @@ function App() {
                   icon: <ShoppingOutlined />,
                 },
               },
+              {
+                name: "products-addons",
+                list: "/products-addons",
+                meta: {
+                  label: "Addons",
+                  parent: "products",
+                  icon: <PlusSquareOutlined />,
+                },
+              },
             ]}
             options={{
               syncWithLocation: true,
@@ -133,7 +145,11 @@ function App() {
                 </Route>
                 <Route path="/drivers" element={<DriverList />} />
                 <Route path="/users" element={<UserList />} />
-                <Route path="/products" element={<ProductList />} />
+                <Route path="/products">
+                  <Route index element={<ProductList />} />
+                  <Route path=":id/options" element={<ProductOptionsPage />} />
+                </Route>
+                <Route path="/products-addons" element={<AddonList />} />
               </Route>
 
               <Route
