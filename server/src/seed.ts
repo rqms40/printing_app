@@ -449,9 +449,8 @@ async function seed() {
   );
   console.log('✅ 2 service categories created (paper, 3d)');
 
-  interface IdRow2 { id: number; }
-  const [paperCat] = await ds.query<IdRow2[]>('SELECT id FROM service_categories WHERE slug = $1', ['paper']);
-  const [threeDCat] = await ds.query<IdRow2[]>('SELECT id FROM service_categories WHERE slug = $1', ['3d']);
+  const [paperCat] = await ds.query<IdRow[]>('SELECT id FROM service_categories WHERE slug = $1', ['paper']);
+  const [threeDCat] = await ds.query<IdRow[]>('SELECT id FROM service_categories WHERE slug = $1', ['3d']);
   const paperId: number = paperCat.id;
   const tdId: number = threeDCat.id;
 
