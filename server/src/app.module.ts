@@ -14,6 +14,7 @@ import { HealthModule } from './health/health.module';
 import { PaymentsModule } from './payments/payments.module';
 import { FilesModule } from './files/files.module';
 import { AdminModule } from './admin/admin.module';
+import { ProductsModule } from './products/products.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { AdminModule } from './admin/admin.module';
     PaymentsModule,
     FilesModule,
     AdminModule,
+    ProductsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
