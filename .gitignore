@@ -51,6 +51,7 @@ dist/
 *.p12
 *.pem
 firebase-service-account.json
+*-firebase-adminsdk-*.json
 google-services.json
 GoogleService-Info.plist
 

@@ -37,6 +37,10 @@ export class DriversService {
     private locationGateway: LocationGateway,
   ) {}
 
+  async getAvailableDrivers(): Promise<DriverProfile[]> {
+    return this.profileRepo.find({ where: { isAvailable: true } });
+  }
+
   async getProfile(userId: number): Promise<DriverProfile> {
     const profile = await this.profileRepo.findOne({ where: { userId } });
     if (!profile) throw new NotFoundException('Driver profile not found');

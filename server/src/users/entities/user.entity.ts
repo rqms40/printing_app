@@ -41,6 +41,9 @@ export class User {
   @Column({ name: 'is_profile_complete', default: false })
   isProfileComplete: boolean;
 
+  @Column({ name: 'fcm_token', nullable: true, type: 'text' })
+  fcmToken: string;
+
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 

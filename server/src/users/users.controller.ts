@@ -1,4 +1,12 @@
-import { Controller, Get, Put, Body, UseGuards, Request } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Body,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UsersService } from './users.service';
@@ -18,6 +26,15 @@ export class UsersController {
     if (!user) return null;
     const { passwordHash: _ph1, ...result } = user;
     return result;
+  }
+
+  @Post('fcm-token')
+  async saveFcmToken(
+    @Request() req: RequestWithUser,
+    @Body('token') token: string,
+  ) {
+    await this.usersService.updateFcmToken(req.user.sub, token);
+    return { success: true };
   }
 
   @Put('profile')

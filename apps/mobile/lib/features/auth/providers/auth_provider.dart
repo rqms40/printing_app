@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/shared/services/api_client.dart';
+import 'package:printing_app/shared/services/notification_service.dart';
 import 'package:printing_app/shared/services/token_storage.dart';
 
 // ---------------------------------------------------------------------------
@@ -104,6 +105,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final data = response.data as Map<String, dynamic>;
       await TokenStorage.saveToken(data['access_token'] as String);
       final user = _parseUser(data['user'] as Map<String, dynamic>);
+      await _sendFcmToken();
       state = AuthState(
         status: user.isProfileComplete
             ? AuthStatus.authenticated
@@ -133,6 +135,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final data = response.data as Map<String, dynamic>;
       await TokenStorage.saveToken(data['access_token'] as String);
       final user = _parseUser(data['user'] as Map<String, dynamic>);
+      await _sendFcmToken();
       state = AuthState(
         status: user.isProfileComplete
             ? AuthStatus.authenticated
@@ -231,6 +234,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (_) {
       await TokenStorage.clearToken();
       // Token expired or invalid — stay unauthenticated
+    }
+  }
+
+  /// Send the current FCM token to the server for targeted push notifications.
+  /// Non-critical — notifications won't work but app still functions if this fails.
+  Future<void> _sendFcmToken() async {
+    final fcmToken = await NotificationService.getToken();
+    if (fcmToken != null) {
+      try {
+        await ApiClient.instance
+            .post('/users/fcm-token', data: {'token': fcmToken});
+      } catch (_) {
+        // Non-critical — notifications won't work but app still functions
+      }
     }
   }
 

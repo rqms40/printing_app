@@ -9,9 +9,11 @@ import { OrdersModule } from './orders/orders.module';
 import { AddressesModule } from './addresses/addresses.module';
 import { DriversModule } from './drivers/drivers.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { FirebaseModule } from './firebase/firebase.module';
 import { HealthModule } from './health/health.module';
 import { PaymentsModule } from './payments/payments.module';
 import { FilesModule } from './files/files.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -41,6 +43,9 @@ import { FilesModule } from './files/files.module';
       }),
     }),
 
+    // Firebase (global — push notifications)
+    FirebaseModule,
+
     // Feature modules
     AuthModule,
     UsersModule,
@@ -51,6 +56,7 @@ import { FilesModule } from './files/files.module';
     HealthModule,
     PaymentsModule,
     FilesModule,
+    AdminModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

@@ -4,14 +4,29 @@ import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/models/paper_specs.dart';
 import 'package:printing_app/shared/models/three_d_specs.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
+import 'package:flutter/foundation.dart';
 import 'package:printing_app/shared/services/api_client.dart';
+import 'package:printing_app/shared/services/websocket_service.dart';
 
 /// Tabs for the order queue screen.
 enum QueueTab { newOrders, inProduction, done, all }
 
+/// Convert camelCase enum name to snake_case for the server.
+String _toSnakeCase(String input) {
+  return input.replaceAllMapped(
+    RegExp(r'[A-Z]'),
+    (m) => '_${m.group(0)!.toLowerCase()}',
+  );
+}
+
 OrderStatus _parseOrderStatus(String value) {
+  // Handle snake_case from server (e.g. 'order_placed' → 'orderPlaced')
+  final camelCase = value.replaceAllMapped(
+    RegExp(r'_([a-z])'),
+    (m) => m.group(1)!.toUpperCase(),
+  );
   return OrderStatus.values.firstWhere(
-    (e) => e.name == value,
+    (e) => e.name == camelCase,
     orElse: () => OrderStatus.orderPlaced,
   );
 }
@@ -77,33 +92,33 @@ ThreeDSpecs? _parseThreeDSpecs(Map<String, dynamic>? json) {
 
 Order _parseOrder(Map<String, dynamic> json) {
   return Order(
-    id: json['id'] as String? ?? json['_id'] as String? ?? '',
-    orderId: json['orderId'] as String? ?? '',
-    userId: json['userId'] as String? ?? '',
-    category: json['category'] as String? ?? '',
-    fileUrl: json['fileUrl'] as String?,
-    fileName: json['fileName'] as String?,
+    id: json['id']?.toString() ?? '',
+    orderId: json['orderId']?.toString() ?? '',
+    userId: json['userId']?.toString() ?? '',
+    category: json['category']?.toString() ?? '',
+    fileUrl: json['fileUrl']?.toString(),
+    fileName: json['fileName']?.toString(),
     paperSpecs: _parsePaperSpecs(json['paperSpecs'] as Map<String, dynamic>?),
     threeDSpecs: _parseThreeDSpecs(json['threeDSpecs'] as Map<String, dynamic>?),
-    quantity: (json['quantity'] as num?)?.toInt() ?? 1,
-    totalPrice: (json['totalPrice'] as num?)?.toDouble() ?? 0,
-    deliveryFee: (json['deliveryFee'] as num?)?.toDouble() ?? 0,
-    paymentMethod: _parsePaymentMethod(json['paymentMethod'] as String? ?? 'cod'),
-    paymentStatus: _parsePaymentStatus(json['paymentStatus'] as String? ?? 'pending'),
-    orderStatus: _parseOrderStatus(json['orderStatus'] as String? ?? 'orderPlaced'),
-    declineReason: json['declineReason'] as String?,
-    cancellationReason: json['cancellationReason'] as String?,
+    quantity: int.tryParse(json['quantity']?.toString() ?? '1') ?? 1,
+    totalPrice: double.tryParse(json['totalPrice']?.toString() ?? '0') ?? 0,
+    deliveryFee: double.tryParse(json['deliveryFee']?.toString() ?? '0') ?? 0,
+    paymentMethod: _parsePaymentMethod(json['paymentMethod']?.toString() ?? 'cod'),
+    paymentStatus: _parsePaymentStatus(json['paymentStatus']?.toString() ?? 'pending'),
+    orderStatus: _parseOrderStatus(json['orderStatus']?.toString() ?? 'orderPlaced'),
+    declineReason: json['declineReason']?.toString(),
+    cancellationReason: json['cancellationReason']?.toString(),
     cancelledAt: json['cancelledAt'] is String
         ? DateTime.parse(json['cancelledAt'] as String)
         : null,
-    deliveryOption: json['deliveryOption'] as String? ?? 'delivery',
-    deliveryAddressId: json['deliveryAddressId'] as String?,
-    assignedDriverId: json['assignedDriverId'] as String?,
+    deliveryOption: json['deliveryOption']?.toString() ?? 'delivery',
+    deliveryAddressId: json['deliveryAddressId']?.toString(),
+    assignedDriverId: json['assignedDriverId']?.toString(),
     estimatedCompletionAt: json['estimatedCompletionAt'] is String
         ? DateTime.parse(json['estimatedCompletionAt'] as String)
         : null,
-    adminNotes: json['adminNotes'] as String?,
-    trackingLink: json['trackingLink'] as String?,
+    adminNotes: json['adminNotes']?.toString(),
+    trackingLink: json['trackingLink']?.toString(),
     createdAt: json['createdAt'] is String
         ? DateTime.parse(json['createdAt'] as String)
         : DateTime.now(),
@@ -185,6 +200,22 @@ class QueueState {
 class QueueNotifier extends StateNotifier<QueueState> {
   QueueNotifier() : super(const QueueState(orders: [])) {
     _fetchOrders();
+    _connectWebSocket();
+  }
+
+  Future<void> _connectWebSocket() async {
+    try {
+      await WebSocketService.instance.connectOrders(
+        onOrderUpdate: (data) {
+          if (data is Map<String, dynamic>) {
+            // Refresh full list when any order changes (new or updated)
+            _fetchOrders();
+          }
+        },
+      );
+    } catch (e) {
+      debugPrint('Admin WS failed: $e');
+    }
   }
 
   Future<void> _fetchOrders() async {
@@ -214,7 +245,7 @@ class QueueNotifier extends StateNotifier<QueueState> {
   Future<void> updateOrderStatus(String orderId, OrderStatus newStatus) async {
     try {
       await ApiClient.instance.patch('/admin/orders/$orderId/status', data: {
-        'status': newStatus.name,
+        'status': _toSnakeCase(newStatus.name),
       });
     } catch (_) {}
     // Update local state regardless

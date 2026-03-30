@@ -33,6 +33,15 @@ export class UsersService {
     return this.usersRepo.save(user);
   }
 
+  async updateFcmToken(userId: number, token: string): Promise<void> {
+    await this.usersRepo.update(userId, { fcmToken: token });
+  }
+
+  async getFcmToken(userId: number): Promise<string | null> {
+    const user = await this.findById(userId);
+    return user?.fcmToken ?? null;
+  }
+
   async updateProfile(id: number, data: Partial<User>): Promise<User> {
     await this.usersRepo.update(id, data);
     return this.usersRepo.findOneOrFail({ where: { id } });

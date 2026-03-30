@@ -8,10 +8,14 @@ import 'app.dart';
 import 'shared/services/api_client.dart';
 import 'shared/services/api_health_check.dart';
 import 'shared/services/draft_storage_service.dart';
+import 'shared/services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await DraftStorageService.init();
+
+  // Initialize Firebase + push notifications
+  await NotificationService.init();
 
   // Initialize API client with platform-appropriate base URL.
   // Android emulator uses 10.0.2.2 to reach host machine's localhost.
