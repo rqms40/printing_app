@@ -26,7 +26,8 @@ import { gridTheme } from "@/config/theme";
 import { authProvider } from "@/providers/auth-provider";
 import { gridDataProvider } from "@/providers/data-provider";
 import { GridLogo } from "@/components/grid-logo";
-import { CustomHeader } from "@/components/header";
+import { renderSiderMenuOnly } from "@/components/sider-render";
+import { CustomHeader } from "@/components/custom-header";
 
 import { LoginPage } from "@/pages/login";
 import { DashboardPage } from "@/pages/dashboard";
@@ -125,20 +126,11 @@ function App() {
                     fallback={<CatchAllNavigate to="/login" />}
                   >
                     <ThemedLayoutV2
-                      Header={() => <CustomHeader />}
+                      Header={CustomHeader}
                       Sider={() => (
-                        <ThemedSiderV2
-                          fixed
-                          Title={({ collapsed }) => (
-                            <ThemedTitleV2
-                              collapsed={collapsed}
-                              text="GRID Admin"
-                              icon={<GridLogo size={collapsed ? 28 : 24} />}
-                            />
-                          )}
-                          render={({ items }) => <>{items}</>}
-                        />
+                        <ThemedSiderV2 render={renderSiderMenuOnly} />
                       )}
+                      Title={ThemedTitleV2}
                     >
                       <Outlet />
                     </ThemedLayoutV2>
