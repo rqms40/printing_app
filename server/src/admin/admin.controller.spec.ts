@@ -25,7 +25,10 @@ describe('AdminController analytics', () => {
       controllers: [AdminController],
       providers: [
         { provide: OrdersService, useValue: { updateStatus: jest.fn() } },
-        { provide: DriversService, useValue: { getAllDriversWithUser: jest.fn() } },
+        {
+          provide: DriversService,
+          useValue: { getAllDriversWithUser: jest.fn() },
+        },
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
         { provide: getRepositoryToken(User), useValue: mockRepo() },
       ],

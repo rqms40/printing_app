@@ -1,52 +1,83 @@
 // server/src/products/dto/create-spec-option.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  IsString, IsNumber, IsInt, IsPositive, Min,
-  IsOptional, IsBoolean, MaxLength, IsNotEmpty,
+  IsString,
+  IsNumber,
+  IsInt,
+  IsPositive,
+  Min,
+  IsOptional,
+  IsBoolean,
+  MaxLength,
+  IsNotEmpty,
 } from 'class-validator';
 
 export class CreateSpecOptionDto {
   @ApiProperty({ example: 1 })
-  @IsInt() @IsPositive()
+  @IsInt()
+  @IsPositive()
   categoryId: number;
 
-  @ApiProperty({ example: 'paper_size', description: 'Group name: paper_size, color_mode, material, etc.' })
-  @IsNotEmpty() @IsString() @MaxLength(50)
+  @ApiProperty({
+    example: 'paper_size',
+    description: 'Group name: paper_size, color_mode, material, etc.',
+  })
+  @IsNotEmpty()
+  @IsString()
+  @MaxLength(50)
   optionGroup: string;
 
   @ApiProperty({ example: 'A4' })
-  @IsNotEmpty() @IsString() @MaxLength(100)
+  @IsNotEmpty()
+  @IsString()
+  @MaxLength(100)
   label: string;
 
   @ApiProperty({ example: 'a4' })
-  @IsNotEmpty() @IsString() @MaxLength(50)
+  @IsNotEmpty()
+  @IsString()
+  @MaxLength(50)
   value: string;
 
   @ApiPropertyOptional({ example: 1.0, default: 1.0 })
-  @IsOptional() @IsNumber() @IsPositive()
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
   multiplier?: number;
 
   @ApiPropertyOptional({ example: 0, default: 0 })
-  @IsOptional() @IsNumber() @Min(0)
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
   fixedFee?: number;
 
   @ApiPropertyOptional({ example: 0, default: 0 })
-  @IsOptional() @IsNumber() @Min(0)
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
   unitCost?: number;
 
-  @ApiPropertyOptional({ example: 40, description: 'Estimated grams for 3D infill options' })
-  @IsOptional() @IsInt() @Min(0)
+  @ApiPropertyOptional({
+    example: 40,
+    description: 'Estimated grams for 3D infill options',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
   estimatedGrams?: number;
 
   @ApiPropertyOptional({ default: false })
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   isDefault?: boolean;
 
   @ApiPropertyOptional({ default: true })
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   isActive?: boolean;
 
   @ApiPropertyOptional({ default: 0 })
-  @IsOptional() @IsInt()
+  @IsOptional()
+  @IsInt()
   sortOrder?: number;
 }

@@ -1,6 +1,8 @@
 // server/src/products/products.service.ts
 import {
-  Injectable, ConflictException, BadRequestException,
+  Injectable,
+  ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull, FindOptionsWhere } from 'typeorm';
@@ -91,15 +93,21 @@ export class ProductsService {
 
   async createCategory(dto: CreateCategoryDto): Promise<ServiceCategory> {
     const existing = await this.catRepo.findOne({ where: { slug: dto.slug } });
-    if (existing) throw new ConflictException(`Slug '${dto.slug}' is already in use`);
+    if (existing)
+      throw new ConflictException(`Slug '${dto.slug}' is already in use`);
     const cat = this.catRepo.create(dto);
     return this.catRepo.save(cat);
   }
 
-  async updateCategory(id: number, dto: UpdateCategoryDto): Promise<ServiceCategory> {
+  async updateCategory(
+    id: number,
+    dto: UpdateCategoryDto,
+  ): Promise<ServiceCategory> {
     await this.catRepo.findOneOrFail({ where: { id } });
     if (dto.slug) {
-      const conflict = await this.catRepo.findOne({ where: { slug: dto.slug } });
+      const conflict = await this.catRepo.findOne({
+        where: { slug: dto.slug },
+      });
       if (conflict && conflict.id !== id) {
         throw new ConflictException(`Slug '${dto.slug}' is already in use`);
       }
@@ -116,19 +124,31 @@ export class ProductsService {
 
   // ─── Spec Options ────────────────────────────────────────────────────
 
-  findOptions(categoryId?: number, optionGroup?: string): Promise<SpecOption[]> {
+  findOptions(
+    categoryId?: number,
+    optionGroup?: string,
+  ): Promise<SpecOption[]> {
     const where: FindOptionsWhere<SpecOption> = {};
     if (categoryId) where.categoryId = categoryId;
     if (optionGroup) where.optionGroup = optionGroup;
-    return this.optRepo.find({ where, order: { optionGroup: 'ASC', sortOrder: 'ASC', id: 'ASC' } });
+    return this.optRepo.find({
+      where,
+      order: { optionGroup: 'ASC', sortOrder: 'ASC', id: 'ASC' },
+    });
   }
 
   async createOption(dto: CreateSpecOptionDto): Promise<SpecOption> {
     const existing = await this.optRepo.findOne({
-      where: { categoryId: dto.categoryId, optionGroup: dto.optionGroup, value: dto.value },
+      where: {
+        categoryId: dto.categoryId,
+        optionGroup: dto.optionGroup,
+        value: dto.value,
+      },
     });
     if (existing) {
-      throw new ConflictException('A spec option with this category/group/value already exists');
+      throw new ConflictException(
+        'A spec option with this category/group/value already exists',
+      );
     }
     if (dto.multiplier !== undefined && dto.multiplier <= 0) {
       throw new BadRequestException('multiplier must be greater than 0');
@@ -137,17 +157,26 @@ export class ProductsService {
     return this.optRepo.save(opt);
   }
 
-  async updateOption(id: number, dto: UpdateSpecOptionDto): Promise<SpecOption> {
+  async updateOption(
+    id: number,
+    dto: UpdateSpecOptionDto,
+  ): Promise<SpecOption> {
     const opt = await this.optRepo.findOneOrFail({ where: { id } });
     if (dto.multiplier !== undefined && dto.multiplier <= 0) {
       throw new BadRequestException('multiplier must be greater than 0');
     }
     if (dto.isActive === false && opt.isActive) {
       const activeCount = await this.optRepo.count({
-        where: { categoryId: opt.categoryId, optionGroup: opt.optionGroup, isActive: true },
+        where: {
+          categoryId: opt.categoryId,
+          optionGroup: opt.optionGroup,
+          isActive: true,
+        },
       });
       if (activeCount <= 1) {
-        throw new BadRequestException('Cannot disable the last active option in a group');
+        throw new BadRequestException(
+          'Cannot disable the last active option in a group',
+        );
       }
     }
     await this.optRepo.update(id, dto);
@@ -158,10 +187,16 @@ export class ProductsService {
     const opt = await this.optRepo.findOneOrFail({ where: { id } });
     if (opt.isActive) {
       const activeCount = await this.optRepo.count({
-        where: { categoryId: opt.categoryId, optionGroup: opt.optionGroup, isActive: true },
+        where: {
+          categoryId: opt.categoryId,
+          optionGroup: opt.optionGroup,
+          isActive: true,
+        },
       });
       if (activeCount <= 1) {
-        throw new BadRequestException('Cannot delete the last active option in a group');
+        throw new BadRequestException(
+          'Cannot delete the last active option in a group',
+        );
       }
     }
     await this.optRepo.remove(opt);
@@ -169,7 +204,9 @@ export class ProductsService {
 
   async reorderOptions(dto: ReorderOptionsDto): Promise<void> {
     await Promise.all(
-      dto.items.map((item) => this.optRepo.update(item.id, { sortOrder: item.sortOrder })),
+      dto.items.map((item) =>
+        this.optRepo.update(item.id, { sortOrder: item.sortOrder }),
+      ),
     );
   }
 

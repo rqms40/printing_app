@@ -11,7 +11,13 @@ import { DriversModule } from '../drivers/drivers.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Order, User, PaperSpec, ThreeDSpec, OrderStatusHistory]),
+    TypeOrmModule.forFeature([
+      Order,
+      User,
+      PaperSpec,
+      ThreeDSpec,
+      OrderStatusHistory,
+    ]),
     OrdersModule,
     DriversModule,
   ],

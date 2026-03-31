@@ -133,10 +133,16 @@ export class Order {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
-  @OneToOne(() => PaperSpec, (spec) => spec.order, { nullable: true, eager: false })
+  @OneToOne(() => PaperSpec, (spec) => spec.order, {
+    nullable: true,
+    eager: false,
+  })
   paperSpec: PaperSpec | null;
 
-  @OneToOne(() => ThreeDSpec, (spec) => spec.order, { nullable: true, eager: false })
+  @OneToOne(() => ThreeDSpec, (spec) => spec.order, {
+    nullable: true,
+    eager: false,
+  })
   threeDSpec: ThreeDSpec | null;
 
   @OneToMany(() => OrderStatusHistory, (h) => h.order)

@@ -120,17 +120,17 @@ class _HeroTile extends StatelessWidget {
                 children: [
                   Flexible(
                     child: Text(
-                      'Professional\nprinting,\ndelivered.',
+                      'GRID',
                       style: AppTypography.display.copyWith(
                         color: isDark ? colors.onBackground : colors.background,
-                        height: 1.0, fontSize: 24,
+                        height: 1.0, fontSize: 34,
                       ),
                       maxLines: 3, overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
-                    'Paper & 3D printing services',
+                    'Paper. 3D. Delivered.',
                     style: AppTypography.caption.copyWith(
                       color: (isDark ? colors.onBackground : colors.background).withValues(alpha: 0.7),
                     ),

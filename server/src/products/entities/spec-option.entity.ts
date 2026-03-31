@@ -1,8 +1,13 @@
 // server/src/products/entities/spec-option.entity.ts
 import {
-  Entity, PrimaryGeneratedColumn, Column,
-  CreateDateColumn, UpdateDateColumn,
-  ManyToOne, JoinColumn, Unique,
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Unique,
 } from 'typeorm';
 import { ServiceCategory } from './service-category.entity';
 
@@ -20,7 +25,9 @@ export class SpecOption {
   @Column({ name: 'category_id' })
   categoryId: number;
 
-  @ManyToOne(() => ServiceCategory, (cat) => cat.specOptions, { onDelete: 'CASCADE' })
+  @ManyToOne(() => ServiceCategory, (cat) => cat.specOptions, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'category_id' })
   category: ServiceCategory;
 
@@ -34,13 +41,33 @@ export class SpecOption {
   @Column({ length: 50 })
   value: string;
 
-  @Column({ type: 'decimal', precision: 6, scale: 3, default: 1.0, transformer: numberTransformer })
+  @Column({
+    type: 'decimal',
+    precision: 6,
+    scale: 3,
+    default: 1.0,
+    transformer: numberTransformer,
+  })
   multiplier: number;
 
-  @Column({ name: 'fixed_fee', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: numberTransformer })
+  @Column({
+    name: 'fixed_fee',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    default: 0,
+    transformer: numberTransformer,
+  })
   fixedFee: number;
 
-  @Column({ name: 'unit_cost', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: numberTransformer })
+  @Column({
+    name: 'unit_cost',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    default: 0,
+    transformer: numberTransformer,
+  })
   unitCost: number;
 
   @Column({ name: 'estimated_grams', type: 'int', nullable: true })

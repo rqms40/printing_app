@@ -1,6 +1,12 @@
 // server/src/products/dto/reorder-options.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsInt, IsPositive, ValidateNested, Min } from 'class-validator';
+import {
+  IsArray,
+  IsInt,
+  IsPositive,
+  ValidateNested,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ReorderItemDto {
