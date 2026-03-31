@@ -10,7 +10,6 @@ import {
 } from "@ant-design/icons";
 import { useParams } from "react-router";
 import { useState, useEffect } from "react";
-import axios from "axios";
 import type { OrderStatus } from "@/types/enums";
 import {
   ORDER_STATUS_TRANSITIONS,
@@ -23,23 +22,21 @@ import {
   statusLabel,
 } from "@/utils/format";
 import type { Order, OrderStatusHistory } from "@/types/order";
-import { API_URL } from "@/config/constants";
+import { apiClient } from "@/providers/api-client";
+import {
+  humanizeEnumValue,
+  normalizeAdminDrivers,
+  normalizeOrder,
+} from "@/utils/api-normalizers";
 
 const { Text } = Typography;
 const { TextArea } = Input;
-
-const axiosInstance = axios.create();
-axiosInstance.interceptors.request.use((config) => {
-  const token = localStorage.getItem('grid_admin_token');
-  if (token) config.headers['Authorization'] = `Bearer ${token}`;
-  return config;
-});
 
 export function OrderShow() {
   const { id } = useParams<{ id: string }>();
   const { modal, message } = App.useApp();
   const [order, setOrder] = useState<(Order & { status_history?: OrderStatusHistory[] }) | null>(null);
-  const [availableDrivers, setAvailableDrivers] = useState<{ id: number; full_name: string; vehicle_type: string; plate_number: string | null; is_available?: boolean }[]>([]);
+  const [availableDrivers, setAvailableDrivers] = useState<{ id: number; full_name: string | null; vehicle_type: string; plate_number: string | null; is_available?: boolean }[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [driverModalOpen, setDriverModalOpen] = useState(false);
@@ -49,8 +46,8 @@ export function OrderShow() {
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      axiosInstance.get(`${API_URL}/admin/orders/${id}`).then(r => setOrder(r.data)).catch(() => {}),
-      axiosInstance.get(`${API_URL}/admin/drivers`).then(r => setAvailableDrivers(r.data)).catch(() => {}),
+      apiClient.get(`/admin/orders/${id}`).then((r) => setOrder(normalizeOrder(r.data))).catch(() => {}),
+      apiClient.get("/admin/drivers").then((r) => setAvailableDrivers(normalizeAdminDrivers(r.data))).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, [id]);
 
@@ -75,10 +72,10 @@ export function OrderShow() {
       content: `Change status to "${statusLabel(newStatus)}"?`,
       onOk: async () => {
         try {
-          await axiosInstance.patch(`${API_URL}/admin/orders/${id}/status`, { status: newStatus });
+          await apiClient.patch(`/admin/orders/${id}/status`, { status: newStatus });
           void message.success(`Status updated to ${statusLabel(newStatus)}`);
-          const res = await axiosInstance.get(`${API_URL}/admin/orders/${id}`);
-          setOrder(res.data);
+          const res = await apiClient.get(`/admin/orders/${id}`);
+          setOrder(normalizeOrder(res.data));
         } catch {
           void message.error('Failed to update status');
         }
@@ -88,11 +85,11 @@ export function OrderShow() {
 
   const handleAssignDriver = async (driverId: number) => {
     try {
-      await axiosInstance.post(`${API_URL}/admin/orders/${id}/assign`, { driverId });
+      await apiClient.post(`/admin/orders/${id}/assign`, { driverId });
       void message.success("Driver assigned");
       setDriverModalOpen(false);
-      const res = await axiosInstance.get(`${API_URL}/admin/orders/${id}`);
-      setOrder(res.data);
+      const res = await apiClient.get(`/admin/orders/${id}`);
+      setOrder(normalizeOrder(res.data));
     } catch {
       void message.error('Failed to assign driver');
     }
@@ -104,12 +101,12 @@ export function OrderShow() {
       return;
     }
     try {
-      await axiosInstance.patch(`${API_URL}/admin/orders/${id}/status`, { status: 'file_declined', notes: declineReason });
+      await apiClient.patch(`/admin/orders/${id}/status`, { status: 'file_declined', notes: declineReason });
       void message.success("Order declined");
       setDeclineModalOpen(false);
       setDeclineReason("");
-      const res = await axiosInstance.get(`${API_URL}/admin/orders/${id}`);
-      setOrder(res.data);
+      const res = await apiClient.get(`/admin/orders/${id}`);
+      setOrder(normalizeOrder(res.data));
     } catch {
       void message.error('Failed to decline order');
     }
@@ -215,7 +212,7 @@ export function OrderShow() {
               const newNotes = e.target.value;
               if (newNotes !== (order.admin_notes ?? "")) {
                 try {
-                  await axiosInstance.patch(`${API_URL}/admin/orders/${id}/notes`, { adminNotes: newNotes });
+                  await apiClient.patch(`/admin/orders/${id}/notes`, { adminNotes: newNotes });
                   void message.success("Notes saved");
                   setOrder({ ...order, admin_notes: newNotes });
                 } catch {
@@ -268,7 +265,7 @@ export function OrderShow() {
           <Table.Column
             dataIndex="vehicle_type"
             title="Vehicle"
-            render={(v: string) => v.charAt(0).toUpperCase() + v.slice(1)}
+            render={(v: string) => humanizeEnumValue(v, "Unknown")}
           />
           <Table.Column dataIndex="plate_number" title="Plate" />
           <Table.Column

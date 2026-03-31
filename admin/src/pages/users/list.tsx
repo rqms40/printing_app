@@ -2,18 +2,15 @@ import { List } from "@refinedev/antd";
 import { Table, Tag, Avatar, Space, Typography, Input, Tooltip } from "antd";
 import { SearchOutlined, MailOutlined } from "@ant-design/icons";
 import { useState, useEffect } from "react";
-import axios from "axios";
 import { formatDate, formatRelativeTime } from "@/utils/format";
-import { API_URL } from "@/config/constants";
+import { apiClient } from "@/providers/api-client";
+import {
+  humanizeEnumValue,
+  normalizeAdminUsers,
+  type AdminUserRecord,
+} from "@/utils/api-normalizers";
 
 const { Text } = Typography;
-
-const axiosInstance = axios.create();
-axiosInstance.interceptors.request.use((config) => {
-  const token = localStorage.getItem('grid_admin_token');
-  if (token) config.headers['Authorization'] = `Bearer ${token}`;
-  return config;
-});
 
 const mockUsers = [
   { id: 1, full_name: "Maria Santos", email: "maria.santos@gmail.com", phone_number: "+639171234567", role: "customer" as const, is_active: true, is_profile_complete: true, created_at: "2025-12-25T00:00:00Z", updated_at: "2025-12-25T00:00:00Z" },
@@ -24,18 +21,6 @@ const mockUsers = [
   { id: 11, full_name: "Marco dela Cruz", email: "marco.delacruz@gmail.com", phone_number: "+639221234567", role: "driver" as const, is_active: true, is_profile_complete: true, created_at: "2026-02-01T00:00:00Z", updated_at: "2026-02-01T00:00:00Z" },
   { id: 100, full_name: "Admin User", email: "admin@grid.ph", phone_number: "+639001234567", role: "admin" as const, is_active: true, is_profile_complete: true, created_at: "2025-11-01T00:00:00Z", updated_at: "2025-11-01T00:00:00Z" },
 ];
-
-interface AdminUser {
-  id: number;
-  full_name: string | null;
-  email: string;
-  phone_number: string | null;
-  role: 'customer' | 'driver' | 'admin';
-  is_active: boolean;
-  is_profile_complete: boolean;
-  created_at: string;
-  updated_at: string;
-}
 
 const ROLE_COLORS: Record<string, string> = {
   customer: "blue",
@@ -57,12 +42,14 @@ const AVATAR_FG: Record<string, string> = {
 
 export function UserList() {
   const [search, setSearch] = useState("");
-  const [users, setUsers] = useState<AdminUser[]>(mockUsers as AdminUser[]);
+  const [users, setUsers] = useState<AdminUserRecord[]>(
+    mockUsers as AdminUserRecord[],
+  );
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    void axiosInstance.get<AdminUser[]>(`${API_URL}/admin/users`)
-      .then(res => setUsers(res.data))
+    void apiClient.get("/admin/users")
+      .then((res) => setUsers(normalizeAdminUsers(res.data)))
       .catch(() => { /* keep mock fallback */ })
       .finally(() => setLoading(false));
   }, []);
@@ -116,7 +103,7 @@ export function UserList() {
           <Table.Column
             title="User"
             width={250}
-            render={(_: unknown, record: AdminUser) => (
+            render={(_: unknown, record: AdminUserRecord) => (
               <Space>
                 <Avatar
                   size={40}
@@ -157,7 +144,7 @@ export function UserList() {
             width={110}
             render={(role: string) => (
               <Tag color={ROLE_COLORS[role]}>
-                {role.charAt(0).toUpperCase() + role.slice(1)}
+                {humanizeEnumValue(role, "Unknown")}
               </Tag>
             )}
             filters={[
@@ -165,7 +152,7 @@ export function UserList() {
               { text: "Driver", value: "driver" },
               { text: "Admin", value: "admin" },
             ]}
-            onFilter={(value, record: AdminUser) => record.role === value}
+            onFilter={(value, record: AdminUserRecord) => record.role === value}
           />
           <Table.Column
             dataIndex="is_active"
@@ -180,7 +167,7 @@ export function UserList() {
               { text: "Active", value: true },
               { text: "Inactive", value: false },
             ]}
-            onFilter={(value, record: AdminUser) => record.is_active === value}
+            onFilter={(value, record: AdminUserRecord) => record.is_active === value}
           />
           <Table.Column
             dataIndex="created_at"
@@ -191,7 +178,7 @@ export function UserList() {
                 <span>{formatRelativeTime(v)}</span>
               </Tooltip>
             )}
-            sorter={(a: AdminUser, b: AdminUser) =>
+            sorter={(a: AdminUserRecord, b: AdminUserRecord) =>
               new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
             }
             defaultSortOrder="descend"

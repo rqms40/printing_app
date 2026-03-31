@@ -14,13 +14,19 @@ export const CostTracker: React.FC = () => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Metrics Row */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <Card style={{ background: '#1f1f1f', border: '1px solid #2E2E2E' }} bodyStyle={{ padding: 16 }}>
+        <Card
+          style={{ background: '#1f1f1f', border: '1px solid #2E2E2E' }}
+          styles={{ body: { padding: 16 } }}
+        >
           <Text type="secondary" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <DollarOutlined /> Total Payouts
           </Text>
           <Title level={4} style={{ margin: 0, color: '#66BB6A' }}>₱{totalPayout.toFixed(2)}</Title>
         </Card>
-        <Card style={{ background: '#1f1f1f', border: '1px solid #2E2E2E' }} bodyStyle={{ padding: 16 }}>
+        <Card
+          style={{ background: '#1f1f1f', border: '1px solid #2E2E2E' }}
+          styles={{ body: { padding: 16 } }}
+        >
           <Text type="secondary" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <ClockCircleOutlined /> Active Costs
           </Text>

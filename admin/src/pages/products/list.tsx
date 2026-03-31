@@ -10,10 +10,11 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { API_URL } from '@/config/constants';
 import { mockCategories } from '@/providers/mock-data';
+import { apiClient } from '@/providers/api-client';
 import type { ServiceCategory } from '@/types/products';
 import { formatCurrency } from '@/utils/format';
+import { normalizeServiceCategories } from '@/utils/api-normalizers';
 
 const { Text, Title } = Typography;
 
@@ -23,13 +24,6 @@ const S = {
   label: { color: '#666', fontSize: 11, fontWeight: 500, textTransform: 'uppercase' as const, letterSpacing: '0.5px' } as React.CSSProperties,
   value: { color: '#F0F0F0', fontSize: 14, fontWeight: 600 } as React.CSSProperties,
 };
-
-const axiosInstance = axios.create();
-axiosInstance.interceptors.request.use((config) => {
-  const token = localStorage.getItem('grid_admin_token');
-  if (token) config.headers['Authorization'] = `Bearer ${token}`;
-  return config;
-});
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   paper: <FileTextOutlined style={{ fontSize: 28, color: '#FFDE58' }} />,
@@ -48,8 +42,8 @@ export function ProductList() {
 
   const fetchCategories = async () => {
     try {
-      const res = await axiosInstance.get<ServiceCategory[]>(`${API_URL}/products/categories?include_inactive=true`);
-      setCategories(res.data);
+      const res = await apiClient.get("/products/categories?include_inactive=true");
+      setCategories(normalizeServiceCategories(res.data));
     } catch {
       setCategories(mockCategories);
     } finally {
@@ -94,10 +88,10 @@ export function ProductList() {
         sortOrder: values.sort_order ?? 0,
       };
       if (editTarget) {
-        await axiosInstance.patch(`${API_URL}/products/categories/${editTarget.id}`, payload);
+        await apiClient.patch(`/products/categories/${editTarget.id}`, payload);
         void message.success('Category updated');
       } else {
-        await axiosInstance.post(`${API_URL}/products/categories`, payload);
+        await apiClient.post("/products/categories", payload);
         void message.success('Category created');
       }
       setDrawerOpen(false);
@@ -113,7 +107,7 @@ export function ProductList() {
 
   const handleToggleActive = async (cat: ServiceCategory) => {
     try {
-      await axiosInstance.patch(`${API_URL}/products/categories/${cat.id}`, { isActive: !cat.is_active });
+      await apiClient.patch(`/products/categories/${cat.id}`, { isActive: !cat.is_active });
       void fetchCategories();
     } catch {
       void message.error('Failed to update status');

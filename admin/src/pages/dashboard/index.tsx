@@ -7,13 +7,13 @@ import {
   CheckCircleOutlined,
   ArrowUpOutlined,
 } from "@ant-design/icons";
-import axios from 'axios';
 import { StatusBadge } from "@/components/status-badge";
 import { formatCurrency, formatRelativeTime } from "@/utils/format";
 import { mockKPIs, mockOrders } from "@/providers/mock-data";
 import type { Order } from "@/types/order";
 import type { OrderStatus } from "@/types/enums";
-import { API_URL } from "@/config/constants";
+import { apiClient } from "@/providers/api-client";
+import { normalizeOrders } from "@/utils/api-normalizers";
 import {
   AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid,
@@ -23,14 +23,6 @@ import {
 const { Title, Text } = Typography;
 
 type FilterPeriod = '7D' | '30D' | '6M';
-
-/* ─── Axios instance with auth interceptor ───────────────────────── */
-const axiosInstance = axios.create();
-axiosInstance.interceptors.request.use((config) => {
-  const token = localStorage.getItem('grid_admin_token');
-  if (token) config.headers['Authorization'] = `Bearer ${token}`;
-  return config;
-});
 
 /* ─── Error Boundary ──────────────────────────────────────────────── */
 class ErrorBoundary extends Component<{children: ReactNode}, {hasError: boolean, error: Error | null}> {
@@ -205,9 +197,9 @@ export function DashboardPage() {
     void (async () => {
       try {
         const [dashRes, analyticsRes, ordersRes] = await Promise.all([
-          axiosInstance.get(`${API_URL}/admin/dashboard`),
-          axiosInstance.get(`${API_URL}/admin/analytics`),
-          axiosInstance.get(`${API_URL}/admin/orders`),
+          apiClient.get("/admin/dashboard"),
+          apiClient.get("/admin/analytics"),
+          apiClient.get("/admin/orders"),
         ]);
         const d = dashRes.data;
         setKpis({
@@ -225,7 +217,7 @@ export function DashboardPage() {
             ({ month, value }) => ({ month, value })
           ),
         });
-        setRecentOrders((ordersRes.data as Order[]).slice(0, 5));
+        setRecentOrders(normalizeOrders(ordersRes.data).slice(0, 5));
       } catch {
         // keep mock fallback values already set in state
       } finally {

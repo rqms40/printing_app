@@ -1,7 +1,7 @@
 import type { AuthProvider } from "@refinedev/core";
 import { API_URL } from "@/config/constants";
-
-const TOKEN_KEY = "grid_admin_token";
+import { TOKEN_KEY } from "@/providers/api-client";
+import { normalizeIdentity } from "@/utils/api-normalizers";
 
 export const authProvider: AuthProvider = {
   login: async ({ email, password }) => {
@@ -76,7 +76,7 @@ export const authProvider: AuthProvider = {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) return null;
-      return await response.json();
+      return normalizeIdentity(await response.json());
     } catch {
       return { id: "1", name: "Admin User", email: "admin@grid.ph" };
     }

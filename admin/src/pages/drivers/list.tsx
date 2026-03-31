@@ -12,20 +12,15 @@ import {
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L, { DivIcon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import axios from 'axios';
 import { mockDeliveries } from "@/providers/mock-data";
-import { API_URL } from '@/config/constants';
 import { formatDateTime, formatRelativeTime } from "@/utils/format";
+import { apiClient } from "@/providers/api-client";
+import {
+  normalizeAdminDrivers,
+  normalizeOrders,
+} from "@/utils/api-normalizers";
 
 const { Text, Title } = Typography;
-
-/* ─── Axios instance with auth interceptor ───────────────────────── */
-const axiosInstance = axios.create();
-axiosInstance.interceptors.request.use((config) => {
-  const token = localStorage.getItem('grid_admin_token');
-  if (token) config.headers['Authorization'] = `Bearer ${token}`;
-  return config;
-});
 
 /* ─── API Driver type ────────────────────────────────────────────── */
 interface ApiDriver {
@@ -120,21 +115,21 @@ export function DriverList() {
   const [loadingDrivers, setLoadingDrivers] = useState(true);
 
   useEffect(() => {
-    void axiosInstance.get(`${API_URL}/admin/drivers`)
-      .then(r => setDrivers(r.data as ApiDriver[]))
+    void apiClient.get("/admin/drivers")
+      .then((r) => setDrivers(normalizeAdminDrivers(r.data) as ApiDriver[]))
       .catch(() => {})
       .finally(() => setLoadingDrivers(false));
-    void axiosInstance.get(`${API_URL}/admin/orders`)
-      .then(r => setOrders(r.data))
+    void apiClient.get("/admin/orders")
+      .then((r) => setOrders(normalizeOrders(r.data)))
       .catch(() => {});
   }, []);
 
   const handleAssignDriver = async (orderId: number | string, driverId: number) => {
     try {
-      await axiosInstance.post(`${API_URL}/admin/orders/${orderId}/assign`, { driverId });
+      await apiClient.post(`/admin/orders/${orderId}/assign`, { driverId });
       void message.success('Driver assigned successfully');
-      const res = await axiosInstance.get(`${API_URL}/admin/orders`);
-      setOrders(res.data);
+      const res = await apiClient.get("/admin/orders");
+      setOrders(normalizeOrders(res.data));
     } catch {
       void message.error('Failed to assign driver');
     }

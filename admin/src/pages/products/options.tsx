@@ -9,18 +9,15 @@ import {
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { API_URL } from '@/config/constants';
 import { mockCategories, mockSpecOptions } from '@/providers/mock-data';
+import { apiClient } from '@/providers/api-client';
 import type { ServiceCategory, SpecOption } from '@/types/products';
+import {
+  normalizeServiceCategory,
+  normalizeSpecOptions,
+} from '@/utils/api-normalizers';
 
 const { Text } = Typography;
-
-const axiosInstance = axios.create();
-axiosInstance.interceptors.request.use((config) => {
-  const token = localStorage.getItem('grid_admin_token');
-  if (token) config.headers['Authorization'] = `Bearer ${token}`;
-  return config;
-});
 
 // Groups that have a fixed_fee (bindings)
 const FEE_GROUPS = new Set(['binding']);
@@ -44,11 +41,11 @@ export function ProductOptionsPage() {
   const fetchData = async () => {
     try {
       const [catRes, optRes] = await Promise.all([
-        axiosInstance.get<ServiceCategory>(`${API_URL}/products/categories/${id!}`),
-        axiosInstance.get<SpecOption[]>(`${API_URL}/products/options?category_id=${id!}`),
+        apiClient.get(`/products/categories/${id!}`),
+        apiClient.get(`/products/options?category_id=${id!}`),
       ]);
-      setCategory(catRes.data);
-      setOptions(optRes.data);
+      setCategory(normalizeServiceCategory(catRes.data));
+      setOptions(normalizeSpecOptions(optRes.data));
     } catch {
       const cat = mockCategories.find((c) => c.id === id) ?? null;
       setCategory(cat);
@@ -64,7 +61,7 @@ export function ProductOptionsPage() {
 
   const handleToggleActive = async (opt: SpecOption) => {
     try {
-      await axiosInstance.patch(`${API_URL}/products/options/${opt.id}`, { isActive: !opt.is_active });
+      await apiClient.patch(`/products/options/${opt.id}`, { isActive: !opt.is_active });
       void fetchData();
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
@@ -83,7 +80,7 @@ export function ProductOptionsPage() {
         : field === 'sort_order' ? 'sortOrder'
         : field === 'estimated_grams' ? 'estimatedGrams'
         : field;
-      await axiosInstance.patch(`${API_URL}/products/options/${opt.id}`, { [key]: value });
+      await apiClient.patch(`/products/options/${opt.id}`, { [key]: value });
       void fetchData();
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
@@ -100,7 +97,7 @@ export function ProductOptionsPage() {
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
-          await axiosInstance.delete(`${API_URL}/products/options/${opt.id}`);
+          await apiClient.delete(`/products/options/${opt.id}`);
           void message.success('Option deleted');
           void fetchData();
         } catch (err: unknown) {
@@ -123,7 +120,7 @@ export function ProductOptionsPage() {
     try {
       const values = await form.validateFields();
       setSaving(true);
-      await axiosInstance.post(`${API_URL}/products/options`, {
+      await apiClient.post("/products/options", {
         ...values,
         categoryId: Number(id),
       });

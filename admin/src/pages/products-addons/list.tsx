@@ -6,19 +6,16 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
-import { API_URL } from '@/config/constants';
 import { mockAddons, mockCategories } from '@/providers/mock-data';
+import { apiClient } from '@/providers/api-client';
 import type { ServiceAddon, ServiceCategory } from '@/types/products';
 import { formatCurrency } from '@/utils/format';
+import {
+  normalizeServiceAddons,
+  normalizeServiceCategories,
+} from '@/utils/api-normalizers';
 
 const { Text, Title } = Typography;
-
-const axiosInstance = axios.create();
-axiosInstance.interceptors.request.use((config) => {
-  const token = localStorage.getItem('grid_admin_token');
-  if (token) config.headers['Authorization'] = `Bearer ${token}`;
-  return config;
-});
 
 export function AddonList() {
   const [searchParams] = useSearchParams();
@@ -35,11 +32,11 @@ export function AddonList() {
   const fetchData = async () => {
     try {
       const [addonRes, catRes] = await Promise.all([
-        axiosInstance.get<ServiceAddon[]>(`${API_URL}/products/addons${categoryId ? `?category_id=${categoryId}` : ''}`),
-        axiosInstance.get<ServiceCategory[]>(`${API_URL}/products/categories`),
+        apiClient.get(`/products/addons${categoryId ? `?category_id=${categoryId}` : ''}`),
+        apiClient.get("/products/categories"),
       ]);
-      setAddons(addonRes.data);
-      setCategories(catRes.data);
+      setAddons(normalizeServiceAddons(addonRes.data));
+      setCategories(normalizeServiceCategories(catRes.data));
     } catch {
       setAddons(mockAddons);
       setCategories(mockCategories);
@@ -75,10 +72,10 @@ export function AddonList() {
       const values = await form.validateFields();
       setSaving(true);
       if (editTarget) {
-        await axiosInstance.patch(`${API_URL}/products/addons/${editTarget.id}`, values);
+        await apiClient.patch(`/products/addons/${editTarget.id}`, values);
         void message.success('Addon updated');
       } else {
-        await axiosInstance.post(`${API_URL}/products/addons`, values);
+        await apiClient.post("/products/addons", values);
         void message.success('Addon created');
       }
       setModalOpen(false);
@@ -100,7 +97,7 @@ export function AddonList() {
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
-          await axiosInstance.delete(`${API_URL}/products/addons/${addon.id}`);
+          await apiClient.delete(`/products/addons/${addon.id}`);
           void message.success('Addon deleted');
           void fetchData();
         } catch (err: unknown) {
@@ -184,7 +181,7 @@ export function AddonList() {
                 size="small"
                 onChange={async (checked) => {
                   try {
-                    await axiosInstance.patch(`${API_URL}/products/addons/${record.id}`, { isActive: checked });
+                    await apiClient.patch(`/products/addons/${record.id}`, { isActive: checked });
                     void fetchData();
                   } catch {
                     void message.error('Update failed');

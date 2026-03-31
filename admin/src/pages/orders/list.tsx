@@ -3,20 +3,13 @@ import { Table, Input, Radio, Space, Badge, Tag, Tooltip } from "antd";
 import { SearchOutlined, EyeOutlined } from "@ant-design/icons";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
 import type { Order } from "@/types/order";
 import type { OrderStatus, PaymentStatus } from "@/types/enums";
 import { StatusBadge } from "@/components/status-badge";
 import { formatCurrency, formatRelativeTime, formatDate } from "@/utils/format";
 import { mockOrders } from "@/providers/mock-data";
-import { API_URL } from "@/config/constants";
-
-const axiosInstance = axios.create();
-axiosInstance.interceptors.request.use((config) => {
-  const token = localStorage.getItem('grid_admin_token');
-  if (token) config.headers['Authorization'] = `Bearer ${token}`;
-  return config;
-});
+import { apiClient } from "@/providers/api-client";
+import { humanizeEnumValue, normalizeOrders } from "@/utils/api-normalizers";
 
 type TabFilter = "new" | "production" | "done" | "all";
 
@@ -42,8 +35,8 @@ export function OrderList() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    void axiosInstance.get<Order[]>(`${API_URL}/admin/orders`)
-      .then(res => setOrders(res.data))
+    void apiClient.get("/admin/orders")
+      .then((res) => setOrders(normalizeOrders(res.data)))
       .catch(() => { /* keep mock fallback already in state */ })
       .finally(() => setLoading(false));
   }, []);
@@ -165,7 +158,7 @@ export function OrderList() {
             width={100}
             render={(v: PaymentStatus) => (
               <Tag color={PAYMENT_COLORS[v]}>
-                {v.charAt(0).toUpperCase() + v.slice(1)}
+                {humanizeEnumValue(v, "Unknown")}
               </Tag>
             )}
           />

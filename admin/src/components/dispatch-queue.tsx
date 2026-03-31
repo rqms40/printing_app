@@ -17,7 +17,7 @@ export const DispatchQueue: React.FC = () => {
       title="Dispatch Queue" 
       extra={<Badge count={`${readyOrders.length} Pending`} color="#FFDE58" style={{ color: '#1A1A0A', fontWeight: 'bold' }} />}
       style={{ background: "#141414", border: '1px solid #2E2E2E', height: '100%', display: 'flex', flexDirection: 'column' }}
-      bodyStyle={{ padding: 12, flex: 1, overflowY: 'auto', minHeight: '300px' }}
+      styles={{ body: { padding: 12, flex: 1, overflowY: 'auto', minHeight: '300px' } }}
     >
       <List
         dataSource={readyOrders}
