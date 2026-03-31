@@ -54,6 +54,7 @@ describe("admin users data", () => {
     });
 
     expect(view.kind).toBe("error");
+    if (view.kind !== "error") throw new Error("Expected error view");
     expect(view.users).toEqual([]);
     expect(view.retryLabel).toBe("Retry");
     expect(view.message).toContain("Request failed");

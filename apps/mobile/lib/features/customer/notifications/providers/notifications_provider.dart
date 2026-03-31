@@ -65,7 +65,7 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
         await _api.markAsRead(id);
       } catch (_) {}
     }
-    state = state.where((n) => n.id != id).toList();
+    state = state.map((n) => n.id == id ? n.copyWith(isRead: true) : n).toList();
   }
 
   Future<void> markAllAsRead() async {
@@ -74,7 +74,7 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
         await _api.markAllAsRead();
       } catch (_) {}
     }
-    state = [];
+    state = state.map((n) => n.copyWith(isRead: true)).toList();
   }
 }
 
