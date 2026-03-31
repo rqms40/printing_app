@@ -265,7 +265,7 @@ export function DriverList() {
                     >
                       <Popup>
                         <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 13, lineHeight: 1.6 }}>
-                          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>{d.full_name}</div>
+                          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>{d.full_name ?? d.email}</div>
                           <div style={{ color: '#666' }}>
                             {d.vehicle_type} &middot; {d.plate_number}
                           </div>
@@ -367,7 +367,7 @@ export function DriverList() {
                       fontSize: 15,
                     }}
                   >
-                    {record.full_name?.charAt(0) ?? '?'}
+                    {(record.full_name ?? record.email)?.charAt(0)?.toUpperCase() ?? '?'}
                   </Avatar>
                   <span style={{
                     position: 'absolute', bottom: 0, right: 0,
@@ -378,9 +378,9 @@ export function DriverList() {
                 </div>
                 <div>
                   <Text strong style={{ color: '#F0F0F0', display: 'block', fontSize: 13.5, lineHeight: 1.3 }}>
-                    {record.full_name ?? 'Unknown'}
+                    {record.full_name ?? record.email ?? 'Unknown'}
                   </Text>
-                  <Text style={{ color: '#666', fontSize: 11.5 }}>ID: {record.user_id}</Text>
+                  <Text style={{ color: '#666', fontSize: 11.5 }}>{record.email ?? `ID: ${record.user_id}`}</Text>
                 </div>
               </Space>
             )}
@@ -565,7 +565,7 @@ const DispatchPanel: React.FC<{
                       onMouseLeave={e => (e.currentTarget.style.borderColor = 'transparent')}
                     >
                       <Text style={{ fontSize: 13, color: '#F0F0F0', display: 'block' }}>
-                        {driver.full_name}
+                        {driver.full_name ?? driver.email ?? 'Unknown'}
                       </Text>
                       <Text style={{ fontSize: 11, color: '#666' }}>
                         {driver.vehicle_type} &middot; {driver.plate_number}

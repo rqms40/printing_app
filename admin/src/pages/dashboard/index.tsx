@@ -1,5 +1,5 @@
-import React, { Component, ErrorInfo, ReactNode, useState, useMemo, useEffect } from 'react';
-import { Row, Col, Card, Typography, Table, Tag, Alert, Radio, Spin } from "antd";
+import React, { Component, ErrorInfo, ReactNode, useState, useEffect } from 'react';
+import { Row, Col, Card, Typography, Table, Tag, Alert, Radio, Spin, Empty } from "antd";
 import {
   FileTextOutlined,
   PrinterOutlined,
@@ -15,6 +15,14 @@ import type { OrderStatus } from "@/types/enums";
 import { apiClient } from "@/providers/api-client";
 import { normalizeOrders } from "@/utils/api-normalizers";
 import {
+  deriveDashboardAnalyticsFromOrders,
+  hasModernDashboardAnalyticsPayload,
+  normalizeDashboardAnalytics,
+  type DashboardAnalyticsPoint,
+  type DashboardAnalyticsPeriod,
+  type DashboardAnalyticsResponse,
+} from "./analytics-contract";
+import {
   AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend
@@ -22,7 +30,7 @@ import {
 
 const { Title, Text } = Typography;
 
-type FilterPeriod = '7D' | '30D' | '6M';
+type FilterPeriod = DashboardAnalyticsPeriod;
 
 /* ─── Error Boundary ──────────────────────────────────────────────── */
 class ErrorBoundary extends Component<{children: ReactNode}, {hasError: boolean, error: Error | null}> {
@@ -52,38 +60,26 @@ const tooltipStyle = {
   color: '#F0F0F0',
 };
 
+const emptyChart = (
+  <div style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <Empty
+      image={Empty.PRESENTED_IMAGE_SIMPLE}
+      description={<span style={{ color: '#808080' }}>No analytics data yet</span>}
+    />
+  </div>
+);
+
 /* ─── Sales Trend Chart ──────────────────────────────────────────── */
 const SalesTrendChart: React.FC<{
-  period: FilterPeriod;
-  apiSalesData?: { month: string; value: number }[];
-}> = ({ period, apiSalesData }) => {
-  const data = useMemo(() => {
-    if (period === '7D') return [
-      { name: 'Mon', revenue: 4200 }, { name: 'Tue', revenue: 3800 },
-      { name: 'Wed', revenue: 5100 }, { name: 'Thu', revenue: 4700 },
-      { name: 'Fri', revenue: 6200 }, { name: 'Sat', revenue: 7400 }, { name: 'Sun', revenue: 5900 },
-    ];
-    if (period === '30D') return Array.from({ length: 10 }, (_, i) => ({
-      name: `W${i + 1}`, revenue: Math.floor(Math.random() * 15000) + 8000,
-    }));
-    // 6M
-    if (apiSalesData && apiSalesData.length > 0) {
-      return apiSalesData.map(({ month, value }) => ({ name: month, revenue: value }));
-    }
-    // fallback to static
-    return [
-      { name: 'Oct', revenue: 32000 }, { name: 'Nov', revenue: 38500 },
-      { name: 'Dec', revenue: 41000 }, { name: 'Jan', revenue: 35200 },
-      { name: 'Feb', revenue: 42800 }, { name: 'Mar', revenue: 45200 },
-    ];
-  }, [period, apiSalesData]);
-
+  data: DashboardAnalyticsPoint[];
+}> = ({ data }) => {
   return (
     <Card
       title={<Text style={{ color: '#A0A0A0', fontWeight: 400 }}>Sales Trend</Text>}
       style={{ background: '#1f1f1f', border: '1px solid #2E2E2E', borderRadius: 12 }}
       styles={{ header: { borderBottom: '1px solid #2E2E2E' } }}
     >
+      {data.length === 0 ? emptyChart : (
       <ResponsiveContainer width="100%" height={260}>
         <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
           <defs>
@@ -93,91 +89,74 @@ const SalesTrendChart: React.FC<{
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#2E2E2E" />
-          <XAxis dataKey="name" stroke="#555" fontSize={12} tickLine={false} axisLine={false} />
+          <XAxis dataKey="label" stroke="#555" fontSize={12} tickLine={false} axisLine={false} interval="preserveStartEnd" />
           <YAxis stroke="#555" fontSize={12} tickLine={false} axisLine={false}
             tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
           <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => `₱${Number(v).toLocaleString()}`} />
-          <Area type="monotone" dataKey="revenue" stroke="#FFDE58" strokeWidth={2.5}
+          <Area type="monotone" dataKey="value" stroke="#FFDE58" strokeWidth={2.5}
             fillOpacity={1} fill="url(#colorRevenue)" />
         </AreaChart>
       </ResponsiveContainer>
+      )}
     </Card>
   );
 };
 
 /* ─── Order Volume Chart ─────────────────────────────────────────── */
 const OrderVolumeChart: React.FC<{
-  period: FilterPeriod;
-  apiVolumeData?: { month: string; value: number }[];
-}> = ({ period, apiVolumeData }) => {
-  const data = useMemo(() => {
-    if (period === '7D') return [
-      { name: 'Mon', count: 120 }, { name: 'Tue', count: 150 },
-      { name: 'Wed', count: 200 }, { name: 'Thu', count: 180 },
-      { name: 'Fri', count: 240 }, { name: 'Sat', count: 300 }, { name: 'Sun', count: 190 },
-    ];
-    if (period === '30D') return Array.from({ length: 10 }, (_, i) => ({
-      name: `W${i + 1}`, count: Math.floor(Math.random() * 200) + 50,
-    }));
-    // 6M
-    if (apiVolumeData && apiVolumeData.length > 0) {
-      return apiVolumeData.map(({ month, value }) => ({ name: month, count: value }));
-    }
-    // fallback to static
-    return [
-      { name: 'Oct', count: 85 }, { name: 'Nov', count: 102 },
-      { name: 'Dec', count: 115 }, { name: 'Jan', count: 94 },
-      { name: 'Feb', count: 110 }, { name: 'Mar', count: 128 },
-    ];
-  }, [period, apiVolumeData]);
-
+  data: DashboardAnalyticsPoint[];
+}> = ({ data }) => {
   return (
     <Card
       title={<Text style={{ color: '#A0A0A0', fontWeight: 400 }}>Order Volume</Text>}
       style={{ background: '#1f1f1f', border: '1px solid #2E2E2E', borderRadius: 12 }}
       styles={{ header: { borderBottom: '1px solid #2E2E2E' } }}
     >
+      {data.length === 0 ? emptyChart : (
       <ResponsiveContainer width="100%" height={260}>
         <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#2E2E2E" />
-          <XAxis dataKey="name" stroke="#555" fontSize={12} tickLine={false} axisLine={false} />
+          <XAxis dataKey="label" stroke="#555" fontSize={12} tickLine={false} axisLine={false} interval="preserveStartEnd" />
           <YAxis stroke="#555" fontSize={12} tickLine={false} axisLine={false} />
           <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
-          <Bar dataKey="count" fill="#42A5F5" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="value" fill="#42A5F5" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
+      )}
     </Card>
   );
 };
 
-/* ─── Storage Tracking Chart (recharts inline) ───────────────────── */
-const StorageChartRecharts: React.FC = () => {
-  const data = [
-    { size: 'A5',           Student: 350,  Employee: 80  },
-    { size: 'A4',           Student: 1800, Employee: 1250 },
-    { size: 'A3',           Student: 240,  Employee: 410  },
-    { size: 'A2',           Student: 90,   Employee: 280  },
-    { size: 'A1',           Student: 40,   Employee: 150  },
-    { size: 'Poster(20x30)', Student: 120, Employee: 300  },
-  ];
+/* ─── Paper Size Demand Chart ────────────────────────────────────── */
+const PaperSizeDemandChart: React.FC<{
+  data: DashboardAnalyticsPoint[];
+}> = ({ data }) => {
   return (
     <Card
-      title={<Text style={{ color: '#F0F0F0', fontWeight: 600 }}>Document Print Storage Tracking</Text>}
-      extra={<Text style={{ color: '#808080', fontSize: 12 }}>Print volume by dimension & user segment</Text>}
+      title={<Text style={{ color: '#F0F0F0', fontWeight: 600 }}>Paper Size Demand</Text>}
+      extra={<Text style={{ color: '#808080', fontSize: 12 }}>Paper order counts by size for the selected period</Text>}
       style={{ background: '#1f1f1f', border: '1px solid #2E2E2E', borderRadius: 12 }}
       styles={{ header: { borderBottom: 'none' } }}
     >
+      {data.length === 0 ? (
+        <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={<span style={{ color: '#808080' }}>No paper-spec data yet</span>}
+          />
+        </div>
+      ) : (
       <ResponsiveContainer width="100%" height={300}>
         <BarChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#2E2E2E" />
-          <XAxis dataKey="size" stroke="#555" fontSize={11} tickLine={false} axisLine={false} />
+          <XAxis dataKey="label" stroke="#555" fontSize={11} tickLine={false} axisLine={false} />
           <YAxis stroke="#555" fontSize={12} tickLine={false} axisLine={false} />
           <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
           <Legend wrapperStyle={{ paddingTop: 16, color: '#808080', fontSize: 13 }} />
-          <Bar dataKey="Student"  fill="#42A5F5" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="Employee" fill="#FFCA28" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="value" name="Orders" fill="#FFDE58" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
+      )}
     </Card>
   );
 };
@@ -186,19 +165,17 @@ const StorageChartRecharts: React.FC = () => {
 export function DashboardPage() {
   const [period, setPeriod] = useState<FilterPeriod>('7D');
   const [kpis, setKpis] = useState(mockKPIs);
+  const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [recentOrders, setRecentOrders] = useState<Order[]>(mockOrders.slice(0, 5));
-  const [analyticsData, setAnalyticsData] = useState<{
-    sales: { month: string; value: number }[];
-    volume: { month: string; value: number }[];
-  } | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [analyticsData, setAnalyticsData] = useState<DashboardAnalyticsResponse | null>(null);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
 
   useEffect(() => {
     void (async () => {
       try {
-        const [dashRes, analyticsRes, ordersRes] = await Promise.all([
+        const [dashRes, ordersRes] = await Promise.all([
           apiClient.get("/admin/dashboard"),
-          apiClient.get("/admin/analytics"),
           apiClient.get("/admin/orders"),
         ]);
         const d = dashRes.data;
@@ -209,26 +186,41 @@ export function DashboardPage() {
           delivered_count: d.deliveredCount,
           monthly_revenue: d.monthlyRevenue,
         });
-        setAnalyticsData({
-          sales: (analyticsRes.data.sales as { month: string; value: number }[]).map(
-            ({ month, value }) => ({ month, value })
-          ),
-          volume: (analyticsRes.data.volume as { month: string; value: number }[]).map(
-            ({ month, value }) => ({ month, value })
-          ),
-        });
-        setRecentOrders(normalizeOrders(ordersRes.data).slice(0, 5));
+        const normalizedOrders = normalizeOrders(ordersRes.data);
+        setAllOrders(normalizedOrders);
+        setRecentOrders(normalizedOrders.slice(0, 5));
       } catch {
         // keep mock fallback values already set in state
       } finally {
-        setLoading(false);
+        setDashboardLoading(false);
       }
     })();
   }, []);
 
+  useEffect(() => {
+    setAnalyticsLoading(true);
+
+    void (async () => {
+      try {
+        const analyticsRes = await apiClient.get(`/admin/analytics?period=${period}`);
+        if (hasModernDashboardAnalyticsPayload(analyticsRes.data)) {
+          setAnalyticsData(normalizeDashboardAnalytics(analyticsRes.data));
+        } else {
+          setAnalyticsData(null);
+        }
+      } catch {
+        setAnalyticsData(null);
+      } finally {
+        setAnalyticsLoading(false);
+      }
+    })();
+  }, [period]);
+
+  const effectiveAnalytics = analyticsData ?? deriveDashboardAnalyticsFromOrders(allOrders, period);
+
   const cardStyle = { background: '#1f1f1f', border: '1px solid #2E2E2E', borderRadius: 12 };
 
-  if (loading) {
+  if (dashboardLoading || (analyticsLoading && !analyticsData)) {
     return <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}><Spin size="large" /></div>;
   }
 
@@ -381,16 +373,16 @@ export function DashboardPage() {
         {/* ── Row 3: Sales Trend + Order Volume charts ───────────── */}
         <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
           <Col xs={24} lg={12}>
-            <SalesTrendChart period={period} apiSalesData={analyticsData?.sales} />
+            <SalesTrendChart data={effectiveAnalytics.sales} />
           </Col>
           <Col xs={24} lg={12}>
-            <OrderVolumeChart period={period} apiVolumeData={analyticsData?.volume} />
+            <OrderVolumeChart data={effectiveAnalytics.volume} />
           </Col>
         </Row>
 
-        {/* ── Row 4: Document Print Storage Tracking ─────────────── */}
+        {/* ── Row 4: Paper Size Demand ───────────────────────────── */}
         <div style={{ marginBottom: 24 }}>
-          <StorageChartRecharts />
+          <PaperSizeDemandChart data={effectiveAnalytics.paperSizeDemand} />
         </div>
 
         {/* ── Row 5: Recent Orders Table ─────────────────────────── */}

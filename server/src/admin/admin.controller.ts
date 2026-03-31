@@ -7,6 +7,7 @@ import {
   Body,
   UseGuards,
   ParseIntPipe,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -18,6 +19,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
+
+type AnalyticsPeriod = '7D' | '30D' | '6M';
+type AnalyticsPoint = { label: string; value: number };
+type MonthlyAnalyticsPoint = { month: string; value: number };
+
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -33,6 +40,180 @@ export class AdminController {
     @InjectRepository(User)
     private usersRepo: Repository<User>,
   ) {}
+
+  private normalizeAnalyticsPeriod(period?: string): AnalyticsPeriod {
+    return period === '7D' || period === '30D' || period === '6M'
+      ? period
+      : '6M';
+  }
+
+  private startOfUtcDay(date: Date) {
+    return new Date(
+      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+    );
+  }
+
+  private startOfUtcMonth(date: Date) {
+    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+  }
+
+  private addUtcDays(date: Date, days: number) {
+    const next = new Date(date);
+    next.setUTCDate(next.getUTCDate() + days);
+    return next;
+  }
+
+  private addUtcMonths(date: Date, months: number) {
+    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, 1));
+  }
+
+  private formatDayLabel(date: Date) {
+    return `${MONTH_LABELS[date.getUTCMonth()]} ${String(
+      date.getUTCDate(),
+    ).padStart(2, '0')}`;
+  }
+
+  private formatMonthLabel(date: Date) {
+    return MONTH_LABELS[date.getUTCMonth()];
+  }
+
+  private buildDailyBuckets(now: Date, days: number) {
+    const currentDay = this.startOfUtcDay(now);
+    const start = this.addUtcDays(currentDay, -(days - 1));
+
+    return Array.from({ length: days }, (_, index) => {
+      const date = this.addUtcDays(start, index);
+      const key = date.toISOString().slice(0, 10);
+
+      return {
+        key,
+        label: this.formatDayLabel(date),
+        start: date,
+      };
+    });
+  }
+
+  private buildMonthlyBuckets(now: Date, months: number) {
+    const currentMonth = this.startOfUtcMonth(now);
+    const start = this.addUtcMonths(currentMonth, -(months - 1));
+
+    return Array.from({ length: months }, (_, index) => {
+      const date = this.addUtcMonths(start, index);
+      const key = `${date.getUTCFullYear()}-${String(
+        date.getUTCMonth() + 1,
+      ).padStart(2, '0')}`;
+
+      return {
+        key,
+        label: this.formatMonthLabel(date),
+        start: date,
+      };
+    });
+  }
+
+  private buildAnalyticsBuckets(period: AnalyticsPeriod, now: Date) {
+    if (period === '7D') {
+      return this.buildDailyBuckets(now, 7);
+    }
+
+    if (period === '30D') {
+      return this.buildDailyBuckets(now, 30);
+    }
+
+    return this.buildMonthlyBuckets(now, 6);
+  }
+
+  private getBucketKey(date: Date, period: AnalyticsPeriod) {
+    if (period === '6M') {
+      return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(
+        2,
+        '0',
+      )}`;
+    }
+
+    return this.startOfUtcDay(date).toISOString().slice(0, 10);
+  }
+
+  private buildSeries(
+    orders: Order[],
+    period: AnalyticsPeriod,
+    metric: 'sales' | 'volume',
+    now: Date,
+  ): AnalyticsPoint[] {
+    const buckets = this.buildAnalyticsBuckets(period, now);
+    const values = new Map<string, number>(buckets.map((bucket) => [bucket.key, 0]));
+    const earliestBucket = buckets[0]?.start ?? now;
+
+    for (const order of orders) {
+      if (order.createdAt < earliestBucket) {
+        continue;
+      }
+
+      const bucketKey = this.getBucketKey(order.createdAt, period);
+
+      if (!values.has(bucketKey)) {
+        continue;
+      }
+
+      if (metric === 'sales') {
+        if (order.paymentStatus !== 'paid') {
+          continue;
+        }
+
+        values.set(bucketKey, (values.get(bucketKey) ?? 0) + Number(order.totalPrice));
+        continue;
+      }
+
+      values.set(bucketKey, (values.get(bucketKey) ?? 0) + 1);
+    }
+
+    return buckets.map((bucket) => ({
+      label: bucket.label,
+      value: values.get(bucket.key) ?? 0,
+    }));
+  }
+
+  private buildPaperSizeDemand(orders: Order[], period: AnalyticsPeriod, now: Date) {
+    const buckets = this.buildAnalyticsBuckets(period, now);
+    const earliestBucket = buckets[0]?.start ?? now;
+    const totals = new Map<string, number>();
+
+    for (const order of orders) {
+      if (
+        order.createdAt < earliestBucket ||
+        order.category !== 'paper' ||
+        !order.paperSpec ||
+        order.orderStatus === OrderStatus.CANCELLED ||
+        order.orderStatus === OrderStatus.FILE_DECLINED
+      ) {
+        continue;
+      }
+
+      const paperSize = order.paperSpec.paperSize.toUpperCase();
+      totals.set(paperSize, (totals.get(paperSize) ?? 0) + 1);
+    }
+
+    return Array.from(totals.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([label, value]) => ({ label, value }));
+  }
+
+  private buildMonthlySeries(
+    orders: Order[],
+    metric: 'sales' | 'volume',
+    now: Date,
+  ): MonthlyAnalyticsPoint[] {
+    return this.buildSeries(orders, '6M', metric, now).map(({ label, value }) => ({
+      month: label,
+      value,
+    }));
+  }
+
+  private async getAnalyticsOrders() {
+    return this.ordersRepo.find({
+      relations: ['paperSpec'],
+    });
+  }
 
   private mapOrder(o: Order) {
     return {
@@ -202,52 +383,31 @@ export class AdminController {
     }));
   }
 
-  // Sales analytics (mock 6-month data for now)
+  // Sales analytics for admin web dashboard
   @Get('analytics')
-  async getAnalytics() {
+  async getAnalytics(@Query('period') period?: string) {
+    const normalizedPeriod = this.normalizeAnalyticsPeriod(period);
+    const now = new Date();
+    const orders = await this.getAnalyticsOrders();
+
     return {
-      sales: [
-        { month: 'Oct', value: 45200 },
-        { month: 'Nov', value: 52800 },
-        { month: 'Dec', value: 68500 },
-        { month: 'Jan', value: 41300 },
-        { month: 'Feb', value: 57900 },
-        { month: 'Mar', value: 63400 },
-      ],
-      volume: [
-        { month: 'Oct', value: 38 },
-        { month: 'Nov', value: 45 },
-        { month: 'Dec', value: 62 },
-        { month: 'Jan', value: 35 },
-        { month: 'Feb', value: 48 },
-        { month: 'Mar', value: 55 },
-      ],
+      sales: this.buildSeries(orders, normalizedPeriod, 'sales', now),
+      volume: this.buildSeries(orders, normalizedPeriod, 'volume', now),
+      paperSizeDemand: this.buildPaperSizeDemand(orders, normalizedPeriod, now),
     };
   }
 
-  // Sales trend data (Flutter calls this endpoint)
+  // Sales trend data (mobile admin client calls this endpoint)
   @Get('dashboard/sales')
   async getSales() {
-    return [
-      { month: 'Oct', value: 45200 },
-      { month: 'Nov', value: 52800 },
-      { month: 'Dec', value: 68500 },
-      { month: 'Jan', value: 41300 },
-      { month: 'Feb', value: 57900 },
-      { month: 'Mar', value: 63400 },
-    ];
+    const orders = await this.getAnalyticsOrders();
+    return this.buildMonthlySeries(orders, 'sales', new Date());
   }
 
-  // Order volume data (Flutter calls this endpoint)
+  // Order volume data (mobile admin client calls this endpoint)
   @Get('dashboard/volume')
   async getVolume() {
-    return [
-      { month: 'Oct', value: 38 },
-      { month: 'Nov', value: 45 },
-      { month: 'Dec', value: 62 },
-      { month: 'Jan', value: 35 },
-      { month: 'Feb', value: 48 },
-      { month: 'Mar', value: 55 },
-    ];
+    const orders = await this.getAnalyticsOrders();
+    return this.buildMonthlySeries(orders, 'volume', new Date());
   }
 }

@@ -25,7 +25,7 @@ export class ServiceCategory {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
-  @Column({ length: 50, nullable: true })
+  @Column({ type: 'varchar', length: 50, nullable: true })
   icon: string | null;
 
   @Column({ name: 'base_rate', type: 'decimal', precision: 10, scale: 2, transformer: numberTransformer })

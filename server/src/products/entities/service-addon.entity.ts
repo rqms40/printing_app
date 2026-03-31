@@ -16,7 +16,7 @@ export class ServiceAddon {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ name: 'category_id', nullable: true })
+  @Column({ name: 'category_id', type: 'int', nullable: true })
   categoryId: number | null;
 
   @ManyToOne(() => ServiceCategory, (cat) => cat.addons, {
