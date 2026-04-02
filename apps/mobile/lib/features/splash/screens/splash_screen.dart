@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -25,9 +27,15 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     with TickerProviderStateMixin {
   // Animation controllers for each dot + wordmark + fadeout
   late final List<AnimationController> _dotControllers;
-  late final AnimationController _wordmarkController;
-  late final AnimationController _subtitleController;
+  late final AnimationController _expandController;
+  late final AnimationController _yellowTextController;
   late final AnimationController _fadeOutController;
+  late final AudioPlayer _introPlayer;
+  late final AudioPlayer _outroPlayer;
+
+  final GlobalKey _yellowDotKey = GlobalKey();
+  final GlobalKey _stackKey = GlobalKey();
+  Offset? _yellowDotPosition;
 
   // Dot appearance order (row, col) — spiral from bottom-left
   static const _dotOrder = [
@@ -42,12 +50,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     (0, 2), // top-right (yellow accent)
   ];
 
-  static const _dotDelay = 120; // ms between each dot
-  static const _dotDuration = 350; // ms for each dot's color-up animation
+  static const _dotDelay = 90; // ms between each dot
+  static const _dotDuration = 400; // ms for each dot's color-up animation
 
   @override
   void initState() {
     super.initState();
+    _introPlayer = AudioPlayer();
+    _outroPlayer = AudioPlayer();
 
     _dotControllers = List.generate(
       9,
@@ -57,14 +67,15 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       ),
     );
 
-    _wordmarkController = AnimationController(
+    _expandController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 600),
+      reverseDuration: const Duration(milliseconds: 600),
     );
 
-    _subtitleController = AnimationController(
+    _yellowTextController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 350),
     );
 
     _fadeOutController = AnimationController(
@@ -76,30 +87,51 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   Future<void> _startAnimation() async {
-    // Wait a beat before starting
+    // Preload the audio to completely eliminate startup playback delay
+    await _introPlayer.setSource(AssetSource('audio/Intro_SF.m4a'));
+    _outroPlayer.setSource(AssetSource('audio/Outro_SF.m4a'));
+
+    // Wait a beat before starting visually
     await Future.delayed(const Duration(milliseconds: 300));
+
+    // Play intro sound synced with dot animations via resume() since it's preloaded
+    _introPlayer.resume().catchError((_) {});
 
     // Animate dots one by one
     for (int i = 0; i < 9; i++) {
       if (!mounted) return;
       _dotControllers[i].forward();
-      await Future.delayed(const Duration(milliseconds: _dotDelay));
+      if (i < 8) {
+        await Future.delayed(const Duration(milliseconds: _dotDelay));
+      }
     }
 
-    // Wait a moment after all dots are lit
-    await Future.delayed(const Duration(milliseconds: 200));
+    // The yellow dot (i=8) has just started bounding. We barely wait
+    // so the zoom is triggered as soon as the dot lights up!
+    await Future.delayed(const Duration(milliseconds: 120));
     if (!mounted) return;
 
-    // Show wordmark
-    _wordmarkController.forward();
-    await Future.delayed(const Duration(milliseconds: 200));
+    // Get yellow dot position and expand it relative to Stack
+    final RenderBox? dotBox = _yellowDotKey.currentContext?.findRenderObject() as RenderBox?;
+    final RenderBox? stackBox = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    if (dotBox != null && stackBox != null) {
+      setState(() {
+        final globalDotCenter = dotBox.localToGlobal(dotBox.size.center(Offset.zero));
+        _yellowDotPosition = stackBox.globalToLocal(globalDotCenter);
+      });
+    }
+
+    _expandController.forward();
+    await Future.delayed(const Duration(milliseconds: 700));
     if (!mounted) return;
 
-    // Show subtitle
-    _subtitleController.forward();
+    // Show GRID and powered by text
+    _yellowTextController.forward();
 
-    // Hold for a moment
-    await Future.delayed(const Duration(milliseconds: 1200));
+    // Play outro sound when the GRID text shows up
+    _outroPlayer.resume().catchError((_) {});
+
+    await Future.delayed(const Duration(milliseconds: 1500));
     if (!mounted) return;
 
     // Fade everything out
@@ -133,9 +165,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     for (final c in _dotControllers) {
       c.dispose();
     }
-    _wordmarkController.dispose();
-    _subtitleController.dispose();
+    _expandController.dispose();
+    _yellowTextController.dispose();
     _fadeOutController.dispose();
+    _introPlayer.dispose();
+    _outroPlayer.dispose();
     super.dispose();
   }
 
@@ -173,124 +207,150 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         opacity: Tween(begin: 1.0, end: 0.0).animate(
           CurvedAnimation(parent: _fadeOutController, curve: Curves.easeIn),
         ),
-        child: SizedBox.expand(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Animated dot grid
-              SizedBox(
-                width: logoSize,
-                height: logoSize,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(3, (row) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: spacing / 2),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(3, (col) {
-                          final ctrlIndex = controllerMap[(row, col)]!;
-                          final finalColor = dotColors[row][col];
+        child: Stack(
+          key: _stackKey,
+          textDirection: TextDirection.ltr,
+          children: [
+            // Main Content
+            SizedBox.expand(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Animated dot grid
+                  SizedBox(
+                    width: logoSize,
+                    height: logoSize,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(3, (row) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: spacing / 2),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(3, (col) {
+                              final ctrlIndex = controllerMap[(row, col)]!;
+                              final finalColor = dotColors[row][col];
 
-                          return Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: spacing / 2),
-                            child: _DotAnimator(
-                              animation: CurvedAnimation(
-                                parent: _dotControllers[ctrlIndex],
-                                curve: Curves.easeOutCubic,
-                              ),
-                              builder: (context, t) {
-                                return Transform.scale(
-                                  scale: 0.4 + (0.6 * t),
-                                  child: Container(
-                                    width: dotSize,
-                                    height: dotSize,
-                                    decoration: BoxDecoration(
-                                      color: Color.lerp(ghost, finalColor, t),
-                                      shape: BoxShape.circle,
-                                    ),
+                              return Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: spacing / 2),
+                                child: _DotAnimator(
+                                  animation: CurvedAnimation(
+                                    parent: _dotControllers[ctrlIndex],
+                                    curve: Curves.easeOutCubic,
                                   ),
-                                );
-                              },
-                            ),
-                          );
-                        }),
-                      ),
-                    );
-                  }),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // GRID wordmark
-              FadeTransition(
-                opacity: CurvedAnimation(
-                  parent: _wordmarkController,
-                  curve: Curves.easeOut,
-                ),
-                child: SlideTransition(
-                  position: Tween(
-                    begin: const Offset(0, 0.15),
-                    end: Offset.zero,
-                  ).animate(CurvedAnimation(
-                    parent: _wordmarkController,
-                    curve: Curves.easeOutCubic,
-                  )),
-                  child: Text(
-                    'GRID',
-                    style: TextStyle(
-                      fontFamily: 'Satoshi',
-                      fontSize: 36,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 6,
-                      color: fg,
+                                  builder: (context, t) {
+                                    return Transform.scale(
+                                      scale: 0.4 + (0.6 * t),
+                                      child: Container(
+                                        key: (row == 0 && col == 2) ? _yellowDotKey : null,
+                                        width: dotSize,
+                                        height: dotSize,
+                                        decoration: BoxDecoration(
+                                          color: Color.lerp(ghost, finalColor, t),
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              );
+                            }),
+                          ),
+                        );
+                      }),
                     ),
                   ),
-                ),
-              ),
-
-              const SizedBox(height: AppSpacing.sm),
-
-              // Subtitle
-              FadeTransition(
-                opacity: CurvedAnimation(
-                  parent: _subtitleController,
-                  curve: Curves.easeOut,
-                ),
-                child: Text(
-                  'Premium Printing Services',
-                  style: AppTypography.caption.copyWith(
-                    color: colors.onSurfaceDim,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      bottomNavigationBar: FadeTransition(
-        opacity: Tween(begin: 1.0, end: 0.0).animate(
-          CurvedAnimation(parent: _fadeOutController, curve: Curves.easeIn),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.md),
-            child: FadeTransition(
-              opacity: CurvedAnimation(
-                parent: _subtitleController,
-                curve: Curves.easeOut,
-              ),
-              child: Text(
-                'Powered by GRID',
-                style: AppTypography.overline.copyWith(
-                  color: colors.onSurfaceDim,
-                ),
-                textAlign: TextAlign.center,
+                ],
               ),
             ),
-          ),
+
+            // Expanding yellow layer placed ON TOP of content
+            if (_yellowDotPosition != null)
+              AnimatedBuilder(
+                animation: _expandController,
+                builder: (context, child) {
+                  // easeIn overlaps nicely with the end of the previous bounce
+                  final curvedValue = Curves.easeIn.transform(_expandController.value);
+                  final scale = 1.0 + (curvedValue * 150);
+
+                  return Positioned(
+                    left: _yellowDotPosition!.dx - (dotSize / 2),
+                    top: _yellowDotPosition!.dy - (dotSize / 2),
+                    child: IgnorePointer(
+                      child: Transform.scale(
+                        scale: scale,
+                        child: Container(
+                          width: dotSize,
+                          height: dotSize,
+                          decoration: const BoxDecoration(
+                            color: yellow,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+
+            // Top level texts (appear after engulf)
+            FadeTransition(
+              opacity: CurvedAnimation(
+                parent: _yellowTextController,
+                curve: Curves.easeOut,
+              ),
+              child: SizedBox.expand(
+                child: Stack(
+                  children: [
+                    // Center "GRID" text
+                    const Align(
+                      alignment: Alignment.center,
+                      child: Text(
+                        'GRID',
+                        style: TextStyle(
+                          fontFamily: 'Satoshi',
+                          fontSize: 48,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 6,
+                          color: Color(0xFF1E1E1E), // Dark
+                        ),
+                      ),
+                    ),
+                    
+                    // Bottom "Powered by GRID" text and tagline
+                    Align(
+                      alignment: Alignment.bottomCenter,
+                      child: SafeArea(
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Powered by GRID',
+                                style: AppTypography.overline.copyWith(
+                                  color: const Color(0xFF1E1E1E).withValues(alpha: 0.6),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'MAPPING THE FUTURE OF PRINTING',
+                                style: AppTypography.overline.copyWith(
+                                  color: const Color(0xFF1E1E1E).withValues(alpha: 0.6),
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

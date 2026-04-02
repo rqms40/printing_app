@@ -54,41 +54,32 @@ class CategoryScreen extends ConsumerWidget {
                 .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
               const SizedBox(height: AppSpacing.xl),
               Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 280),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _CategoryCard(
-                            illustration: PrinterIllustration(
-                              size: 80,
-                              color: colors.accent,
-                            ),
-                            title: 'Paper Printing',
-                            description: 'Documents, posters, photos',
-                            onTap: () => _selectCategory(context, ref, 'paper'),
-                          ).animate()
-                            .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
-                            .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
-                        ),
-                        const SizedBox(width: AppSpacing.md),
-                        Expanded(
-                          child: _CategoryCard(
-                            illustration: ThreeDCubeIllustration(
-                              size: 80,
-                              color: colors.accent,
-                            ),
-                            title: '3D Printing',
-                            description: 'Models, prototypes, figures',
-                            onTap: () => _selectCategory(context, ref, '3d'),
-                          ).animate()
-                            .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
-                            .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
-                        ),
-                      ],
-                    ),
-                  ),
+                child: ListView(
+                  children: [
+                    _CategoryCard(
+                      illustration: PrinterIllustration(
+                        size: 60,
+                        color: colors.accent,
+                      ),
+                      title: 'Paper Printing',
+                      description: 'Documents, posters, photos',
+                      onTap: () => _selectCategory(context, ref, 'paper'),
+                    ).animate()
+                      .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
+                      .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
+                    const SizedBox(height: AppSpacing.md),
+                    _CategoryCard(
+                      illustration: ThreeDCubeIllustration(
+                        size: 60,
+                        color: colors.accent,
+                      ),
+                      title: '3D Printing',
+                      description: 'Models, prototypes, figures',
+                      onTap: () => _selectCategory(context, ref, '3d'),
+                    ).animate()
+                      .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
+                      .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
+                  ],
                 ),
               ),
             ],
@@ -136,32 +127,28 @@ class _CategoryCard extends StatelessWidget {
     return AppCard(
       onTap: onTap,
       padding: const EdgeInsets.all(AppSpacing.xl),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Row(
         children: [
           illustration,
-          const SizedBox(height: AppSpacing.md),
-          Text(
-            title,
-            style: AppTypography.h3.copyWith(color: colors.onBackground),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            description,
-            style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          // Decorative accent line
-          Container(
-            width: 32,
-            height: 1.5,
-            decoration: BoxDecoration(
-              color: colors.accent.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(1),
+          const SizedBox(width: AppSpacing.xl),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  title,
+                  style: AppTypography.h3.copyWith(color: colors.onBackground),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  description,
+                  style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
+                ),
+              ],
             ),
           ),
+          Icon(Icons.chevron_right, color: colors.onSurfaceDim),
         ],
       ),
     );
