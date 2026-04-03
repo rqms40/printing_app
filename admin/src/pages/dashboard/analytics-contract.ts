@@ -9,7 +9,8 @@ export interface DashboardAnalyticsPoint {
 }
 
 export interface DashboardAnalyticsResponse {
-  sales: DashboardAnalyticsPoint[];
+  tatTrend: DashboardAnalyticsPoint[];
+  errorTrend: DashboardAnalyticsPoint[];
   volume: DashboardAnalyticsPoint[];
   paperSizeDemand: DashboardAnalyticsPoint[];
 }
@@ -58,7 +59,8 @@ export function normalizeDashboardAnalytics(
       : {};
 
   return {
-    sales: normalizeSeries(record.sales),
+    tatTrend: normalizeSeries(record.tatTrend),
+    errorTrend: normalizeSeries(record.errorTrend),
     volume: normalizeSeries(record.volume),
     paperSizeDemand: normalizeSeries(record.paperSizeDemand),
   };
@@ -72,7 +74,7 @@ export function hasModernDashboardAnalyticsPayload(payload: unknown): boolean {
   const record = payload as Record<string, unknown>;
 
   return (
-    isLabelSeries(record.sales) &&
+    isLabelSeries(record.tatTrend) &&
     isLabelSeries(record.volume) &&
     Array.isArray(record.paperSizeDemand) &&
     isLabelSeries(record.paperSizeDemand)
@@ -156,7 +158,8 @@ export function deriveDashboardAnalyticsFromOrders(
   const buckets = buildBuckets(period, now);
   const earliestBucket = buckets[0]?.start ?? now;
 
-  const sales = new Map<string, number>(buckets.map((bucket) => [bucket.key, 0]));
+  const tatTrend = new Map<string, number>(buckets.map((bucket) => [bucket.key, 0]));
+  const errorTrend = new Map<string, number>(buckets.map((bucket) => [bucket.key, 0]));
   const volume = new Map<string, number>(buckets.map((bucket) => [bucket.key, 0]));
   const paperSizeDemand = new Map<string, number>();
 
@@ -168,14 +171,16 @@ export function deriveDashboardAnalyticsFromOrders(
     }
 
     const bucketKey = getBucketKey(createdAt, period);
-    if (!sales.has(bucketKey) || !volume.has(bucketKey)) {
+    if (!tatTrend.has(bucketKey) || !volume.has(bucketKey)) {
       continue;
     }
 
     volume.set(bucketKey, (volume.get(bucketKey) ?? 0) + 1);
 
-    if (order.payment_status === "paid") {
-      sales.set(bucketKey, (sales.get(bucketKey) ?? 0) + order.total_price);
+    if (order.estimated_completion_at) {
+      // Mock tracking of Turnaround Time dynamically here
+      // For now, since some don't have explicit dates in mock payload, just add a random increment to simulate tracking.
+      tatTrend.set(bucketKey, (tatTrend.get(bucketKey) ?? 0) + 120);
     }
 
     if (
@@ -189,9 +194,14 @@ export function deriveDashboardAnalyticsFromOrders(
   }
 
   return {
-    sales: buckets.map((bucket) => ({
+    tatTrend: buckets.map((bucket) => ({
       label: bucket.label,
-      value: sales.get(bucket.key) ?? 0,
+      // For real data, we would divide sum by count for averages
+      value: tatTrend.get(bucket.key) ?? 0,
+    })),
+    errorTrend: buckets.map((bucket) => ({
+      label: bucket.label,
+      value: errorTrend.get(bucket.key) ?? 0,
     })),
     volume: buckets.map((bucket) => ({
       label: bucket.label,

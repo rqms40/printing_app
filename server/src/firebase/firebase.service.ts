@@ -1,14 +1,14 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
-import { initializeApp, cert, App } from 'firebase-admin/app';
-import { getMessaging, Messaging } from 'firebase-admin/messaging';
+// @ts-ignore
+import * as admin from 'firebase-admin';
 import * as path from 'path';
 import * as fs from 'fs';
 
 @Injectable()
 export class FirebaseService implements OnModuleInit {
   private readonly logger = new Logger(FirebaseService.name);
-  private app: App | null = null;
-  private messaging: Messaging | null = null;
+  private app: any = null;
+  private messaging: any = null;
 
   onModuleInit() {
     const keyPath = path.resolve(
@@ -23,10 +23,10 @@ export class FirebaseService implements OnModuleInit {
     }
 
     try {
-      this.app = initializeApp({
-        credential: cert(keyPath),
+      this.app = admin.initializeApp({
+        credential: admin.credential.cert(keyPath),
       });
-      this.messaging = getMessaging(this.app);
+      this.messaging = admin.messaging(this.app);
       this.logger.log('Firebase Admin SDK initialized successfully');
     } catch (error) {
       this.logger.error('Failed to initialize Firebase Admin SDK', error);

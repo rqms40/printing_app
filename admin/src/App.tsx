@@ -20,6 +20,7 @@ import {
   CarOutlined,
   TeamOutlined,
   ShoppingOutlined,
+  WalletOutlined,
 } from "@ant-design/icons";
 
 import { gridTheme } from "@/config/theme";
@@ -37,6 +38,7 @@ import { UserList } from "@/pages/users/list";
 import { ProductList } from "@/pages/products/list";
 import { ProductOptionsPage } from "@/pages/products/options";
 import { AddonList } from "@/pages/products-addons/list";
+import { CreditRequestsPage } from "@/pages/credit-requests";
 
 function App() {
   return (
@@ -80,6 +82,14 @@ function App() {
                 meta: {
                   label: "Users",
                   icon: <TeamOutlined />,
+                },
+              },
+              {
+                name: "credit-requests",
+                list: "/credit-requests",
+                meta: {
+                  label: "Top-Up Requests",
+                  icon: <WalletOutlined />,
                 },
               },
               // "products" is a collapsible group only — no list route
@@ -157,6 +167,7 @@ function App() {
                   <Route path=":id/options" element={<ProductOptionsPage />} />
                 </Route>
                 <Route path="/products-addons" element={<AddonList />} />
+                <Route path="/credit-requests" element={<CreditRequestsPage />} />
               </Route>
 
               <Route

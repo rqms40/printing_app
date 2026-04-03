@@ -40,6 +40,7 @@ import 'package:printing_app/features/customer/profile/screens/account_details_s
 import 'package:printing_app/features/customer/profile/screens/support_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/terms_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/privacy_screen.dart';
+import 'package:printing_app/features/customer/profile/screens/top_up_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Driver screens
@@ -304,6 +305,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/customer/profile/privacy',
         pageBuilder: (_, state) =>
             slideTransition(const PrivacyScreen(), state),
+      ),
+      GoRoute(
+        path: '/customer/profile/top-up',
+        pageBuilder: (_, state) =>
+            slideTransition(const TopUpScreen(), state),
       ),
 
       // -----------------------------------------------------------------------
