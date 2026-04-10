@@ -37,7 +37,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   final GlobalKey _stackKey = GlobalKey();
   Offset? _yellowDotPosition;
 
-
   // Dot appearance order (row, col) — spiral from bottom-left
   static const _dotOrder = [
     (2, 0), // bottom-left
@@ -146,14 +145,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
     final authState = ref.read(authProvider);
     if (authState.status == AuthStatus.authenticated) {
-      final role = authState.user!.role;
-      if (role == 'driver') {
-        context.go('/driver/deliveries');
-      } else if (role == 'admin') {
-        context.go('/admin/dashboard');
-      } else {
-        context.go('/customer/home');
-      }
+      context.go('/onboarding');
     } else if (authState.status == AuthStatus.profileIncomplete) {
       context.go('/auth/profile-setup');
     } else {
