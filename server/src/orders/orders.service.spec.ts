@@ -8,6 +8,7 @@ import { ThreeDSpec } from './entities/three-d-specs.entity';
 import { OrdersGateway } from './orders.gateway';
 import { FirebaseService } from '../firebase/firebase.service';
 import { UsersService } from '../users/users.service';
+import { CreditsService } from '../credits/credits.service';
 
 describe('OrdersService', () => {
   let service: OrdersService;
@@ -17,6 +18,7 @@ describe('OrdersService', () => {
   let gateway: Partial<OrdersGateway>;
   let firebaseService: Partial<FirebaseService>;
   let usersService: Partial<UsersService>;
+  let creditsService: Partial<CreditsService>;
 
   const mockOrder = {
     id: 1,
@@ -55,6 +57,9 @@ describe('OrdersService', () => {
     usersService = {
       getFcmToken: jest.fn().mockResolvedValue(null),
     };
+    creditsService = {
+      subtractCredits: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -65,6 +70,7 @@ describe('OrdersService', () => {
         { provide: OrdersGateway, useValue: gateway },
         { provide: FirebaseService, useValue: firebaseService },
         { provide: UsersService, useValue: usersService },
+        { provide: CreditsService, useValue: creditsService },
       ],
     }).compile();
 
