@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -70,78 +69,36 @@ const kQuickActions = <QuickActionItem>[
 // AppBottomNav
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Bottom navigation bar with a "+" FAB in the center slot.
+/// Bottom navigation bar.
 ///
-/// The toggle state, panel, teardrop, and close button are all managed by
-/// [ScaffoldWithNav] so they can truly float above the page.
-/// [AppBottomNav] just renders the bar and emits tap events.
-class AppBottomNav extends StatefulWidget {
+/// When [showFab] is true (customer), renders 2 items + a 72 px center gap
+/// (where [ScaffoldWithNav] places its floating FAB) + 2 items.
+/// When [showFab] is false (driver / admin), renders all items evenly.
+class AppBottomNav extends StatelessWidget {
   const AppBottomNav({
     super.key,
     required this.items,
     required this.currentIndex,
     required this.onTap,
-    this.onToggle,
-    this.isOpen = false,
+    this.showFab = false,
   });
 
   final List<NavItem> items;
   final int currentIndex;
   final ValueChanged<int> onTap;
-  final ValueChanged<bool>? onToggle;
 
-  /// True when the quick-action panel is open. The FAB fades out so the
-  /// teardrop + close button from [ScaffoldWithNav] take its place.
-  final bool isOpen;
-
-  @override
-  State<AppBottomNav> createState() => _AppBottomNavState();
-}
-
-class _AppBottomNavState extends State<AppBottomNav>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _fabCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _fabCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-  }
-
-  @override
-  void didUpdateWidget(AppBottomNav old) {
-    super.didUpdateWidget(old);
-    if (widget.isOpen != old.isOpen) {
-      widget.isOpen ? _fabCtrl.forward() : _fabCtrl.reverse();
-    }
-  }
-
-  @override
-  void dispose() {
-    _fabCtrl.dispose();
-    super.dispose();
-  }
+  /// When true a 72 px gap is left in the centre for the floating FAB.
+  final bool showFab;
 
   AppColorSet _colors(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark
           ? AppColors.dark
           : AppColors.light;
 
-  void _handleFabTap() {
-    HapticFeedback.lightImpact();
-    widget.onToggle?.call(!widget.isOpen);
-  }
-
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
     final viewPadding = MediaQuery.of(context).viewPadding;
-
-    final leftItems = widget.items.take(2).toList();
-    final rightItems = widget.items.skip(2).toList();
 
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(padding: viewPadding),
@@ -157,70 +114,49 @@ class _AppBottomNavState extends State<AppBottomNav>
           minimum: const EdgeInsets.only(bottom: 4),
           child: Padding(
             padding: const EdgeInsets.only(top: 6),
-            child: Row(
-              children: [
-                // ── Left nav items ─────────────────────────────────────────
-                ...List.generate(leftItems.length, (i) {
-                  return _NavItemTile(
-                    item: leftItems[i],
-                    isActive: i == widget.currentIndex,
-                    onTap: () => widget.onTap(i),
-                    colors: colors,
-                  );
-                }),
-
-                // ── Center FAB slot ─────────────────────────────────────────
-                // Fades out when open so the ScaffoldWithNav overlay takes over
-                SizedBox(
-                  width: 72,
-                  height: 56,
-                  child: Center(
-                    child: AnimatedOpacity(
-                      opacity: widget.isOpen ? 0.0 : 1.0,
-                      duration: const Duration(milliseconds: 200),
-                      child: GestureDetector(
-                        onTap: _handleFabTap,
-                        child: Container(
-                          width: 48,
-                          height: 48,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFFFDE58),
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Color(0x55FFDE58),
-                                blurRadius: 12,
-                                spreadRadius: 0,
-                                offset: Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.add_rounded,
-                            size: 28,
-                            color: Colors.black,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-                // ── Right nav items ─────────────────────────────────────────
-                ...List.generate(rightItems.length, (i) {
-                  final globalIndex = i + leftItems.length;
-                  return _NavItemTile(
-                    item: rightItems[i],
-                    isActive: globalIndex == widget.currentIndex,
-                    onTap: () => widget.onTap(globalIndex),
-                    colors: colors,
-                  );
-                }),
-              ],
-            ),
+            child: showFab ? _buildWithGap(colors) : _buildFlat(colors),
           ),
         ),
       ),
+    );
+  }
+
+  /// 2 left items + centre gap + 2 right items.
+  Widget _buildWithGap(AppColorSet colors) {
+    final leftItems = items.take(2).toList();
+    final rightItems = items.skip(2).toList();
+    return Row(
+      children: [
+        ...List.generate(leftItems.length, (i) => _NavItemTile(
+          item: leftItems[i],
+          isActive: i == currentIndex,
+          onTap: () => onTap(i),
+          colors: colors,
+        )),
+        // Empty slot — floating FAB sits here from ScaffoldWithNav's Stack
+        const SizedBox(width: 72, height: 56),
+        ...List.generate(rightItems.length, (i) {
+          final globalIndex = i + leftItems.length;
+          return _NavItemTile(
+            item: rightItems[i],
+            isActive: globalIndex == currentIndex,
+            onTap: () => onTap(globalIndex),
+            colors: colors,
+          );
+        }),
+      ],
+    );
+  }
+
+  /// All items evenly distributed — no FAB gap.
+  Widget _buildFlat(AppColorSet colors) {
+    return Row(
+      children: List.generate(items.length, (i) => _NavItemTile(
+        item: items[i],
+        isActive: i == currentIndex,
+        onTap: () => onTap(i),
+        colors: colors,
+      )),
     );
   }
 }

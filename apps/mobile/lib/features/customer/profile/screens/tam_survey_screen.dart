@@ -67,6 +67,7 @@ extension LikertScaleExt on LikertScale {
     }
   }
 
+  // ignore: library_private_types_in_public_api
   _FaceExpression get expression {
     switch (this) {
       case LikertScale.stronglyDisagree:
@@ -368,12 +369,12 @@ class _QuestionCard extends StatelessWidget {
         curve: Curves.easeOut,
         decoration: BoxDecoration(
           color: hasAnswer
-              ? answer!.faceColor.withOpacity(0.1)
+              ? answer!.faceColor.withValues(alpha: 0.1)
               : colors.surface,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: hasAnswer
-                ? answer!.faceColor.withOpacity(0.4)
+                ? answer!.faceColor.withValues(alpha: 0.4)
                 : colors.outline,
             width: hasAnswer ? 1.5 : 1,
           ),
@@ -529,7 +530,7 @@ class _SubmittedView extends StatelessWidget {
                 width: 100,
                 height: 100,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF6BCB77).withOpacity(0.15),
+                  color: const Color(0xFF6BCB77).withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -752,7 +753,7 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
     final isDark =
         ThemeData.estimateBrightnessForColor(bg) == Brightness.dark;
     final textColor = isDark ? Colors.white : Colors.black87;
-    final dimColor = textColor.withOpacity(0.55);
+    final dimColor = textColor.withValues(alpha: 0.55);
 
     return Scaffold(
       backgroundColor: bg,
@@ -773,7 +774,7 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: textColor.withOpacity(0.12),
+                        color: textColor.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
@@ -830,7 +831,7 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
             AnimatedBuilder(
               animation: Listenable.merge(
                   [_faceController, _pulseController]),
-              builder: (_, __) => Transform.scale(
+              builder: (_, _) => Transform.scale(
                 scale: _faceScale.value * _pulse.value,
                 child: _AnimatedFace(
                   expression: _currentScale.expression,
@@ -883,7 +884,7 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
                               shape: BoxShape.circle,
                               color: isActive
                                   ? textColor
-                                  : textColor.withOpacity(0.28),
+                                  : textColor.withValues(alpha: 0.28),
                             ),
                           ),
                         ),
@@ -898,8 +899,8 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
                       trackHeight: 5,
                       thumbShape: _CustomThumbShape(color: textColor),
                       activeTrackColor: textColor,
-                      inactiveTrackColor: textColor.withOpacity(0.22),
-                      overlayColor: textColor.withOpacity(0.14),
+                      inactiveTrackColor: textColor.withValues(alpha: 0.22),
+                      overlayColor: textColor.withValues(alpha: 0.14),
                       overlayShape:
                           const RoundSliderOverlayShape(overlayRadius: 22),
                     ),
@@ -943,7 +944,7 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
               child: _ConfirmButton(
                 onTap: _confirm,
                 textColor: textColor,
-                bgColor: textColor.withOpacity(0.14),
+                bgColor: textColor.withValues(alpha: 0.14),
               ),
             ),
 
@@ -990,7 +991,7 @@ class _CustomThumbShape extends SliderComponentShape {
       center + const Offset(0, 2),
       14,
       Paint()
-        ..color = Colors.black.withOpacity(0.18)
+        ..color = Colors.black.withValues(alpha: 0.18)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
     );
 
@@ -1005,7 +1006,7 @@ class _CustomThumbShape extends SliderComponentShape {
         ..color = (color == Colors.white
                 ? Colors.black
                 : Colors.white)
-            .withOpacity(0.35),
+            .withValues(alpha: 0.35),
     );
   }
 }
@@ -1076,7 +1077,7 @@ class _FacePainter extends CustomPainter {
         _drawCircle(canvas, paint, cx - size.width * 0.23, cy, 31);
         _drawCircle(canvas, paint, cx + size.width * 0.23, cy, 31);
         final shinePaint = Paint()
-          ..color = color.withOpacity(0.32)
+          ..color = color.withValues(alpha: 0.32)
           ..style = PaintingStyle.fill;
         _drawCircle(
             canvas, shinePaint, cx - size.width * 0.23 + 9, cy - 10, 8);
@@ -1088,7 +1089,7 @@ class _FacePainter extends CustomPainter {
     _drawEllipse(
       canvas,
       Paint()
-        ..color = color.withOpacity(0.45)
+        ..color = color.withValues(alpha: 0.45)
         ..style = PaintingStyle.fill,
       cx,
       cy + size.height * 0.12,
@@ -1161,7 +1162,7 @@ class _ConfirmButtonState extends State<_ConfirmButton> {
             color: widget.bgColor,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: widget.textColor.withOpacity(0.3),
+              color: widget.textColor.withValues(alpha: 0.3),
               width: 1.5,
             ),
           ),

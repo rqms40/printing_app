@@ -44,7 +44,7 @@ describe("notification-ws", () => {
     subscribeToNotifications(() => {});
 
     expect(mockIo).toHaveBeenCalledOnce();
-    const [url, opts] = mockIo.mock.calls[0];
+    const [url, opts] = mockIo.mock.calls[0] as unknown as [string, Record<string, unknown>];
     expect(url).toContain("/ws/notifications");
     expect(opts).toMatchObject({ auth: { token: "test-jwt-token" } });
 

@@ -3,8 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:printing_app/features/driver/deliveries/providers/deliveries_provider.dart';
 import 'package:printing_app/features/driver/deliveries/screens/deliveries_screen.dart';
-import 'package:printing_app/shared/models/delivery_assignment.dart';
-import 'package:printing_app/shared/models/enums.dart';
 
 /// Wraps a widget in a ProviderScope + MaterialApp for testing.
 Widget _wrap(Widget child, {List<Override>? overrides}) {
@@ -34,7 +32,6 @@ void main() {
 
     testWidgets('shows empty state when no deliveries', (tester) async {
       // Override with an empty list.
-      final emptyNotifier = DeliveriesNotifier();
       // Clear all assignments by using a custom override.
       await tester.pumpWidget(
         ProviderScope(

@@ -106,13 +106,11 @@ class _HeroTile extends StatelessWidget {
           fit: StackFit.expand,
           clipBehavior: Clip.hardEdge,
           children: [
-            // GIF Background at reduced opacity
-            Opacity(
-              opacity: 0.45,
-              child: Image.asset(
-                'assets/animations/bentobox.gif',
-                fit: BoxFit.cover,
-              ),
+            // GIF Background
+            Image.asset(
+              'assets/animations/bentobox.gif',
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
             ),
 
             // Dark scrim gradient so text remains readable
@@ -122,8 +120,8 @@ class _HeroTile extends StatelessWidget {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withValues(alpha: 0.1),
-                    Colors.black.withValues(alpha: 0.55),
+                    Colors.black.withValues(alpha: 0.15),
+                    Colors.black.withValues(alpha: 0.65),
                   ],
                 ),
               ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/routes/page_transitions.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/shared/widgets/app_bottom_nav.dart';
@@ -167,29 +168,30 @@ final routerProvider = Provider<GoRouter>((ref) {
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => ScaffoldWithNav(
           currentIndex: navigationShell.currentIndex,
+          showFab: true,
           onTap: (i) => navigationShell.goBranch(
             i,
             initialLocation: i == navigationShell.currentIndex,
           ),
           items: const [
             NavItem(
-              icon: Icons.home_outlined,
-              activeIcon: Icons.home_rounded,
+              icon: HugeIcons.strokeRoundedHome01,
+              activeIcon: HugeIcons.strokeRoundedHome01,
               label: 'Home',
             ),
             NavItem(
-              icon: Icons.receipt_long_outlined,
-              activeIcon: Icons.receipt_long_rounded,
+              icon: HugeIcons.strokeRoundedPackage,
+              activeIcon: HugeIcons.strokeRoundedPackage,
               label: 'Orders',
             ),
             NavItem(
-              icon: Icons.notifications_none_rounded,
-              activeIcon: Icons.notifications_rounded,
+              icon: HugeIcons.strokeRoundedNotification02,
+              activeIcon: HugeIcons.strokeRoundedNotification02,
               label: 'Alerts',
             ),
             NavItem(
-              icon: Icons.person_outline_rounded,
-              activeIcon: Icons.person_rounded,
+              icon: HugeIcons.strokeRoundedUser,
+              activeIcon: HugeIcons.strokeRoundedUser,
               label: 'Profile',
             ),
           ],
@@ -327,24 +329,25 @@ final routerProvider = Provider<GoRouter>((ref) {
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => ScaffoldWithNav(
           currentIndex: navigationShell.currentIndex,
+          showFab: false,
           onTap: (i) => navigationShell.goBranch(
             i,
             initialLocation: i == navigationShell.currentIndex,
           ),
           items: const [
             NavItem(
-              icon: Icons.local_shipping_outlined,
-              activeIcon: Icons.local_shipping_rounded,
+              icon: HugeIcons.strokeRoundedDeliveryTruck02,
+              activeIcon: HugeIcons.strokeRoundedDeliveryTruck02,
               label: 'Deliveries',
             ),
             NavItem(
-              icon: Icons.history_rounded,
-              activeIcon: Icons.history_rounded,
+              icon: HugeIcons.strokeRoundedClock01,
+              activeIcon: HugeIcons.strokeRoundedClock01,
               label: 'History',
             ),
             NavItem(
-              icon: Icons.person_outline_rounded,
-              activeIcon: Icons.person_rounded,
+              icon: HugeIcons.strokeRoundedUser,
+              activeIcon: HugeIcons.strokeRoundedUser,
               label: 'Profile',
             ),
           ],
@@ -402,24 +405,25 @@ final routerProvider = Provider<GoRouter>((ref) {
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => ScaffoldWithNav(
           currentIndex: navigationShell.currentIndex,
+          showFab: false,
           onTap: (i) => navigationShell.goBranch(
             i,
             initialLocation: i == navigationShell.currentIndex,
           ),
           items: const [
             NavItem(
-              icon: Icons.dashboard_outlined,
-              activeIcon: Icons.dashboard_rounded,
+              icon: HugeIcons.strokeRoundedDashboardSquare01,
+              activeIcon: HugeIcons.strokeRoundedDashboardSquare01,
               label: 'Dashboard',
             ),
             NavItem(
-              icon: Icons.list_alt_rounded,
-              activeIcon: Icons.list_alt_rounded,
+              icon: HugeIcons.strokeRoundedFile02,
+              activeIcon: HugeIcons.strokeRoundedFile02,
               label: 'Queue',
             ),
             NavItem(
-              icon: Icons.person_outline_rounded,
-              activeIcon: Icons.person_rounded,
+              icon: HugeIcons.strokeRoundedUser,
+              activeIcon: HugeIcons.strokeRoundedUser,
               label: 'Profile',
             ),
           ],

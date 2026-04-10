@@ -110,7 +110,7 @@ void main() {
         fullName: 'Test',
         role: 'customer',
       );
-      final state = AuthState(
+      const state = AuthState(
         status: AuthStatus.authenticated,
         user: user,
       );
@@ -121,7 +121,7 @@ void main() {
     });
 
     test('copyWith clears errorMessage when not passed', () {
-      final state = AuthState(
+      const state = AuthState(
         status: AuthStatus.unauthenticated,
         errorMessage: 'some error',
       );

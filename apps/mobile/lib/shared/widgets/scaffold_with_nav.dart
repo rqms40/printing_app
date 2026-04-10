@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing_app/shared/providers/api_status_provider.dart';
@@ -26,12 +27,17 @@ class ScaffoldWithNav extends ConsumerStatefulWidget {
     required this.currentIndex,
     required this.items,
     required this.onTap,
+    this.showFab = false,
   });
 
   final Widget child;
   final int currentIndex;
   final List<NavItem> items;
   final ValueChanged<int> onTap;
+
+  /// When true the yellow floating FAB, quick-action panel, and backdrop are
+  /// rendered. Set false for driver / admin shells.
+  final bool showFab;
 
   @override
   ConsumerState<ScaffoldWithNav> createState() => _ScaffoldWithNavState();
@@ -115,6 +121,10 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
     });
   }
 
+  // Floating FAB dimensions
+  static const _openFabSize = 56.0;
+  static const _openFabR = _openFabSize / 2; // 28
+
   @override
   Widget build(BuildContext context) {
     final isOnline = ref.watch(connectivityProvider);
@@ -125,10 +135,14 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
     // Total nav bar height (reported by SafeArea + padding)
     final navBarHeight = _navIntrinsicH + bottomInset;
 
+    // Open-FAB: bottom edge 20 px inside the nav bar so the button rises
+    // above the bar — centre is ~8 px above the bar's top edge.
+    final openFabBottom = navBarHeight - 20;
+
     // Close-FAB:
     //   Centre from screen bottom = 38 + bottomInset
     //   Container height = fabDiameter = 48
-    //   Container bottom from screen = centre - fabR = 38 + bottomInset - 24 = 14 + bottomInset
+    //   Container bottom from screen = centre - fabR = 14 + bottomInset
     final closeFabBottom = 14.0 + bottomInset;
 
     return Scaffold(
@@ -168,36 +182,38 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
           ),
 
           // ── Backdrop (blur + dark tint, tap to close) ────────────────────
-          AnimatedBuilder(
-            animation: _panelCtrl,
-            builder: (context, child) {
-              if (_panelCtrl.value == 0) return const SizedBox.shrink();
-              return Positioned.fill(
-                child: GestureDetector(
-                  onTap: _close,
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(
-                      sigmaX: _blurAnim.value,
-                      sigmaY: _blurAnim.value,
-                    ),
-                    child: FadeTransition(
-                      opacity: _fadeAnim,
-                      child: Container(
-                          color: Colors.black.withValues(alpha: 0.32)),
+          if (widget.showFab)
+            AnimatedBuilder(
+              animation: _panelCtrl,
+              builder: (context, child) {
+                if (_panelCtrl.value == 0) return const SizedBox.shrink();
+                return Positioned.fill(
+                  child: GestureDetector(
+                    onTap: _close,
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(
+                        sigmaX: _blurAnim.value,
+                        sigmaY: _blurAnim.value,
+                      ),
+                      child: FadeTransition(
+                        opacity: _fadeAnim,
+                        child: Container(
+                            color: Colors.black.withValues(alpha: 0.32)),
+                      ),
                     ),
                   ),
-                ),
-              );
-            },
-          ),
+                );
+              },
+            ),
 
           // ── Yellow quick-action panel ───────────────────────────────────
-          QuickActionPanel(
-            slideAnim: _slideAnim,
-            fadeAnim: _fadeAnim,
-            navBarHeight: navBarHeight,
-            onActionTap: _handleActionTap,
-          ),
+          if (widget.showFab)
+            QuickActionPanel(
+              slideAnim: _slideAnim,
+              fadeAnim: _fadeAnim,
+              navBarHeight: navBarHeight,
+              onActionTap: _handleActionTap,
+            ),
 
           // ── Nav bar ──────────────────────────────────────────────────────
           Positioned(
@@ -207,59 +223,109 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
             child: AppBottomNav(
               items: widget.items,
               currentIndex: widget.currentIndex,
+              showFab: widget.showFab,
               onTap: (i) {
                 _close();
                 widget.onTap(i);
               },
-              isOpen: _isOpen,
-              onToggle: _onToggle,
             ),
           ),
 
-
-
-          // ── Close-FAB (pastel-red ×, centred on teardrop bottom circle) ─
-          Positioned(
-            bottom: closeFabBottom,
-            left: 0,
-            right: 0,
-            height: _fabR * 2, // 48px
-            child: AnimatedBuilder(
-              animation: _panelCtrl,
-              builder: (context, child) {
-                return Transform.scale(
-                  scale: _tearScaleAnim.value,
-                  child: FadeTransition(opacity: _fadeAnim, child: child),
-                );
-              },
+          // ── Floating open-FAB (yellow +, rises above the nav bar) ────────
+          if (widget.showFab)
+            Positioned(
+              bottom: openFabBottom,
+              left: 0,
+              right: 0,
+              height: _openFabSize,
               child: Center(
-                child: GestureDetector(
-                  onTap: _close,
-                  child: Container(
-                    width: _fabR * 2,
-                    height: _fabR * 2,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFF6B6B), // pastel red
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFFFF6B6B).withValues(alpha: 0.5),
-                          blurRadius: 14,
-                          spreadRadius: 1,
-                          offset: const Offset(0, 2),
+                child: AnimatedOpacity(
+                  opacity: _isOpen ? 0.0 : 1.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: IgnorePointer(
+                    ignoring: _isOpen,
+                    child: GestureDetector(
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        _onToggle(true);
+                      },
+                      child: Container(
+                        width: _openFabSize,
+                        height: _openFabSize,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFDE58),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFFFDE58)
+                                  .withValues(alpha: 0.55),
+                              blurRadius: 18,
+                              spreadRadius: 0,
+                              offset: const Offset(0, 4),
+                            ),
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.14),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.close_rounded,
-                      size: 24,
-                      color: Colors.white,
+                        child: const Icon(
+                          Icons.add_rounded,
+                          size: 30,
+                          color: Colors.black,
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
+
+          // ── Close-FAB (pastel-red ×, centred on teardrop bottom circle) ─
+          if (widget.showFab)
+            Positioned(
+              bottom: closeFabBottom,
+              left: 0,
+              right: 0,
+              height: _fabR * 2, // 48px
+              child: AnimatedBuilder(
+                animation: _panelCtrl,
+                builder: (context, child) {
+                  return Transform.scale(
+                    scale: _tearScaleAnim.value,
+                    child: FadeTransition(opacity: _fadeAnim, child: child),
+                  );
+                },
+                child: Center(
+                  child: GestureDetector(
+                    onTap: _close,
+                    child: Container(
+                      width: _fabR * 2,
+                      height: _fabR * 2,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF6B6B), // pastel red
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color:
+                                const Color(0xFFFF6B6B).withValues(alpha: 0.5),
+                            blurRadius: 14,
+                            spreadRadius: 1,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.close_rounded,
+                        size: 24,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

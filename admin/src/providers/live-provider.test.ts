@@ -48,7 +48,7 @@ describe("live-provider", () => {
     subscribeToOrderUpdates(() => {});
 
     expect(mockIo).toHaveBeenCalledOnce();
-    const [url, opts] = mockIo.mock.calls[0];
+    const [url, opts] = mockIo.mock.calls[0] as unknown as [string, Record<string, unknown>];
     expect(url).toContain("/ws/orders");
     expect(opts).toMatchObject({ auth: { token: "test-jwt-token" } });
 
