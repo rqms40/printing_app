@@ -135,15 +135,15 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
     // Total nav bar height (reported by SafeArea + padding)
     final navBarHeight = _navIntrinsicH + bottomInset;
 
-    // Open-FAB: bottom edge 20 px inside the nav bar so the button rises
-    // above the bar — centre is ~8 px above the bar's top edge.
-    final openFabBottom = navBarHeight - 20;
+    // Open-FAB: bottom edge sits deeper inside the nav bar so the button
+    // is lower — centre is ~6 px below the bar's top edge, still above items.
+    final openFabBottom = navBarHeight - 42;
 
     // Close-FAB:
     //   Centre from screen bottom = 38 + bottomInset
     //   Container height = fabDiameter = 48
     //   Container bottom from screen = centre - fabR = 14 + bottomInset
-    final closeFabBottom = 14.0 + bottomInset;
+    final closeFabBottom = 12.0 + bottomInset;
 
     return Scaffold(
       body: Stack(
