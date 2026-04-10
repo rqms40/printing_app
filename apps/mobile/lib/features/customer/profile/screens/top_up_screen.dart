@@ -93,7 +93,7 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      var formData;
+      FormData? formData;
       if (kIsWeb) {
         final bytes = await _proofImage!.readAsBytes();
         formData = FormData.fromMap({
@@ -191,7 +191,7 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
                   Container(
                     padding: const EdgeInsets.all(AppSpacing.md),
                     decoration: BoxDecoration(
-                      color: colors.accent.withOpacity(0.1),
+                      color: colors.accent.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(

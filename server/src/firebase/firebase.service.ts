@@ -1,14 +1,15 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
-// @ts-ignore
 import * as admin from 'firebase-admin';
+import type { App } from 'firebase-admin/app';
+import type { Messaging } from 'firebase-admin/messaging';
 import * as path from 'path';
 import * as fs from 'fs';
 
 @Injectable()
 export class FirebaseService implements OnModuleInit {
   private readonly logger = new Logger(FirebaseService.name);
-  private app: any = null;
-  private messaging: any = null;
+  private app: App | null = null;
+  private messaging: Messaging | null = null;
 
   onModuleInit() {
     const keyPath = path.resolve(

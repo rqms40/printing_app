@@ -11,7 +11,7 @@ import {
 describe("normalizeDashboardAnalytics", () => {
   it("maps the backend analytics payload into chart-safe series arrays", () => {
     const analytics = normalizeDashboardAnalytics({
-      sales: [
+      tatTrend: [
         { label: "Mar 31", value: 100 },
         { label: "Mar 30", value: 80 },
       ],
@@ -24,7 +24,7 @@ describe("normalizeDashboardAnalytics", () => {
       ],
     });
 
-    expect(analytics.sales).toEqual([
+    expect(analytics.tatTrend).toEqual([
       { label: "Mar 31", value: 100 },
       { label: "Mar 30", value: 80 },
     ]);
@@ -37,12 +37,12 @@ describe("normalizeDashboardAnalytics", () => {
 
   it("drops malformed analytics entries instead of leaking fake chart data", () => {
     const analytics = normalizeDashboardAnalytics({
-      sales: [{ label: "Mar 31", value: "100" }, { bad: true }],
+      tatTrend: [{ label: "Mar 31", value: "100" }, { bad: true }],
       volume: null,
       paperSizeDemand: [{ label: "A4", value: 2 }],
     });
 
-    expect(analytics.sales).toEqual([]);
+    expect(analytics.tatTrend).toEqual([]);
     expect(analytics.volume).toEqual([]);
     expect(analytics.paperSizeDemand).toEqual([{ label: "A4", value: 2 }]);
   });
@@ -50,14 +50,14 @@ describe("normalizeDashboardAnalytics", () => {
   it("detects the stale legacy analytics payload shape served by the old backend", () => {
     expect(
       hasModernDashboardAnalyticsPayload({
-        sales: [{ month: "Oct", value: 45200 }],
+        tatTrend: [{ month: "Oct", value: 45200 }],
         volume: [{ month: "Oct", value: 38 }],
       }),
     ).toBe(false);
 
     expect(
       hasModernDashboardAnalyticsPayload({
-        sales: [{ label: "Mar 31", value: 100 }],
+        tatTrend: [{ label: "Mar 31", value: 100 }],
         volume: [{ label: "Mar 31", value: 2 }],
         paperSizeDemand: [],
       }),
@@ -133,11 +133,11 @@ describe("normalizeDashboardAnalytics", () => {
       new Date("2026-03-31T12:00:00.000Z"),
     );
 
-    expect(analytics.sales).toEqual(
+    expect(analytics.tatTrend).toEqual(
       expect.arrayContaining([
-        { label: "Mar 31", value: 100 },
+        { label: "Mar 31", value: 0 },
         { label: "Mar 30", value: 0 },
-        { label: "Mar 29", value: 200 },
+        { label: "Mar 29", value: 0 },
       ]),
     );
     expect(analytics.volume).toEqual(
