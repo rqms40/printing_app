@@ -47,5 +47,50 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <script src="flutter_bootstrap.js" async></script>
+
+  <!--
+    AudioContext Unlock — Chrome and Safari block Web Audio until a user
+    gesture. This script listens for the very first interaction anywhere
+    on the page and resumes every suspended AudioContext, including the
+    one created by Flutter's audioplayers package. Once unlocked it
+    removes itself so there is zero ongoing overhead.
+  -->
+  <script>
+    (function () {
+      var unlocked = false;
+
+      function unlock() {
+        if (unlocked) return;
+        unlocked = true;
+
+        // Resume every AudioContext that currently exists or will exist
+        var AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+
+        // Resume any already-created contexts (e.g. from audioplayers)
+        if (window._flutter_audio_ctx) {
+          window._flutter_audio_ctx.resume();
+        }
+
+        // Patch the constructor so any future AudioContext starts resumed
+        var OriginalAudioContext = AudioContext;
+        window.AudioContext = window.webkitAudioContext = function () {
+          var ctx = new OriginalAudioContext();
+          ctx.resume();
+          window._flutter_audio_ctx = ctx;
+          return ctx;
+        };
+
+        // Remove listeners — job done
+        ['click', 'touchstart', 'touchend', 'keydown', 'pointerdown'].forEach(function (evt) {
+          document.removeEventListener(evt, unlock, true);
+        });
+      }
+
+      ['click', 'touchstart', 'touchend', 'keydown', 'pointerdown'].forEach(function (evt) {
+        document.addEventListener(evt, unlock, { capture: true, once: false, passive: true });
+      });
+    })();
+  </script>
 </body>
 </html>

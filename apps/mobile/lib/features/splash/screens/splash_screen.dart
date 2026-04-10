@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -89,17 +88,15 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   Future<void> _startAnimation() async {
-    // On web, AudioContext requires a user gesture — skip audio silently.
-    if (!kIsWeb) {
-      await _introPlayer.setSource(AssetSource('audio/Intro_SF.m4a'));
-      _outroPlayer.setSource(AssetSource('audio/Outro_SF.m4a'));
-    }
+    // Preload the audio to completely eliminate startup playback delay
+    await _introPlayer.setSource(AssetSource('audio/Intro_SF.m4a'));
+    _outroPlayer.setSource(AssetSource('audio/Outro_SF.m4a'));
 
     // Wait a beat before starting visually
     await Future.delayed(const Duration(milliseconds: 300));
 
-    // Play intro sound (native only)
-    if (!kIsWeb) _introPlayer.resume().catchError((_) {});
+    // Play intro sound synced with dot animations via resume() since it's preloaded
+    _introPlayer.resume().catchError((_) {});
 
     // Animate dots one by one
     for (int i = 0; i < 9; i++) {
@@ -132,8 +129,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     // Show GRID and powered by text
     _yellowTextController.forward();
 
-    // Play outro sound when the GRID text shows up (native only)
-    if (!kIsWeb) _outroPlayer.resume().catchError((_) {});
+    // Play outro sound when the GRID text shows up
+    _outroPlayer.resume().catchError((_) {});
 
     await Future.delayed(const Duration(milliseconds: 1500));
     if (!mounted) return;
