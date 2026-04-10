@@ -8,6 +8,8 @@ import { ThreeDSpec } from './entities/three-d-specs.entity';
 import { OrdersGateway } from './orders.gateway';
 import { FirebaseService } from '../firebase/firebase.service';
 import { UsersService } from '../users/users.service';
+import { CreditsService } from '../credits/credits.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 describe('OrdersService', () => {
   let service: OrdersService;
@@ -17,6 +19,8 @@ describe('OrdersService', () => {
   let gateway: Partial<OrdersGateway>;
   let firebaseService: Partial<FirebaseService>;
   let usersService: Partial<UsersService>;
+  let creditsService: Partial<CreditsService>;
+  let notificationsService: Partial<NotificationsService>;
 
   const mockOrder = {
     id: 1,
@@ -55,6 +59,12 @@ describe('OrdersService', () => {
     usersService = {
       getFcmToken: jest.fn().mockResolvedValue(null),
     };
+    creditsService = {
+      subtractCredits: jest.fn().mockResolvedValue(undefined),
+    };
+    notificationsService = {
+      createForAllAdmins: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -65,6 +75,8 @@ describe('OrdersService', () => {
         { provide: OrdersGateway, useValue: gateway },
         { provide: FirebaseService, useValue: firebaseService },
         { provide: UsersService, useValue: usersService },
+        { provide: CreditsService, useValue: creditsService },
+        { provide: NotificationsService, useValue: notificationsService },
       ],
     }).compile();
 
@@ -97,6 +109,18 @@ describe('OrdersService', () => {
 
       expect(repo.create).toHaveBeenCalledWith(
         expect.objectContaining({ orderId: 'ORD-10043' }),
+      );
+    });
+
+    it('fires createForAllAdmins with order_placed type after saving', async () => {
+      repo.count.mockResolvedValue(0);
+      repo.create.mockReturnValue(mockOrder);
+      repo.save.mockResolvedValue(mockOrder);
+
+      await service.create({ userId: 1 } as Partial<Order>);
+
+      expect(notificationsService.createForAllAdmins).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'order_placed', orderRef: mockOrder.orderId }),
       );
     });
   });
@@ -140,6 +164,39 @@ describe('OrdersService', () => {
         mockOrder,
       );
       expect(result).toEqual(mockOrder);
+    });
+  });
+
+  describe('updateStatus notifications', () => {
+    it('notifies admins when status becomes cancelled', async () => {
+      repo.update.mockResolvedValue(undefined as any);
+      repo.findOneOrFail.mockResolvedValue(mockOrder);
+
+      await service.updateStatus(1, 'cancelled');
+
+      expect(notificationsService.createForAllAdmins).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'order_cancelled', orderRef: mockOrder.orderId }),
+      );
+    });
+
+    it('notifies admins when status becomes file_declined', async () => {
+      repo.update.mockResolvedValue(undefined as any);
+      repo.findOneOrFail.mockResolvedValue(mockOrder);
+
+      await service.updateStatus(1, 'file_declined');
+
+      expect(notificationsService.createForAllAdmins).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'order_declined', orderRef: mockOrder.orderId }),
+      );
+    });
+
+    it('does NOT call createForAllAdmins for other statuses', async () => {
+      repo.update.mockResolvedValue(undefined as any);
+      repo.findOneOrFail.mockResolvedValue(mockOrder);
+
+      await service.updateStatus(1, 'printing_in_progress');
+
+      expect(notificationsService.createForAllAdmins).not.toHaveBeenCalled();
     });
   });
 });

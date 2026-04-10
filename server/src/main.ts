@@ -8,8 +8,11 @@ import helmet from 'helmet';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Security headers
-  app.use(helmet());
+  // Security headers — skip entirely in dev; plain HTTP on a remote IP is incompatible
+  // with HSTS, COOP, and CSP upgrade-insecure-requests that helmet enables by default.
+  if (process.env.NODE_ENV === 'production') {
+    app.use(helmet());
+  }
 
   // Global validation pipe
   app.useGlobalPipes(
@@ -40,8 +43,8 @@ async function bootstrap() {
   SwaggerModule.setup('docs', app, document);
 
   const port = process.env.PORT || 3000;
-  await app.listen(port);
-  console.log(`🟢 GRID API running on http://localhost:${port}`);
-  console.log(`📚 Swagger docs at http://localhost:${port}/docs`);
+  await app.listen(port, '0.0.0.0');
+  console.log(`🟢 GRID API running on http://0.0.0.0:${port}`);
+  console.log(`📚 Swagger docs at http://0.0.0.0:${port}/docs`);
 }
 void bootstrap();

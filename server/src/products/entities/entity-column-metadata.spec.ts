@@ -8,10 +8,12 @@ describe('product entity column metadata', () => {
     const columns = getMetadataArgsStorage().columns;
 
     const serviceCategoryIcon = columns.find(
-      (column) => column.target === ServiceCategory && column.propertyName === 'icon',
+      (column) =>
+        column.target === ServiceCategory && column.propertyName === 'icon',
     );
     const serviceAddonCategoryId = columns.find(
-      (column) => column.target === ServiceAddon && column.propertyName === 'categoryId',
+      (column) =>
+        column.target === ServiceAddon && column.propertyName === 'categoryId',
     );
 
     expect(serviceCategoryIcon?.options.type).toBe('varchar');

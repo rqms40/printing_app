@@ -2,6 +2,8 @@ import type { AuthProvider } from "@refinedev/core";
 import { API_URL } from "@/config/constants";
 import { TOKEN_KEY } from "@/providers/api-client";
 import { normalizeIdentity } from "@/utils/api-normalizers";
+import { disconnectLive } from "@/providers/live-provider";
+import { disconnectNotifications } from "@/providers/notification-ws";
 
 export const authProvider: AuthProvider = {
   login: async ({ email, password }) => {
@@ -44,6 +46,8 @@ export const authProvider: AuthProvider = {
 
   logout: async () => {
     localStorage.removeItem(TOKEN_KEY);
+    disconnectLive();
+    disconnectNotifications();
     return { success: true, redirectTo: "/login" };
   },
 

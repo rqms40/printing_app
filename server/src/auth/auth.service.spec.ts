@@ -4,11 +4,13 @@ import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException, ConflictException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { NotificationsService } from '../notifications/notifications.service';
 
 describe('AuthService', () => {
   let authService: AuthService;
   let usersService: Partial<UsersService>;
   let jwtService: Partial<JwtService>;
+  let notificationsService: Partial<NotificationsService>;
 
   const mockUser = {
     id: 1,
@@ -18,6 +20,9 @@ describe('AuthService', () => {
   };
 
   beforeEach(async () => {
+    notificationsService = {
+      createForAllAdmins: jest.fn().mockResolvedValue(undefined),
+    };
     usersService = {
       findByEmail: jest.fn(),
       create: jest.fn(),
@@ -31,6 +36,7 @@ describe('AuthService', () => {
         AuthService,
         { provide: UsersService, useValue: usersService },
         { provide: JwtService, useValue: jwtService },
+        { provide: NotificationsService, useValue: notificationsService },
       ],
     }).compile();
 
@@ -68,6 +74,19 @@ describe('AuthService', () => {
       await expect(
         authService.register('test@example.com', 'password123'),
       ).rejects.toThrow(ConflictException);
+    });
+
+    it('fires createForAllAdmins with new_user type after registering', async () => {
+      (usersService.create as jest.Mock).mockResolvedValue(mockUser);
+
+      await authService.register('test@example.com', 'password123');
+
+      expect(notificationsService.createForAllAdmins).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'new_user',
+          metadata: expect.objectContaining({ userId: mockUser.id, email: mockUser.email }),
+        }),
+      );
     });
   });
 

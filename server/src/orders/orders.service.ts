@@ -8,6 +8,7 @@ import { OrdersGateway } from './orders.gateway';
 import { FirebaseService } from '../firebase/firebase.service';
 import { UsersService } from '../users/users.service';
 import { CreditsService } from '../credits/credits.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class OrdersService {
@@ -22,6 +23,7 @@ export class OrdersService {
     private firebaseService: FirebaseService,
     private usersService: UsersService,
     private creditsService: CreditsService,
+    private notificationsService: NotificationsService,
   ) {}
 
   async findByUser(userId: number): Promise<Order[]> {
@@ -42,20 +44,28 @@ export class OrdersService {
     },
   ): Promise<Order> {
     const { paperSpecs, threeDSpecs, ...orderData } = data;
-    
+
     // Validate and deduct credits if payment method is credits
-    if (orderData.paymentMethod === 'credits' && orderData.totalPrice && orderData.totalPrice > 0) {
+    if (
+      orderData.paymentMethod === 'credits' &&
+      orderData.totalPrice &&
+      orderData.totalPrice > 0
+    ) {
       if (!orderData.userId) {
-         throw new Error('User ID is required to process credit payment');
+        throw new Error('User ID is required to process credit payment');
       }
-      
+
       const userId = orderData.userId;
       const amountCredits = orderData.totalPrice; // 1 PHP = 1 Credit equivalent locally
-      
+
       // Attempt subtraction, will throw BadRequestException if insufficient
-      await this.creditsService.subtractCredits(userId, amountCredits, 'order_placed');
+      await this.creditsService.subtractCredits(
+        userId,
+        amountCredits,
+        'order_placed',
+      );
     }
-    
+
     const count = await this.ordersRepo.count();
     const orderId = `ORD-${(10001 + count).toString().padStart(5, '0')}`;
     const order = this.ordersRepo.create({ ...orderData, orderId });
@@ -78,6 +88,23 @@ export class OrdersService {
 
     // Notify via WebSocket — admin queue sees new orders in real-time
     void this.ordersGateway.notifyOrderUpdate(savedOrder.orderId, savedOrder);
+
+    // Notify admins of new order
+    try {
+      await this.notificationsService.createForAllAdmins({
+        title: 'New Order Placed',
+        message: `Order ${savedOrder.orderId} has been placed.`,
+        type: 'order_placed',
+        orderRef: savedOrder.orderId,
+        metadata: {
+          orderId: savedOrder.id,
+          amount: Number(savedOrder.totalPrice ?? 0),
+          category: savedOrder.category ?? null,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`Admin notification failed for order ${savedOrder.orderId}: ${err}`);
+    }
 
     return savedOrder;
   }
@@ -147,6 +174,27 @@ export class OrdersService {
 
     // Emit WebSocket update
     void this.ordersGateway.notifyOrderUpdate(order.orderId, order);
+
+    // Notify admins of cancellation / decline
+    if (
+      status === OrderStatus.CANCELLED ||
+      status === OrderStatus.FILE_DECLINED
+    ) {
+      const type =
+        status === OrderStatus.CANCELLED ? 'order_cancelled' : 'order_declined';
+      try {
+        await this.notificationsService.createForAllAdmins({
+          title: status === OrderStatus.CANCELLED ? 'Order Cancelled' : 'Order Declined',
+          message: `Order ${order.orderId} was ${status === OrderStatus.CANCELLED ? 'cancelled' : 'declined'}.`,
+          type,
+          orderRef: order.orderId,
+          metadata: { orderId: order.id, toStatus: status },
+        });
+      } catch (err) {
+        this.logger.warn(`Admin notification failed for status ${status}: ${err}`);
+      }
+    }
+
     return order;
   }
 }

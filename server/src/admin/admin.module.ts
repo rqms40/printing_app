@@ -8,12 +8,20 @@ import { ThreeDSpec } from '../orders/entities/three-d-specs.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
 import { OrdersModule } from '../orders/orders.module';
 import { DriversModule } from '../drivers/drivers.module';
+import { CreditsModule } from '../credits/credits.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Order, User, PaperSpec, ThreeDSpec, OrderStatusHistory]),
+    TypeOrmModule.forFeature([
+      Order,
+      User,
+      PaperSpec,
+      ThreeDSpec,
+      OrderStatusHistory,
+    ]),
     OrdersModule,
     DriversModule,
+    CreditsModule,
   ],
   controllers: [AdminController],
 })

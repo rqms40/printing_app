@@ -2,13 +2,11 @@ import {
   Card,
   InputNumber,
   Button,
-  Typography,
   Form,
   Skeleton
 } from "antd";
 import { useApiUrl, useCustom, useCustomMutation, useNotification } from "@refinedev/core";
 
-const { Title, Text } = Typography;
 
 export const CreditSettingsCard = () => {
   const apiUrl = useApiUrl();

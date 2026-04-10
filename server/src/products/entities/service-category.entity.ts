@@ -1,7 +1,11 @@
 // server/src/products/entities/service-category.entity.ts
 import {
-  Entity, PrimaryGeneratedColumn, Column,
-  CreateDateColumn, UpdateDateColumn, OneToMany,
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  OneToMany,
 } from 'typeorm';
 import { SpecOption } from './spec-option.entity';
 import { ServiceAddon } from './service-addon.entity';
@@ -28,7 +32,13 @@ export class ServiceCategory {
   @Column({ type: 'varchar', length: 50, nullable: true })
   icon: string | null;
 
-  @Column({ name: 'base_rate', type: 'decimal', precision: 10, scale: 2, transformer: numberTransformer })
+  @Column({
+    name: 'base_rate',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    transformer: numberTransformer,
+  })
   baseRate: number;
 
   @Column({ name: 'max_file_size_mb', default: 50 })

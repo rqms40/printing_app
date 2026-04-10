@@ -61,6 +61,11 @@ import 'package:printing_app/features/admin/driver_management/screens/driver_ass
 import 'package:printing_app/features/admin/profile/screens/admin_profile_screen.dart';
 
 // ---------------------------------------------------------------------------
+// Onboarding screen
+// ---------------------------------------------------------------------------
+import 'package:printing_app/features/onboarding/screens/onboarding_screen.dart';
+
+// ---------------------------------------------------------------------------
 // Navigation keys (keep shell state across navigations)
 // ---------------------------------------------------------------------------
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -94,9 +99,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           authState.status == AuthStatus.profileIncomplete;
       final isOnAuth = state.matchedLocation.startsWith('/auth');
       final isOnSplash = state.matchedLocation == '/splash';
+      final isOnOnboarding = state.matchedLocation == '/onboarding';
 
-      // Let the splash screen through without redirect
+      // Let the splash screen and onboarding through without redirect
       if (isOnSplash) return null;
+      if (isOnOnboarding && isAuth) return null;
 
       // Unauthenticated users must go to login
       if (!isAuth && !isProfileIncomplete && !isOnAuth) {
@@ -109,16 +116,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/auth/profile-setup';
       }
 
-      // Authenticated users on auth pages get redirected to their role home
+      // Authenticated users on auth pages go through onboarding first
       if (isAuth && isOnAuth) {
-        switch (authState.user!.role) {
-          case 'customer':
-            return '/customer/home';
-          case 'driver':
-            return '/driver/deliveries';
-          case 'admin':
-            return '/admin/dashboard';
-        }
+        return '/onboarding';
       }
 
       return null; // no redirect
@@ -150,6 +150,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/auth/profile-setup',
         pageBuilder: (_, state) =>
             fadeTransition(const ProfileSetupScreen(), state),
+      ),
+
+      // -----------------------------------------------------------------------
+      // Onboarding (shown every login, before role home)
+      // -----------------------------------------------------------------------
+      GoRoute(
+        path: '/onboarding',
+        pageBuilder: (_, state) =>
+            fadeTransition(const OnboardingScreen(), state),
       ),
 
       // -----------------------------------------------------------------------

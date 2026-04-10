@@ -109,6 +109,18 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
 - View driver location on live map during delivery ("on the way" phase)
 - Contact support (basic link/info)
 - Accept terms of service / privacy policy (RA 10173 compliance)
+- Select occupation type at signup — required, minimal UI (Student: Architecture/Engineering/Other, Construction Worker, Office Worker, Others with specify field) — editable in profile
+- Set print scale preference per paper order (Fit to Paper / Actual Size)
+- Auto-delete / purge uploaded file after order completion (user-triggered privacy control)
+- Receive automatic CMYK/RGB color mode warning on file upload (PDF, JPG, PNG) — customer-facing warning only, no admin gate
+- Receive automatic file dimension mismatch warning when uploaded file dimensions don't match selected paper size — shows warning, does not block order
+- Use interactive digital ruler overlay on uploaded file preview (draggable, rotatable, scale-togglable triangular scale ruler) to verify print dimensions before submitting
+- Place multi-destination orders — one order, multiple delivery addresses, each with its own delivery fee, one driver handles all stops
+- Schedule exact delivery time when placing a delivery order
+- Submit feature requests via "Request a Feature" button in the profile screen
+- Receive transactional email notifications for order status changes (in addition to FCM push)
+- Top up GRID Credits with a custom amount (no expiration) and pay for orders using accumulated credit balance
+- Contact support and request quotes via in-app live chat (dedicated Chat tab)
 
 **Driver Features**
 
@@ -135,6 +147,10 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
 - Set estimated completion time per order
 - Decline orders with a reason (customer receives notification with explanation)
 - View order status change history / audit trail
+- Send marketing notification blasts — admin-triggered or scheduled automated, users can opt out
+- View funnel drop-off analytics — where users abandon the order flow (per step: category, specs, upload, summary, payment)
+- Set a manual status note per 3D printing order (free text, e.g., "8 hours remaining")
+- Manage GRID Credits: view top-up history per user
 
 **Technical**
 
@@ -148,6 +164,10 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
 - flutter_staggered_grid_view for bento grid layouts
 - TypeORM for type-safe database queries
 - WebSocket Gateway for real-time order updates
+- PayMongo GCash direct checkout API (not deep-link only — full PayMongo SDK checkout flow)
+- Email delivery via SendGrid (or equivalent) for transactional + marketing notifications
+- Maxim / Grab Express API integration for third-party delivery outside Davao
+- In-app live chat module (built-in, not external service) with WebSocket-backed message streaming
 - S3-compatible storage (AWS S3 / MinIO) for file uploads
 - NestJS Passport.js + JWT authentication
 - Riverpod for client-side state management
@@ -159,8 +179,7 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
 ### Out of Scope (Post-MVP)
 
 - OTP-based phone authentication
-- Full PayMongo SDK integration (checkout forms)
-- In-app messaging / support chat
+- PayMongo recurring billing / subscriptions
 - Ratings and reviews system
 - Multi-language support (i18n)
 - Web admin panel (separate project)
@@ -272,6 +291,58 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
 
 30. **As an admin, I want to view the status change history for an order, so that I can resolve disputes.**
     - Audit trail showing each status change with timestamp, actor (admin/driver/system), and notes
+
+31. **As a customer, I want to set my occupation type at signup, so that GRID can tailor analytics and future features to my segment.**
+    - Required step in profile setup — icon-based tap UI (no text forms). Student sub-types: Architecture, Engineering, Other. Options: Student, Construction Worker, Office Worker, Others (with specify field). Editable from profile screen.
+
+32. **As a customer, I want to choose how my file prints on the paper, so that my output matches my intent.**
+    - Fit to Paper: scales content to fill the selected paper size. Actual Size: prints at the file's defined dimensions. Toggle visible on the specs screen for paper orders.
+
+33. **As a customer, I want to delete my uploaded file after printing, so that my private documents are not stored longer than needed.**
+    - "Delete my file" button visible on the order detail screen once the order status is `delivered` or `completedPickup`. Triggers server-side deletion from S3. Confirmation dialog shown before deletion.
+
+34. **As a customer, I want to be warned if my file uses CMYK instead of RGB (or vice versa), so that I understand how color output may differ.**
+    - Auto-detected on upload for PDF, JPG, PNG. Non-blocking inline warning shown below the file card: "Your file uses CMYK color mode. Print output may differ from screen preview." Detected server-side.
+
+35. **As a customer, I want to be warned if my file dimensions don't match my selected paper size, so that I can correct it before printing.**
+    - Auto-detected on upload. Non-blocking inline warning: "Your file is [detected size] but you selected [chosen size]. Continue or update your specs." Does not block order submission.
+
+36. **As a customer, I want to use a digital ruler overlay on my file preview, so that I can visually confirm print dimensions are correct.**
+    - Interactive overlay on the file preview step. Shows a triangular scale ruler that the user can drag, rotate, and scale. Scale unit toggle (1:1, 1:50, 1:100, 1:200, 1:500). Rulers snap to file edges for alignment.
+
+37. **As a customer, I want to send my prints to multiple delivery addresses in one order, so that I can distribute them without placing separate orders.**
+    - Multi-destination toggle in the delivery details step. Add up to 5 destinations per order. Each destination has its own delivery address and delivery fee. One driver handles all stops sequentially.
+
+38. **As a customer, I want to schedule an exact delivery time, so that I know when to expect my prints.**
+    - Date + time picker in the delivery details step. Minimum advance notice: 2 hours from order placement. Admin sees scheduled time on the order detail.
+
+39. **As a customer, I want to submit feature suggestions, so that I can influence the product roadmap.**
+    - "Request a Feature" card in the profile screen. Opens a form with a title field and description field. Submitted to server. Admin can view submissions in the admin panel.
+
+40. **As a customer, I want to receive email notifications for important order updates, so that I stay informed even when push notifications are off.**
+    - Transactional emails sent on: order confirmed, file declined, ready for pickup/delivery, delivered. Uses the customer's registered email. Opt-out available in notification settings.
+
+41. **As a customer, I want to top up GRID Credits and pay for orders with them, so that I can skip opening GCash each time.**
+    - Top-up screen: enter any custom PHP amount → pay via PayMongo GCash checkout → credits added to balance instantly. Credits never expire. Balance shown in profile and on the payment screen. Pay with Credits appears as a payment method when balance ≥ order total.
+
+42. **As an admin, I want to send marketing notifications to all users, so that I can keep GRID top-of-mind.**
+    - Compose screen in admin panel: title + message + optional image. Send immediately or schedule for a future date/time. Users can opt out via notification settings. Delivery via FCM (push) + email.
+
+43. **As an admin, I want to set a manual status note on 3D printing orders, so that customers know the estimated completion without a fixed time.**
+    - Free-text field on the admin order detail for 3D orders: "Status Note" (e.g., "8 hours remaining", "Cooling — ready by tomorrow"). Visible to the customer on the order detail screen.
+
+44. **As a customer, I want to be warned if my 3D model exceeds my chosen printer's build volume, so that I can adjust before printing fails.**
+    - Customer manually enters model dimensions (W × H × D in cm) on the 3D specs screen. System checks against printer limits: Bambu A1 (25.6 × 25.6 × 25.6 cm), Bambu A1 Mini (18 × 18 × 18 cm). Non-blocking warning shown if dimensions exceed limits. Live chat link offered for oversized/custom requests.
+
+45. **As a customer, I want to chat with GRID support in-app, so that I can get help without leaving the app.**
+    - Dedicated Chat tab in customer bottom navigation. Real-time messaging via WebSocket. Admin sees all active conversations in the admin panel (new Chat management screen). Supports text messages. Timestamps and read receipts shown.
+
+46. **As a customer, I want GRID to use Maxim or Grab for delivery outside Davao, so that I can order from anywhere.**
+    - During order placement, if the customer's delivery address is outside the primary service zone (Davao), the app automatically selects Maxim or Grab Express as the delivery method. Delivery fee calculated via third-party API. Customer sees provider name and fee estimate.
+
+47. **As an admin, I want to see where customers drop off in the order flow, so that I can identify and fix friction points.**
+    - Funnel analytics page in the admin dashboard: shows drop-off rates per step (Category → Specs → Upload → Summary → Payment → Confirmed). Data collected via server-side event logging on each step start/complete. Displayed as a funnel chart.
+
 ## 6. Core Architecture & Patterns
 
 ### High-Level Architecture
@@ -594,6 +665,7 @@ printing_app/
 - Profile completeness check before accessing main app
 - Persistent auth session (survives app restart)
 - Developer bypass logins for testing (one per role: customer, driver, admin)
+- Occupation type selection at profile setup (required for customers) — icon-tap UI, not a form
 - Role detection on login determines which navigation shell is loaded: customers see the customer tab bar, drivers see the driver tab bar, admins see the admin tab bar
 - Driver profile includes additional fields: vehicle type, plate number, and availability toggle
 
@@ -608,6 +680,10 @@ printing_app/
 4. **Order Summary** — Review specs + calculated price with breakdown
 5. **Delivery Details** — Select delivery option (pickup or delivery). If delivery: select from saved addresses or add a new address with map pin picker and mandatory landmark field
 6. **Payment** — Select payment method and confirm
+
+**Print Scale Preference (Paper Orders):**
+- Shown as a toggle on the specs screen: **Fit to Paper** (scales to fill selected size) / **Actual Size** (prints at defined file dimensions)
+- Defaults to Fit to Paper
 
 **Paper Printing Specs:**
 
@@ -661,9 +737,10 @@ printing_app/
 
 | Method | Flow |
 |--------|------|
-| GCash | Deep link to GCash app -> fallback to web -> manual confirmation |
+| GCash | PayMongo GCash checkout API (full SDK flow, not deep-link) |
 | Maya | Deep link to Maya app -> fallback to web -> manual confirmation |
 | Cash on Delivery | Mark as pending, collect at pickup/delivery |
+| GRID Credits | Debit from pre-loaded credit balance (no external gateway call) |
 
 **Key Features:**
 - E-wallet deep linking with native app detection
@@ -710,9 +787,15 @@ Alternative exits:
 - Estimated completion time updated
 - Order cancelled
 
+**Notification Types (additions):**
+- Marketing blast (admin-composed, opt-in)
+- Feature request received confirmation
+
 **Implementation:**
 - In-app notification list with read/unread state
 - FCM push notifications for background alerts
+- Transactional email notifications via SendGrid for key order events
+- Marketing push + email blasts via admin panel (opt-out available in notification settings)
 - Server-triggered via NestJS when admin updates status or driver updates delivery checkpoint
 
 ### 7.7 Draft Orders (Offline)
@@ -850,6 +933,235 @@ Each transition is validated server-side. The driver can only move forward throu
 - FAQ section with common questions presented as expandable accordion items (static content, not fetched from server). Topics include: order process, payment methods, cancellation policy, delivery times, file requirements, supported formats
 - Link to Terms of Service (full legal text screen)
 - Link to Privacy Policy with RA 10173 (Data Privacy Act of the Philippines) compliance information
+
+### 7.16 User Profiling
+
+**Purpose:** Capture customer occupation type at signup to power analytics segmentation and future personalization.
+
+**Occupation Types:**
+
+| Type | Sub-types |
+|------|-----------|
+| Student | Architecture, Engineering, Other |
+| Construction Worker | — |
+| Office Worker | — |
+| Others | Specify (free-text field) |
+
+**Key Features:**
+- Required at profile setup — shown as the final step before accessing the app
+- Icon-based tap UI — each occupation displayed as a large icon + label card. No text forms, no scrolling
+- Student taps → sub-type screen (Architecture / Engineering / Other) — same icon-tap pattern
+- "Others" shows a short text field to specify
+- Editable from the profile screen at any time
+- Stored server-side for analytics segmentation
+- Not shown to drivers or admins (customer-only field)
+
+### 7.17 File Intelligence
+
+**Purpose:** Warn customers about file issues before printing starts — dimension mismatches and color mode incompatibilities.
+
+#### 7.17.1 CMYK/RGB Detection
+
+**Key Features:**
+- Triggered automatically on successful file upload (PDF, JPG, PNG)
+- Server-side detection using file metadata / color profile headers
+- Non-blocking inline warning shown below the file card on the upload screen
+- Warning copy: *"Your file uses CMYK color mode. Print output may differ from your screen preview. For best results, convert to RGB before uploading."*
+- No admin approval required — purely informational for the customer
+
+#### 7.17.2 File Dimension Mismatch
+
+**Key Features:**
+- Triggered automatically on successful file upload when `category = 'paper'`
+- Server extracts file dimensions (PDF media box, image pixel dimensions converted via DPI)
+- Compares against the customer's selected paper size
+- Non-blocking inline warning: *"Your file appears to be [detected size] but you selected [chosen size]. You can continue or update your paper size."*
+- Customer can dismiss and proceed — order is not blocked
+
+#### 7.17.3 Digital Ruler Overlay
+
+**Purpose:** Let customers visually verify their file's print dimensions before submitting.
+
+**Key Features:**
+- Available on the file preview step for paper orders
+- Interactive triangular scale ruler rendered as an overlay on the file preview
+- Draggable: user can reposition the ruler anywhere on the preview
+- Rotatable: 360° rotation with a rotation handle
+- Scale toggle: 1:1, 1:50, 1:100, 1:200, 1:500 — displayed as a chip selector above the ruler
+- Edge-snapping: ruler snaps to file edges when dragged close
+- Toggle button to show/hide the ruler overlay (ruler is hidden by default)
+- Ruler styling matches greyscale design system — dark lines with tick marks, semi-transparent
+
+### 7.18 Multi-Destination & Split Ordering
+
+**Purpose:** Allow customers to deliver one order to multiple addresses in a single transaction.
+
+**Key Features:**
+- Toggle in delivery details step: "Deliver to multiple addresses"
+- Add up to 5 destination addresses per order (saved addresses or new)
+- Each destination has its own delivery fee (calculated independently)
+- Total delivery fee = sum of all destination fees
+- One driver handles all stops sequentially — admin assigns a single driver
+- Driver sees all stop addresses in sequence on the delivery screen
+- Each stop has its own checkpoint (picked up → on the way to stop 1 → arrived at stop 1 → on the way to stop 2 → etc.)
+- Customer can track which stop the driver is currently heading to
+
+### 7.19 Scheduled Delivery
+
+**Purpose:** Allow customers to choose the exact time their order will be delivered.
+
+**Key Features:**
+- Date + time picker shown in the delivery details step when `deliveryOption = 'delivery'`
+- Minimum advance: 2 hours from current time
+- Maximum advance: 7 days
+- Stored on the order as `scheduledDeliveryAt`
+- Admin sees scheduled time on the order detail and queue card
+- Driver receives scheduled time in their assignment notification
+- System does not auto-dispatch — admin still manually assigns the driver
+- Customer sees scheduled delivery time prominently on the order tracking screen
+
+### 7.20 GRID Credits
+
+**Purpose:** Pre-loaded wallet system allowing customers to pay without opening GCash each time.
+
+**Top-Up Flow:**
+1. Customer opens "GRID Credits" in their profile
+2. Enters a custom PHP top-up amount (min ₱50, no maximum)
+3. Taps "Top Up via GCash" → PayMongo GCash checkout opens
+4. On successful payment, credits are added to balance instantly
+5. Balance shown on the profile screen and the payment method selection screen
+
+**Payment Flow:**
+- "Pay with GRID Credits" option appears on the payment screen when `creditBalance ≥ orderTotal`
+- On confirmation, balance is debited instantly — no external gateway call needed
+- Transaction logged in `grid_credit_transactions`
+
+**Key Features:**
+- Credits never expire
+- Full transaction history visible in the profile screen
+- Partial credit usage not supported — must have full order amount in credits
+- Admin can view per-user credit balance in the admin user detail screen
+
+### 7.21 3D Printing Enhancements
+
+**Purpose:** Improve the 3D printing experience with manual status visibility and hardware-aware dimension validation.
+
+#### 7.21.1 Admin Manual Status Note
+
+**Key Features:**
+- Free-text "Status Note" field on the admin order detail for 3D orders
+- Examples: *"Cooling — will be ready by tomorrow morning"*, *"8 hours remaining"*
+- Visible to the customer on the order detail screen, below the status timeline
+- Displayed only when non-empty — hidden otherwise
+- Real-time update via WebSocket when admin saves
+
+#### 7.21.2 3D Printer Size Limits
+
+**Supported Printers:**
+
+| Printer | Build Volume (W × H × D) |
+|---------|--------------------------|
+| Bambu A1 | 25.6 cm × 25.6 cm × 25.6 cm |
+| Bambu A1 Mini | 18 cm × 18 cm × 18 cm |
+
+**Key Features:**
+- Customer manually enters model dimensions (width × height × depth in cm) on the 3D specs screen
+- Three numeric input fields: W, H, D
+- System checks against whichever printer the admin has configured as active (default: Bambu A1)
+- Non-blocking warning displayed if any dimension exceeds the active printer's build volume: *"Your model exceeds the printer's build volume ([limit]). Contact us for custom requests."*
+- Inline "Chat with us" link in the warning opens the live chat tab
+- Order can still be submitted — warning does not block
+
+### 7.22 Third-Party Delivery Integration (Maxim / Grab Express)
+
+**Purpose:** Enable delivery outside GRID's primary Davao service zone via Maxim and Grab Express.
+
+**Key Features:**
+- Triggered automatically during order placement when the delivery address is outside the Davao service zone
+- App detects zone via coordinates (geofence boundary defined server-side)
+- Customer sees: "Delivery outside Davao — powered by [Maxim / Grab]" with provider logo and estimated fee
+- Delivery fee fetched from Maxim or Grab Express API based on shop → customer distance
+- Admin still manages order status and file verification; third-party handles physical delivery
+- Tracking link from the third-party provider displayed to the customer when available
+
+### 7.23 Request a Feature
+
+**Purpose:** Collect user-driven product feedback directly in the app.
+
+**Key Features:**
+- "Request a Feature" card in the profile screen (always visible)
+- Tapping opens a bottom sheet form: Title field (required, max 100 chars) + Description field (optional, max 500 chars)
+- Submitted to server, associated with the user's ID
+- Submitted requests are viewable by admin in a "Feature Requests" section of the admin panel
+- User sees a confirmation message after submitting: *"Thanks! We'll review your suggestion."*
+- No voting or public visibility in MVP — internal admin review only
+
+### 7.24 Funnel Analytics (Admin)
+
+**Purpose:** Show admins where customers abandon the order creation flow.
+
+**Funnel Steps Tracked:**
+
+| Step | Event |
+|------|-------|
+| 1 | Category selected |
+| 2 | Specs completed |
+| 3 | File uploaded |
+| 4 | Summary viewed |
+| 5 | Payment initiated |
+| 6 | Order confirmed |
+
+**Key Features:**
+- Server-side event logging at each step start and completion (anonymous events linked to session, not just users — captures abandonment too)
+- Admin dashboard "Funnel" tab showing percentage of users reaching each step
+- Drop-off rate between each step highlighted
+- Date range filter (7D, 30D, all time)
+- Displayed as a horizontal funnel chart using fl_chart
+
+### 7.25 In-App Live Chat
+
+**Purpose:** Real-time customer–admin chat for support and custom 3D print inquiries.
+
+**Key Features:**
+- Dedicated **Chat** tab in the customer bottom navigation (5th tab)
+- WebSocket-backed real-time messaging (NestJS WebSocket Gateway)
+- Admin sees all active conversations in a new "Chat" screen in the admin panel
+- Message types: text only (MVP)
+- Timestamps on every message
+- Read receipts (admin-side: message read by admin)
+- Unread message count badge on the Chat tab
+- Messages persisted server-side (PostgreSQL)
+- Admin can close/resolve a conversation
+
+### 7.26 Marketing & Email Notifications
+
+**Purpose:** Keep users engaged through scheduled and admin-triggered communications.
+
+#### 7.26.1 Marketing Push Notifications
+
+**Key Features:**
+- Admin composes a notification: title + message body + optional image URL
+- Send immediately or schedule for a specific future date/time
+- Target: all users, or filtered by occupation type
+- Delivered via FCM push notification
+- Users can opt out in notification preferences (toggle per notification type)
+
+#### 7.26.2 Transactional Emails
+
+**Key Features:**
+- Sent automatically on key order events: order confirmed, file declined, ready for pickup, delivered
+- Uses customer's registered email address
+- Delivered via SendGrid (or compatible SMTP provider)
+- Email templates match GRID brand: greyscale design, logo at top, single CTA button
+- Opt-out link in every email (RA 10173 compliance)
+
+#### 7.26.3 Scheduled Marketing Emails
+
+**Key Features:**
+- Admin can compose and schedule marketing email blasts
+- Sent via @nestjs/schedule cron job at the configured time
+- Target: all opted-in users or filtered by segment (occupation type)
+- Unsubscribe link required in every marketing email
 
 ---
 
@@ -1184,9 +1496,10 @@ All interactive elements must have a minimum touch target of **48x48dp** (Materi
 ### Customer Navigation
 
 ```
-Bottom Tabs (4 tabs):
+Bottom Tabs (5 tabs):
 ├── Home                         # Dashboard with hero, services, recent orders
 ├── Orders                       # Order list with active/completed tabs
+├── Chat                         # Live support chat with admin
 ├── Notifications                # Status update alerts
 └── Profile                      # Settings, account, dark mode, sign out
 
@@ -1239,7 +1552,11 @@ Other Screens (Stack):
 ├── File Preview                 # View uploaded customer files
 ├── Driver Assignment            # Pick driver for an order
 ├── Driver List                  # View all drivers + availability
-└── Order Status History         # Audit trail for an order
+├── Order Status History         # Audit trail for an order
+├── Chat Management              # All active customer chat conversations
+├── Feature Requests             # Customer-submitted feature ideas
+├── Marketing                    # Compose and schedule notification blasts
+└── Funnel Analytics             # Order flow drop-off chart
 ```
 
 ### Auth Flow (Stack -- before tabs)
@@ -1247,7 +1564,7 @@ Other Screens (Stack):
 ```
 ├── Login                        # Email/password + dev bypass
 ├── Register                     # Create account
-└── Profile Setup                # Complete profile (required)
+└── Profile Setup                # Complete profile + occupation type (required)
 ```
 
 ### Route Guards
@@ -1278,6 +1595,10 @@ class User {
   String role;                    // 'customer', 'driver', 'admin'
   bool isProfileComplete;
   bool isActive;
+  String? occupationType;         // 'student', 'construction_worker', 'office_worker', 'others'
+  String? occupationSubType;      // 'architecture', 'engineering', 'other' (for students); custom text for 'others'
+  bool emailNotificationsEnabled; // default true
+  bool marketingEmailsEnabled;    // default true
   DateTime createdAt;
   DateTime updatedAt;
 }
@@ -1312,6 +1633,9 @@ class Order {
   DateTime? estimatedCompletionAt;
   String? adminNotes;             // Internal notes
   String? trackingLink;           // External tracking URL (optional)
+  DateTime? scheduledDeliveryAt;  // Customer-requested delivery time
+  String? printScalePreference;   // 'fit_to_paper', 'actual_size' (paper orders only)
+  bool fileDeleted;               // Customer purged the uploaded file
   DateTime createdAt;
   DateTime updatedAt;
 }
@@ -1326,6 +1650,9 @@ class PaperSpecs {
   String mediaType;
   String printSides;
   String binding;
+  String printScalePreference;    // 'fit_to_paper', 'actual_size'
+  String? detectedColorProfile;   // 'cmyk', 'rgb', null (from server-side file analysis)
+  String? detectedFileDimensions; // e.g., '420x297mm' (from server-side extraction)
 }
 ```
 
@@ -1340,6 +1667,10 @@ class ThreeDSpecs {
   double layerHeight;
   bool supports;
   String? notes;
+  double? modelWidth;             // cm — customer-entered
+  double? modelHeight;            // cm — customer-entered
+  double? modelDepth;             // cm — customer-entered
+  String? adminStatusNote;        // Admin free-text status (e.g., "8 hours remaining")
 }
 ```
 
@@ -1491,6 +1822,122 @@ class DraftOrder {
 }
 ```
 
+### GridCredit (NEW)
+
+Tracks a customer's GRID Credit balance.
+
+```dart
+class GridCredit {
+  int? id;
+  int userId;
+  double balance;               // Current balance in PHP
+  DateTime createdAt;
+  DateTime updatedAt;
+}
+```
+
+### GridCreditTransaction (NEW)
+
+Records every credit top-up and spend.
+
+```dart
+class GridCreditTransaction {
+  int? id;
+  int userId;
+  String type;                  // 'topup', 'payment', 'refund'
+  double amount;                // PHP — positive for top-up, negative for spend
+  double balanceAfter;
+  String? orderId;              // FK — null for top-ups
+  String? externalReferenceId;  // PayMongo reference for top-ups
+  DateTime createdAt;
+}
+```
+
+### FeatureRequest (NEW)
+
+```dart
+class FeatureRequest {
+  int? id;
+  int userId;
+  String title;
+  String? description;
+  DateTime createdAt;
+}
+```
+
+### ChatMessage (NEW)
+
+```dart
+class ChatMessage {
+  int? id;
+  int conversationId;
+  int senderUserId;
+  String content;
+  bool isReadByAdmin;
+  DateTime createdAt;
+}
+```
+
+### ChatConversation (NEW)
+
+```dart
+class ChatConversation {
+  int? id;
+  int customerId;
+  bool isResolved;
+  DateTime createdAt;
+  DateTime updatedAt;
+}
+```
+
+### FunnelEvent (NEW)
+
+```dart
+class FunnelEvent {
+  int? id;
+  String? sessionId;            // Anonymous session ID
+  int? userId;                  // Null for unauthenticated drop-offs
+  String step;                  // 'category', 'specs', 'upload', 'summary', 'payment', 'confirmed'
+  String action;                // 'start', 'complete', 'abandon'
+  DateTime createdAt;
+}
+```
+
+### MarketingNotification (NEW)
+
+```dart
+class MarketingNotification {
+  int? id;
+  int createdByAdminId;
+  String title;
+  String message;
+  String? imageUrl;
+  String targetSegment;         // 'all', occupation type filter
+  String channel;               // 'push', 'email', 'both'
+  DateTime? scheduledAt;        // Null = send immediately
+  DateTime? sentAt;
+  DateTime createdAt;
+}
+```
+
+### OrderDestination (NEW)
+
+For multi-destination orders.
+
+```dart
+class OrderDestination {
+  int? id;
+  int orderId;
+  int sequenceNumber;           // 1, 2, 3...
+  int addressId;                // FK to Address
+  double deliveryFee;
+  String status;                // 'pending', 'on_the_way', 'arrived', 'delivered'
+  DateTime? arrivedAt;
+  DateTime? deliveredAt;
+  DateTime createdAt;
+}
+```
+
 ---
 
 ## 12. API Specification (NestJS REST + WebSocket API)
@@ -1582,6 +2029,47 @@ GET    /api/notifications      → List notifications
 PATCH  /api/notifications/:id/read → Mark as read
 PATCH  /api/notifications/read-all → Mark all as read
 WS     /ws/notifications       → Real-time notification stream
+```
+
+### CreditsController
+
+```
+GET    /api/credits/balance        → Get current credit balance
+POST   /api/credits/topup          → Create PayMongo checkout for top-up
+GET    /api/credits/transactions   → Top-up and spend history
+```
+
+### ChatController
+
+```
+GET    /api/chat/conversations                → List conversations (admin: all; customer: own)
+POST   /api/chat/conversations                → Start a conversation (customer)
+GET    /api/chat/conversations/:id/messages   → Get messages in a conversation
+POST   /api/chat/conversations/:id/messages   → Send a message
+PATCH  /api/chat/conversations/:id/resolve    → Mark conversation resolved (admin)
+WS     /ws/chat/:conversationId               → Real-time message stream
+```
+
+### FeatureRequestsController
+
+```
+POST   /api/feature-requests       → Submit a feature request (customer)
+GET    /api/feature-requests       → List all feature requests (admin)
+```
+
+### FunnelController
+
+```
+POST   /api/funnel/event           → Log a funnel step event (anonymous allowed)
+GET    /api/admin/funnel           → Get funnel analytics data (admin)
+```
+
+### MarketingController (admin only)
+
+```
+GET    /api/admin/marketing        → List marketing notifications
+POST   /api/admin/marketing        → Create and send/schedule a blast
+DELETE /api/admin/marketing/:id    → Cancel a scheduled blast
 ```
 
 ### PaymentsController
@@ -1792,6 +2280,103 @@ CREATE TABLE notifications (
 );
 
 -- ============================================================
+-- GRID CREDITS (NEW)
+-- ============================================================
+CREATE TABLE grid_credits (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER UNIQUE NOT NULL REFERENCES users(id),
+    balance DECIMAL(10,2) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE grid_credit_transactions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    type VARCHAR(10) NOT NULL,          -- 'topup', 'payment', 'refund'
+    amount DECIMAL(10,2) NOT NULL,
+    balance_after DECIMAL(10,2) NOT NULL,
+    order_id VARCHAR(20) REFERENCES orders(order_id),
+    external_reference_id VARCHAR(255),
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- ============================================================
+-- FEATURE REQUESTS (NEW)
+-- ============================================================
+CREATE TABLE feature_requests (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    title VARCHAR(100) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- ============================================================
+-- CHAT (NEW)
+-- ============================================================
+CREATE TABLE chat_conversations (
+    id SERIAL PRIMARY KEY,
+    customer_id INTEGER NOT NULL REFERENCES users(id),
+    is_resolved BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE chat_messages (
+    id SERIAL PRIMARY KEY,
+    conversation_id INTEGER NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
+    sender_user_id INTEGER NOT NULL REFERENCES users(id),
+    content TEXT NOT NULL,
+    is_read_by_admin BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- ============================================================
+-- FUNNEL EVENTS (NEW)
+-- ============================================================
+CREATE TABLE funnel_events (
+    id SERIAL PRIMARY KEY,
+    session_id VARCHAR(128),
+    user_id INTEGER REFERENCES users(id),
+    step VARCHAR(20) NOT NULL,     -- 'category','specs','upload','summary','payment','confirmed'
+    action VARCHAR(10) NOT NULL,   -- 'start','complete','abandon'
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- ============================================================
+-- MARKETING NOTIFICATIONS (NEW)
+-- ============================================================
+CREATE TABLE marketing_notifications (
+    id SERIAL PRIMARY KEY,
+    created_by_admin_id INTEGER NOT NULL REFERENCES users(id),
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    image_url TEXT,
+    target_segment VARCHAR(50) NOT NULL DEFAULT 'all',
+    channel VARCHAR(10) NOT NULL DEFAULT 'both',   -- 'push','email','both'
+    scheduled_at TIMESTAMP,
+    sent_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- ============================================================
+-- ORDER DESTINATIONS (NEW — multi-destination orders)
+-- ============================================================
+CREATE TABLE order_destinations (
+    id SERIAL PRIMARY KEY,
+    order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    sequence_number INTEGER NOT NULL,
+    address_id INTEGER NOT NULL REFERENCES addresses(id),
+    delivery_fee DECIMAL(10,2) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    arrived_at TIMESTAMP,
+    delivered_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- ============================================================
 -- INDEXES
 -- ============================================================
 
@@ -1828,6 +2413,22 @@ CREATE INDEX idx_payment_transactions_external ON payment_transactions(external_
 -- Notifications
 CREATE INDEX idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX idx_notifications_created ON notifications(created_at DESC);
+
+-- Grid credits
+CREATE INDEX idx_grid_credit_transactions_user ON grid_credit_transactions(user_id);
+
+-- Chat
+CREATE INDEX idx_chat_conversations_customer ON chat_conversations(customer_id);
+CREATE INDEX idx_chat_messages_conversation ON chat_messages(conversation_id);
+CREATE INDEX idx_chat_messages_created ON chat_messages(created_at);
+
+-- Funnel events
+CREATE INDEX idx_funnel_events_user ON funnel_events(user_id);
+CREATE INDEX idx_funnel_events_step ON funnel_events(step, action);
+CREATE INDEX idx_funnel_events_created ON funnel_events(created_at DESC);
+
+-- Order destinations
+CREATE INDEX idx_order_destinations_order ON order_destinations(order_id);
 ```
 
 > **Note:** All mutable tables include `updated_at` columns. Application code must update these on every write. Consider a PostgreSQL trigger for automatic `updated_at` management:
@@ -1896,6 +2497,24 @@ S3_SECRET_KEY=minioadmin
 # FCM
 FIREBASE_SERVICE_ACCOUNT=./firebase-service-account.json
 
+# Email (SendGrid)
+SENDGRID_API_KEY=SG.xxx
+SENDGRID_FROM_EMAIL=noreply@grid.ph
+
+# Maxim API
+MAXIM_API_KEY=xxx
+MAXIM_BASE_URL=https://api.maximapp.com
+
+# Grab Express API
+GRAB_CLIENT_ID=xxx
+GRAB_CLIENT_SECRET=xxx
+GRAB_BASE_URL=https://api.grab.com/v1
+
+# Service Zone (Davao geofence)
+DAVAO_GEOFENCE_RADIUS_KM=50
+DAVAO_CENTER_LAT=7.1907
+DAVAO_CENTER_LNG=125.4553
+
 # OSRM
 OSRM_BASE_URL=https://router.project-osrm.org
 
@@ -1958,6 +2577,11 @@ The MVP is successful when:
 10. An admin can assign a driver to an order ready for dispatch
 11. A driver can accept assignments, update checkpoints, and complete deliveries
 12. The UI feels premium, refined, and distinctly monochrome -- not a default Flutter app
+13. A customer can select their occupation type at signup with a single tap (no text forms)
+14. A customer receives an automatic warning when a file dimension mismatch or CMYK color mode is detected
+15. A customer can top up GRID Credits via PayMongo and pay for orders using their balance
+16. An admin can send a marketing notification blast from the admin panel
+17. A customer can chat with admin support in real time via the Chat tab
 
 ### 15.2 Functional Requirements
 
@@ -1982,6 +2606,21 @@ The MVP is successful when:
 - Admin driver assignment for delivery orders
 - In-app notifications for status changes
 - Draft order persistence for offline resilience
+- Occupation type capture at signup with icon-tap UI
+- Print scale preference (Fit to Paper / Actual Size) selectable per paper order
+- Automatic CMYK/RGB detection and dimension mismatch warnings on file upload
+- Interactive digital ruler overlay on file preview
+- Multi-destination order placement with per-destination delivery fees
+- Scheduled delivery time selection (exact date + time, min 2h advance)
+- GRID Credits top-up via PayMongo and credit-based payment at checkout
+- In-app live chat between customers and admin
+- Admin marketing notification blasts (push + email)
+- Transactional email notifications via SendGrid
+- Funnel drop-off analytics in admin dashboard
+- 3D model dimension entry with printer size limit warnings
+- Admin free-text status note for 3D printing orders
+- Feature request submission from customer profile
+- Third-party delivery (Maxim / Grab Express) for outside-Davao orders
 - Support/help access from within the app
 
 ### 15.3 Quality Indicators
@@ -2076,6 +2715,17 @@ The MVP is successful when:
 - @nestjs/schedule for task scheduling
 - OpenAPI/Swagger documentation auto-generated
 - MQTT transport configured for future IoT integration
+- GRID Credits module (balance tracking, PayMongo top-up, credit payments)
+- Chat module (conversation + message persistence, WebSocket gateway)
+- Funnel event logging endpoint (anonymous + authenticated)
+- Feature requests endpoint
+- Marketing notifications module with @nestjs/schedule blast scheduling
+- SendGrid email integration for transactional + marketing emails
+- File intelligence: server-side CMYK/RGB detection and dimension extraction on upload
+- Multi-destination order model and endpoints
+- Occupation type field on user profile
+- 3D order admin status note field and endpoint
+- Maxim / Grab Express delivery fee API integration
 
 ### Phase 4: Client-Server Integration -- NOT STARTED
 
@@ -2137,11 +2787,10 @@ The MVP is successful when:
 - **Delivery Photo Proof** -- Required photo on delivery for verification (basic version in MVP, enhanced post-MVP with AI validation)
 - **Heat Maps** -- Admin view of delivery demand patterns by time and geography
 - **Driver Incentives** -- Bonus system for peak hours, high volume, or perfect rating streaks
-- **In-App Chat** -- Customer-driver messaging during active delivery
+- **Customer-Driver Chat** -- Direct messaging between customer and their assigned driver during active delivery (admin-customer chat is in MVP; driver-customer is post-MVP)
 - **Bulk Orders** -- Business accounts with volume discounts and recurring orders
 - **Order Templates** -- Save frequently used spec combinations for quick reorder
 - **Multi-Language Support** -- Filipino (Tagalog) and Cebuano localization
-- **Push Notifications** -- FCM integration for background status updates
 - **Advanced Analytics** -- Revenue trends, customer retention, driver utilization dashboards
 
 ### 17.2 Technical Improvements
@@ -2214,6 +2863,10 @@ The MVP is successful when:
 | [Shimmer](https://pub.dev/packages/shimmer) | Loading skeleton animations |
 | [Flutter Animate](https://pub.dev/packages/flutter_animate) | Micro-interaction animations |
 | [Philippine Data Privacy Act (RA 10173)](https://www.privacy.gov.ph/data-privacy-act/) | Regulatory compliance reference |
+| [SendGrid Node.js SDK](https://github.com/sendgrid/sendgrid-nodejs) | Transactional + marketing email delivery |
+| [@nestjs/schedule](https://docs.nestjs.com/techniques/task-scheduling) | Cron jobs for scheduled marketing blasts |
+| [Maxim API](https://www.maximapp.com) | Third-party delivery outside Davao |
+| [Grab Express API](https://developer.grab.com) | Third-party delivery outside Davao (fallback) |
 
 ### 19.2 Environment Requirements
 

@@ -1,8 +1,12 @@
 // server/src/products/entities/service-addon.entity.ts
 import {
-  Entity, PrimaryGeneratedColumn, Column,
-  CreateDateColumn, UpdateDateColumn,
-  ManyToOne, JoinColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
 import { ServiceCategory } from './service-category.entity';
 
@@ -32,7 +36,12 @@ export class ServiceAddon {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, transformer: numberTransformer })
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    transformer: numberTransformer,
+  })
   price: number;
 
   @Column({ name: 'price_type', length: 20 })

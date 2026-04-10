@@ -38,6 +38,9 @@ export class Notification {
   @Column({ name: 'is_read', default: false })
   isRead: boolean;
 
+  @Column({ type: 'jsonb', nullable: true })
+  metadata: Record<string, unknown> | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

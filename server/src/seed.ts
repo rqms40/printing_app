@@ -440,44 +440,190 @@ async function seed() {
   await ds.query(
     `INSERT INTO service_categories (name, slug, description, icon, base_rate, max_file_size_mb, allowed_extensions, is_active, sort_order)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-    ['Paper Printing', 'paper', 'Standard and large-format paper printing', 'FileTextOutlined', 2.00, 50, '["pdf","png","jpg","jpeg","docx"]', true, 1],
+    [
+      'Paper Printing',
+      'paper',
+      'Standard and large-format paper printing',
+      'FileTextOutlined',
+      2.0,
+      50,
+      '["pdf","png","jpg","jpeg","docx"]',
+      true,
+      1,
+    ],
   );
   await ds.query(
     `INSERT INTO service_categories (name, slug, description, icon, base_rate, max_file_size_mb, allowed_extensions, is_active, sort_order)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-    ['3D Printing', '3d', 'FDM 3D printing with PLA, ABS, and PETG materials', 'AppstoreOutlined', 50.00, 200, '["stl","obj","3mf"]', true, 2],
+    [
+      '3D Printing',
+      '3d',
+      'FDM 3D printing with PLA, ABS, and PETG materials',
+      'AppstoreOutlined',
+      50.0,
+      200,
+      '["stl","obj","3mf"]',
+      true,
+      2,
+    ],
   );
   console.log('✅ 2 service categories created (paper, 3d)');
 
-  const [paperCat] = await ds.query<IdRow[]>('SELECT id FROM service_categories WHERE slug = $1', ['paper']);
-  const [threeDCat] = await ds.query<IdRow[]>('SELECT id FROM service_categories WHERE slug = $1', ['3d']);
+  const [paperCat] = await ds.query<IdRow[]>(
+    'SELECT id FROM service_categories WHERE slug = $1',
+    ['paper'],
+  );
+  const [threeDCat] = await ds.query<IdRow[]>(
+    'SELECT id FROM service_categories WHERE slug = $1',
+    ['3d'],
+  );
   const paperId: number = paperCat.id;
   const tdId: number = threeDCat.id;
 
   // ─── Paper Spec Options ─────────────────────────────────────────────
   const paperOptions = [
     // paper_size
-    [paperId, 'paper_size', 'A5', 'a5', 0.800, 0, 0, null, false, true, 10],
-    [paperId, 'paper_size', 'A4', 'a4', 1.000, 0, 0, null, true,  true, 20],
-    [paperId, 'paper_size', 'A3', 'a3', 1.500, 0, 0, null, false, true, 30],
-    [paperId, 'paper_size', 'A2', 'a2', 2.500, 0, 0, null, false, true, 40],
-    [paperId, 'paper_size', 'A1', 'a1', 4.000, 0, 0, null, false, true, 50],
-    [paperId, 'paper_size', '20×30in', 'twenty_by_thirty', 3.000, 0, 0, null, false, true, 60],
-    [paperId, 'paper_size', 'Custom', 'custom', 2.000, 0, 0, null, false, true, 70],
+    [paperId, 'paper_size', 'A5', 'a5', 0.8, 0, 0, null, false, true, 10],
+    [paperId, 'paper_size', 'A4', 'a4', 1.0, 0, 0, null, true, true, 20],
+    [paperId, 'paper_size', 'A3', 'a3', 1.5, 0, 0, null, false, true, 30],
+    [paperId, 'paper_size', 'A2', 'a2', 2.5, 0, 0, null, false, true, 40],
+    [paperId, 'paper_size', 'A1', 'a1', 4.0, 0, 0, null, false, true, 50],
+    [
+      paperId,
+      'paper_size',
+      '20×30in',
+      'twenty_by_thirty',
+      3.0,
+      0,
+      0,
+      null,
+      false,
+      true,
+      60,
+    ],
+    [
+      paperId,
+      'paper_size',
+      'Custom',
+      'custom',
+      2.0,
+      0,
+      0,
+      null,
+      false,
+      true,
+      70,
+    ],
     // color_mode
-    [paperId, 'color_mode', 'Black & White', 'black_and_white', 1.000, 0, 0, null, true,  true, 10],
-    [paperId, 'color_mode', 'Full Color',    'full_color',      2.500, 0, 0, null, false, true, 20],
+    [
+      paperId,
+      'color_mode',
+      'Black & White',
+      'black_and_white',
+      1.0,
+      0,
+      0,
+      null,
+      true,
+      true,
+      10,
+    ],
+    [
+      paperId,
+      'color_mode',
+      'Full Color',
+      'full_color',
+      2.5,
+      0,
+      0,
+      null,
+      false,
+      true,
+      20,
+    ],
     // media_type
-    [paperId, 'media_type', 'Matte',  'matte',  1.000, 0, 0, null, true,  true, 10],
-    [paperId, 'media_type', 'Glossy', 'glossy', 1.300, 0, 0, null, false, true, 20],
+    [paperId, 'media_type', 'Matte', 'matte', 1.0, 0, 0, null, true, true, 10],
+    [
+      paperId,
+      'media_type',
+      'Glossy',
+      'glossy',
+      1.3,
+      0,
+      0,
+      null,
+      false,
+      true,
+      20,
+    ],
     // print_sides
-    [paperId, 'print_sides', 'Front Only',   'front_only',   1.000, 0, 0, null, true,  true, 10],
-    [paperId, 'print_sides', 'Back-to-Back', 'back_to_back', 1.800, 0, 0, null, false, true, 20],
+    [
+      paperId,
+      'print_sides',
+      'Front Only',
+      'front_only',
+      1.0,
+      0,
+      0,
+      null,
+      true,
+      true,
+      10,
+    ],
+    [
+      paperId,
+      'print_sides',
+      'Back-to-Back',
+      'back_to_back',
+      1.8,
+      0,
+      0,
+      null,
+      false,
+      true,
+      20,
+    ],
     // binding
-    [paperId, 'binding', 'None',    'none',    1.000,  0.00, 0, null, true,  true, 10],
-    [paperId, 'binding', 'Staple',  'staple',  1.000, 10.00, 0, null, false, true, 20],
-    [paperId, 'binding', 'Spiral',  'spiral',  1.000, 25.00, 0, null, false, true, 30],
-    [paperId, 'binding', 'Premium', 'premium', 1.000, 50.00, 0, null, false, true, 40],
+    [paperId, 'binding', 'None', 'none', 1.0, 0.0, 0, null, true, true, 10],
+    [
+      paperId,
+      'binding',
+      'Staple',
+      'staple',
+      1.0,
+      10.0,
+      0,
+      null,
+      false,
+      true,
+      20,
+    ],
+    [
+      paperId,
+      'binding',
+      'Spiral',
+      'spiral',
+      1.0,
+      25.0,
+      0,
+      null,
+      false,
+      true,
+      30,
+    ],
+    [
+      paperId,
+      'binding',
+      'Premium',
+      'premium',
+      1.0,
+      50.0,
+      0,
+      null,
+      false,
+      true,
+      40,
+    ],
   ];
   for (const o of paperOptions) {
     await ds.query(
@@ -491,22 +637,70 @@ async function seed() {
   // ─── 3D Spec Options ────────────────────────────────────────────────
   const tdOptions = [
     // file_format
-    [tdId, 'file_format', 'STL', 'stl',      1.0, 0, 0.00, null, true,  true, 10],
-    [tdId, 'file_format', 'OBJ', 'obj',      1.0, 0, 0.00, null, false, true, 20],
-    [tdId, 'file_format', '3MF', 'three_mf', 1.0, 0, 0.00, null, false, true, 30],
+    [tdId, 'file_format', 'STL', 'stl', 1.0, 0, 0.0, null, true, true, 10],
+    [tdId, 'file_format', 'OBJ', 'obj', 1.0, 0, 0.0, null, false, true, 20],
+    [
+      tdId,
+      'file_format',
+      '3MF',
+      'three_mf',
+      1.0,
+      0,
+      0.0,
+      null,
+      false,
+      true,
+      30,
+    ],
     // material
-    [tdId, 'material', 'PLA',  'pla',  1.0, 0, 3.00, null, true,  true, 10],
-    [tdId, 'material', 'ABS',  'abs',  1.0, 0, 3.00, null, false, true, 20],
-    [tdId, 'material', 'PETG', 'petg', 1.0, 0, 4.00, null, false, true, 30],
+    [tdId, 'material', 'PLA', 'pla', 1.0, 0, 3.0, null, true, true, 10],
+    [tdId, 'material', 'ABS', 'abs', 1.0, 0, 3.0, null, false, true, 20],
+    [tdId, 'material', 'PETG', 'petg', 1.0, 0, 4.0, null, false, true, 30],
     // infill
-    [tdId, 'infill', '10%',  'infill_10',  1.0, 0, 0, 20,  true,  true, 10],
-    [tdId, 'infill', '20%',  'infill_20',  1.0, 0, 0, 40,  false, true, 20],
-    [tdId, 'infill', '50%',  'infill_50',  1.0, 0, 0, 100, false, true, 30],
+    [tdId, 'infill', '10%', 'infill_10', 1.0, 0, 0, 20, true, true, 10],
+    [tdId, 'infill', '20%', 'infill_20', 1.0, 0, 0, 40, false, true, 20],
+    [tdId, 'infill', '50%', 'infill_50', 1.0, 0, 0, 100, false, true, 30],
     [tdId, 'infill', '100%', 'infill_100', 1.0, 0, 0, 200, false, true, 40],
     // layer_height
-    [tdId, 'layer_height', '0.1mm', 'layer_01', 1.0, 0, 0, null, false, true, 10],
-    [tdId, 'layer_height', '0.2mm', 'layer_02', 1.0, 0, 0, null, true,  true, 20],
-    [tdId, 'layer_height', '0.3mm', 'layer_03', 1.0, 0, 0, null, false, true, 30],
+    [
+      tdId,
+      'layer_height',
+      '0.1mm',
+      'layer_01',
+      1.0,
+      0,
+      0,
+      null,
+      false,
+      true,
+      10,
+    ],
+    [
+      tdId,
+      'layer_height',
+      '0.2mm',
+      'layer_02',
+      1.0,
+      0,
+      0,
+      null,
+      true,
+      true,
+      20,
+    ],
+    [
+      tdId,
+      'layer_height',
+      '0.3mm',
+      'layer_03',
+      1.0,
+      0,
+      0,
+      null,
+      false,
+      true,
+      30,
+    ],
   ];
   for (const o of tdOptions) {
     await ds.query(
@@ -521,12 +715,28 @@ async function seed() {
   await ds.query(
     `INSERT INTO service_addons (category_id, name, description, price, price_type, is_active, sort_order)
      VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-    [paperId, 'Lamination (A4)', 'Matte or glossy lamination for A4 sheets', 20.00, 'per_unit', true, 10],
+    [
+      paperId,
+      'Lamination (A4)',
+      'Matte or glossy lamination for A4 sheets',
+      20.0,
+      'per_unit',
+      true,
+      10,
+    ],
   );
   await ds.query(
     `INSERT INTO service_addons (category_id, name, description, price, price_type, is_active, sort_order)
      VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-    [null, 'Rush Processing', 'Priority queue processing, ready in 2 hours', 150.00, 'flat', true, 20],
+    [
+      null,
+      'Rush Processing',
+      'Priority queue processing, ready in 2 hours',
+      150.0,
+      'flat',
+      true,
+      20,
+    ],
   );
   console.log('✅ 2 service addons created');
 

@@ -16,15 +16,29 @@ import { OrdersService } from '../orders/orders.service';
 import { DriversService } from '../drivers/drivers.service';
 import { UpdateStatusDto } from '../orders/dto/update-status.dto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
+import { CreditsService } from '../credits/credits.service';
 
 type AnalyticsPeriod = '7D' | '30D' | '6M';
 type AnalyticsPoint = { label: string; value: number };
 type MonthlyAnalyticsPoint = { month: string; value: number };
 
-const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH_LABELS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -35,6 +49,7 @@ export class AdminController {
   constructor(
     private ordersService: OrdersService,
     private driversService: DriversService,
+    private creditsService: CreditsService,
     @InjectRepository(Order)
     private ordersRepo: Repository<Order>,
     @InjectRepository(User)
@@ -64,7 +79,9 @@ export class AdminController {
   }
 
   private addUtcMonths(date: Date, months: number) {
-    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, 1));
+    return new Date(
+      Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, 1),
+    );
   }
 
   private formatDayLabel(date: Date) {
@@ -125,10 +142,9 @@ export class AdminController {
 
   private getBucketKey(date: Date, period: AnalyticsPeriod) {
     if (period === '6M') {
-      return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(
-        2,
-        '0',
-      )}`;
+      return `${date.getUTCFullYear()}-${String(
+        date.getUTCMonth() + 1,
+      ).padStart(2, '0')}`;
     }
 
     return this.startOfUtcDay(date).toISOString().slice(0, 10);
@@ -141,7 +157,9 @@ export class AdminController {
     now: Date,
   ): AnalyticsPoint[] {
     const buckets = this.buildAnalyticsBuckets(period, now);
-    const values = new Map<string, number>(buckets.map((bucket) => [bucket.key, 0]));
+    const values = new Map<string, number>(
+      buckets.map((bucket) => [bucket.key, 0]),
+    );
     const earliestBucket = buckets[0]?.start ?? now;
 
     for (const order of orders) {
@@ -160,7 +178,10 @@ export class AdminController {
           continue;
         }
 
-        values.set(bucketKey, (values.get(bucketKey) ?? 0) + Number(order.totalPrice));
+        values.set(
+          bucketKey,
+          (values.get(bucketKey) ?? 0) + Number(order.totalPrice),
+        );
         continue;
       }
 
@@ -173,7 +194,11 @@ export class AdminController {
     }));
   }
 
-  private buildPaperSizeDemand(orders: Order[], period: AnalyticsPeriod, now: Date) {
+  private buildPaperSizeDemand(
+    orders: Order[],
+    period: AnalyticsPeriod,
+    now: Date,
+  ) {
     const buckets = this.buildAnalyticsBuckets(period, now);
     const earliestBucket = buckets[0]?.start ?? now;
     const totals = new Map<string, number>();
@@ -203,10 +228,12 @@ export class AdminController {
     metric: 'sales' | 'volume',
     now: Date,
   ): MonthlyAnalyticsPoint[] {
-    return this.buildSeries(orders, '6M', metric, now).map(({ label, value }) => ({
-      month: label,
-      value,
-    }));
+    return this.buildSeries(orders, '6M', metric, now).map(
+      ({ label, value }) => ({
+        month: label,
+        value,
+      }),
+    );
   }
 
   private async getAnalyticsOrders() {
@@ -309,6 +336,15 @@ export class AdminController {
       monthlyRevenue,
       totalOrders: orders.length,
     };
+  }
+
+  @Get('badge-counts')
+  async getBadgeCounts() {
+    const newOrders = await this.ordersRepo.count({
+      where: { orderStatus: In([OrderStatus.ORDER_PLACED, OrderStatus.FILE_VERIFIED]) },
+    });
+    const pendingTopUps = await this.creditsService.getPendingCount();
+    return { newOrders, pendingTopUps };
   }
 
   // All orders (not filtered by user)

@@ -206,8 +206,9 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
 
   Future<void> refreshOrders() async => _fetchOrders();
 
-  /// Add a new order to the top of the list.
-  Future<void> addOrder(Order order) async {
+  /// Add a new order to the top of the list. Returns the created [Order]
+  /// (server-assigned fields populated) so callers can use the real DB id.
+  Future<Order> addOrder(Order order) async {
     try {
       final response = await ApiClient.instance.post('/orders', data: {
         'category': order.category,
@@ -242,9 +243,11 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       final newOrder = _parseOrder(response.data as Map<String, dynamic>);
       state = [newOrder, ...state];
       debugPrint('OrdersProvider: Order created via API: ${newOrder.orderId}');
+      return newOrder;
     } catch (e) {
       debugPrint('OrdersProvider: API create failed ($e), adding locally');
       state = [order, ...state];
+      return order;
     }
   }
 

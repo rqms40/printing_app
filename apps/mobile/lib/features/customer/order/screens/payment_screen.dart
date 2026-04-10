@@ -254,14 +254,17 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         updatedAt: DateTime.now(),
       );
 
-      // 1. Create the order via API
-      await ref.read(ordersProvider.notifier).addOrder(newOrder);
+      // 1. Create the order via API — captures the server-assigned integer id
+      final createdOrder =
+          await ref.read(ordersProvider.notifier).addOrder(newOrder);
 
       // 2. Create payment intent for non-COD methods
       final paymentMethod = flowState.paymentMethod?.name ?? 'cod';
       if (paymentMethod != 'cod') {
         try {
+          final orderId = int.tryParse(createdOrder.id) ?? 0;
           await ApiClient.instance.post('/payments/intent', data: {
+            'orderId': orderId,
             'paymentMethod': paymentMethod,
             'amount': flowState.totalPrice + flowState.deliveryFee,
           });

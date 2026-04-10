@@ -40,7 +40,11 @@ export class CreditTransaction {
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   amountCredits: number;
 
-  @Column({ type: 'enum', enum: CreditTransactionStatus, default: CreditTransactionStatus.PENDING })
+  @Column({
+    type: 'enum',
+    enum: CreditTransactionStatus,
+    default: CreditTransactionStatus.PENDING,
+  })
   status: CreditTransactionStatus;
 
   @Column({ name: 'proof_of_payment_url', nullable: true, type: 'text' })

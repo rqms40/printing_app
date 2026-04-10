@@ -46,4 +46,8 @@ export class UsersService {
     await this.usersRepo.update(id, data);
     return this.usersRepo.findOneOrFail({ where: { id } });
   }
+
+  async findAllByRole(role: string): Promise<User[]> {
+    return this.usersRepo.find({ where: { role: role as any } });
+  }
 }
