@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -36,6 +37,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   final GlobalKey _yellowDotKey = GlobalKey();
   final GlobalKey _stackKey = GlobalKey();
   Offset? _yellowDotPosition;
+
+  // On web, Chrome blocks AudioContext until a user gesture. We show a
+  // tap-to-start overlay so the first touch unlocks audio autoplay.
+  bool _waitingForGesture = kIsWeb;
 
   // Dot appearance order (row, col) — spiral from bottom-left
   static const _dotOrder = [
@@ -83,6 +88,15 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       duration: const Duration(milliseconds: 400),
     );
 
+    // On native start immediately; on web wait for tap gesture first.
+    if (!kIsWeb) {
+      _startAnimation();
+    }
+  }
+
+  void _onWebTap() {
+    if (!_waitingForGesture) return;
+    setState(() => _waitingForGesture = false);
     _startAnimation();
   }
 
@@ -200,6 +214,61 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     const logoSize = 80.0;
     const dotSize = logoSize / 4.2;
     const spacing = logoSize / 12;
+
+    // Web tap-to-start gate: shown before user gesture to unlock AudioContext
+    if (_waitingForGesture) {
+      return Scaffold(
+        backgroundColor: colors.background,
+        body: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _onWebTap,
+          child: SizedBox.expand(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Static dot grid (no animation yet)
+                SizedBox(
+                  width: 80,
+                  height: 80,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(3, (row) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 80 / 24),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(3, (col) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 80 / 24),
+                              child: Container(
+                                width: 80 / 4.2,
+                                height: 80 / 4.2,
+                                decoration: BoxDecoration(
+                                  color: ghost,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            );
+                          }),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+                const SizedBox(height: 48),
+                Text(
+                  'TAP ANYWHERE TO BEGIN',
+                  style: AppTypography.overline.copyWith(
+                    color: fg.withValues(alpha: 0.4),
+                    letterSpacing: 2.0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: colors.background,
