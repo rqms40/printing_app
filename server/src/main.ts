@@ -8,16 +8,11 @@ import helmet from 'helmet';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Security headers — in dev skip HTTPS-forcing directives that break plain HTTP access
-  const isDev = process.env.NODE_ENV !== 'production';
-  app.use(
-    helmet({
-      contentSecurityPolicy: isDev ? false : undefined,
-      hsts: isDev ? false : undefined,
-      crossOriginOpenerPolicy: isDev ? false : undefined,
-      crossOriginEmbedderPolicy: isDev ? false : undefined,
-    }),
-  );
+  // Security headers — skip entirely in dev; plain HTTP on a remote IP is incompatible
+  // with HSTS, COOP, and CSP upgrade-insecure-requests that helmet enables by default.
+  if (process.env.NODE_ENV === 'production') {
+    app.use(helmet());
+  }
 
   // Global validation pipe
   app.useGlobalPipes(
