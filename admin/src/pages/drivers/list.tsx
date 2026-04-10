@@ -137,7 +137,7 @@ export function DriverList() {
 
   const onlineCount  = drivers.filter(d => d.is_available).length;
   const offlineCount = drivers.length - onlineCount;
-  const totalPayout  = mockDeliveries.reduce((a, d) => a + d.earnings, 0);
+  const totalDeliveries = mockDeliveries.length;
   const activeTrips  = mockDeliveries.filter(d =>
     ['Assigned', 'Accepted', 'Picked Up', 'On the Way'].includes(d.status)
   ).length;
@@ -197,10 +197,9 @@ export function DriverList() {
         <Col xs={12} sm={6}>
           <Card style={S.card} styles={{ body: { padding: '16px 20px' } }}>
             <Statistic
-              title={<span style={S.metricLabel}>Total Payouts</span>}
-              value={totalPayout}
-              precision={2}
-              prefix={<span style={{ color: '#34d399', fontSize: 16, marginRight: 2 }}>₱</span>}
+              title={<span style={S.metricLabel}>Total Deliveries</span>}
+              value={totalDeliveries}
+              prefix={<DropboxOutlined style={{ color: '#34d399', fontSize: 16, marginRight: 4 }} />}
               valueStyle={{ ...S.metricValue, color: '#34d399' }}
             />
           </Card>
@@ -424,13 +423,9 @@ export function DriverList() {
             width={100}
             render={(_: unknown, record: ApiDriver) => {
               const count = mockDeliveries.filter(d => d.driver_id === String(record.id)).length;
-              const earned = mockDeliveries
-                .filter(d => d.driver_id === String(record.id))
-                .reduce((a, d) => a + d.earnings, 0);
               return (
-                <div>
-                  <Text style={{ color: '#F0F0F0', display: 'block', fontSize: 13 }}>{count} trips</Text>
-                  <Text style={{ color: '#34d399', fontSize: 11.5 }}>₱{earned.toFixed(0)}</Text>
+                <div style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+                  <Text style={{ color: '#F0F0F0', fontSize: 13, fontWeight: 500 }}>{count} trips</Text>
                 </div>
               );
             }}
@@ -527,10 +522,8 @@ const DispatchPanel: React.FC<{
                   <Text strong style={{ color: '#F0F0F0', display: 'block', fontSize: 13.5 }}>
                     {order.order_id ?? order.id}
                   </Text>
-                  <Text style={{ color: '#666', fontSize: 11.5 }}>
-                    {order.delivery_fee != null
-                      ? `Fee: ₱${Number(order.delivery_fee).toFixed(0)}`
-                      : `Total: ₱${Number(order.total_price ?? 0).toFixed(0)}`}
+                  <Text style={{ color: '#666', fontSize: 11.5, textTransform: 'capitalize' }}>
+                    Type: {order.category ?? 'Parcel'}
                   </Text>
                 </div>
                 <div style={{

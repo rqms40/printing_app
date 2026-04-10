@@ -22,6 +22,7 @@ class AuthUser {
     this.phone,
     this.gender,
     this.dateOfBirth,
+    this.credits,
   });
 
   final String id;
@@ -32,6 +33,7 @@ class AuthUser {
   final String? phone;
   final String? gender;
   final DateTime? dateOfBirth;
+  final String? credits;
 
   AuthUser copyWith({
     String? id,
@@ -42,6 +44,7 @@ class AuthUser {
     String? phone,
     String? gender,
     DateTime? dateOfBirth,
+    String? credits,
   }) {
     return AuthUser(
       id: id ?? this.id,
@@ -52,6 +55,7 @@ class AuthUser {
       phone: phone ?? this.phone,
       gender: gender ?? this.gender,
       dateOfBirth: dateOfBirth ?? this.dateOfBirth,
+      credits: credits ?? this.credits,
     );
   }
 }
@@ -260,6 +264,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       isProfileComplete: json['isProfileComplete'] as bool? ?? false,
       phone: json['phoneNumber'] as String?,
       gender: json['gender'] as String?,
+      credits: json['credits']?.toString(),
       dateOfBirth: json['dateOfBirth'] != null
           ? DateTime.tryParse(json['dateOfBirth'] as String)
           : null,

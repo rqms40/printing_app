@@ -1,0 +1,181 @@
+﻿src/addresses/addresses.service.spec.ts(16,23): error TS2352: Conversion of type '{ id: number; userId: number; label: string; street: string; isDefault: false; createdAt: Date; }' to type 'Address' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type '{ id: number; userId: number; label: string; street: string; isDefault: false; createdAt: Date; }' is missing the following properties from type 'Address': user, fullAddress, barangay, city, and 6 more.
+src/addresses/addresses.service.spec.ts(49,7): error TS18048: 'repo.find' is possibly 'undefined'.
+src/addresses/addresses.service.spec.ts(49,17): error TS2339: Property 'mockResolvedValue' does not exist on type '(options?: FindManyOptions<Address> | undefined) => Promise<Address[]>'.
+src/addresses/addresses.service.spec.ts(63,7): error TS18048: 'repo.count' is possibly 'undefined'.
+src/addresses/addresses.service.spec.ts(63,18): error TS2339: Property 'mockResolvedValue' does not exist on type '(options?: FindManyOptions<Address> | undefined) => Promise<number>'.
+src/addresses/addresses.service.spec.ts(64,7): error TS18048: 'repo.create' is possibly 'undefined'.
+src/addresses/addresses.service.spec.ts(64,19): error TS2339: Property 'mockReturnValue' does not exist on type '{ (): Address; (entityLikeArray: DeepPartial<Address>[]): Address[]; (entityLike: DeepPartial<Address>): Address; }'.
+src/addresses/addresses.service.spec.ts(65,7): error TS18048: 'repo.save' is possibly 'undefined'.
+src/addresses/addresses.service.spec.ts(65,17): error TS2339: Property 'mockResolvedValue' does not exist on type '{ <T extends DeepPartial<Address>>(entities: T[], options: SaveOptions & { reload: false; }): Promise<T[]>; <T extends DeepPartial<Address>>(entities: T[], options?: SaveOptions | undefined): Promise<...>; <T extends DeepPartial<...>>(entity: T, options: SaveOptions & { ...; }): Promise<...>; <T extends DeepPartial<...'.
+src/addresses/addresses.service.spec.ts(82,7): error TS18048: 'repo.count' is possibly 'undefined'.
+src/addresses/addresses.service.spec.ts(82,18): error TS2339: Property 'mockResolvedValue' does not exist on type '(options?: FindManyOptions<Address> | undefined) => Promise<number>'.
+src/addresses/addresses.service.spec.ts(90,7): error TS18048: 'repo.count' is possibly 'undefined'.
+src/addresses/addresses.service.spec.ts(90,18): error TS2339: Property 'mockResolvedValue' does not exist on type '(options?: FindManyOptions<Address> | undefined) => Promise<number>'.
+src/addresses/addresses.service.spec.ts(91,7): error TS18048: 'repo.update' is possibly 'undefined'.
+src/addresses/addresses.service.spec.ts(91,19): error TS2339: Property 'mockResolvedValue' does not exist on type '(criteria: string | number | Date | ObjectId | string[] | number[] | Date[] | ObjectId[] | FindOptionsWhere<Address> | FindOptionsWhere<Address>[], partialEntity: _QueryDeepPartialEntity<...>) => Promise<...>'.
+src/addresses/addresses.service.spec.ts(93,7): error TS18048: 'repo.create' is possibly 'undefined'.
+src/addresses/addresses.service.spec.ts(93,19): error TS2339: Property 'mockReturnValue' does not exist on type '{ (): Address; (entityLikeArray: DeepPartial<Address>[]): Address[]; (entityLike: DeepPartial<Address>): Address; }'.
+src/addresses/addresses.service.spec.ts(94,7): error TS18048: 'repo.save' is possibly 'undefined'.
+src/addresses/addresses.service.spec.ts(94,17): error TS2339: Property 'mockResolvedValue' does not exist on type '{ <T extends DeepPartial<Address>>(entities: T[], options: SaveOptions & { reload: false; }): Promise<T[]>; <T extends DeepPartial<Address>>(entities: T[], options?: SaveOptions | undefined): Promise<...>; <T extends DeepPartial<...>>(entity: T, options: SaveOptions & { ...; }): Promise<...>; <T extends DeepPartial<...'.
+src/addresses/addresses.service.spec.ts(113,7): error TS18048: 'repo.findOne' is possibly 'undefined'.
+src/addresses/addresses.service.spec.ts(113,20): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<Address>) => Promise<Address | null>'.
+src/addresses/addresses.service.spec.ts(114,7): error TS18048: 'repo.update' is possibly 'undefined'.
+src/addresses/addresses.service.spec.ts(114,19): error TS2339: Property 'mockResolvedValue' does not exist on type '(criteria: string | number | Date | ObjectId | string[] | number[] | Date[] | ObjectId[] | FindOptionsWhere<Address> | FindOptionsWhere<Address>[], partialEntity: _QueryDeepPartialEntity<...>) => Promise<...>'.
+src/addresses/addresses.service.spec.ts(116,7): error TS18048: 'repo.save' is possibly 'undefined'.
+src/addresses/addresses.service.spec.ts(116,17): error TS2339: Property 'mockResolvedValue' does not exist on type '{ <T extends DeepPartial<Address>>(entities: T[], options: SaveOptions & { reload: false; }): Promise<T[]>; <T extends DeepPartial<Address>>(entities: T[], options?: SaveOptions | undefined): Promise<...>; <T extends DeepPartial<...>>(entity: T, options: SaveOptions & { ...; }): Promise<...>; <T extends DeepPartial<...'.
+src/addresses/addresses.service.spec.ts(131,7): error TS18048: 'repo.findOne' is possibly 'undefined'.
+src/addresses/addresses.service.spec.ts(131,20): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<Address>) => Promise<Address | null>'.
+src/addresses/addresses.service.spec.ts(132,7): error TS18048: 'repo.remove' is possibly 'undefined'.
+src/addresses/addresses.service.spec.ts(132,19): error TS2339: Property 'mockResolvedValue' does not exist on type '{ (entities: Address[], options?: RemoveOptions | undefined): Promise<Address[]>; (entity: Address, options?: RemoveOptions | undefined): Promise<...>; }'.
+src/addresses/addresses.service.spec.ts(141,7): error TS18048: 'repo.findOne' is possibly 'undefined'.
+src/addresses/addresses.service.spec.ts(141,20): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<Address>) => Promise<Address | null>'.
+src/addresses/addresses.service.spec.ts(147,7): error TS18048: 'repo.findOne' is possibly 'undefined'.
+src/addresses/addresses.service.spec.ts(147,20): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<Address>) => Promise<Address | null>'.
+src/admin/admin.controller.spec.ts(46,5): error TS18048: 'ordersRepo.find' is possibly 'undefined'.
+src/admin/admin.controller.spec.ts(46,21): error TS2339: Property 'mockResolvedValue' does not exist on type '(options?: FindManyOptions<Order> | undefined) => Promise<Order[]>'.
+src/admin/admin.controller.spec.ts(136,5): error TS18048: 'ordersRepo.find' is possibly 'undefined'.
+src/admin/admin.controller.spec.ts(136,21): error TS2339: Property 'mockResolvedValue' does not exist on type '(options?: FindManyOptions<Order> | undefined) => Promise<Order[]>'.
+src/drivers/drivers.service.spec.ts(74,7): error TS18048: 'profileRepo.findOne' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(74,27): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<DriverProfile>) => Promise<DriverProfile | null>'.
+src/drivers/drivers.service.spec.ts(85,7): error TS18048: 'profileRepo.findOne' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(85,27): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<DriverProfile>) => Promise<DriverProfile | null>'.
+src/drivers/drivers.service.spec.ts(93,7): error TS18048: 'profileRepo.findOne' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(93,27): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<DriverProfile>) => Promise<DriverProfile | null>'.
+src/drivers/drivers.service.spec.ts(97,7): error TS18048: 'profileRepo.save' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(97,24): error TS2339: Property 'mockImplementation' does not exist on type '{ <T extends DeepPartial<DriverProfile>>(entities: T[], options: SaveOptions & { reload: false; }): Promise<T[]>; <T extends DeepPartial<DriverProfile>>(entities: T[], options?: SaveOptions | undefined): Promise<...>; <T extends DeepPartial<...>>(entity: T, options: SaveOptions & { ...; }): Promise<...>; <T extends ...'.
+src/drivers/drivers.service.spec.ts(97,50): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/drivers/drivers.service.spec.ts(106,7): error TS18048: 'profileRepo.findOne' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(106,27): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<DriverProfile>) => Promise<DriverProfile | null>'.
+src/drivers/drivers.service.spec.ts(110,7): error TS18048: 'profileRepo.save' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(110,24): error TS2339: Property 'mockImplementation' does not exist on type '{ <T extends DeepPartial<DriverProfile>>(entities: T[], options: SaveOptions & { reload: false; }): Promise<T[]>; <T extends DeepPartial<DriverProfile>>(entities: T[], options?: SaveOptions | undefined): Promise<...>; <T extends DeepPartial<...>>(entity: T, options: SaveOptions & { ...; }): Promise<...>; <T extends ...'.
+src/drivers/drivers.service.spec.ts(110,50): error TS7006: Parameter 'p' implicitly has an 'any' type.
+src/drivers/drivers.service.spec.ts(120,7): error TS18048: 'profileRepo.findOne' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(120,27): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<DriverProfile>) => Promise<DriverProfile | null>'.
+src/drivers/drivers.service.spec.ts(121,7): error TS18048: 'assignmentRepo.findOne' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(121,30): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<DeliveryAssignment>) => Promise<DeliveryAssignment | null>'.
+src/drivers/drivers.service.spec.ts(124,7): error TS18048: 'assignmentRepo.save' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(124,27): error TS2339: Property 'mockImplementation' does not exist on type '{ <T extends DeepPartial<DeliveryAssignment>>(entities: T[], options: SaveOptions & { reload: false; }): Promise<T[]>; <T extends DeepPartial<DeliveryAssignment>>(entities: T[], options?: SaveOptions | undefined): Promise<...>; <T extends DeepPartial<...>>(entity: T, options: SaveOptions & { ...; }): Promise<...>; <...'.
+src/drivers/drivers.service.spec.ts(125,16): error TS7006: Parameter 'a' implicitly has an 'any' type.
+src/drivers/drivers.service.spec.ts(139,7): error TS18048: 'profileRepo.findOne' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(139,27): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<DriverProfile>) => Promise<DriverProfile | null>'.
+src/drivers/drivers.service.spec.ts(140,7): error TS18048: 'assignmentRepo.findOne' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(140,30): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<DeliveryAssignment>) => Promise<DeliveryAssignment | null>'.
+src/drivers/drivers.service.spec.ts(143,7): error TS18048: 'assignmentRepo.save' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(143,27): error TS2339: Property 'mockImplementation' does not exist on type '{ <T extends DeepPartial<DeliveryAssignment>>(entities: T[], options: SaveOptions & { reload: false; }): Promise<T[]>; <T extends DeepPartial<DeliveryAssignment>>(entities: T[], options?: SaveOptions | undefined): Promise<...>; <T extends DeepPartial<...>>(entity: T, options: SaveOptions & { ...; }): Promise<...>; <...'.
+src/drivers/drivers.service.spec.ts(144,16): error TS7006: Parameter 'a' implicitly has an 'any' type.
+src/drivers/drivers.service.spec.ts(159,7): error TS18048: 'profileRepo.findOne' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(159,27): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<DriverProfile>) => Promise<DriverProfile | null>'.
+src/drivers/drivers.service.spec.ts(160,7): error TS18048: 'assignmentRepo.findOne' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(160,30): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<DeliveryAssignment>) => Promise<DeliveryAssignment | null>'.
+src/drivers/drivers.service.spec.ts(174,7): error TS18048: 'profileRepo.findOne' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(174,27): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<DriverProfile>) => Promise<DriverProfile | null>'.
+src/drivers/drivers.service.spec.ts(175,7): error TS18048: 'assignmentRepo.findOne' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(175,30): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<DeliveryAssignment>) => Promise<DeliveryAssignment | null>'.
+src/drivers/drivers.service.spec.ts(183,7): error TS18048: 'profileRepo.findOne' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(183,27): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<DriverProfile>) => Promise<DriverProfile | null>'.
+src/drivers/drivers.service.spec.ts(184,7): error TS18048: 'assignmentRepo.save' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(184,27): error TS2339: Property 'mockImplementation' does not exist on type '{ <T extends DeepPartial<DeliveryAssignment>>(entities: T[], options: SaveOptions & { reload: false; }): Promise<T[]>; <T extends DeepPartial<DeliveryAssignment>>(entities: T[], options?: SaveOptions | undefined): Promise<...>; <T extends DeepPartial<...>>(entity: T, options: SaveOptions & { ...; }): Promise<...>; <...'.
+src/drivers/drivers.service.spec.ts(185,16): error TS7006: Parameter 'a' implicitly has an 'any' type.
+src/drivers/drivers.service.spec.ts(193,7): error TS18048: 'assignmentRepo.findOne' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(193,30): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<DeliveryAssignment>) => Promise<DeliveryAssignment | null>'.
+src/drivers/drivers.service.spec.ts(206,7): error TS18048: 'assignmentRepo.findOne' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(206,30): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<DeliveryAssignment>) => Promise<DeliveryAssignment | null>'.
+src/drivers/drivers.service.spec.ts(219,7): error TS18048: 'assignmentRepo.findOne' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(219,30): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<DeliveryAssignment>) => Promise<DeliveryAssignment | null>'.
+src/drivers/drivers.service.spec.ts(232,7): error TS18048: 'assignmentRepo.findOne' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(232,30): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<DeliveryAssignment>) => Promise<DeliveryAssignment | null>'.
+src/drivers/drivers.service.spec.ts(245,7): error TS18048: 'assignmentRepo.findOne' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(245,30): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<DeliveryAssignment>) => Promise<DeliveryAssignment | null>'.
+src/drivers/drivers.service.spec.ts(256,7): error TS18048: 'profileRepo.findOne' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(256,27): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<DriverProfile>) => Promise<DriverProfile | null>'.
+src/drivers/drivers.service.spec.ts(257,7): error TS18048: 'assignmentRepo.findOne' is possibly 'undefined'.
+src/drivers/drivers.service.spec.ts(257,30): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<DeliveryAssignment>) => Promise<DeliveryAssignment | null>'.
+src/firebase/firebase.service.ts(2,42): error TS2307: Cannot find module 'firebase-admin/app' or its corresponding type declarations.
+src/firebase/firebase.service.ts(3,41): error TS2307: Cannot find module 'firebase-admin/messaging' or its corresponding type declarations.
+src/notifications/notifications.service.spec.ts(45,7): error TS18048: 'repo.find' is possibly 'undefined'.
+src/notifications/notifications.service.spec.ts(45,17): error TS2339: Property 'mockResolvedValue' does not exist on type '(options?: FindManyOptions<Notification> | undefined) => Promise<Notification[]>'.
+src/notifications/notifications.service.spec.ts(60,7): error TS18048: 'repo.create' is possibly 'undefined'.
+src/notifications/notifications.service.spec.ts(60,19): error TS2339: Property 'mockReturnValue' does not exist on type '{ (): Notification; (entityLikeArray: DeepPartial<Notification>[]): Notification[]; (entityLike: DeepPartial<Notification>): Notification; }'.
+src/notifications/notifications.service.spec.ts(61,7): error TS18048: 'repo.save' is possibly 'undefined'.
+src/notifications/notifications.service.spec.ts(61,17): error TS2339: Property 'mockResolvedValue' does not exist on type '{ <T extends DeepPartial<Notification>>(entities: T[], options: SaveOptions & { reload: false; }): Promise<T[]>; <T extends DeepPartial<Notification>>(entities: T[], options?: SaveOptions | undefined): Promise<...>; <T extends DeepPartial<...>>(entity: T, options: SaveOptions & { ...; }): Promise<...>; <T extends De...'.
+src/notifications/notifications.service.spec.ts(83,7): error TS18048: 'repo.findOne' is possibly 'undefined'.
+src/notifications/notifications.service.spec.ts(83,20): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<Notification>) => Promise<Notification | null>'.
+src/notifications/notifications.service.spec.ts(84,7): error TS18048: 'repo.save' is possibly 'undefined'.
+src/notifications/notifications.service.spec.ts(84,17): error TS2339: Property 'mockImplementation' does not exist on type '{ <T extends DeepPartial<Notification>>(entities: T[], options: SaveOptions & { reload: false; }): Promise<T[]>; <T extends DeepPartial<Notification>>(entities: T[], options?: SaveOptions | undefined): Promise<...>; <T extends DeepPartial<...>>(entity: T, options: SaveOptions & { ...; }): Promise<...>; <T extends De...'.
+src/notifications/notifications.service.spec.ts(84,43): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/notifications/notifications.service.spec.ts(95,7): error TS18048: 'repo.findOne' is possibly 'undefined'.
+src/notifications/notifications.service.spec.ts(95,20): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<Notification>) => Promise<Notification | null>'.
+src/notifications/notifications.service.spec.ts(105,7): error TS18048: 'repo.update' is possibly 'undefined'.
+src/notifications/notifications.service.spec.ts(105,19): error TS2339: Property 'mockResolvedValue' does not exist on type '(criteria: string | number | Date | ObjectId | string[] | number[] | Date[] | ObjectId[] | FindOptionsWhere<Notification> | FindOptionsWhere<...>[], partialEntity: _QueryDeepPartialEntity<...>) => Promise<...>'.
+src/notifications/notifications.service.spec.ts(118,7): error TS18048: 'repo.count' is possibly 'undefined'.
+src/notifications/notifications.service.spec.ts(118,18): error TS2339: Property 'mockResolvedValue' does not exist on type '(options?: FindManyOptions<Notification> | undefined) => Promise<number>'.
+src/notifications/notifications.service.spec.ts(129,7): error TS18048: 'repo.count' is possibly 'undefined'.
+src/notifications/notifications.service.spec.ts(129,18): error TS2339: Property 'mockResolvedValue' does not exist on type '(options?: FindManyOptions<Notification> | undefined) => Promise<number>'.
+src/orders/orders.service.spec.ts(21,21): error TS2352: Conversion of type '{ id: number; orderId: string; userId: number; orderStatus: "pending"; createdAt: Date; }' to type 'Order' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type '{ id: number; orderId: string; userId: number; orderStatus: "pending"; createdAt: Date; }' is missing the following properties from type 'Order': user, category, fileUrl, fileName, and 20 more.
+src/orders/orders.service.spec.ts(76,7): error TS18048: 'repo.count' is possibly 'undefined'.
+src/orders/orders.service.spec.ts(76,18): error TS2339: Property 'mockResolvedValue' does not exist on type '(options?: FindManyOptions<Order> | undefined) => Promise<number>'.
+src/orders/orders.service.spec.ts(77,7): error TS18048: 'repo.create' is possibly 'undefined'.
+src/orders/orders.service.spec.ts(77,19): error TS2339: Property 'mockReturnValue' does not exist on type '{ (): Order; (entityLikeArray: DeepPartial<Order>[]): Order[]; (entityLike: DeepPartial<Order>): Order; }'.
+src/orders/orders.service.spec.ts(78,7): error TS18048: 'repo.save' is possibly 'undefined'.
+src/orders/orders.service.spec.ts(78,17): error TS2339: Property 'mockResolvedValue' does not exist on type '{ <T extends DeepPartial<Order>>(entities: T[], options: SaveOptions & { reload: false; }): Promise<T[]>; <T extends DeepPartial<Order>>(entities: T[], options?: SaveOptions | undefined): Promise<...>; <T extends DeepPartial<...>>(entity: T, options: SaveOptions & { ...; }): Promise<...>; <T extends DeepPartial<...>...'.
+src/orders/orders.service.spec.ts(80,20): error TS2352: Conversion of type '{ userId: number; orderStatus: "pending"; }' to type 'Partial<Order>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Types of property 'orderStatus' are incompatible.
+    Type '"pending"' is not comparable to type 'OrderStatus | undefined'.
+src/orders/orders.service.spec.ts(92,7): error TS18048: 'repo.count' is possibly 'undefined'.
+src/orders/orders.service.spec.ts(92,18): error TS2339: Property 'mockResolvedValue' does not exist on type '(options?: FindManyOptions<Order> | undefined) => Promise<number>'.
+src/orders/orders.service.spec.ts(93,7): error TS18048: 'repo.create' is possibly 'undefined'.
+src/orders/orders.service.spec.ts(93,19): error TS2339: Property 'mockReturnValue' does not exist on type '{ (): Order; (entityLikeArray: DeepPartial<Order>[]): Order[]; (entityLike: DeepPartial<Order>): Order; }'.
+src/orders/orders.service.spec.ts(94,7): error TS18048: 'repo.save' is possibly 'undefined'.
+src/orders/orders.service.spec.ts(94,17): error TS2339: Property 'mockResolvedValue' does not exist on type '{ <T extends DeepPartial<Order>>(entities: T[], options: SaveOptions & { reload: false; }): Promise<T[]>; <T extends DeepPartial<Order>>(entities: T[], options?: SaveOptions | undefined): Promise<...>; <T extends DeepPartial<...>>(entity: T, options: SaveOptions & { ...; }): Promise<...>; <T extends DeepPartial<...>...'.
+src/orders/orders.service.spec.ts(107,7): error TS18048: 'repo.find' is possibly 'undefined'.
+src/orders/orders.service.spec.ts(107,17): error TS2339: Property 'mockResolvedValue' does not exist on type '(options?: FindManyOptions<Order> | undefined) => Promise<Order[]>'.
+src/orders/orders.service.spec.ts(121,7): error TS18048: 'repo.findOne' is possibly 'undefined'.
+src/orders/orders.service.spec.ts(121,20): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<Order>) => Promise<Order | null>'.
+src/orders/orders.service.spec.ts(132,7): error TS18048: 'repo.update' is possibly 'undefined'.
+src/orders/orders.service.spec.ts(132,19): error TS2339: Property 'mockResolvedValue' does not exist on type '(criteria: string | number | Date | ObjectId | string[] | number[] | Date[] | ObjectId[] | FindOptionsWhere<Order> | FindOptionsWhere<Order>[], partialEntity: _QueryDeepPartialEntity<...>) => Promise<...>'.
+src/orders/orders.service.spec.ts(133,7): error TS18048: 'repo.findOneOrFail' is possibly 'undefined'.
+src/orders/orders.service.spec.ts(133,26): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<Order>) => Promise<Order>'.
+src/payments/payments.service.spec.ts(39,7): error TS18048: 'txnRepo.create' is possibly 'undefined'.
+src/payments/payments.service.spec.ts(39,22): error TS2339: Property 'mockReturnValue' does not exist on type '{ (): PaymentTransaction; (entityLikeArray: DeepPartial<PaymentTransaction>[]): PaymentTransaction[]; (entityLike: DeepPartial<...>): PaymentTransaction; }'.
+src/payments/payments.service.spec.ts(40,7): error TS18048: 'txnRepo.save' is possibly 'undefined'.
+src/payments/payments.service.spec.ts(40,20): error TS2339: Property 'mockResolvedValue' does not exist on type '{ <T extends DeepPartial<PaymentTransaction>>(entities: T[], options: SaveOptions & { reload: false; }): Promise<T[]>; <T extends DeepPartial<PaymentTransaction>>(entities: T[], options?: SaveOptions | undefined): Promise<...>; <T extends DeepPartial<...>>(entity: T, options: SaveOptions & { ...; }): Promise<...>; <...'.
+src/payments/payments.service.spec.ts(65,7): error TS18048: 'txnRepo.findOne' is possibly 'undefined'.
+src/payments/payments.service.spec.ts(65,23): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<PaymentTransaction>) => Promise<PaymentTransaction | null>'.
+src/payments/payments.service.spec.ts(66,7): error TS18048: 'txnRepo.save' is possibly 'undefined'.
+src/payments/payments.service.spec.ts(66,20): error TS2339: Property 'mockImplementation' does not exist on type '{ <T extends DeepPartial<PaymentTransaction>>(entities: T[], options: SaveOptions & { reload: false; }): Promise<T[]>; <T extends DeepPartial<PaymentTransaction>>(entities: T[], options?: SaveOptions | undefined): Promise<...>; <T extends DeepPartial<...>>(entity: T, options: SaveOptions & { ...; }): Promise<...>; <...'.
+src/payments/payments.service.spec.ts(66,46): error TS7006: Parameter 't' implicitly has an 'any' type.
+src/payments/payments.service.spec.ts(74,7): error TS18048: 'txnRepo.findOne' is possibly 'undefined'.
+src/payments/payments.service.spec.ts(74,23): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<PaymentTransaction>) => Promise<PaymentTransaction | null>'.
+src/payments/payments.service.spec.ts(86,7): error TS18048: 'txnRepo.findOne' is possibly 'undefined'.
+src/payments/payments.service.spec.ts(86,23): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<PaymentTransaction>) => Promise<PaymentTransaction | null>'.
+src/payments/payments.service.spec.ts(100,7): error TS18048: 'txnRepo.findOne' is possibly 'undefined'.
+src/payments/payments.service.spec.ts(100,23): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<PaymentTransaction>) => Promise<PaymentTransaction | null>'.
+src/payments/payments.service.spec.ts(101,7): error TS18048: 'txnRepo.save' is possibly 'undefined'.
+src/payments/payments.service.spec.ts(101,20): error TS2339: Property 'mockImplementation' does not exist on type '{ <T extends DeepPartial<PaymentTransaction>>(entities: T[], options: SaveOptions & { reload: false; }): Promise<T[]>; <T extends DeepPartial<PaymentTransaction>>(entities: T[], options?: SaveOptions | undefined): Promise<...>; <T extends DeepPartial<...>>(entity: T, options: SaveOptions & { ...; }): Promise<...>; <...'.
+src/payments/payments.service.spec.ts(101,46): error TS7006: Parameter 't' implicitly has an 'any' type.
+src/payments/payments.service.spec.ts(109,7): error TS18048: 'txnRepo.findOne' is possibly 'undefined'.
+src/payments/payments.service.spec.ts(109,23): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<PaymentTransaction>) => Promise<PaymentTransaction | null>'.
+src/payments/payments.service.spec.ts(121,7): error TS18048: 'txnRepo.findOne' is possibly 'undefined'.
+src/payments/payments.service.spec.ts(121,23): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<PaymentTransaction>) => Promise<PaymentTransaction | null>'.
+src/users/users.service.spec.ts(41,7): error TS18048: 'repo.findOne' is possibly 'undefined'.
+src/users/users.service.spec.ts(41,20): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<User>) => Promise<User | null>'.
+src/users/users.service.spec.ts(52,7): error TS18048: 'repo.findOne' is possibly 'undefined'.
+src/users/users.service.spec.ts(52,20): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<User>) => Promise<User | null>'.
+src/users/users.service.spec.ts(62,7): error TS18048: 'repo.findOne' is possibly 'undefined'.
+src/users/users.service.spec.ts(62,20): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<User>) => Promise<User | null>'.
+src/users/users.service.spec.ts(73,7): error TS18048: 'repo.findOne' is possibly 'undefined'.
+src/users/users.service.spec.ts(73,20): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<User>) => Promise<User | null>'.
+src/users/users.service.spec.ts(74,7): error TS18048: 'repo.create' is possibly 'undefined'.
+src/users/users.service.spec.ts(74,19): error TS2339: Property 'mockReturnValue' does not exist on type '{ (): User; (entityLikeArray: DeepPartial<User>[]): User[]; (entityLike: DeepPartial<User>): User; }'.
+src/users/users.service.spec.ts(75,7): error TS18048: 'repo.save' is possibly 'undefined'.
+src/users/users.service.spec.ts(75,17): error TS2339: Property 'mockResolvedValue' does not exist on type '{ <T extends DeepPartial<User>>(entities: T[], options: SaveOptions & { reload: false; }): Promise<T[]>; <T extends DeepPartial<User>>(entities: T[], options?: SaveOptions | undefined): Promise<...>; <T extends DeepPartial<...>>(entity: T, options: SaveOptions & { ...; }): Promise<...>; <T extends DeepPartial<...>>(...'.
+src/users/users.service.spec.ts(86,26): error TS18048: 'repo.create' is possibly 'undefined'.
+src/users/users.service.spec.ts(86,38): error TS2339: Property 'mock' does not exist on type '{ (): User; (entityLikeArray: DeepPartial<User>[]): User[]; (entityLike: DeepPartial<User>): User; }'.
+src/users/users.service.spec.ts(97,7): error TS18048: 'repo.findOne' is possibly 'undefined'.
+src/users/users.service.spec.ts(97,20): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<User>) => Promise<User | null>'.
+src/users/users.service.spec.ts(108,7): error TS18048: 'repo.update' is possibly 'undefined'.
+src/users/users.service.spec.ts(108,19): error TS2339: Property 'mockResolvedValue' does not exist on type '(criteria: string | number | Date | FindOptionsWhere<User> | FindOptionsWhere<User>[] | ObjectId | string[] | number[] | Date[] | ObjectId[], partialEntity: _QueryDeepPartialEntity<...>) => Promise<...>'.
+src/users/users.service.spec.ts(109,7): error TS18048: 'repo.findOneOrFail' is possibly 'undefined'.
+src/users/users.service.spec.ts(109,26): error TS2339: Property 'mockResolvedValue' does not exist on type '(options: FindOneOptions<User>) => Promise<User>'.

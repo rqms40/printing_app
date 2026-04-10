@@ -47,6 +47,9 @@ export class User {
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  credits: number;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

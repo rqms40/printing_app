@@ -61,18 +61,18 @@ class ApiClient {
   }
 
   // Convenience methods
-  Future<Response<T>> get<T>(String path, {Map<String, dynamic>? queryParameters}) =>
-      dio.get<T>(path, queryParameters: queryParameters);
+  Future<Response<T>> get<T>(String path, {Map<String, dynamic>? queryParameters, Options? options}) =>
+      dio.get<T>(path, queryParameters: queryParameters, options: options);
 
-  Future<Response<T>> post<T>(String path, {dynamic data}) =>
-      dio.post<T>(path, data: data);
+  Future<Response<T>> post<T>(String path, {dynamic data, Options? options}) =>
+      dio.post<T>(path, data: data, options: options);
 
-  Future<Response<T>> put<T>(String path, {dynamic data}) =>
-      dio.put<T>(path, data: data);
+  Future<Response<T>> put<T>(String path, {dynamic data, Options? options}) =>
+      dio.put<T>(path, data: data, options: options);
 
-  Future<Response<T>> patch<T>(String path, {dynamic data}) =>
-      dio.patch<T>(path, data: data);
+  Future<Response<T>> patch<T>(String path, {dynamic data, Options? options}) =>
+      dio.patch<T>(path, data: data, options: options);
 
-  Future<Response<T>> delete<T>(String path) =>
-      dio.delete<T>(path);
+  Future<Response<T>> delete<T>(String path, {Options? options}) =>
+      dio.delete<T>(path, options: options);
 }

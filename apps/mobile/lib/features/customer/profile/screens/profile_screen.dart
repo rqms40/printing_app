@@ -100,6 +100,28 @@ class ProfileScreen extends ConsumerWidget {
                       curve: Curves.easeOut),
               const SizedBox(height: AppSpacing.lg),
 
+              // WALLET section
+              _SectionHeader(label: 'WALLET', colors: colors)
+                  .animate()
+                  .fadeIn(
+                      duration: 400.ms,
+                      delay: 25.ms,
+                      curve: Curves.easeOut),
+              _MenuRow(
+                icon: HugeIcons.strokeRoundedCoins01, // Generic Coin icon
+                title: 'GRID Credits: ${user?.credits ?? "0.00"}',
+                onTap: () {},
+                colors: colors,
+              ),
+              _Divider(colors: colors),
+              _MenuRow(
+                icon: HugeIcons.strokeRoundedWalletAdd01,
+                title: 'Top-Up Credits',
+                onTap: () => context.push('/customer/profile/top-up'),
+                colors: colors,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+
               // ACCOUNT section
               _SectionHeader(label: 'ACCOUNT', colors: colors)
                   .animate()

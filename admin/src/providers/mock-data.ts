@@ -8,16 +8,26 @@ export const mockKPIs: DashboardKPIs = {
   in_production_count: 3,
   ready_for_pickup_count: 2,
   delivered_count: 128,
-  monthly_revenue: 45200,
+  avg_tat_mins: 145,
+  error_rate_percent: 1.2,
 };
 
-export const mockSalesData: ChartDataPoint[] = [
-  { month: "Oct", value: 32000 },
-  { month: "Nov", value: 38500 },
-  { month: "Dec", value: 41000 },
-  { month: "Jan", value: 35200 },
-  { month: "Feb", value: 42800 },
-  { month: "Mar", value: 45200 },
+export const mockTatData: ChartDataPoint[] = [
+  { month: "Oct", value: 180 },
+  { month: "Nov", value: 175 },
+  { month: "Dec", value: 190 },
+  { month: "Jan", value: 160 },
+  { month: "Feb", value: 155 },
+  { month: "Mar", value: 145 },
+];
+
+export const mockErrorRateData: ChartDataPoint[] = [
+  { month: "Oct", value: 2.1 },
+  { month: "Nov", value: 1.8 },
+  { month: "Dec", value: 2.5 },
+  { month: "Jan", value: 1.6 },
+  { month: "Feb", value: 1.4 },
+  { month: "Mar", value: 1.2 },
 ];
 
 export const mockVolumeData: ChartDataPoint[] = [

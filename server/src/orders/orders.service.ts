@@ -7,6 +7,7 @@ import { ThreeDSpec } from './entities/three-d-specs.entity';
 import { OrdersGateway } from './orders.gateway';
 import { FirebaseService } from '../firebase/firebase.service';
 import { UsersService } from '../users/users.service';
+import { CreditsService } from '../credits/credits.service';
 
 @Injectable()
 export class OrdersService {
@@ -20,6 +21,7 @@ export class OrdersService {
     private ordersGateway: OrdersGateway,
     private firebaseService: FirebaseService,
     private usersService: UsersService,
+    private creditsService: CreditsService,
   ) {}
 
   async findByUser(userId: number): Promise<Order[]> {
@@ -40,6 +42,20 @@ export class OrdersService {
     },
   ): Promise<Order> {
     const { paperSpecs, threeDSpecs, ...orderData } = data;
+    
+    // Validate and deduct credits if payment method is credits
+    if (orderData.paymentMethod === 'credits' && orderData.totalPrice && orderData.totalPrice > 0) {
+      if (!orderData.userId) {
+         throw new Error('User ID is required to process credit payment');
+      }
+      
+      const userId = orderData.userId;
+      const amountCredits = orderData.totalPrice; // 1 PHP = 1 Credit equivalent locally
+      
+      // Attempt subtraction, will throw BadRequestException if insufficient
+      await this.creditsService.subtractCredits(userId, amountCredits, 'order_placed');
+    }
+    
     const count = await this.ordersRepo.count();
     const orderId = `ORD-${(10001 + count).toString().padStart(5, '0')}`;
     const order = this.ordersRepo.create({ ...orderData, orderId });

@@ -12,6 +12,7 @@ class User {
     required this.role,
     required this.isProfileComplete,
     required this.isActive,
+    this.credits,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -26,6 +27,7 @@ class User {
   final UserRole role;
   final bool isProfileComplete;
   final bool isActive;
+  final String? credits;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -40,6 +42,7 @@ class User {
     UserRole? role,
     bool? isProfileComplete,
     bool? isActive,
+    String? credits,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -54,6 +57,7 @@ class User {
       role: role ?? this.role,
       isProfileComplete: isProfileComplete ?? this.isProfileComplete,
       isActive: isActive ?? this.isActive,
+      credits: credits ?? this.credits,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

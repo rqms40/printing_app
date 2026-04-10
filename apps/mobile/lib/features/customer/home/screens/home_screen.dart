@@ -63,19 +63,51 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               const SizedBox(height: AppSpacing.lg),
 
               // Greeting header
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    '${_greeting()},',
-                    style: AppTypography.body.copyWith(
-                      color: colors.onSurfaceDim,
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${_greeting()},',
+                        style: AppTypography.body.copyWith(
+                          color: colors.onSurfaceDim,
+                        ),
+                      ),
+                      Text(
+                        'Hello, $userName',
+                        style: AppTypography.h1.copyWith(
+                          color: colors.onBackground,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    'Hello, $userName',
-                    style: AppTypography.h1.copyWith(
-                      color: colors.onBackground,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                      vertical: AppSpacing.sm,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.surfaceVariant,
+                      borderRadius: AppRadius.borderFull,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(
+                          'assets/images/Coin.png',
+                          width: 22,
+                          height: 22,
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Text(
+                          authState.user?.credits ?? '0',
+                          style: AppTypography.h3.copyWith(
+                            color: colors.onBackground,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],

@@ -1,14 +1,16 @@
 import React, { Component, ErrorInfo, ReactNode, useState, useEffect } from 'react';
-import { Row, Col, Card, Typography, Table, Tag, Alert, Radio, Spin, Empty } from "antd";
+import { Row, Col, Card, Typography, Table, Tag, Alert, Radio, Spin, Empty, Space, Button } from "antd";
 import {
   FileTextOutlined,
   PrinterOutlined,
   DropboxOutlined,
   CheckCircleOutlined,
   ArrowUpOutlined,
+  DownloadOutlined,
+  ClockCircleOutlined,
 } from "@ant-design/icons";
 import { StatusBadge } from "@/components/status-badge";
-import { formatCurrency, formatRelativeTime } from "@/utils/format";
+import { formatRelativeTime } from "@/utils/format";
 import { mockKPIs, mockOrders } from "@/providers/mock-data";
 import type { Order } from "@/types/order";
 import type { OrderStatus } from "@/types/enums";
@@ -69,13 +71,13 @@ const emptyChart = (
   </div>
 );
 
-/* ─── Sales Trend Chart ──────────────────────────────────────────── */
-const SalesTrendChart: React.FC<{
+/* ─── TAT Trend Chart ──────────────────────────────────────────── */
+const TatTrendChart: React.FC<{
   data: DashboardAnalyticsPoint[];
 }> = ({ data }) => {
   return (
     <Card
-      title={<Text style={{ color: '#A0A0A0', fontWeight: 400 }}>Sales Trend</Text>}
+      title={<Text style={{ color: '#A0A0A0', fontWeight: 400 }}>Turnaround Time (TAT) Trend</Text>}
       style={{ background: '#1f1f1f', border: '1px solid #2E2E2E', borderRadius: 12 }}
       styles={{ header: { borderBottom: '1px solid #2E2E2E' } }}
     >
@@ -83,18 +85,18 @@ const SalesTrendChart: React.FC<{
       <ResponsiveContainer width="100%" height={260}>
         <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
           <defs>
-            <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#FFDE58" stopOpacity={0.35} />
-              <stop offset="95%" stopColor="#FFDE58" stopOpacity={0} />
+            <linearGradient id="colorTat" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#34d399" stopOpacity={0.35} />
+              <stop offset="95%" stopColor="#34d399" stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#2E2E2E" />
           <XAxis dataKey="label" stroke="#555" fontSize={12} tickLine={false} axisLine={false} interval="preserveStartEnd" />
           <YAxis stroke="#555" fontSize={12} tickLine={false} axisLine={false}
-            tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
-          <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => `₱${Number(v).toLocaleString()}`} />
-          <Area type="monotone" dataKey="value" stroke="#FFDE58" strokeWidth={2.5}
-            fillOpacity={1} fill="url(#colorRevenue)" />
+            tickFormatter={(v) => `${Math.floor(v / 60)}h`} />
+          <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => `${Math.floor(Number(v) / 60)}h ${Number(v) % 60}m`} />
+          <Area type="monotone" dataKey="value" stroke="#34d399" strokeWidth={2.5}
+            fillOpacity={1} fill="url(#colorTat)" />
         </AreaChart>
       </ResponsiveContainer>
       )}
@@ -184,7 +186,8 @@ export function DashboardPage() {
           in_production_count: d.inProductionCount,
           ready_for_pickup_count: d.readyForPickupCount,
           delivered_count: d.deliveredCount,
-          monthly_revenue: d.monthlyRevenue,
+          avg_tat_mins: d.avgTatMins ?? mockKPIs.avg_tat_mins,
+          error_rate_percent: d.errorRatePercent ?? mockKPIs.error_rate_percent,
         });
         const normalizedOrders = normalizeOrders(ordersRes.data);
         setAllOrders(normalizedOrders);
@@ -240,38 +243,57 @@ export function DashboardPage() {
               <Title level={4} style={{ color: '#F0F0F0', margin: 0 }}>Analytics Overview</Title>
             </Col>
             <Col>
-              <Radio.Group
-                value={period}
-                onChange={(e) => setPeriod(e.target.value)}
-                size="small"
-                buttonStyle="solid"
-              >
-                <Radio.Button value="7D" style={{
-                  background: period === '7D' ? '#F0F0F0' : '#141414',
-                  color: period === '7D' ? '#141414' : '#808080',
-                  borderColor: period === '7D' ? '#F0F0F0' : '#2E2E2E',
-                  borderRadius: '16px 0 0 16px',
-                  padding: '0 16px'
-                }}>7 Days</Radio.Button>
-                <Radio.Button value="30D" style={{
-                  background: period === '30D' ? '#F0F0F0' : '#141414',
-                  color: period === '30D' ? '#141414' : '#808080',
-                  borderColor: period === '30D' ? '#F0F0F0' : '#2E2E2E',
-                  padding: '0 16px'
-                }}>30 Days</Radio.Button>
-                <Radio.Button value="6M" style={{
-                  background: period === '6M' ? '#F0F0F0' : '#141414',
-                  color: period === '6M' ? '#141414' : '#808080',
-                  borderColor: period === '6M' ? '#F0F0F0' : '#2E2E2E',
-                  borderRadius: '0 16px 16px 0',
-                  padding: '0 16px'
-                }}>6 Months</Radio.Button>
-              </Radio.Group>
+              <Space size={16}>
+                <Radio.Group
+                  value={period}
+                  onChange={(e) => setPeriod(e.target.value)}
+                  size="small"
+                  buttonStyle="solid"
+                >
+                  <Radio.Button value="7D" style={{
+                    background: period === '7D' ? '#F0F0F0' : '#141414',
+                    color: period === '7D' ? '#141414' : '#808080',
+                    borderColor: period === '7D' ? '#F0F0F0' : '#2E2E2E',
+                    borderRadius: '16px 0 0 16px',
+                    padding: '0 16px'
+                  }}>7 Days</Radio.Button>
+                  <Radio.Button value="30D" style={{
+                    background: period === '30D' ? '#F0F0F0' : '#141414',
+                    color: period === '30D' ? '#141414' : '#808080',
+                    borderColor: period === '30D' ? '#F0F0F0' : '#2E2E2E',
+                    padding: '0 16px'
+                  }}>30 Days</Radio.Button>
+                  <Radio.Button value="6M" style={{
+                    background: period === '6M' ? '#F0F0F0' : '#141414',
+                    color: period === '6M' ? '#141414' : '#808080',
+                    borderColor: period === '6M' ? '#F0F0F0' : '#2E2E2E',
+                    borderRadius: '0 16px 16px 0',
+                    padding: '0 16px'
+                  }}>6 Months</Radio.Button>
+                </Radio.Group>
+                <Button 
+                  type="primary" 
+                  icon={<DownloadOutlined />} 
+                  style={{ background: '#FFDE58', color: '#141414', border: 'none', fontWeight: 600, borderRadius: '8px' }}
+                  onClick={() => {
+                     const csvHeader = "Order_ID,Status,Created_At,Total_Price\n";
+                     const csvRows = allOrders.map(o => `${o.order_id},${o.order_status},${o.created_at},${o.total_price}`).join('\n');
+                     const blob = new Blob([csvHeader + csvRows], { type: 'text/csv' });
+                     const url = window.URL.createObjectURL(blob);
+                     const a = document.createElement('a');
+                     a.href = url;
+                     a.download = `Master_Export_${new Date().toISOString().slice(0,10)}.csv`;
+                     a.click();
+                  }}
+                >
+                  Master CSV Export
+                </Button>
+              </Space>
             </Col>
           </Row>
         </div>
 
-        {/* ── Row 1: Monthly Revenue (full-width hero card) ─────── */}
+        {/* ── Row 1: Turnaround Time (full-width hero card) ─────── */}
         <Card style={{ ...cardStyle, marginBottom: 16 }} styles={{ body: { padding: 24 } }}>
           <Row justify="space-between" align="middle">
             <Col style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -279,14 +301,14 @@ export function DashboardPage() {
                 background: 'rgba(255, 222, 88, 0.15)', padding: '14px 18px',
                 borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}>
-                <span style={{ color: '#FFDE58', fontSize: 26, fontWeight: 'bold', lineHeight: 1 }}>₱</span>
+                <ClockCircleOutlined style={{ color: '#FFDE58', fontSize: 26 }} />
               </div>
               <div>
                 <Text style={{ color: '#808080', fontSize: 13, display: 'block', marginBottom: 4 }}>
-                  Monthly Revenue
+                  Average Turnaround Time (TAT)
                 </Text>
                 <Title level={2} style={{ color: '#F0F0F0', margin: 0, letterSpacing: '-0.5px' }}>
-                  {formatCurrency(kpis.monthly_revenue)}
+                  {Math.floor((kpis.avg_tat_mins || 0) / 60)}h {(kpis.avg_tat_mins || 0) % 60}m
                 </Title>
               </div>
             </Col>
@@ -296,7 +318,7 @@ export function DashboardPage() {
                 borderRadius: 999, display: 'flex', alignItems: 'center', gap: 6
               }}>
                 <ArrowUpOutlined style={{ color: '#34d399', fontSize: 13 }} />
-                <Text style={{ color: '#34d399', fontWeight: 600, fontSize: 14 }}>12%</Text>
+                <Text style={{ color: '#34d399', fontWeight: 600, fontSize: 14 }}>12% Faster</Text>
               </div>
             </Col>
           </Row>
@@ -373,7 +395,7 @@ export function DashboardPage() {
         {/* ── Row 3: Sales Trend + Order Volume charts ───────────── */}
         <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
           <Col xs={24} lg={12}>
-            <SalesTrendChart data={effectiveAnalytics.sales} />
+            <TatTrendChart data={effectiveAnalytics.tatTrend || []} />
           </Col>
           <Col xs={24} lg={12}>
             <OrderVolumeChart data={effectiveAnalytics.volume} />
@@ -416,11 +438,6 @@ export function DashboardPage() {
               dataIndex="order_status"
               title="Status"
               render={(s: OrderStatus) => <StatusBadge status={s} />}
-            />
-            <Table.Column<Order>
-              dataIndex="total_price"
-              title="Amount"
-              render={(v: number) => formatCurrency(v)}
             />
             <Table.Column<Order>
               dataIndex="created_at"
