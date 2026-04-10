@@ -10,7 +10,7 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
-import 'package:printing_app/shared/widgets/grid_logo.dart';
+
 
 /// Bento grid — exact design from commit a4c58c8 with ClipRRect overflow protection.
 class BentoGrid extends StatelessWidget {
@@ -103,15 +103,33 @@ class _HeroTile extends StatelessWidget {
           borderRadius: AppRadius.borderLg,
         ),
         child: Stack(
+          fit: StackFit.expand,
           clipBehavior: Clip.hardEdge,
           children: [
-            Positioned(
-              right: -8, bottom: -8,
-              child: Opacity(
-                opacity: isDark ? 0.08 : 0.12,
-                child: GridLogo(size: 120, foregroundColor: isDark ? colors.onBackground : colors.background),
+            // GIF Background at reduced opacity
+            Opacity(
+              opacity: 0.45,
+              child: Image.asset(
+                'assets/animations/bentobox.gif',
+                fit: BoxFit.cover,
               ),
             ),
+
+            // Dark scrim gradient so text remains readable
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.1),
+                    Colors.black.withValues(alpha: 0.55),
+                  ],
+                ),
+              ),
+            ),
+
+            // Content
             Padding(
               padding: const EdgeInsets.all(AppSpacing.lg),
               child: Column(
@@ -120,21 +138,24 @@ class _HeroTile extends StatelessWidget {
                 children: [
                   Flexible(
                     child: Text(
-                      'Professional\nprinting,\ndelivered.',
+                      'GRID',
                       style: AppTypography.display.copyWith(
-                        color: isDark ? colors.onBackground : colors.background,
-                        height: 1.0, fontSize: 24,
+                        color: Colors.white,
+                        height: 1.0,
+                        fontSize: 48,
                       ),
-                      maxLines: 3, overflow: TextOverflow.ellipsis,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
-                    'Paper & 3D printing services',
+                    'Paper, 3D, Delivered',
                     style: AppTypography.caption.copyWith(
-                      color: (isDark ? colors.onBackground : colors.background).withValues(alpha: 0.7),
+                      color: Colors.white.withValues(alpha: 0.75),
                     ),
-                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),

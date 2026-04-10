@@ -20,6 +20,18 @@ export const authProvider: AuthProvider = {
       }
 
       const data = await response.json();
+
+      // Ensure only admin accounts can access the admin panel
+      if (data.user?.role !== "admin") {
+        return {
+          success: false,
+          error: {
+            name: "Login Failed",
+            message: "Access denied. Admin accounts only.",
+          },
+        };
+      }
+
       localStorage.setItem(TOKEN_KEY, data.access_token);
       return { success: true, redirectTo: "/" };
     } catch {

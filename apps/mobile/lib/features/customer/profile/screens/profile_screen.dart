@@ -7,222 +7,342 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/profile/providers/profile_provider.dart';
+import 'package:printing_app/features/customer/profile/screens/tam_survey_screen.dart';
 import 'package:printing_app/shared/providers/theme_provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/confirmation_dialog.dart';
 
-class ProfileScreen extends ConsumerWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends ConsumerState<ProfileScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final user = ref.watch(profileProvider);
-    ref.watch(themeProvider); // rebuild when theme changes
+    ref.watch(themeProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = isDark ? AppColors.dark : AppColors.light;
 
     return ColoredBox(
       color: colors.background,
       child: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // h1 title
-              Padding(
-                padding: const EdgeInsets.only(
-                  left: AppSpacing.xl,
-                  right: AppSpacing.xl,
-                  top: AppSpacing.lg,
-                  bottom: AppSpacing.md,
-                ),
-                child: Text(
-                  'Profile',
-                  style:
-                      AppTypography.h1.copyWith(color: colors.onBackground),
-                ),
-              )
-                  .animate()
-                  .fadeIn(duration: 350.ms, curve: Curves.easeOut)
-                  .slideY(
-                      begin: 0.02,
-                      duration: 350.ms,
-                      curve: Curves.easeOut),
-
-              // Avatar + name card
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-                child: Center(
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          color: colors.surfaceVariant,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Text(
-                            user?.fullName.isNotEmpty == true
-                                ? user!.fullName[0].toUpperCase()
-                                : '?',
-                            style: AppTypography.h1.copyWith(
-                              color: colors.accent,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      Text(
-                        user?.fullName ?? 'Guest',
-                        style: AppTypography.h2.copyWith(
-                          color: colors.onBackground,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        user?.email ?? '',
-                        style: AppTypography.body.copyWith(
-                          color: colors.onSurfaceDim,
-                        ),
-                      ),
-                    ],
+        child: Column(
+          children: [
+            // ── Header: title + avatar ─────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.only(
+                left: AppSpacing.xl,
+                right: AppSpacing.xl,
+                top: AppSpacing.lg,
+                bottom: AppSpacing.md,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Profile',
+                      style: AppTypography.h1
+                          .copyWith(color: colors.onBackground),
+                    ),
                   ),
-                ),
-              )
-                  .animate()
-                  .fadeIn(duration: 400.ms, curve: Curves.easeOut)
-                  .slideY(
-                      begin: 0.03,
-                      duration: 400.ms,
-                      curve: Curves.easeOut),
-              const SizedBox(height: AppSpacing.lg),
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: colors.surfaceVariant,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text(
+                        user?.fullName.isNotEmpty == true
+                            ? user!.fullName[0].toUpperCase()
+                            : '?',
+                        style: AppTypography.h3.copyWith(color: colors.accent),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+                .animate()
+                .fadeIn(duration: 350.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.02, duration: 350.ms, curve: Curves.easeOut),
 
-              // WALLET section
-              _SectionHeader(label: 'WALLET', colors: colors)
-                  .animate()
-                  .fadeIn(
-                      duration: 400.ms,
-                      delay: 25.ms,
-                      curve: Curves.easeOut),
-              _MenuRow(
-                icon: HugeIcons.strokeRoundedCoins01, // Generic Coin icon
-                title: 'GRID Credits: ${user?.credits ?? "0.00"}',
-                onTap: () {},
+            // ── Tab Bar ────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+              child: _ProfileTabBar(
+                controller: _tabController,
                 colors: colors,
               ),
-              _Divider(colors: colors),
-              _MenuRow(
-                icon: HugeIcons.strokeRoundedWalletAdd01,
-                title: 'Top-Up Credits',
-                onTap: () => context.push('/customer/profile/top-up'),
-                colors: colors,
-              ),
-              const SizedBox(height: AppSpacing.lg),
+            ).animate().fadeIn(delay: 50.ms, duration: 300.ms),
 
-              // ACCOUNT section
-              _SectionHeader(label: 'ACCOUNT', colors: colors)
-                  .animate()
-                  .fadeIn(
-                      duration: 400.ms,
-                      delay: 50.ms,
-                      curve: Curves.easeOut),
-              _MenuRow(
-                icon: HugeIcons.strokeRoundedUser,
-                title: 'Account Details',
-                onTap: () => context.push('/customer/profile/account'),
-                colors: colors,
-              ),
-              _Divider(colors: colors),
-              _MenuRow(
-                icon: HugeIcons.strokeRoundedLocation01,
-                title: 'Saved Addresses',
-                onTap: () => context.push('/customer/addresses'),
-                colors: colors,
-              ),
+            const SizedBox(height: AppSpacing.sm),
 
-              const SizedBox(height: AppSpacing.lg),
-
-              // PREFERENCES section
-              _SectionHeader(label: 'PREFERENCES', colors: colors)
-                  .animate()
-                  .fadeIn(
-                      duration: 400.ms,
-                      delay: 100.ms,
-                      curve: Curves.easeOut),
-              _MenuToggleRow(
-                icon: HugeIcons.strokeRoundedMoon02,
-                title: 'Dark Mode',
-                value: isDark,
-                onChanged: (_) {
-                  ref.read(themeProvider.notifier).toggleFrom(
-                    Theme.of(context).brightness,
-                  );
-                },
-                colors: colors,
+            // ── Tab Views ──────────────────────────────────────────────
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _ProfileTab(user: user, colors: colors, isDark: isDark),
+                  const TamSurveyScreen(),
+                ],
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
-              const SizedBox(height: AppSpacing.lg),
+// ---------------------------------------------------------------------------
+// Custom Tab Bar
+// ---------------------------------------------------------------------------
 
-              // SUPPORT section
-              _SectionHeader(label: 'SUPPORT', colors: colors)
-                  .animate()
-                  .fadeIn(
-                      duration: 400.ms,
-                      delay: 150.ms,
-                      curve: Curves.easeOut),
-              _MenuRow(
-                icon: HugeIcons.strokeRoundedMessageQuestion,
-                title: 'Support & Help',
-                onTap: () => context.push('/customer/profile/support'),
-                colors: colors,
-              ),
-              _Divider(colors: colors),
-              _MenuRow(
-                icon: HugeIcons.strokeRoundedFile02,
-                title: 'Terms of Service',
-                onTap: () => context.push('/customer/profile/terms'),
-                colors: colors,
-              ),
-              _Divider(colors: colors),
-              _MenuRow(
-                icon: HugeIcons.strokeRoundedShield01,
-                title: 'Privacy Policy',
-                onTap: () => context.push('/customer/profile/privacy'),
-                colors: colors,
-              ),
+class _ProfileTabBar extends StatelessWidget {
+  const _ProfileTabBar({
+    required this.controller,
+    required this.colors,
+  });
 
-              const SizedBox(height: AppSpacing.lg),
+  final TabController controller;
+  final AppColorSet colors;
 
-              // Sign out
-              _MenuRow(
-                icon: HugeIcons.strokeRoundedLogout01,
-                title: 'Sign Out',
-                isDestructive: true,
-                onTap: () {
-                  ConfirmationDialog.show(
-                    context,
-                    title: 'Sign Out',
-                    message:
-                        'Are you sure you want to sign out of your account?',
-                    confirmLabel: 'Sign Out',
-                    cancelLabel: 'Cancel',
-                    onConfirm: () {
-                      ref.read(authProvider.notifier).logout();
-                      Navigator.of(context).pop();
-                    },
-                    onCancel: () => Navigator.of(context).pop(),
-                  );
-                },
-                colors: colors,
-              ),
-
-              const SizedBox(height: AppSpacing.xxl),
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        return Container(
+          height: 44,
+          decoration: BoxDecoration(
+            color: colors.surfaceVariant,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: TabBar(
+            controller: controller,
+            indicator: BoxDecoration(
+              color: colors.accent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            indicatorSize: TabBarIndicatorSize.tab,
+            labelStyle: AppTypography.button.copyWith(letterSpacing: 0.5),
+            unselectedLabelStyle:
+                AppTypography.body.copyWith(fontWeight: FontWeight.w500),
+            labelColor: colors.accentOnColor,
+            unselectedLabelColor: colors.onSurfaceDim,
+            dividerColor: Colors.transparent,
+            splashFactory: NoSplash.splashFactory,
+            overlayColor: WidgetStateProperty.all(Colors.transparent),
+            padding: const EdgeInsets.all(3),
+            tabs: const [
+              Tab(text: 'Account'),
+              Tab(text: 'Survey'),
             ],
           ),
-        ),
+        );
+      },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Profile Tab Content (the original profile list)
+// ---------------------------------------------------------------------------
+
+class _ProfileTab extends ConsumerWidget {
+  const _ProfileTab({
+    required this.user,
+    required this.colors,
+    required this.isDark,
+  });
+
+  final dynamic user;
+  final AppColorSet colors;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Avatar + name card
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+            child: Center(
+              child: Column(
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: colors.surfaceVariant,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text(
+                        user?.fullName.isNotEmpty == true
+                            ? user!.fullName[0].toUpperCase()
+                            : '?',
+                        style: AppTypography.h1.copyWith(
+                          color: colors.accent,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    user?.fullName ?? 'Guest',
+                    style: AppTypography.h2.copyWith(
+                      color: colors.onBackground,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    user?.email ?? '',
+                    style: AppTypography.body.copyWith(
+                      color: colors.onSurfaceDim,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+              .animate()
+              .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+              .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
+          const SizedBox(height: AppSpacing.lg),
+
+          // WALLET section
+          _SectionHeader(label: 'WALLET', colors: colors)
+              .animate()
+              .fadeIn(duration: 400.ms, delay: 25.ms, curve: Curves.easeOut),
+          _MenuRow(
+            icon: HugeIcons.strokeRoundedCoins01,
+            title: 'GRID Credits: ${user?.credits ?? "0.00"}',
+            onTap: () {},
+            colors: colors,
+          ),
+          _Divider(colors: colors),
+          _MenuRow(
+            icon: HugeIcons.strokeRoundedWalletAdd01,
+            title: 'Top-Up Credits',
+            onTap: () => context.push('/customer/profile/top-up'),
+            colors: colors,
+          ),
+          const SizedBox(height: AppSpacing.lg),
+
+          // ACCOUNT section
+          _SectionHeader(label: 'ACCOUNT', colors: colors)
+              .animate()
+              .fadeIn(duration: 400.ms, delay: 50.ms, curve: Curves.easeOut),
+          _MenuRow(
+            icon: HugeIcons.strokeRoundedUser,
+            title: 'Account Details',
+            onTap: () => context.push('/customer/profile/account'),
+            colors: colors,
+          ),
+          _Divider(colors: colors),
+          _MenuRow(
+            icon: HugeIcons.strokeRoundedLocation01,
+            title: 'Saved Addresses',
+            onTap: () => context.push('/customer/addresses'),
+            colors: colors,
+          ),
+
+          const SizedBox(height: AppSpacing.lg),
+
+          // PREFERENCES section
+          _SectionHeader(label: 'PREFERENCES', colors: colors)
+              .animate()
+              .fadeIn(duration: 400.ms, delay: 100.ms, curve: Curves.easeOut),
+          _MenuToggleRow(
+            icon: HugeIcons.strokeRoundedMoon02,
+            title: 'Dark Mode',
+            value: isDark,
+            onChanged: (_) {
+              ref.read(themeProvider.notifier).toggleFrom(
+                    Theme.of(context).brightness,
+                  );
+            },
+            colors: colors,
+          ),
+
+          const SizedBox(height: AppSpacing.lg),
+
+          // SUPPORT section
+          _SectionHeader(label: 'SUPPORT', colors: colors)
+              .animate()
+              .fadeIn(duration: 400.ms, delay: 150.ms, curve: Curves.easeOut),
+          _MenuRow(
+            icon: HugeIcons.strokeRoundedMessageQuestion,
+            title: 'Support & Help',
+            onTap: () => context.push('/customer/profile/support'),
+            colors: colors,
+          ),
+          _Divider(colors: colors),
+          _MenuRow(
+            icon: HugeIcons.strokeRoundedFile02,
+            title: 'Terms of Service',
+            onTap: () => context.push('/customer/profile/terms'),
+            colors: colors,
+          ),
+          _Divider(colors: colors),
+          _MenuRow(
+            icon: HugeIcons.strokeRoundedShield01,
+            title: 'Privacy Policy',
+            onTap: () => context.push('/customer/profile/privacy'),
+            colors: colors,
+          ),
+
+          const SizedBox(height: AppSpacing.lg),
+
+          // Sign out
+          _MenuRow(
+            icon: HugeIcons.strokeRoundedLogout01,
+            title: 'Sign Out',
+            isDestructive: true,
+            onTap: () {
+              ConfirmationDialog.show(
+                context,
+                title: 'Sign Out',
+                message:
+                    'Are you sure you want to sign out of your account?',
+                confirmLabel: 'Sign Out',
+                cancelLabel: 'Cancel',
+                onConfirm: () {
+                  ref.read(authProvider.notifier).logout();
+                  Navigator.of(context).pop();
+                },
+                onCancel: () => Navigator.of(context).pop(),
+              );
+            },
+            colors: colors,
+          ),
+
+          const SizedBox(height: AppSpacing.xxl),
+        ],
       ),
     );
   }

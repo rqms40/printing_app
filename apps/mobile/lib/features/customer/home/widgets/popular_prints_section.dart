@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -8,8 +10,55 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/widgets/section_header.dart';
 
 /// Horizontal carousel of popular print type cards with real photo previews.
-class PopularPrintsSection extends StatelessWidget {
+class PopularPrintsSection extends StatefulWidget {
   const PopularPrintsSection({super.key});
+
+  @override
+  State<PopularPrintsSection> createState() => _PopularPrintsSectionState();
+}
+
+class _PopularPrintsSectionState extends State<PopularPrintsSection> {
+  late final ScrollController _scrollController;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    _startTimer();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (!_scrollController.hasClients) return;
+      
+      final maxScroll = _scrollController.position.maxScrollExtent;
+      final currentScroll = _scrollController.position.pixels;
+      
+      if (currentScroll >= maxScroll - 10) {
+        // Rewind to the start
+        _scrollController.animateTo(
+          0.0,
+          duration: const Duration(milliseconds: 800),
+          curve: Curves.fastOutSlowIn,
+        );
+      } else {
+        // Scroll forward by one item width (140 width + 12 gap)
+        _scrollController.animateTo(
+          currentScroll + 152.0,
+          duration: const Duration(milliseconds: 600),
+          curve: Curves.fastOutSlowIn,
+        );
+      }
+    });
+  }
 
   static const _prints = <_PrintTypeData>[
     _PrintTypeData(
@@ -77,6 +126,7 @@ class PopularPrintsSection extends StatelessWidget {
         SizedBox(
           height: 190,
           child: ListView.separated(
+            controller: _scrollController,
             scrollDirection: Axis.horizontal,
             clipBehavior: Clip.none,
             itemCount: _prints.length,
