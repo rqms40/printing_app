@@ -1,8 +1,6 @@
 import { Refine, Authenticated } from "@refinedev/core";
 import {
   ThemedLayoutV2,
-  ThemedSiderV2,
-  ThemedTitleV2,
   useNotificationProvider,
   ErrorComponent,
 } from "@refinedev/antd";
@@ -21,6 +19,7 @@ import {
   TeamOutlined,
   ShoppingOutlined,
   WalletOutlined,
+  BellOutlined,
 } from "@ant-design/icons";
 
 import { gridTheme } from "@/config/theme";
@@ -28,6 +27,8 @@ import { authProvider } from "@/providers/auth-provider";
 import { gridDataProvider } from "@/providers/data-provider";
 import { GridLogo } from "@/components/grid-logo";
 import { CustomHeader } from "@/components/header";
+import { GridSider } from "@/components/grid-sider";
+import { NotificationsProvider } from "@/context/notifications-context";
 
 import { LoginPage } from "@/pages/login";
 import { DashboardPage } from "@/pages/dashboard";
@@ -39,6 +40,7 @@ import { ProductList } from "@/pages/products/list";
 import { ProductOptionsPage } from "@/pages/products/options";
 import { AddonList } from "@/pages/products-addons/list";
 import { CreditRequestsPage } from "@/pages/credit-requests";
+import { NotificationsPage } from "@/pages/notifications";
 
 function App() {
   return (
@@ -54,68 +56,47 @@ function App() {
               {
                 name: "dashboard",
                 list: "/",
-                meta: {
-                  label: "Dashboard",
-                  icon: <DashboardOutlined />,
-                },
+                meta: { label: "Dashboard", icon: <DashboardOutlined /> },
               },
               {
                 name: "admin/orders",
                 list: "/orders",
                 show: "/orders/show/:id",
-                meta: {
-                  label: "Orders",
-                  icon: <ShoppingCartOutlined />,
-                },
+                meta: { label: "Orders", icon: <ShoppingCartOutlined /> },
               },
               {
                 name: "drivers",
                 list: "/drivers",
-                meta: {
-                  label: "Drivers",
-                  icon: <CarOutlined />,
-                },
+                meta: { label: "Drivers", icon: <CarOutlined /> },
               },
               {
                 name: "users",
                 list: "/users",
-                meta: {
-                  label: "Users",
-                  icon: <TeamOutlined />,
-                },
+                meta: { label: "Users", icon: <TeamOutlined /> },
               },
               {
                 name: "credit-requests",
                 list: "/credit-requests",
-                meta: {
-                  label: "Top-Up Requests",
-                  icon: <WalletOutlined />,
-                },
+                meta: { label: "Top-Up Requests", icon: <WalletOutlined /> },
               },
-              // "products" is a collapsible group only — no list route
               {
                 name: "products",
-                meta: {
-                  label: "Products",
-                  icon: <ShoppingOutlined />,
-                },
+                meta: { label: "Products", icon: <ShoppingOutlined /> },
               },
-              // Children — no icons so ThemedSiderV2 won't render them
               {
                 name: "products-categories",
                 list: "/products",
-                meta: {
-                  label: "Categories",
-                  parent: "products",
-                },
+                meta: { label: "Categories", parent: "products" },
               },
               {
                 name: "products-addons",
                 list: "/products-addons",
-                meta: {
-                  label: "Addons",
-                  parent: "products",
-                },
+                meta: { label: "Addons", parent: "products" },
+              },
+              {
+                name: "notifications",
+                list: "/notifications",
+                meta: { label: "Notifications", icon: <BellOutlined /> },
               },
             ]}
             options={{
@@ -134,24 +115,14 @@ function App() {
                     key="auth-layout"
                     fallback={<CatchAllNavigate to="/login" />}
                   >
-                    <ThemedLayoutV2
-                      Header={() => <CustomHeader />}
-                      Sider={() => (
-                        <ThemedSiderV2
-                          fixed
-                          Title={({ collapsed }) => (
-                            <ThemedTitleV2
-                              collapsed={collapsed}
-                              text="GRID Admin"
-                              icon={<GridLogo size={collapsed ? 28 : 24} />}
-                            />
-                          )}
-                          render={({ items }) => <>{items}</>}
-                        />
-                      )}
-                    >
-                      <Outlet />
-                    </ThemedLayoutV2>
+                    <NotificationsProvider>
+                      <ThemedLayoutV2
+                        Header={() => <CustomHeader />}
+                        Sider={() => <GridSider />}
+                      >
+                        <Outlet />
+                      </ThemedLayoutV2>
+                    </NotificationsProvider>
                   </Authenticated>
                 }
               >
@@ -168,6 +139,7 @@ function App() {
                 </Route>
                 <Route path="/products-addons" element={<AddonList />} />
                 <Route path="/credit-requests" element={<CreditRequestsPage />} />
+                <Route path="/notifications" element={<NotificationsPage />} />
               </Route>
 
               <Route

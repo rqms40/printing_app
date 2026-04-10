@@ -3,11 +3,16 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { NotFoundException } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
+import { NotificationsGateway } from './notifications.gateway';
 import { Notification } from './entities/notification.entity';
+import { UsersService } from '../users/users.service';
+import { User } from '../users/entities/user.entity';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
   let repo: jest.Mocked<Partial<Repository<Notification>>>;
+  let usersService: jest.Mocked<Partial<UsersService>>;
+  let gateway: jest.Mocked<Partial<NotificationsGateway>>;
 
   const mockNotification = {
     id: 1,
@@ -16,8 +21,11 @@ describe('NotificationsService', () => {
     message: 'Your order is ready',
     type: 'order',
     isRead: false,
+    metadata: null,
     createdAt: new Date(),
   } as Notification;
+
+  const mockAdmin = { id: 10, email: 'admin@grid.ph', role: 'admin' } as User;
 
   beforeEach(async () => {
     repo = {
@@ -28,11 +36,15 @@ describe('NotificationsService', () => {
       update: jest.fn(),
       count: jest.fn(),
     };
+    usersService = { findAllByRole: jest.fn() };
+    gateway = { broadcastToAdmins: jest.fn() };
 
     const module = await Test.createTestingModule({
       providers: [
         NotificationsService,
         { provide: getRepositoryToken(Notification), useValue: repo },
+        { provide: UsersService, useValue: usersService },
+        { provide: NotificationsGateway, useValue: gateway },
       ],
     }).compile();
 
@@ -76,27 +88,20 @@ describe('NotificationsService', () => {
 
   describe('markAsRead', () => {
     it('should set isRead to true', async () => {
-      const unreadNotif = {
-        ...mockNotification,
-        isRead: false,
-      } as Notification;
+      const unreadNotif = { ...mockNotification, isRead: false } as Notification;
       repo.findOne.mockResolvedValue(unreadNotif);
       repo.save.mockImplementation(async (n) => n as Notification);
 
       const result = await service.markAsRead(1, 1);
 
-      expect(repo.findOne).toHaveBeenCalledWith({
-        where: { id: 1, userId: 1 },
-      });
+      expect(repo.findOne).toHaveBeenCalledWith({ where: { id: 1, userId: 1 } });
       expect(result.isRead).toBe(true);
     });
 
     it('should throw NotFoundException if notification not found', async () => {
       repo.findOne.mockResolvedValue(null);
 
-      await expect(service.markAsRead(999, 1)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.markAsRead(999, 1)).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -128,9 +133,62 @@ describe('NotificationsService', () => {
     it('should return 0 when no unread notifications', async () => {
       repo.count.mockResolvedValue(0);
 
-      const result = await service.getUnreadCount(1);
+      expect(await service.getUnreadCount(1)).toBe(0);
+    });
+  });
 
-      expect(result).toBe(0);
+  describe('createForAllAdmins', () => {
+    it('batch-inserts one row per admin and broadcasts', async () => {
+      const admins = [mockAdmin, { id: 11, email: 'admin2@grid.ph', role: 'admin' } as User];
+      usersService.findAllByRole.mockResolvedValue(admins);
+
+      const row1 = { ...mockNotification, userId: 10 } as Notification;
+      const row2 = { ...mockNotification, userId: 11, id: 2 } as Notification;
+      repo.create
+        .mockReturnValueOnce(row1)
+        .mockReturnValueOnce(row2);
+      repo.save.mockResolvedValue([row1, row2] as any);
+
+      await service.createForAllAdmins({
+        title: 'New Order',
+        message: 'ORD-10042 placed',
+        type: 'order_placed',
+        orderRef: 'ORD-10042',
+        metadata: { orderId: 42, amount: 450 },
+      });
+
+      expect(usersService.findAllByRole).toHaveBeenCalledWith('admin');
+      expect(repo.create).toHaveBeenCalledTimes(2);
+      expect(repo.save).toHaveBeenCalledWith([row1, row2]);
+      expect(gateway.broadcastToAdmins).toHaveBeenCalledWith(row1);
+    });
+
+    it('calls broadcastToAdmins with the first saved row', async () => {
+      usersService.findAllByRole.mockResolvedValue([mockAdmin]);
+      const saved = { ...mockNotification, userId: 10 } as Notification;
+      repo.create.mockReturnValue(saved);
+      repo.save.mockResolvedValue([saved] as any);
+
+      await service.createForAllAdmins({
+        title: 'Test',
+        message: 'Test msg',
+        type: 'test',
+      });
+
+      expect(gateway.broadcastToAdmins).toHaveBeenCalledWith(saved);
+    });
+
+    it('no-ops silently when no admin users exist', async () => {
+      usersService.findAllByRole.mockResolvedValue([]);
+
+      await service.createForAllAdmins({
+        title: 'Test',
+        message: 'Test msg',
+        type: 'test',
+      });
+
+      expect(repo.save).not.toHaveBeenCalled();
+      expect(gateway.broadcastToAdmins).not.toHaveBeenCalled();
     });
   });
 });

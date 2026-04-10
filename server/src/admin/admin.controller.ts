@@ -16,9 +16,10 @@ import { OrdersService } from '../orders/orders.service';
 import { DriversService } from '../drivers/drivers.service';
 import { UpdateStatusDto } from '../orders/dto/update-status.dto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
+import { CreditsService } from '../credits/credits.service';
 
 type AnalyticsPeriod = '7D' | '30D' | '6M';
 type AnalyticsPoint = { label: string; value: number };
@@ -48,6 +49,7 @@ export class AdminController {
   constructor(
     private ordersService: OrdersService,
     private driversService: DriversService,
+    private creditsService: CreditsService,
     @InjectRepository(Order)
     private ordersRepo: Repository<Order>,
     @InjectRepository(User)
@@ -334,6 +336,15 @@ export class AdminController {
       monthlyRevenue,
       totalOrders: orders.length,
     };
+  }
+
+  @Get('badge-counts')
+  async getBadgeCounts() {
+    const newOrders = await this.ordersRepo.count({
+      where: { orderStatus: In([OrderStatus.ORDER_PLACED, OrderStatus.FILE_VERIFIED]) },
+    });
+    const pendingTopUps = await this.creditsService.getPendingCount();
+    return { newOrders, pendingTopUps };
   }
 
   // All orders (not filtered by user)

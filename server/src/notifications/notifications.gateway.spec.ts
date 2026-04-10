@@ -1,0 +1,95 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { JwtService } from '@nestjs/jwt';
+import { Server, Socket } from 'socket.io';
+import { NotificationsGateway } from './notifications.gateway';
+
+const makeClient = (
+  token?: string,
+): jest.Mocked<Pick<Socket, 'join' | 'disconnect'>> & {
+  handshake: { auth: Record<string, unknown> };
+} => ({
+  handshake: { auth: token ? { token } : {} },
+  join: jest.fn().mockResolvedValue(undefined),
+  disconnect: jest.fn(),
+});
+
+describe('NotificationsGateway', () => {
+  let gateway: NotificationsGateway;
+  let jwtService: jest.Mocked<Pick<JwtService, 'verifyAsync'>>;
+
+  beforeEach(async () => {
+    jwtService = { verifyAsync: jest.fn() };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        NotificationsGateway,
+        { provide: JwtService, useValue: jwtService },
+      ],
+    }).compile();
+
+    gateway = module.get<NotificationsGateway>(NotificationsGateway);
+  });
+
+  describe('handleConnection', () => {
+    it('joins admin_notifications when JWT has role=admin', async () => {
+      (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
+        sub: 1,
+        role: 'admin',
+      });
+      const client = makeClient('valid-admin-token');
+
+      await gateway.handleConnection(client as unknown as Socket);
+
+      expect(jwtService.verifyAsync).toHaveBeenCalledWith('valid-admin-token');
+      expect(client.join).toHaveBeenCalledWith('admin_notifications');
+      expect(client.disconnect).not.toHaveBeenCalled();
+    });
+
+    it('does NOT join admin_notifications for a non-admin JWT', async () => {
+      (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
+        sub: 2,
+        role: 'customer',
+      });
+      const client = makeClient('customer-token');
+
+      await gateway.handleConnection(client as unknown as Socket);
+
+      expect(client.join).not.toHaveBeenCalled();
+      expect(client.disconnect).not.toHaveBeenCalled();
+    });
+
+    it('disconnects immediately when token is missing', async () => {
+      const client = makeClient();
+
+      await gateway.handleConnection(client as unknown as Socket);
+
+      expect(client.disconnect).toHaveBeenCalled();
+      expect(jwtService.verifyAsync).not.toHaveBeenCalled();
+    });
+
+    it('disconnects when JWT verification throws', async () => {
+      (jwtService.verifyAsync as jest.Mock).mockRejectedValue(
+        new Error('jwt expired'),
+      );
+      const client = makeClient('expired-token');
+
+      await gateway.handleConnection(client as unknown as Socket);
+
+      expect(client.disconnect).toHaveBeenCalled();
+    });
+  });
+
+  describe('broadcastToAdmins', () => {
+    it('emits newNotification to admin_notifications room', () => {
+      const emitMock = jest.fn();
+      const toMock = jest.fn().mockReturnValue({ emit: emitMock });
+      gateway.server = { to: toMock } as unknown as Server;
+
+      const notif = { id: 1, title: 'New Order', type: 'order_placed' } as any;
+      gateway.broadcastToAdmins(notif);
+
+      expect(toMock).toHaveBeenCalledWith('admin_notifications');
+      expect(emitMock).toHaveBeenCalledWith('newNotification', notif);
+    });
+  });
+});

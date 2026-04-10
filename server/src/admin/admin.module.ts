@@ -8,6 +8,7 @@ import { ThreeDSpec } from '../orders/entities/three-d-specs.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
 import { OrdersModule } from '../orders/orders.module';
 import { DriversModule } from '../drivers/drivers.module';
+import { CreditsModule } from '../credits/credits.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { DriversModule } from '../drivers/drivers.module';
     ]),
     OrdersModule,
     DriversModule,
+    CreditsModule,
   ],
   controllers: [AdminController],
 })

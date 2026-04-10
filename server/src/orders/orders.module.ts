@@ -11,6 +11,7 @@ import { OrdersController } from './orders.controller';
 import { OrdersGateway } from './orders.gateway';
 import { UsersModule } from '../users/users.module';
 import { CreditsModule } from '../credits/credits.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { CreditsModule } from '../credits/credits.module';
     }),
     UsersModule,
     CreditsModule,
+    NotificationsModule,
   ],
   providers: [OrdersService, OrdersGateway],
   controllers: [OrdersController],

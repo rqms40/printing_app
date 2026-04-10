@@ -7,19 +7,24 @@ import { OrdersService } from '../orders/orders.service';
 import { DriversService } from '../drivers/drivers.service';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
+import { CreditsService } from '../credits/credits.service';
+import { In } from 'typeorm';
 
 const mockRepo = () => ({
   find: jest.fn(),
   findOneOrFail: jest.fn(),
   update: jest.fn(),
+  count: jest.fn(),
 });
 
 describe('AdminController analytics', () => {
   let controller: AdminController;
   let ordersRepo: jest.Mocked<Partial<Repository<Order>>>;
+  let creditsService: jest.Mocked<Partial<CreditsService>>;
 
   beforeEach(async () => {
     ordersRepo = mockRepo();
+    creditsService = { getPendingCount: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AdminController],
@@ -29,6 +34,7 @@ describe('AdminController analytics', () => {
           provide: DriversService,
           useValue: { getAllDriversWithUser: jest.fn() },
         },
+        { provide: CreditsService, useValue: creditsService },
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
         { provide: getRepositoryToken(User), useValue: mockRepo() },
       ],
@@ -180,5 +186,28 @@ describe('AdminController analytics', () => {
       { month: 'Feb', value: 1 },
       { month: 'Mar', value: 2 },
     ]);
+  });
+
+  describe('getBadgeCounts', () => {
+    it('returns correct newOrders and pendingTopUps counts', async () => {
+      ordersRepo.count.mockResolvedValue(3);
+      (creditsService as jest.Mocked<Pick<CreditsService, 'getPendingCount'>>).getPendingCount.mockResolvedValue(2);
+
+      const result = await controller.getBadgeCounts();
+
+      expect(ordersRepo.count).toHaveBeenCalledWith({
+        where: { orderStatus: In([OrderStatus.ORDER_PLACED, OrderStatus.FILE_VERIFIED]) },
+      });
+      expect(result).toEqual({ newOrders: 3, pendingTopUps: 2 });
+    });
+
+    it('returns 0 for both when nothing is pending', async () => {
+      ordersRepo.count.mockResolvedValue(0);
+      (creditsService as jest.Mocked<Pick<CreditsService, 'getPendingCount'>>).getPendingCount.mockResolvedValue(0);
+
+      const result = await controller.getBadgeCounts();
+
+      expect(result).toEqual({ newOrders: 0, pendingTopUps: 0 });
+    });
   });
 });

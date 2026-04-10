@@ -24,6 +24,7 @@ describe('UsersService', () => {
       save: jest.fn(),
       update: jest.fn(),
       findOneOrFail: jest.fn(),
+      find: jest.fn(),
     };
 
     const module = await Test.createTestingModule({
@@ -115,6 +116,28 @@ describe('UsersService', () => {
       expect(repo.update).toHaveBeenCalledWith(1, { email: 'new@example.com' });
       expect(repo.findOneOrFail).toHaveBeenCalledWith({ where: { id: 1 } });
       expect(result).toEqual(updatedUser);
+    });
+  });
+
+  describe('findAllByRole', () => {
+    it('returns all users with the given role', async () => {
+      const admins = [
+        { id: 1, email: 'admin@grid.ph', role: 'admin' } as User,
+      ];
+      repo.find.mockResolvedValue(admins);
+
+      const result = await service.findAllByRole('admin');
+
+      expect(repo.find).toHaveBeenCalledWith({ where: { role: 'admin' } });
+      expect(result).toEqual(admins);
+    });
+
+    it('returns empty array when no users with that role exist', async () => {
+      repo.find.mockResolvedValue([]);
+
+      const result = await service.findAllByRole('admin');
+
+      expect(result).toEqual([]);
     });
   });
 });

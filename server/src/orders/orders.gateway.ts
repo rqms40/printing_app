@@ -23,7 +23,9 @@ export class OrdersGateway implements OnGatewayConnection {
       return;
     }
     try {
-      const payload = await this.jwtService.verifyAsync<{ role?: string }>(token);
+      const payload = await this.jwtService.verifyAsync<{ role?: string }>(
+        token,
+      );
       if (payload.role === 'admin') {
         void client.join('admin_orders');
       }

@@ -1,6 +1,7 @@
 import { useGetIdentity, useLogout } from "@refinedev/core";
 import { Layout, Avatar, Dropdown, Typography, Space, App, theme } from "antd";
 import { LogoutOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
+import { NotificationBell } from "@/components/notification-bell";
 
 const { Text } = Typography;
 
@@ -56,12 +57,14 @@ export function CustomHeader() {
         display: "flex",
         alignItems: "center",
         justifyContent: "flex-end",
+        gap: 20,
         height: "64px",
         position: "sticky",
         top: 0,
         zIndex: 1000,
       }}
     >
+      <NotificationBell />
       <Dropdown menu={{ items: menuItems }} trigger={["click"]} placement="bottomRight">
         <Space style={{ cursor: "pointer" }}>
           <Avatar
