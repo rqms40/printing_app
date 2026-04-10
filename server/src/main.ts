@@ -8,8 +8,16 @@ import helmet from 'helmet';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Security headers
-  app.use(helmet());
+  // Security headers — in dev skip HTTPS-forcing directives that break plain HTTP access
+  const isDev = process.env.NODE_ENV !== 'production';
+  app.use(
+    helmet({
+      contentSecurityPolicy: isDev ? false : undefined,
+      hsts: isDev ? false : undefined,
+      crossOriginOpenerPolicy: isDev ? false : undefined,
+      crossOriginEmbedderPolicy: isDev ? false : undefined,
+    }),
+  );
 
   // Global validation pipe
   app.useGlobalPipes(
