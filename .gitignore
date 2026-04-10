@@ -7,6 +7,11 @@
 Thumbs.db
 *.swp
 
+# Flutter platform stubs generated at repo root (belong inside apps/mobile/)
+/linux/
+/macos/
+/windows/
+
 # === IDE ===
 .idea/
 .vscode/
