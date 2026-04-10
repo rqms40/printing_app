@@ -10,6 +10,7 @@ import { formatCurrency, formatRelativeTime, formatDate } from "@/utils/format";
 import { mockOrders } from "@/providers/mock-data";
 import { apiClient } from "@/providers/api-client";
 import { humanizeEnumValue, normalizeOrders } from "@/utils/api-normalizers";
+import { subscribeToOrderUpdates } from "@/providers/live-provider";
 
 type TabFilter = "new" | "production" | "done" | "all";
 
@@ -39,6 +40,19 @@ export function OrderList() {
       .then((res) => setOrders(normalizeOrders(res.data)))
       .catch(() => { /* keep mock fallback already in state */ })
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    return subscribeToOrderUpdates((incoming) => {
+      const updated = normalizeOrders([incoming])[0];
+      setOrders((prev) => {
+        const idx = prev.findIndex((o) => o.id === updated.id);
+        if (idx === -1) return [updated, ...prev];
+        const next = [...prev];
+        next[idx] = updated;
+        return next;
+      });
+    });
   }, []);
 
   let filtered = orders;

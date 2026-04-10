@@ -16,6 +16,7 @@ import type { Order } from "@/types/order";
 import type { OrderStatus } from "@/types/enums";
 import { apiClient } from "@/providers/api-client";
 import { normalizeOrders } from "@/utils/api-normalizers";
+import { subscribeToOrderUpdates } from "@/providers/live-provider";
 import {
   deriveDashboardAnalyticsFromOrders,
   hasModernDashboardAnalyticsPayload,
@@ -198,6 +199,39 @@ export function DashboardPage() {
         setDashboardLoading(false);
       }
     })();
+  }, []);
+
+  useEffect(() => {
+    return subscribeToOrderUpdates((incoming) => {
+      const updated = normalizeOrders([incoming])[0];
+      setAllOrders((prev) => {
+        const idx = prev.findIndex((o) => o.id === updated.id);
+        if (idx === -1) return [updated, ...prev];
+        const next = [...prev];
+        next[idx] = updated;
+        return next;
+      });
+      setRecentOrders((prev) => {
+        const idx = prev.findIndex((o) => o.id === updated.id);
+        if (idx !== -1) {
+          const next = [...prev];
+          next[idx] = updated;
+          return next;
+        }
+        return [updated, ...prev].slice(0, 5);
+      });
+      void apiClient.get("/admin/dashboard").then((res) => {
+        const d = res.data;
+        setKpis({
+          new_orders_count: d.newOrdersCount,
+          in_production_count: d.inProductionCount,
+          ready_for_pickup_count: d.readyForPickupCount,
+          delivered_count: d.deliveredCount,
+          avg_tat_mins: d.avgTatMins ?? mockKPIs.avg_tat_mins,
+          error_rate_percent: d.errorRatePercent ?? mockKPIs.error_rate_percent,
+        });
+      }).catch(() => {});
+    });
   }, []);
 
   useEffect(() => {
