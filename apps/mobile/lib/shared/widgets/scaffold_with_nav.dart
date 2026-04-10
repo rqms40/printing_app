@@ -213,6 +213,7 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
               fadeAnim: _fadeAnim,
               navBarHeight: navBarHeight,
               onActionTap: _handleActionTap,
+              ignoring: !_isOpen,
             ),
 
           // ── Nav bar ──────────────────────────────────────────────────────

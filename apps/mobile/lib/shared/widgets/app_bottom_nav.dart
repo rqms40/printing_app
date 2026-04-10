@@ -244,6 +244,7 @@ class QuickActionPanel extends StatelessWidget {
     required this.fadeAnim,
     required this.navBarHeight,
     required this.onActionTap,
+    this.ignoring = false,
   });
 
   final Animation<Offset> slideAnim;
@@ -251,17 +252,23 @@ class QuickActionPanel extends StatelessWidget {
   final double navBarHeight;
   final void Function(QuickActionItem) onActionTap;
 
+  /// When true the panel is invisible to hit-testing (closed state).
+  final bool ignoring;
+
   @override
   Widget build(BuildContext context) {
     return Positioned(
       left: 0,
       right: 0,
       bottom: navBarHeight,
-      child: SlideTransition(
-        position: slideAnim,
-        child: FadeTransition(
-          opacity: fadeAnim,
-          child: _PanelBody(onActionTap: onActionTap),
+      child: IgnorePointer(
+        ignoring: ignoring,
+        child: SlideTransition(
+          position: slideAnim,
+          child: FadeTransition(
+            opacity: fadeAnim,
+            child: _PanelBody(onActionTap: onActionTap),
+          ),
         ),
       ),
     );

@@ -24,6 +24,13 @@ class NotificationService {
   /// Initialize Firebase + request notification permissions.
   /// Call once at app startup.
   static Future<void> init() async {
+    // FCM on web requires a secure context (HTTPS). Skip when running over
+    // plain HTTP (e.g. local LAN dev server) to avoid unsupported-browser errors.
+    if (kIsWeb) {
+      debugPrint('FCM: skipped on web (requires HTTPS)');
+      return;
+    }
+
     try {
       // Check if Firebase is already initialized
       if (Firebase.apps.isEmpty) {
