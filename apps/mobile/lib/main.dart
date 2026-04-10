@@ -19,13 +19,23 @@ void main() async {
 
   // Initialize API client with platform-appropriate base URL.
   // Android emulator uses 10.0.2.2 to reach host machine's localhost.
-  // All other platforms (web, desktop, iOS simulator) use localhost directly.
-  final isAndroid = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
-  ApiClient.instance.init(
-    baseUrl: isAndroid
-        ? 'http://10.0.2.2:3000/api'
-        : 'http://localhost:3000/api',
+  // Web build served from a remote host uses the server's public IP.
+  // iOS simulator / desktop use localhost directly.
+  const String kServerUrl = String.fromEnvironment(
+    'SERVER_URL',
+    defaultValue: '',
   );
+  final String baseUrl;
+  if (kServerUrl.isNotEmpty) {
+    baseUrl = '$kServerUrl/api';
+  } else if (kIsWeb) {
+    baseUrl = 'http://209.159.149.164:3000/api';
+  } else if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    baseUrl = 'http://10.0.2.2:3000/api';
+  } else {
+    baseUrl = 'http://localhost:3000/api';
+  }
+  ApiClient.instance.init(baseUrl: baseUrl);
 
   // Check if the API server is reachable; app works with mock data if not.
   final serverReachable = await ApiHealthCheck.isServerReachable();

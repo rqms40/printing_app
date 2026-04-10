@@ -11,8 +11,10 @@ class WebSocketService {
   io.Socket? _locationSocket;
 
   String get _baseUrl {
-    final isAndroid =
-        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    const String kServerUrl = String.fromEnvironment('SERVER_URL', defaultValue: '');
+    if (kServerUrl.isNotEmpty) return kServerUrl;
+    if (kIsWeb) return 'http://209.159.149.164:3000';
+    final isAndroid = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
     return isAndroid ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
   }
 
