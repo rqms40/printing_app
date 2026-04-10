@@ -24,6 +24,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   /// Tracks whether the draft banner has been dismissed this session.
   bool _draftDismissed = false;
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Kick off GIF decode into Flutter's image cache as early as possible
+    // so BentoGrid's HeroTile finds it ready on first paint.
+    precacheImage(
+      const AssetImage('assets/animations/bentobox.webp'),
+      context,
+    );
+  }
+
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark

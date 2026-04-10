@@ -106,11 +106,16 @@ class _HeroTile extends StatelessWidget {
           fit: StackFit.expand,
           clipBehavior: Clip.hardEdge,
           children: [
-            // GIF Background
+            // GIF Background — frameBuilder shows a shimmer while decoding
             Image.asset(
-              'assets/animations/bentobox.gif',
+              'assets/animations/bentobox.webp',
               fit: BoxFit.cover,
               gaplessPlayback: true,
+              frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                if (wasSynchronouslyLoaded || frame != null) return child;
+                // Pulsing placeholder shown until first frame is ready
+                return _GifPlaceholder(colors: colors);
+              },
             ),
 
             // Dark scrim gradient so text remains readable
@@ -296,6 +301,52 @@ class _PromoTile extends StatelessWidget {
             HugeIcon(icon: HugeIcons.strokeRoundedArrowRight01, size: 16, color: colors.disabled),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GIF placeholder — pulsing shimmer shown until the first frame is decoded
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _GifPlaceholder extends StatefulWidget {
+  const _GifPlaceholder({required this.colors});
+  final AppColorSet colors;
+
+  @override
+  State<_GifPlaceholder> createState() => _GifPlaceholderState();
+}
+
+class _GifPlaceholderState extends State<_GifPlaceholder>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    _anim = Tween<double>(begin: 0.3, end: 0.7).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, __) => Container(
+        color: widget.colors.surfaceVariant.withValues(alpha: _anim.value),
       ),
     );
   }

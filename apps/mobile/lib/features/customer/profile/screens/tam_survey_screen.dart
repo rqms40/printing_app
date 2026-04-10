@@ -141,7 +141,7 @@ final _tamQuestions = [
 ];
 
 // ---------------------------------------------------------------------------
-// TAM Survey Screen – embedded as a tab inside ProfileScreen
+// TAM Survey Screen – standalone page navigated from Profile
 // ---------------------------------------------------------------------------
 
 class TamSurveyScreen extends ConsumerStatefulWidget {
@@ -205,136 +205,160 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
     final allAnswered = answered == total;
 
     if (_submitted) {
-      return _SubmittedView(
-        colors: colors,
-        onReset: () {
-          setState(() {
-            _answers.clear();
-            _submitted = false;
-            _checkController.reset();
-          });
-        },
+      return Scaffold(
+        backgroundColor: colors.background,
+        appBar: AppBar(
+          backgroundColor: colors.background,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back_rounded, color: colors.onBackground),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
+        body: _SubmittedView(
+          colors: colors,
+          onReset: () {
+            setState(() {
+              _answers.clear();
+              _submitted = false;
+              _checkController.reset();
+            });
+          },
+        ),
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Header + progress
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.xl,
-            AppSpacing.md,
-            AppSpacing.xl,
-            AppSpacing.md,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'TAM Questionnaire',
-                style: AppTypography.h3.copyWith(color: colors.onBackground),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                'Help us improve GRID by sharing your experience.',
-                style:
-                    AppTypography.body.copyWith(color: colors.onSurfaceDim),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0, end: progress),
-                  duration: const Duration(milliseconds: 500),
-                  curve: Curves.easeOut,
-                  builder: (context, value, _) {
-                    return LinearProgressIndicator(
-                      value: value,
-                      minHeight: 6,
-                      backgroundColor: colors.outlineVariant,
-                      valueColor: AlwaysStoppedAnimation<Color>(colors.accent),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                '$answered / $total answered',
-                style: AppTypography.caption
-                    .copyWith(color: colors.onSurfaceDim),
-              ),
-            ],
-          ),
-        ).animate().fadeIn(duration: 350.ms).slideY(begin: 0.02, duration: 350.ms),
-
-        // Question list
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.xl,
-              vertical: AppSpacing.sm,
+    return Scaffold(
+      backgroundColor: colors.background,
+      appBar: AppBar(
+        backgroundColor: colors.background,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_rounded, color: colors.onBackground),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Text(
+          'TAM Survey',
+          style: AppTypography.h3.copyWith(color: colors.onBackground),
+        ),
+        centerTitle: false,
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header + progress
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.xl,
+              AppSpacing.sm,
+              AppSpacing.xl,
+              AppSpacing.md,
             ),
-            itemCount: _tamQuestions.length + 1,
-            itemBuilder: (context, i) {
-              if (i == _tamQuestions.length) {
-                return Padding(
-                  padding: const EdgeInsets.only(
-                    top: AppSpacing.lg,
-                    bottom: AppSpacing.xxl,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Help us improve GRID by sharing your experience.',
+                  style:
+                      AppTypography.body.copyWith(color: colors.onSurfaceDim),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: progress),
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeOut,
+                    builder: (context, value, _) {
+                      return LinearProgressIndicator(
+                        value: value,
+                        minHeight: 6,
+                        backgroundColor: colors.outlineVariant,
+                        valueColor: AlwaysStoppedAnimation<Color>(colors.accent),
+                      );
+                    },
                   ),
-                  child: _SubmitButton(
-                    enabled: allAnswered,
-                    onTap: _submit,
-                    colors: colors,
-                  ),
-                ).animate().fadeIn(
-                      delay: Duration(milliseconds: 40 * _tamQuestions.length),
-                      duration: 350.ms,
-                    );
-              }
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  '$answered / $total answered',
+                  style: AppTypography.caption
+                      .copyWith(color: colors.onSurfaceDim),
+                ),
+              ],
+            ),
+          ).animate().fadeIn(duration: 350.ms).slideY(begin: 0.02, duration: 350.ms),
 
-              final question = _tamQuestions[i];
-              final answer = _answers[i];
-              final showCategory = i == 0 ||
-                  _tamQuestions[i - 1].category != question.category;
+          // Question list
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.xl,
+                vertical: AppSpacing.sm,
+              ),
+              itemCount: _tamQuestions.length + 1,
+              itemBuilder: (context, i) {
+                if (i == _tamQuestions.length) {
+                  return Padding(
+                    padding: const EdgeInsets.only(
+                      top: AppSpacing.lg,
+                      bottom: AppSpacing.xxl,
+                    ),
+                    child: _SubmitButton(
+                      enabled: allAnswered,
+                      onTap: _submit,
+                      colors: colors,
+                    ),
+                  ).animate().fadeIn(
+                        delay: Duration(milliseconds: 40 * _tamQuestions.length),
+                        duration: 350.ms,
+                      );
+                }
 
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (showCategory) ...[
-                    if (i != 0) const SizedBox(height: AppSpacing.lg),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                      child: Text(
-                        question.category.toUpperCase(),
-                        style: AppTypography.overline.copyWith(
-                          color: colors.onSurfaceDim,
-                          letterSpacing: 1.5,
+                final question = _tamQuestions[i];
+                final answer = _answers[i];
+                final showCategory = i == 0 ||
+                    _tamQuestions[i - 1].category != question.category;
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (showCategory) ...[
+                      if (i != 0) const SizedBox(height: AppSpacing.lg),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                        child: Text(
+                          question.category.toUpperCase(),
+                          style: AppTypography.overline.copyWith(
+                            color: colors.onSurfaceDim,
+                            letterSpacing: 1.5,
+                          ),
                         ),
                       ),
-                    ),
+                    ],
+                    _QuestionCard(
+                      number: i + 1,
+                      question: question.question,
+                      answer: answer,
+                      colors: colors,
+                      onTap: () => _openQuestion(i),
+                    )
+                        .animate()
+                        .fadeIn(
+                          delay: Duration(milliseconds: 40 * i),
+                          duration: 350.ms,
+                        )
+                        .slideX(begin: 0.04, duration: 350.ms),
+                    const SizedBox(height: AppSpacing.sm),
                   ],
-                  _QuestionCard(
-                    number: i + 1,
-                    question: question.question,
-                    answer: answer,
-                    colors: colors,
-                    onTap: () => _openQuestion(i),
-                  )
-                      .animate()
-                      .fadeIn(
-                        delay: Duration(milliseconds: 40 * i),
-                        duration: 350.ms,
-                      )
-                      .slideX(begin: 0.04, duration: 350.ms),
-                  const SizedBox(height: AppSpacing.sm),
-                ],
-              );
-            },
+                );
+              },
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

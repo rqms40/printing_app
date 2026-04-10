@@ -7,36 +7,15 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/profile/providers/profile_provider.dart';
-import 'package:printing_app/features/customer/profile/screens/tam_survey_screen.dart';
 import 'package:printing_app/shared/providers/theme_provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/confirmation_dialog.dart';
 
-class ProfileScreen extends ConsumerStatefulWidget {
+class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
   @override
-  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
-}
-
-class _ProfileScreenState extends ConsumerState<ProfileScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(profileProvider);
     ref.watch(themeProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -87,81 +66,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 .fadeIn(duration: 350.ms, curve: Curves.easeOut)
                 .slideY(begin: 0.02, duration: 350.ms, curve: Curves.easeOut),
 
-            // ── Tab Bar ────────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-              child: _ProfileTabBar(
-                controller: _tabController,
-                colors: colors,
-              ),
-            ).animate().fadeIn(delay: 50.ms, duration: 300.ms),
-
-            const SizedBox(height: AppSpacing.sm),
-
-            // ── Tab Views ──────────────────────────────────────────────
+            // ── Scrollable content ──────────────────────────────────────
             Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _ProfileTab(user: user, colors: colors, isDark: isDark),
-                  const TamSurveyScreen(),
-                ],
-              ),
+              child: _ProfileTab(user: user, colors: colors, isDark: isDark),
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Custom Tab Bar
-// ---------------------------------------------------------------------------
-
-class _ProfileTabBar extends StatelessWidget {
-  const _ProfileTabBar({
-    required this.controller,
-    required this.colors,
-  });
-
-  final TabController controller;
-  final AppColorSet colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, _) {
-        return Container(
-          height: 44,
-          decoration: BoxDecoration(
-            color: colors.surfaceVariant,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: TabBar(
-            controller: controller,
-            indicator: BoxDecoration(
-              color: colors.accent,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            indicatorSize: TabBarIndicatorSize.tab,
-            labelStyle: AppTypography.button.copyWith(letterSpacing: 0.5),
-            unselectedLabelStyle:
-                AppTypography.body.copyWith(fontWeight: FontWeight.w500),
-            labelColor: colors.accentOnColor,
-            unselectedLabelColor: colors.onSurfaceDim,
-            dividerColor: Colors.transparent,
-            splashFactory: NoSplash.splashFactory,
-            overlayColor: WidgetStateProperty.all(Colors.transparent),
-            padding: const EdgeInsets.all(3),
-            tabs: const [
-              Tab(text: 'Account'),
-              Tab(text: 'Survey'),
-            ],
-          ),
-        );
-      },
     );
   }
 }
@@ -313,6 +224,19 @@ class _ProfileTab extends ConsumerWidget {
             icon: HugeIcons.strokeRoundedShield01,
             title: 'Privacy Policy',
             onTap: () => context.push('/customer/profile/privacy'),
+            colors: colors,
+          ),
+
+          const SizedBox(height: AppSpacing.lg),
+
+          // FEEDBACK section
+          _SectionHeader(label: 'FEEDBACK', colors: colors)
+              .animate()
+              .fadeIn(duration: 400.ms, delay: 175.ms, curve: Curves.easeOut),
+          _MenuRow(
+            icon: HugeIcons.strokeRoundedTaskEdit01,
+            title: 'TAM Survey',
+            onTap: () => context.push('/customer/profile/survey'),
             colors: colors,
           ),
 
