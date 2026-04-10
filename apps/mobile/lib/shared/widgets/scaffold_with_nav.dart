@@ -290,7 +290,9 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
               left: 0,
               right: 0,
               height: _fabR * 2, // 48px
-              child: AnimatedBuilder(
+              child: IgnorePointer(
+                ignoring: !_isOpen,
+                child: AnimatedBuilder(
                 animation: _panelCtrl,
                 builder: (context, child) {
                   return Transform.scale(
@@ -327,6 +329,7 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
                 ),
               ),
             ),
+          ),
         ],
       ),
     );

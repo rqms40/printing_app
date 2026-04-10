@@ -2,26 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
+import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
-import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/section_header.dart';
 import 'package:printing_app/shared/widgets/status_badge.dart';
 
-/// Displays a snapping carousel of recent orders with dot indicators.
-class RecentOrdersSection extends StatefulWidget {
+/// Vertical list of recent orders.
+class RecentOrdersSection extends StatelessWidget {
   const RecentOrdersSection({super.key});
-
-  @override
-  State<RecentOrdersSection> createState() => _RecentOrdersSectionState();
-}
-
-class _RecentOrdersSectionState extends State<RecentOrdersSection> {
-  int _currentIndex = 0;
-  late final PageController _pageController;
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -53,16 +45,17 @@ class _RecentOrdersSectionState extends State<RecentOrdersSection> {
     }
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController(viewportFraction: 0.88);
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
+  IconData _iconForCategory(String category) {
+    switch (category.toLowerCase()) {
+      case '3d print':
+        return Icons.view_in_ar_rounded;
+      case 'banner':
+        return Icons.panorama_rounded;
+      case 'poster':
+        return Icons.image_rounded;
+      default:
+        return Icons.description_rounded;
+    }
   }
 
   @override
@@ -76,9 +69,7 @@ class _RecentOrdersSectionState extends State<RecentOrdersSection> {
         SectionHeader(
           title: 'Recent Orders',
           actionLabel: 'See All',
-          onAction: () {
-            context.go('/customer/orders');
-          },
+          onAction: () => context.go('/customer/orders'),
         ),
         if (recentOrders.isEmpty)
           Padding(
@@ -86,117 +77,173 @@ class _RecentOrdersSectionState extends State<RecentOrdersSection> {
             child: Center(
               child: Text(
                 'No orders yet',
-                style: AppTypography.body.copyWith(
-                  color: colors.onSurfaceDim,
-                ),
+                style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
               ),
             ),
           )
-        else ...[
-          SizedBox(
-            height: 160,
-            child: PageView.builder(
-              padEnds: false,
-              controller: _pageController,
-              itemCount: recentOrders.length,
-              onPageChanged: (index) {
-                setState(() => _currentIndex = index);
-              },
-              itemBuilder: (context, index) {
-                final order = recentOrders[index];
-                return Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.xs,
-                  ),
-                  child: _MiniOrderCard(
-                    order: order,
-                    colors: colors,
-                    variant: _variantForStatus(order.orderStatus),
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          // Dot indicators
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(
-              recentOrders.length,
-              (i) => AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                margin: const EdgeInsets.symmetric(horizontal: 3),
-                width: i == _currentIndex ? 20 : 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color:
-                      i == _currentIndex ? colors.accent : colors.disabled,
-                  borderRadius: BorderRadius.circular(3),
+        else
+          Column(
+            children: [
+              for (int i = 0; i < recentOrders.length; i++) ...[
+                _OrderListItem(
+                  order: recentOrders[i],
+                  colors: colors,
+                  variant: _variantForStatus(recentOrders[i].orderStatus),
+                  icon: _iconForCategory(recentOrders[i].category),
                 ),
-              ),
-            ),
+                if (i < recentOrders.length - 1)
+                  Divider(
+                    height: 1,
+                    thickness: 0.5,
+                    color: colors.outline.withValues(alpha: 0.5),
+                    indent: 56,
+                  ),
+              ],
+            ],
           ),
-        ],
       ],
     );
   }
 }
 
-class _MiniOrderCard extends StatelessWidget {
-  const _MiniOrderCard({
+class _OrderListItem extends StatefulWidget {
+  const _OrderListItem({
     required this.order,
     required this.colors,
     required this.variant,
+    required this.icon,
   });
 
   final Order order;
   final AppColorSet colors;
   final StatusBadgeVariant variant;
+  final IconData icon;
+
+  @override
+  State<_OrderListItem> createState() => _OrderListItemState();
+}
+
+class _OrderListItemState extends State<_OrderListItem> {
+  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
-    final dateFormat = DateFormat('MMM d, y');
+    final dateFormat = DateFormat('MMM d');
 
-    return AppCard(
-      onTap: () {
-        context.push('/customer/orders/${order.id}');
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        context.push('/customer/orders/${widget.order.id}');
       },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            order.orderId,
-            style: AppTypography.bodyBold.copyWith(
-              color: colors.onBackground,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: StatusBadge(
-                label: order.orderStatus.displayName,
-                variant: variant,
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 100),
+        color: _pressed
+            ? widget.colors.surfaceVariant.withValues(alpha: 0.6)
+            : Colors.transparent,
+        padding: const EdgeInsets.symmetric(
+          vertical: AppSpacing.sm + 2,
+        ),
+        child: Row(
+          children: [
+            // Icon
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: widget.colors.surfaceVariant,
+                borderRadius: AppRadius.borderMd,
+              ),
+              child: Icon(
+                widget.icon,
+                color: widget.colors.onSurfaceDim,
+                size: 20,
               ),
             ),
-          ),
-          const Spacer(),
-          Text(
-            'P${order.totalPrice.toStringAsFixed(2)}',
-            style: AppTypography.body.copyWith(
-              color: colors.onSurface,
+            const SizedBox(width: AppSpacing.sm),
+
+            // Order details
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        widget.order.orderId,
+                        style: AppTypography.bodyBold.copyWith(
+                          color: widget.colors.onBackground,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: widget.colors.surfaceVariant,
+                          borderRadius: AppRadius.borderFull,
+                        ),
+                        child: Text(
+                          widget.order.category,
+                          style: AppTypography.overline.copyWith(
+                            color: widget.colors.onSurfaceDim,
+                            fontSize: 9,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: StatusBadge(
+                          label: widget.order.orderStatus.displayName,
+                          variant: widget.variant,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      Text(
+                        dateFormat.format(widget.order.createdAt),
+                        style: AppTypography.caption.copyWith(
+                          color: widget.colors.onSurfaceDim,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            dateFormat.format(order.createdAt),
-            style: AppTypography.caption.copyWith(
-              color: colors.onSurfaceDim,
+
+            const SizedBox(width: AppSpacing.sm),
+
+            // Price + chevron
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '₱${widget.order.totalPrice.toStringAsFixed(0)}',
+                  style: AppTypography.bodyBold.copyWith(
+                    color: widget.colors.onBackground,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: widget.colors.disabled,
+                  size: 18,
+                ),
+              ],
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

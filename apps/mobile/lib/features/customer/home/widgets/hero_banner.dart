@@ -1,74 +1,95 @@
 import 'package:flutter/material.dart';
-import 'package:printing_app/config/theme/app_colors.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
-import 'package:printing_app/config/theme/app_shadows.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/widgets/grid_logo.dart';
 
-/// Editorial hero banner with Instrument Serif display text.
+/// Compact hero banner — real GridLogo stamp + bentobox.webp fills edge-to-edge.
 class HeroBanner extends StatelessWidget {
   const HeroBanner({super.key});
 
-  AppColorSet _colors(BuildContext context) {
-    return Theme.of(context).brightness == Brightness.dark
-        ? AppColors.dark
-        : AppColors.light;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final colors = _colors(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.only(
-        left: AppSpacing.xl,
-        right: AppSpacing.xl,
-        top: AppSpacing.xxl,
-        bottom: AppSpacing.lg,
-      ),
-      decoration: BoxDecoration(
-        color: colors.surfaceVariant,
-        borderRadius: AppRadius.borderXl,
-        boxShadow: isDark ? AppShadows.none : AppShadows.subtle,
-      ),
-      child: Stack(
-        children: [
-          // Background decorative illustration
-          Positioned(
-            right: -AppSpacing.md,
-            bottom: -AppSpacing.sm,
-            child: Opacity(
-              opacity: 0.07,
-              child: GridLogo(
-                size: 140,
-                foregroundColor: colors.onBackground,
+    return ClipRRect(
+      borderRadius: AppRadius.borderXl,
+      child: Container(
+        height: 115,
+        width: double.infinity,
+        color: Colors.black,
+        child: Stack(
+          children: [
+            // WebP background — Positioned.fill for true edge-to-edge coverage
+            Positioned.fill(
+              child: Opacity(
+                opacity: 0.45,
+                child: Image.asset(
+                  'assets/animations/bentobox.webp',
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                ),
               ),
             ),
-          ),
-          // Foreground text content
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Professional printing,\ndelivered.',
-                style: AppTypography.display.copyWith(
-                  color: colors.onBackground,
+
+            // Gradient scrim
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.08),
+                      Colors.black.withValues(alpha: 0.62),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'Paper and 3D printing services at your fingertips',
-                style: AppTypography.body.copyWith(
-                  color: colors.onSurfaceDim,
-                ),
+            ),
+
+            // Content: logo + text, centered
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Real GRID dot-matrix logo, white dots
+                  GridLogo(
+                    size: 28,
+                    foregroundColor: Colors.white.withValues(alpha: 0.82),
+                    accentColor: const Color(0xFFFFDE58),
+                    secondaryColor: Colors.white.withValues(alpha: 0.35),
+                  ),
+
+                  const SizedBox(height: AppSpacing.xs),
+
+                  // GRID wordmark
+                  Text(
+                    'GRID',
+                    style: AppTypography.display.copyWith(
+                      color: Colors.white,
+                      fontSize: 38,
+                      height: 1.0,
+                      letterSpacing: 5,
+                    ),
+                  ),
+
+                  const SizedBox(height: 3),
+
+                  // Tagline
+                  Text(
+                    'MAPPING THE FUTURE OF PRINTING',
+                    style: AppTypography.overline.copyWith(
+                      color: Colors.white.withValues(alpha: 0.50),
+                      fontSize: 7.5,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
-    );
+    ).animate().fadeIn(duration: 450.ms, curve: Curves.easeOut);
   }
 }
