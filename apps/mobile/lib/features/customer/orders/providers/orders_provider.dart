@@ -9,17 +9,25 @@ import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
 
 /// Terminal statuses that mark an order as completed/done.
-const _terminalStatuses = {
+const terminalStatuses = {
   OrderStatus.delivered,
   OrderStatus.completedPickup,
   OrderStatus.cancelled,
 };
 
 /// Statuses eligible for customer-initiated cancellation.
-const _cancellableStatuses = {
+const cancellableStatuses = {
   OrderStatus.orderPlaced,
   OrderStatus.fileVerified,
 };
+
+dynamic _readJsonValue(
+  Map<String, dynamic> json,
+  String camelKey, [
+  String? snakeKey,
+]) {
+  return json[camelKey] ?? (snakeKey != null ? json[snakeKey] : null);
+}
 
 OrderStatus _parseOrderStatus(String value) {
   // Handle snake_case from server (e.g. 'order_placed' → 'orderPlaced')
@@ -132,38 +140,72 @@ DateTime? _parseDateNullable(dynamic value) {
 
 Order _parseOrder(Map<String, dynamic> json) {
   return Order(
-    id: json['id']?.toString() ?? '',
-    orderId: json['orderId']?.toString() ?? '',
-    userId: json['userId']?.toString() ?? '',
-    category: json['category']?.toString() ?? '',
-    fileUrl: json['fileUrl']?.toString(),
-    fileName: json['fileName']?.toString(),
-    paperSpecs: _parsePaperSpecs(json['paperSpecs'] as Map<String, dynamic>?),
-    threeDSpecs: _parseThreeDSpecs(json['threeDSpecs'] as Map<String, dynamic>?),
-    quantity: int.tryParse(json['quantity']?.toString() ?? '1') ?? 1,
-    totalPrice: double.tryParse(json['totalPrice']?.toString() ?? '0') ?? 0,
-    deliveryFee: double.tryParse(json['deliveryFee']?.toString() ?? '0') ?? 0,
-    paymentMethod: _parsePaymentMethod(json['paymentMethod']?.toString() ?? 'cod'),
-    paymentStatus: _parsePaymentStatus(json['paymentStatus']?.toString() ?? 'pending'),
-    orderStatus: _parseOrderStatus(json['orderStatus']?.toString() ?? 'orderPlaced'),
-    declineReason: json['declineReason']?.toString(),
-    cancellationReason: json['cancellationReason']?.toString(),
-    cancelledAt: _parseDateNullable(json['cancelledAt']),
-    deliveryOption: json['deliveryOption']?.toString() ?? 'delivery',
-    deliveryAddressId: json['deliveryAddressId']?.toString(),
-    assignedDriverId: json['assignedDriverId']?.toString(),
-    estimatedCompletionAt: _parseDateNullable(json['estimatedCompletionAt']),
-    adminNotes: json['adminNotes']?.toString(),
-    trackingLink: json['trackingLink']?.toString(),
-    createdAt: _parseDate(json['createdAt']),
-    updatedAt: _parseDate(json['updatedAt']),
+    id: _readJsonValue(json, 'id')?.toString() ?? '',
+    orderId: _readJsonValue(json, 'orderId', 'order_id')?.toString() ?? '',
+    userId: _readJsonValue(json, 'userId', 'user_id')?.toString() ?? '',
+    category: _readJsonValue(json, 'category')?.toString() ?? '',
+    fileUrl: _readJsonValue(json, 'fileUrl', 'file_url')?.toString(),
+    fileName: _readJsonValue(json, 'fileName', 'file_name')?.toString(),
+    paperSpecs: _parsePaperSpecs(
+      _readJsonValue(json, 'paperSpecs', 'paper_specs') as Map<String, dynamic>?,
+    ),
+    threeDSpecs: _parseThreeDSpecs(
+      _readJsonValue(json, 'threeDSpecs', 'three_d_specs')
+          as Map<String, dynamic>?,
+    ),
+    quantity: int.tryParse(_readJsonValue(json, 'quantity')?.toString() ?? '1') ?? 1,
+    totalPrice:
+        double.tryParse(_readJsonValue(json, 'totalPrice', 'total_price')?.toString() ?? '0') ??
+            0,
+    deliveryFee:
+        double.tryParse(_readJsonValue(json, 'deliveryFee', 'delivery_fee')?.toString() ?? '0') ??
+            0,
+    paymentMethod: _parsePaymentMethod(
+      _readJsonValue(json, 'paymentMethod', 'payment_method')?.toString() ?? 'cod',
+    ),
+    paymentStatus: _parsePaymentStatus(
+      _readJsonValue(json, 'paymentStatus', 'payment_status')?.toString() ??
+          'pending',
+    ),
+    orderStatus: _parseOrderStatus(
+      _readJsonValue(json, 'orderStatus', 'order_status')?.toString() ??
+          'orderPlaced',
+    ),
+    declineReason: _readJsonValue(json, 'declineReason', 'decline_reason')?.toString(),
+    cancellationReason: _readJsonValue(
+      json,
+      'cancellationReason',
+      'cancellation_reason',
+    )?.toString(),
+    cancelledAt: _parseDateNullable(_readJsonValue(json, 'cancelledAt', 'cancelled_at')),
+    deliveryOption:
+        _readJsonValue(json, 'deliveryOption', 'delivery_option')?.toString() ??
+            'delivery',
+    deliveryAddressId:
+        _readJsonValue(json, 'deliveryAddressId', 'delivery_address_id')
+            ?.toString(),
+    assignedDriverId:
+        _readJsonValue(json, 'assignedDriverId', 'assigned_driver_id')
+            ?.toString(),
+    estimatedCompletionAt: _parseDateNullable(
+      _readJsonValue(json, 'estimatedCompletionAt', 'estimated_completion_at'),
+    ),
+    adminNotes: _readJsonValue(json, 'adminNotes', 'admin_notes')?.toString(),
+    trackingLink: _readJsonValue(json, 'trackingLink', 'tracking_link')?.toString(),
+    createdAt: _parseDate(_readJsonValue(json, 'createdAt', 'created_at')),
+    updatedAt: _parseDate(_readJsonValue(json, 'updatedAt', 'updated_at')),
   );
 }
 
 class OrdersNotifier extends StateNotifier<List<Order>> {
-  OrdersNotifier() : super([]) {
-    _fetchOrders();
-    _connectWebSocket();
+  OrdersNotifier({
+    List<Order> initialState = const [],
+    bool skipBootstrap = false,
+  }) : super(initialState) {
+    if (!skipBootstrap) {
+      _fetchOrders();
+      _connectWebSocket();
+    }
   }
 
   Future<void> _connectWebSocket() async {
@@ -172,25 +214,42 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
         onOrderUpdate: (data) {
           if (data is Map<String, dynamic>) {
             final updated = _parseOrder(data);
-            state = [
-              for (final order in state)
-                if (order.orderId == updated.orderId) updated else order,
-            ];
+            final index = state.indexWhere(
+              (order) => order.id == updated.id || order.orderId == updated.orderId,
+            );
+
+            if (index >= 0) {
+              final next = [...state];
+              next[index] = updated;
+              state = next;
+            } else {
+              _fetchOrders();
+            }
           }
         },
+        // Once socket is confirmed connected, subscribe to every loaded order room.
+        onConnect: _subscribeToAllOrders,
       );
     } catch (e) {
       debugPrint('WebSocket connection failed: $e');
     }
   }
 
+  /// Emits a `subscribe` event for every order currently in state.
+  /// Safe to call multiple times — idempotent on the server.
+  void _subscribeToAllOrders() {
+    for (final order in state) {
+      WebSocketService.instance.subscribeToOrder(order.orderId);
+    }
+  }
+
   /// Orders that are still in progress (non-terminal statuses).
   List<Order> get activeOrders =>
-      state.where((o) => !_terminalStatuses.contains(o.orderStatus)).toList();
+      state.where((o) => !terminalStatuses.contains(o.orderStatus)).toList();
 
   /// Orders that have reached a terminal status.
   List<Order> get completedOrders =>
-      state.where((o) => _terminalStatuses.contains(o.orderStatus)).toList();
+      state.where((o) => terminalStatuses.contains(o.orderStatus)).toList();
 
   Future<void> _fetchOrders() async {
     try {
@@ -202,6 +261,8 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       debugPrint('OrdersProvider: API failed ($e), using MockData');
       state = List.of(MockData.orders);
     }
+    // Subscribe to all loaded orders in case socket connected before fetch completed.
+    _subscribeToAllOrders();
   }
 
   Future<void> refreshOrders() async => _fetchOrders();
@@ -242,6 +303,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       });
       final newOrder = _parseOrder(response.data as Map<String, dynamic>);
       state = [newOrder, ...state];
+      WebSocketService.instance.subscribeToOrder(newOrder.orderId);
       debugPrint('OrdersProvider: Order created via API: ${newOrder.orderId}');
       return newOrder;
     } catch (e) {
@@ -253,14 +315,11 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
 
   /// Cancel an order if it is in a cancellable status.
   Future<void> cancelOrder(String orderId) async {
-    try {
-      await ApiClient.instance.patch('/orders/$orderId/status', data: {'status': 'cancelled'});
-    } catch (_) {}
-    // Update local state regardless
+    // Optimistic local update so the UI responds immediately
     state = [
       for (final order in state)
         if (order.id == orderId &&
-            _cancellableStatuses.contains(order.orderStatus))
+            cancellableStatuses.contains(order.orderStatus))
           order.copyWith(
             orderStatus: OrderStatus.cancelled,
             cancelledAt: DateTime.now(),
@@ -269,10 +328,43 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
         else
           order,
     ];
+    try {
+      await ApiClient.instance.patch('/orders/$orderId/cancel');
+      // WS orderUpdate event will re-sync the confirmed state from the server
+    } catch (e) {
+      debugPrint('OrdersProvider: cancel failed ($e) — reverting local state');
+      await _fetchOrders();
+    }
   }
 }
 
 final ordersProvider =
     StateNotifierProvider<OrdersNotifier, List<Order>>((ref) {
   return OrdersNotifier();
+});
+
+/// Reactive list of active (non-terminal) orders, sorted newest-updated first.
+/// Widgets that watch this will rebuild automatically on any WS or API update.
+final activeOrdersProvider = Provider<List<Order>>((ref) {
+  return ref
+      .watch(ordersProvider)
+      .where((o) => !terminalStatuses.contains(o.orderStatus))
+      .toList()
+    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+});
+
+/// Reactive list of completed/terminal orders, sorted newest-updated first.
+final completedOrdersProvider = Provider<List<Order>>((ref) {
+  return ref
+      .watch(ordersProvider)
+      .where((o) => terminalStatuses.contains(o.orderStatus))
+      .toList()
+    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+});
+
+/// The 5 most-recently-updated orders across all statuses (home screen feed).
+final recentOrdersProvider = Provider<List<Order>>((ref) {
+  final all = List<Order>.from(ref.watch(ordersProvider))
+    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  return all.take(5).toList();
 });

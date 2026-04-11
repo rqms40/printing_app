@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/customer/orders/providers/orders_provider.dart'
+    show recentOrdersProvider;
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
-import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/widgets/section_header.dart';
 import 'package:printing_app/shared/widgets/status_badge.dart';
 
-/// Vertical list of recent orders.
-class RecentOrdersSection extends StatelessWidget {
+/// Vertical list of the 5 most-recently-updated orders.
+/// Automatically rebuilds when any order status changes via WS or API.
+class RecentOrdersSection extends ConsumerWidget {
   const RecentOrdersSection({super.key});
 
   AppColorSet _colors(BuildContext context) {
@@ -59,9 +62,9 @@ class RecentOrdersSection extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = _colors(context);
-    final recentOrders = MockData.orders.take(5).toList();
+    final recentOrders = ref.watch(recentOrdersProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

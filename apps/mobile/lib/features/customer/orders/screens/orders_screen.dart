@@ -5,7 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
-import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
+import 'package:printing_app/features/customer/orders/providers/orders_provider.dart'
+    show ordersProvider, activeOrdersProvider, completedOrdersProvider;
 import 'package:printing_app/features/customer/orders/widgets/order_card.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -22,16 +23,31 @@ class OrdersScreen extends ConsumerStatefulWidget {
 }
 
 class _OrdersScreenState extends ConsumerState<OrdersScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   bool _isLoading = true;
   int _selectedTab = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    Future.microtask(() => ref.read(ordersProvider.notifier).refreshOrders());
     Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted) setState(() => _isLoading = false);
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.read(ordersProvider.notifier).refreshOrders();
+    }
   }
 
   @override
@@ -40,12 +56,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         ? AppColors.dark
         : AppColors.light;
 
-    ref.watch(ordersProvider);
-    final notifier = ref.read(ordersProvider.notifier);
-    final activeOrders = notifier.activeOrders
-      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    final completedOrders = notifier.completedOrders
-      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final activeOrders = ref.watch(activeOrdersProvider);
+    final completedOrders = ref.watch(completedOrdersProvider);
 
     final activeCount = activeOrders.length;
     final completedCount = completedOrders.length;
@@ -97,29 +109,34 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             Expanded(
               child: _isLoading
                   ? const OrderListSkeleton()
-                  : AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 250),
-                      switchInCurve: Curves.easeOut,
-                      switchOutCurve: Curves.easeIn,
-                      child: _selectedTab == 0
-                          ? _OrdersList(
-                              key: const ValueKey('active'),
-                              orders: activeOrders,
-                              emptyHeading: 'No active orders',
-                              emptyBody:
-                                  'When you place an order, it will appear here.',
-                              emptyIcon: HugeIcons.strokeRoundedFile02,
-                              colors: colors,
-                            )
-                          : _OrdersList(
-                              key: const ValueKey('completed'),
-                              orders: completedOrders,
-                              emptyHeading: 'No completed orders',
-                              emptyBody: 'Your finished orders will show here.',
-                              emptyIcon:
-                                  HugeIcons.strokeRoundedCheckmarkCircle02,
-                              colors: colors,
-                            ),
+                  : RefreshIndicator(
+                      onRefresh: () =>
+                          ref.read(ordersProvider.notifier).refreshOrders(),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 250),
+                        switchInCurve: Curves.easeOut,
+                        switchOutCurve: Curves.easeIn,
+                        child: _selectedTab == 0
+                            ? _OrdersList(
+                                key: const ValueKey('active'),
+                                orders: activeOrders,
+                                emptyHeading: 'No active orders',
+                                emptyBody:
+                                    'When you place an order, it will appear here.',
+                                emptyIcon: HugeIcons.strokeRoundedFile02,
+                                colors: colors,
+                              )
+                            : _OrdersList(
+                                key: const ValueKey('completed'),
+                                orders: completedOrders,
+                                emptyHeading: 'No completed orders',
+                                emptyBody:
+                                    'Your finished orders will show here.',
+                                emptyIcon:
+                                    HugeIcons.strokeRoundedCheckmarkCircle02,
+                                colors: colors,
+                              ),
+                      ),
                     ),
             ),
           ],

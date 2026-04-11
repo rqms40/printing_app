@@ -123,7 +123,6 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
 
   // Floating FAB dimensions
   static const _openFabSize = 56.0;
-  static const _openFabR = _openFabSize / 2; // 28
 
   @override
   Widget build(BuildContext context) {

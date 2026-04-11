@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/shared/models/app_notification.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
+import 'package:printing_app/shared/services/notification_service.dart';
+import 'package:printing_app/shared/services/websocket_service.dart';
 import 'notifications_api.dart';
 
 export 'notifications_api.dart';
@@ -31,11 +35,38 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
       : _api = api ?? NotificationsApiImpl(),
         super([]) {
     _fetchNotifications();
+    _listenToFcmMessages();
+    _listenToWsNotifications();
   }
 
   final NotificationsApi _api;
 
+  StreamSubscription<Map<String, dynamic>>? _fcmSub;
+
   bool _loadedFromApi = false;
+
+  void _listenToFcmMessages() {
+    _fcmSub?.cancel();
+    _fcmSub = NotificationService.messageStream.listen((_) {
+      _fetchNotifications();
+    });
+  }
+
+  void _listenToWsNotifications() {
+    WebSocketService.instance.listenForNewNotifications((data) {
+      final notif = _parseNotification(data);
+      // Deduplicate: don't add if already present
+      if (!state.any((n) => n.id == notif.id)) {
+        state = [notif, ...state];
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _fcmSub?.cancel();
+    super.dispose();
+  }
 
   int get unreadCount => state.where((n) => !n.isRead).length;
 
@@ -75,6 +106,13 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
       } catch (_) {}
     }
     state = state.map((n) => n.copyWith(isRead: true)).toList();
+  }
+
+  Future<void> clearNotifications() async {
+    try {
+      await _api.markAllAsRead();
+    } catch (_) {}
+    state = [];
   }
 }
 

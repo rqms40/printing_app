@@ -25,6 +25,7 @@ import 'package:printing_app/features/auth/screens/profile_setup_screen.dart';
 import 'package:printing_app/features/customer/home/screens/home_screen.dart';
 import 'package:printing_app/features/customer/orders/screens/orders_screen.dart';
 import 'package:printing_app/features/customer/orders/screens/order_detail_screen.dart';
+import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
 import 'package:printing_app/features/customer/notifications/screens/notifications_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/profile_screen.dart';
 import 'package:printing_app/features/customer/order/screens/category_screen.dart';
@@ -167,36 +168,99 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Customer shell (4 tabs: Home, Orders, Notifications, Profile)
       // -----------------------------------------------------------------------
       StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) => ScaffoldWithNav(
-          currentIndex: navigationShell.currentIndex,
-          showFab: true,
-          onTap: (i) => navigationShell.goBranch(
-            i,
-            initialLocation: i == navigationShell.currentIndex,
-          ),
-          items: const [
-            NavItem(
-              icon: HugeIcons.strokeRoundedHome01,
-              activeIcon: HugeIcons.strokeRoundedHome01,
-              label: 'Home',
-            ),
-            NavItem(
-              icon: HugeIcons.strokeRoundedPackage,
-              activeIcon: HugeIcons.strokeRoundedPackage,
-              label: 'Orders',
-            ),
-            NavItem(
-              icon: HugeIcons.strokeRoundedNotification02,
-              activeIcon: HugeIcons.strokeRoundedNotification02,
-              label: 'Alerts',
-            ),
-            NavItem(
-              icon: HugeIcons.strokeRoundedUser,
-              activeIcon: HugeIcons.strokeRoundedUser,
-              label: 'Profile',
-            ),
-          ],
-          child: navigationShell,
+        builder: (context, state, navigationShell) => Consumer(
+          builder: (context, ref, _) {
+            final unreadCount = ref.watch(unreadNotificationsCountProvider);
+
+            // Show a real-time toast when a single new notification arrives
+            // via WebSocket (diff > 3 = bulk fetch on startup, skip).
+            ref.listen(notificationsProvider, (prev, next) {
+              final prevLen = prev?.length ?? -1;
+              final diff = next.length - prevLen;
+              if (prevLen < 0 || diff <= 0 || diff > 3) return;
+              final newest = next.first;
+              ScaffoldMessenger.of(context)
+                ..clearSnackBars()
+                ..showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        const Icon(Icons.notifications_rounded,
+                            color: Colors.black, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                newest.title,
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (newest.message.isNotEmpty)
+                                Text(
+                                  newest.message,
+                                  style: const TextStyle(
+                                    color: Color(0xFF444444),
+                                    fontSize: 11,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    backgroundColor: const Color(0xFFFFDE58),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    margin: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+                    duration: const Duration(seconds: 4),
+                  ),
+                );
+            });
+
+            return ScaffoldWithNav(
+              currentIndex: navigationShell.currentIndex,
+              showFab: true,
+              onTap: (i) => navigationShell.goBranch(
+                i,
+                initialLocation: i == navigationShell.currentIndex,
+              ),
+              items: [
+                const NavItem(
+                  icon: HugeIcons.strokeRoundedHome01,
+                  activeIcon: HugeIcons.strokeRoundedHome01,
+                  label: 'Home',
+                ),
+                const NavItem(
+                  icon: HugeIcons.strokeRoundedPackage,
+                  activeIcon: HugeIcons.strokeRoundedPackage,
+                  label: 'Orders',
+                ),
+                NavItem(
+                  icon: HugeIcons.strokeRoundedNotification02,
+                  activeIcon: HugeIcons.strokeRoundedNotification02,
+                  label: 'Notifications',
+                  badge: unreadCount,
+                ),
+                const NavItem(
+                  icon: HugeIcons.strokeRoundedUser,
+                  activeIcon: HugeIcons.strokeRoundedUser,
+                  label: 'Profile',
+                ),
+              ],
+              child: navigationShell,
+            );
+          },
         ),
         branches: [
           StatefulShellBranch(

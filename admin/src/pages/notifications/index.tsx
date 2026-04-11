@@ -10,6 +10,7 @@ import {
   Empty,
   Space,
 } from "antd";
+import { CheckOutlined } from "@ant-design/icons";
 import { useNotificationsContext } from "@/context/notifications-context";
 import type { Notification, NotificationType } from "@/types/notification";
 
@@ -93,7 +94,14 @@ export function NotificationsPage() {
     <List
       title="Notifications"
       headerButtons={
-        <Button onClick={() => markAllRead()}>Mark all as read</Button>
+        unreadCount > 0 ? (
+          <Button
+            icon={<CheckOutlined />}
+            onClick={() => markAllRead()}
+          >
+            Mark all read
+          </Button>
+        ) : undefined
       }
     >
       <Space direction="vertical" size="middle" style={{ width: "100%" }}>

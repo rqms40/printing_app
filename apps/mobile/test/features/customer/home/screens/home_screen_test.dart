@@ -44,14 +44,8 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(milliseconds: 500));
 
-      expect(
-        find.textContaining('Professional'),
-        findsOneWidget,
-      );
-      expect(
-        find.textContaining('Paper & 3D'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('GRID'), findsWidgets);
+      expect(find.textContaining('The Daily Grid'), findsOneWidget);
     });
 
     testWidgets('renders bento grid service tiles', (tester) async {
@@ -92,7 +86,12 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(milliseconds: 500));
 
-      expect(find.text('Hello, Maria Santos'), findsOneWidget);
+      // Greeting is RichText (time-based + first name only)
+      expect(
+        find.byWidgetPredicate((w) =>
+            w is RichText && w.text.toPlainText().contains('Maria')),
+        findsWidgets,
+      );
     });
   });
 }

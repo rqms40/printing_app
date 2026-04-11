@@ -5,7 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
-import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
+import 'package:printing_app/features/customer/orders/providers/orders_provider.dart'
+    show ordersProvider, cancellableStatuses;
 import 'package:printing_app/features/customer/orders/widgets/order_status_timeline.dart';
 import 'package:printing_app/shared/models/address.dart';
 import 'package:printing_app/shared/models/enums.dart';
@@ -45,8 +46,7 @@ class OrderDetailScreen extends ConsumerWidget {
         .toList()
       ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
-    final isCancellable = order.orderStatus == OrderStatus.orderPlaced ||
-        order.orderStatus == OrderStatus.fileVerified;
+    final isCancellable = cancellableStatuses.contains(order.orderStatus);
 
     final isOnTheWay = order.orderStatus == OrderStatus.onTheWay;
 
@@ -68,7 +68,12 @@ class OrderDetailScreen extends ConsumerWidget {
         ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: EdgeInsets.only(
+          left: AppSpacing.md,
+          right: AppSpacing.md,
+          top: AppSpacing.md,
+          bottom: MediaQuery.of(context).padding.bottom + AppSpacing.md,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

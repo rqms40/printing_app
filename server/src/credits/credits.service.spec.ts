@@ -11,6 +11,8 @@ import {
 import { CreditSettings } from './entities/credit-settings.entity';
 import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
+import { FirebaseService } from '../firebase/firebase.service';
 import { User } from '../users/entities/user.entity';
 
 describe('CreditsService', () => {
@@ -59,6 +61,8 @@ describe('CreditsService', () => {
         { provide: getRepositoryToken(CreditSettings), useValue: settingsRepo },
         { provide: UsersService, useValue: usersService },
         { provide: NotificationsService, useValue: notificationsService },
+        { provide: FirebaseService, useValue: { sendToDevice: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsGateway, useValue: { notifyUser: jest.fn(), notifyUserCreditsUpdate: jest.fn() } },
       ],
     }).compile();
 

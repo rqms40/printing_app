@@ -13,11 +13,13 @@ class NavItem {
     required this.icon,
     required this.activeIcon,
     required this.label,
+    this.badge = 0,
   });
 
   final dynamic icon;
   final dynamic activeIcon;
   final String label;
+  final int badge;
 }
 
 /// Data for a single quick-action button shown in the FAB panel.
@@ -202,15 +204,45 @@ class _NavItemTile extends StatelessWidget {
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Builder(builder: (context) {
-                  final iconData = isActive ? item.activeIcon : item.icon;
-                  final color =
-                      isActive ? colors.onBackground : colors.onSurfaceDim;
-                  if (iconData is IconData) {
-                    return Icon(iconData, size: 22, color: color);
-                  }
-                  return HugeIcon(icon: iconData, size: 22, color: color);
-                }),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Builder(builder: (context) {
+                      final iconData = isActive ? item.activeIcon : item.icon;
+                      final color =
+                          isActive ? colors.onBackground : colors.onSurfaceDim;
+                      if (iconData is IconData) {
+                        return Icon(iconData, size: 22, color: color);
+                      }
+                      return HugeIcon(icon: iconData, size: 22, color: color);
+                    }),
+                    if (item.badge > 0)
+                      Positioned(
+                        top: -4,
+                        right: -6,
+                        child: Container(
+                          constraints: const BoxConstraints(minWidth: 14),
+                          height: 14,
+                          padding: const EdgeInsets.symmetric(horizontal: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE53935),
+                            borderRadius: BorderRadius.circular(7),
+                          ),
+                          child: Center(
+                            child: Text(
+                              item.badge > 9 ? '9+' : '${item.badge}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w700,
+                                height: 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
               const SizedBox(height: 2),
               Text(

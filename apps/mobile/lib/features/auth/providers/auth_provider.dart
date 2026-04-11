@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/services/notification_service.dart';
 import 'package:printing_app/shared/services/token_storage.dart';
+import 'package:printing_app/shared/services/websocket_service.dart';
 
 // ---------------------------------------------------------------------------
 // Auth status
@@ -97,7 +100,29 @@ class AuthState {
 // Auth notifier
 // ---------------------------------------------------------------------------
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier() : super(AuthState.unauthenticated());
+  AuthNotifier() : super(AuthState.unauthenticated()) {
+    _listenToFcmMessages();
+  }
+
+  StreamSubscription<Map<String, dynamic>>? _fcmSub;
+
+  void _listenToFcmMessages() {
+    _fcmSub?.cancel();
+    _fcmSub = NotificationService.messageStream.listen((data) {
+      if (data['type'] == 'credits_update' && state.user != null) {
+        final credits = data['credits']?.toString();
+        if (credits != null && credits.isNotEmpty) {
+          state = state.copyWith(user: state.user!.copyWith(credits: credits));
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _fcmSub?.cancel();
+    super.dispose();
+  }
 
   Future<void> login(String email, String password) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
@@ -116,6 +141,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
             : AuthStatus.profileIncomplete,
         user: user,
       );
+      _connectNotificationsWs();
     } on DioException catch (e) {
       final message = e.response?.data is Map
           ? (e.response!.data as Map)['message']?.toString() ?? 'Login failed'
@@ -219,6 +245,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> logout() async {
     await TokenStorage.clearToken();
+    WebSocketService.instance.disconnect();
     state = AuthState.unauthenticated();
   }
 
@@ -235,10 +262,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
             : AuthStatus.profileIncomplete,
         user: user,
       );
+      _connectNotificationsWs();
     } catch (_) {
       await TokenStorage.clearToken();
       // Token expired or invalid — stay unauthenticated
     }
+  }
+
+  void _connectNotificationsWs() {
+    WebSocketService.instance.connectNotifications(
+      onCreditsUpdate: (data) {
+        final credits = data['credits']?.toString();
+        if (credits != null && credits.isNotEmpty && state.user != null) {
+          state = state.copyWith(user: state.user!.copyWith(credits: credits));
+        }
+      },
+    );
   }
 
   /// Send the current FCM token to the server for targeted push notifications.

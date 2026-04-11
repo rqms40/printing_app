@@ -43,7 +43,12 @@ export class NotificationsService {
     metadata?: Record<string, unknown>;
   }): Promise<Notification> {
     const notif = this.notifRepo.create(data);
-    return this.notifRepo.save(notif);
+    const saved = await this.notifRepo.save(notif);
+    // Push real-time to the user's WS room
+    try {
+      this.gateway.notifyUser(saved.userId, saved);
+    } catch (_) {}
+    return saved;
   }
 
   async getUnreadCount(userId: number): Promise<number> {

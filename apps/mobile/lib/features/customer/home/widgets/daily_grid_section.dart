@@ -14,13 +14,11 @@ class _GridItem {
   const _GridItem({
     required this.title,
     required this.subtitle,
-    required this.tag,
     required this.imageUrl,
   });
 
   final String title;
   final String subtitle;
-  final String tag;
   final String imageUrl;
 }
 
@@ -28,7 +26,6 @@ const _kItems = [
   _GridItem(
     title: 'Bond Paper A4',
     subtitle: '₱15 / page',
-    tag: 'Popular',
     // crisp top-down white paper stack
     imageUrl:
         'https://images.unsplash.com/photo-1588580000645-4562a6d2c839'
@@ -37,7 +34,6 @@ const _kItems = [
   _GridItem(
     title: 'A3 Poster',
     subtitle: '₱75 / sheet',
-    tag: 'Trending',
     // rolled / printed poster on white surface
     imageUrl:
         'https://images.unsplash.com/photo-1503455637927-730bce8583c0'
@@ -46,7 +42,6 @@ const _kItems = [
   _GridItem(
     title: '3D Print',
     subtitle: 'From ₱120',
-    tag: '3D',
     // dark 3-D printed object
     imageUrl:
         'https://images.unsplash.com/photo-1617839625591-e5a789593135'
@@ -55,7 +50,6 @@ const _kItems = [
   _GridItem(
     title: 'Large Banner',
     subtitle: 'From ₱350',
-    tag: 'Event',
     // wide-format print / signage
     imageUrl:
         'https://images.unsplash.com/photo-1586717791821-3f44a563fa4c'
@@ -64,7 +58,6 @@ const _kItems = [
   _GridItem(
     title: 'Flyer Print',
     subtitle: '₱12 / sheet',
-    tag: 'Fast',
     // stack of printed leaflets
     imageUrl:
         'https://images.unsplash.com/photo-1601645191163-3fc0d5d64e35'
@@ -175,23 +168,31 @@ class _DailyGridSectionState extends State<DailyGridSection> {
         ),
 
         // ── Infinite auto-scrolling carousel ───────────────────────────────
-        // Negative right margin cancels the parent's 20px padding so
-        // the carousel bleeds flush to the right screen edge.
-        Container(
-          margin: const EdgeInsets.only(right: -AppSpacing.xl),
+        // OverflowBox lets the carousel bleed past the parent's right padding
+        // without using a negative margin (which Flutter asserts against).
+        SizedBox(
           height: _kCardH,
-          child: PageView.builder(
-            padEnds: false,
-            controller: _pageController,
-            itemCount: null, // infinite
-            itemBuilder: (context, index) {
-              final item = _kItems[index % _kItems.length];
-              return Padding(
-                // Small gap between cards; no right padding on last visible
-                padding: const EdgeInsets.only(right: AppSpacing.sm),
-                child: _DailyGridCard(item: item, colors: colors),
-              );
-            },
+          child: LayoutBuilder(
+            builder: (context, constraints) => OverflowBox(
+              alignment: Alignment.centerLeft,
+              maxWidth: constraints.maxWidth + AppSpacing.xl,
+              child: SizedBox(
+                width: constraints.maxWidth + AppSpacing.xl,
+                height: _kCardH,
+                child: PageView.builder(
+                  padEnds: false,
+                  controller: _pageController,
+                  itemCount: null, // infinite
+                  itemBuilder: (context, index) {
+                    final item = _kItems[index % _kItems.length];
+                    return Padding(
+                      padding: const EdgeInsets.only(right: AppSpacing.sm),
+                      child: _DailyGridCard(item: item, colors: colors),
+                    );
+                  },
+                ),
+              ),
+            ),
           ),
         ),
       ],
@@ -248,56 +249,32 @@ class _DailyGridCardState extends State<_DailyGridCard> {
                       width: 0.5,
                     ),
                   ),
-                  padding: EdgeInsets.only(
+                  padding: const EdgeInsets.only(
                     left: _kCardPadL,
                     right: AppSpacing.sm,
                     top: AppSpacing.sm,
                     bottom: AppSpacing.sm,
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              widget.item.title,
-                              style: AppTypography.bodyBold.copyWith(
-                                color: widget.colors.onBackground,
-                                fontSize: 12,
-                                height: 1.2,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              widget.item.subtitle,
-                              style: AppTypography.caption.copyWith(
-                                color: widget.colors.onSurfaceDim,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ],
+                      Text(
+                        widget.item.title,
+                        style: AppTypography.bodyBold.copyWith(
+                          color: widget.colors.onBackground,
+                          fontSize: 12,
+                          height: 1.2,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      // Tag badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: widget.colors.brand
-                              .withValues(alpha: 0.12),
-                          borderRadius: AppRadius.borderFull,
-                        ),
-                        child: Text(
-                          widget.item.tag,
-                          style: AppTypography.overline.copyWith(
-                            color: widget.colors.brand,
-                            fontSize: 8,
-                            letterSpacing: 0.3,
-                          ),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.item.subtitle,
+                        style: AppTypography.caption.copyWith(
+                          color: widget.colors.onSurfaceDim,
+                          fontSize: 10,
                         ),
                       ),
                     ],
@@ -360,7 +337,7 @@ class _CirclePhoto extends StatelessWidget {
           // Dark tone overlay so image matches the dark UI
           color: Colors.black.withValues(alpha: 0.20),
           colorBlendMode: BlendMode.darken,
-          placeholder: (_, __) => Container(
+          placeholder: (_, _) => Container(
             color: const Color(0xFF1E1E1E),
             child: const Center(
               child: SizedBox(
@@ -373,7 +350,7 @@ class _CirclePhoto extends StatelessWidget {
               ),
             ),
           ),
-          errorWidget: (_, __, ___) => Container(
+          errorWidget: (_, _, _) => Container(
             color: const Color(0xFF1A1A1A),
             child: const Icon(
               Icons.image_rounded,

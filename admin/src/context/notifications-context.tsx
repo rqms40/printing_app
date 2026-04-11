@@ -15,6 +15,7 @@ interface NotificationsContextValue {
   badgeCounts: BadgeCounts;
   markRead: (id: number) => Promise<void>;
   markAllRead: () => Promise<void>;
+  clearNotifications: () => Promise<void>;
   refreshBadges: () => Promise<void>;
 }
 
@@ -76,6 +77,16 @@ export function NotificationsProvider({
     setUnreadCount(0);
   }, []);
 
+  const clearNotifications = useCallback(async () => {
+    try {
+      await apiClient.patch("/notifications/read-all");
+    } catch {
+      // best-effort — clear the UI regardless
+    }
+    setNotifications([]);
+    setUnreadCount(0);
+  }, []);
+
   return (
     <NotificationsContext.Provider
       value={{
@@ -84,6 +95,7 @@ export function NotificationsProvider({
         badgeCounts,
         markRead,
         markAllRead,
+        clearNotifications,
         refreshBadges,
       }}
     >

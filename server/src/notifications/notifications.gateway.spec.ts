@@ -54,7 +54,9 @@ describe('NotificationsGateway', () => {
 
       await gateway.handleConnection(client as unknown as Socket);
 
-      expect(client.join).not.toHaveBeenCalled();
+      // Non-admins join their personal room but NOT the admin room
+      expect(client.join).toHaveBeenCalledWith('user_2');
+      expect(client.join).not.toHaveBeenCalledWith('admin_notifications');
       expect(client.disconnect).not.toHaveBeenCalled();
     });
 

@@ -109,6 +109,22 @@ export class OrdersService {
     return savedOrder;
   }
 
+  private static readonly CANCELLABLE_STATUSES: OrderStatus[] = [
+    OrderStatus.ORDER_PLACED,
+    OrderStatus.FILE_VERIFIED,
+  ];
+
+  async cancelOrder(id: number, userId: number): Promise<Order> {
+    const order = await this.ordersRepo.findOneOrFail({ where: { id } });
+    if (order.userId !== userId) {
+      throw new Error('Forbidden');
+    }
+    if (!OrdersService.CANCELLABLE_STATUSES.includes(order.orderStatus as OrderStatus)) {
+      throw new Error('Order cannot be cancelled at this stage');
+    }
+    return this.updateStatus(id, 'cancelled');
+  }
+
   async updateStatus(id: number, status: string): Promise<Order> {
     const existing = await this.ordersRepo.findOneOrFail({ where: { id } });
 
@@ -117,63 +133,78 @@ export class OrdersService {
     });
     const order = await this.ordersRepo.findOneOrFail({ where: { id } });
 
+    // Status → notification copy (shared by FCM push + in-app notification)
+    const messages: Record<string, { title: string; body: string }> = {
+      file_verified: {
+        title: 'File Verified',
+        body: `Your order ${order.orderId} file has been verified.`,
+      },
+      printing_in_progress: {
+        title: 'Printing Started',
+        body: `Your order ${order.orderId} is being printed.`,
+      },
+      quality_checked: {
+        title: 'Quality Checked',
+        body: `Your order ${order.orderId} passed quality check.`,
+      },
+      ready_for_dispatch: {
+        title: 'Ready for Dispatch',
+        body: `Your order ${order.orderId} is ready.`,
+      },
+      driver_assigned: {
+        title: 'Driver Assigned',
+        body: `A driver has been assigned to your order ${order.orderId}.`,
+      },
+      picked_up: {
+        title: 'Picked Up',
+        body: `Your order ${order.orderId} has been picked up.`,
+      },
+      on_the_way: {
+        title: 'On The Way',
+        body: `Your order ${order.orderId} is on the way!`,
+      },
+      arrived_at_destination: {
+        title: 'Driver Arrived',
+        body: `Your delivery for ${order.orderId} has arrived!`,
+      },
+      delivered: {
+        title: 'Delivered',
+        body: `Your order ${order.orderId} has been delivered. Thank you!`,
+      },
+      cancelled: {
+        title: 'Order Cancelled',
+        body: `Your order ${order.orderId} has been cancelled.`,
+      },
+    };
+    const statusMsg = messages[status];
+
     // Send push notification to order owner
     const fcmToken = await this.usersService.getFcmToken(existing.userId);
-    if (fcmToken) {
-      const messages: Record<string, { title: string; body: string }> = {
-        file_verified: {
-          title: 'File Verified',
-          body: `Your order ${order.orderId} file has been verified.`,
-        },
-        printing_in_progress: {
-          title: 'Printing Started',
-          body: `Your order ${order.orderId} is being printed.`,
-        },
-        quality_checked: {
-          title: 'Quality Checked',
-          body: `Your order ${order.orderId} passed quality check.`,
-        },
-        ready_for_dispatch: {
-          title: 'Ready for Dispatch',
-          body: `Your order ${order.orderId} is ready.`,
-        },
-        driver_assigned: {
-          title: 'Driver Assigned',
-          body: `A driver has been assigned to your order ${order.orderId}.`,
-        },
-        picked_up: {
-          title: 'Picked Up',
-          body: `Your order ${order.orderId} has been picked up.`,
-        },
-        on_the_way: {
-          title: 'On The Way',
-          body: `Your order ${order.orderId} is on the way!`,
-        },
-        arrived_at_destination: {
-          title: 'Driver Arrived',
-          body: `Your delivery for ${order.orderId} has arrived!`,
-        },
-        delivered: {
-          title: 'Delivered',
-          body: `Your order ${order.orderId} has been delivered. Thank you!`,
-        },
-        cancelled: {
-          title: 'Order Cancelled',
-          body: `Your order ${order.orderId} has been cancelled.`,
-        },
-      };
-
-      const msg = messages[status];
-      if (msg) {
-        await this.firebaseService.sendToDevice(fcmToken, msg.title, msg.body, {
-          orderId: order.orderId,
-          status: status,
-        });
-      }
+    if (fcmToken && statusMsg) {
+      await this.firebaseService.sendToDevice(fcmToken, statusMsg.title, statusMsg.body, {
+        orderId: order.orderId,
+        status: status,
+      });
     }
 
-    // Emit WebSocket update
+    // Emit WebSocket order update
     void this.ordersGateway.notifyOrderUpdate(order.orderId, order);
+
+    // Create in-app notification for the customer (also emitted via WS)
+    if (statusMsg) {
+      try {
+        await this.notificationsService.create({
+          userId: order.userId,
+          title: statusMsg.title,
+          message: statusMsg.body,
+          type: `order_${status}`,
+          orderRef: order.orderId,
+          metadata: { orderId: order.id, toStatus: status },
+        });
+      } catch (err) {
+        this.logger.warn(`Customer notification failed for status ${status}: ${err}`);
+      }
+    }
 
     // Notify admins of cancellation / decline
     if (
