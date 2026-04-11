@@ -52,8 +52,10 @@ export class OrdersController {
       return await this.ordersService.cancelOrder(id, req.user.sub);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg === 'Forbidden') throw new ForbiddenException('You can only cancel your own orders');
-      if (msg.includes('cannot be cancelled')) throw new BadRequestException(msg);
+      if (msg === 'Forbidden')
+        throw new ForbiddenException('You can only cancel your own orders');
+      if (msg.includes('cannot be cancelled'))
+        throw new BadRequestException(msg);
       throw err;
     }
   }

@@ -47,7 +47,10 @@ export class NotificationsService {
     // Push real-time to the user's WS room
     try {
       this.gateway.notifyUser(saved.userId, saved);
-    } catch (_) {}
+    } catch (err) {
+      // WS emit is best-effort; log but don't fail the save
+      console.warn('notifyUser failed:', err);
+    }
     return saved;
   }
 

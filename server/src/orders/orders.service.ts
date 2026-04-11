@@ -103,7 +103,9 @@ export class OrdersService {
         },
       });
     } catch (err) {
-      this.logger.warn(`Admin notification failed for order ${savedOrder.orderId}: ${err}`);
+      this.logger.warn(
+        `Admin notification failed for order ${savedOrder.orderId}: ${err}`,
+      );
     }
 
     return savedOrder;
@@ -119,7 +121,7 @@ export class OrdersService {
     if (order.userId !== userId) {
       throw new Error('Forbidden');
     }
-    if (!OrdersService.CANCELLABLE_STATUSES.includes(order.orderStatus as OrderStatus)) {
+    if (!OrdersService.CANCELLABLE_STATUSES.includes(order.orderStatus)) {
       throw new Error('Order cannot be cancelled at this stage');
     }
     return this.updateStatus(id, 'cancelled');
@@ -181,10 +183,15 @@ export class OrdersService {
     // Send push notification to order owner
     const fcmToken = await this.usersService.getFcmToken(existing.userId);
     if (fcmToken && statusMsg) {
-      await this.firebaseService.sendToDevice(fcmToken, statusMsg.title, statusMsg.body, {
-        orderId: order.orderId,
-        status: status,
-      });
+      await this.firebaseService.sendToDevice(
+        fcmToken,
+        statusMsg.title,
+        statusMsg.body,
+        {
+          orderId: order.orderId,
+          status: status,
+        },
+      );
     }
 
     // Emit WebSocket order update
@@ -202,27 +209,37 @@ export class OrdersService {
           metadata: { orderId: order.id, toStatus: status },
         });
       } catch (err) {
-        this.logger.warn(`Customer notification failed for status ${status}: ${err}`);
+        this.logger.warn(
+          `Customer notification failed for status ${status}: ${err}`,
+        );
       }
     }
 
     // Notify admins of cancellation / decline
+    const orderStatus = status as OrderStatus;
     if (
-      status === OrderStatus.CANCELLED ||
-      status === OrderStatus.FILE_DECLINED
+      orderStatus === OrderStatus.CANCELLED ||
+      orderStatus === OrderStatus.FILE_DECLINED
     ) {
       const type =
-        status === OrderStatus.CANCELLED ? 'order_cancelled' : 'order_declined';
+        orderStatus === OrderStatus.CANCELLED
+          ? 'order_cancelled'
+          : 'order_declined';
       try {
         await this.notificationsService.createForAllAdmins({
-          title: status === OrderStatus.CANCELLED ? 'Order Cancelled' : 'Order Declined',
-          message: `Order ${order.orderId} was ${status === OrderStatus.CANCELLED ? 'cancelled' : 'declined'}.`,
+          title:
+            orderStatus === OrderStatus.CANCELLED
+              ? 'Order Cancelled'
+              : 'Order Declined',
+          message: `Order ${order.orderId} was ${orderStatus === OrderStatus.CANCELLED ? 'cancelled' : 'declined'}.`,
           type,
           orderRef: order.orderId,
           metadata: { orderId: order.id, toStatus: status },
         });
       } catch (err) {
-        this.logger.warn(`Admin notification failed for status ${status}: ${err}`);
+        this.logger.warn(
+          `Admin notification failed for status ${status}: ${err}`,
+        );
       }
     }
 

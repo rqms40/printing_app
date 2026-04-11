@@ -48,6 +48,6 @@ export class UsersService {
   }
 
   async findAllByRole(role: string): Promise<User[]> {
-    return this.usersRepo.find({ where: { role: role as any } });
+    return this.usersRepo.find({ where: { role: role as UserRole } });
   }
 }

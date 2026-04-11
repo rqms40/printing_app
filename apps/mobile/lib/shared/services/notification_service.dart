@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -17,6 +19,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 /// by catching initialization errors and logging them.
 class NotificationService {
   static final _messaging = FirebaseMessaging.instance;
+
+  static final _messageController = StreamController<Map<String, dynamic>>.broadcast();
+  static Stream<Map<String, dynamic>> get messageStream => _messageController.stream;
 
   /// Whether FCM was successfully initialized.
   static bool _initialized = false;
@@ -69,8 +74,13 @@ class NotificationService {
 
       // Listen for foreground messages
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        debugPrint('Foreground message: ${message.notification?.title}');
-        // Could show a local notification or in-app snackbar here
+        final payload = <String, dynamic>{
+          ...message.data,
+          if (message.notification?.title != null) 'title': message.notification!.title,
+          if (message.notification?.body != null) 'body': message.notification!.body,
+        };
+        _messageController.add(payload);
+        debugPrint('Foreground FCM: ${message.notification?.title}');
       });
 
       // Listen for notification taps (app was in background)

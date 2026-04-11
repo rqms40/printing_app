@@ -61,8 +61,17 @@ describe('CreditsService', () => {
         { provide: getRepositoryToken(CreditSettings), useValue: settingsRepo },
         { provide: UsersService, useValue: usersService },
         { provide: NotificationsService, useValue: notificationsService },
-        { provide: FirebaseService, useValue: { sendToDevice: jest.fn().mockResolvedValue(undefined) } },
-        { provide: NotificationsGateway, useValue: { notifyUser: jest.fn(), notifyUserCreditsUpdate: jest.fn() } },
+        {
+          provide: FirebaseService,
+          useValue: { sendToDevice: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: NotificationsGateway,
+          useValue: {
+            notifyUser: jest.fn(),
+            notifyUserCreditsUpdate: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -133,7 +142,9 @@ describe('CreditsService', () => {
         status: CreditTransactionStatus.APPROVED,
       });
 
-      await expect(service.approveTopUp(5)).rejects.toThrow(BadRequestException);
+      await expect(service.approveTopUp(5)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 });
