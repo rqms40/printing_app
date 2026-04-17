@@ -40,7 +40,12 @@ export class CreditsService {
 
   async updateSettings(dto: UpdateSettingsDto): Promise<CreditSettings> {
     const settings = await this.getSettings();
-    settings.conversionRate = dto.conversionRate;
+    if (dto.conversionRate !== undefined) {
+      settings.conversionRate = dto.conversionRate;
+    }
+    if (dto.creditsOnlyMode !== undefined) {
+      settings.creditsOnlyMode = dto.creditsOnlyMode;
+    }
     return this.settingsRepo.save(settings);
   }
 

@@ -15,4 +15,7 @@ export class CreditSettings {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @Column({ default: false })
+  creditsOnlyMode: boolean;
 }

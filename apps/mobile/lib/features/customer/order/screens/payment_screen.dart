@@ -31,6 +31,32 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   PaymentMethod? _selectedMethod;
   bool _isProcessing = false;
   bool _isSuccess = false;
+  bool _isLoadingSettings = false;
+  bool _creditsOnlyMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchSettings();
+  }
+
+  Future<void> _fetchSettings() async {
+    setState(() => _isLoadingSettings = true);
+    try {
+      final res = await ApiClient.instance.get('/credits/settings');
+      if (mounted) {
+        setState(() {
+          _creditsOnlyMode = res.data['creditsOnlyMode'] == true;
+          _isLoadingSettings = false;
+          if (_creditsOnlyMode && _selectedMethod != PaymentMethod.gridCredits) {
+            _selectedMethod = null;
+          }
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingSettings = false);
+    }
+  }
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -89,6 +115,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                     label: 'GCash',
                     subtitle: 'Pay with GCash e-wallet',
                     colors: colors,
+                    isDisabled: _creditsOnlyMode,
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   _paymentCard(
@@ -97,6 +124,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                     label: 'Maya',
                     subtitle: 'Pay with Maya e-wallet',
                     colors: colors,
+                    isDisabled: _creditsOnlyMode,
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   _paymentCard(
@@ -106,6 +134,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                     label: 'Cash on Delivery',
                     subtitle: 'Pay when you receive your order',
                     colors: colors,
+                    isDisabled: _creditsOnlyMode,
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   _paymentCard(
