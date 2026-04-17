@@ -178,8 +178,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> register(
     String email,
     String password, {
+    required String fullName,
     required String profileCategory,
     required String profileField,
+    String? phone,
+    String? gender,
+    DateTime? dob,
     String? course,
     String? organization,
     List<String> printingPreferences = const [],
@@ -189,8 +193,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final response = await ApiClient.instance.post('/auth/register', data: {
         'email': email,
         'password': password,
+        'fullName': fullName,
         'profileCategory': profileCategory,
         'profileField': profileField,
+        if (phone != null && phone.isNotEmpty) 'phoneNumber': phone,
+        if (gender != null && gender.isNotEmpty) 'gender': gender,
+        if (dob != null) 'dateOfBirth': dob.toIso8601String(),
         if (course != null && course.isNotEmpty) 'course': course,
         if (organization != null && organization.isNotEmpty)
           'organization': organization,

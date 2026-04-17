@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:printing_app/features/auth/models/registration_draft.dart';
 import 'package:printing_app/features/auth/screens/profile_setup_screen.dart';
 
 Widget _wrap(Widget child) {
@@ -17,7 +18,16 @@ void main() {
     testWidgets('renders profiling controls alongside identity fields', (
       tester,
     ) async {
-      await tester.pumpWidget(_wrap(const ProfileSetupScreen()));
+      await tester.pumpWidget(
+        _wrap(
+          const ProfileSetupScreen(
+            draft: RegistrationDraft(
+              email: 'new@test.com',
+              password: 'password123',
+            ),
+          ),
+        ),
+      );
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(milliseconds: 500));
 

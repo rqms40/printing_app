@@ -1,30 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
-import 'package:go_router/go_router.dart';
-import 'package:printing_app/features/auth/providers/auth_provider.dart';
+import 'package:printing_app/features/auth/models/registration_draft.dart';
 import 'package:printing_app/features/auth/widgets/auth_form.dart';
 
 /// Registration screen for new users.
-class RegisterScreen extends ConsumerWidget {
+class RegisterScreen extends StatelessWidget {
   const RegisterScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authProvider);
+  Widget build(BuildContext context) {
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
-
-    // Navigate to profile setup when registration succeeds.
-    ref.listen<AuthState>(authProvider, (prev, next) {
-      if (next.status == AuthStatus.profileIncomplete && prev?.status != next.status) {
-        context.pushReplacement('/auth/profile-setup');
-      }
-    });
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -63,32 +54,18 @@ class RegisterScreen extends ConsumerWidget {
               // Auth form (register mode)
               AuthForm(
                 isRegister: true,
-                isLoading: authState.isLoading,
                 onSubmit: (submission) {
-                  ref.read(authProvider.notifier).register(
-                        submission.email,
-                        submission.password,
-                        profileCategory: submission.profileCategory!,
-                        profileField: submission.profileField!,
-                        course: submission.course,
-                        organization: submission.organization,
-                        printingPreferences: submission.printingPreferences,
-                      );
+                  context.pushReplacement(
+                    '/auth/profile-setup',
+                    extra: RegistrationDraft(
+                      email: submission.email,
+                      password: submission.password,
+                    ),
+                  );
                 },
               ).animate()
                 .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
                 .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
-
-              // Error message
-              if (authState.errorMessage != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: AppSpacing.sm),
-                  child: Text(
-                    authState.errorMessage!,
-                    style: AppTypography.caption.copyWith(color: colors.error),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
 
               const SizedBox(height: AppSpacing.lg),
 

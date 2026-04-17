@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/routes/page_transitions.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
+import 'package:printing_app/features/auth/models/registration_draft.dart';
 import 'package:printing_app/shared/widgets/app_bottom_nav.dart';
 import 'package:printing_app/shared/widgets/scaffold_with_nav.dart';
 
@@ -151,8 +152,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/auth/profile-setup',
-        pageBuilder: (_, state) =>
-            fadeTransition(const ProfileSetupScreen(), state),
+        pageBuilder: (_, state) {
+          final draft = state.extra is RegistrationDraft
+              ? state.extra as RegistrationDraft
+              : null;
+          return fadeTransition(ProfileSetupScreen(draft: draft), state);
+        },
       ),
 
       // -----------------------------------------------------------------------

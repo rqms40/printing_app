@@ -5,6 +5,7 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/auth/models/registration_draft.dart';
 import 'package:printing_app/features/auth/models/profiling.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/auth/widgets/profiling_form_section.dart';
@@ -13,7 +14,9 @@ import 'package:printing_app/shared/widgets/app_text_field.dart';
 
 /// Profile setup screen shown after registration.
 class ProfileSetupScreen extends ConsumerStatefulWidget {
-  const ProfileSetupScreen({super.key});
+  const ProfileSetupScreen({super.key, this.draft});
+
+  final RegistrationDraft? draft;
 
   @override
   ConsumerState<ProfileSetupScreen> createState() =>
@@ -85,6 +88,24 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
 
   Future<void> _submit() async {
     if (!_validate()) return;
+
+    if (widget.draft != null) {
+      await ref.read(authProvider.notifier).register(
+            widget.draft!.email,
+            widget.draft!.password,
+            fullName: _nameController.text.trim(),
+            profileCategory: _profiling.profileCategory!,
+            profileField: _profiling.profileField!,
+            phone: _phoneController.text.trim(),
+            gender: _selectedGender,
+            dob: _dateOfBirth,
+            course: _courseController.text.trim(),
+            organization: _organizationController.text.trim(),
+            printingPreferences: _profiling.printingPreferences,
+          );
+      return;
+    }
+
     await ref.read(authProvider.notifier).completeProfile(
           fullName: _nameController.text.trim(),
           phone: _phoneController.text.trim(),

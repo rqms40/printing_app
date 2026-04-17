@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
-import 'package:printing_app/features/auth/models/profiling.dart';
-import 'package:printing_app/features/auth/widgets/profiling_form_section.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_text_field.dart';
 
@@ -11,20 +9,10 @@ class AuthFormSubmission {
   const AuthFormSubmission({
     required this.email,
     required this.password,
-    this.profileCategory,
-    this.profileField,
-    this.course,
-    this.organization,
-    this.printingPreferences = const [],
   });
 
   final String email;
   final String password;
-  final String? profileCategory;
-  final String? profileField;
-  final String? course;
-  final String? organization;
-  final List<String> printingPreferences;
 }
 
 /// Reusable authentication form used by both [LoginScreen] and
@@ -56,23 +44,16 @@ class _AuthFormState extends State<AuthForm> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _courseController = TextEditingController();
-  final _organizationController = TextEditingController();
-  ProfilingFormValue _profiling = const ProfilingFormValue();
 
   String? _emailError;
   String? _passwordError;
   String? _confirmPasswordError;
-  String? _categoryError;
-  String? _fieldError;
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
-    _courseController.dispose();
-    _organizationController.dispose();
     super.dispose();
   }
 
@@ -109,12 +90,6 @@ class _AuthFormState extends State<AuthForm> {
       } else if (confirm != password) {
         confirmErr = 'Passwords do not match';
       }
-
-      _categoryError =
-          _profiling.profileCategory == null ? 'Choose how you use GRID' : null;
-      _fieldError = _profiling.profileField == null
-          ? 'Select your field to continue'
-          : null;
     }
 
     setState(() {
@@ -123,11 +98,7 @@ class _AuthFormState extends State<AuthForm> {
       _confirmPasswordError = confirmErr;
     });
 
-    return emailErr == null &&
-        passwordErr == null &&
-        confirmErr == null &&
-        _categoryError == null &&
-        _fieldError == null;
+    return emailErr == null && passwordErr == null && confirmErr == null;
   }
 
   void _handleSubmit() {
@@ -136,11 +107,6 @@ class _AuthFormState extends State<AuthForm> {
         AuthFormSubmission(
           email: _emailController.text.trim(),
           password: _passwordController.text,
-          profileCategory: _profiling.profileCategory,
-          profileField: _profiling.profileField,
-          course: _courseController.text.trim(),
-          organization: _organizationController.text.trim(),
-          printingPreferences: _profiling.printingPreferences,
         ),
       );
     }
@@ -198,21 +164,6 @@ class _AuthFormState extends State<AuthForm> {
 
         // Confirm password (register only)
         if (widget.isRegister) ...[
-          const SizedBox(height: AppSpacing.xl),
-          ProfilingFormSection(
-            value: _profiling,
-            onChanged: (next) {
-              setState(() {
-                _profiling = next;
-                _categoryError = null;
-                _fieldError = null;
-              });
-            },
-            courseController: _courseController,
-            organizationController: _organizationController,
-            categoryError: _categoryError,
-            fieldError: _fieldError,
-          ),
           const SizedBox(height: AppSpacing.lg),
           AppTextField(
             controller: _confirmPasswordController,

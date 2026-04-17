@@ -84,6 +84,7 @@ void main() {
       await notifier.register(
         'new@test.com',
         'password',
+        fullName: 'New User',
         profileCategory: 'student',
         profileField: 'architecture',
         printingPreferences: const ['plotting_blueprints'],
