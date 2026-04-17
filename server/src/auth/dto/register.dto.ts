@@ -2,6 +2,7 @@ import {
   IsArray,
   IsEmail,
   IsEnum,
+  IsNotEmpty,
   IsOptional,
   IsString,
   MinLength,
@@ -25,6 +26,7 @@ export class RegisterDto {
 
   @ApiProperty({ example: 'Maria Santos' })
   @IsString()
+  @IsNotEmpty()
   fullName: string;
 
   @ApiProperty({ enum: ProfileCategory })

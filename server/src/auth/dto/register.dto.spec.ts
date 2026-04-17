@@ -14,4 +14,18 @@ describe('RegisterDto', () => {
 
     expect(errors.some((error) => error.property === 'fullName')).toBe(true);
   });
+
+  it('rejects empty fullName during registration', () => {
+    const dto = Object.assign(new RegisterDto(), {
+      email: 'test@example.com',
+      password: 'password123',
+      fullName: '',
+      profileCategory: 'student',
+      profileField: 'architecture',
+    });
+
+    const errors = validateSync(dto);
+
+    expect(errors.some((error) => error.property === 'fullName')).toBe(true);
+  });
 });
