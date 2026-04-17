@@ -12,6 +12,9 @@ import {
 
 type RegisterProfileInput = {
   fullName: string;
+  phoneNumber?: string;
+  gender?: string;
+  dateOfBirth?: string;
   profileCategory: ProfileCategory;
   profileField: ProfileField;
   course?: string;

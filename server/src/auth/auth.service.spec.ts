@@ -80,7 +80,7 @@ describe('AuthService', () => {
       });
     });
 
-    it('passes fullName through registration to user creation', async () => {
+    it('forwards optional registration fields to user creation', async () => {
       (usersService.create as jest.Mock).mockResolvedValue({
         ...mockUser,
         fullName: 'Maria Santos',
@@ -89,8 +89,14 @@ describe('AuthService', () => {
 
       await authService.register('test@example.com', 'password123', {
         fullName: 'Maria Santos',
+        phoneNumber: '+639171234567',
+        gender: 'female',
+        dateOfBirth: '2001-02-03',
         profileCategory: 'student',
         profileField: 'architecture',
+        course: 'BS Architecture',
+        organization: 'Mapua University',
+        printingPreferences: ['plotting_blueprints'],
       });
 
       expect(usersService.create).toHaveBeenCalledWith(
@@ -98,8 +104,14 @@ describe('AuthService', () => {
         'password123',
         {
           fullName: 'Maria Santos',
+          phoneNumber: '+639171234567',
+          gender: 'female',
+          dateOfBirth: '2001-02-03',
           profileCategory: 'student',
           profileField: 'architecture',
+          course: 'BS Architecture',
+          organization: 'Mapua University',
+          printingPreferences: ['plotting_blueprints'],
         },
       );
     });

@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsDateString,
   IsEmail,
   IsEnum,
   IsNotEmpty,
@@ -8,7 +9,7 @@ import {
   IsString,
   MinLength,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   PrintingPreference,
   ProfileCategory,
@@ -38,6 +39,21 @@ export class RegisterDto {
   @ApiProperty({ enum: ProfileField })
   @IsEnum(ProfileField)
   profileField: ProfileField;
+
+  @ApiPropertyOptional({ example: '+639171234567' })
+  @IsOptional()
+  @IsString()
+  phoneNumber?: string;
+
+  @ApiPropertyOptional({ example: 'female' })
+  @IsOptional()
+  @IsString()
+  gender?: string;
+
+  @ApiPropertyOptional({ example: '2001-02-03' })
+  @IsOptional()
+  @IsDateString()
+  dateOfBirth?: string;
 
   @ApiProperty({ required: false, example: 'BS Architecture' })
   @IsOptional()

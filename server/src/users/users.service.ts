@@ -12,6 +12,9 @@ import {
 
 type UserProfilingInput = {
   fullName?: string;
+  phoneNumber?: string;
+  gender?: string;
+  dateOfBirth?: string;
   profileCategory?: ProfileCategory;
   profileField?: ProfileField;
   course?: string;
@@ -87,6 +90,20 @@ export class UsersService {
 
     if (data.fullName !== undefined) {
       normalized.fullName = data.fullName?.trim() || null;
+    }
+
+    if (data.phoneNumber !== undefined) {
+      normalized.phoneNumber = data.phoneNumber?.trim() || null;
+    }
+
+    if (data.gender !== undefined) {
+      normalized.gender = data.gender?.trim() || null;
+    }
+
+    if (data.dateOfBirth !== undefined) {
+      normalized.dateOfBirth = data.dateOfBirth
+        ? new Date(data.dateOfBirth)
+        : null;
     }
 
     if (data.profileCategory !== undefined) {

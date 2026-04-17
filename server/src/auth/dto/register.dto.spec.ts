@@ -2,6 +2,29 @@ import { validateSync } from 'class-validator';
 import { RegisterDto } from './register.dto';
 
 describe('RegisterDto', () => {
+  it('accepts optional profile fields during registration', () => {
+    const dto = Object.assign(new RegisterDto(), {
+      email: 'test@example.com',
+      password: 'password123',
+      fullName: 'Maria Santos',
+      profileCategory: 'student',
+      profileField: 'architecture',
+      phoneNumber: '+639171234567',
+      gender: 'female',
+      dateOfBirth: '2001-02-03',
+      course: 'BS Architecture',
+      organization: 'Mapua University',
+      printingPreferences: ['plotting_blueprints'],
+    });
+
+    const errors = validateSync(dto, {
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    });
+
+    expect(errors).toHaveLength(0);
+  });
+
   it('requires fullName during registration', () => {
     const dto = Object.assign(new RegisterDto(), {
       email: 'test@example.com',

@@ -107,7 +107,7 @@ describe('UsersService', () => {
       expect(result).toEqual(mockUser);
     });
 
-    it('marks a new user complete when required registration fields are present', async () => {
+    it('passes optional identity fields into repo.create and keeps completion logic', async () => {
       repo.findOne.mockResolvedValue(null);
       repo.create.mockReturnValue(mockUser);
       repo.save.mockResolvedValue({
@@ -120,6 +120,9 @@ describe('UsersService', () => {
         fullName: 'Maria Santos',
         profileCategory: 'student',
         profileField: 'architecture',
+        phoneNumber: '+639171234567',
+        gender: 'female',
+        dateOfBirth: '2001-02-03',
       });
 
       expect(repo.create).toHaveBeenCalledWith(
@@ -127,6 +130,9 @@ describe('UsersService', () => {
           fullName: 'Maria Santos',
           profileCategory: 'student',
           profileField: 'architecture',
+          phoneNumber: '+639171234567',
+          gender: 'female',
+          dateOfBirth: expect.any(Date),
           isProfileComplete: true,
         }),
       );
