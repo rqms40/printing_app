@@ -20,6 +20,11 @@ import { Repository, In } from 'typeorm';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { CreditsService } from '../credits/credits.service';
+import {
+  buildAdminUserDetailPayload,
+  buildAdminUsersAnalyticsPayload,
+  normalizeUserInsightsPeriod,
+} from './user-insights';
 
 type AnalyticsPeriod = '7D' | '30D' | '6M';
 type AnalyticsPoint = { label: string; value: number };
@@ -174,7 +179,11 @@ export class AdminController {
       }
 
       if (metric === 'sales') {
-        if (order.paymentStatus !== 'paid') {
+        if (
+          order.paymentStatus !== 'paid' ||
+          order.orderStatus === OrderStatus.CANCELLED ||
+          order.orderStatus === OrderStatus.FILE_DECLINED
+        ) {
           continue;
         }
 
@@ -424,6 +433,31 @@ export class AdminController {
       created_at: u.createdAt,
       updated_at: u.updatedAt,
     }));
+  }
+
+  @Get('users/analytics')
+  async getUsersAnalytics(@Query('period') period?: string) {
+    const normalizedPeriod = normalizeUserInsightsPeriod(period);
+    const users = await this.usersRepo.find({ order: { createdAt: 'DESC' } });
+    const orders = await this.ordersRepo.find({ order: { createdAt: 'DESC' } });
+
+    return buildAdminUsersAnalyticsPayload(
+      users,
+      orders,
+      normalizedPeriod,
+      new Date(),
+    );
+  }
+
+  @Get('users/:id')
+  async getUserDetail(@Param('id', ParseIntPipe) id: number) {
+    const user = await this.usersRepo.findOneOrFail({ where: { id } });
+    const orders = await this.ordersRepo.find({
+      where: { userId: id },
+      order: { createdAt: 'DESC' },
+    });
+
+    return buildAdminUserDetailPayload(user, orders);
   }
 
   // Sales analytics for admin web dashboard

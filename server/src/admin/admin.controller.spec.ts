@@ -9,6 +9,7 @@ import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { CreditsService } from '../credits/credits.service';
 import { In } from 'typeorm';
+import * as userInsights from './user-insights';
 
 const mockRepo = () => ({
   find: jest.fn(),
@@ -51,6 +52,7 @@ describe('AdminController analytics', () => {
 
   afterEach(() => {
     jest.useRealTimers();
+    jest.restoreAllMocks();
   });
 
   it('builds analytics from persisted orders and paper specs instead of returning static arrays', async () => {
@@ -121,22 +123,41 @@ describe('AdminController analytics', () => {
 
     const analytics = await (controller as any).getAnalytics('30D');
 
-    expect(analytics.sales).toEqual(
-      expect.arrayContaining([
-        { label: 'Mar 31', value: 100 },
-        { label: 'Mar 30', value: 0 },
-        { label: 'Mar 29', value: 200 },
-        { label: 'Mar 05', value: 150 },
-      ]),
-    );
-    expect(analytics.volume).toEqual(
-      expect.arrayContaining([
-        { label: 'Mar 31', value: 1 },
-        { label: 'Mar 30', value: 1 },
-        { label: 'Mar 29', value: 1 },
-        { label: 'Mar 15', value: 1 },
-      ]),
-    );
+    const expectedSales = Array.from({ length: 30 }, (_, index) => {
+      const day = index + 2;
+      const label = `Mar ${String(day).padStart(2, '0')}`;
+
+      if (day === 5) {
+        return { label, value: 150 };
+      }
+
+      if (day === 29) {
+        return { label, value: 200 };
+      }
+
+      if (day === 31) {
+        return { label, value: 100 };
+      }
+
+      return { label, value: 0 };
+    });
+
+    const expectedVolume = Array.from({ length: 30 }, (_, index) => {
+      const day = index + 2;
+      const label = `Mar ${String(day).padStart(2, '0')}`;
+
+      if ([5, 15, 29, 30, 31].includes(day)) {
+        return { label, value: 1 };
+      }
+
+      return { label, value: 0 };
+    });
+
+    expect(ordersRepo.find).toHaveBeenCalledWith({
+      relations: ['paperSpec'],
+    });
+    expect(analytics.sales).toEqual(expectedSales);
+    expect(analytics.volume).toEqual(expectedVolume);
     expect(analytics.paperSizeDemand).toEqual([
       { label: 'A4', value: 2 },
       { label: 'A3', value: 1 },
@@ -255,6 +276,106 @@ describe('AdminController analytics', () => {
           ],
         }),
       ]);
+    });
+  });
+
+  describe('getUserDetail', () => {
+    it('loads one user and only that user orders for the admin show page', async () => {
+      const user = {
+        id: 42,
+        email: 'maria@gridprint.ph',
+        createdAt: new Date('2026-03-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-03-15T00:00:00.000Z'),
+      } as User;
+      const orders = [
+        {
+          id: 10,
+          userId: 42,
+          createdAt: new Date('2026-03-31T09:00:00.000Z'),
+        },
+      ] as Order[];
+      const detailPayload = {
+        user: { id: 42 },
+        metrics: { total_orders: 1 },
+        recent_orders: [],
+      } as unknown as userInsights.AdminUserDetailPayload;
+
+      usersRepo.findOneOrFail.mockResolvedValue(user);
+      ordersRepo.find.mockResolvedValue(orders);
+      const buildDetailSpy = jest
+        .spyOn(userInsights, 'buildAdminUserDetailPayload')
+        .mockReturnValue(detailPayload);
+
+      await expect((controller as any).getUserDetail(42)).resolves.toBe(
+        detailPayload,
+      );
+
+      expect(usersRepo.findOneOrFail).toHaveBeenCalledWith({
+        where: { id: 42 },
+      });
+      expect(ordersRepo.find).toHaveBeenCalledWith({
+        where: { userId: 42 },
+        order: { createdAt: 'DESC' },
+      });
+      expect(buildDetailSpy).toHaveBeenCalledWith(user, orders);
+    });
+  });
+
+  describe('getUsersAnalytics', () => {
+    it('loads users and orders before delegating analytics shaping', async () => {
+      const users = [
+        { id: 2, createdAt: new Date('2026-03-31T00:00:00.000Z') } as User,
+      ];
+      const orders = [
+        { id: 9, userId: 2, createdAt: new Date('2026-03-30T00:00:00.000Z') },
+      ] as Order[];
+      const analyticsPayload = {
+        summary: {
+          total_customers: 1,
+          new_customers: 1,
+          active_customers: 1,
+          dormant_customers: 0,
+          profile_completion_rate: 0,
+          total_orders: 1,
+          paid_orders: 0,
+          total_revenue: 0,
+          average_order_value: 0,
+        },
+        signup_trend: [],
+        profile_category_mix: [],
+        profile_field_mix: [],
+        top_segments: [],
+        preference_mix: [],
+        activity_split: [],
+        revenue_by_segment: [],
+      } as userInsights.AdminUsersAnalyticsPayload;
+
+      usersRepo.find.mockResolvedValue(users);
+      ordersRepo.find.mockResolvedValue(orders);
+      const normalizeSpy = jest
+        .spyOn(userInsights, 'normalizeUserInsightsPeriod')
+        .mockReturnValue('30D');
+      const buildAnalyticsSpy = jest
+        .spyOn(userInsights, 'buildAdminUsersAnalyticsPayload')
+        .mockReturnValue(analyticsPayload);
+
+      await expect(
+        (controller as any).getUsersAnalytics('invalid'),
+      ).resolves.toBe(analyticsPayload);
+
+      expect(normalizeSpy).toHaveBeenCalledWith('invalid');
+      expect(usersRepo.find).toHaveBeenCalledWith({
+        order: { createdAt: 'DESC' },
+      });
+      expect(ordersRepo.find).toHaveBeenCalledWith({
+        order: { createdAt: 'DESC' },
+      });
+      expect(buildAnalyticsSpy).toHaveBeenCalledWith(
+        users,
+        orders,
+        '30D',
+        expect.any(Date),
+      );
     });
   });
 });
