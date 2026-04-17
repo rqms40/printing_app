@@ -11,7 +11,7 @@ import {
 } from '../users/profile.constants';
 
 type RegisterProfileInput = {
-  fullName?: string;
+  fullName: string;
   profileCategory: ProfileCategory;
   profileField: ProfileField;
   course?: string;

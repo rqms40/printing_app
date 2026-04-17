@@ -107,6 +107,31 @@ describe('UsersService', () => {
       expect(result).toEqual(mockUser);
     });
 
+    it('marks a new user complete when required registration fields are present', async () => {
+      repo.findOne.mockResolvedValue(null);
+      repo.create.mockReturnValue(mockUser);
+      repo.save.mockResolvedValue({
+        ...mockUser,
+        fullName: 'Maria Santos',
+        isProfileComplete: true,
+      } as User);
+
+      await service.create('test@example.com', 'password123', {
+        fullName: 'Maria Santos',
+        profileCategory: 'student',
+        profileField: 'architecture',
+      });
+
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fullName: 'Maria Santos',
+          profileCategory: 'student',
+          profileField: 'architecture',
+          isProfileComplete: true,
+        }),
+      );
+    });
+
     it('should throw ConflictException if email exists', async () => {
       repo.findOne.mockResolvedValue(mockUser); // existing user found
 

@@ -28,13 +28,13 @@ export class User {
   @Column({ name: 'password_hash' })
   passwordHash: string;
 
-  @Column({ name: 'full_name', nullable: true })
+  @Column({ name: 'full_name', type: 'text', nullable: true })
   fullName: string | null;
 
-  @Column({ name: 'phone_number', nullable: true })
+  @Column({ name: 'phone_number', type: 'text', nullable: true })
   phoneNumber: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   gender: string | null;
 
   @Column({ name: 'date_of_birth', type: 'timestamp', nullable: true })
@@ -56,10 +56,10 @@ export class User {
   })
   profileField: ProfileField | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   course: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   organization: string | null;
 
   @Column({

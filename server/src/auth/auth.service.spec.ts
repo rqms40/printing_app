@@ -80,6 +80,30 @@ describe('AuthService', () => {
       });
     });
 
+    it('passes fullName through registration to user creation', async () => {
+      (usersService.create as jest.Mock).mockResolvedValue({
+        ...mockUser,
+        fullName: 'Maria Santos',
+        isProfileComplete: true,
+      });
+
+      await authService.register('test@example.com', 'password123', {
+        fullName: 'Maria Santos',
+        profileCategory: 'student',
+        profileField: 'architecture',
+      });
+
+      expect(usersService.create).toHaveBeenCalledWith(
+        'test@example.com',
+        'password123',
+        {
+          fullName: 'Maria Santos',
+          profileCategory: 'student',
+          profileField: 'architecture',
+        },
+      );
+    });
+
     it('should throw ConflictException if email already exists', async () => {
       (usersService.create as jest.Mock).mockRejectedValue(
         new ConflictException('Email already registered'),

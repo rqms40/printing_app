@@ -23,10 +23,9 @@ export class RegisterDto {
   @MinLength(8)
   password: string;
 
-  @ApiProperty({ required: false, example: 'Maria Santos' })
-  @IsOptional()
+  @ApiProperty({ example: 'Maria Santos' })
   @IsString()
-  fullName?: string;
+  fullName: string;
 
   @ApiProperty({ enum: ProfileCategory })
   @IsEnum(ProfileCategory)
