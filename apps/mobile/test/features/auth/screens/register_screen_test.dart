@@ -25,6 +25,7 @@ void main() {
       expect(find.text('Password'), findsOneWidget);
       expect(find.text('Confirm Password'), findsOneWidget);
       expect(find.byType(AppButton), findsOneWidget);
+      expect(find.text('Continue'), findsOneWidget);
       expect(find.text('Tell us a bit about yourself'), findsNothing);
       expect(find.text('Student'), findsNothing);
       expect(find.text('Professional'), findsNothing);

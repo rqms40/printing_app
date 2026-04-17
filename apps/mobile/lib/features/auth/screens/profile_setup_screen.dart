@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -135,6 +136,49 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
+    final authState = ref.watch(authProvider);
+
+    if (widget.draft == null &&
+        authState.status == AuthStatus.unauthenticated) {
+      return Scaffold(
+        backgroundColor: colors.background,
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Your signup session expired',
+                    style: AppTypography.h2.copyWith(
+                      color: colors.onBackground,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Please restart signup to continue.',
+                    style: AppTypography.body.copyWith(
+                      color: colors.onSurfaceDim,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  AppButton(
+                    label: 'Restart signup',
+                    onTap: () => context.go('/auth/register'),
+                    variant: AppButtonVariant.primary,
+                    isFullWidth: true,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -271,6 +315,15 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
 
               const SizedBox(height: AppSpacing.xl),
 
+              if (authState.errorMessage != null) ...[
+                Text(
+                  authState.errorMessage!,
+                  style: AppTypography.caption.copyWith(color: colors.error),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: AppSpacing.lg),
+              ],
+
               // Complete profile button
               Column(
                 children: [
@@ -278,6 +331,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                     label: 'Complete Profile',
                     onTap: () => _submit(),
                     variant: AppButtonVariant.primary,
+                    isLoading: authState.isLoading,
                     isFullWidth: true,
                   ),
                 ],

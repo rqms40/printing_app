@@ -180,7 +180,7 @@ class _AuthFormState extends State<AuthForm> {
 
         // Submit button
         AppButton(
-          label: widget.isRegister ? 'Create Account' : 'Sign In',
+          label: widget.isRegister ? 'Continue' : 'Sign In',
           onTap: _handleSubmit,
           variant: AppButtonVariant.primary,
           isLoading: widget.isLoading,
