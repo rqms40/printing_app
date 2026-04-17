@@ -36,6 +36,36 @@ export interface AdminUserRecord {
   updated_at: string;
 }
 
+export interface AdminUserDetailRecord extends AdminUserRecord {
+  gender: string | null;
+  date_of_birth: string | null;
+}
+
+export interface AdminUserMetricsRecord {
+  total_orders: number;
+  paid_orders: number;
+  total_spend: number;
+  average_order_value: number;
+  last_order_at: string | null;
+  last_paid_order_at: string | null;
+}
+
+export interface AdminUserRecentOrderRecord {
+  id: number;
+  order_id: string;
+  category: "paper" | "3d";
+  order_status: OrderStatus;
+  payment_status: PaymentStatus;
+  total_price: number;
+  created_at: string;
+}
+
+export interface AdminUserDetailPayload {
+  user: AdminUserDetailRecord;
+  metrics: AdminUserMetricsRecord;
+  recent_orders: AdminUserRecentOrderRecord[];
+}
+
 export interface AdminDriverRecord {
   id: number;
   user_id: number | null;
@@ -59,6 +89,29 @@ export interface AdminIdentity {
 }
 
 const EMPTY_DATE = "1970-01-01T00:00:00.000Z";
+const ADMIN_USER_DETAIL_ORDER_CATEGORIES = new Set(["paper", "3d"]);
+const ADMIN_USER_DETAIL_ORDER_STATUSES = new Set<OrderStatus>([
+  "order_placed",
+  "file_verified",
+  "file_declined",
+  "printing_in_progress",
+  "finishing_mounting",
+  "quality_checked",
+  "ready_for_dispatch",
+  "driver_assigned",
+  "picked_up",
+  "on_the_way",
+  "arrived_at_destination",
+  "delivered",
+  "completed_pickup",
+  "cancelled",
+]);
+const ADMIN_USER_DETAIL_PAYMENT_STATUSES = new Set<PaymentStatus>([
+  "pending",
+  "paid",
+  "failed",
+  "refunded",
+]);
 
 function asRecord(value: unknown): ApiRecord {
   return value !== null && typeof value === "object" ? (value as ApiRecord) : {};
@@ -150,6 +203,69 @@ function toStringArray(value: unknown): string[] {
   }
 
   return [];
+}
+
+function hasFiniteNumberField(record: ApiRecord, ...keys: string[]) {
+  const value = read(record, ...keys);
+  if (value === undefined || value === null || value === "") {
+    return false;
+  }
+
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number);
+}
+
+function hasNonEmptyStringField(record: ApiRecord, ...keys: string[]) {
+  const value = toOptionalString(record, ...keys);
+  return typeof value === "string" && value.length > 0;
+}
+
+function hasAllowedStringField(
+  record: ApiRecord,
+  allowedValues: Set<string>,
+  ...keys: string[]
+) {
+  const value = toOptionalString(record, ...keys);
+  return typeof value === "string" && allowedValues.has(value);
+}
+
+function isValidAdminUserMetrics(input: unknown): input is ApiRecord {
+  const record = asRecord(input);
+
+  return (
+    hasFiniteNumberField(record, "total_orders", "totalOrders") &&
+    hasFiniteNumberField(record, "paid_orders", "paidOrders") &&
+    hasFiniteNumberField(record, "total_spend", "totalSpend") &&
+    hasFiniteNumberField(record, "average_order_value", "averageOrderValue")
+  );
+}
+
+function isValidAdminUserRecentOrder(input: unknown): input is ApiRecord {
+  const record = asRecord(input);
+
+  return (
+    hasFiniteNumberField(record, "id") &&
+    hasNonEmptyStringField(record, "order_id", "orderId") &&
+    hasAllowedStringField(
+      record,
+      ADMIN_USER_DETAIL_ORDER_CATEGORIES,
+      "category",
+    ) &&
+    hasAllowedStringField(
+      record,
+      ADMIN_USER_DETAIL_ORDER_STATUSES,
+      "order_status",
+      "orderStatus",
+    ) &&
+    hasAllowedStringField(
+      record,
+      ADMIN_USER_DETAIL_PAYMENT_STATUSES,
+      "payment_status",
+      "paymentStatus",
+    ) &&
+    hasFiniteNumberField(record, "total_price", "totalPrice") &&
+    hasNonEmptyStringField(record, "created_at", "createdAt")
+  );
 }
 
 function normalizePaperSpecs(value: unknown): PaperSpecs | undefined {
@@ -381,6 +497,99 @@ export function normalizeAdminUser(input: unknown): AdminUserRecord {
 
 export function normalizeAdminUsers(payload: unknown): AdminUserRecord[] {
   return Array.isArray(payload) ? payload.map(normalizeAdminUser) : [];
+}
+
+export function normalizeAdminUserDetailRecord(
+  input: unknown,
+): AdminUserDetailRecord {
+  const record = asRecord(input);
+
+  return {
+    ...normalizeAdminUser(record),
+    gender: toOptionalString(record, "gender") ?? null,
+    date_of_birth: toOptionalString(
+      record,
+      "date_of_birth",
+      "dateOfBirth",
+    ) ?? null,
+  };
+}
+
+export function normalizeAdminUserMetrics(
+  input: unknown,
+): AdminUserMetricsRecord {
+  const record = asRecord(input);
+
+  return {
+    total_orders: toNumberValue(record, 0, "total_orders", "totalOrders"),
+    paid_orders: toNumberValue(record, 0, "paid_orders", "paidOrders"),
+    total_spend: toNumberValue(record, 0, "total_spend", "totalSpend"),
+    average_order_value: toNumberValue(
+      record,
+      0,
+      "average_order_value",
+      "averageOrderValue",
+    ),
+    last_order_at: toOptionalString(record, "last_order_at", "lastOrderAt") ?? null,
+    last_paid_order_at:
+      toOptionalString(
+        record,
+        "last_paid_order_at",
+        "lastPaidOrderAt",
+      ) ?? null,
+  };
+}
+
+export function normalizeAdminUserRecentOrder(
+  input: unknown,
+): AdminUserRecentOrderRecord {
+  const record = asRecord(input);
+
+  return {
+    id: toNumberValue(record, 0, "id"),
+    order_id: toRequiredString(record, "", "order_id", "orderId"),
+    category:
+      toRequiredString(record, "paper", "category") === "3d" ? "3d" : "paper",
+    order_status: toRequiredString(
+      record,
+      "order_placed",
+      "order_status",
+      "orderStatus",
+    ) as OrderStatus,
+    payment_status: toRequiredString(
+      record,
+      "pending",
+      "payment_status",
+      "paymentStatus",
+    ) as PaymentStatus,
+    total_price: toNumberValue(record, 0, "total_price", "totalPrice"),
+    created_at: toRequiredString(record, EMPTY_DATE, "created_at", "createdAt"),
+  };
+}
+
+export function normalizeAdminUserDetail(
+  payload: unknown,
+): AdminUserDetailPayload | null {
+  const record = asRecord(payload);
+  const userValue = read(record, "user");
+  const metricsValue = read(record, "metrics");
+  const recentOrdersValue = read(record, "recent_orders", "recentOrders");
+
+  if (
+    userValue === undefined ||
+    userValue === null ||
+    !isValidAdminUserMetrics(metricsValue) ||
+    !Array.isArray(recentOrdersValue) ||
+    !recentOrdersValue.every(isValidAdminUserRecentOrder)
+  ) {
+    return null;
+  }
+
+  return {
+    user: normalizeAdminUserDetailRecord(userValue),
+    metrics: normalizeAdminUserMetrics(metricsValue),
+    recent_orders: recentOrdersValue.map(normalizeAdminUserRecentOrder),
+  };
 }
 
 export function normalizeAdminDriver(input: unknown): AdminDriverRecord {

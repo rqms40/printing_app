@@ -1,9 +1,21 @@
 import { apiClient } from "@/providers/api-client";
-import { normalizeAdminUsers, type AdminUserRecord } from "@/utils/api-normalizers";
+import {
+  normalizeAdminUserDetail,
+  normalizeAdminUsers,
+  type AdminUserDetailPayload,
+  type AdminUserRecord,
+} from "@/utils/api-normalizers";
 
 export async function loadAdminUsers(): Promise<AdminUserRecord[]> {
   const response = await apiClient.get("/admin/users");
   return normalizeAdminUsers(response.data);
+}
+
+export async function loadAdminUserDetail(
+  id: number | string,
+): Promise<AdminUserDetailPayload | null> {
+  const response = await apiClient.get(`/admin/users/${id}`);
+  return normalizeAdminUserDetail(response.data);
 }
 
 type AdminUsersState = {
@@ -29,5 +41,41 @@ export function buildAdminUsersViewModel(state: AdminUsersState): AdminUsersView
   return {
     kind: "ready",
     users: state.users,
+  };
+}
+
+type AdminUserDetailState = {
+  loading: boolean;
+  detail: AdminUserDetailPayload | null;
+  error: string | null;
+};
+
+type AdminUserDetailViewModel =
+  | { kind: "loading"; title: "User" }
+  | { kind: "error"; title: "User"; message: string; retryLabel: "Retry" }
+  | { kind: "ready"; detail: AdminUserDetailPayload };
+
+export function buildAdminUserDetailViewModel(
+  state: AdminUserDetailState,
+): AdminUserDetailViewModel {
+  if (state.loading) {
+    return {
+      kind: "loading",
+      title: "User",
+    };
+  }
+
+  if (state.error || !state.detail) {
+    return {
+      kind: "error",
+      title: "User",
+      message: state.error ?? "Unable to load user",
+      retryLabel: "Retry",
+    };
+  }
+
+  return {
+    kind: "ready",
+    detail: state.detail,
   };
 }
