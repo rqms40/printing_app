@@ -5,6 +5,11 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import {
+  PrintingPreference,
+  ProfileCategory,
+  ProfileField,
+} from '../profile.constants';
 
 export enum UserRole {
   CUSTOMER = 'customer',
@@ -24,16 +29,45 @@ export class User {
   passwordHash: string;
 
   @Column({ name: 'full_name', nullable: true })
-  fullName: string;
+  fullName: string | null;
 
   @Column({ name: 'phone_number', nullable: true })
-  phoneNumber: string;
+  phoneNumber: string | null;
 
   @Column({ nullable: true })
-  gender: string;
+  gender: string | null;
 
   @Column({ name: 'date_of_birth', type: 'timestamp', nullable: true })
-  dateOfBirth: Date;
+  dateOfBirth: Date | null;
+
+  @Column({
+    name: 'profile_category',
+    type: 'enum',
+    enum: ProfileCategory,
+    nullable: true,
+  })
+  profileCategory: ProfileCategory | null;
+
+  @Column({
+    name: 'profile_field',
+    type: 'enum',
+    enum: ProfileField,
+    nullable: true,
+  })
+  profileField: ProfileField | null;
+
+  @Column({ nullable: true })
+  course: string | null;
+
+  @Column({ nullable: true })
+  organization: string | null;
+
+  @Column({
+    name: 'printing_preferences',
+    type: 'simple-array',
+    nullable: true,
+  })
+  printingPreferences: PrintingPreference[] | null;
 
   @Column({ type: 'enum', enum: UserRole, default: UserRole.CUSTOMER })
   role: UserRole;
@@ -42,7 +76,7 @@ export class User {
   isProfileComplete: boolean;
 
   @Column({ name: 'fcm_token', nullable: true, type: 'text' })
-  fcmToken: string;
+  fcmToken: string | null;
 
   @Column({ name: 'is_active', default: true })
   isActive: boolean;

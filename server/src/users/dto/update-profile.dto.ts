@@ -1,5 +1,16 @@
-import { IsString, IsOptional, IsDateString } from 'class-validator';
+import {
+  IsArray,
+  IsDateString,
+  IsEnum,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  PrintingPreference,
+  ProfileCategory,
+  ProfileField,
+} from '../profile.constants';
 
 export class UpdateProfileDto {
   @ApiPropertyOptional({ example: 'Maria Santos' })
@@ -21,4 +32,30 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsDateString()
   dateOfBirth?: string;
+
+  @ApiPropertyOptional({ enum: ProfileCategory })
+  @IsOptional()
+  @IsEnum(ProfileCategory)
+  profileCategory?: ProfileCategory;
+
+  @ApiPropertyOptional({ enum: ProfileField })
+  @IsOptional()
+  @IsEnum(ProfileField)
+  profileField?: ProfileField;
+
+  @ApiPropertyOptional({ example: 'BS Architecture' })
+  @IsOptional()
+  @IsString()
+  course?: string;
+
+  @ApiPropertyOptional({ example: 'Mapua University' })
+  @IsOptional()
+  @IsString()
+  organization?: string;
+
+  @ApiPropertyOptional({ enum: PrintingPreference, isArray: true })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(PrintingPreference, { each: true })
+  printingPreferences?: PrintingPreference[];
 }

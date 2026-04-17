@@ -416,6 +416,11 @@ export class AdminController {
       role: u.role,
       is_active: u.isActive,
       is_profile_complete: u.isProfileComplete,
+      profile_category: u.profileCategory ?? null,
+      profile_field: u.profileField ?? null,
+      course: u.course ?? null,
+      organization: u.organization ?? null,
+      printing_preferences: u.printingPreferences ?? [],
       created_at: u.createdAt,
       updated_at: u.updatedAt,
     }));

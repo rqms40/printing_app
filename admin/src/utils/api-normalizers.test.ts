@@ -126,6 +126,11 @@ describe("api normalizers", () => {
       role: "admin",
       isActive: true,
       isProfileComplete: true,
+      profileCategory: "professional",
+      profileField: "business_corporate",
+      course: "Operations",
+      organization: "Grid Print HQ",
+      printingPreferences: ["marketing_materials"],
       createdAt: "2026-03-01T00:00:00.000Z",
       updatedAt: "2026-03-15T00:00:00.000Z",
     });
@@ -135,6 +140,11 @@ describe("api normalizers", () => {
       full_name: "Admin User",
       is_active: true,
       is_profile_complete: true,
+      profile_category: "professional",
+      profile_field: "business_corporate",
+      course: "Operations",
+      organization: "Grid Print HQ",
+      printing_preferences: ["marketing_materials"],
     });
     expect(humanizeEnumValue("ready_for_dispatch")).toBe("Ready For Dispatch");
     expect(humanizeEnumValue(undefined, "Unknown")).toBe("Unknown");

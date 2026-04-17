@@ -1,5 +1,17 @@
-import { IsEmail, IsString, MinLength, IsOptional } from 'class-validator';
+import {
+  IsArray,
+  IsEmail,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import {
+  PrintingPreference,
+  ProfileCategory,
+  ProfileField,
+} from '../../users/profile.constants';
 
 export class RegisterDto {
   @ApiProperty({ example: 'user@gridprint.ph' })
@@ -15,4 +27,32 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   fullName?: string;
+
+  @ApiProperty({ enum: ProfileCategory })
+  @IsEnum(ProfileCategory)
+  profileCategory: ProfileCategory;
+
+  @ApiProperty({ enum: ProfileField })
+  @IsEnum(ProfileField)
+  profileField: ProfileField;
+
+  @ApiProperty({ required: false, example: 'BS Architecture' })
+  @IsOptional()
+  @IsString()
+  course?: string;
+
+  @ApiProperty({ required: false, example: 'Mapua University' })
+  @IsOptional()
+  @IsString()
+  organization?: string;
+
+  @ApiProperty({
+    required: false,
+    enum: PrintingPreference,
+    isArray: true,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(PrintingPreference, { each: true })
+  printingPreferences?: PrintingPreference[];
 }

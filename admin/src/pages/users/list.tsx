@@ -13,13 +13,13 @@ import {
 const { Text } = Typography;
 
 const mockUsers = [
-  { id: 1, full_name: "Maria Santos", email: "maria.santos@gmail.com", phone_number: "+639171234567", role: "customer" as const, is_active: true, is_profile_complete: true, created_at: "2025-12-25T00:00:00Z", updated_at: "2025-12-25T00:00:00Z" },
-  { id: 2, full_name: "Jose Garcia", email: "jose.garcia@gmail.com", phone_number: "+639181234567", role: "customer" as const, is_active: true, is_profile_complete: true, created_at: "2026-01-10T00:00:00Z", updated_at: "2026-01-10T00:00:00Z" },
-  { id: 3, full_name: "Ana Reyes", email: "ana.reyes@gmail.com", phone_number: "+639191234567", role: "customer" as const, is_active: true, is_profile_complete: true, created_at: "2026-02-05T00:00:00Z", updated_at: "2026-02-05T00:00:00Z" },
-  { id: 4, full_name: "Pedro Cruz", email: "pedro.cruz@gmail.com", phone_number: "+639201234567", role: "customer" as const, is_active: false, is_profile_complete: false, created_at: "2026-01-20T00:00:00Z", updated_at: "2026-01-20T00:00:00Z" },
-  { id: 10, full_name: "Juan Reyes", email: "juan.reyes@gmail.com", phone_number: "+639211234567", role: "driver" as const, is_active: true, is_profile_complete: true, created_at: "2026-01-15T00:00:00Z", updated_at: "2026-01-15T00:00:00Z" },
-  { id: 11, full_name: "Marco dela Cruz", email: "marco.delacruz@gmail.com", phone_number: "+639221234567", role: "driver" as const, is_active: true, is_profile_complete: true, created_at: "2026-02-01T00:00:00Z", updated_at: "2026-02-01T00:00:00Z" },
-  { id: 100, full_name: "Admin User", email: "admin@grid.ph", phone_number: "+639001234567", role: "admin" as const, is_active: true, is_profile_complete: true, created_at: "2025-11-01T00:00:00Z", updated_at: "2025-11-01T00:00:00Z" },
+  { id: 1, full_name: "Maria Santos", email: "maria.santos@gmail.com", phone_number: "+639171234567", role: "customer" as const, is_active: true, is_profile_complete: true, profile_category: "student", profile_field: "architecture", course: "BS Architecture", organization: "Mapua University", printing_preferences: ["plotting_blueprints", "high_res_color"], created_at: "2025-12-25T00:00:00Z", updated_at: "2025-12-25T00:00:00Z" },
+  { id: 2, full_name: "Jose Garcia", email: "jose.garcia@gmail.com", phone_number: "+639181234567", role: "customer" as const, is_active: true, is_profile_complete: true, profile_category: "student", profile_field: "engineering", course: "BS Civil Engineering", organization: "TIP Manila", printing_preferences: ["technical_specs"], created_at: "2026-01-10T00:00:00Z", updated_at: "2026-01-10T00:00:00Z" },
+  { id: 3, full_name: "Ana Reyes", email: "ana.reyes@gmail.com", phone_number: "+639191234567", role: "customer" as const, is_active: true, is_profile_complete: true, profile_category: "student", profile_field: "medical_nursing", course: "BS Nursing", organization: "UST", printing_preferences: ["high_res_color"], created_at: "2026-02-05T00:00:00Z", updated_at: "2026-02-05T00:00:00Z" },
+  { id: 4, full_name: "Pedro Cruz", email: "pedro.cruz@gmail.com", phone_number: "+639201234567", role: "customer" as const, is_active: false, is_profile_complete: false, profile_category: "student", profile_field: "law_arts_others", course: "Fine Arts", organization: "UP Diliman", printing_preferences: ["document_printing"], created_at: "2026-01-20T00:00:00Z", updated_at: "2026-01-20T00:00:00Z" },
+  { id: 10, full_name: "Juan Reyes", email: "juan.reyes@gmail.com", phone_number: "+639211234567", role: "driver" as const, is_active: true, is_profile_complete: true, profile_category: "professional", profile_field: "engineer_contractor", course: "Field Ops", organization: "Grid Logistics", printing_preferences: ["technical_specs"], created_at: "2026-01-15T00:00:00Z", updated_at: "2026-01-15T00:00:00Z" },
+  { id: 11, full_name: "Marco dela Cruz", email: "marco.delacruz@gmail.com", phone_number: "+639221234567", role: "driver" as const, is_active: true, is_profile_complete: true, profile_category: "professional", profile_field: "architect_designer", course: "Project Coordinator", organization: "BuildLab Studio", printing_preferences: ["plotting_blueprints"], created_at: "2026-02-01T00:00:00Z", updated_at: "2026-02-01T00:00:00Z" },
+  { id: 100, full_name: "Admin User", email: "admin@grid.ph", phone_number: "+639001234567", role: "admin" as const, is_active: true, is_profile_complete: true, profile_category: "professional", profile_field: "business_corporate", course: "Operations", organization: "GRID HQ", printing_preferences: ["marketing_materials"], created_at: "2025-11-01T00:00:00Z", updated_at: "2025-11-01T00:00:00Z" },
 ];
 
 const ROLE_COLORS: Record<string, string> = {
@@ -58,7 +58,9 @@ export function UserList() {
     ? users.filter(
         (u) =>
           (u.full_name?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
-          u.email.toLowerCase().includes(search.toLowerCase()),
+          u.email.toLowerCase().includes(search.toLowerCase()) ||
+          (u.profile_field?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
+          (u.organization?.toLowerCase().includes(search.toLowerCase()) ?? false),
       )
     : users;
 
@@ -136,6 +138,48 @@ export function UserList() {
             width={150}
             render={(v: string) => (
               <span style={{ fontFamily: "monospace", fontSize: 12 }}>{v}</span>
+            )}
+          />
+          <Table.Column
+            title="Profile"
+            width={220}
+            render={(_: unknown, record: AdminUserRecord) => (
+              <Space direction="vertical" size={2}>
+                <Space wrap size={[6, 6]}>
+                  {record.profile_category ? (
+                    <Tag color="cyan">
+                      {humanizeEnumValue(record.profile_category)}
+                    </Tag>
+                  ) : null}
+                  {record.profile_field ? (
+                    <Tag color="geekblue">
+                      {humanizeEnumValue(record.profile_field)}
+                    </Tag>
+                  ) : null}
+                </Space>
+                <Text style={{ color: "#808080", fontSize: 12 }}>
+                  {record.course ?? record.organization ?? "No profile context"}
+                </Text>
+              </Space>
+            )}
+          />
+          <Table.Column
+            title="Print Focus"
+            width={220}
+            render={(_: unknown, record: AdminUserRecord) => (
+              <Space wrap size={[6, 6]}>
+                {record.printing_preferences.length > 0 ? (
+                  record.printing_preferences.map((preference) => (
+                    <Tag key={preference} color="default">
+                      {humanizeEnumValue(preference)}
+                    </Tag>
+                  ))
+                ) : (
+                  <Text style={{ color: "#808080", fontSize: 12 }}>
+                    No preferences
+                  </Text>
+                )}
+              </Space>
             )}
           />
           <Table.Column

@@ -17,6 +17,10 @@ describe('AuthService', () => {
     email: 'test@example.com',
     passwordHash: 'hashed-password',
     role: 'customer',
+    profileCategory: 'student',
+    profileField: 'architecture',
+    printingPreferences: ['plotting_blueprints'],
+    isProfileComplete: false,
   };
 
   beforeEach(async () => {
@@ -50,11 +54,21 @@ describe('AuthService', () => {
       const result = await authService.register(
         'test@example.com',
         'password123',
+        {
+          profileCategory: 'student',
+          profileField: 'architecture',
+          printingPreferences: ['plotting_blueprints'],
+        },
       );
 
       expect(usersService.create).toHaveBeenCalledWith(
         'test@example.com',
         'password123',
+        {
+          profileCategory: 'student',
+          profileField: 'architecture',
+          printingPreferences: ['plotting_blueprints'],
+        },
       );
       expect(result.access_token).toBe('mock-jwt-token');
       expect(result.user).not.toHaveProperty('passwordHash');
@@ -72,14 +86,20 @@ describe('AuthService', () => {
       );
 
       await expect(
-        authService.register('test@example.com', 'password123'),
+        authService.register('test@example.com', 'password123', {
+          profileCategory: 'student',
+          profileField: 'architecture',
+        }),
       ).rejects.toThrow(ConflictException);
     });
 
     it('fires createForAllAdmins with new_user type after registering', async () => {
       (usersService.create as jest.Mock).mockResolvedValue(mockUser);
 
-      await authService.register('test@example.com', 'password123');
+      await authService.register('test@example.com', 'password123', {
+        profileCategory: 'student',
+        profileField: 'architecture',
+      });
 
       expect(notificationsService.createForAllAdmins).toHaveBeenCalledWith(
         expect.objectContaining({

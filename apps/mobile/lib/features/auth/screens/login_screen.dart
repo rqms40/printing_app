@@ -75,8 +75,10 @@ class LoginScreen extends ConsumerWidget {
               // Auth form
               AuthForm(
                 isLoading: authState.isLoading,
-                onSubmit: (email, password) {
-                  ref.read(authProvider.notifier).login(email, password);
+                onSubmit: (submission) {
+                  ref
+                      .read(authProvider.notifier)
+                      .login(submission.email, submission.password);
                 },
               )
                   .animate()

@@ -64,8 +64,16 @@ class RegisterScreen extends ConsumerWidget {
               AuthForm(
                 isRegister: true,
                 isLoading: authState.isLoading,
-                onSubmit: (email, password) {
-                  ref.read(authProvider.notifier).register(email, password);
+                onSubmit: (submission) {
+                  ref.read(authProvider.notifier).register(
+                        submission.email,
+                        submission.password,
+                        profileCategory: submission.profileCategory!,
+                        profileField: submission.profileField!,
+                        course: submission.course,
+                        organization: submission.organization,
+                        printingPreferences: submission.printingPreferences,
+                      );
                 },
               ).animate()
                 .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)

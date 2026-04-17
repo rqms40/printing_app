@@ -9,6 +9,11 @@ class User {
     this.phoneNumber,
     this.gender,
     this.dateOfBirth,
+    this.profileCategory,
+    this.profileField,
+    this.course,
+    this.organization,
+    this.printingPreferences = const [],
     required this.role,
     required this.isProfileComplete,
     required this.isActive,
@@ -24,6 +29,11 @@ class User {
   final String? phoneNumber;
   final String? gender;
   final DateTime? dateOfBirth;
+  final String? profileCategory;
+  final String? profileField;
+  final String? course;
+  final String? organization;
+  final List<String> printingPreferences;
   final UserRole role;
   final bool isProfileComplete;
   final bool isActive;
@@ -39,6 +49,11 @@ class User {
     String? phoneNumber,
     String? gender,
     DateTime? dateOfBirth,
+    String? profileCategory,
+    String? profileField,
+    String? course,
+    String? organization,
+    List<String>? printingPreferences,
     UserRole? role,
     bool? isProfileComplete,
     bool? isActive,
@@ -54,6 +69,11 @@ class User {
       phoneNumber: phoneNumber ?? this.phoneNumber,
       gender: gender ?? this.gender,
       dateOfBirth: dateOfBirth ?? this.dateOfBirth,
+      profileCategory: profileCategory ?? this.profileCategory,
+      profileField: profileField ?? this.profileField,
+      course: course ?? this.course,
+      organization: organization ?? this.organization,
+      printingPreferences: printingPreferences ?? this.printingPreferences,
       role: role ?? this.role,
       isProfileComplete: isProfileComplete ?? this.isProfileComplete,
       isActive: isActive ?? this.isActive,

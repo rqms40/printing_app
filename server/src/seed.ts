@@ -2,6 +2,11 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import {
+  PrintingPreference,
+  ProfileCategory,
+  ProfileField,
+} from './users/profile.constants';
 
 interface CountRow {
   count: string;
@@ -55,6 +60,14 @@ async function seed() {
       full_name: 'Maria Santos',
       phone_number: '+639171234567',
       gender: 'female',
+      profile_category: ProfileCategory.STUDENT,
+      profile_field: ProfileField.ARCHITECTURE,
+      course: 'BS Architecture',
+      organization: 'Mapua University',
+      printing_preferences: [
+        PrintingPreference.PLOTTING_BLUEPRINTS,
+        PrintingPreference.HIGH_RES_COLOR,
+      ].join(','),
       role: 'customer',
       is_profile_complete: true,
       is_active: true,
@@ -65,6 +78,11 @@ async function seed() {
       full_name: 'Juan Reyes',
       phone_number: '+639181234567',
       gender: 'male',
+      profile_category: ProfileCategory.PROFESSIONAL,
+      profile_field: ProfileField.ENGINEER_CONTRACTOR,
+      course: null,
+      organization: 'Grid Logistics',
+      printing_preferences: [PrintingPreference.TECHNICAL_SPECS].join(','),
       role: 'driver',
       is_profile_complete: true,
       is_active: true,
@@ -75,6 +93,11 @@ async function seed() {
       full_name: 'Admin User',
       phone_number: '+639191234567',
       gender: 'male',
+      profile_category: ProfileCategory.PROFESSIONAL,
+      profile_field: ProfileField.BUSINESS_CORPORATE,
+      course: null,
+      organization: 'Grid Print HQ',
+      printing_preferences: [PrintingPreference.MARKETING_MATERIALS].join(','),
       role: 'admin',
       is_profile_complete: true,
       is_active: true,
@@ -116,14 +139,33 @@ async function seed() {
 
   for (const u of users) {
     await ds.query(
-      `INSERT INTO users (email, password_hash, full_name, phone_number, gender, role, is_profile_complete, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      `INSERT INTO users (
+        email,
+        password_hash,
+        full_name,
+        phone_number,
+        gender,
+        profile_category,
+        profile_field,
+        course,
+        organization,
+        printing_preferences,
+        role,
+        is_profile_complete,
+        is_active
+      )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
       [
         u.email,
         u.password_hash,
         u.full_name,
         u.phone_number,
         u.gender,
+        u.profile_category,
+        u.profile_field,
+        u.course,
+        u.organization,
+        u.printing_preferences,
         u.role,
         u.is_profile_complete,
         u.is_active,

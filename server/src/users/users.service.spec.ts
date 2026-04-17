@@ -15,6 +15,11 @@ describe('UsersService', () => {
     email: 'test@example.com',
     passwordHash: 'hashed-password',
     role: 'customer',
+    fullName: null,
+    profileCategory: 'student',
+    profileField: 'architecture',
+    printingPreferences: ['plotting_blueprints'],
+    isProfileComplete: false,
   } as User;
 
   beforeEach(async () => {
@@ -75,12 +80,20 @@ describe('UsersService', () => {
       repo.create.mockReturnValue(mockUser);
       repo.save.mockResolvedValue(mockUser);
 
-      const result = await service.create('test@example.com', 'password123');
+      const result = await service.create('test@example.com', 'password123', {
+        profileCategory: 'student',
+        profileField: 'architecture',
+        printingPreferences: ['plotting_blueprints'],
+      });
 
       expect(repo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           email: 'test@example.com',
           role: 'customer',
+          profileCategory: 'student',
+          profileField: 'architecture',
+          printingPreferences: ['plotting_blueprints'],
+          isProfileComplete: false,
         }),
       );
       // Verify the passwordHash is a bcrypt hash, not plaintext
@@ -106,6 +119,7 @@ describe('UsersService', () => {
   describe('updateProfile', () => {
     it('should update and return user', async () => {
       const updatedUser = { ...mockUser, email: 'new@example.com' } as User;
+      repo.findOne.mockResolvedValue(mockUser);
       repo.update.mockResolvedValue(undefined as any);
       repo.findOneOrFail.mockResolvedValue(updatedUser);
 
@@ -113,9 +127,45 @@ describe('UsersService', () => {
         email: 'new@example.com',
       } as Partial<User>);
 
-      expect(repo.update).toHaveBeenCalledWith(1, { email: 'new@example.com' });
+      expect(repo.update).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          email: 'new@example.com',
+          isProfileComplete: false,
+        }),
+      );
+      expect(repo.findOne).toHaveBeenCalledWith({ where: { id: 1 } });
       expect(repo.findOneOrFail).toHaveBeenCalledWith({ where: { id: 1 } });
       expect(result).toEqual(updatedUser);
+    });
+
+    it('marks the profile complete when required profiling fields are present', async () => {
+      const existingUser = {
+        ...mockUser,
+        fullName: null,
+        isProfileComplete: false,
+      } as User;
+      const updatedUser = {
+        ...existingUser,
+        fullName: 'Maria Santos',
+        isProfileComplete: true,
+      } as User;
+      repo.findOne.mockResolvedValue(existingUser);
+      repo.update.mockResolvedValue(undefined as any);
+      repo.findOneOrFail.mockResolvedValue(updatedUser);
+
+      const result = await service.updateProfile(1, {
+        fullName: 'Maria Santos',
+      });
+
+      expect(repo.update).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          fullName: 'Maria Santos',
+          isProfileComplete: true,
+        }),
+      );
+      expect(result.isProfileComplete).toBe(true);
     });
   });
 

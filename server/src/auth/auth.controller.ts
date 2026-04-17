@@ -13,7 +13,14 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('register')
   register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto.email, dto.password);
+    return this.authService.register(dto.email, dto.password, {
+      fullName: dto.fullName,
+      profileCategory: dto.profileCategory,
+      profileField: dto.profileField,
+      course: dto.course,
+      organization: dto.organization,
+      printingPreferences: dto.printingPreferences,
+    });
   }
 
   @Throttle({ default: { limit: 5, ttl: 60000 } })

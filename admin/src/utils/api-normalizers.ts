@@ -27,6 +27,11 @@ export interface AdminUserRecord {
   role: UserRole;
   is_active: boolean;
   is_profile_complete: boolean;
+  profile_category: string | null;
+  profile_field: string | null;
+  course: string | null;
+  organization: string | null;
+  printing_preferences: string[];
   created_at: string;
   updated_at: string;
 }
@@ -359,6 +364,15 @@ export function normalizeAdminUser(input: unknown): AdminUserRecord {
       false,
       "is_profile_complete",
       "isProfileComplete",
+    ),
+    profile_category:
+      toOptionalString(record, "profile_category", "profileCategory") ?? null,
+    profile_field:
+      toOptionalString(record, "profile_field", "profileField") ?? null,
+    course: toOptionalString(record, "course") ?? null,
+    organization: toOptionalString(record, "organization") ?? null,
+    printing_preferences: toStringArray(
+      read(record, "printing_preferences", "printingPreferences"),
     ),
     created_at: toRequiredString(record, EMPTY_DATE, "created_at", "createdAt"),
     updated_at: toRequiredString(record, EMPTY_DATE, "updated_at", "updatedAt"),

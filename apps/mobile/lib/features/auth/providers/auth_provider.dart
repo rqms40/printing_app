@@ -26,6 +26,11 @@ class AuthUser {
     this.gender,
     this.dateOfBirth,
     this.credits,
+    this.profileCategory,
+    this.profileField,
+    this.course,
+    this.organization,
+    this.printingPreferences = const [],
   });
 
   final String id;
@@ -37,6 +42,11 @@ class AuthUser {
   final String? gender;
   final DateTime? dateOfBirth;
   final String? credits;
+  final String? profileCategory;
+  final String? profileField;
+  final String? course;
+  final String? organization;
+  final List<String> printingPreferences;
 
   AuthUser copyWith({
     String? id,
@@ -48,6 +58,11 @@ class AuthUser {
     String? gender,
     DateTime? dateOfBirth,
     String? credits,
+    String? profileCategory,
+    String? profileField,
+    String? course,
+    String? organization,
+    List<String>? printingPreferences,
   }) {
     return AuthUser(
       id: id ?? this.id,
@@ -59,6 +74,11 @@ class AuthUser {
       gender: gender ?? this.gender,
       dateOfBirth: dateOfBirth ?? this.dateOfBirth,
       credits: credits ?? this.credits,
+      profileCategory: profileCategory ?? this.profileCategory,
+      profileField: profileField ?? this.profileField,
+      course: course ?? this.course,
+      organization: organization ?? this.organization,
+      printingPreferences: printingPreferences ?? this.printingPreferences,
     );
   }
 }
@@ -155,12 +175,27 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> register(String email, String password) async {
+  Future<void> register(
+    String email,
+    String password, {
+    required String profileCategory,
+    required String profileField,
+    String? course,
+    String? organization,
+    List<String> printingPreferences = const [],
+  }) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {
       final response = await ApiClient.instance.post('/auth/register', data: {
         'email': email,
         'password': password,
+        'profileCategory': profileCategory,
+        'profileField': profileField,
+        if (course != null && course.isNotEmpty) 'course': course,
+        if (organization != null && organization.isNotEmpty)
+          'organization': organization,
+        if (printingPreferences.isNotEmpty)
+          'printingPreferences': printingPreferences,
       });
       final data = response.data as Map<String, dynamic>;
       await TokenStorage.saveToken(data['access_token'] as String);
@@ -194,6 +229,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         fullName: 'Maria Santos',
         role: 'customer',
         isProfileComplete: true,
+        profileCategory: 'student',
+        profileField: 'architecture',
+        organization: 'Mapua University',
+        printingPreferences: ['plotting_blueprints'],
       ),
       'driver': const AuthUser(
         id: '2',
@@ -201,6 +240,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         fullName: 'Juan Reyes',
         role: 'driver',
         isProfileComplete: true,
+        profileCategory: 'professional',
+        profileField: 'engineer_contractor',
+        organization: 'Grid Logistics',
+        printingPreferences: ['technical_specs'],
       ),
       'admin': const AuthUser(
         id: '3',
@@ -208,6 +251,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         fullName: 'Admin',
         role: 'admin',
         isProfileComplete: true,
+        profileCategory: 'professional',
+        profileField: 'business_corporate',
+        organization: 'Grid Print HQ',
+        printingPreferences: ['marketing_materials'],
       ),
     };
     state = AuthState(
@@ -216,30 +263,49 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
   }
 
-  Future<void> completeProfile({
+  Future<bool> completeProfile({
     required String fullName,
     String? phone,
     String? gender,
     DateTime? dob,
+    String? profileCategory,
+    String? profileField,
+    String? course,
+    String? organization,
+    List<String>? printingPreferences,
   }) async {
     state = state.copyWith(isLoading: true);
     try {
-      final response = await ApiClient.instance.put('/users/profile', data: {
+      final payload = <String, dynamic>{
         'fullName': fullName,
         if (phone != null && phone.isNotEmpty) 'phoneNumber': phone,
         if (gender != null && gender.isNotEmpty) 'gender': gender,
         if (dob != null) 'dateOfBirth': dob.toIso8601String(),
-      });
+        if (course != null && course.isNotEmpty) 'course': course,
+        if (organization != null && organization.isNotEmpty)
+          'organization': organization,
+      };
+      if (profileCategory != null) payload['profileCategory'] = profileCategory;
+      if (profileField != null) payload['profileField'] = profileField;
+      if (printingPreferences != null) {
+        payload['printingPreferences'] = printingPreferences;
+      }
+
+      final response = await ApiClient.instance.put('/users/profile', data: payload);
       final user = _parseUser(response.data as Map<String, dynamic>);
       state = AuthState(
-        status: AuthStatus.authenticated,
-        user: user.copyWith(isProfileComplete: true),
+        status: user.isProfileComplete
+            ? AuthStatus.authenticated
+            : AuthStatus.profileIncomplete,
+        user: user,
       );
+      return true;
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
         errorMessage: 'Failed to update profile',
       );
+      return false;
     }
   }
 
@@ -304,10 +370,32 @@ class AuthNotifier extends StateNotifier<AuthState> {
       phone: json['phoneNumber'] as String?,
       gender: json['gender'] as String?,
       credits: json['credits']?.toString(),
+      profileCategory: json['profileCategory'] as String?,
+      profileField: json['profileField'] as String?,
+      course: json['course'] as String?,
+      organization: json['organization'] as String?,
+      printingPreferences:
+          _parseStringList(json['printingPreferences'] ?? json['printing_preferences']),
       dateOfBirth: json['dateOfBirth'] != null
           ? DateTime.tryParse(json['dateOfBirth'] as String)
           : null,
     );
+  }
+
+  List<String> _parseStringList(dynamic value) {
+    if (value is List) {
+      return value.map((item) => item.toString()).toList();
+    }
+
+    if (value is String && value.isNotEmpty) {
+      return value
+          .split(',')
+          .map((item) => item.trim())
+          .where((item) => item.isNotEmpty)
+          .toList();
+    }
+
+    return const [];
   }
 }
 

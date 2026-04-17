@@ -4,6 +4,20 @@ import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { User } from '../users/entities/user.entity';
 import * as bcrypt from 'bcrypt';
+import {
+  PrintingPreference,
+  ProfileCategory,
+  ProfileField,
+} from '../users/profile.constants';
+
+type RegisterProfileInput = {
+  fullName?: string;
+  profileCategory: ProfileCategory;
+  profileField: ProfileField;
+  course?: string;
+  organization?: string;
+  printingPreferences?: PrintingPreference[];
+};
 
 @Injectable()
 export class AuthService {
@@ -13,8 +27,12 @@ export class AuthService {
     private notificationsService: NotificationsService,
   ) {}
 
-  async register(email: string, password: string) {
-    const user = await this.usersService.create(email, password);
+  async register(
+    email: string,
+    password: string,
+    profile: RegisterProfileInput,
+  ) {
+    const user = await this.usersService.create(email, password, profile);
 
     try {
       await this.notificationsService.createForAllAdmins({

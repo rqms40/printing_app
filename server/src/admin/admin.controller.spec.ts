@@ -20,10 +20,12 @@ const mockRepo = () => ({
 describe('AdminController analytics', () => {
   let controller: AdminController;
   let ordersRepo: jest.Mocked<Partial<Repository<Order>>>;
+  let usersRepo: jest.Mocked<Partial<Repository<User>>>;
   let creditsService: jest.Mocked<Partial<CreditsService>>;
 
   beforeEach(async () => {
     ordersRepo = mockRepo();
+    usersRepo = mockRepo();
     creditsService = { getPendingCount: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -36,7 +38,7 @@ describe('AdminController analytics', () => {
         },
         { provide: CreditsService, useValue: creditsService },
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
-        { provide: getRepositoryToken(User), useValue: mockRepo() },
+        { provide: getRepositoryToken(User), useValue: usersRepo },
       ],
     }).compile();
 
@@ -217,6 +219,42 @@ describe('AdminController analytics', () => {
       const result = await controller.getBadgeCounts();
 
       expect(result).toEqual({ newOrders: 0, pendingTopUps: 0 });
+    });
+  });
+
+  describe('getAllUsers', () => {
+    it('includes profiling metadata for admin user management', async () => {
+      usersRepo.find.mockResolvedValue([
+        {
+          id: 1,
+          fullName: 'Maria Santos',
+          email: 'maria@gridprint.ph',
+          phoneNumber: '+639171234567',
+          role: 'customer',
+          isActive: true,
+          isProfileComplete: true,
+          profileCategory: 'student',
+          profileField: 'architecture',
+          course: 'BS Architecture',
+          organization: 'Mapua University',
+          printingPreferences: ['plotting_blueprints', 'high_res_color'],
+          createdAt: new Date('2026-03-01T00:00:00.000Z'),
+          updatedAt: new Date('2026-03-15T00:00:00.000Z'),
+        } as User,
+      ]);
+
+      await expect(controller.getAllUsers()).resolves.toEqual([
+        expect.objectContaining({
+          profile_category: 'student',
+          profile_field: 'architecture',
+          course: 'BS Architecture',
+          organization: 'Mapua University',
+          printing_preferences: [
+            'plotting_blueprints',
+            'high_res_color',
+          ],
+        }),
+      ]);
     });
   });
 });

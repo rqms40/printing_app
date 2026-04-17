@@ -6,7 +6,9 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/auth/models/profiling.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
+import 'package:printing_app/features/auth/widgets/profiling_form_section.dart';
 import 'package:printing_app/features/customer/profile/providers/profile_provider.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_text_field.dart';
@@ -24,8 +26,11 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _emailController;
   late final TextEditingController _phoneController;
+  late final TextEditingController _courseController;
+  late final TextEditingController _organizationController;
   DateTime? _dateOfBirth;
   String? _selectedGender;
+  ProfilingFormValue _profiling = const ProfilingFormValue();
 
   static const _genders = ['Male', 'Female', 'Other'];
 
@@ -36,8 +41,16 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
     _nameController = TextEditingController(text: user?.fullName ?? '');
     _emailController = TextEditingController(text: user?.email ?? '');
     _phoneController = TextEditingController(text: user?.phone ?? '');
+    _courseController = TextEditingController(text: user?.course ?? '');
+    _organizationController =
+        TextEditingController(text: user?.organization ?? '');
     _dateOfBirth = user?.dateOfBirth;
     _selectedGender = user?.gender;
+    _profiling = seededProfilingValue(
+      profileCategory: user?.profileCategory,
+      profileField: user?.profileField,
+      printingPreferences: user?.printingPreferences,
+    );
   }
 
   @override
@@ -45,6 +58,8 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
     _nameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
+    _courseController.dispose();
+    _organizationController.dispose();
     super.dispose();
   }
 
@@ -75,13 +90,20 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
     }
   }
 
-  void _save() {
-    ref.read(authProvider.notifier).completeProfile(
+  Future<void> _save() async {
+    final success = await ref.read(authProvider.notifier).completeProfile(
           fullName: _nameController.text.trim(),
           phone: _phoneController.text.trim(),
           gender: _selectedGender ?? '',
           dob: _dateOfBirth,
+          profileCategory: _profiling.profileCategory,
+          profileField: _profiling.profileField,
+          course: _courseController.text.trim(),
+          organization: _organizationController.text.trim(),
+          printingPreferences: _profiling.printingPreferences,
         );
+
+    if (!success || !mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Profile updated successfully')),
@@ -134,6 +156,15 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
                     label: 'Phone',
                     hintText: '+63 917 123 4567',
                     keyboardType: TextInputType.phone,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  ProfilingFormSection(
+                    value: _profiling,
+                    onChanged: (next) {
+                      setState(() => _profiling = next);
+                    },
+                    courseController: _courseController,
+                    organizationController: _organizationController,
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   // Date of birth
@@ -231,7 +262,7 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
             child: AppButton(
               label: 'Save Changes',
               isFullWidth: true,
-              onTap: _save,
+              onTap: () => _save(),
             ),
           ).animate()
             .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)

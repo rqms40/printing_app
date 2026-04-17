@@ -8,6 +8,11 @@ export interface User {
   phone_number?: string;
   gender?: string;
   date_of_birth?: string;
+  profile_category?: string;
+  profile_field?: string;
+  course?: string;
+  organization?: string;
+  printing_preferences?: string[];
   role: UserRole;
   is_profile_complete: boolean;
   is_active: boolean;

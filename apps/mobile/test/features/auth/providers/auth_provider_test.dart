@@ -34,6 +34,12 @@ void main() {
       expect(notifier.state.user!.email, 'maria@test.com');
       expect(notifier.state.user!.id, '1');
       expect(notifier.state.user!.isProfileComplete, true);
+      expect(notifier.state.user!.profileCategory, 'student');
+      expect(notifier.state.user!.profileField, 'architecture');
+      expect(
+        notifier.state.user!.printingPreferences,
+        contains('plotting_blueprints'),
+      );
     });
 
     test('devBypass sets authenticated state for driver', () {
@@ -75,7 +81,13 @@ void main() {
     });
 
     test('register sets error on connection failure (no server)', () async {
-      await notifier.register('new@test.com', 'password');
+      await notifier.register(
+        'new@test.com',
+        'password',
+        profileCategory: 'student',
+        profileField: 'architecture',
+        printingPreferences: const ['plotting_blueprints'],
+      );
 
       expect(notifier.state.isLoading, false);
       expect(notifier.state.errorMessage, isNotNull);
@@ -138,10 +150,18 @@ void main() {
         email: 'test@test.com',
         fullName: 'Test User',
         role: 'customer',
+        profileCategory: 'student',
+        profileField: 'architecture',
+        printingPreferences: ['plotting_blueprints'],
       );
-      final updated = user.copyWith(fullName: 'New Name', phone: '1234567890');
+      final updated = user.copyWith(
+        fullName: 'New Name',
+        phone: '1234567890',
+        printingPreferences: const ['technical_specs'],
+      );
       expect(updated.fullName, 'New Name');
       expect(updated.phone, '1234567890');
+      expect(updated.printingPreferences, const ['technical_specs']);
       expect(updated.email, 'test@test.com'); // preserved
       expect(updated.id, '1'); // preserved
     });
