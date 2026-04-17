@@ -121,9 +121,7 @@ describe('UsersService', () => {
 
   describe('findAllByRole', () => {
     it('returns all users with the given role', async () => {
-      const admins = [
-        { id: 1, email: 'admin@grid.ph', role: 'admin' } as User,
-      ];
+      const admins = [{ id: 1, email: 'admin@grid.ph', role: 'admin' } as User];
       repo.find.mockResolvedValue(admins);
 
       const result = await service.findAllByRole('admin');

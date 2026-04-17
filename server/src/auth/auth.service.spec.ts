@@ -84,7 +84,10 @@ describe('AuthService', () => {
       expect(notificationsService.createForAllAdmins).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'new_user',
-          metadata: expect.objectContaining({ userId: mockUser.id, email: mockUser.email }),
+          metadata: expect.objectContaining({
+            userId: mockUser.id,
+            email: mockUser.email,
+          }),
         }),
       );
     });

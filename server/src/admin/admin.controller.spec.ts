@@ -191,19 +191,28 @@ describe('AdminController analytics', () => {
   describe('getBadgeCounts', () => {
     it('returns correct newOrders and pendingTopUps counts', async () => {
       ordersRepo.count.mockResolvedValue(3);
-      (creditsService as jest.Mocked<Pick<CreditsService, 'getPendingCount'>>).getPendingCount.mockResolvedValue(2);
+      (
+        creditsService as jest.Mocked<Pick<CreditsService, 'getPendingCount'>>
+      ).getPendingCount.mockResolvedValue(2);
 
       const result = await controller.getBadgeCounts();
 
       expect(ordersRepo.count).toHaveBeenCalledWith({
-        where: { orderStatus: In([OrderStatus.ORDER_PLACED, OrderStatus.FILE_VERIFIED]) },
+        where: {
+          orderStatus: In([
+            OrderStatus.ORDER_PLACED,
+            OrderStatus.FILE_VERIFIED,
+          ]),
+        },
       });
       expect(result).toEqual({ newOrders: 3, pendingTopUps: 2 });
     });
 
     it('returns 0 for both when nothing is pending', async () => {
       ordersRepo.count.mockResolvedValue(0);
-      (creditsService as jest.Mocked<Pick<CreditsService, 'getPendingCount'>>).getPendingCount.mockResolvedValue(0);
+      (
+        creditsService as jest.Mocked<Pick<CreditsService, 'getPendingCount'>>
+      ).getPendingCount.mockResolvedValue(0);
 
       const result = await controller.getBadgeCounts();
 

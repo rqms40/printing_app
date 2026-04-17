@@ -88,20 +88,27 @@ describe('NotificationsService', () => {
 
   describe('markAsRead', () => {
     it('should set isRead to true', async () => {
-      const unreadNotif = { ...mockNotification, isRead: false } as Notification;
+      const unreadNotif = {
+        ...mockNotification,
+        isRead: false,
+      } as Notification;
       repo.findOne.mockResolvedValue(unreadNotif);
       repo.save.mockImplementation(async (n) => n as Notification);
 
       const result = await service.markAsRead(1, 1);
 
-      expect(repo.findOne).toHaveBeenCalledWith({ where: { id: 1, userId: 1 } });
+      expect(repo.findOne).toHaveBeenCalledWith({
+        where: { id: 1, userId: 1 },
+      });
       expect(result.isRead).toBe(true);
     });
 
     it('should throw NotFoundException if notification not found', async () => {
       repo.findOne.mockResolvedValue(null);
 
-      await expect(service.markAsRead(999, 1)).rejects.toThrow(NotFoundException);
+      await expect(service.markAsRead(999, 1)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -139,14 +146,15 @@ describe('NotificationsService', () => {
 
   describe('createForAllAdmins', () => {
     it('batch-inserts one row per admin and broadcasts', async () => {
-      const admins = [mockAdmin, { id: 11, email: 'admin2@grid.ph', role: 'admin' } as User];
+      const admins = [
+        mockAdmin,
+        { id: 11, email: 'admin2@grid.ph', role: 'admin' } as User,
+      ];
       usersService.findAllByRole.mockResolvedValue(admins);
 
       const row1 = { ...mockNotification, userId: 10 } as Notification;
       const row2 = { ...mockNotification, userId: 11, id: 2 } as Notification;
-      repo.create
-        .mockReturnValueOnce(row1)
-        .mockReturnValueOnce(row2);
+      repo.create.mockReturnValueOnce(row1).mockReturnValueOnce(row2);
       repo.save.mockResolvedValue([row1, row2] as any);
 
       await service.createForAllAdmins({

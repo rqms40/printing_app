@@ -13,6 +13,8 @@ import {
 import { CreditSettings } from './entities/credit-settings.entity';
 import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { FirebaseService } from '../firebase/firebase.service';
+import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { RequestTopUpDto, UpdateSettingsDto } from './dto/credits.dto';
 
 @Injectable()
@@ -24,6 +26,8 @@ export class CreditsService {
     private settingsRepo: Repository<CreditSettings>,
     private usersService: UsersService,
     private notificationsService: NotificationsService,
+    private firebaseService: FirebaseService,
+    private notificationsGateway: NotificationsGateway,
   ) {}
 
   async getSettings(): Promise<CreditSettings> {
@@ -108,6 +112,26 @@ export class CreditsService {
       type: 'credit',
     });
 
+    try {
+      const fcmToken = await this.usersService.getFcmToken(user.id);
+      if (fcmToken) {
+        await this.firebaseService.sendToDevice(
+          fcmToken,
+          'Top-Up Approved! 🎉',
+          `${tx.amountCredits} Credits have been added to your account.`,
+          { type: 'credits_update', credits: user.credits.toString() },
+        );
+      }
+    } catch {
+      // push failure must never break the approve flow
+    }
+
+    try {
+      this.notificationsGateway.notifyUserCreditsUpdate(user.id, user.credits);
+    } catch {
+      // non-critical
+    }
+
     return savedTx;
   }
 
@@ -127,6 +151,15 @@ export class CreditsService {
         message: `Your top-up request of ${tx.amountCredits} Credits was rejected.`,
         type: 'topup_rejected',
       });
+      const fcmToken = await this.usersService.getFcmToken(tx.userId);
+      if (fcmToken) {
+        await this.firebaseService.sendToDevice(
+          fcmToken,
+          'Top-Up Rejected',
+          `Your top-up of ${tx.amountCredits} Credits was not approved.`,
+          { type: 'credits_update' },
+        );
+      }
     } catch {
       // notification failure must not break the reject flow
     }

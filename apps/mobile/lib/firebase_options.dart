@@ -28,15 +28,9 @@ class DefaultFirebaseOptions {
           'you can reconfigure this by running the FlutterFire CLI again.',
         );
       case TargetPlatform.macOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return macos;
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -66,4 +60,24 @@ class DefaultFirebaseOptions {
     projectId: 'grid-print-85681',
     storageBucket: 'grid-print-85681.firebasestorage.app',
   );
+
+  static const FirebaseOptions macos = FirebaseOptions(
+    apiKey: 'AIzaSyA3lpb2O4iU0_CxW3gt7tlsysMLFCp2sHE',
+    appId: '1:3582834609:ios:f331cd3dd3b20cfe862f90',
+    messagingSenderId: '3582834609',
+    projectId: 'grid-print-85681',
+    storageBucket: 'grid-print-85681.firebasestorage.app',
+    iosBundleId: 'com.example.printingApp',
+  );
+
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyBo0cT2CVQzrZjkwXffimq1P6_Ou336lvs',
+    appId: '1:3582834609:web:e567116248b62f4b862f90',
+    messagingSenderId: '3582834609',
+    projectId: 'grid-print-85681',
+    authDomain: 'grid-print-85681.firebaseapp.com',
+    storageBucket: 'grid-print-85681.firebasestorage.app',
+    measurementId: 'G-R64GYNJP0Q',
+  );
+
 }

@@ -33,5 +33,10 @@ jobs:
       - name: Run tests
         run: flutter test
 
+      - name: Stub google-services.json for web build
+        run: |
+          mkdir -p android/app
+          echo '{"project_info":{"project_id":"grid-print-85681"},"client":[{"client_info":{"mobilesdk_app_id":"1:3582834609:android:8cb382ce6878312f862f90","android_client_info":{"package_name":"com.example.printing_app"}},"oauth_client":[],"api_key":[],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}' > android/app/google-services.json
+
       - name: Build web (verify compilation)
-        run: flutter build web --no-tree-shake-icons
+        run: flutter build web --release --no-tree-shake-icons

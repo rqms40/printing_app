@@ -3,7 +3,9 @@ import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import { OrdersGateway } from './orders.gateway';
 
-const makeClient = (token?: string): jest.Mocked<Pick<Socket, 'join' | 'disconnect'>> & {
+const makeClient = (
+  token?: string,
+): jest.Mocked<Pick<Socket, 'join' | 'disconnect'>> & {
   handshake: { auth: Record<string, unknown> };
 } => ({
   handshake: { auth: token ? { token } : {} },
@@ -19,10 +21,7 @@ describe('OrdersGateway', () => {
     jwtService = { verifyAsync: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        OrdersGateway,
-        { provide: JwtService, useValue: jwtService },
-      ],
+      providers: [OrdersGateway, { provide: JwtService, useValue: jwtService }],
     }).compile();
 
     gateway = module.get<OrdersGateway>(OrdersGateway);
@@ -32,7 +31,10 @@ describe('OrdersGateway', () => {
 
   describe('handleConnection', () => {
     it('joins admin_orders room when JWT has role=admin', async () => {
-      (jwtService.verifyAsync as jest.Mock).mockResolvedValue({ sub: 1, role: 'admin' });
+      (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
+        sub: 1,
+        role: 'admin',
+      });
       const client = makeClient('valid-admin-token');
 
       await gateway.handleConnection(client as unknown as Socket);
@@ -43,7 +45,10 @@ describe('OrdersGateway', () => {
     });
 
     it('does NOT join admin_orders for a non-admin JWT', async () => {
-      (jwtService.verifyAsync as jest.Mock).mockResolvedValue({ sub: 2, role: 'customer' });
+      (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
+        sub: 2,
+        role: 'customer',
+      });
       const client = makeClient('customer-token');
 
       await gateway.handleConnection(client as unknown as Socket);
@@ -62,7 +67,9 @@ describe('OrdersGateway', () => {
     });
 
     it('disconnects when JWT verification throws', async () => {
-      (jwtService.verifyAsync as jest.Mock).mockRejectedValue(new Error('jwt expired'));
+      (jwtService.verifyAsync as jest.Mock).mockRejectedValue(
+        new Error('jwt expired'),
+      );
       const client = makeClient('expired-token');
 
       await gateway.handleConnection(client as unknown as Socket);
@@ -92,7 +99,11 @@ describe('OrdersGateway', () => {
       const toMock = jest.fn().mockReturnValue({ emit: emitMock });
       gateway.server = { to: toMock } as unknown as Server;
 
-      const order = { id: 7, orderId: 'ORD-10007', orderStatus: 'printing_in_progress' };
+      const order = {
+        id: 7,
+        orderId: 'ORD-10007',
+        orderStatus: 'printing_in_progress',
+      };
       gateway.notifyOrderUpdate('ORD-10007', order);
 
       expect(toMock).toHaveBeenCalledWith('order_ORD-10007');

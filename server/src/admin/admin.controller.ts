@@ -341,7 +341,9 @@ export class AdminController {
   @Get('badge-counts')
   async getBadgeCounts() {
     const newOrders = await this.ordersRepo.count({
-      where: { orderStatus: In([OrderStatus.ORDER_PLACED, OrderStatus.FILE_VERIFIED]) },
+      where: {
+        orderStatus: In([OrderStatus.ORDER_PLACED, OrderStatus.FILE_VERIFIED]),
+      },
     });
     const pendingTopUps = await this.creditsService.getPendingCount();
     return { newOrders, pendingTopUps };

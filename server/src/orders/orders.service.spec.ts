@@ -120,7 +120,10 @@ describe('OrdersService', () => {
       await service.create({ userId: 1 } as Partial<Order>);
 
       expect(notificationsService.createForAllAdmins).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'order_placed', orderRef: mockOrder.orderId }),
+        expect.objectContaining({
+          type: 'order_placed',
+          orderRef: mockOrder.orderId,
+        }),
       );
     });
   });
@@ -175,7 +178,10 @@ describe('OrdersService', () => {
       await service.updateStatus(1, 'cancelled');
 
       expect(notificationsService.createForAllAdmins).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'order_cancelled', orderRef: mockOrder.orderId }),
+        expect.objectContaining({
+          type: 'order_cancelled',
+          orderRef: mockOrder.orderId,
+        }),
       );
     });
 
@@ -186,7 +192,10 @@ describe('OrdersService', () => {
       await service.updateStatus(1, 'file_declined');
 
       expect(notificationsService.createForAllAdmins).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'order_declined', orderRef: mockOrder.orderId }),
+        expect.objectContaining({
+          type: 'order_declined',
+          orderRef: mockOrder.orderId,
+        }),
       );
     });
 
