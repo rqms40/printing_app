@@ -4,6 +4,7 @@ import {
   IsEnum,
   IsNotEmpty,
   IsOptional,
+  Matches,
   IsString,
   MinLength,
 } from 'class-validator';
@@ -27,6 +28,7 @@ export class RegisterDto {
   @ApiProperty({ example: 'Maria Santos' })
   @IsString()
   @IsNotEmpty()
+  @Matches(/\S/)
   fullName: string;
 
   @ApiProperty({ enum: ProfileCategory })
