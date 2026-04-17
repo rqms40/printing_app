@@ -132,6 +132,31 @@ export function TamSurveyList() {
           )}
         />
         <Table.Column
+          title="Show in Feed"
+          dataIndex="is_approved_for_feed"
+          align="center"
+          width={110}
+          render={(val, record: any) => (
+            <Switch
+              checked={!!val}
+              size="small"
+              onClick={(checked, e) => {
+                e.stopPropagation();
+              }}
+              onChange={async (checked) => {
+                try {
+                  await apiClient.patch(`/admin/tam-surveys/${record.id}/approve`, {
+                    isApprovedForFeed: checked,
+                  });
+                  setSurveys(prev => prev.map(s => s.id === record.id ? { ...s, is_approved_for_feed: checked } : s));
+                } catch (err) {
+                  console.error("Failed to approve/unapprove survey for feed", err);
+                }
+              }}
+            />
+          )}
+        />
+        <Table.Column
           title=""
           width={50}
           render={(_: unknown, record: any) => (

@@ -479,6 +479,7 @@ export class AdminController {
       user_name: s.user?.fullName ?? s.user?.email ?? 'Unknown',
       open_forum_feedback: s.openForumFeedback ?? null,
       survey_data: s.surveyData,
+      is_approved_for_feed: s.isApprovedForFeed,
       created_at: s.createdAt,
     }));
   }
@@ -496,7 +497,18 @@ export class AdminController {
       user_name: s.user?.fullName ?? s.user?.email ?? 'Unknown',
       open_forum_feedback: s.openForumFeedback ?? null,
       survey_data: s.surveyData,
+      is_approved_for_feed: s.isApprovedForFeed,
       created_at: s.createdAt,
     };
+  }
+
+  // Toggle TAM Survey approval for feed
+  @Patch('tam-surveys/:id/approve')
+  async toggleSurveyApproval(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('isApprovedForFeed') isApprovedForFeed: boolean,
+  ) {
+    await this.tamSurveysRepo.update(id, { isApprovedForFeed });
+    return { success: true, isApprovedForFeed };
   }
 }

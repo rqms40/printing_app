@@ -27,6 +27,9 @@ export class TamSurvey {
   @Column({ name: 'open_forum_feedback', type: 'text', nullable: true })
   openForumFeedback: string;
 
+  @Column({ name: 'is_approved_for_feed', type: 'boolean', default: false })
+  isApprovedForFeed: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
