@@ -88,7 +88,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final unreadCount = ref.watch(unreadNotificationsCountProvider);
 
-    final credits = int.tryParse(authState.user?.credits ?? '0') ?? 0;
+    final creditsStr = authState.user?.credits ?? '0.00';
+    final credits = double.tryParse(creditsStr)?.toInt() ?? 0;
 
     return ColoredBox(
       color: colors.background,

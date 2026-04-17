@@ -42,7 +42,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   Widget build(BuildContext context) {
     final colors = _colors(context);
     final state = ref.watch(orderFlowProvider);
+    final authState = ref.watch(authProvider);
     final total = state.totalPrice + state.deliveryFee;
+
+    final creditsStr = authState.user?.credits ?? '0.00';
+    final currentCredits = double.tryParse(creditsStr) ?? 0.0;
+    final hasEnoughCredits = currentCredits >= total;
 
     if (_isSuccess) {
       return _buildSuccessView(colors);
@@ -102,6 +107,36 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                     subtitle: 'Pay when you receive your order',
                     colors: colors,
                   ),
+                  const SizedBox(height: AppSpacing.sm),
+                  _paymentCard(
+                    method: PaymentMethod.gridCredits,
+                    icon: null,
+                    iconWidget: Icon(
+                      Icons.apps_rounded,
+                      size: 24,
+                      color: colors.brand,
+                    ),
+                    label: 'GRID Credits',
+                    subtitleWidget: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          formatCurrency(currentCredits),
+                          style: AppTypography.bodyBold.copyWith(
+                            color: hasEnoughCredits ? colors.brand : colors.error,
+                          ),
+                        ),
+                        Text(
+                          hasEnoughCredits ? 'Pay using your credits.' : 'Insufficient wallet balance.',
+                          style: AppTypography.caption.copyWith(
+                            color: hasEnoughCredits ? colors.onSurfaceDim : colors.error,
+                          ),
+                        ),
+                      ],
+                    ),
+                    colors: colors,
+                    isDisabled: !hasEnoughCredits,
+                  ),
                   const SizedBox(height: AppSpacing.xl),
 
                   // Total display
@@ -157,18 +192,24 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     required PaymentMethod method,
     String? icon,
     dynamic iconData,
+    Widget? iconWidget,
     required String label,
-    required String subtitle,
+    String? subtitle,
+    Widget? subtitleWidget,
     required AppColorSet colors,
+    bool isDisabled = false,
   }) {
     final isSelected = _selectedMethod == method;
+    final isGridCredits = method == PaymentMethod.gridCredits;
 
-    return AppCard(
-      onTap: () {
+    final card = AppCard(
+      onTap: isDisabled ? null : () {
         setState(() => _selectedMethod = method);
         ref.read(orderFlowProvider.notifier).setPaymentMethod(method);
       },
-      accentColor: isSelected ? colors.accent : null,
+      accentColor: isSelected && !isGridCredits ? colors.accent : null,
+      borderColor: isGridCredits && !isDisabled ? colors.brand : (isGridCredits ? colors.outline : null),
+      borderWidth: isGridCredits ? 1.0 : null,
       child: Row(
         children: [
           // Premium letter/icon container with subtle border ring
@@ -186,7 +227,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               ),
             ),
             child: Center(
-              child: icon != null
+              child: iconWidget ?? (icon != null
                   ? Text(
                       icon,
                       style: AppTypography.h1.copyWith(
@@ -194,7 +235,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                         fontSize: 22,
                       ),
                     )
-                  : HugeIcon(icon: iconData!, size: 24, color: colors.accent),
+                  : HugeIcon(icon: iconData!, size: 24, color: isGridCredits ? colors.brand : colors.accent)),
             ),
           ),
           const SizedBox(width: AppSpacing.md),
@@ -208,11 +249,14 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                       .copyWith(color: colors.onBackground),
                 ),
                 const SizedBox(height: AppSpacing.xs),
-                Text(
-                  subtitle,
-                  style: AppTypography.caption
-                      .copyWith(color: colors.onSurfaceDim),
-                ),
+                if (subtitleWidget != null)
+                  subtitleWidget
+                else if (subtitle != null)
+                  Text(
+                    subtitle,
+                    style: AppTypography.caption
+                        .copyWith(color: colors.onSurfaceDim),
+                  ),
               ],
             ),
           ),
@@ -221,6 +265,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         ],
       ),
     );
+
+    return isDisabled ? Opacity(opacity: 0.6, child: card) : card;
   }
 
   Future<void> _onPay() async {

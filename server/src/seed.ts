@@ -96,6 +96,7 @@ async function seed() {
   await ds.query('DELETE FROM addresses');
   await ds.query('DELETE FROM driver_profiles');
   await ds.query('DELETE FROM file_metadata');
+  await ds.query('DELETE FROM tam_surveys');
   await ds.query('DELETE FROM users');
 
   // Reset all sequences so IDs start fresh
@@ -113,6 +114,7 @@ async function seed() {
   await ds.query("SELECT setval('service_categories_id_seq', 1, false)");
   await ds.query("SELECT setval('spec_options_id_seq', 1, false)");
   await ds.query("SELECT setval('service_addons_id_seq', 1, false)");
+  await ds.query("SELECT setval('tam_surveys_id_seq', 1, false)");
 
   for (const u of users) {
     await ds.query(
@@ -739,6 +741,33 @@ async function seed() {
     ],
   );
   console.log('✅ 2 service addons created');
+
+  // ─── TAM Surveys ────────────────────────────────────────────────────────
+  const mockSurveys = [
+    {
+      user_id: mariaId,
+      survey_data: JSON.stringify({
+        0: 4, 1: 4, 2: 4, 3: 4, 4: 5, 5: 5, 6: 4, 7: 5, 8: 5, 9: 5
+      }),
+      open_forum_feedback: "GRID is amazing! It saved me so much time printing my architectural plans. The UI could be slightly better though.",
+    },
+    {
+      user_id: juanId,
+      survey_data: JSON.stringify({
+        0: 3, 1: 2, 2: 3, 3: 3, 4: 4, 5: 4, 6: 3, 7: 4, 8: 3, 9: 4
+      }),
+      open_forum_feedback: "It's alright, but sometimes the delivery assignments mismatch map locations.",
+    }
+  ];
+
+  for(const s of mockSurveys) {
+    await ds.query(
+      `INSERT INTO tam_surveys (user_id, survey_data, open_forum_feedback, created_at, updated_at)
+       VALUES ($1, $2, $3, NOW(), NOW())`,
+       [s.user_id, s.survey_data, s.open_forum_feedback]
+    );
+  }
+  console.log('✅ 2 TAM surveys created');
 
   console.log('\n🎉 Seed complete!\n');
   console.log('Login credentials (all use password: password123):');

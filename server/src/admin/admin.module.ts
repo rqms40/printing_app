@@ -9,6 +9,8 @@ import { OrderStatusHistory } from '../orders/entities/order-status-history.enti
 import { OrdersModule } from '../orders/orders.module';
 import { DriversModule } from '../drivers/drivers.module';
 import { CreditsModule } from '../credits/credits.module';
+import { TamSurvey } from '../tam-surveys/entities/tam-survey.entity';
+import { TamSurveySettings } from '../tam-surveys/entities/tam-survey-settings.entity';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { CreditsModule } from '../credits/credits.module';
       PaperSpec,
       ThreeDSpec,
       OrderStatusHistory,
+      TamSurvey,
+      TamSurveySettings,
     ]),
     OrdersModule,
     DriversModule,

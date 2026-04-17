@@ -20,6 +20,8 @@ import { Repository, In } from 'typeorm';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { CreditsService } from '../credits/credits.service';
+import { TamSurvey } from '../tam-surveys/entities/tam-survey.entity';
+import { TamSurveySettings } from '../tam-surveys/entities/tam-survey-settings.entity';
 
 type AnalyticsPeriod = '7D' | '30D' | '6M';
 type AnalyticsPoint = { label: string; value: number };
@@ -54,7 +56,23 @@ export class AdminController {
     private ordersRepo: Repository<Order>,
     @InjectRepository(User)
     private usersRepo: Repository<User>,
+    @InjectRepository(TamSurvey)
+    private tamSurveysRepo: Repository<TamSurvey>,
+    @InjectRepository(TamSurveySettings)
+    private tamSurveySettingsRepo: Repository<TamSurveySettings>,
   ) {}
+
+  @Patch('tam-surveys/settings')
+  async updateTamSurveySettings(@Body() body: { isEnabled: boolean }) {
+    let settings = await this.tamSurveySettingsRepo.findOne({ where: { id: 1 } });
+    if (!settings) {
+      settings = this.tamSurveySettingsRepo.create({ id: 1, isEnabled: body.isEnabled });
+    } else {
+      settings.isEnabled = body.isEnabled;
+    }
+    await this.tamSurveySettingsRepo.save(settings);
+    return settings;
+  }
 
   private normalizeAnalyticsPeriod(period?: string): AnalyticsPeriod {
     return period === '7D' || period === '30D' || period === '6M'
@@ -445,5 +463,40 @@ export class AdminController {
   async getVolume() {
     const orders = await this.getAnalyticsOrders();
     return this.buildMonthlySeries(orders, 'volume', new Date());
+  }
+
+  // TAM Surveys list
+  @Get('tam-surveys')
+  async getTamSurveys() {
+    const surveys = await this.tamSurveysRepo.find({
+      relations: ['user'],
+      order: { createdAt: 'DESC' },
+    });
+    
+    return surveys.map((s) => ({
+      id: s.id,
+      user_id: s.userId,
+      user_name: s.user?.fullName ?? s.user?.email ?? 'Unknown',
+      open_forum_feedback: s.openForumFeedback ?? null,
+      survey_data: s.surveyData,
+      created_at: s.createdAt,
+    }));
+  }
+
+  // TAM Survey short view
+  @Get('tam-surveys/:id')
+  async getTamSurveyShow(@Param('id', ParseIntPipe) id: number) {
+    const s = await this.tamSurveysRepo.findOneOrFail({
+      where: { id },
+      relations: ['user'],
+    });
+    return {
+      id: s.id,
+      user_id: s.userId,
+      user_name: s.user?.fullName ?? s.user?.email ?? 'Unknown',
+      open_forum_feedback: s.openForumFeedback ?? null,
+      survey_data: s.surveyData,
+      created_at: s.createdAt,
+    };
   }
 }

@@ -97,6 +97,11 @@ export class CreditsService {
     user.credits = Number(user.credits) + Number(tx.amountCredits);
     await this.usersService.updateProfile(user.id, { credits: user.credits });
 
+    await this.notificationsService.triggerCreditsUpdate(
+      user.id,
+      Number(user.credits),
+    );
+
     tx.status = CreditTransactionStatus.APPROVED;
     const savedTx = await this.transactionRepo.save(tx);
 
@@ -168,6 +173,11 @@ export class CreditsService {
 
     user.credits = Number(user.credits) - amountCredits;
     await this.usersService.updateProfile(user.id, { credits: user.credits });
+
+    await this.notificationsService.triggerCreditsUpdate(
+      user.id,
+      Number(user.credits),
+    );
 
     const tx = this.transactionRepo.create({
       userId,

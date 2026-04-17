@@ -8,8 +8,18 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/profile/providers/profile_provider.dart';
 import 'package:printing_app/shared/providers/theme_provider.dart';
+import 'package:printing_app/shared/services/api_client.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/confirmation_dialog.dart';
+
+final surveyVisibilityProvider = FutureProvider.autoDispose<bool>((ref) async {
+  try {
+    final response = await ApiClient.instance.get('/tam-surveys/settings');
+    return response.data['isEnabled'] == true;
+  } catch (e) {
+    return true;
+  }
+});
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -94,6 +104,8 @@ class _ProfileTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final showSurvey = ref.watch(surveyVisibilityProvider).value ?? false;
+
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -230,17 +242,18 @@ class _ProfileTab extends ConsumerWidget {
           const SizedBox(height: AppSpacing.lg),
 
           // FEEDBACK section
-          _SectionHeader(label: 'FEEDBACK', colors: colors)
-              .animate()
-              .fadeIn(duration: 400.ms, delay: 175.ms, curve: Curves.easeOut),
-          _MenuRow(
-            icon: HugeIcons.strokeRoundedTaskEdit01,
-            title: 'TAM Survey',
-            onTap: () => context.push('/customer/profile/survey'),
-            colors: colors,
-          ),
-
-          const SizedBox(height: AppSpacing.lg),
+          if (showSurvey) ...[
+            _SectionHeader(label: 'FEEDBACK', colors: colors)
+                .animate()
+                .fadeIn(duration: 400.ms, delay: 175.ms, curve: Curves.easeOut),
+            _MenuRow(
+              icon: HugeIcons.strokeRoundedTaskEdit01,
+              title: 'Survey',
+              onTap: () => context.push('/customer/profile/survey'),
+              colors: colors,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+          ],
 
           // Sign out
           _MenuRow(

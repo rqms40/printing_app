@@ -58,6 +58,14 @@ export class NotificationsService {
     return this.notifRepo.count({ where: { userId, isRead: false } });
   }
 
+  async triggerCreditsUpdate(userId: number, newCredits: number): Promise<void> {
+    try {
+      this.gateway.notifyUserCreditsUpdate(userId, newCredits);
+    } catch (err) {
+      this.logger.warn(`notifyUserCreditsUpdate failed: ${err}`);
+    }
+  }
+
   async createForAllAdmins(data: {
     title: string;
     message: string;
