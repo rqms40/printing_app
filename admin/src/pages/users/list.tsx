@@ -1,26 +1,16 @@
 import { List } from "@refinedev/antd";
-import { Table, Tag, Avatar, Space, Typography, Input, Tooltip } from "antd";
+import { Table, Tag, Avatar, Space, Typography, Input, Tooltip, Button, Alert } from "antd";
 import { SearchOutlined, MailOutlined } from "@ant-design/icons";
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { formatDate, formatRelativeTime } from "@/utils/format";
-import { apiClient } from "@/providers/api-client";
+import { buildAdminUsersViewModel, loadAdminUsers } from "./data";
 import {
   humanizeEnumValue,
-  normalizeAdminUsers,
   type AdminUserRecord,
 } from "@/utils/api-normalizers";
 
 const { Text } = Typography;
-
-const mockUsers = [
-  { id: 1, full_name: "Maria Santos", email: "maria.santos@gmail.com", phone_number: "+639171234567", role: "customer" as const, is_active: true, is_profile_complete: true, profile_category: "student", profile_field: "architecture", course: "BS Architecture", organization: "Mapua University", printing_preferences: ["plotting_blueprints", "high_res_color"], created_at: "2025-12-25T00:00:00Z", updated_at: "2025-12-25T00:00:00Z" },
-  { id: 2, full_name: "Jose Garcia", email: "jose.garcia@gmail.com", phone_number: "+639181234567", role: "customer" as const, is_active: true, is_profile_complete: true, profile_category: "student", profile_field: "engineering", course: "BS Civil Engineering", organization: "TIP Manila", printing_preferences: ["technical_specs"], created_at: "2026-01-10T00:00:00Z", updated_at: "2026-01-10T00:00:00Z" },
-  { id: 3, full_name: "Ana Reyes", email: "ana.reyes@gmail.com", phone_number: "+639191234567", role: "customer" as const, is_active: true, is_profile_complete: true, profile_category: "student", profile_field: "medical_nursing", course: "BS Nursing", organization: "UST", printing_preferences: ["high_res_color"], created_at: "2026-02-05T00:00:00Z", updated_at: "2026-02-05T00:00:00Z" },
-  { id: 4, full_name: "Pedro Cruz", email: "pedro.cruz@gmail.com", phone_number: "+639201234567", role: "customer" as const, is_active: false, is_profile_complete: false, profile_category: "student", profile_field: "law_arts_others", course: "Fine Arts", organization: "UP Diliman", printing_preferences: ["document_printing"], created_at: "2026-01-20T00:00:00Z", updated_at: "2026-01-20T00:00:00Z" },
-  { id: 10, full_name: "Juan Reyes", email: "juan.reyes@gmail.com", phone_number: "+639211234567", role: "driver" as const, is_active: true, is_profile_complete: true, profile_category: "professional", profile_field: "engineer_contractor", course: "Field Ops", organization: "Grid Logistics", printing_preferences: ["technical_specs"], created_at: "2026-01-15T00:00:00Z", updated_at: "2026-01-15T00:00:00Z" },
-  { id: 11, full_name: "Marco dela Cruz", email: "marco.delacruz@gmail.com", phone_number: "+639221234567", role: "driver" as const, is_active: true, is_profile_complete: true, profile_category: "professional", profile_field: "architect_designer", course: "Project Coordinator", organization: "BuildLab Studio", printing_preferences: ["plotting_blueprints"], created_at: "2026-02-01T00:00:00Z", updated_at: "2026-02-01T00:00:00Z" },
-  { id: 100, full_name: "Admin User", email: "admin@grid.ph", phone_number: "+639001234567", role: "admin" as const, is_active: true, is_profile_complete: true, profile_category: "professional", profile_field: "business_corporate", course: "Operations", organization: "GRID HQ", printing_preferences: ["marketing_materials"], created_at: "2025-11-01T00:00:00Z", updated_at: "2025-11-01T00:00:00Z" },
-];
 
 const ROLE_COLORS: Record<string, string> = {
   customer: "blue",
@@ -42,31 +32,76 @@ const AVATAR_FG: Record<string, string> = {
 
 export function UserList() {
   const [search, setSearch] = useState("");
-  const [users, setUsers] = useState<AdminUserRecord[]>(
-    mockUsers as AdminUserRecord[],
-  );
+  const [users, setUsers] = useState<AdminUserRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    void apiClient.get("/admin/users")
-      .then((res) => setUsers(normalizeAdminUsers(res.data)))
-      .catch(() => { /* keep mock fallback */ })
-      .finally(() => setLoading(false));
-  }, []);
+    let active = true;
 
+    setLoading(true);
+    setError(null);
+
+    void loadAdminUsers()
+      .then((loadedUsers) => {
+        if (!active) {
+          return;
+        }
+
+        setUsers(loadedUsers);
+      })
+      .catch((cause: unknown) => {
+        if (!active) {
+          return;
+        }
+
+        setUsers([]);
+        setError(cause instanceof Error ? cause.message : "Unable to load users");
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [reloadKey]);
+
+  const view = buildAdminUsersViewModel({
+    loading,
+    users,
+    error,
+  });
+
+  const visibleUsers = view.users;
   const filtered = search
-    ? users.filter(
+    ? visibleUsers.filter(
         (u) =>
           (u.full_name?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
           u.email.toLowerCase().includes(search.toLowerCase()) ||
           (u.profile_field?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
           (u.organization?.toLowerCase().includes(search.toLowerCase()) ?? false),
       )
-    : users;
+    : visibleUsers;
 
   return (
     <List title="Users">
       <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+        {view.kind === "error" ? (
+          <Alert
+            type="error"
+            showIcon
+            message={view.message}
+            action={
+              <Button type="link" onClick={() => setReloadKey((value) => value + 1)}>
+                {view.retryLabel}
+              </Button>
+            }
+          />
+        ) : null}
         <Space style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
           <Input
             placeholder="Search by name or email..."
@@ -78,13 +113,13 @@ export function UserList() {
           />
           <Space>
             <Tag color="blue" style={{ margin: 0, padding: "2px 10px" }}>
-              {users.filter((u) => u.role === "customer").length} Customers
+              {visibleUsers.filter((u) => u.role === "customer").length} Customers
             </Tag>
             <Tag color="gold" style={{ margin: 0, padding: "2px 10px" }}>
-              {users.filter((u) => u.role === "driver").length} Drivers
+              {visibleUsers.filter((u) => u.role === "driver").length} Drivers
             </Tag>
             <Tag color="red" style={{ margin: 0, padding: "2px 10px" }}>
-              {users.filter((u) => u.role === "admin").length} Admins
+              {visibleUsers.filter((u) => u.role === "admin").length} Admins
             </Tag>
           </Space>
         </Space>
@@ -226,6 +261,18 @@ export function UserList() {
               new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
             }
             defaultSortOrder="descend"
+          />
+          <Table.Column
+            title="Actions"
+            width={100}
+            fixed="right"
+            render={(_: unknown, record: AdminUserRecord) => (
+              <Link to={`/users/show/${record.id}`}>
+                <Button type="link" style={{ paddingInline: 0 }}>
+                  View
+                </Button>
+              </Link>
+            )}
           />
         </Table>
       </Space>

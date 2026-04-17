@@ -36,6 +36,7 @@ import { OrderList } from "@/pages/orders/list";
 import { OrderShow } from "@/pages/orders/show";
 import { DriverList } from "@/pages/drivers/list";
 import { UserList } from "@/pages/users/list";
+import { UserShow } from "@/pages/users/show";
 import { ProductList } from "@/pages/products/list";
 import { ProductOptionsPage } from "@/pages/products/options";
 import { AddonList } from "@/pages/products-addons/list";
@@ -72,6 +73,7 @@ function App() {
               {
                 name: "users",
                 list: "/users",
+                show: "/users/show/:id",
                 meta: { label: "Users", icon: <TeamOutlined /> },
               },
               {
@@ -132,7 +134,10 @@ function App() {
                   <Route path="show/:id" element={<OrderShow />} />
                 </Route>
                 <Route path="/drivers" element={<DriverList />} />
-                <Route path="/users" element={<UserList />} />
+                <Route path="/users">
+                  <Route index element={<UserList />} />
+                  <Route path="show/:id" element={<UserShow />} />
+                </Route>
                 <Route path="/products">
                   <Route index element={<ProductList />} />
                   <Route path=":id/options" element={<ProductOptionsPage />} />
