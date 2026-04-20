@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { User, UserRole } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import {
+  AgeRange,
   isProfileComplete,
   PrintingPreference,
   ProfileCategory,
@@ -12,8 +13,10 @@ import {
 
 type UserProfilingInput = {
   fullName?: string;
+  nickname?: string;
   phoneNumber?: string;
   gender?: string;
+  ageRange?: AgeRange;
   dateOfBirth?: string;
   profileCategory?: ProfileCategory;
   profileField?: ProfileField;
@@ -92,12 +95,20 @@ export class UsersService {
       normalized.fullName = data.fullName?.trim() || null;
     }
 
+    if (data.nickname !== undefined) {
+      normalized.nickname = data.nickname?.trim() || null;
+    }
+
     if (data.phoneNumber !== undefined) {
       normalized.phoneNumber = data.phoneNumber?.trim() || null;
     }
 
     if (data.gender !== undefined) {
       normalized.gender = data.gender?.trim() || null;
+    }
+
+    if (data.ageRange !== undefined) {
+      normalized.ageRange = data.ageRange ?? null;
     }
 
     if (data.dateOfBirth !== undefined) {

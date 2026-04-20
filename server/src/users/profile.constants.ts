@@ -22,6 +22,14 @@ export enum PrintingPreference {
   MARKETING_MATERIALS = 'marketing_materials',
 }
 
+export enum AgeRange {
+  UNDER_18 = 'under_18',
+  FROM_18_TO_24 = '18_24',
+  FROM_25_TO_34 = '25_34',
+  FROM_35_TO_44 = '35_44',
+  FROM_45_PLUS = '45_plus',
+}
+
 export type ProfileCompletionFields = {
   fullName?: string | null;
   profileCategory?: ProfileCategory | null;

@@ -6,8 +6,10 @@ class User {
     required this.uid,
     required this.email,
     this.fullName,
+    this.nickname,
     this.phoneNumber,
     this.gender,
+    this.ageRange,
     this.dateOfBirth,
     this.profileCategory,
     this.profileField,
@@ -26,8 +28,10 @@ class User {
   final String uid;
   final String email;
   final String? fullName;
+  final String? nickname;
   final String? phoneNumber;
   final String? gender;
+  final String? ageRange;
   final DateTime? dateOfBirth;
   final String? profileCategory;
   final String? profileField;
@@ -46,8 +50,10 @@ class User {
     String? uid,
     String? email,
     String? fullName,
+    String? nickname,
     String? phoneNumber,
     String? gender,
+    String? ageRange,
     DateTime? dateOfBirth,
     String? profileCategory,
     String? profileField,
@@ -66,8 +72,10 @@ class User {
       uid: uid ?? this.uid,
       email: email ?? this.email,
       fullName: fullName ?? this.fullName,
+      nickname: nickname ?? this.nickname,
       phoneNumber: phoneNumber ?? this.phoneNumber,
       gender: gender ?? this.gender,
+      ageRange: ageRange ?? this.ageRange,
       dateOfBirth: dateOfBirth ?? this.dateOfBirth,
       profileCategory: profileCategory ?? this.profileCategory,
       profileField: profileField ?? this.profileField,
@@ -84,7 +92,8 @@ class User {
   }
 
   @override
-  String toString() => 'User(id: $id, email: $email, role: ${role.displayName})';
+  String toString() =>
+      'User(id: $id, email: $email, role: ${role.displayName})';
 
   @override
   bool operator ==(Object other) =>

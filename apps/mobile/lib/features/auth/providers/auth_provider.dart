@@ -22,8 +22,10 @@ class AuthUser {
     required this.fullName,
     required this.role,
     this.isProfileComplete = false,
+    this.nickname,
     this.phone,
     this.gender,
+    this.ageRange,
     this.dateOfBirth,
     this.credits,
     this.profileCategory,
@@ -38,8 +40,10 @@ class AuthUser {
   final String fullName;
   final String role; // 'customer', 'driver', 'admin'
   final bool isProfileComplete;
+  final String? nickname;
   final String? phone;
   final String? gender;
+  final String? ageRange;
   final DateTime? dateOfBirth;
   final String? credits;
   final String? profileCategory;
@@ -54,8 +58,10 @@ class AuthUser {
     String? fullName,
     String? role,
     bool? isProfileComplete,
+    String? nickname,
     String? phone,
     String? gender,
+    String? ageRange,
     DateTime? dateOfBirth,
     String? credits,
     String? profileCategory,
@@ -70,8 +76,10 @@ class AuthUser {
       fullName: fullName ?? this.fullName,
       role: role ?? this.role,
       isProfileComplete: isProfileComplete ?? this.isProfileComplete,
+      nickname: nickname ?? this.nickname,
       phone: phone ?? this.phone,
       gender: gender ?? this.gender,
+      ageRange: ageRange ?? this.ageRange,
       dateOfBirth: dateOfBirth ?? this.dateOfBirth,
       credits: credits ?? this.credits,
       profileCategory: profileCategory ?? this.profileCategory,
@@ -147,10 +155,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> login(String email, String password) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {
-      final response = await ApiClient.instance.post('/auth/login', data: {
-        'email': email,
-        'password': password,
-      });
+      final response = await ApiClient.instance.post(
+        '/auth/login',
+        data: {'email': email, 'password': password},
+      );
       final data = response.data as Map<String, dynamic>;
       await TokenStorage.saveToken(data['access_token'] as String);
       final user = _parseUser(data['user'] as Map<String, dynamic>);
@@ -181,8 +189,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String fullName,
     required String profileCategory,
     required String profileField,
+    String? nickname,
     String? phone,
     String? gender,
+    String? ageRange,
     DateTime? dob,
     String? course,
     String? organization,
@@ -190,21 +200,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {
-      final response = await ApiClient.instance.post('/auth/register', data: {
-        'email': email,
-        'password': password,
-        'fullName': fullName,
-        'profileCategory': profileCategory,
-        'profileField': profileField,
-        if (phone != null && phone.isNotEmpty) 'phoneNumber': phone,
-        if (gender != null && gender.isNotEmpty) 'gender': gender,
-        if (dob != null) 'dateOfBirth': dob.toIso8601String(),
-        if (course != null && course.isNotEmpty) 'course': course,
-        if (organization != null && organization.isNotEmpty)
-          'organization': organization,
-        if (printingPreferences.isNotEmpty)
-          'printingPreferences': printingPreferences,
-      });
+      final response = await ApiClient.instance.post(
+        '/auth/register',
+        data: {
+          'email': email,
+          'password': password,
+          'fullName': fullName,
+          if (nickname != null && nickname.isNotEmpty) 'nickname': nickname,
+          'profileCategory': profileCategory,
+          'profileField': profileField,
+          if (ageRange != null && ageRange.isNotEmpty) 'ageRange': ageRange,
+          if (phone != null && phone.isNotEmpty) 'phoneNumber': phone,
+          if (gender != null && gender.isNotEmpty) 'gender': gender,
+          if (dob != null) 'dateOfBirth': dob.toIso8601String(),
+          if (course != null && course.isNotEmpty) 'course': course,
+          if (organization != null && organization.isNotEmpty)
+            'organization': organization,
+          if (printingPreferences.isNotEmpty)
+            'printingPreferences': printingPreferences,
+        },
+      );
       final data = response.data as Map<String, dynamic>;
       await TokenStorage.saveToken(data['access_token'] as String);
       final user = _parseUser(data['user'] as Map<String, dynamic>);
@@ -218,7 +233,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } on DioException catch (e) {
       final message = e.response?.data is Map
           ? (e.response!.data as Map)['message']?.toString() ??
-              'Registration failed'
+                'Registration failed'
           : 'Registration failed';
       state = state.copyWith(isLoading: false, errorMessage: message);
     } catch (e) {
@@ -235,8 +250,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         id: '1',
         email: 'maria@test.com',
         fullName: 'Maria Santos',
+        nickname: 'Mia',
         role: 'customer',
         isProfileComplete: true,
+        ageRange: '18_24',
         profileCategory: 'student',
         profileField: 'architecture',
         organization: 'Mapua University',
@@ -246,8 +263,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         id: '2',
         email: 'juan@test.com',
         fullName: 'Juan Reyes',
+        nickname: 'Juan',
         role: 'driver',
         isProfileComplete: true,
+        ageRange: '35_44',
         profileCategory: 'professional',
         profileField: 'engineer_contractor',
         organization: 'Grid Logistics',
@@ -257,24 +276,25 @@ class AuthNotifier extends StateNotifier<AuthState> {
         id: '3',
         email: 'admin@test.com',
         fullName: 'Admin',
+        nickname: 'Admin',
         role: 'admin',
         isProfileComplete: true,
+        ageRange: '35_44',
         profileCategory: 'professional',
         profileField: 'business_corporate',
         organization: 'Grid Print HQ',
         printingPreferences: ['marketing_materials'],
       ),
     };
-    state = AuthState(
-      status: AuthStatus.authenticated,
-      user: users[role]!,
-    );
+    state = AuthState(status: AuthStatus.authenticated, user: users[role]!);
   }
 
   Future<bool> completeProfile({
     required String fullName,
+    String? nickname,
     String? phone,
     String? gender,
+    String? ageRange,
     DateTime? dob,
     String? profileCategory,
     String? profileField,
@@ -286,8 +306,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final payload = <String, dynamic>{
         'fullName': fullName,
+        if (nickname != null && nickname.isNotEmpty) 'nickname': nickname,
         if (phone != null && phone.isNotEmpty) 'phoneNumber': phone,
         if (gender != null && gender.isNotEmpty) 'gender': gender,
+        if (ageRange != null && ageRange.isNotEmpty) 'ageRange': ageRange,
         if (dob != null) 'dateOfBirth': dob.toIso8601String(),
         if (course != null && course.isNotEmpty) 'course': course,
         if (organization != null && organization.isNotEmpty)
@@ -299,7 +321,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         payload['printingPreferences'] = printingPreferences;
       }
 
-      final response = await ApiClient.instance.put('/users/profile', data: payload);
+      final response = await ApiClient.instance.put(
+        '/users/profile',
+        data: payload,
+      );
       final user = _parseUser(response.data as Map<String, dynamic>);
       state = AuthState(
         status: user.isProfileComplete
@@ -360,8 +385,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final fcmToken = await NotificationService.getToken();
     if (fcmToken != null) {
       try {
-        await ApiClient.instance
-            .post('/users/fcm-token', data: {'token': fcmToken});
+        await ApiClient.instance.post(
+          '/users/fcm-token',
+          data: {'token': fcmToken},
+        );
       } catch (_) {
         // Non-critical — notifications won't work but app still functions
       }
@@ -375,15 +402,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
       fullName: (json['fullName'] as String?) ?? '',
       role: json['role'] as String? ?? 'customer',
       isProfileComplete: json['isProfileComplete'] as bool? ?? false,
+      nickname: (json['nickname'] ?? json['nickName']) as String?,
       phone: json['phoneNumber'] as String?,
       gender: json['gender'] as String?,
+      ageRange: (json['ageRange'] ?? json['age_range']) as String?,
       credits: json['credits']?.toString(),
       profileCategory: json['profileCategory'] as String?,
       profileField: json['profileField'] as String?,
       course: json['course'] as String?,
       organization: json['organization'] as String?,
-      printingPreferences:
-          _parseStringList(json['printingPreferences'] ?? json['printing_preferences']),
+      printingPreferences: _parseStringList(
+        json['printingPreferences'] ?? json['printing_preferences'],
+      ),
       dateOfBirth: json['dateOfBirth'] != null
           ? DateTime.tryParse(json['dateOfBirth'] as String)
           : null,
@@ -410,5 +440,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
 // ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
-final authProvider =
-    StateNotifierProvider<AuthNotifier, AuthState>((ref) => AuthNotifier());
+final authProvider = StateNotifierProvider<AuthNotifier, AuthState>(
+  (ref) => AuthNotifier(),
+);

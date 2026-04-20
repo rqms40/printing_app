@@ -118,20 +118,24 @@ describe('UsersService', () => {
 
       await service.create('test@example.com', 'password123', {
         fullName: 'Maria Santos',
+        nickname: 'Mia',
         profileCategory: 'student',
         profileField: 'architecture',
         phoneNumber: '+639171234567',
         gender: 'female',
+        ageRange: '18_24',
         dateOfBirth: '2001-02-03',
       });
 
       expect(repo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           fullName: 'Maria Santos',
+          nickname: 'Mia',
           profileCategory: 'student',
           profileField: 'architecture',
           phoneNumber: '+639171234567',
           gender: 'female',
+          ageRange: '18_24',
           dateOfBirth: expect.any(Date),
           isProfileComplete: true,
         }),
@@ -197,6 +201,30 @@ describe('UsersService', () => {
         }),
       );
       expect(result.isProfileComplete).toBe(true);
+    });
+
+    it('normalizes nickname and ageRange during profile updates', async () => {
+      const updatedUser = {
+        ...mockUser,
+        nickname: 'Mia',
+        ageRange: '25_34',
+      } as User;
+      repo.findOne.mockResolvedValue(mockUser);
+      repo.update.mockResolvedValue(undefined as any);
+      repo.findOneOrFail.mockResolvedValue(updatedUser);
+
+      await service.updateProfile(1, {
+        nickname: '  Mia  ',
+        ageRange: '25_34',
+      } as Partial<User>);
+
+      expect(repo.update).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          nickname: 'Mia',
+          ageRange: '25_34',
+        }),
+      );
     });
   });
 

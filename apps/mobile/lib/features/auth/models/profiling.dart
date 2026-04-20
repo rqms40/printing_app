@@ -29,13 +29,22 @@ class ProfilingFieldOption {
 }
 
 class PrintingPreferenceOption {
-  const PrintingPreferenceOption({
+  const PrintingPreferenceOption({required this.value, required this.label});
+
+  final String value;
+  final String label;
+}
+
+class AgeRangeOption {
+  const AgeRangeOption({
     required this.value,
     required this.label,
+    required this.description,
   });
 
   final String value;
   final String label;
+  final String description;
 }
 
 const profileCategories = [
@@ -109,14 +118,8 @@ const printingPreferenceOptions = [
     value: 'plotting_blueprints',
     label: 'Plotting / Blueprints',
   ),
-  PrintingPreferenceOption(
-    value: 'technical_specs',
-    label: 'Technical Specs',
-  ),
-  PrintingPreferenceOption(
-    value: 'high_res_color',
-    label: 'High-Res Color',
-  ),
+  PrintingPreferenceOption(value: 'technical_specs', label: 'Technical Specs'),
+  PrintingPreferenceOption(value: 'high_res_color', label: 'High-Res Color'),
   PrintingPreferenceOption(
     value: 'document_printing',
     label: 'Document Printing',
@@ -124,6 +127,34 @@ const printingPreferenceOptions = [
   PrintingPreferenceOption(
     value: 'marketing_materials',
     label: 'Marketing Materials',
+  ),
+];
+
+const ageRangeOptions = [
+  AgeRangeOption(
+    value: 'under_18',
+    label: 'Under 18',
+    description: 'Just getting started',
+  ),
+  AgeRangeOption(
+    value: '18_24',
+    label: '18–24',
+    description: 'Campus crunch mode',
+  ),
+  AgeRangeOption(
+    value: '25_34',
+    label: '25–34',
+    description: 'Balancing work and big ideas',
+  ),
+  AgeRangeOption(
+    value: '35_44',
+    label: '35–44',
+    description: 'Experienced and moving fast',
+  ),
+  AgeRangeOption(
+    value: '45_plus',
+    label: '45+',
+    description: 'Seasoned and detail-focused',
   ),
 ];
 
@@ -220,4 +251,51 @@ String profilingOrganizationLabel(String? profileCategory) {
   }
 
   return 'School';
+}
+
+String profileCategoryLabel(String? value) {
+  return profileCategories
+      .firstWhere(
+        (option) => option.value == value,
+        orElse: () => const ProfilingCategoryOption(
+          value: '',
+          label: 'Unknown',
+          description: '',
+          icon: Icons.help_outline_rounded,
+        ),
+      )
+      .label;
+}
+
+String profileFieldLabel(String? value) {
+  return profileFields
+      .firstWhere(
+        (option) => option.value == value,
+        orElse: () => const ProfilingFieldOption(
+          category: '',
+          value: '',
+          label: 'Unknown',
+          description: '',
+        ),
+      )
+      .label;
+}
+
+String printingPreferenceLabel(String value) {
+  return printingPreferenceOptions
+      .firstWhere(
+        (option) => option.value == value,
+        orElse: () => PrintingPreferenceOption(value: value, label: value),
+      )
+      .label;
+}
+
+String ageRangeLabel(String? value) {
+  return ageRangeOptions
+      .firstWhere(
+        (option) => option.value == value,
+        orElse: () =>
+            const AgeRangeOption(value: '', label: 'Unknown', description: ''),
+      )
+      .label;
 }

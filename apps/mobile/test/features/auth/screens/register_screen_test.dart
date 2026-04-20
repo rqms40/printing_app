@@ -1,11 +1,54 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/auth/screens/register_screen.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 
-Widget _wrap(Widget child) {
+class _TestAuthNotifier extends AuthNotifier {
+  int registerCalls = 0;
+  Map<String, dynamic>? lastRegisterPayload;
+
+  @override
+  Future<void> register(
+    String email,
+    String password, {
+    required String fullName,
+    required String profileCategory,
+    required String profileField,
+    String? nickname,
+    String? phone,
+    String? gender,
+    String? ageRange,
+    DateTime? dob,
+    String? course,
+    String? organization,
+    List<String> printingPreferences = const [],
+  }) async {
+    registerCalls += 1;
+    lastRegisterPayload = {
+      'email': email,
+      'password': password,
+      'fullName': fullName,
+      'nickname': nickname,
+      'phone': phone,
+      'gender': gender,
+      'ageRange': ageRange,
+      'profileCategory': profileCategory,
+      'profileField': profileField,
+      'course': course,
+      'organization': organization,
+      'printingPreferences': printingPreferences,
+    };
+  }
+}
+
+Widget _wrap(Widget child, {_TestAuthNotifier? notifier}) {
   return ProviderScope(
+    overrides: [
+      if (notifier != null) authProvider.overrideWith((ref) => notifier),
+    ],
     child: MaterialApp(
       theme: ThemeData(brightness: Brightness.light),
       home: child,
@@ -15,20 +58,128 @@ Widget _wrap(Widget child) {
 
 void main() {
   group('RegisterScreen', () {
-    testWidgets('renders only credential fields on the first signup step',
-        (tester) async {
+    testWidgets('starts on the privacy step instead of the account form', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap(const RegisterScreen()));
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(milliseconds: 500));
 
-      expect(find.text('Email'), findsOneWidget);
-      expect(find.text('Password'), findsOneWidget);
-      expect(find.text('Confirm Password'), findsOneWidget);
-      expect(find.byType(AppButton), findsOneWidget);
-      expect(find.text('Continue'), findsOneWidget);
+      expect(find.text('Before we begin'), findsOneWidget);
+      expect(find.text('Agree & Continue'), findsOneWidget);
+      expect(find.text('View Terms & Conditions'), findsOneWidget);
+      expect(find.text('Email'), findsNothing);
+      expect(find.text('Password'), findsNothing);
+      expect(find.text('Confirm Password'), findsNothing);
+      expect(find.text('Full Name'), findsNothing);
+    });
+
+    testWidgets('blocks progression until the nickname step is filled', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_wrap(const RegisterScreen()));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
+
+      await tester.tap(find.text('Agree & Continue'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('What should we call you?'), findsOneWidget);
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nickname is required'), findsOneWidget);
       expect(find.text('Tell us a bit about yourself'), findsNothing);
-      expect(find.text('Student'), findsNothing);
-      expect(find.text('Professional'), findsNothing);
+    });
+
+    testWidgets(
+      'submits registration only after completing the onboarding flow',
+      (tester) async {
+        final notifier = _TestAuthNotifier();
+
+        await tester.pumpWidget(
+          _wrap(const RegisterScreen(), notifier: notifier),
+        );
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(milliseconds: 500));
+
+        await tester.tap(find.text('Agree & Continue'));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byType(TextField).first, 'Kai');
+        await tester.tap(find.text('Continue'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Student'));
+        await tester.tap(find.text('Continue'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Architecture'));
+        await tester.tap(find.text('Continue'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Prefer not to say'));
+        await tester.tap(find.text('Continue'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('25–34'));
+        await tester.tap(find.text('Continue'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Hi, Kai'), findsOneWidget);
+        expect(find.text('Full Name'), findsOneWidget);
+        expect(notifier.registerCalls, 0);
+
+        await tester.enterText(find.byType(TextField).at(0), 'Kai Reyes');
+        await tester.enterText(find.byType(TextField).at(1), 'kai@test.com');
+        await tester.enterText(find.byType(TextField).at(2), '+639171234567');
+        await tester.enterText(find.byType(TextField).at(3), 'password123');
+        await tester.enterText(find.byType(TextField).at(4), 'password123');
+
+        await tester.tap(find.text('Create Account'));
+        await tester.pumpAndSettle();
+
+        expect(notifier.registerCalls, 1);
+        expect(notifier.lastRegisterPayload, isNotNull);
+        expect(notifier.lastRegisterPayload!['nickname'], 'Kai');
+        expect(notifier.lastRegisterPayload!['ageRange'], '25_34');
+        expect(notifier.lastRegisterPayload!['profileCategory'], 'student');
+        expect(notifier.lastRegisterPayload!['profileField'], 'architecture');
+        expect(notifier.lastRegisterPayload!['printingPreferences'], const [
+          'plotting_blueprints',
+        ]);
+        expect(notifier.lastRegisterPayload!['phone'], '+639171234567');
+      },
+    );
+  });
+
+  group('RegisterScreen routes', () {
+    testWidgets('opens the terms screen from the privacy step', (tester) async {
+      final router = GoRouter(
+        routes: [
+          GoRoute(path: '/', builder: (_, __) => const RegisterScreen()),
+          GoRoute(
+            path: '/customer/profile/terms',
+            builder: (_, __) => const Scaffold(body: Text('Terms Destination')),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp.router(
+            theme: ThemeData(brightness: Brightness.light),
+            routerConfig: router,
+          ),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
+
+      await tester.tap(find.text('View Terms & Conditions'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Terms Destination'), findsOneWidget);
     });
   });
 }

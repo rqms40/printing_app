@@ -417,7 +417,12 @@ describe('user-insights helpers', () => {
       },
     ] as Order[];
 
-    const payload = buildAdminUsersAnalyticsPayload(users, orders, '30D', new Date('2026-03-31T12:00:00.000Z'));
+    const payload = buildAdminUsersAnalyticsPayload(
+      users,
+      orders,
+      '30D',
+      new Date('2026-03-31T12:00:00.000Z'),
+    );
 
     expect(payload.summary).toEqual({
       total_customers: 4,

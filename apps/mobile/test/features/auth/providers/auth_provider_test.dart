@@ -34,6 +34,8 @@ void main() {
       expect(notifier.state.user!.email, 'maria@test.com');
       expect(notifier.state.user!.id, '1');
       expect(notifier.state.user!.isProfileComplete, true);
+      expect(notifier.state.user!.nickname, 'Mia');
+      expect(notifier.state.user!.ageRange, '18_24');
       expect(notifier.state.user!.profileCategory, 'student');
       expect(notifier.state.user!.profileField, 'architecture');
       expect(
@@ -123,10 +125,7 @@ void main() {
         fullName: 'Test',
         role: 'customer',
       );
-      const state = AuthState(
-        status: AuthStatus.authenticated,
-        user: user,
-      );
+      const state = AuthState(status: AuthStatus.authenticated, user: user);
       final copied = state.copyWith(isLoading: true);
       expect(copied.status, AuthStatus.authenticated);
       expect(copied.user, user);
@@ -157,11 +156,15 @@ void main() {
       );
       final updated = user.copyWith(
         fullName: 'New Name',
+        nickname: 'Kai',
         phone: '1234567890',
+        ageRange: '25_34',
         printingPreferences: const ['technical_specs'],
       );
       expect(updated.fullName, 'New Name');
+      expect(updated.nickname, 'Kai');
       expect(updated.phone, '1234567890');
+      expect(updated.ageRange, '25_34');
       expect(updated.printingPreferences, const ['technical_specs']);
       expect(updated.email, 'test@test.com'); // preserved
       expect(updated.id, '1'); // preserved

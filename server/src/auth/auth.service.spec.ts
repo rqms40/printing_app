@@ -89,11 +89,13 @@ describe('AuthService', () => {
 
       await authService.register('test@example.com', 'password123', {
         fullName: 'Maria Santos',
+        nickname: 'Mia',
         phoneNumber: '+639171234567',
         gender: 'female',
         dateOfBirth: '2001-02-03',
         profileCategory: 'student',
         profileField: 'architecture',
+        ageRange: '18_24',
         course: 'BS Architecture',
         organization: 'Mapua University',
         printingPreferences: ['plotting_blueprints'],
@@ -104,11 +106,13 @@ describe('AuthService', () => {
         'password123',
         {
           fullName: 'Maria Santos',
+          nickname: 'Mia',
           phoneNumber: '+639171234567',
           gender: 'female',
           dateOfBirth: '2001-02-03',
           profileCategory: 'student',
           profileField: 'architecture',
+          ageRange: '18_24',
           course: 'BS Architecture',
           organization: 'Mapua University',
           printingPreferences: ['plotting_blueprints'],

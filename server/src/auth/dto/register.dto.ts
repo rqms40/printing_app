@@ -11,6 +11,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  AgeRange,
   PrintingPreference,
   ProfileCategory,
   ProfileField,
@@ -32,6 +33,12 @@ export class RegisterDto {
   @Matches(/\S/)
   fullName: string;
 
+  @ApiPropertyOptional({ example: 'Mia' })
+  @IsOptional()
+  @IsString()
+  @Matches(/\S/)
+  nickname?: string;
+
   @ApiProperty({ enum: ProfileCategory })
   @IsEnum(ProfileCategory)
   profileCategory: ProfileCategory;
@@ -39,6 +46,11 @@ export class RegisterDto {
   @ApiProperty({ enum: ProfileField })
   @IsEnum(ProfileField)
   profileField: ProfileField;
+
+  @ApiPropertyOptional({ enum: AgeRange })
+  @IsOptional()
+  @IsEnum(AgeRange)
+  ageRange?: AgeRange;
 
   @ApiPropertyOptional({ example: '+639171234567' })
   @IsOptional()

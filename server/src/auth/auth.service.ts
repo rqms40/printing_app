@@ -5,6 +5,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { User } from '../users/entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import {
+  AgeRange,
   PrintingPreference,
   ProfileCategory,
   ProfileField,
@@ -12,8 +13,10 @@ import {
 
 type RegisterProfileInput = {
   fullName: string;
+  nickname?: string;
   phoneNumber?: string;
   gender?: string;
+  ageRange?: AgeRange;
   dateOfBirth?: string;
   profileCategory: ProfileCategory;
   profileField: ProfileField;

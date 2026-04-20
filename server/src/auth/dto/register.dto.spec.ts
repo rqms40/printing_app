@@ -7,8 +7,10 @@ describe('RegisterDto', () => {
       email: 'test@example.com',
       password: 'password123',
       fullName: 'Maria Santos',
+      nickname: 'Mia',
       profileCategory: 'student',
       profileField: 'architecture',
+      ageRange: '18_24',
       phoneNumber: '+639171234567',
       gender: 'female',
       dateOfBirth: '2001-02-03',
@@ -64,5 +66,21 @@ describe('RegisterDto', () => {
     const errors = validateSync(dto);
 
     expect(errors.some((error) => error.property === 'fullName')).toBe(true);
+  });
+
+  it('rejects an invalid ageRange during registration', () => {
+    const dto = Object.assign(new RegisterDto(), {
+      email: 'test@example.com',
+      password: 'password123',
+      fullName: 'Maria Santos',
+      nickname: 'Mia',
+      profileCategory: 'student',
+      profileField: 'architecture',
+      ageRange: 'old_enough',
+    });
+
+    const errors = validateSync(dto);
+
+    expect(errors.some((error) => error.property === 'ageRange')).toBe(true);
   });
 });

@@ -15,8 +15,10 @@ export class AuthController {
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto.email, dto.password, {
       fullName: dto.fullName,
+      nickname: dto.nickname,
       phoneNumber: dto.phoneNumber,
       gender: dto.gender,
+      ageRange: dto.ageRange,
       dateOfBirth: dto.dateOfBirth,
       profileCategory: dto.profileCategory,
       profileField: dto.profileField,

@@ -270,10 +270,7 @@ describe('AdminController analytics', () => {
           profile_field: 'architecture',
           course: 'BS Architecture',
           organization: 'Mapua University',
-          printing_preferences: [
-            'plotting_blueprints',
-            'high_res_color',
-          ],
+          printing_preferences: ['plotting_blueprints', 'high_res_color'],
         }),
       ]);
     });

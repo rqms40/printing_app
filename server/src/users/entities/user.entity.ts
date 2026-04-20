@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import {
+  AgeRange,
   PrintingPreference,
   ProfileCategory,
   ProfileField,
@@ -31,11 +32,22 @@ export class User {
   @Column({ name: 'full_name', type: 'text', nullable: true })
   fullName: string | null;
 
+  @Column({ type: 'text', nullable: true })
+  nickname: string | null;
+
   @Column({ name: 'phone_number', type: 'text', nullable: true })
   phoneNumber: string | null;
 
   @Column({ type: 'text', nullable: true })
   gender: string | null;
+
+  @Column({
+    name: 'age_range',
+    type: 'enum',
+    enum: AgeRange,
+    nullable: true,
+  })
+  ageRange: AgeRange | null;
 
   @Column({ name: 'date_of_birth', type: 'timestamp', nullable: true })
   dateOfBirth: Date | null;

@@ -131,8 +131,7 @@ export function buildAdminUserDetailPayload(
 ): AdminUserDetailPayload {
   const scopedOrders = orders.filter((order) => order.userId === user.id);
   const ordered = [...scopedOrders].sort(
-    (a, b) =>
-      b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id,
+    (a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id,
   );
   const paidOrders = ordered.filter(isPaidOrder);
   const paidSpend = paidOrders.reduce(
@@ -187,7 +186,11 @@ export function buildAdminUsersAnalyticsPayload(
     const customer = customerById.get(order.userId);
     const createdAt = order.createdAt.getTime();
 
-    return Boolean(customer) && createdAt >= periodStart.getTime() && createdAt <= periodEnd;
+    return (
+      Boolean(customer) &&
+      createdAt >= periodStart.getTime() &&
+      createdAt <= periodEnd
+    );
   });
 
   const activeCustomerIds = new Set<number>(
@@ -206,10 +209,7 @@ export function buildAdminUsersAnalyticsPayload(
       return createdAt >= periodStart.getTime() && createdAt <= periodEnd;
     }).length,
     active_customers: activeCustomerIds.size,
-    dormant_customers: Math.max(
-      0,
-      customers.length - activeCustomerIds.size,
-    ),
+    dormant_customers: Math.max(0, customers.length - activeCustomerIds.size),
     profile_completion_rate: customers.length
       ? Math.round(
           (customers.filter((user) => user.isProfileComplete).length /
@@ -303,11 +303,15 @@ function buildSignupTrend(
 }
 
 function buildCategoryMix(customers: User[]): LabelValue[] {
-  return buildCountMix(customers, (user) => humanizeProfileCategory(user.profileCategory));
+  return buildCountMix(customers, (user) =>
+    humanizeProfileCategory(user.profileCategory),
+  );
 }
 
 function buildFieldMix(customers: User[]): LabelValue[] {
-  return buildCountMix(customers, (user) => humanizeProfileField(user.profileField));
+  return buildCountMix(customers, (user) =>
+    humanizeProfileField(user.profileField),
+  );
 }
 
 function buildPreferenceMix(customers: User[]): LabelValue[] {
@@ -352,7 +356,10 @@ function buildRevenueBySegment(
     }
 
     const label = humanizeSegment(customer);
-    counts.set(label, (counts.get(label) ?? 0) + numberOrZero(order.totalPrice));
+    counts.set(
+      label,
+      (counts.get(label) ?? 0) + numberOrZero(order.totalPrice),
+    );
   }
 
   return sortLabelValueEntries(counts);
@@ -372,9 +379,7 @@ function buildCountMix(
   return sortLabelValueEntries(counts);
 }
 
-function sortLabelValueEntries(
-  counts: Map<string, number>,
-): LabelValue[] {
+function sortLabelValueEntries(counts: Map<string, number>): LabelValue[] {
   return [...counts.entries()]
     .sort(([leftLabel, leftValue], [rightLabel, rightValue]) => {
       if (rightValue !== leftValue) {
@@ -386,9 +391,7 @@ function sortLabelValueEntries(
     .map(([label, value]) => ({ label, value }));
 }
 
-function humanizeProfileCategory(
-  value: User['profileCategory'],
-): string {
+function humanizeProfileCategory(value: User['profileCategory']): string {
   if (!value) {
     return 'Uncategorized';
   }
@@ -501,7 +504,9 @@ function addUtcDays(date: Date, days: number) {
 }
 
 function addUtcMonths(date: Date, months: number) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, 1));
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, 1),
+  );
 }
 
 function formatDayLabel(date: Date) {

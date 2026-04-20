@@ -9,7 +9,8 @@ describe('user entity column metadata', () => {
       (column) => column.target === User && column.propertyName === 'fullName',
     );
     const phoneNumber = columns.find(
-      (column) => column.target === User && column.propertyName === 'phoneNumber',
+      (column) =>
+        column.target === User && column.propertyName === 'phoneNumber',
     );
     const gender = columns.find(
       (column) => column.target === User && column.propertyName === 'gender',

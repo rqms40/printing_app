@@ -14,10 +14,7 @@ Widget _wrap(Widget child) {
   );
 }
 
-Widget _wrapWithAuth(
-  Widget child, {
-  required AuthState state,
-}) {
+Widget _wrapWithAuth(Widget child, {required AuthState state}) {
   return ProviderScope(
     overrides: [
       authProvider.overrideWith((ref) {
@@ -67,51 +64,55 @@ void main() {
       expect(find.text('Professional'), findsOneWidget);
     });
 
-    testWidgets('shows loading and error state from auth provider after final registration failure',
-        (tester) async {
-      await tester.pumpWidget(
-        _wrapWithAuth(
-          const ProfileSetupScreen(
-            draft: RegistrationDraft(
-              email: 'new@test.com',
-              password: 'password123',
+    testWidgets(
+      'shows loading and error state from auth provider after final registration failure',
+      (tester) async {
+        await tester.pumpWidget(
+          _wrapWithAuth(
+            const ProfileSetupScreen(
+              draft: RegistrationDraft(
+                email: 'new@test.com',
+                password: 'password123',
+              ),
+            ),
+            state: const AuthState(
+              status: AuthStatus.profileIncomplete,
+              isLoading: true,
+              errorMessage: 'Registration failed',
+              user: AuthUser(
+                id: '1',
+                email: 'new@test.com',
+                fullName: '',
+                role: 'customer',
+              ),
             ),
           ),
-          state: const AuthState(
-            status: AuthStatus.profileIncomplete,
-            isLoading: true,
-            errorMessage: 'Registration failed',
-            user: AuthUser(
-              id: '1',
-              email: 'new@test.com',
-              fullName: '',
-              role: 'customer',
-            ),
+        );
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(milliseconds: 500));
+
+        expect(find.text('Registration failed'), findsOneWidget);
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'shows a recovery guard when opened unauthenticated without a draft',
+      (tester) async {
+        await tester.pumpWidget(
+          _wrapWithAuth(
+            const ProfileSetupScreen(),
+            state: AuthState.unauthenticated(),
           ),
-        ),
-      );
-      await tester.pump(const Duration(seconds: 1));
-      await tester.pump(const Duration(milliseconds: 500));
+        );
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(milliseconds: 500));
 
-      expect(find.text('Registration failed'), findsOneWidget);
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    });
-
-    testWidgets('shows a recovery guard when opened unauthenticated without a draft',
-        (tester) async {
-      await tester.pumpWidget(
-        _wrapWithAuth(
-          const ProfileSetupScreen(),
-          state: AuthState.unauthenticated(),
-        ),
-      );
-      await tester.pump(const Duration(seconds: 1));
-      await tester.pump(const Duration(milliseconds: 500));
-
-      expect(find.textContaining('restart'), findsWidgets);
-      expect(find.text('Full Name'), findsNothing);
-      expect(find.text('Student'), findsNothing);
-      expect(find.text('Professional'), findsNothing);
-    });
+        expect(find.textContaining('restart'), findsWidgets);
+        expect(find.text('Full Name'), findsNothing);
+        expect(find.text('Student'), findsNothing);
+        expect(find.text('Professional'), findsNothing);
+      },
+    );
   });
 }
