@@ -16,6 +16,7 @@ import { FilesModule } from './files/files.module';
 import { AdminModule } from './admin/admin.module';
 import { ProductsModule } from './products/products.module';
 import { CreditsModule } from './credits/credits.module';
+import { TamSurveysModule } from './tam-surveys/tam-surveys.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { CreditsModule } from './credits/credits.module';
     AdminModule,
     ProductsModule,
     CreditsModule,
+    TamSurveysModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

@@ -1,4 +1,4 @@
-import { IsNumber, IsString } from 'class-validator';
+import { IsNumber, IsString, IsOptional, IsBoolean } from 'class-validator';
 
 export class RequestTopUpDto {
   @IsNumber()
@@ -13,4 +13,8 @@ export class RequestTopUpDto {
 export class UpdateSettingsDto {
   @IsNumber()
   conversionRate: number;
+
+  @IsOptional()
+  @IsBoolean()
+  creditsOnlyMode?: boolean;
 }

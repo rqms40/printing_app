@@ -12,6 +12,8 @@ class AppCard extends StatefulWidget {
     this.onTap,
     this.shadow,
     this.accentColor,
+    this.borderColor,
+    this.borderWidth,
     this.padding,
   });
 
@@ -23,6 +25,12 @@ class AppCard extends StatefulWidget {
 
   /// Optional thin left accent line (4px wide) for status indication.
   final Color? accentColor;
+
+  /// Optional custom border color for the entire card.
+  final Color? borderColor;
+
+  /// Optional border width, used when [borderColor] is set. Defaults to 1.5.
+  final double? borderWidth;
 
   /// Card padding. Defaults to [AppSpacing.md] on all sides.
   final EdgeInsetsGeometry? padding;
@@ -52,9 +60,12 @@ class _AppCardState extends State<AppCard> {
         borderRadius: AppRadius.borderMd,
         boxShadow:
             isDark ? AppShadows.none : (widget.shadow ?? AppShadows.subtle),
-        border: isDark
-            ? Border.all(color: colors.outline, width: 0.5)
-            : null,
+        border: widget.borderColor != null
+            ? Border.all(
+                color: widget.borderColor!,
+                width: widget.borderWidth ?? 1.5,
+              )
+            : (isDark ? Border.all(color: colors.outline, width: 0.5) : null),
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(

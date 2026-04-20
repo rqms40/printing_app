@@ -44,7 +44,12 @@ export class CreditsService {
 
   async updateSettings(dto: UpdateSettingsDto): Promise<CreditSettings> {
     const settings = await this.getSettings();
-    settings.conversionRate = dto.conversionRate;
+    if (dto.conversionRate !== undefined) {
+      settings.conversionRate = dto.conversionRate;
+    }
+    if (dto.creditsOnlyMode !== undefined) {
+      settings.creditsOnlyMode = dto.creditsOnlyMode;
+    }
     return this.settingsRepo.save(settings);
   }
 
@@ -100,6 +105,11 @@ export class CreditsService {
 
     user.credits = Number(user.credits) + Number(tx.amountCredits);
     await this.usersService.updateProfile(user.id, { credits: user.credits });
+
+    await this.notificationsService.triggerCreditsUpdate(
+      user.id,
+      Number(user.credits),
+    );
 
     tx.status = CreditTransactionStatus.APPROVED;
     const savedTx = await this.transactionRepo.save(tx);
@@ -201,6 +211,11 @@ export class CreditsService {
 
     user.credits = Number(user.credits) - amountCredits;
     await this.usersService.updateProfile(user.id, { credits: user.credits });
+
+    await this.notificationsService.triggerCreditsUpdate(
+      user.id,
+      Number(user.credits),
+    );
 
     const tx = this.transactionRepo.create({
       userId,

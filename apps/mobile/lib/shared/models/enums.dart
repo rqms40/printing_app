@@ -91,7 +91,7 @@ extension DeliveryStatusX on DeliveryStatus {
   }
 }
 
-enum PaymentMethod { gcash, maya, cod }
+enum PaymentMethod { gcash, maya, cod, gridCredits }
 
 extension PaymentMethodX on PaymentMethod {
   String get displayName {
@@ -102,6 +102,8 @@ extension PaymentMethodX on PaymentMethod {
         return 'Maya';
       case PaymentMethod.cod:
         return 'Cash on Delivery';
+      case PaymentMethod.gridCredits:
+        return 'GRID Credits';
     }
   }
 }

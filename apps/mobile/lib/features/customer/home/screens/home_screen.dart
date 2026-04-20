@@ -1,5 +1,5 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +11,7 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart'
     show ordersProvider;
+import 'package:printing_app/features/customer/home/providers/tam_surveys_feed_provider.dart';
 import 'package:printing_app/features/customer/home/widgets/daily_grid_section.dart';
 import 'package:printing_app/features/customer/home/widgets/hero_banner.dart';
 import 'package:printing_app/features/customer/home/widgets/map_tracking_tile.dart';
@@ -227,7 +228,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                 // ── Two-column: map + right tiles ─────────────────────
                 SizedBox(
-                  height: 250,
+                  height: 290,
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -257,10 +258,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               child: _DataGridTile(colors: colors),
                             ),
                             const SizedBox(height: AppSpacing.xs + 2),
-                            // 3: Ad — taller (flex 3)
+                            // 3: The Feed (flex 3)
                             Expanded(
                               flex: 3,
-                              child: _AdTile(colors: colors),
+                              child: _FeedTile(colors: colors),
                             ),
                           ],
                         ),
@@ -1229,99 +1230,227 @@ class _DataGridTile extends StatelessWidget {
       );
 }
 
-// ── Right-column tile: Advertisement (photo background) ─────────────────────
-class _AdTile extends StatelessWidget {
-  const _AdTile({required this.colors});
+// ── Right-column tile: The Feed ─────────────────────────────────────────────
+class _FeedTile extends ConsumerStatefulWidget {
+  const _FeedTile({required this.colors});
   final AppColorSet colors;
 
-  // Dark-toned industrial/print photo — consistent via seed
-  static const _imgUrl =
-      'https://images.unsplash.com/photo-1558618666-fcd25c85cd64'
-      '?w=400&q=70&fit=crop&auto=format';
+  @override
+  ConsumerState<_FeedTile> createState() => _FeedTileState();
+}
+
+class _FeedTileState extends ConsumerState<_FeedTile> {
+  Timer? _timer;
+  int _currentPage = 0;
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _startTimer(int totalItems) {
+    if (_timer?.isActive ?? false) return;
+    _timer = Timer.periodic(const Duration(seconds: 4), (timer) {
+      if (mounted) {
+        setState(() {
+          _currentPage = (_currentPage + 1) % totalItems;
+        });
+      }
+    });
+  }
+
+  void _showFeedbackModal(BuildContext context, FeedItem item) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: widget.colors.surface,
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.borderXl),
+          title: Row(
+            children: [
+              const Icon(Icons.star_rounded, color: Color(0xFFFFDE58), size: 20),
+              const SizedBox(width: 8),
+              Text(
+                '${item.rating.toStringAsFixed(1)} / 5.0',
+                style: AppTypography.bodyBold.copyWith(color: widget.colors.onBackground),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(item.userName, style: AppTypography.bodyBold.copyWith(color: widget.colors.brand)),
+              Text('Student', style: AppTypography.caption.copyWith(color: widget.colors.onSurfaceDim)),
+              const SizedBox(height: 16),
+              if (item.feedback != null && item.feedback!.isNotEmpty)
+                Text(
+                  item.feedback!,
+                  style: AppTypography.body.copyWith(color: widget.colors.onBackground),
+                )
+              else
+                Text(
+                  'No additional comments.',
+                  style: AppTypography.body.copyWith(
+                    color: widget.colors.onSurfaceDim,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text('Close', style: TextStyle(color: widget.colors.brand)),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: AppRadius.borderXl,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Photo base — forced dark with blend
-          CachedNetworkImage(
-            imageUrl: _imgUrl,
-            fit: BoxFit.cover,
-            color: Colors.black.withValues(alpha: 0.48),
-            colorBlendMode: BlendMode.darken,
-            placeholder: (_, _) => Container(color: colors.surfaceVariant),
-            errorWidget: (_, _, _) =>
-                Container(color: colors.surfaceVariant),
-          ),
+    final feedAsync = ref.watch(feedSurveysProvider);
 
-          // Bottom-up gradient scrim so text stays legible
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: const [0.0, 0.55, 1.0],
-                  colors: [
-                    Colors.black.withValues(alpha: 0.0),
-                    Colors.black.withValues(alpha: 0.35),
-                    Colors.black.withValues(alpha: 0.80),
-                  ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              'The Feed',
+              style: AppTypography.h2.copyWith(
+                color: widget.colors.onBackground,
+                fontSize: 18,
+                letterSpacing: -0.5,
+                height: 1.0,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Text(
+                'Community feedback.',
+                style: AppTypography.caption.copyWith(
+                  color: const Color(0xFFFFDE58),
+                  fontSize: 10,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.transparent,
+              borderRadius: AppRadius.borderMd,
+              border: Border.all(
+                color: const Color(0xFFFFDE58).withValues(alpha: 0.8),
+                width: 0.75,
+              ),
+            ),
+            child: feedAsync.when(
+              data: (feed) {
+                if (feed.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'No community feedback yet.',
+                      style: AppTypography.caption.copyWith(color: widget.colors.onSurfaceDim),
+                      textAlign: TextAlign.center,
+                    ),
+                  );
+                }
+
+                if (feed.length > 1) {
+                  _startTimer(feed.length);
+                }
+
+                final safeIndex = _currentPage < feed.length ? _currentPage : 0;
+                final item = feed[safeIndex];
+
+                return AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 600),
+                  switchInCurve: Curves.easeIn,
+                  switchOutCurve: Curves.easeOut,
+                  child: GestureDetector(
+                    key: ValueKey<int>(item.id),
+                    onTap: () => _showFeedbackModal(context, item),
+                    behavior: HitTestBehavior.opaque,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 4),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(5, (starIdx) {
+                              final isFilled = starIdx < item.rating.round();
+                              return Icon(
+                                Icons.star_rounded,
+                                color: isFilled ? const Color(0xFFFFDE58) : widget.colors.onSurfaceDim.withValues(alpha: 0.4),
+                                size: 14,
+                              );
+                            }),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            item.userName,
+                            style: AppTypography.bodyBold.copyWith(
+                              color: widget.colors.onBackground,
+                              fontSize: 11,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                          ),
+                          Text(
+                            'Student',
+                            style: AppTypography.caption.copyWith(
+                              color: widget.colors.onSurfaceDim,
+                              fontSize: 9,
+                              fontStyle: FontStyle.italic,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          if (item.feedback != null && item.feedback!.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              '"${item.feedback!}"',
+                              style: AppTypography.body.copyWith(
+                                color: widget.colors.onBackground.withValues(alpha: 0.9),
+                                fontSize: 9,
+                                height: 1.2,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+              loading: () => const Center(
+                  child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(color: Color(0xFFFFDE58), strokeWidth: 2.0))),
+              error: (err, _) => Center(
+                child: Text(
+                  'Failed to load feed',
+                  style: AppTypography.caption.copyWith(color: Colors.redAccent),
                 ),
               ),
             ),
           ),
-
-          // Ad copy — anchored to bottom-left
-          Positioned(
-            left: AppSpacing.sm,
-            right: AppSpacing.sm,
-            bottom: AppSpacing.sm,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFDE58),
-                    borderRadius: AppRadius.borderFull,
-                  ),
-                  child: Text(
-                    '20% OFF',
-                    style: AppTypography.overline.copyWith(
-                      color: Colors.black,
-                      fontSize: 7,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Large Prints',
-                  style: AppTypography.bodyBold.copyWith(
-                    color: Colors.white,
-                    fontSize: 13,
-                    height: 1.1,
-                  ),
-                ),
-                Text(
-                  'This weekend only',
-                  style: AppTypography.caption.copyWith(
-                    color: Colors.white.withValues(alpha: 0.65),
-                    fontSize: 9,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

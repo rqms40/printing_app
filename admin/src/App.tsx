@@ -20,6 +20,7 @@ import {
   ShoppingOutlined,
   WalletOutlined,
   BellOutlined,
+  FormOutlined,
 } from "@ant-design/icons";
 
 import { gridTheme } from "@/config/theme";
@@ -42,6 +43,8 @@ import { ProductOptionsPage } from "@/pages/products/options";
 import { AddonList } from "@/pages/products-addons/list";
 import { CreditRequestsPage } from "@/pages/credit-requests";
 import { NotificationsPage } from "@/pages/notifications";
+import { TamSurveyList } from "@/pages/tam-surveys/list";
+import { TamSurveyShow } from "@/pages/tam-surveys/show";
 
 function App() {
   return (
@@ -100,6 +103,12 @@ function App() {
                 list: "/notifications",
                 meta: { label: "Notifications", icon: <BellOutlined /> },
               },
+              {
+                name: "tam-surveys",
+                list: "/tam-surveys",
+                show: "/tam-surveys/show/:id",
+                meta: { label: "Surveys", icon: <FormOutlined /> },
+              },
             ]}
             options={{
               syncWithLocation: true,
@@ -145,6 +154,10 @@ function App() {
                 <Route path="/products-addons" element={<AddonList />} />
                 <Route path="/credit-requests" element={<CreditRequestsPage />} />
                 <Route path="/notifications" element={<NotificationsPage />} />
+                <Route path="/tam-surveys">
+                  <Route index element={<TamSurveyList />} />
+                  <Route path="show/:id" element={<TamSurveyShow />} />
+                </Route>
               </Route>
 
               <Route

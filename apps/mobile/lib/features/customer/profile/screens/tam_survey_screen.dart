@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -5,6 +7,7 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/providers/theme_provider.dart';
+import 'package:printing_app/shared/services/api_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // ---------------------------------------------------------------------------
@@ -93,50 +96,64 @@ class TamQuestion {
 }
 
 final _tamQuestions = [
-  // Perceived Usefulness (PU)
+  // SURVEY
   TamQuestion(
-    category: 'Perceived Usefulness',
-    question: 'Using GRID improves my ability to manage printing tasks.',
+    category: 'SURVEY',
+    question: 'GRID allows me to manage my printing tasks more efficiently.',
   ),
   TamQuestion(
-    category: 'Perceived Usefulness',
-    question:
-        'Using GRID enhances my effectiveness in completing print orders.',
+    category: 'SURVEY',
+    question: 'Using GRID simplifies my entire printing process.',
   ),
   TamQuestion(
-    category: 'Perceived Usefulness',
-    question: 'GRID makes it easier to accomplish my printing needs.',
+    category: 'SURVEY',
+    question: 'It was easy to learn how to use the GRID app.',
   ),
   TamQuestion(
-    category: 'Perceived Usefulness',
-    question: 'GRID is useful for managing my document printing.',
-  ),
-  // Perceived Ease of Use (PEOU)
-  TamQuestion(
-    category: 'Perceived Ease of Use',
-    question: 'Learning to use GRID is easy for me.',
+    category: 'SURVEY',
+    question: 'I find the GRID app intuitive and easy to navigate.',
   ),
   TamQuestion(
-    category: 'Perceived Ease of Use',
-    question: 'I find GRID easy to navigate and use.',
-  ),
-  TamQuestion(
-    category: 'Perceived Ease of Use',
-    question: 'It is easy for me to place print orders through GRID.',
-  ),
-  TamQuestion(
-    category: 'Perceived Ease of Use',
-    question: 'Overall, I find GRID easy to use.',
-  ),
-  // Behavioral Intention (BI)
-  TamQuestion(
-    category: 'Behavioral Intention',
+    category: 'SURVEY',
     question: 'I intend to continue using GRID for my printing needs.',
   ),
   TamQuestion(
-    category: 'Behavioral Intention',
-    question:
-        'I would recommend GRID to others who need printing services.',
+    category: 'SURVEY',
+    question: 'I would recommend GRID to my peers or colleagues.',
+  ),
+  // LOGISTICS & SERVICE
+  TamQuestion(
+    category: 'LOGISTICS & SERVICE',
+    question: 'Accuracy of the prints received compared to your digital order.',
+  ),
+  TamQuestion(
+    category: 'LOGISTICS & SERVICE',
+    question: 'Physical condition of the prints (no damage, clean finish).',
+  ),
+  TamQuestion(
+    category: 'LOGISTICS & SERVICE',
+    question: 'Speed and punctuality of the delivery/pickup readiness.',
+  ),
+  TamQuestion(
+    category: 'LOGISTICS & SERVICE',
+    question: 'Clarity of the status updates (Order Received, Printing... delivery).',
+  ),
+  TamQuestion(
+    category: 'LOGISTICS & SERVICE',
+    question: 'The delivery/pickup system fits my schedule perfectly.',
+  ),
+  // PRODUCT & TECHNICAL SPECIFICS
+  TamQuestion(
+    category: 'PRODUCT & TECHNICAL SPECIFICS',
+    question: 'Color accuracy and resolution of the final product.',
+  ),
+  TamQuestion(
+    category: 'PRODUCT & TECHNICAL SPECIFICS',
+    question: 'The weight and feel of the paper/media used.',
+  ),
+  TamQuestion(
+    category: 'PRODUCT & TECHNICAL SPECIFICS',
+    question: 'Performance of the app (no crashes or slow loading).',
   ),
 ];
 
@@ -154,7 +171,9 @@ class TamSurveyScreen extends ConsumerStatefulWidget {
 class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
     with TickerProviderStateMixin {
   final Map<int, LikertScale> _answers = {};
+  String? _comment;
   bool _submitted = false;
+  bool _isSubmitting = false;
 
   late AnimationController _checkController;
 
@@ -173,24 +192,54 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
     super.dispose();
   }
 
-  void _openQuestion(int index) async {
-    final result = await Navigator.of(context).push<LikertScale>(
-      _SurveyQuestionRoute(
-        question: _tamQuestions[index],
-        questionNumber: index + 1,
-        totalQuestions: _tamQuestions.length,
-        initialValue: _answers[index],
+  void _openQuestion(int index) {
+    Navigator.of(context).push(
+      _SurveyFlowRoute(
+        startIndex: index,
+        questions: _tamQuestions,
+        answers: _answers,
+        initialComment: _comment,
+        onAnswer: (idx, scale) {
+          setState(() => _answers[idx] = scale);
+        },
+        onComment: (text) {
+          setState(() => _comment = text);
+          _submit(); // auto submit when finished
+        },
       ),
     );
-    if (result != null) {
-      setState(() => _answers[index] = result);
-    }
   }
 
-  void _submit() {
-    setState(() => _submitted = true);
-    _checkController.forward();
-    HapticFeedback.mediumImpact();
+  Future<void> _submit() async {
+    setState(() => _isSubmitting = true);
+    try {
+      final formattedAnswers = {};
+      _answers.forEach((key, value) {
+        formattedAnswers[key.toString()] = value.index;
+      });
+
+      await ApiClient.instance.post(
+        '/tam-surveys',
+        data: {
+          'survey_data': formattedAnswers,
+          'open_forum_feedback': _comment ?? '',
+        },
+      );
+
+      setState(() => _submitted = true);
+      _checkController.forward();
+      HapticFeedback.mediumImpact();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to submit survey. Please try again.')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 
   @override
@@ -221,6 +270,7 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
           onReset: () {
             setState(() {
               _answers.clear();
+              _comment = null;
               _submitted = false;
               _checkController.reset();
             });
@@ -240,7 +290,7 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
-          'TAM Survey',
+          'Survey',
           style: AppTypography.h3.copyWith(color: colors.onBackground),
         ),
         centerTitle: false,
@@ -298,23 +348,95 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
                 horizontal: AppSpacing.xl,
                 vertical: AppSpacing.sm,
               ),
-              itemCount: _tamQuestions.length + 1,
+              itemCount: _tamQuestions.length + 2,
               itemBuilder: (context, i) {
+                if (i == _tamQuestions.length + 1) {
+                  return const SizedBox.shrink(); // Automatically handled by modal now
+                }
+
                 if (i == _tamQuestions.length) {
-                  return Padding(
-                    padding: const EdgeInsets.only(
-                      top: AppSpacing.lg,
-                      bottom: AppSpacing.xxl,
-                    ),
-                    child: _SubmitButton(
-                      enabled: allAnswered,
-                      onTap: _submit,
-                      colors: colors,
-                    ),
-                  ).animate().fadeIn(
-                        delay: Duration(milliseconds: 40 * _tamQuestions.length),
-                        duration: 350.ms,
-                      );
+                  final hasComment = _comment != null && _comment!.trim().isNotEmpty;
+                  final faceColor = const Color(0xFF4CC9F0);
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: AppSpacing.lg),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                        child: Text(
+                          'OPEN FORUM',
+                          style: AppTypography.overline.copyWith(
+                            color: colors.onSurfaceDim,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => _openQuestion(i),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOut,
+                          decoration: BoxDecoration(
+                            color: hasComment ? faceColor.withValues(alpha: 0.1) : colors.surface,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: hasComment ? faceColor.withValues(alpha: 0.4) : colors.outline,
+                              width: hasComment ? 1.5 : 1,
+                            ),
+                          ),
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          child: Row(
+                            children: [
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: hasComment ? faceColor : colors.surfaceVariant,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: hasComment
+                                      ? const Icon(Icons.check, size: 16, color: Colors.white)
+                                      : Icon(Icons.comment_rounded, size: 16, color: colors.onSurfaceDim),
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.md),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Additional Feedback',
+                                      style: AppTypography.body.copyWith(color: colors.onBackground),
+                                    ),
+                                    if (hasComment) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        _comment!.length > 40 ? '${_comment!.substring(0, 40).replaceAll('\n', ' ')}...' : _comment!.replaceAll('\n', ' '),
+                                        style: AppTypography.caption.copyWith(
+                                          color: faceColor,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Icon(
+                                hasComment ? Icons.edit_rounded : Icons.chevron_right_rounded,
+                                size: 20,
+                                color: hasComment ? faceColor : colors.onSurfaceDim,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ).animate().fadeIn(delay: Duration(milliseconds: 40 * i), duration: 350.ms).slideX(begin: 0.04, duration: 350.ms),
+                      const SizedBox(height: AppSpacing.sm),
+                    ],
+                  );
                 }
 
                 final question = _tamQuestions[i];
@@ -463,68 +585,7 @@ class _QuestionCard extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Submit Button
-// ---------------------------------------------------------------------------
-
-class _SubmitButton extends StatefulWidget {
-  const _SubmitButton({
-    required this.enabled,
-    required this.onTap,
-    required this.colors,
-  });
-
-  final bool enabled;
-  final VoidCallback onTap;
-  final AppColorSet colors;
-
-  @override
-  State<_SubmitButton> createState() => _SubmitButtonState();
-}
-
-class _SubmitButtonState extends State<_SubmitButton> {
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown:
-          widget.enabled ? (_) => setState(() => _pressed = true) : null,
-      onTapUp: widget.enabled
-          ? (_) {
-              setState(() => _pressed = false);
-              widget.onTap();
-            }
-          : null,
-      onTapCancel:
-          widget.enabled ? () => setState(() => _pressed = false) : null,
-      child: AnimatedScale(
-        scale: _pressed ? 0.96 : 1.0,
-        duration: const Duration(milliseconds: 120),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          height: 56,
-          decoration: BoxDecoration(
-            color:
-                widget.enabled ? widget.colors.accent : widget.colors.disabled,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Center(
-            child: Text(
-              'Submit Survey',
-              style: AppTypography.button.copyWith(
-                color: widget.enabled
-                    ? widget.colors.accentOnColor
-                    : widget.colors.onSurfaceDim,
-                letterSpacing: 1,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
+// Removed _SubmitButton
 
 // ---------------------------------------------------------------------------
 // Submitted / Thank-you View
@@ -603,21 +664,25 @@ class _SubmittedView extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Survey Question Route (full-screen modal with custom transition)
+// Survey Flow Route & Screen
 // ---------------------------------------------------------------------------
 
-class _SurveyQuestionRoute extends PageRoute<LikertScale> {
-  _SurveyQuestionRoute({
-    required this.question,
-    required this.questionNumber,
-    required this.totalQuestions,
-    this.initialValue,
+class _SurveyFlowRoute extends PageRoute<void> {
+  _SurveyFlowRoute({
+    required this.startIndex,
+    required this.questions,
+    required this.answers,
+    required this.initialComment,
+    required this.onAnswer,
+    required this.onComment,
   }) : super(fullscreenDialog: true);
 
-  final TamQuestion question;
-  final int questionNumber;
-  final int totalQuestions;
-  final LikertScale? initialValue;
+  final int startIndex;
+  final List<TamQuestion> questions;
+  final Map<int, LikertScale> answers;
+  final String? initialComment;
+  final void Function(int, LikertScale) onAnswer;
+  final void Function(String) onComment;
 
   @override
   Color? get barrierColor => Colors.black87;
@@ -649,11 +714,13 @@ class _SurveyQuestionRoute extends PageRoute<LikertScale> {
         ).animate(
           CurvedAnimation(parent: animation, curve: Curves.easeOut),
         ),
-        child: _SurveyQuestionPage(
-          question: question,
-          questionNumber: questionNumber,
-          totalQuestions: totalQuestions,
-          initialValue: initialValue,
+        child: _SurveyFlowScreen(
+          startIndex: startIndex,
+          questions: questions,
+          answers: answers,
+          initialComment: initialComment,
+          onAnswer: onAnswer,
+          onComment: onComment,
         ),
       ),
     );
@@ -670,6 +737,87 @@ class _SurveyQuestionRoute extends PageRoute<LikertScale> {
   }
 }
 
+class _SurveyFlowScreen extends StatefulWidget {
+  const _SurveyFlowScreen({
+    required this.startIndex,
+    required this.questions,
+    required this.answers,
+    required this.initialComment,
+    required this.onAnswer,
+    required this.onComment,
+  });
+
+  final int startIndex;
+  final List<TamQuestion> questions;
+  final Map<int, LikertScale> answers;
+  final String? initialComment;
+  final void Function(int, LikertScale) onAnswer;
+  final void Function(String) onComment;
+
+  @override
+  State<_SurveyFlowScreen> createState() => _SurveyFlowScreenState();
+}
+
+class _SurveyFlowScreenState extends State<_SurveyFlowScreen> {
+  late PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: widget.startIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _nextPage() {
+    if (_pageController.page!.toInt() < widget.questions.length) {
+      _pageController.nextPage(
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOutCubic,
+      );
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PageView.builder(
+      controller: _pageController,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: widget.questions.length + 1,
+      itemBuilder: (context, index) {
+        if (index < widget.questions.length) {
+          return _SurveyQuestionPage(
+            question: widget.questions[index],
+            questionNumber: index + 1,
+            totalQuestions: widget.questions.length,
+            initialValue: widget.answers[index],
+            onConfirm: (scale) {
+              widget.onAnswer(index, scale);
+              _nextPage();
+            },
+            onClose: () => Navigator.of(context).pop(),
+          );
+        } else {
+          return _OpenForumPage(
+            initialText: widget.initialComment,
+            onConfirm: (text) {
+              widget.onComment(text);
+              Navigator.of(context).pop();
+            },
+            onClose: () => Navigator.of(context).pop(),
+          );
+        }
+      },
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Survey Question Page – the interactive slider + face screen
 // ---------------------------------------------------------------------------
@@ -680,12 +828,16 @@ class _SurveyQuestionPage extends StatefulWidget {
     required this.questionNumber,
     required this.totalQuestions,
     this.initialValue,
+    required this.onConfirm,
+    required this.onClose,
   });
 
   final TamQuestion question;
   final int questionNumber;
   final int totalQuestions;
   final LikertScale? initialValue;
+  final void Function(LikertScale) onConfirm;
+  final VoidCallback onClose;
 
   @override
   State<_SurveyQuestionPage> createState() => _SurveyQuestionPageState();
@@ -768,7 +920,7 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
 
   void _confirm() {
     HapticFeedback.mediumImpact();
-    Navigator.of(context).pop(_currentScale);
+    widget.onConfirm(_currentScale);
   }
 
   @override
@@ -793,7 +945,7 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
               child: Row(
                 children: [
                   GestureDetector(
-                    onTap: () => Navigator.of(context).pop(),
+                    onTap: widget.onClose,
                     child: Container(
                       width: 40,
                       height: 40,
@@ -969,6 +1121,7 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
                 onTap: _confirm,
                 textColor: textColor,
                 bgColor: textColor.withValues(alpha: 0.14),
+                label: 'Next',
               ),
             ),
 
@@ -1077,49 +1230,96 @@ class _FacePainter extends CustomPainter {
     final cx = size.width / 2;
     final cy = size.height / 2;
 
+    final eyeCy = cy - 18; // Pull eyes up for more padding
+
     switch (expression) {
       case _FaceExpression.veryBad:
         // Squinting small ovals
-        _drawEllipse(canvas, paint, cx - size.width * 0.18, cy - 8, 20, 12);
-        _drawEllipse(canvas, paint, cx + size.width * 0.18, cy - 8, 20, 12);
+        _drawEllipse(canvas, paint, cx - size.width * 0.23, eyeCy - 8, 20, 12);
+        _drawEllipse(canvas, paint, cx + size.width * 0.23, eyeCy - 8, 20, 12);
+        break;
       case _FaceExpression.bad:
         // Sleepy pill rectangles
         _drawRoundRect(
-            canvas, paint, cx - size.width * 0.24, cy - 7, 42, 15, 7);
+            canvas, paint, cx - size.width * 0.23 - 21, eyeCy - 7, 42, 15, 7);
         _drawRoundRect(
-            canvas, paint, cx + size.width * 0.02, cy - 7, 42, 15, 7);
+            canvas, paint, cx + size.width * 0.23 - 21, eyeCy - 7, 42, 15, 7);
+        break;
       case _FaceExpression.neutral:
         // Medium circles
-        _drawCircle(canvas, paint, cx - size.width * 0.2, cy - 5, 20);
-        _drawCircle(canvas, paint, cx + size.width * 0.2, cy - 5, 20);
+        _drawCircle(canvas, paint, cx - size.width * 0.23, eyeCy - 5, 20);
+        _drawCircle(canvas, paint, cx + size.width * 0.23, eyeCy - 5, 20);
+        break;
       case _FaceExpression.good:
         // Larger open circles
-        _drawCircle(canvas, paint, cx - size.width * 0.22, cy, 26);
-        _drawCircle(canvas, paint, cx + size.width * 0.22, cy, 26);
+        _drawCircle(canvas, paint, cx - size.width * 0.22, eyeCy, 26);
+        _drawCircle(canvas, paint, cx + size.width * 0.22, eyeCy, 26);
+        break;
       case _FaceExpression.veryGood:
         // Big bright circles + shine
-        _drawCircle(canvas, paint, cx - size.width * 0.23, cy, 31);
-        _drawCircle(canvas, paint, cx + size.width * 0.23, cy, 31);
+        _drawCircle(canvas, paint, cx - size.width * 0.23, eyeCy, 31);
+        _drawCircle(canvas, paint, cx + size.width * 0.23, eyeCy, 31);
         final shinePaint = Paint()
           ..color = color.withValues(alpha: 0.32)
           ..style = PaintingStyle.fill;
         _drawCircle(
-            canvas, shinePaint, cx - size.width * 0.23 + 9, cy - 10, 8);
+            canvas, shinePaint, cx - size.width * 0.23 + 9, eyeCy - 10, 8);
         _drawCircle(
-            canvas, shinePaint, cx + size.width * 0.23 + 9, cy - 10, 8);
+            canvas, shinePaint, cx + size.width * 0.23 + 9, eyeCy - 10, 8);
+        break;
     }
 
-    // Tiny nose dot
-    _drawEllipse(
-      canvas,
-      Paint()
-        ..color = color.withValues(alpha: 0.45)
-        ..style = PaintingStyle.fill,
-      cx,
-      cy + size.height * 0.12,
-      9,
-      7,
-    );
+    // Mouth
+    final mouthPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 14
+      ..strokeCap = StrokeCap.round;
+
+    final mouthWidth = size.width * 0.35;
+    final mouthHeight = size.height * 0.20;
+    final mouthCy = cy + 12; // Push mouth down for more padding
+
+    switch (expression) {
+      case _FaceExpression.veryBad:
+      case _FaceExpression.bad:
+        // Sad face (arc curving downwards)
+        canvas.drawArc(
+          Rect.fromCenter(
+            center: Offset(cx, mouthCy + size.height * 0.28),
+            width: mouthWidth,
+            height: mouthHeight,
+          ),
+          math.pi + 0.2,
+          math.pi - 0.4,
+          false,
+          mouthPaint,
+        );
+        break;
+      case _FaceExpression.neutral:
+        // Straight line
+        canvas.drawLine(
+          Offset(cx - mouthWidth / 2, mouthCy + size.height * 0.25),
+          Offset(cx + mouthWidth / 2, mouthCy + size.height * 0.25),
+          mouthPaint,
+        );
+        break;
+      case _FaceExpression.good:
+      case _FaceExpression.veryGood:
+        // Happy face (arc curving upwards)
+        canvas.drawArc(
+          Rect.fromCenter(
+            center: Offset(cx, mouthCy + size.height * 0.22),
+            width: mouthWidth,
+            height: mouthHeight,
+          ),
+          0.2,
+          math.pi - 0.4,
+          false,
+          mouthPaint,
+        );
+        break;
+    }
   }
 
   void _drawCircle(Canvas c, Paint p, double x, double y, double r) =>
@@ -1155,11 +1355,15 @@ class _ConfirmButton extends StatefulWidget {
     required this.onTap,
     required this.textColor,
     required this.bgColor,
+    this.label = 'Confirm',
+    this.icon = Icons.arrow_forward_rounded,
   });
 
   final VoidCallback onTap;
   final Color textColor;
   final Color bgColor;
+  final String label;
+  final IconData icon;
 
   @override
   State<_ConfirmButton> createState() => _ConfirmButtonState();
@@ -1194,7 +1398,7 @@ class _ConfirmButtonState extends State<_ConfirmButton> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                'Confirm',
+                widget.label,
                 style: AppTypography.button.copyWith(
                   color: widget.textColor,
                   letterSpacing: 1,
@@ -1202,12 +1406,223 @@ class _ConfirmButtonState extends State<_ConfirmButton> {
               ),
               const SizedBox(width: AppSpacing.sm),
               Icon(
-                Icons.arrow_forward_rounded,
+                widget.icon,
                 color: widget.textColor,
                 size: 18,
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Open Forum Page
+// ---------------------------------------------------------------------------
+
+class _OpenForumPage extends StatefulWidget {
+  const _OpenForumPage({
+    this.initialText,
+    required this.onConfirm,
+    required this.onClose,
+  });
+
+  final String? initialText;
+  final void Function(String) onConfirm;
+  final VoidCallback onClose;
+
+  @override
+  State<_OpenForumPage> createState() => _OpenForumPageState();
+}
+
+class _OpenForumPageState extends State<_OpenForumPage> {
+  late TextEditingController _featureController;
+  late TextEditingController _deliveryController;
+
+  @override
+  void initState() {
+    super.initState();
+    String feature = '';
+    String delivery = '';
+    if (widget.initialText != null && widget.initialText!.isNotEmpty) {
+      try {
+        final map = jsonDecode(widget.initialText!);
+        feature = map['feature'] ?? '';
+        delivery = map['delivery'] ?? '';
+      } catch (e) {
+        feature = widget.initialText!;
+      }
+    }
+    _featureController = TextEditingController(text: feature);
+    _deliveryController = TextEditingController(text: delivery);
+  }
+
+  @override
+  void dispose() {
+    _featureController.dispose();
+    _deliveryController.dispose();
+    super.dispose();
+  }
+
+  void _confirm() {
+    HapticFeedback.mediumImpact();
+    final data = jsonEncode({
+      'feature': _featureController.text,
+      'delivery': _deliveryController.text,
+    });
+    widget.onConfirm(data);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF8F9FA);
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final dimColor = textColor.withValues(alpha: 0.55);
+
+    return Scaffold(
+      backgroundColor: bg,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Top bar
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.md,
+              ),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: widget.onClose,
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: textColor.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.close_rounded,
+                        color: textColor,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'OPEN FORUM',
+                          style: AppTypography.overline.copyWith(
+                            color: dimColor,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                        Text(
+                          'Additional Feedback',
+                          style: AppTypography.caption.copyWith(color: dimColor),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                child: Column(
+                  children: [
+                    Text(
+                      'What is one feature or service you wish GRID would add in the future?',
+                      textAlign: TextAlign.left,
+                      style: AppTypography.body.copyWith(
+                        color: textColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Expanded(
+                      flex: 3,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: textColor.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: textColor.withValues(alpha: 0.1),
+                          ),
+                        ),
+                        child: TextField(
+                          controller: _featureController,
+                          maxLines: null,
+                          expands: true,
+                          style: AppTypography.body.copyWith(color: textColor),
+                          decoration: InputDecoration(
+                            hintText: 'Share your thoughts...',
+                            hintStyle: AppTypography.body.copyWith(color: dimColor),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.all(AppSpacing.md),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Text(
+                      '(Optional) Any additional comments regarding your experience?',
+                      textAlign: TextAlign.left,
+                      style: AppTypography.body.copyWith(
+                        color: textColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Expanded(
+                      flex: 2,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: textColor.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: textColor.withValues(alpha: 0.1),
+                          ),
+                        ),
+                        child: TextField(
+                          controller: _deliveryController,
+                          maxLines: null,
+                          expands: true,
+                          style: AppTypography.body.copyWith(color: textColor),
+                          decoration: InputDecoration(
+                            hintText: 'Optional comments...',
+                            hintStyle: AppTypography.body.copyWith(color: dimColor),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.all(AppSpacing.md),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              child: _ConfirmButton(
+                onTap: _confirm,
+                textColor: textColor,
+                bgColor: textColor.withValues(alpha: 0.14),
+                label: 'Submit Feedback',
+                icon: Icons.check_rounded,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xxl),
+          ],
         ),
       ),
     );

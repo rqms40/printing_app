@@ -47,7 +47,8 @@ export class OrdersService {
 
     // Validate and deduct credits if payment method is credits
     if (
-      orderData.paymentMethod === 'credits' &&
+      (orderData.paymentMethod === 'credits' ||
+        orderData.paymentMethod === 'gridCredits') &&
       orderData.totalPrice &&
       orderData.totalPrice > 0
     ) {

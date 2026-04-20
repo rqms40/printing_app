@@ -3,7 +3,8 @@ import {
   InputNumber,
   Button,
   Form,
-  Skeleton
+  Skeleton,
+  Switch
 } from "antd";
 import { useApiUrl, useCustom, useCustomMutation, useNotification } from "@refinedev/core";
 
@@ -24,7 +25,10 @@ export const CreditSettingsCard = () => {
     mutate({
       url: `${apiUrl}/credits/settings`,
       method: "put",
-      values,
+      values: {
+        ...values,
+        conversionRate: Number(values.conversionRate),
+      },
     }, {
       onSuccess: () => {
         open?.({
@@ -45,7 +49,10 @@ export const CreditSettingsCard = () => {
         form={form} 
         layout="vertical" 
         onFinish={onFinish}
-        initialValues={{ conversionRate: data?.data?.conversionRate || 1 }}
+        initialValues={{ 
+          conversionRate: data?.data?.conversionRate || 1,
+          creditsOnlyMode: data?.data?.creditsOnlyMode || false
+        }}
       >
         <Form.Item 
           name="conversionRate" 
@@ -54,6 +61,14 @@ export const CreditSettingsCard = () => {
           extra="Change this during promos. (e.g. 1.2 means 1 PHP gives 1.2 credits)"
         >
           <InputNumber step="0.1" min="0.1" style={{ width: "100%" }} />
+        </Form.Item>
+        <Form.Item
+          name="creditsOnlyMode"
+          label="Restrict Payments to GRID Credits"
+          valuePropName="checked"
+          extra="If enabled, GCash, Maya, and Cash on Delivery will be temporarily disabled in the mobile app."
+        >
+          <Switch />
         </Form.Item>
         <Button type="primary" htmlType="submit" loading={isUpdating}>
           Save Settings

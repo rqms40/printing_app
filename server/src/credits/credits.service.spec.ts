@@ -52,6 +52,7 @@ describe('CreditsService', () => {
     notificationsService = {
       create: jest.fn().mockResolvedValue(undefined),
       createForAllAdmins: jest.fn().mockResolvedValue(undefined),
+      triggerCreditsUpdate: jest.fn().mockResolvedValue(undefined),
     };
 
     const module = await Test.createTestingModule({

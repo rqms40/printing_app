@@ -8,6 +8,8 @@ import { DriversService } from '../drivers/drivers.service';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { CreditsService } from '../credits/credits.service';
+import { TamSurvey } from '../tam-surveys/entities/tam-survey.entity';
+import { TamSurveySettings } from '../tam-surveys/entities/tam-survey-settings.entity';
 import { In } from 'typeorm';
 import * as userInsights from './user-insights';
 
@@ -40,6 +42,8 @@ describe('AdminController analytics', () => {
         { provide: CreditsService, useValue: creditsService },
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
         { provide: getRepositoryToken(User), useValue: usersRepo },
+        { provide: getRepositoryToken(TamSurvey), useValue: mockRepo() },
+        { provide: getRepositoryToken(TamSurveySettings), useValue: mockRepo() },
       ],
     }).compile();
 
