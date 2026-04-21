@@ -38,6 +38,7 @@ dependencies:
 
   # File handling
   file_picker: ^8.1.6
+  syncfusion_flutter_pdfviewer: ^28.1.33
 
   # Persistence
   shared_preferences: ^2.3.4
