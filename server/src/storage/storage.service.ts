@@ -43,8 +43,15 @@ export class StorageService implements OnModuleInit {
     return `${scheme}://${endpoint}:${port}/${bucket}/${objectKey}`;
   }
 
-  async getPresignedUrl(objectKey: string, expirySeconds = 3600): Promise<string> {
+  async getPresignedUrl(
+    objectKey: string,
+    expirySeconds = 3600,
+  ): Promise<string> {
     const bucket = this.config.get<string>('MINIO_BUCKET', 'grid-print');
-    return this.presignClient.presignedGetObject(bucket, objectKey, expirySeconds);
+    return this.presignClient.presignedGetObject(
+      bucket,
+      objectKey,
+      expirySeconds,
+    );
   }
 }

@@ -32,7 +32,10 @@ export class DailyGridService {
     return this.repo.save(card);
   }
 
-  async update(id: number, dto: Partial<DailyGridCard>): Promise<DailyGridCard> {
+  async update(
+    id: number,
+    dto: Partial<DailyGridCard>,
+  ): Promise<DailyGridCard> {
     await this.findOne(id);
     await this.repo.update(id, dto);
     return this.findOne(id);

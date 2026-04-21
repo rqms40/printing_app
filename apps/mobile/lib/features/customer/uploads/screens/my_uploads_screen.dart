@@ -130,7 +130,7 @@ class _MyUploadsScreenState extends ConsumerState<MyUploadsScreen> {
             Expanded(
               child: state.when(
                 loading: () => _buildShimmer(colors),
-                error: (_, __) => _buildError(colors),
+                error: (_, _) => _buildError(colors),
                 data: (files) {
                   final filtered = _applyFilters(files);
                   if (files.isEmpty) return _buildEmpty(colors);
@@ -176,7 +176,7 @@ class _MyUploadsScreenState extends ConsumerState<MyUploadsScreen> {
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
         itemCount: files.length,
-        separatorBuilder: (_, __) => Divider(
+        separatorBuilder: (_, _) => Divider(
           color: colors.outline,
           height: 1,
           indent: 76,
@@ -198,7 +198,7 @@ class _MyUploadsScreenState extends ConsumerState<MyUploadsScreen> {
         childAspectRatio: 0.80,
       ),
       itemCount: 6,
-      itemBuilder: (_, __) => Shimmer.fromColors(
+      itemBuilder: (_, _) => Shimmer.fromColors(
         baseColor: colors.surfaceVariant,
         highlightColor: colors.surface,
         child: Container(
@@ -597,7 +597,7 @@ class _FilterChips extends StatelessWidget {
           vertical: 5,
         ),
         itemCount: _chips.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (_, i) {
           final (filter, label, icon) = _chips[i];
           final active = selected == filter;
@@ -799,8 +799,8 @@ class _ListRow extends StatelessWidget {
         mimeType: file.mimeType,
         fileSize: file.size,
       ),
-      splashColor: colors.accent.withOpacity(0.06),
-      highlightColor: colors.surfaceVariant.withOpacity(0.5),
+      splashColor: colors.accent.withValues(alpha: 0.06),
+      highlightColor: colors.surfaceVariant.withValues(alpha: 0.5),
       child: Padding(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.lg,

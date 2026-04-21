@@ -384,7 +384,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            OnboardingHero(
+            const OnboardingHero(
               icon: Icons.verified_user_rounded,
               headline: 'Your data,\nyour rules.',
               subtitle:
@@ -411,7 +411,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            OnboardingHero(
+            const OnboardingHero(
               icon: Icons.waving_hand_rounded,
               headline: 'What should\nwe call you?',
               subtitle: 'This is how we\'ll greet you throughout the app.',
@@ -523,7 +523,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            OnboardingHero(
+            const OnboardingHero(
               icon: Icons.people_rounded,
               headline: 'How do you\nidentify?',
               subtitle: 'Choose what feels right for you.',
@@ -990,7 +990,6 @@ class _AccountField extends StatefulWidget {
     required this.prefixIcon,
     this.keyboardType,
     this.obscureText = false,
-    this.onChanged,
     this.errorText,
     this.validator,
     this.textInputAction,
@@ -1002,7 +1001,6 @@ class _AccountField extends StatefulWidget {
   final IconData prefixIcon;
   final TextInputType? keyboardType;
   final bool obscureText;
-  final ValueChanged<String>? onChanged;
   final String? errorText;
   final String? Function(String)? validator;
   final TextInputAction? textInputAction;
@@ -1031,7 +1029,6 @@ class _AccountFieldState extends State<_AccountField> {
         ? widget.validator!(value) == null
         : value.trim().isNotEmpty;
     setState(() => _isValid = valid);
-    widget.onChanged?.call(value);
   }
 
   @override

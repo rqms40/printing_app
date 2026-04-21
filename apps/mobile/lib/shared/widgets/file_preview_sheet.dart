@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
-import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/services/api_client.dart';
@@ -119,7 +118,7 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.18),
+            color: Colors.black.withValues(alpha: 0.18),
             blurRadius: 32,
             offset: const Offset(0, -4),
           ),
@@ -129,7 +128,7 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
         children: [
           _buildHandle(colors),
           _buildHeader(colors),
-          Divider(color: colors.outline.withOpacity(0.5), height: 1),
+          Divider(color: colors.outline.withValues(alpha: 0.5), height: 1),
           Expanded(child: _buildContent(colors)),
         ],
       ),
@@ -144,7 +143,7 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
           width: 36,
           height: 4,
           decoration: BoxDecoration(
-            color: colors.outline.withOpacity(0.6),
+            color: colors.outline.withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(2),
           ),
         ),
@@ -215,8 +214,8 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
               imageUrl: url,
               fit: BoxFit.contain,
               fadeInDuration: const Duration(milliseconds: 200),
-              placeholder: (_, __) => _buildLoading(colors),
-              errorWidget: (_, __, ___) => _buildError(colors),
+              placeholder: (_, _) => _buildLoading(colors),
+              errorWidget: (_, _, _) => _buildError(colors),
             ),
           ),
         ),

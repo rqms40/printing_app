@@ -817,7 +817,8 @@ async function seed() {
     {
       title: 'Bond Paper A4',
       subtitle: '₱15 / page',
-      imageUrl: 'https://images.unsplash.com/photo-1588580000645-4562a6d2c839?w=160&h=160&fit=crop&q=80',
+      imageUrl:
+        'https://images.unsplash.com/photo-1588580000645-4562a6d2c839?w=160&h=160&fit=crop&q=80',
       category: 'paper',
       sortOrder: 0,
       isActive: true,
@@ -825,7 +826,8 @@ async function seed() {
     {
       title: 'A3 Poster',
       subtitle: '₱75 / sheet',
-      imageUrl: 'https://images.unsplash.com/photo-1503455637927-730bce8583c0?w=160&h=160&fit=crop&q=80',
+      imageUrl:
+        'https://images.unsplash.com/photo-1503455637927-730bce8583c0?w=160&h=160&fit=crop&q=80',
       category: 'paper',
       sortOrder: 1,
       isActive: true,
@@ -833,7 +835,8 @@ async function seed() {
     {
       title: '3D Print',
       subtitle: 'From ₱120',
-      imageUrl: 'https://images.unsplash.com/photo-1617839625591-e5a789593135?w=160&h=160&fit=crop&q=80',
+      imageUrl:
+        'https://images.unsplash.com/photo-1617839625591-e5a789593135?w=160&h=160&fit=crop&q=80',
       category: '3d',
       sortOrder: 2,
       isActive: true,
@@ -841,7 +844,8 @@ async function seed() {
     {
       title: 'Large Banner',
       subtitle: 'From ₱350',
-      imageUrl: 'https://images.unsplash.com/photo-1586717791821-3f44a563fa4c?w=160&h=160&fit=crop&q=80',
+      imageUrl:
+        'https://images.unsplash.com/photo-1586717791821-3f44a563fa4c?w=160&h=160&fit=crop&q=80',
       category: 'paper',
       sortOrder: 3,
       isActive: true,
@@ -849,7 +853,8 @@ async function seed() {
     {
       title: 'Flyer Print',
       subtitle: '₱12 / sheet',
-      imageUrl: 'https://images.unsplash.com/photo-1601645191163-3fc0d5d64e35?w=160&h=160&fit=crop&q=80',
+      imageUrl:
+        'https://images.unsplash.com/photo-1601645191163-3fc0d5d64e35?w=160&h=160&fit=crop&q=80',
       category: 'paper',
       sortOrder: 4,
       isActive: true,

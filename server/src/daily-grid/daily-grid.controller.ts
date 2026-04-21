@@ -38,7 +38,10 @@ export class DailyGridController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Post('admin')
-  create(@Body() body: Partial<import('./entities/daily-grid-card.entity').DailyGridCard>) {
+  create(
+    @Body()
+    body: Partial<import('./entities/daily-grid-card.entity').DailyGridCard>,
+  ) {
     return this.service.create(body);
   }
 
@@ -57,7 +60,8 @@ export class DailyGridController {
   @Patch('admin/:id')
   update(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: Partial<import('./entities/daily-grid-card.entity').DailyGridCard>,
+    @Body()
+    body: Partial<import('./entities/daily-grid-card.entity').DailyGridCard>,
   ) {
     return this.service.update(id, body);
   }

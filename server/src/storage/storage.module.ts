@@ -7,12 +7,18 @@ import { MINIO_CLIENT, MINIO_PRESIGN_CLIENT } from './storage.constants';
 export { MINIO_CLIENT, MINIO_PRESIGN_CLIENT } from './storage.constants';
 
 function makeClient(config: ConfigService, usePublicUrl = false): Client {
-  const publicUrl = usePublicUrl ? config.get<string>('MINIO_PUBLIC_URL') : undefined;
+  const publicUrl = usePublicUrl
+    ? config.get<string>('MINIO_PUBLIC_URL')
+    : undefined;
   if (publicUrl) {
     const parsed = new URL(publicUrl);
     return new Client({
       endPoint: parsed.hostname,
-      port: parsed.port ? parseInt(parsed.port, 10) : (parsed.protocol === 'https:' ? 443 : 80),
+      port: parsed.port
+        ? parseInt(parsed.port, 10)
+        : parsed.protocol === 'https:'
+          ? 443
+          : 80,
       useSSL: parsed.protocol === 'https:',
       accessKey: config.get<string>('MINIO_ACCESS_KEY', 'minioadmin'),
       secretKey: config.get<string>('MINIO_SECRET_KEY', 'minioadmin'),

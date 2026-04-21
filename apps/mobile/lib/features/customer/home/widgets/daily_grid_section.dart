@@ -165,7 +165,7 @@ class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
           height: _kCardH,
           child: gridAsync.when(
             loading: () => _buildShimmer(colors),
-            error: (_, __) => _buildCarousel(_kFallback, colors),
+            error: (_, _) => _buildCarousel(_kFallback, colors),
             data: (items) => _buildCarousel(
               items.isEmpty ? _kFallback : items,
               colors,

@@ -47,7 +47,11 @@ export class FilesController {
     @Request() req: RequestWithUser,
   ): Promise<PresignedUrlResponseDto> {
     const isAdmin = req.user.role === 'admin';
-    const url = await this.filesService.getPresignedUrl(id, req.user.sub, isAdmin);
+    const url = await this.filesService.getPresignedUrl(
+      id,
+      req.user.sub,
+      isAdmin,
+    );
     return { url };
   }
 

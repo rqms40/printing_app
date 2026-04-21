@@ -139,7 +139,9 @@ describe('FilesService', () => {
     it('returns presigned URL when owner requests own file', async () => {
       const fileMeta = makeFileMeta();
       mockFileRepo.findOne.mockResolvedValue(fileMeta);
-      mockStorageService.getPresignedUrl.mockResolvedValue('http://minio/presigned?sig=abc');
+      mockStorageService.getPresignedUrl.mockResolvedValue(
+        'http://minio/presigned?sig=abc',
+      );
 
       const result = await service.getPresignedUrl(1, 42, false);
 
@@ -153,7 +155,9 @@ describe('FilesService', () => {
     it('returns presigned URL when admin requests any file', async () => {
       const fileMeta = makeFileMeta({ uploadedBy: 99 });
       mockFileRepo.findOne.mockResolvedValue(fileMeta);
-      mockStorageService.getPresignedUrl.mockResolvedValue('http://minio/presigned?sig=xyz');
+      mockStorageService.getPresignedUrl.mockResolvedValue(
+        'http://minio/presigned?sig=xyz',
+      );
 
       const result = await service.getPresignedUrl(1, 1, true);
 
@@ -190,7 +194,9 @@ describe('FilesService', () => {
     it('throws InternalServerErrorException when storage service fails', async () => {
       const fileMeta = makeFileMeta();
       mockFileRepo.findOne.mockResolvedValue(fileMeta);
-      mockStorageService.getPresignedUrl.mockRejectedValue(new Error('MinIO down'));
+      mockStorageService.getPresignedUrl.mockRejectedValue(
+        new Error('MinIO down'),
+      );
 
       await expect(service.getPresignedUrl(1, 42, false)).rejects.toThrow(
         InternalServerErrorException,

@@ -88,10 +88,14 @@ describe('StorageService', () => {
 
   describe('getPresignedUrl', () => {
     it('calls presignedGetObject with correct bucket, key, expiry and returns URL', async () => {
-      const fakeUrl = 'http://localhost:9000/test-bucket/uploads/general/2026/04/21/uuid.jpg?X-Amz-Signature=abc';
+      const fakeUrl =
+        'http://localhost:9000/test-bucket/uploads/general/2026/04/21/uuid.jpg?X-Amz-Signature=abc';
       mockMinioClient.presignedGetObject.mockResolvedValue(fakeUrl);
 
-      const result = await service.getPresignedUrl('uploads/general/2026/04/21/uuid.jpg', 3600);
+      const result = await service.getPresignedUrl(
+        'uploads/general/2026/04/21/uuid.jpg',
+        3600,
+      );
 
       expect(mockMinioClient.presignedGetObject).toHaveBeenCalledWith(
         'test-bucket',
