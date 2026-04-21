@@ -90,6 +90,9 @@ class LocationNotifier extends StateNotifier<LocationUpdate?> {
     });
   }
 
+  /// Accepts a driver location pushed from the customer tracking WebSocket.
+  void updateLocation(LocationUpdate update) => state = update;
+
   @override
   void dispose() {
     _subscription?.cancel();

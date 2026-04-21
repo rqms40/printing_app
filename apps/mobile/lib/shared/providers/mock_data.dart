@@ -130,7 +130,26 @@ class MockData {
     updatedAt: _now.subtract(const Duration(days: 30)),
   );
 
-  static List<Address> get addresses => [addressMakati, addressQC, addressCebu];
+  /// Davao City delivery address — near the GRID shop, used for live-map testing.
+  static final Address addressDavao = Address(
+    id: 'addr_004',
+    userId: 'usr_001',
+    label: 'Davao Office',
+    fullAddress: '123 CM Recto Avenue, Poblacion District, Davao City',
+    barangay: 'Poblacion District',
+    city: 'Davao City',
+    province: 'Davao del Sur',
+    zipCode: '8000',
+    landmark: 'Near Victoria Plaza Mall',
+    latitude: 7.0731,
+    longitude: 125.6128,
+    isDefault: false,
+    createdAt: _now.subtract(const Duration(days: 10)),
+    updatedAt: _now.subtract(const Duration(days: 10)),
+  );
+
+  static List<Address> get addresses =>
+      [addressMakati, addressQC, addressCebu, addressDavao];
 
   // ─── Paper & 3D Specs ──────────────────────────────────────────────
 
@@ -293,7 +312,7 @@ class MockData {
       paymentStatus: PaymentStatus.paid,
       orderStatus: OrderStatus.onTheWay,
       deliveryOption: 'delivery',
-      deliveryAddressId: 'addr_002',
+      deliveryAddressId: 'addr_004',
       assignedDriverId: 'usr_002',
       trackingLink: 'https://track.gridprint.ph/ORD-10005',
       createdAt: _now.subtract(const Duration(days: 3)),

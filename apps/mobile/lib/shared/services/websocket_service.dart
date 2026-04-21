@@ -1,5 +1,6 @@
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'package:flutter/foundation.dart';
+import 'package:printing_app/config/api_config.dart';
 import 'token_storage.dart';
 
 /// Recursively converts `Map<dynamic, dynamic>` and `List<dynamic>` trees
@@ -29,13 +30,7 @@ class WebSocketService {
   // Callbacks registered before the notifications socket is created
   final List<Function(Map<String, dynamic>)> _pendingNotifListeners = [];
 
-  String get _baseUrl {
-    const String kServerUrl = String.fromEnvironment('SERVER_URL', defaultValue: '');
-    if (kServerUrl.isNotEmpty) return kServerUrl;
-    if (kIsWeb) return 'http://192.168.40.201:3000';
-    final isAndroid = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
-    return isAndroid ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
-  }
+  String get _baseUrl => kServerUrl;
 
   Future<void> connectOrders({
     required Function(dynamic) onOrderUpdate,
@@ -85,6 +80,11 @@ class WebSocketService {
 
   void sendDriverLocation(Map<String, dynamic> location) {
     _locationSocket?.emit('updateLocation', location);
+  }
+
+  void disconnectLocation() {
+    _locationSocket?.disconnect();
+    _locationSocket = null;
   }
 
   Future<void> connectNotifications({

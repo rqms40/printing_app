@@ -172,11 +172,12 @@ void main() {
       expect(statuses.length, greaterThanOrEqualTo(8));
     });
 
-    test('provides 3 addresses with Filipino locations', () {
-      expect(MockData.addresses.length, 3);
+    test('provides addresses with Filipino locations', () {
+      expect(MockData.addresses.length, greaterThanOrEqualTo(3));
       expect(MockData.addresses.any((a) => a.city == 'Makati City'), isTrue);
       expect(MockData.addresses.any((a) => a.city == 'Quezon City'), isTrue);
       expect(MockData.addresses.any((a) => a.city == 'Cebu City'), isTrue);
+      expect(MockData.addresses.any((a) => a.city == 'Davao City'), isTrue);
     });
 
     test('provides location updates with Manila coordinates', () {

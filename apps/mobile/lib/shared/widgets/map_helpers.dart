@@ -20,11 +20,20 @@ class MapHelpers {
   /// Center between shop and destination.
   static const mapCenter = LatLng(14.5940, 121.0380);
 
-  /// OSM tile layer.
-  static TileLayer tileLayer() => TileLayer(
-        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-        userAgentPackageName: 'com.gridprint.app',
-      );
+  /// Davao City center — used for idle state on home map tile.
+  static const davaoCenter = LatLng(7.1907, 125.4553);
+
+  /// Returns a CartoDB tile layer matching the system theme.
+  /// Dark mode → Dark Matter. Light mode → Positron.
+  static TileLayer tileLayer(Brightness brightness) {
+    final url = brightness == Brightness.dark
+        ? 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
+        : 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';
+    return TileLayer(
+      urlTemplate: url,
+      userAgentPackageName: 'com.gridprint.app',
+    );
+  }
 
   /// Bold route polyline (double-layered: dark border + teal fill).
   static PolylineLayer routePolyline(List<LatLng> points) {

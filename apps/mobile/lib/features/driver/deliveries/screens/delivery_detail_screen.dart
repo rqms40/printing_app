@@ -329,7 +329,7 @@ class _RouteMapPreviewState extends State<_RouteMapPreview> {
                     interactionOptions: InteractionOptions(flags: 0),
                   ),
                   children: [
-                    MapHelpers.tileLayer(),
+                    MapHelpers.tileLayer(Theme.of(context).brightness),
                     MapHelpers.routePolyline(_routePoints!),
                     MarkerLayer(
                       markers: [

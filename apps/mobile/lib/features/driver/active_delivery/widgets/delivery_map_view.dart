@@ -104,7 +104,7 @@ class _DeliveryMapViewState extends ConsumerState<DeliveryMapView> {
                   initialZoom: 14.0,
                 ),
                 children: [
-                  MapHelpers.tileLayer(),
+                  MapHelpers.tileLayer(Theme.of(context).brightness),
                   MapHelpers.routePolyline(_routePoints),
                   MarkerLayer(
                     markers: [

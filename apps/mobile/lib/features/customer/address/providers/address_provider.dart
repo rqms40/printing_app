@@ -27,8 +27,11 @@ Address _parseAddress(Map<String, dynamic> json) {
 }
 
 class AddressNotifier extends StateNotifier<List<Address>> {
-  AddressNotifier() : super([]) {
-    _fetchAddresses();
+  AddressNotifier({
+    List<Address> initialState = const [],
+    bool skipBootstrap = false,
+  }) : super(initialState) {
+    if (!skipBootstrap) _fetchAddresses();
   }
 
   static const int maxAddresses = 5;

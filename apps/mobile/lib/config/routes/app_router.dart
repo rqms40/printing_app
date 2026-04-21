@@ -358,6 +358,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             slideTransition(const DeliveryTrackingScreen(), state),
       ),
       GoRoute(
+        path: '/customer/tracking',
+        pageBuilder: (_, state) =>
+            slideTransition(const DeliveryTrackingScreen(), state),
+      ),
+      GoRoute(
         path: '/customer/addresses',
         pageBuilder: (_, state) =>
             slideTransition(const AddressListScreen(), state),
