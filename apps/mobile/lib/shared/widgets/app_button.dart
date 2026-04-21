@@ -7,7 +7,7 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 
 /// Button variants for [AppButton].
-enum AppButtonVariant { primary, secondary, ghost }
+enum AppButtonVariant { primary, secondary, ghost, brand }
 
 /// Reusable button following the GRID design system.
 ///
@@ -109,6 +109,8 @@ class _AppButtonState extends State<AppButton> {
       case AppButtonVariant.secondary:
       case AppButtonVariant.ghost:
         return Colors.transparent;
+      case AppButtonVariant.brand:
+        return colors.brand;
     }
   }
 
@@ -123,6 +125,8 @@ class _AppButtonState extends State<AppButton> {
         );
       case AppButtonVariant.ghost:
         return RoundedRectangleBorder(borderRadius: AppRadius.borderMd);
+      case AppButtonVariant.brand:
+        return RoundedRectangleBorder(borderRadius: AppRadius.borderMd);
     }
   }
 
@@ -133,6 +137,8 @@ class _AppButtonState extends State<AppButton> {
       case AppButtonVariant.secondary:
       case AppButtonVariant.ghost:
         return colors.onBackground;
+      case AppButtonVariant.brand:
+        return colors.accentOnColor;
     }
   }
 

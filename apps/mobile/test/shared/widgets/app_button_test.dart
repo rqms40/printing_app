@@ -149,5 +149,31 @@ void main() {
       await tester.tap(find.text('No Tap'));
       expect(tapped, isFalse);
     });
+
+    testWidgets('brand button renders with brand background color in dark mode',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(brightness: Brightness.dark),
+          home: Scaffold(
+            body: Center(
+              child: AppButton(
+                label: 'Get Started',
+                onTap: () {},
+                variant: AppButtonVariant.brand,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final material = tester.widgetList<Material>(
+        find.descendant(
+          of: find.byType(AppButton),
+          matching: find.byType(Material),
+        ),
+      ).first;
+      expect(material.color, equals(AppColors.dark.brand));
+    });
   });
 }
