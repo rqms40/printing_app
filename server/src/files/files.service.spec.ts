@@ -1,54 +1,233 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import {
+  BadRequestException,
+  ForbiddenException,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { FilesService } from './files.service';
 import { FileMetadata } from './entities/file-metadata.entity';
 import { StorageService } from '../storage/storage.service';
 
+const mockFileRepo = {
+  create: jest.fn(),
+  save: jest.fn(),
+  findOne: jest.fn(),
+  find: jest.fn(),
+  update: jest.fn(),
+  delete: jest.fn(),
+  createQueryBuilder: jest.fn(),
+};
+
+const mockStorageService = {
+  upload: jest.fn(),
+  getPresignedUrl: jest.fn(),
+  delete: jest.fn(),
+};
+
+const makeFile = (
+  overrides: Partial<Express.Multer.File> = {},
+): Express.Multer.File => ({
+  fieldname: 'file',
+  originalname: 'photo.jpg',
+  encoding: '7bit',
+  mimetype: 'image/jpeg',
+  size: 1024,
+  buffer: Buffer.from('fake-image-data'),
+  stream: null as any,
+  destination: '',
+  filename: '',
+  path: '',
+  ...overrides,
+});
+
+const makeFileMeta = (overrides: Partial<FileMetadata> = {}) => ({
+  id: 1,
+  originalName: 'photo.jpg',
+  mimeType: 'image/jpeg',
+  size: 1024,
+  url: 'http://localhost:9000/grid-print/uploads/general/2026/04/21/uuid.jpg',
+  objectKey: 'uploads/general/2026/04/21/uuid.jpg',
+  uploadedBy: 42,
+  expiresAt: null,
+  createdAt: new Date(),
+  ...overrides,
+});
+
 describe('FilesService', () => {
   let service: FilesService;
-  const repo = {
-    find: jest.fn(),
-    findOne: jest.fn(),
-    findOneOrFail: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
-    create: jest.fn(),
-    save: jest.fn(),
-    createQueryBuilder: jest.fn(),
-  };
-  const storageService = {
-    upload: jest.fn(),
-    getPresignedUrl: jest.fn(),
-    delete: jest.fn(),
-  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    const module: TestingModule = await Test.createTestingModule({
+    const module = await Test.createTestingModule({
       providers: [
         FilesService,
-        { provide: getRepositoryToken(FileMetadata), useValue: repo },
-        { provide: StorageService, useValue: storageService },
+        { provide: getRepositoryToken(FileMetadata), useValue: mockFileRepo },
+        { provide: StorageService, useValue: mockStorageService },
       ],
     }).compile();
     service = module.get<FilesService>(FilesService);
   });
 
+  describe('storeMetadata', () => {
+    it('uploads file to MinIO and returns metadata with objectKey and url', async () => {
+      const file = makeFile();
+      const fakeUrl =
+        'http://localhost:9000/grid-print/uploads/general/2026/04/21/uuid.jpg';
+      mockStorageService.upload.mockResolvedValue(fakeUrl);
+      const savedMeta = makeFileMeta({ url: fakeUrl });
+      mockFileRepo.create.mockReturnValue(savedMeta);
+      mockFileRepo.save.mockResolvedValue(savedMeta);
+
+      const result = await service.storeMetadata(file, 42);
+
+      expect(mockStorageService.upload).toHaveBeenCalledWith(
+        file.buffer,
+        expect.stringMatching(
+          /^uploads\/general\/\d{4}\/\d{2}\/\d{2}\/.+\.jpg$/,
+        ),
+        'image/jpeg',
+      );
+      expect(mockFileRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          originalName: 'photo.jpg',
+          mimeType: 'image/jpeg',
+          size: 1024,
+          url: fakeUrl,
+          uploadedBy: 42,
+        }),
+      );
+      expect(result).toEqual(savedMeta);
+    });
+
+    it('throws BadRequestException for disallowed MIME type without calling StorageService', async () => {
+      const file = makeFile({ mimetype: 'video/mp4' });
+      await expect(service.storeMetadata(file, 1)).rejects.toThrow(
+        new BadRequestException('File type not allowed'),
+      );
+      expect(mockStorageService.upload).not.toHaveBeenCalled();
+    });
+
+    it('throws BadRequestException for file over 20 MB without calling StorageService', async () => {
+      const file = makeFile({ size: 21 * 1024 * 1024 });
+      await expect(service.storeMetadata(file, 1)).rejects.toThrow(
+        new BadRequestException('File exceeds 20 MB limit'),
+      );
+      expect(mockStorageService.upload).not.toHaveBeenCalled();
+    });
+
+    it('throws InternalServerErrorException when MinIO fails without saving to DB', async () => {
+      const file = makeFile();
+      mockStorageService.upload.mockRejectedValue(
+        new Error('MinIO unavailable'),
+      );
+      await expect(service.storeMetadata(file, 1)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+      expect(mockFileRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getPresignedUrl', () => {
+    it('returns presigned URL when owner requests own file', async () => {
+      const fileMeta = makeFileMeta();
+      mockFileRepo.findOne.mockResolvedValue(fileMeta);
+      mockStorageService.getPresignedUrl.mockResolvedValue(
+        'http://minio/presigned?sig=abc',
+      );
+
+      const result = await service.getPresignedUrl(1, 42, false);
+
+      expect(mockStorageService.getPresignedUrl).toHaveBeenCalledWith(
+        'uploads/general/2026/04/21/uuid.jpg',
+        3600,
+      );
+      expect(result).toBe('http://minio/presigned?sig=abc');
+    });
+
+    it('returns presigned URL when admin requests any file', async () => {
+      const fileMeta = makeFileMeta({ uploadedBy: 99 });
+      mockFileRepo.findOne.mockResolvedValue(fileMeta);
+      mockStorageService.getPresignedUrl.mockResolvedValue(
+        'http://minio/presigned?sig=xyz',
+      );
+
+      const result = await service.getPresignedUrl(1, 1, true);
+
+      expect(result).toBe('http://minio/presigned?sig=xyz');
+    });
+
+    it('throws ForbiddenException when non-owner non-admin requests file', async () => {
+      const fileMeta = makeFileMeta({ uploadedBy: 99 });
+      mockFileRepo.findOne.mockResolvedValue(fileMeta);
+
+      await expect(service.getPresignedUrl(1, 42, false)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(mockStorageService.getPresignedUrl).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException when file does not exist', async () => {
+      mockFileRepo.findOne.mockResolvedValue(null);
+
+      await expect(service.getPresignedUrl(999, 42, false)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('throws NotFoundException when objectKey is null', async () => {
+      mockFileRepo.findOne.mockResolvedValue(makeFileMeta({ objectKey: null }));
+
+      await expect(service.getPresignedUrl(1, 42, false)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(mockStorageService.getPresignedUrl).not.toHaveBeenCalled();
+    });
+
+    it('throws InternalServerErrorException when storage service fails', async () => {
+      const fileMeta = makeFileMeta();
+      mockFileRepo.findOne.mockResolvedValue(fileMeta);
+      mockStorageService.getPresignedUrl.mockRejectedValue(
+        new Error('MinIO down'),
+      );
+
+      await expect(service.getPresignedUrl(1, 42, false)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+  });
+
+  describe('getMyUploads', () => {
+    it('uses two-branch OR where clause to exclude expired files', async () => {
+      mockFileRepo.find.mockResolvedValue([]);
+      await service.getMyUploads(7);
+
+      const whereArg = mockFileRepo.find.mock.calls[0][0].where;
+      expect(Array.isArray(whereArg)).toBe(true);
+      expect(whereArg).toHaveLength(2);
+      expect(whereArg[0].uploadedBy).toBe(7);
+      expect(whereArg[1].uploadedBy).toBe(7);
+    });
+  });
+
   describe('stampExpiry', () => {
     it('sets expiresAt to now + retentionDays on the file row', async () => {
-      repo.update.mockResolvedValue({});
+      mockFileRepo.update.mockResolvedValue({});
       const before = new Date();
       await service.stampExpiry(5, 7);
       const after = new Date();
 
-      expect(repo.update).toHaveBeenCalledTimes(1);
-      const [id, payload] = repo.update.mock.calls[0];
+      expect(mockFileRepo.update).toHaveBeenCalledTimes(1);
+      const [id, payload] = mockFileRepo.update.mock.calls[0];
       expect(id).toBe(5);
       const expiresAt: Date = payload.expiresAt;
       const diffMs = expiresAt.getTime() - before.getTime();
       const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
       expect(diffMs).toBeGreaterThanOrEqual(sevenDaysMs - 1000);
-      expect(diffMs).toBeLessThanOrEqual(sevenDaysMs + (after.getTime() - before.getTime()) + 1000);
+      expect(diffMs).toBeLessThanOrEqual(
+        sevenDaysMs + (after.getTime() - before.getTime()) + 1000,
+      );
     });
   });
 
@@ -62,14 +241,14 @@ describe('FilesService', () => {
           { id: 2, objectKey: 'key/b.pdf', expiresAt: new Date(Date.now() - 1000) },
         ]),
       };
-      repo.createQueryBuilder.mockReturnValue(fakeQb);
-      storageService.delete.mockResolvedValue(undefined);
-      repo.delete.mockResolvedValue({});
+      mockFileRepo.createQueryBuilder.mockReturnValue(fakeQb);
+      mockStorageService.delete.mockResolvedValue(undefined);
+      mockFileRepo.delete.mockResolvedValue({});
 
       const result = await service.deleteExpired();
 
-      expect(storageService.delete).toHaveBeenCalledTimes(2);
-      expect(repo.delete).toHaveBeenCalledTimes(2);
+      expect(mockStorageService.delete).toHaveBeenCalledTimes(2);
+      expect(mockFileRepo.delete).toHaveBeenCalledTimes(2);
       expect(result).toEqual({ found: 2, deleted: 2, skipped: 0 });
     });
 
@@ -81,13 +260,12 @@ describe('FilesService', () => {
           { id: 1, objectKey: 'key/a.pdf', expiresAt: new Date(Date.now() - 1000) },
         ]),
       };
-      repo.createQueryBuilder.mockReturnValue(fakeQb);
-      storageService.delete.mockRejectedValue(new Error('MinIO down'));
-      repo.delete.mockResolvedValue({});
+      mockFileRepo.createQueryBuilder.mockReturnValue(fakeQb);
+      mockStorageService.delete.mockRejectedValue(new Error('MinIO down'));
 
       const result = await service.deleteExpired();
 
-      expect(repo.delete).not.toHaveBeenCalled();
+      expect(mockFileRepo.delete).not.toHaveBeenCalled();
       expect(result).toEqual({ found: 1, deleted: 0, skipped: 1 });
     });
 
@@ -99,25 +277,14 @@ describe('FilesService', () => {
           { id: 3, objectKey: null, expiresAt: new Date(Date.now() - 1000) },
         ]),
       };
-      repo.createQueryBuilder.mockReturnValue(fakeQb);
-      repo.delete.mockResolvedValue({});
+      mockFileRepo.createQueryBuilder.mockReturnValue(fakeQb);
+      mockFileRepo.delete.mockResolvedValue({});
 
       const result = await service.deleteExpired();
 
-      expect(storageService.delete).not.toHaveBeenCalled();
-      expect(repo.delete).toHaveBeenCalledWith(3);
+      expect(mockStorageService.delete).not.toHaveBeenCalled();
+      expect(mockFileRepo.delete).toHaveBeenCalledWith(3);
       expect(result).toEqual({ found: 1, deleted: 1, skipped: 0 });
-    });
-  });
-
-  describe('getMyUploads', () => {
-    it('uses two-branch OR where clause to exclude expired files', async () => {
-      repo.find.mockResolvedValue([]);
-      await service.getMyUploads(7);
-
-      const whereArg = repo.find.mock.calls[0][0].where;
-      expect(Array.isArray(whereArg)).toBe(true);
-      expect(whereArg).toHaveLength(2);
     });
   });
 });
