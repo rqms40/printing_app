@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:printing_app/shared/models/app_notification.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/services/notification_service.dart';
@@ -40,8 +41,15 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
   }
 
   final NotificationsApi _api;
+  final AudioPlayer _audioPlayer = AudioPlayer();
 
   StreamSubscription<Map<String, dynamic>>? _fcmSub;
+
+  Future<void> _playNotificationSound() async {
+    try {
+      await _audioPlayer.play(AssetSource('audio/notification_user.mp3'));
+    } catch (_) {}
+  }
 
   bool _loadedFromApi = false;
 
@@ -49,6 +57,7 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
     _fcmSub?.cancel();
     _fcmSub = NotificationService.messageStream.listen((_) {
       _fetchNotifications();
+      _playNotificationSound();
     });
   }
 
@@ -58,6 +67,7 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
       // Deduplicate: don't add if already present
       if (!state.any((n) => n.id == notif.id)) {
         state = [notif, ...state];
+        _playNotificationSound();
       }
     });
   }
@@ -65,6 +75,7 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
   @override
   void dispose() {
     _fcmSub?.cancel();
+    _audioPlayer.dispose();
     super.dispose();
   }
 

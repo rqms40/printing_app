@@ -7,11 +7,13 @@ import 'package:printing_app/config/theme/app_shadows.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/admin/dashboard/providers/dashboard_provider.dart';
-import 'package:printing_app/features/admin/dashboard/widgets/sales_chart.dart';
-import 'package:printing_app/features/admin/dashboard/widgets/volume_chart.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/skeleton_screens.dart';
 import 'package:printing_app/utils/formatters.dart';
+import 'package:printing_app/features/admin/dashboard/screens/users_dashboard_view.dart';
+import 'package:printing_app/features/admin/dashboard/screens/orders_dashboard_view.dart';
+
+enum DashboardTab { operations, orders, users }
 
 /// Admin dashboard — clean KPI layout + charts.
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -23,6 +25,7 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   bool _isLoading = true;
+  DashboardTab _selectedTab = DashboardTab.operations;
 
   AppColorSet _colors(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark
@@ -71,83 +74,126 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ).animate().fadeIn(duration: 350.ms, curve: Curves.easeOut),
               const SizedBox(height: AppSpacing.lg),
 
-              // Revenue hero card — full width
-              _RevenueCard(
-                value: formatCurrency(kpis.monthlyRevenue),
-                colors: colors,
-                isDark: isDark,
-              ).animate().fadeIn(
-                  duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
-              const SizedBox(height: 10),
-
-              // 4 KPI tiles in 2×2
-              Row(
-                children: [
-                  Expanded(
-                    child: _KpiTile(
-                      icon: HugeIcons.strokeRoundedFile02,
-                      value: '${kpis.newOrdersCount}',
-                      label: 'New Orders',
-                      accentColor: colors.info,
-                      colors: colors,
-                      isDark: isDark,
+              // Segmented Control
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SegmentedButton<DashboardTab>(
+                  segments: const [
+                    ButtonSegment(
+                      value: DashboardTab.operations,
+                      label: Text('Operations'),
+                      icon: HugeIcon(icon: HugeIcons.strokeRoundedActivity01, size: 18, color: Colors.transparent),
+                    ),
+                    ButtonSegment(
+                      value: DashboardTab.orders,
+                      label: Text('Orders'),
+                      icon: HugeIcon(icon: HugeIcons.strokeRoundedPackage, size: 18, color: Colors.transparent),
+                    ),
+                    ButtonSegment(
+                      value: DashboardTab.users,
+                      label: Text('Users'),
+                      icon: HugeIcon(icon: HugeIcons.strokeRoundedUserGroup, size: 18, color: Colors.transparent),
+                    ),
+                  ],
+                  selected: {_selectedTab},
+                  onSelectionChanged: (Set<DashboardTab> newSelection) {
+                    setState(() {
+                      _selectedTab = newSelection.first;
+                    });
+                  },
+                  showSelectedIcon: false,
+                  style: ButtonStyle(
+                    backgroundColor: WidgetStateProperty.resolveWith<Color>(
+                      (Set<WidgetState> states) {
+                        if (states.contains(WidgetState.selected)) {
+                          return colors.onBackground.withValues(alpha: 0.1);
+                        }
+                        return Colors.transparent;
+                      },
+                    ),
+                    foregroundColor: WidgetStateProperty.resolveWith<Color>(
+                      (Set<WidgetState> states) {
+                        if (states.contains(WidgetState.selected)) {
+                          return colors.onBackground;
+                        }
+                        return colors.onSurfaceDim;
+                      },
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _KpiTile(
-                      icon: HugeIcons.strokeRoundedPrinter,
-                      value: '${kpis.inProductionCount}',
-                      label: 'In Production',
-                      accentColor: colors.warning,
-                      colors: colors,
-                      isDark: isDark,
-                    ),
-                  ),
-                ],
-              ).animate().fadeIn(
-                  duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: _KpiTile(
-                      icon: HugeIcons.strokeRoundedPackageDelivered,
-                      value: '${kpis.readyForPickupCount}',
-                      label: 'Ready',
-                      accentColor: colors.success,
-                      colors: colors,
-                      isDark: isDark,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _KpiTile(
-                      icon: HugeIcons.strokeRoundedCheckmarkCircle02,
-                      value: '${kpis.deliveredCount}',
-                      label: 'Delivered',
-                      accentColor: colors.success,
-                      colors: colors,
-                      isDark: isDark,
-                    ),
-                  ),
-                ],
-              ).animate().fadeIn(
-                  duration: 400.ms, delay: 160.ms, curve: Curves.easeOut),
-              const SizedBox(height: AppSpacing.xl),
-
-              // Sales chart
-              const SalesChart().animate().fadeIn(
-                  duration: 450.ms,
-                  delay: 220.ms,
-                  curve: Curves.easeOutCubic),
+                ),
+              ),
               const SizedBox(height: AppSpacing.lg),
 
-              // Volume chart
-              const VolumeChart().animate().fadeIn(
-                  duration: 450.ms,
-                  delay: 280.ms,
-                  curve: Curves.easeOutCubic),
+              // Tab Content
+              if (_selectedTab == DashboardTab.operations) ...[
+                // TAT hero card — full width
+                _TatCard(
+                  value: '${kpis.avgTatMins} mins',
+                  colors: colors,
+                  isDark: isDark,
+                ).animate().fadeIn(
+                    duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
+                const SizedBox(height: 10),
+
+                // 4 KPI tiles in 2×2
+                Row(
+                  children: [
+                    Expanded(
+                      child: _KpiTile(
+                        icon: HugeIcons.strokeRoundedFile02,
+                        value: '${kpis.newOrdersCount}',
+                        label: 'New Orders',
+                        accentColor: colors.info,
+                        colors: colors,
+                        isDark: isDark,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _KpiTile(
+                        icon: HugeIcons.strokeRoundedPrinter,
+                        value: '${kpis.inProductionCount}',
+                        label: 'In Production',
+                        accentColor: colors.warning,
+                        colors: colors,
+                        isDark: isDark,
+                      ),
+                    ),
+                  ],
+                ).animate().fadeIn(
+                    duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _KpiTile(
+                        icon: HugeIcons.strokeRoundedPackageDelivered,
+                        value: '${kpis.readyForPickupCount}',
+                        label: 'Ready',
+                        accentColor: colors.success,
+                        colors: colors,
+                        isDark: isDark,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _KpiTile(
+                        icon: HugeIcons.strokeRoundedCheckmarkCircle02,
+                        value: '${kpis.deliveredCount}',
+                        label: 'Delivered',
+                        accentColor: colors.success,
+                        colors: colors,
+                        isDark: isDark,
+                      ),
+                    ),
+                  ],
+                ).animate().fadeIn(
+                    duration: 400.ms, delay: 160.ms, curve: Curves.easeOut),
+              ] else if (_selectedTab == DashboardTab.orders) ...[
+                const OrdersDashboardView(),
+              ] else ...[
+                const UsersDashboardView(),
+              ],
               const SizedBox(height: AppSpacing.lg),
             ],
           ),
@@ -158,10 +204,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 }
 
 // ---------------------------------------------------------------------------
-// Revenue hero card — full-width accent banner
+// Average Turnaround Time
 // ---------------------------------------------------------------------------
-class _RevenueCard extends StatelessWidget {
-  const _RevenueCard({
+class _TatCard extends StatelessWidget {
+  const _TatCard({
     required this.value,
     required this.colors,
     required this.isDark,
@@ -193,7 +239,7 @@ class _RevenueCard extends StatelessWidget {
             ),
             child: Center(
               child: HugeIcon(
-                icon: HugeIcons.strokeRoundedMoneyReceive01,
+                icon: HugeIcons.strokeRoundedTime01,
                 size: 22,
                 color: textColor,
               ),
@@ -206,7 +252,7 @@ class _RevenueCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Monthly Revenue',
+                  'Average Turnaround Time',
                   style: AppTypography.caption.copyWith(
                     color: textColor.withValues(alpha: 0.7),
                     fontSize: 12,
@@ -233,13 +279,13 @@ class _RevenueCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 HugeIcon(
-                  icon: HugeIcons.strokeRoundedArrowUp01,
+                  icon: HugeIcons.strokeRoundedArrowDown01,
                   size: 14,
                   color: textColor,
                 ),
                 const SizedBox(width: 2),
                 Text(
-                  '12%',
+                  '5%',
                   style: AppTypography.caption.copyWith(
                     color: textColor,
                     fontWeight: FontWeight.w600,

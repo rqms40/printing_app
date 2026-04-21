@@ -320,6 +320,9 @@ export class AdminController {
         notes: h.notes ?? null,
         created_at: h.createdAt,
       })),
+      customer_id: o.user?.id ?? o.userId ?? null,
+      customer_name: o.user?.fullName ?? null,
+      customer_email: o.user?.email ?? null,
     };
   }
 
@@ -381,7 +384,7 @@ export class AdminController {
   async getAllOrders() {
     const orders = await this.ordersRepo.find({
       order: { createdAt: 'DESC' },
-      relations: ['paperSpec', 'threeDSpec'],
+      relations: ['paperSpec', 'threeDSpec', 'user'],
     });
     return orders.map((o) => this.mapOrder(o));
   }
@@ -391,7 +394,7 @@ export class AdminController {
   async getOrder(@Param('id', ParseIntPipe) id: number) {
     const order = await this.ordersRepo.findOneOrFail({
       where: { id },
-      relations: ['paperSpec', 'threeDSpec', 'statusHistory'],
+      relations: ['paperSpec', 'threeDSpec', 'statusHistory', 'user'],
     });
     return this.mapOrder(order);
   }

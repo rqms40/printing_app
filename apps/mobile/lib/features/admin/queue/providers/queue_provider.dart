@@ -205,14 +205,13 @@ class QueueNotifier extends StateNotifier<QueueState> {
 
   Future<void> _connectWebSocket() async {
     try {
-      await WebSocketService.instance.connectOrders(
-        onOrderUpdate: (data) {
-          if (data is Map<String, dynamic>) {
-            // Refresh full list when any order changes (new or updated)
-            _fetchOrders();
-          }
-        },
-      );
+      WebSocketService.instance.listenForOrderUpdates((data) {
+        if (data is Map<String, dynamic>) {
+          // Refresh full list when any order changes (new or updated)
+          _fetchOrders();
+        }
+      });
+      await WebSocketService.instance.connectOrders();
     } catch (e) {
       debugPrint('Admin WS failed: $e');
     }

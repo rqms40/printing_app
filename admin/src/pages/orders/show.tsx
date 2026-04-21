@@ -9,6 +9,7 @@ import {
   StopOutlined,
 } from "@ant-design/icons";
 import { useParams } from "react-router";
+import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import type { OrderStatus } from "@/types/enums";
 import {
@@ -161,6 +162,29 @@ export function OrderShow() {
               </Space>
             </Col>
           </Row>
+        </Card>
+
+        {/* Customer Information */}
+        <Card title="Customer Information">
+          <Descriptions column={2} bordered size="small">
+            <Descriptions.Item label="Name">
+              {order.customer_name ?? "Unknown"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Email">
+              {order.customer_email ?? "—"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Customer ID">
+              {order.customer_id ? (
+                <Link to={`/users/show/${order.customer_id}`} style={{ fontWeight: 500 }}>
+                  #{order.customer_id}
+                </Link>
+              ) : (
+                <span style={{ fontFamily: "monospace", color: "#888" }}>
+                  {order.user_id?.split("-")[0] ?? "—"}
+                </span>
+              )}
+            </Descriptions.Item>
+          </Descriptions>
         </Card>
 
         {/* Specifications */}

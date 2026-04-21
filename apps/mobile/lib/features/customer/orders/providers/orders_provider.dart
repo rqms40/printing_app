@@ -210,23 +210,23 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
 
   Future<void> _connectWebSocket() async {
     try {
-      await WebSocketService.instance.connectOrders(
-        onOrderUpdate: (data) {
-          if (data is Map<String, dynamic>) {
-            final updated = _parseOrder(data);
-            final index = state.indexWhere(
-              (order) => order.id == updated.id || order.orderId == updated.orderId,
-            );
+      WebSocketService.instance.listenForOrderUpdates((data) {
+        if (data is Map<String, dynamic>) {
+          final updated = _parseOrder(data);
+          final index = state.indexWhere(
+            (order) => order.id == updated.id || order.orderId == updated.orderId,
+          );
 
-            if (index >= 0) {
-              final next = [...state];
-              next[index] = updated;
-              state = next;
-            } else {
-              _fetchOrders();
-            }
+          if (index >= 0) {
+            final next = [...state];
+            next[index] = updated;
+            state = next;
+          } else {
+            _fetchOrders();
           }
-        },
+        }
+      });
+      await WebSocketService.instance.connectOrders(
         // Once socket is confirmed connected, subscribe to every loaded order room.
         onConnect: _subscribeToAllOrders,
       );

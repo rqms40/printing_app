@@ -16,6 +16,7 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  Cell,
 } from "recharts";
 
 import {
@@ -131,19 +132,30 @@ function MetricListCard({
       styles={{ header: { borderBottom: "1px solid #2E2E2E" } }}
     >
       {items.length === 0 ? (
-        renderEmptyState(emptyLabel, 180)
+        renderEmptyState(emptyLabel, 100)
       ) : (
-        <Space direction="vertical" size={12} style={{ width: "100%" }}>
-          {items.slice(0, 5).map((item) => (
-            <div
-              key={item.label}
-              style={{ display: "flex", justifyContent: "space-between", gap: 16 }}
-            >
-              <Text style={{ color: "#BDBDBD" }}>{item.label}</Text>
-              <Text style={{ color: "#F0F0F0", fontWeight: 600 }}>{formatValue(item.value)}</Text>
-            </div>
+        <Row gutter={[24, 16]}>
+          {items.slice(0, 6).map((item) => (
+            <Col xs={12} md={8} lg={4} key={item.label}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                  background: "rgba(255,255,255,0.02)",
+                  padding: 16,
+                  borderRadius: 8,
+                  border: "1px solid #2E2E2E",
+                }}
+              >
+                <Text style={{ color: "#BDBDBD", fontSize: 13 }}>{item.label}</Text>
+                <Text style={{ color: "#F0F0F0", fontWeight: 600, fontSize: 20 }}>
+                  {formatValue(item.value)}
+                </Text>
+              </div>
+            </Col>
           ))}
-        </Space>
+        </Row>
       )}
     </Card>
   );
@@ -159,7 +171,7 @@ function TrendChartCard({
   return (
     <Card
       title={<Text style={{ color: "#F0F0F0", fontWeight: 600 }}>{title}</Text>}
-      style={cardStyle}
+      style={{ ...cardStyle, height: "100%" }}
       styles={{ header: { borderBottom: "1px solid #2E2E2E" } }}
     >
       {data.length === 0 ? (
@@ -185,24 +197,29 @@ function TrendChartCard({
   );
 }
 
+const BLUE_COLORS = ["#1E88E5", "#2196F3", "#42A5F5", "#64B5F6", "#90CAF9", "#BBDEFB"];
+const YELLOW_COLORS = ["#FBC02D", "#FDD835", "#FFEB3B", "#FFEE58", "#FFF176", "#FFF59D"];
+const GREEN_COLORS = ["#388E3C", "#43A047", "#4CAF50", "#66BB6A", "#81C784", "#A5D6A7"];
+
 function MixChartCard({
   title,
   data,
   emptyLabel,
-  color,
+  colors,
 }: {
   title: string;
   data: AdminUsersAnalyticsPoint[];
   emptyLabel: string;
-  color: string;
+  colors: string[];
 }) {
+  const isDataEmpty = data.length === 0 || data.every((d) => d.value === 0);
   return (
     <Card
       title={<Text style={{ color: "#F0F0F0", fontWeight: 600 }}>{title}</Text>}
       style={cardStyle}
       styles={{ header: { borderBottom: "1px solid #2E2E2E" } }}
     >
-      {data.length === 0 ? (
+      {isDataEmpty ? (
         renderEmptyState(emptyLabel)
       ) : (
         <ResponsiveContainer width="100%" height={260}>
@@ -211,7 +228,11 @@ function MixChartCard({
             <XAxis dataKey="label" stroke="#555" fontSize={11} tickLine={false} axisLine={false} />
             <YAxis stroke="#555" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
             <Tooltip contentStyle={tooltipStyle} />
-            <Bar dataKey="value" fill={color} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+              {data.slice(0, 6).map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+              ))}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       )}
@@ -253,22 +274,22 @@ function ReadyState({ analytics }: { analytics: AdminUsersAnalyticsRecord }) {
         </Col>
       </Row>
 
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+      <Row gutter={[16, 16]} style={{ marginBottom: 24, alignItems: "stretch" }}>
         <Col xs={24} lg={8}>
           <Card
             title={<Text style={{ color: "#F0F0F0", fontWeight: 600 }}>Role Distribution</Text>}
-            style={cardStyle}
-            styles={{ header: { borderBottom: "1px solid #2E2E2E" } }}
+            style={{ ...cardStyle, height: "100%", display: "flex", flexDirection: "column" }}
+            styles={{ header: { borderBottom: "1px solid #2E2E2E" }, body: { flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" } }}
           >
-            <Space direction="vertical" size={14} style={{ width: "100%" }}>
+            <Space direction="vertical" size={24} style={{ width: "100%" }}>
               {[
                 ["Customers", analytics.summary.role_counts.customers],
                 ["Drivers", analytics.summary.role_counts.drivers],
                 ["Admins", analytics.summary.role_counts.admins],
               ].map(([label, value]) => (
                 <div key={label} style={{ display: "flex", justifyContent: "space-between" }}>
-                  <Text style={{ color: "#BDBDBD" }}>{label}</Text>
-                  <Text style={{ color: "#F0F0F0", fontWeight: 600 }}>{formatValue(Number(value))}</Text>
+                  <Text style={{ color: "#BDBDBD", fontSize: 15 }}>{label}</Text>
+                  <Text style={{ color: "#F0F0F0", fontWeight: 600, fontSize: 16 }}>{formatValue(Number(value))}</Text>
                 </div>
               ))}
             </Space>
@@ -280,34 +301,34 @@ function ReadyState({ analytics }: { analytics: AdminUsersAnalyticsRecord }) {
       </Row>
 
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={24} lg={12}>
+        <Col xs={24} lg={8}>
           <MixChartCard
             title="Profile Category Mix"
             data={analytics.profile_category_mix}
             emptyLabel="No profile category data yet"
-            color="#42A5F5"
+            colors={BLUE_COLORS}
           />
         </Col>
-        <Col xs={24} lg={12}>
+        <Col xs={24} lg={8}>
           <MixChartCard
             title="Profile Field Mix"
             data={analytics.profile_field_mix}
             emptyLabel="No profile field data yet"
-            color="#FFCA28"
+            colors={YELLOW_COLORS}
+          />
+        </Col>
+        <Col xs={24} lg={8}>
+          <MixChartCard
+            title="Preference Mix"
+            data={analytics.preference_mix}
+            emptyLabel="No preference data yet"
+            colors={GREEN_COLORS}
           />
         </Col>
       </Row>
 
       <Row gutter={[16, 16]}>
-        <Col xs={24} lg={12}>
-          <MixChartCard
-            title="Preference Mix"
-            data={analytics.preference_mix}
-            emptyLabel="No preference data yet"
-            color="#34d399"
-          />
-        </Col>
-        <Col xs={24} lg={12}>
+        <Col xs={24}>
           <MetricListCard
             title="Activity Split"
             items={analytics.activity_split}
