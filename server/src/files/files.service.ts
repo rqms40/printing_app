@@ -7,7 +7,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, MoreThan, Repository } from 'typeorm';
 import { extname } from 'path';
 import { randomUUID } from 'crypto';
 import { FileMetadata } from './entities/file-metadata.entity';
@@ -80,10 +80,7 @@ export class FilesService {
   ): Promise<string> {
     const file = await this.fileRepo.findOne({ where: { id: fileId } });
     if (!file) throw new NotFoundException('File not found');
-    if (
-      !isAdmin &&
-      (file.uploadedBy == null || file.uploadedBy !== requestingUserId)
-    ) {
+    if (!isAdmin && (file.uploadedBy == null || file.uploadedBy !== requestingUserId)) {
       throw new ForbiddenException();
     }
     if (!file.objectKey) throw new NotFoundException('File has no storage key');
@@ -91,16 +88,52 @@ export class FilesService {
       return await this.storageService.getPresignedUrl(file.objectKey, 3600);
     } catch (err) {
       this.logger.error('Failed to generate presigned URL', err);
-      throw new InternalServerErrorException(
-        'Could not generate download link',
-      );
+      throw new InternalServerErrorException('Could not generate download link');
     }
   }
 
   async getMyUploads(userId: number): Promise<FileMetadata[]> {
+    const now = new Date();
     return this.fileRepo.find({
-      where: { uploadedBy: userId },
+      where: [
+        { uploadedBy: userId, expiresAt: IsNull() },
+        { uploadedBy: userId, expiresAt: MoreThan(now) },
+      ],
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async stampExpiry(fileMetadataId: number, retentionDays: number): Promise<void> {
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + retentionDays);
+    await this.fileRepo.update(fileMetadataId, { expiresAt });
+  }
+
+  async deleteExpired(): Promise<{ found: number; deleted: number; skipped: number }> {
+    const now = new Date();
+    const expired = await this.fileRepo
+      .createQueryBuilder('fm')
+      .where('fm.expires_at IS NOT NULL')
+      .andWhere('fm.expires_at <= :now', { now })
+      .getMany();
+
+    let deleted = 0;
+    let skipped = 0;
+
+    for (const file of expired) {
+      if (file.objectKey) {
+        try {
+          await this.storageService.delete(file.objectKey);
+        } catch (err) {
+          this.logger.error(`Failed to delete MinIO object ${file.objectKey}`, err);
+          skipped++;
+          continue;
+        }
+      }
+      await this.fileRepo.delete(file.id);
+      deleted++;
+    }
+
+    return { found: expired.length, deleted, skipped };
   }
 }

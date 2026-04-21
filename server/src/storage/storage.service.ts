@@ -54,4 +54,9 @@ export class StorageService implements OnModuleInit {
       expirySeconds,
     );
   }
+
+  async delete(objectKey: string): Promise<void> {
+    const bucket = this.config.get<string>('MINIO_BUCKET', 'grid-print');
+    await this.minioClient.removeObject(bucket, objectKey);
+  }
 }
