@@ -10,6 +10,7 @@ import { AddressesModule } from './addresses/addresses.module';
 import { DriversModule } from './drivers/drivers.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { FirebaseModule } from './firebase/firebase.module';
+import { StorageModule } from './storage/storage.module';
 import { HealthModule } from './health/health.module';
 import { PaymentsModule } from './payments/payments.module';
 import { FilesModule } from './files/files.module';
@@ -48,6 +49,9 @@ import { TamSurveysModule } from './tam-surveys/tam-surveys.module';
 
     // Firebase (global — push notifications)
     FirebaseModule,
+
+    // Storage (global — MinIO object storage)
+    StorageModule,
 
     // Feature modules
     AuthModule,
