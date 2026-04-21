@@ -10,6 +10,7 @@ import {
 } from './entities/delivery-assignment.entity';
 import { Order } from '../orders/entities/order.entity';
 import { LocationGateway } from './location.gateway';
+import { OrdersGateway } from '../orders/orders.gateway';
 
 describe('DriversService', () => {
   let service: DriversService;
@@ -17,6 +18,7 @@ describe('DriversService', () => {
   let assignmentRepo: jest.Mocked<Partial<Repository<DeliveryAssignment>>>;
   let orderRepo: jest.Mocked<Partial<Repository<Order>>>;
   let locationGateway: Partial<LocationGateway>;
+  let ordersGateway: Partial<OrdersGateway>;
 
   const mockProfile = {
     id: 10,
@@ -48,9 +50,13 @@ describe('DriversService', () => {
     };
     orderRepo = {
       findOne: jest.fn(),
+      update: jest.fn(),
     };
     locationGateway = {
       broadcastLocation: jest.fn(),
+    };
+    ordersGateway = {
+      notifyOrderUpdate: jest.fn(),
     };
 
     const module = await Test.createTestingModule({
@@ -63,6 +69,7 @@ describe('DriversService', () => {
         },
         { provide: getRepositoryToken(Order), useValue: orderRepo },
         { provide: LocationGateway, useValue: locationGateway },
+        { provide: OrdersGateway, useValue: ordersGateway },
       ],
     }).compile();
 
@@ -133,6 +140,9 @@ describe('DriversService', () => {
 
       expect(result.status).toBe(DeliveryStatus.ACCEPTED);
       expect(result.acceptedAt).toBeDefined();
+      expect(orderRepo.update).toHaveBeenCalledWith(1, {
+        orderStatus: 'driver_assigned',
+      });
     });
 
     it('should transition from ASSIGNED to DECLINED', async () => {
@@ -217,12 +227,23 @@ describe('DriversService', () => {
         status: DeliveryStatus.PICKED_UP,
       } as DeliveryAssignment;
       assignmentRepo.findOne.mockResolvedValue(pickedUpAssignment);
+      orderRepo.findOne.mockResolvedValue({
+        id: 1,
+        orderId: 'ORD-10001',
+      } as Order);
       const otw = await service.updateDeliveryStatus(
         1,
         100,
         DeliveryStatus.ON_THE_WAY,
       );
       expect(otw.status).toBe(DeliveryStatus.ON_THE_WAY);
+      expect(orderRepo.update).toHaveBeenLastCalledWith(1, {
+        orderStatus: 'on_the_way',
+      });
+      expect(ordersGateway.notifyOrderUpdate).toHaveBeenLastCalledWith(
+        'ORD-10001',
+        expect.objectContaining({ orderId: 'ORD-10001' }),
+      );
 
       // ON_THE_WAY -> ARRIVED
       const otwAssignment = {

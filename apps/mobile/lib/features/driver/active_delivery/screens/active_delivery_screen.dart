@@ -57,9 +57,9 @@ class ActiveDeliveryScreen extends ConsumerWidget {
 
     final Address? address = order.deliveryAddressId != null
         ? MockData.addresses.cast<dynamic>().firstWhere(
-              (a) => a.id == order.deliveryAddressId,
-              orElse: () => null,
-            )
+            (a) => a.id == order.deliveryAddressId,
+            orElse: () => null,
+          )
         : null;
 
     // Find the customer user
@@ -81,9 +81,7 @@ class ActiveDeliveryScreen extends ConsumerWidget {
       body: Column(
         children: [
           // Map placeholder (takes up available space)
-          const Expanded(
-            child: DeliveryMapView(),
-          ),
+          Expanded(child: DeliveryMapView(assignmentId: activeDelivery.id)),
 
           // Bottom overlay card with customer info
           AppCard(
@@ -96,12 +94,17 @@ class ActiveDeliveryScreen extends ConsumerWidget {
                 // Customer name
                 Row(
                   children: [
-                    HugeIcon(icon: HugeIcons.strokeRoundedUser, size: 18, color: colors.onSurface),
+                    HugeIcon(
+                      icon: HugeIcons.strokeRoundedUser,
+                      size: 18,
+                      color: colors.onSurface,
+                    ),
                     const SizedBox(width: AppSpacing.sm),
                     Text(
                       customer.fullName ?? 'Customer',
-                      style: AppTypography.bodyBold
-                          .copyWith(color: colors.onBackground),
+                      style: AppTypography.bodyBold.copyWith(
+                        color: colors.onBackground,
+                      ),
                     ),
                   ],
                 ),
@@ -110,12 +113,17 @@ class ActiveDeliveryScreen extends ConsumerWidget {
                 // Phone
                 Row(
                   children: [
-                    HugeIcon(icon: HugeIcons.strokeRoundedCall, size: 18, color: colors.onSurface),
+                    HugeIcon(
+                      icon: HugeIcons.strokeRoundedCall,
+                      size: 18,
+                      color: colors.onSurface,
+                    ),
                     const SizedBox(width: AppSpacing.sm),
                     Text(
                       customer.phoneNumber ?? 'No phone',
-                      style: AppTypography.body
-                          .copyWith(color: colors.onSurface),
+                      style: AppTypography.body.copyWith(
+                        color: colors.onSurface,
+                      ),
                     ),
                   ],
                 ),
@@ -126,14 +134,18 @@ class ActiveDeliveryScreen extends ConsumerWidget {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      HugeIcon(icon: HugeIcons.strokeRoundedLocation01,
-                          size: 18, color: colors.onSurface),
+                      HugeIcon(
+                        icon: HugeIcons.strokeRoundedLocation01,
+                        size: 18,
+                        color: colors.onSurface,
+                      ),
                       const SizedBox(width: AppSpacing.sm),
                       Expanded(
                         child: Text(
                           address.fullAddress,
-                          style: AppTypography.body
-                              .copyWith(color: colors.onSurface),
+                          style: AppTypography.body.copyWith(
+                            color: colors.onSurface,
+                          ),
                         ),
                       ),
                     ],
@@ -144,8 +156,9 @@ class ActiveDeliveryScreen extends ConsumerWidget {
                       padding: const EdgeInsets.only(left: 26),
                       child: Text(
                         address.landmark!,
-                        style: AppTypography.bodyBold
-                            .copyWith(color: colors.onBackground),
+                        style: AppTypography.bodyBold.copyWith(
+                          color: colors.onBackground,
+                        ),
                       ),
                     ),
                   ],
@@ -187,8 +200,7 @@ class ActiveDeliveryScreen extends ConsumerWidget {
           if (activeDelivery.status != DeliveryStatus.arrived)
             StatusActionBar(
               currentStatus: activeDelivery.status,
-              onAdvance: () =>
-                  notifier.advanceCheckpoint(activeDelivery.id),
+              onAdvance: () => notifier.advanceCheckpoint(activeDelivery.id),
             ),
         ],
       ),
@@ -248,8 +260,9 @@ class _SwipeToConfirmState extends State<_SwipeToConfirm> {
               Center(
                 child: Text(
                   'Swipe to Confirm Delivery',
-                  style: AppTypography.button
-                      .copyWith(color: colors.onSurfaceDim),
+                  style: AppTypography.button.copyWith(
+                    color: colors.onSurfaceDim,
+                  ),
                 ),
               ),
 
@@ -260,8 +273,10 @@ class _SwipeToConfirmState extends State<_SwipeToConfirm> {
                 child: GestureDetector(
                   onHorizontalDragUpdate: (details) {
                     setState(() {
-                      _dragExtent =
-                          (_dragExtent + details.delta.dx).clamp(0, maxDrag);
+                      _dragExtent = (_dragExtent + details.delta.dx).clamp(
+                        0,
+                        maxDrag,
+                      );
                     });
                   },
                   onHorizontalDragEnd: (details) {

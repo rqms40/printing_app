@@ -104,40 +104,21 @@ async function seed() {
     },
   ];
 
-  // Clear existing data (order matters for FK constraints)
-  // Product tables (clear before others)
-  await ds.query('DELETE FROM spec_options');
-  await ds.query('DELETE FROM service_addons');
-  await ds.query('DELETE FROM service_categories');
-  await ds.query('DELETE FROM notifications');
-  await ds.query('DELETE FROM payment_transactions');
-  await ds.query('DELETE FROM delivery_assignments');
-  await ds.query('DELETE FROM order_status_history');
-  await ds.query('DELETE FROM paper_specs');
-  await ds.query('DELETE FROM three_d_specs');
-  await ds.query('DELETE FROM orders');
-  await ds.query('DELETE FROM addresses');
-  await ds.query('DELETE FROM driver_profiles');
-  await ds.query('DELETE FROM file_metadata');
-  await ds.query('DELETE FROM tam_surveys');
-  await ds.query('DELETE FROM users');
+  // Clear all tables — CASCADE handles FK ordering automatically
+  await ds.query(`
+    TRUNCATE TABLE
+      spec_options, service_addons, service_categories,
+      notifications, payment_transactions, credit_transactions, credit_settings,
+      delivery_assignments, order_status_history,
+      paper_specs, three_d_specs, orders,
+      addresses, driver_profiles, file_metadata,
+      tam_survey_settings, tam_surveys,
+      daily_grid_cards,
+      users
+    RESTART IDENTITY CASCADE
+  `);
 
-  // Reset all sequences so IDs start fresh
-  await ds.query("SELECT setval('users_id_seq', 1, false)");
-  await ds.query("SELECT setval('orders_id_seq', 1, false)");
-  await ds.query("SELECT setval('addresses_id_seq', 1, false)");
-  await ds.query("SELECT setval('notifications_id_seq', 1, false)");
-  await ds.query("SELECT setval('payment_transactions_id_seq', 1, false)");
-  await ds.query("SELECT setval('delivery_assignments_id_seq', 1, false)");
-  await ds.query("SELECT setval('order_status_history_id_seq', 1, false)");
-  await ds.query("SELECT setval('paper_specs_id_seq', 1, false)");
-  await ds.query("SELECT setval('three_d_specs_id_seq', 1, false)");
-  await ds.query("SELECT setval('driver_profiles_id_seq', 1, false)");
-  await ds.query("SELECT setval('file_metadata_id_seq', 1, false)");
-  await ds.query("SELECT setval('service_categories_id_seq', 1, false)");
-  await ds.query("SELECT setval('spec_options_id_seq', 1, false)");
-  await ds.query("SELECT setval('service_addons_id_seq', 1, false)");
-  await ds.query("SELECT setval('tam_surveys_id_seq', 1, false)");
+  // Sequences were already reset by TRUNCATE ... RESTART IDENTITY above
 
   for (const u of users) {
     await ds.query(
@@ -830,6 +811,58 @@ async function seed() {
     );
   }
   console.log('✅ 2 TAM surveys created');
+
+  // ─── Daily Grid Cards ────────────────────────────────────────────────
+  const dailyGridCards = [
+    {
+      title: 'Bond Paper A4',
+      subtitle: '₱15 / page',
+      imageUrl: 'https://images.unsplash.com/photo-1588580000645-4562a6d2c839?w=160&h=160&fit=crop&q=80',
+      category: 'paper',
+      sortOrder: 0,
+      isActive: true,
+    },
+    {
+      title: 'A3 Poster',
+      subtitle: '₱75 / sheet',
+      imageUrl: 'https://images.unsplash.com/photo-1503455637927-730bce8583c0?w=160&h=160&fit=crop&q=80',
+      category: 'paper',
+      sortOrder: 1,
+      isActive: true,
+    },
+    {
+      title: '3D Print',
+      subtitle: 'From ₱120',
+      imageUrl: 'https://images.unsplash.com/photo-1617839625591-e5a789593135?w=160&h=160&fit=crop&q=80',
+      category: '3d',
+      sortOrder: 2,
+      isActive: true,
+    },
+    {
+      title: 'Large Banner',
+      subtitle: 'From ₱350',
+      imageUrl: 'https://images.unsplash.com/photo-1586717791821-3f44a563fa4c?w=160&h=160&fit=crop&q=80',
+      category: 'paper',
+      sortOrder: 3,
+      isActive: true,
+    },
+    {
+      title: 'Flyer Print',
+      subtitle: '₱12 / sheet',
+      imageUrl: 'https://images.unsplash.com/photo-1601645191163-3fc0d5d64e35?w=160&h=160&fit=crop&q=80',
+      category: 'paper',
+      sortOrder: 4,
+      isActive: true,
+    },
+  ];
+  for (const c of dailyGridCards) {
+    await ds.query(
+      `INSERT INTO daily_grid_cards (title, subtitle, "imageUrl", category, "sortOrder", "isActive")
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [c.title, c.subtitle, c.imageUrl, c.category, c.sortOrder, c.isActive],
+    );
+  }
+  console.log('✅ 5 Daily Grid cards seeded');
 
   console.log('\n🎉 Seed complete!\n');
   console.log('Login credentials (all use password: password123):');

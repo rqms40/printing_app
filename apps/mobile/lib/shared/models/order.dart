@@ -25,6 +25,7 @@ class Order {
     required this.deliveryOption,
     this.deliveryAddressId,
     this.assignedDriverId,
+    this.deliveryAssignmentId,
     this.estimatedCompletionAt,
     this.adminNotes,
     this.trackingLink,
@@ -53,6 +54,7 @@ class Order {
   final String deliveryOption;
   final String? deliveryAddressId;
   final String? assignedDriverId;
+  final String? deliveryAssignmentId;
   final DateTime? estimatedCompletionAt;
   final String? adminNotes;
   final String? trackingLink;
@@ -81,6 +83,7 @@ class Order {
     String? deliveryOption,
     String? deliveryAddressId,
     String? assignedDriverId,
+    String? deliveryAssignmentId,
     DateTime? estimatedCompletionAt,
     String? adminNotes,
     String? trackingLink,
@@ -109,7 +112,9 @@ class Order {
       deliveryOption: deliveryOption ?? this.deliveryOption,
       deliveryAddressId: deliveryAddressId ?? this.deliveryAddressId,
       assignedDriverId: assignedDriverId ?? this.assignedDriverId,
-      estimatedCompletionAt: estimatedCompletionAt ?? this.estimatedCompletionAt,
+      deliveryAssignmentId: deliveryAssignmentId ?? this.deliveryAssignmentId,
+      estimatedCompletionAt:
+          estimatedCompletionAt ?? this.estimatedCompletionAt,
       adminNotes: adminNotes ?? this.adminNotes,
       trackingLink: trackingLink ?? this.trackingLink,
       createdAt: createdAt ?? this.createdAt,
@@ -118,8 +123,7 @@ class Order {
   }
 
   @override
-  String toString() =>
-      'Order($orderId, ${orderStatus.displayName}, $category)';
+  String toString() => 'Order($orderId, ${orderStatus.displayName}, $category)';
 
   @override
   bool operator ==(Object other) =>

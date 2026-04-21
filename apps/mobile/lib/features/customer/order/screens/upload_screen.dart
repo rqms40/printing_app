@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -144,7 +145,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
     setState(() {
       _errorText = null;
       _fileName = file.name;
-      _filePath = file.path;
+      _filePath = kIsWeb ? null : file.path;
       _fileBytes = file.bytes;
       _fileMimeType = _mimeFromExtension(extension);
       _fileSize = sizeInBytes;
@@ -191,7 +192,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
       if (file.bytes != null) {
         multipartFile =
             MultipartFile.fromBytes(file.bytes!, filename: file.name);
-      } else if (file.path != null) {
+      } else if (!kIsWeb && file.path != null) {
         multipartFile =
             await MultipartFile.fromFile(file.path!, filename: file.name);
       } else {

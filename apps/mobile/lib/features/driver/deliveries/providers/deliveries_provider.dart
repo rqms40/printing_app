@@ -5,10 +5,26 @@ import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 
 DeliveryStatus _parseDeliveryStatus(String value) {
+  final camelCase = value.replaceAllMapped(
+    RegExp(r'_([a-z])'),
+    (m) => m.group(1)!.toUpperCase(),
+  );
   return DeliveryStatus.values.firstWhere(
-    (e) => e.name == value,
+    (e) => e.name == camelCase,
     orElse: () => DeliveryStatus.assigned,
   );
+}
+
+String _serverDeliveryStatus(DeliveryStatus status) {
+  return switch (status) {
+    DeliveryStatus.assigned => 'assigned',
+    DeliveryStatus.accepted => 'accepted',
+    DeliveryStatus.declined => 'declined',
+    DeliveryStatus.pickedUp => 'picked_up',
+    DeliveryStatus.onTheWay => 'on_the_way',
+    DeliveryStatus.arrived => 'arrived',
+    DeliveryStatus.delivered => 'delivered',
+  };
 }
 
 DateTime? _parseDateNullable(dynamic value) {
@@ -42,10 +58,7 @@ DeliveryAssignment _parseAssignment(Map<String, dynamic> json) {
 
 /// State for the deliveries list.
 class DeliveriesState {
-  const DeliveriesState({
-    required this.assignments,
-    this.filterStatus,
-  });
+  const DeliveriesState({required this.assignments, this.filterStatus});
 
   final List<DeliveryAssignment> assignments;
   final DeliveryStatus? filterStatus;
@@ -68,9 +81,7 @@ class DeliveriesState {
       DeliveryStatus.arrived,
     ];
     try {
-      return assignments.firstWhere(
-        (a) => activeStatuses.contains(a.status),
-      );
+      return assignments.firstWhere((a) => activeStatuses.contains(a.status));
     } catch (_) {
       return null;
     }
@@ -82,15 +93,13 @@ class DeliveriesState {
   }) {
     return DeliveriesState(
       assignments: assignments ?? this.assignments,
-      filterStatus:
-          filterStatus != null ? filterStatus() : this.filterStatus,
+      filterStatus: filterStatus != null ? filterStatus() : this.filterStatus,
     );
   }
 }
 
 class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
-  DeliveriesNotifier()
-      : super(const DeliveriesState(assignments: [])) {
+  DeliveriesNotifier() : super(const DeliveriesState(assignments: [])) {
     _fetchAssignments();
   }
 
@@ -120,7 +129,10 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
   /// Accept an assignment. Transitions assigned -> accepted.
   Future<void> acceptAssignment(String assignmentId) async {
     try {
-      await ApiClient.instance.patch('/drivers/assignments/$assignmentId/accept');
+      await ApiClient.instance.patch(
+        '/drivers/assignments/$assignmentId/status',
+        data: {'status': _serverDeliveryStatus(DeliveryStatus.accepted)},
+      );
     } catch (_) {}
     // Update local state regardless
     _updateAssignment(assignmentId, (a) {
@@ -136,7 +148,13 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
   /// Decline an assignment. Transitions assigned -> declined.
   Future<void> declineAssignment(String assignmentId) async {
     try {
-      await ApiClient.instance.patch('/drivers/assignments/$assignmentId/decline');
+      await ApiClient.instance.patch(
+        '/drivers/assignments/$assignmentId/status',
+        data: {
+          'status': _serverDeliveryStatus(DeliveryStatus.declined),
+          'declineReason': 'Driver declined',
+        },
+      );
     } catch (_) {}
     // Update local state regardless
     _updateAssignment(assignmentId, (a) {
@@ -152,8 +170,31 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
   /// Advance the delivery to the next checkpoint status.
   /// State machine: assigned -> accepted -> pickedUp -> onTheWay -> arrived -> delivered
   Future<void> advanceCheckpoint(String assignmentId) async {
+    DeliveryAssignment? current;
+    for (final assignment in state.assignments) {
+      if (assignment.id == assignmentId) {
+        current = assignment;
+        break;
+      }
+    }
+    if (current == null) return;
+
+    final nextStatus = switch (current.status) {
+      DeliveryStatus.assigned => DeliveryStatus.accepted,
+      DeliveryStatus.accepted => DeliveryStatus.pickedUp,
+      DeliveryStatus.pickedUp => DeliveryStatus.onTheWay,
+      DeliveryStatus.onTheWay => DeliveryStatus.arrived,
+      DeliveryStatus.arrived => DeliveryStatus.delivered,
+      DeliveryStatus.delivered || DeliveryStatus.declined => null,
+    };
+
     try {
-      await ApiClient.instance.patch('/drivers/assignments/$assignmentId/advance');
+      if (nextStatus != null) {
+        await ApiClient.instance.patch(
+          '/drivers/assignments/$assignmentId/status',
+          data: {'status': _serverDeliveryStatus(nextStatus)},
+        );
+      }
     } catch (_) {}
     // Update local state regardless
     _updateAssignment(assignmentId, (a) {
@@ -215,5 +256,5 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
 
 final deliveriesProvider =
     StateNotifierProvider<DeliveriesNotifier, DeliveriesState>(
-  (ref) => DeliveriesNotifier(),
-);
+      (ref) => DeliveriesNotifier(),
+    );

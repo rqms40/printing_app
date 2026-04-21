@@ -10,6 +10,11 @@ import { User } from '../users/entities/user.entity';
 import { CreditsService } from '../credits/credits.service';
 import { TamSurvey } from '../tam-surveys/entities/tam-survey.entity';
 import { TamSurveySettings } from '../tam-surveys/entities/tam-survey-settings.entity';
+import { DriverProfile } from '../drivers/entities/driver-profile.entity';
+import {
+  DeliveryAssignment,
+  DeliveryStatus,
+} from '../drivers/entities/delivery-assignment.entity';
 import { In } from 'typeorm';
 import * as userInsights from './user-insights';
 
@@ -24,11 +29,21 @@ describe('AdminController analytics', () => {
   let controller: AdminController;
   let ordersRepo: jest.Mocked<Partial<Repository<Order>>>;
   let usersRepo: jest.Mocked<Partial<Repository<User>>>;
+  let driverProfilesRepo: jest.Mocked<Partial<Repository<DriverProfile>>>;
+  let assignmentsRepo: jest.Mocked<Partial<Repository<DeliveryAssignment>>>;
   let creditsService: jest.Mocked<Partial<CreditsService>>;
 
   beforeEach(async () => {
     ordersRepo = mockRepo();
     usersRepo = mockRepo();
+    driverProfilesRepo = {
+      findOneOrFail: jest.fn(),
+    };
+    assignmentsRepo = {
+      create: jest.fn(),
+      findOne: jest.fn(),
+      save: jest.fn(),
+    };
     creditsService = { getPendingCount: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -42,6 +57,14 @@ describe('AdminController analytics', () => {
         { provide: CreditsService, useValue: creditsService },
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
         { provide: getRepositoryToken(User), useValue: usersRepo },
+        {
+          provide: getRepositoryToken(DriverProfile),
+          useValue: driverProfilesRepo,
+        },
+        {
+          provide: getRepositoryToken(DeliveryAssignment),
+          useValue: assignmentsRepo,
+        },
         { provide: getRepositoryToken(TamSurvey), useValue: mockRepo() },
         {
           provide: getRepositoryToken(TamSurveySettings),
@@ -247,6 +270,49 @@ describe('AdminController analytics', () => {
       const result = await controller.getBadgeCounts();
 
       expect(result).toEqual({ newOrders: 0, pendingTopUps: 0 });
+    });
+  });
+
+  describe('assignDriver', () => {
+    it('creates an active delivery assignment and stores the assigned driver user id on the order', async () => {
+      const driverProfile = {
+        id: 7,
+        userId: 70,
+      } as DriverProfile;
+      const assignment = {
+        orderId: 42,
+        driverId: 7,
+        status: DeliveryStatus.ASSIGNED,
+      } as DeliveryAssignment;
+      const savedOrder = {
+        id: 42,
+        assignedDriverId: 70,
+      } as Order;
+
+      driverProfilesRepo.findOneOrFail.mockResolvedValue(driverProfile);
+      assignmentsRepo.findOne.mockResolvedValue(null);
+      assignmentsRepo.create.mockReturnValue(assignment);
+      assignmentsRepo.save.mockResolvedValue({
+        ...assignment,
+        id: 99,
+      } as DeliveryAssignment);
+      ordersRepo.findOneOrFail.mockResolvedValue(savedOrder);
+
+      await expect(controller.assignDriver(42, 7)).resolves.toBe(savedOrder);
+
+      expect(driverProfilesRepo.findOneOrFail).toHaveBeenCalledWith({
+        where: { id: 7 },
+      });
+      expect(ordersRepo.update).toHaveBeenCalledWith(42, {
+        assignedDriverId: 70,
+        orderStatus: OrderStatus.DRIVER_ASSIGNED,
+      });
+      expect(assignmentsRepo.create).toHaveBeenCalledWith({
+        orderId: 42,
+        driverId: 7,
+        status: DeliveryStatus.ASSIGNED,
+      });
+      expect(assignmentsRepo.save).toHaveBeenCalledWith(assignment);
     });
   });
 

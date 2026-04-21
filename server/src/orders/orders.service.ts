@@ -1,9 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Order, OrderStatus } from './entities/order.entity';
 import { PaperSpec } from './entities/paper-specs.entity';
 import { ThreeDSpec } from './entities/three-d-specs.entity';
+import {
+  DeliveryAssignment,
+  DeliveryStatus,
+} from '../drivers/entities/delivery-assignment.entity';
 import { OrdersGateway } from './orders.gateway';
 import { FirebaseService } from '../firebase/firebase.service';
 import { UsersService } from '../users/users.service';
@@ -19,6 +23,8 @@ export class OrdersService {
     @InjectRepository(PaperSpec) private paperSpecsRepo: Repository<PaperSpec>,
     @InjectRepository(ThreeDSpec)
     private threeDSpecsRepo: Repository<ThreeDSpec>,
+    @InjectRepository(DeliveryAssignment)
+    private deliveryAssignmentRepo: Repository<DeliveryAssignment>,
     private ordersGateway: OrdersGateway,
     private firebaseService: FirebaseService,
     private usersService: UsersService,
@@ -27,14 +33,49 @@ export class OrdersService {
   ) {}
 
   async findByUser(userId: number): Promise<Order[]> {
-    return this.ordersRepo.find({
+    const orders = await this.ordersRepo.find({
       where: { userId },
       order: { createdAt: 'DESC' },
     });
+    return this.attachDeliveryAssignmentIds(orders);
   }
 
   async findById(id: number): Promise<Order | null> {
-    return this.ordersRepo.findOne({ where: { id } });
+    const order = await this.ordersRepo.findOne({ where: { id } });
+    if (!order) return null;
+    const [withTracking] = await this.attachDeliveryAssignmentIds([order]);
+    return withTracking;
+  }
+
+  private async attachDeliveryAssignmentIds(orders: Order[]): Promise<Order[]> {
+    const orderIds = orders.map((order) => order.id).filter(Boolean);
+    if (orderIds.length === 0) return orders;
+
+    const assignments = await this.deliveryAssignmentRepo.find({
+      where: {
+        orderId: In(orderIds),
+        status: In([
+          DeliveryStatus.ASSIGNED,
+          DeliveryStatus.ACCEPTED,
+          DeliveryStatus.PICKED_UP,
+          DeliveryStatus.ON_THE_WAY,
+          DeliveryStatus.ARRIVED,
+        ]),
+      },
+    });
+
+    const assignmentByOrderId = new Map<number, DeliveryAssignment>();
+    for (const assignment of assignments) {
+      if (!assignmentByOrderId.has(assignment.orderId)) {
+        assignmentByOrderId.set(assignment.orderId, assignment);
+      }
+    }
+
+    return orders.map((order) =>
+      Object.assign(order, {
+        deliveryAssignmentId: assignmentByOrderId.get(order.id)?.id ?? null,
+      }),
+    );
   }
 
   async create(

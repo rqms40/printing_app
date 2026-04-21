@@ -196,7 +196,7 @@ class _ProfileTab extends ConsumerWidget {
           _Divider(colors: colors),
           _MenuRow(
             icon: HugeIcons.strokeRoundedFolder01,
-            title: 'My Uploads',
+            title: 'Data Grid',
             onTap: () => context.push('/customer/uploads'),
             colors: colors,
           ),

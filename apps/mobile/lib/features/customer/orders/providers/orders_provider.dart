@@ -16,10 +16,7 @@ const terminalStatuses = {
 };
 
 /// Statuses eligible for customer-initiated cancellation.
-const cancellableStatuses = {
-  OrderStatus.orderPlaced,
-  OrderStatus.fileVerified,
-};
+const cancellableStatuses = {OrderStatus.orderPlaced, OrderStatus.fileVerified};
 
 dynamic _readJsonValue(
   Map<String, dynamic> json,
@@ -146,23 +143,33 @@ Order _parseOrder(Map<String, dynamic> json) {
     category: _readJsonValue(json, 'category')?.toString() ?? '',
     fileUrl: _readJsonValue(json, 'fileUrl', 'file_url')?.toString(),
     fileName: _readJsonValue(json, 'fileName', 'file_name')?.toString(),
-    fileMetadataId: (_readJsonValue(json, 'fileMetadataId', 'file_metadata_id') as num?)?.toInt(),
+    fileMetadataId:
+        (_readJsonValue(json, 'fileMetadataId', 'file_metadata_id') as num?)
+            ?.toInt(),
     paperSpecs: _parsePaperSpecs(
-      _readJsonValue(json, 'paperSpecs', 'paper_specs') as Map<String, dynamic>?,
+      _readJsonValue(json, 'paperSpecs', 'paper_specs')
+          as Map<String, dynamic>?,
     ),
     threeDSpecs: _parseThreeDSpecs(
       _readJsonValue(json, 'threeDSpecs', 'three_d_specs')
           as Map<String, dynamic>?,
     ),
-    quantity: int.tryParse(_readJsonValue(json, 'quantity')?.toString() ?? '1') ?? 1,
+    quantity:
+        int.tryParse(_readJsonValue(json, 'quantity')?.toString() ?? '1') ?? 1,
     totalPrice:
-        double.tryParse(_readJsonValue(json, 'totalPrice', 'total_price')?.toString() ?? '0') ??
-            0,
+        double.tryParse(
+          _readJsonValue(json, 'totalPrice', 'total_price')?.toString() ?? '0',
+        ) ??
+        0,
     deliveryFee:
-        double.tryParse(_readJsonValue(json, 'deliveryFee', 'delivery_fee')?.toString() ?? '0') ??
-            0,
+        double.tryParse(
+          _readJsonValue(json, 'deliveryFee', 'delivery_fee')?.toString() ??
+              '0',
+        ) ??
+        0,
     paymentMethod: _parsePaymentMethod(
-      _readJsonValue(json, 'paymentMethod', 'payment_method')?.toString() ?? 'cod',
+      _readJsonValue(json, 'paymentMethod', 'payment_method')?.toString() ??
+          'cod',
     ),
     paymentStatus: _parsePaymentStatus(
       _readJsonValue(json, 'paymentStatus', 'payment_status')?.toString() ??
@@ -172,27 +179,46 @@ Order _parseOrder(Map<String, dynamic> json) {
       _readJsonValue(json, 'orderStatus', 'order_status')?.toString() ??
           'orderPlaced',
     ),
-    declineReason: _readJsonValue(json, 'declineReason', 'decline_reason')?.toString(),
+    declineReason: _readJsonValue(
+      json,
+      'declineReason',
+      'decline_reason',
+    )?.toString(),
     cancellationReason: _readJsonValue(
       json,
       'cancellationReason',
       'cancellation_reason',
     )?.toString(),
-    cancelledAt: _parseDateNullable(_readJsonValue(json, 'cancelledAt', 'cancelled_at')),
+    cancelledAt: _parseDateNullable(
+      _readJsonValue(json, 'cancelledAt', 'cancelled_at'),
+    ),
     deliveryOption:
         _readJsonValue(json, 'deliveryOption', 'delivery_option')?.toString() ??
-            'delivery',
-    deliveryAddressId:
-        _readJsonValue(json, 'deliveryAddressId', 'delivery_address_id')
-            ?.toString(),
-    assignedDriverId:
-        _readJsonValue(json, 'assignedDriverId', 'assigned_driver_id')
-            ?.toString(),
+        'delivery',
+    deliveryAddressId: _readJsonValue(
+      json,
+      'deliveryAddressId',
+      'delivery_address_id',
+    )?.toString(),
+    assignedDriverId: _readJsonValue(
+      json,
+      'assignedDriverId',
+      'assigned_driver_id',
+    )?.toString(),
+    deliveryAssignmentId: _readJsonValue(
+      json,
+      'deliveryAssignmentId',
+      'delivery_assignment_id',
+    )?.toString(),
     estimatedCompletionAt: _parseDateNullable(
       _readJsonValue(json, 'estimatedCompletionAt', 'estimated_completion_at'),
     ),
     adminNotes: _readJsonValue(json, 'adminNotes', 'admin_notes')?.toString(),
-    trackingLink: _readJsonValue(json, 'trackingLink', 'tracking_link')?.toString(),
+    trackingLink: _readJsonValue(
+      json,
+      'trackingLink',
+      'tracking_link',
+    )?.toString(),
     createdAt: _parseDate(_readJsonValue(json, 'createdAt', 'created_at')),
     updatedAt: _parseDate(_readJsonValue(json, 'updatedAt', 'updated_at')),
   );
@@ -213,19 +239,24 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     try {
       await WebSocketService.instance.connectOrders(
         onOrderUpdate: (data) {
-          if (data is Map<String, dynamic>) {
-            final updated = _parseOrder(data);
-            final index = state.indexWhere(
-              (order) => order.id == updated.id || order.orderId == updated.orderId,
-            );
+          try {
+            if (data is Map<String, dynamic>) {
+              final updated = _parseOrder(data);
+              final index = state.indexWhere(
+                (order) =>
+                    order.id == updated.id || order.orderId == updated.orderId,
+              );
 
-            if (index >= 0) {
-              final next = [...state];
-              next[index] = updated;
-              state = next;
-            } else {
-              _fetchOrders();
+              if (index >= 0) {
+                final next = [...state];
+                next[index] = updated;
+                state = next;
+              } else {
+                _fetchOrders();
+              }
             }
+          } catch (e) {
+            debugPrint('OrdersProvider: WS order parse error: $e');
           }
         },
         // Once socket is confirmed connected, subscribe to every loaded order room.
@@ -256,7 +287,9 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     try {
       final response = await ApiClient.instance.get('/orders');
       final data = response.data as List<dynamic>;
-      state = data.map((json) => _parseOrder(json as Map<String, dynamic>)).toList();
+      state = data
+          .map((json) => _parseOrder(json as Map<String, dynamic>))
+          .toList();
       debugPrint('OrdersProvider: Loaded ${state.length} orders from API');
     } catch (e) {
       debugPrint('OrdersProvider: API failed ($e), using MockData');
@@ -272,37 +305,40 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   /// (server-assigned fields populated) so callers can use the real DB id.
   Future<Order> addOrder(Order order) async {
     try {
-      final response = await ApiClient.instance.post('/orders', data: {
-        'category': order.category,
-        'quantity': order.quantity,
-        'totalPrice': order.totalPrice,
-        'deliveryFee': order.deliveryFee,
-        'paymentMethod': order.paymentMethod.name,
-        'deliveryOption': order.deliveryOption,
-        'fileName': order.fileName,
-        'fileUrl': order.fileUrl,
-        'fileMetadataId': order.fileMetadataId,
-        'paperSpecs': order.paperSpecs != null
-            ? {
-                'paperSize': order.paperSpecs!.paperSize.name,
-                'colorMode': order.paperSpecs!.colorMode.name,
-                'mediaType': order.paperSpecs!.mediaType.name,
-                'printSides': order.paperSpecs!.printSides.name,
-                'binding': order.paperSpecs!.binding.name,
-              }
-            : null,
-        'threeDSpecs': order.threeDSpecs != null
-            ? {
-                'fileFormat': order.threeDSpecs!.fileFormat.name,
-                'material': order.threeDSpecs!.material.name,
-                'color': order.threeDSpecs!.color,
-                'infillPercentage': order.threeDSpecs!.infillPercentage,
-                'layerHeight': order.threeDSpecs!.layerHeight,
-                'supports': order.threeDSpecs!.supports,
-                'notes': order.threeDSpecs!.notes,
-              }
-            : null,
-      });
+      final response = await ApiClient.instance.post(
+        '/orders',
+        data: {
+          'category': order.category,
+          'quantity': order.quantity,
+          'totalPrice': order.totalPrice,
+          'deliveryFee': order.deliveryFee,
+          'paymentMethod': order.paymentMethod.name,
+          'deliveryOption': order.deliveryOption,
+          'fileName': order.fileName,
+          'fileUrl': order.fileUrl,
+          'fileMetadataId': order.fileMetadataId,
+          'paperSpecs': order.paperSpecs != null
+              ? {
+                  'paperSize': order.paperSpecs!.paperSize.name,
+                  'colorMode': order.paperSpecs!.colorMode.name,
+                  'mediaType': order.paperSpecs!.mediaType.name,
+                  'printSides': order.paperSpecs!.printSides.name,
+                  'binding': order.paperSpecs!.binding.name,
+                }
+              : null,
+          'threeDSpecs': order.threeDSpecs != null
+              ? {
+                  'fileFormat': order.threeDSpecs!.fileFormat.name,
+                  'material': order.threeDSpecs!.material.name,
+                  'color': order.threeDSpecs!.color,
+                  'infillPercentage': order.threeDSpecs!.infillPercentage,
+                  'layerHeight': order.threeDSpecs!.layerHeight,
+                  'supports': order.threeDSpecs!.supports,
+                  'notes': order.threeDSpecs!.notes,
+                }
+              : null,
+        },
+      );
       final newOrder = _parseOrder(response.data as Map<String, dynamic>);
       state = [newOrder, ...state];
       WebSocketService.instance.subscribeToOrder(newOrder.orderId);
@@ -340,8 +376,9 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   }
 }
 
-final ordersProvider =
-    StateNotifierProvider<OrdersNotifier, List<Order>>((ref) {
+final ordersProvider = StateNotifierProvider<OrdersNotifier, List<Order>>((
+  ref,
+) {
   return OrdersNotifier();
 });
 

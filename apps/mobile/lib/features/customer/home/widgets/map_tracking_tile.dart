@@ -8,7 +8,7 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/home/providers/live_delivery_map_provider.dart';
-import 'package:printing_app/features/driver/active_delivery/providers/location_provider.dart';
+import 'package:printing_app/features/customer/tracking/providers/live_driver_location_provider.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
 class MapTrackingTile extends ConsumerWidget {
@@ -19,10 +19,11 @@ class MapTrackingTile extends ConsumerWidget {
     final mapAsync = ref.watch(liveDeliveryMapProvider);
     // Watched directly here so location updates only rebuild markers,
     // not the entire FutureProvider async cycle.
-    final locationUpdate = ref.watch(locationProvider);
+    final locationUpdate = ref.watch(liveDriverLocationProvider);
     final brightness = Theme.of(context).brightness;
-    final colors =
-        brightness == Brightness.dark ? AppColors.dark : AppColors.light;
+    final colors = brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
 
     final driverPoint = locationUpdate != null
         ? LatLng(locationUpdate.latitude, locationUpdate.longitude)
@@ -65,9 +66,7 @@ class _LoadingTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: colors.surfaceVariant,
-      child: Center(
-        child: CircularProgressIndicator(color: colors.accent),
-      ),
+      child: Center(child: CircularProgressIndicator(color: colors.accent)),
     );
   }
 }
@@ -90,9 +89,7 @@ class _IdleTile extends StatelessWidget {
           options: const MapOptions(
             initialCenter: MapHelpers.davaoCenter,
             initialZoom: _davaoZoom,
-            interactionOptions: InteractionOptions(
-              flags: InteractiveFlag.none,
-            ),
+            interactionOptions: InteractionOptions(flags: InteractiveFlag.none),
           ),
           children: [MapHelpers.tileLayer(brightness)],
         ),
@@ -103,8 +100,11 @@ class _IdleTile extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.location_on_rounded,
-                  color: Colors.white, size: 28),
+              const Icon(
+                Icons.location_on_rounded,
+                color: Colors.white,
+                size: 28,
+              ),
               const SizedBox(height: 6),
               Text(
                 'No active delivery',
@@ -168,11 +168,13 @@ class _ActiveTile extends StatelessWidget {
             MapHelpers.tileLayer(brightness),
             if (state.routePoints.isNotEmpty)
               MapHelpers.routePolyline(state.routePoints),
-            MarkerLayer(markers: [
-              MapHelpers.shopMarker(point: state.shopPoint),
-              MapHelpers.destinationMarker(point: state.destPoint),
-              MapHelpers.driverMarker(driverPoint),
-            ]),
+            MarkerLayer(
+              markers: [
+                MapHelpers.shopMarker(point: state.shopPoint),
+                MapHelpers.destinationMarker(point: state.destPoint),
+                MapHelpers.driverMarker(driverPoint),
+              ],
+            ),
           ],
         ),
 
@@ -182,7 +184,9 @@ class _ActiveTile extends StatelessWidget {
           left: AppSpacing.sm,
           child: Container(
             padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.sm, vertical: 3),
+              horizontal: AppSpacing.sm,
+              vertical: 3,
+            ),
             decoration: BoxDecoration(
               color: const Color(0xFFFFDE58),
               borderRadius: AppRadius.borderFull,
@@ -219,7 +223,9 @@ class _ActiveTile extends StatelessWidget {
           right: AppSpacing.sm,
           child: Container(
             padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.sm, vertical: 3),
+              horizontal: AppSpacing.sm,
+              vertical: 3,
+            ),
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: 0.65),
               borderRadius: AppRadius.borderFull,

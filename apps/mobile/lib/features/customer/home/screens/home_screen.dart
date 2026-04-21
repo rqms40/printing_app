@@ -1227,6 +1227,7 @@ class _DataGridTile extends StatelessWidget {
         colors: colors,
         icon: HugeIcons.strokeRoundedCloudUpload,
         title: 'The Data Grid',
+        onTap: () => context.push('/customer/uploads'),
       );
 }
 

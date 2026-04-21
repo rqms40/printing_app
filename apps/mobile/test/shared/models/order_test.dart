@@ -67,16 +67,19 @@ void main() {
       expect(minimalOrder.threeDSpecs, isNull);
       expect(minimalOrder.declineReason, isNull);
       expect(minimalOrder.assignedDriverId, isNull);
+      expect(minimalOrder.deliveryAssignmentId, isNull);
     });
 
     test('copyWith updates specified fields only', () {
       final updated = sampleOrder.copyWith(
         orderStatus: OrderStatus.printingInProgress,
         assignedDriverId: 'usr_002',
+        deliveryAssignmentId: 'da_001',
       );
 
       expect(updated.orderStatus, OrderStatus.printingInProgress);
       expect(updated.assignedDriverId, 'usr_002');
+      expect(updated.deliveryAssignmentId, 'da_001');
       // Unchanged fields remain the same
       expect(updated.id, sampleOrder.id);
       expect(updated.orderId, sampleOrder.orderId);

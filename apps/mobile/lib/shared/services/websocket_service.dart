@@ -9,9 +9,7 @@ import 'token_storage.dart';
 dynamic _normalize(dynamic data) {
   if (data is Map) {
     return Map<String, dynamic>.fromEntries(
-      data.entries.map(
-        (e) => MapEntry(e.key.toString(), _normalize(e.value)),
-      ),
+      data.entries.map((e) => MapEntry(e.key.toString(), _normalize(e.value))),
     );
   }
   if (data is List) return data.map(_normalize).toList();
@@ -39,39 +37,53 @@ class WebSocketService {
     final token = await TokenStorage.getToken();
     _ordersSocket = io.io(
       '$_baseUrl/ws/orders',
-      io.OptionBuilder()
-          .setTransports(['websocket'])
-          .setAuth({'token': token ?? ''})
-          .build(),
+      io.OptionBuilder().setTransports(['websocket']).setAuth({
+        'token': token ?? '',
+      }).build(),
     );
-    _ordersSocket!.on('orderUpdate', (data) => onOrderUpdate(_normalize(data)));
+    _ordersSocket!.on('orderUpdate', (data) {
+      try {
+        onOrderUpdate(_normalize(data));
+      } catch (e) {
+        debugPrint('WS orderUpdate handler error: $e');
+      }
+    });
     _ordersSocket!.on('connect', (_) {
       debugPrint('WS Orders connected');
       onConnect?.call();
     });
-    _ordersSocket!
-        .on('connect_error', (e) => debugPrint('WS Orders error: $e'));
+    _ordersSocket!.on(
+      'connect_error',
+      (e) => debugPrint('WS Orders error: $e'),
+    );
   }
 
   void subscribeToOrder(String orderId) {
     _ordersSocket?.emit('subscribe', orderId);
   }
 
-  Future<void> connectLocation(
-      {required Function(dynamic) onLocationUpdate}) async {
+  Future<void> connectLocation({Function(dynamic)? onLocationUpdate}) async {
     final token = await TokenStorage.getToken();
     _locationSocket = io.io(
       '$_baseUrl/ws/location',
-      io.OptionBuilder()
-          .setTransports(['websocket'])
-          .setAuth({'token': token ?? ''})
-          .build(),
+      io.OptionBuilder().setTransports(['websocket']).setAuth({
+        'token': token ?? '',
+      }).build(),
     );
-    _locationSocket!.on('locationUpdate', onLocationUpdate);
-    _locationSocket!
-        .on('connect', (_) => debugPrint('WS Location connected'));
-    _locationSocket!
-        .on('connect_error', (e) => debugPrint('WS Location error: $e'));
+    if (onLocationUpdate != null) {
+      _locationSocket!.on('locationUpdate', (data) {
+        try {
+          onLocationUpdate(_normalize(data));
+        } catch (e) {
+          debugPrint('WS locationUpdate handler error: $e');
+        }
+      });
+    }
+    _locationSocket!.on('connect', (_) => debugPrint('WS Location connected'));
+    _locationSocket!.on(
+      'connect_error',
+      (e) => debugPrint('WS Location error: $e'),
+    );
   }
 
   void subscribeToDelivery(String assignmentId) {
@@ -125,10 +137,14 @@ class WebSocketService {
       });
     }
     _pendingNotifListeners.clear();
-    _notificationsSocket!
-        .on('connect', (_) => debugPrint('WS Notifications connected'));
-    _notificationsSocket!
-        .on('connect_error', (e) => debugPrint('WS Notifications error: $e'));
+    _notificationsSocket!.on(
+      'connect',
+      (_) => debugPrint('WS Notifications connected'),
+    );
+    _notificationsSocket!.on(
+      'connect_error',
+      (e) => debugPrint('WS Notifications error: $e'),
+    );
     _notificationsSocket!.connect();
   }
 

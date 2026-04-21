@@ -1,7 +1,7 @@
 import { Injectable, Inject, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Client } from 'minio';
-import { MINIO_CLIENT } from './storage.constants';
+import { MINIO_CLIENT, MINIO_PRESIGN_CLIENT } from './storage.constants';
 
 @Injectable()
 export class StorageService implements OnModuleInit {
@@ -9,6 +9,7 @@ export class StorageService implements OnModuleInit {
 
   constructor(
     @Inject(MINIO_CLIENT) private readonly minioClient: Client,
+    @Inject(MINIO_PRESIGN_CLIENT) private readonly presignClient: Client,
     private readonly config: ConfigService,
   ) {}
 
@@ -44,6 +45,6 @@ export class StorageService implements OnModuleInit {
 
   async getPresignedUrl(objectKey: string, expirySeconds = 3600): Promise<string> {
     const bucket = this.config.get<string>('MINIO_BUCKET', 'grid-print');
-    return this.minioClient.presignedGetObject(bucket, objectKey, expirySeconds);
+    return this.presignClient.presignedGetObject(bucket, objectKey, expirySeconds);
   }
 }

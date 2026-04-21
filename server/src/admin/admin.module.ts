@@ -11,6 +11,8 @@ import { DriversModule } from '../drivers/drivers.module';
 import { CreditsModule } from '../credits/credits.module';
 import { TamSurvey } from '../tam-surveys/entities/tam-survey.entity';
 import { TamSurveySettings } from '../tam-surveys/entities/tam-survey-settings.entity';
+import { DriverProfile } from '../drivers/entities/driver-profile.entity';
+import { DeliveryAssignment } from '../drivers/entities/delivery-assignment.entity';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { TamSurveySettings } from '../tam-surveys/entities/tam-survey-settings.e
       OrderStatusHistory,
       TamSurvey,
       TamSurveySettings,
+      DriverProfile,
+      DeliveryAssignment,
     ]),
     OrdersModule,
     DriversModule,

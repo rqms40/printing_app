@@ -15,54 +15,55 @@ Order _makeOrder({
   String orderId = 'ORD-TEST-001',
   OrderStatus status = OrderStatus.onTheWay,
   String? deliveryAddressId = 'addr_test',
-}) =>
-    Order(
-      id: id,
-      orderId: orderId,
-      userId: 'usr_001',
-      category: 'Poster',
-      quantity: 1,
-      totalPrice: 500.0,
-      deliveryFee: 80.0,
-      paymentMethod: PaymentMethod.gcash,
-      paymentStatus: PaymentStatus.paid,
-      orderStatus: status,
-      deliveryOption: 'delivery',
-      deliveryAddressId: deliveryAddressId,
-      createdAt: DateTime(2026, 4, 21),
-      updatedAt: DateTime(2026, 4, 21),
-    );
+  String? deliveryAssignmentId = 'da_test',
+}) => Order(
+  id: id,
+  orderId: orderId,
+  userId: 'usr_001',
+  category: 'Poster',
+  quantity: 1,
+  totalPrice: 500.0,
+  deliveryFee: 80.0,
+  paymentMethod: PaymentMethod.gcash,
+  paymentStatus: PaymentStatus.paid,
+  orderStatus: status,
+  deliveryOption: 'delivery',
+  deliveryAddressId: deliveryAddressId,
+  deliveryAssignmentId: deliveryAssignmentId,
+  createdAt: DateTime(2026, 4, 21),
+  updatedAt: DateTime(2026, 4, 21),
+);
 
 Address _makeDavaoAddress({
   String id = 'addr_test',
   double latitude = 7.0731,
   double longitude = 125.6128,
-}) =>
-    Address(
-      id: id,
-      userId: 'usr_001',
-      label: 'Test Davao Address',
-      fullAddress: '123 CM Recto Avenue, Davao City',
-      city: 'Davao City',
-      latitude: latitude,
-      longitude: longitude,
-      isDefault: false,
-      createdAt: DateTime(2026, 4, 21),
-      updatedAt: DateTime(2026, 4, 21),
-    );
+}) => Address(
+  id: id,
+  userId: 'usr_001',
+  label: 'Test Davao Address',
+  fullAddress: '123 CM Recto Avenue, Davao City',
+  city: 'Davao City',
+  latitude: latitude,
+  longitude: longitude,
+  isDefault: false,
+  createdAt: DateTime(2026, 4, 21),
+  updatedAt: DateTime(2026, 4, 21),
+);
 
 ProviderContainer _container({
   List<Order> orders = const [],
   List<Address> addresses = const [],
-}) =>
-    ProviderContainer(overrides: [
-      ordersProvider.overrideWith(
-        (_) => OrdersNotifier(initialState: orders, skipBootstrap: true),
-      ),
-      addressProvider.overrideWith(
-        (_) => AddressNotifier(initialState: addresses, skipBootstrap: true),
-      ),
-    ]);
+}) => ProviderContainer(
+  overrides: [
+    ordersProvider.overrideWith(
+      (_) => OrdersNotifier(initialState: orders, skipBootstrap: true),
+    ),
+    addressProvider.overrideWith(
+      (_) => AddressNotifier(initialState: addresses, skipBootstrap: true),
+    ),
+  ],
+);
 
 // ── State factory unit tests ──────────────────────────────────────────────────
 
@@ -89,6 +90,7 @@ void main() {
         destPoint: dest,
         routePoints: route,
         orderId: 'ORD-001',
+        deliveryAssignmentId: 'da_001',
         orderStatus: OrderStatus.onTheWay,
       );
 
@@ -98,6 +100,7 @@ void main() {
       expect(state.destPoint, dest);
       expect(state.routePoints, route);
       expect(state.orderId, 'ORD-001');
+      expect(state.deliveryAssignmentId, 'da_001');
       expect(state.orderStatus, OrderStatus.onTheWay);
     });
 
@@ -118,6 +121,7 @@ void main() {
         destPoint: dest,
         routePoints: route,
         orderId: 'ORD-001',
+        deliveryAssignmentId: 'da_001',
         orderStatus: OrderStatus.onTheWay,
       );
 
@@ -142,7 +146,11 @@ void main() {
       container = _container(
         orders: [
           _makeOrder(status: OrderStatus.orderPlaced),
-          _makeOrder(id: 'ord_b', orderId: 'ORD-002', status: OrderStatus.printingInProgress),
+          _makeOrder(
+            id: 'ord_b',
+            orderId: 'ORD-002',
+            status: OrderStatus.printingInProgress,
+          ),
         ],
         addresses: [_makeDavaoAddress()],
       );
@@ -168,21 +176,25 @@ void main() {
       expect(state.status, LiveMapStatus.idle);
     });
 
-    test('returns active when onTheWay order + matching address exist', () async {
-      container = _container(
-        orders: [_makeOrder()],
-        addresses: [_makeDavaoAddress()],
-      );
-      final state = await container.read(liveDeliveryMapProvider.future);
+    test(
+      'returns active when onTheWay order + matching address exist',
+      () async {
+        container = _container(
+          orders: [_makeOrder()],
+          addresses: [_makeDavaoAddress()],
+        );
+        final state = await container.read(liveDeliveryMapProvider.future);
 
-      expect(state.status, LiveMapStatus.active);
-      expect(state.orderId, 'ORD-TEST-001');
-      expect(state.orderStatus, OrderStatus.onTheWay);
-      expect(state.destPoint.latitude, closeTo(7.0731, 0.001));
-      expect(state.destPoint.longitude, closeTo(125.6128, 0.001));
-      // Route fallback always returns non-empty list
-      expect(state.routePoints, isNotEmpty);
-    });
+        expect(state.status, LiveMapStatus.active);
+        expect(state.orderId, 'ORD-TEST-001');
+        expect(state.deliveryAssignmentId, 'da_test');
+        expect(state.orderStatus, OrderStatus.onTheWay);
+        expect(state.destPoint.latitude, closeTo(7.0731, 0.001));
+        expect(state.destPoint.longitude, closeTo(125.6128, 0.001));
+        // Route fallback always returns non-empty list
+        expect(state.routePoints, isNotEmpty);
+      },
+    );
 
     test('active state shopPoint is the Davao branch location', () async {
       container = _container(
@@ -195,18 +207,29 @@ void main() {
       expect(state.shopPoint.longitude, closeTo(125.608, 0.01));
     });
 
-    test('picks first onTheWay order when multiple active orders exist', () async {
-      container = _container(
-        orders: [
-          _makeOrder(status: OrderStatus.printingInProgress, id: 'ord_a', orderId: 'ORD-A'),
-          _makeOrder(id: 'ord_b', orderId: 'ORD-B'), // onTheWay
-          _makeOrder(status: OrderStatus.readyForDispatch, id: 'ord_c', orderId: 'ORD-C'),
-        ],
-        addresses: [_makeDavaoAddress()],
-      );
-      final state = await container.read(liveDeliveryMapProvider.future);
-      expect(state.status, LiveMapStatus.active);
-      expect(state.orderId, 'ORD-B');
-    });
+    test(
+      'picks first onTheWay order when multiple active orders exist',
+      () async {
+        container = _container(
+          orders: [
+            _makeOrder(
+              status: OrderStatus.printingInProgress,
+              id: 'ord_a',
+              orderId: 'ORD-A',
+            ),
+            _makeOrder(id: 'ord_b', orderId: 'ORD-B'), // onTheWay
+            _makeOrder(
+              status: OrderStatus.readyForDispatch,
+              id: 'ord_c',
+              orderId: 'ORD-C',
+            ),
+          ],
+          addresses: [_makeDavaoAddress()],
+        );
+        final state = await container.read(liveDeliveryMapProvider.future);
+        expect(state.status, LiveMapStatus.active);
+        expect(state.orderId, 'ORD-B');
+      },
+    );
   });
 }

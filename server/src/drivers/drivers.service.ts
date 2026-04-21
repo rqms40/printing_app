@@ -10,10 +10,11 @@ import {
   DeliveryAssignment,
   DeliveryStatus,
 } from './entities/delivery-assignment.entity';
-import { Order } from '../orders/entities/order.entity';
+import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { UpdateDriverProfileDto } from './dto/update-profile.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { LocationGateway } from './location.gateway';
+import { OrdersGateway } from '../orders/orders.gateway';
 
 // Valid state transitions for delivery status
 const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
@@ -26,6 +27,16 @@ const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
   [DeliveryStatus.DELIVERED]: [],
 };
 
+const ORDER_STATUS_BY_DELIVERY_STATUS: Partial<
+  Record<DeliveryStatus, OrderStatus>
+> = {
+  [DeliveryStatus.ACCEPTED]: OrderStatus.DRIVER_ASSIGNED,
+  [DeliveryStatus.PICKED_UP]: OrderStatus.PICKED_UP,
+  [DeliveryStatus.ON_THE_WAY]: OrderStatus.ON_THE_WAY,
+  [DeliveryStatus.ARRIVED]: OrderStatus.ARRIVED_AT_DESTINATION,
+  [DeliveryStatus.DELIVERED]: OrderStatus.DELIVERED,
+};
+
 @Injectable()
 export class DriversService {
   constructor(
@@ -35,6 +46,7 @@ export class DriversService {
     private assignmentRepo: Repository<DeliveryAssignment>,
     @InjectRepository(Order) private orderRepo: Repository<Order>,
     private locationGateway: LocationGateway,
+    private ordersGateway: OrdersGateway,
   ) {}
 
   async getAvailableDrivers(): Promise<DriverProfile[]> {
@@ -186,6 +198,17 @@ export class DriversService {
       case DeliveryStatus.DELIVERED:
         assignment.deliveredAt = now;
         break;
+    }
+
+    const orderStatus = ORDER_STATUS_BY_DELIVERY_STATUS[newStatus];
+    if (orderStatus) {
+      await this.orderRepo.update(assignment.orderId, { orderStatus });
+      const order = await this.orderRepo.findOne({
+        where: { id: assignment.orderId },
+      });
+      if (order) {
+        void this.ordersGateway.notifyOrderUpdate(order.orderId, order);
+      }
     }
 
     return this.assignmentRepo.save(assignment);

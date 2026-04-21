@@ -21,6 +21,7 @@ import {
   WalletOutlined,
   BellOutlined,
   FormOutlined,
+  AppstoreOutlined,
 } from "@ant-design/icons";
 
 import { gridTheme } from "@/config/theme";
@@ -45,6 +46,7 @@ import { CreditRequestsPage } from "@/pages/credit-requests";
 import { NotificationsPage } from "@/pages/notifications";
 import { TamSurveyList } from "@/pages/tam-surveys/list";
 import { TamSurveyShow } from "@/pages/tam-surveys/show";
+import { DailyGridList } from "@/pages/daily-grid/list";
 
 function App() {
   return (
@@ -109,6 +111,11 @@ function App() {
                 show: "/tam-surveys/show/:id",
                 meta: { label: "Surveys", icon: <FormOutlined /> },
               },
+              {
+                name: "daily-grid",
+                list: "/daily-grid",
+                meta: { label: "Daily Grid", icon: <AppstoreOutlined /> },
+              },
             ]}
             options={{
               syncWithLocation: true,
@@ -158,6 +165,7 @@ function App() {
                   <Route index element={<TamSurveyList />} />
                   <Route path="show/:id" element={<TamSurveyShow />} />
                 </Route>
+                <Route path="/daily-grid" element={<DailyGridList />} />
               </Route>
 
               <Route

@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { StorageService } from './storage.service';
-import { MINIO_CLIENT } from './storage.constants';
+import { MINIO_CLIENT, MINIO_PRESIGN_CLIENT } from './storage.constants';
 
 const mockMinioClient = {
   bucketExists: jest.fn(),
@@ -32,6 +32,7 @@ describe('StorageService', () => {
       providers: [
         StorageService,
         { provide: MINIO_CLIENT, useValue: mockMinioClient },
+        { provide: MINIO_PRESIGN_CLIENT, useValue: mockMinioClient },
         { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();

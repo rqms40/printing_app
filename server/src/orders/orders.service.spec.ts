@@ -10,12 +10,17 @@ import { FirebaseService } from '../firebase/firebase.service';
 import { UsersService } from '../users/users.service';
 import { CreditsService } from '../credits/credits.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import {
+  DeliveryAssignment,
+  DeliveryStatus,
+} from '../drivers/entities/delivery-assignment.entity';
 
 describe('OrdersService', () => {
   let service: OrdersService;
   let repo: jest.Mocked<Partial<Repository<Order>>>;
   let paperSpecsRepo: jest.Mocked<Partial<Repository<PaperSpec>>>;
   let threeDSpecsRepo: jest.Mocked<Partial<Repository<ThreeDSpec>>>;
+  let assignmentRepo: jest.Mocked<Partial<Repository<DeliveryAssignment>>>;
   let gateway: Partial<OrdersGateway>;
   let firebaseService: Partial<FirebaseService>;
   let usersService: Partial<UsersService>;
@@ -48,6 +53,10 @@ describe('OrdersService', () => {
       create: jest.fn(),
       save: jest.fn(),
     };
+    assignmentRepo = {
+      find: jest.fn(),
+      findOne: jest.fn(),
+    };
     gateway = {
       notifyOrderUpdate: jest.fn(),
     };
@@ -72,6 +81,10 @@ describe('OrdersService', () => {
         { provide: getRepositoryToken(Order), useValue: repo },
         { provide: getRepositoryToken(PaperSpec), useValue: paperSpecsRepo },
         { provide: getRepositoryToken(ThreeDSpec), useValue: threeDSpecsRepo },
+        {
+          provide: getRepositoryToken(DeliveryAssignment),
+          useValue: assignmentRepo,
+        },
         { provide: OrdersGateway, useValue: gateway },
         { provide: FirebaseService, useValue: firebaseService },
         { provide: UsersService, useValue: usersService },
@@ -132,6 +145,7 @@ describe('OrdersService', () => {
     it('should return orders for given userId sorted by createdAt DESC', async () => {
       const orders = [mockOrder];
       repo.find.mockResolvedValue(orders);
+      assignmentRepo.find.mockResolvedValue([]);
 
       const result = await service.findByUser(1);
 
@@ -141,11 +155,37 @@ describe('OrdersService', () => {
       });
       expect(result).toEqual(orders);
     });
+
+    it('attaches active deliveryAssignmentId for live tracking subscription', async () => {
+      const orders = [{ ...mockOrder, id: 12 }] as Order[];
+      repo.find.mockResolvedValue(orders);
+      assignmentRepo.find.mockResolvedValue([
+        {
+          id: 99,
+          orderId: 12,
+          status: DeliveryStatus.ON_THE_WAY,
+        } as DeliveryAssignment,
+      ]);
+
+      const result = await service.findByUser(1);
+
+      expect(assignmentRepo.find).toHaveBeenCalledWith({
+        where: {
+          orderId: expect.any(Object),
+          status: expect.any(Object),
+        },
+      });
+      expect(
+        (result[0] as Order & { deliveryAssignmentId?: number })
+          .deliveryAssignmentId,
+      ).toBe(99);
+    });
   });
 
   describe('findById', () => {
     it('should return order', async () => {
       repo.findOne.mockResolvedValue(mockOrder);
+      assignmentRepo.find.mockResolvedValue([]);
 
       const result = await service.findById(1);
 

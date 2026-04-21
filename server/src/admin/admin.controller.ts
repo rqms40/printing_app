@@ -27,6 +27,11 @@ import {
 } from './user-insights';
 import { TamSurvey } from '../tam-surveys/entities/tam-survey.entity';
 import { TamSurveySettings } from '../tam-surveys/entities/tam-survey-settings.entity';
+import { DriverProfile } from '../drivers/entities/driver-profile.entity';
+import {
+  DeliveryAssignment,
+  DeliveryStatus,
+} from '../drivers/entities/delivery-assignment.entity';
 
 type AnalyticsPeriod = '7D' | '30D' | '6M';
 type AnalyticsPoint = { label: string; value: number };
@@ -65,6 +70,10 @@ export class AdminController {
     private tamSurveysRepo: Repository<TamSurvey>,
     @InjectRepository(TamSurveySettings)
     private tamSurveySettingsRepo: Repository<TamSurveySettings>,
+    @InjectRepository(DriverProfile)
+    private driverProfilesRepo: Repository<DriverProfile>,
+    @InjectRepository(DeliveryAssignment)
+    private deliveryAssignmentsRepo: Repository<DeliveryAssignment>,
   ) {}
 
   @Patch('tam-surveys/settings')
@@ -426,7 +435,32 @@ export class AdminController {
     @Param('id', ParseIntPipe) id: number,
     @Body('driverId') driverId: number,
   ) {
-    await this.ordersRepo.update(id, { assignedDriverId: driverId });
+    const driverProfile = await this.driverProfilesRepo.findOneOrFail({
+      where: { id: driverId },
+    });
+
+    await this.ordersRepo.update(id, {
+      assignedDriverId: driverProfile.userId,
+      orderStatus: OrderStatus.DRIVER_ASSIGNED,
+    });
+
+    let assignment = await this.deliveryAssignmentsRepo.findOne({
+      where: { orderId: id },
+    });
+
+    if (assignment) {
+      assignment.driverId = driverProfile.id;
+      assignment.status = DeliveryStatus.ASSIGNED;
+      assignment.assignedAt = new Date();
+    } else {
+      assignment = this.deliveryAssignmentsRepo.create({
+        orderId: id,
+        driverId: driverProfile.id,
+        status: DeliveryStatus.ASSIGNED,
+      });
+    }
+
+    await this.deliveryAssignmentsRepo.save(assignment);
     return this.ordersRepo.findOneOrFail({ where: { id } });
   }
 

@@ -7,7 +7,7 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/home/providers/live_delivery_map_provider.dart';
-import 'package:printing_app/features/driver/active_delivery/providers/location_provider.dart';
+import 'package:printing_app/features/customer/tracking/providers/live_driver_location_provider.dart';
 import 'package:printing_app/shared/models/location_update.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
@@ -23,6 +23,7 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulseController;
   final _mapController = MapController();
+  bool _isMapReady = false;
 
   @override
   void initState() {
@@ -31,6 +32,7 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     )..repeat(reverse: true);
+    ref.read(liveDriverLocationProvider.notifier).state = null;
     _connectLocationSocket();
   }
 
@@ -45,20 +47,28 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
         final lat = (d['latitude'] as num?)?.toDouble();
         final lng = (d['longitude'] as num?)?.toDouble();
         if (lat == null || lng == null) return;
-        ref.read(locationProvider.notifier).updateLocation(LocationUpdate(
+        ref.read(liveDriverLocationProvider.notifier).state = LocationUpdate(
           id: 'live',
-          deliveryAssignmentId: 'active',
+          deliveryAssignmentId:
+              d['assignmentId']?.toString() ??
+              d['assignment_id']?.toString() ??
+              'active',
           latitude: lat,
           longitude: lng,
           timestamp: DateTime.now(),
-        ));
+        );
       },
     );
 
     if (!mounted) return; // widget may have been disposed before WS connected
     final mapState = await ref.read(liveDeliveryMapProvider.future);
-    if (mapState.orderId != null) {
-      WebSocketService.instance.subscribeToDelivery(mapState.orderId!);
+    final deliveryAssignmentId = mapState.deliveryAssignmentId;
+    if (deliveryAssignmentId != null && deliveryAssignmentId.isNotEmpty) {
+      WebSocketService.instance.subscribeToDelivery(deliveryAssignmentId);
+    } else {
+      debugPrint(
+        'DeliveryMap: missing deliveryAssignmentId; live location subscription skipped',
+      );
     }
   }
 
@@ -70,19 +80,32 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
     super.dispose();
   }
 
+  void _moveCameraTo(LatLng point) {
+    if (!_isMapReady || !mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_isMapReady || !mounted) return;
+      try {
+        _mapController.move(point, 13.5);
+      } catch (e) {
+        debugPrint('DeliveryMap: map camera move skipped: $e');
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    final colors =
-        brightness == Brightness.dark ? AppColors.dark : AppColors.light;
+    final colors = brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
 
     final mapAsync = ref.watch(liveDeliveryMapProvider);
-    final locationUpdate = ref.watch(locationProvider);
+    final locationUpdate = ref.watch(liveDriverLocationProvider);
 
     // Move camera whenever a live location update arrives.
-    ref.listen(locationProvider, (_, next) {
+    ref.listen(liveDriverLocationProvider, (_, next) {
       if (next == null) return;
-      _mapController.move(LatLng(next.latitude, next.longitude), 13.5);
+      _moveCameraTo(LatLng(next.latitude, next.longitude));
     });
 
     return mapAsync.when(
@@ -110,8 +133,12 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
     );
   }
 
-  Widget _mapView(LiveDeliveryMapState state, LatLng driverPoint,
-      Brightness brightness, AppColorSet colors) {
+  Widget _mapView(
+    LiveDeliveryMapState state,
+    LatLng driverPoint,
+    Brightness brightness,
+    AppColorSet colors,
+  ) {
     final eta = state.etaMinutes;
 
     return ClipRRect(
@@ -131,16 +158,25 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
                 options: MapOptions(
                   initialCenter: driverPoint,
                   initialZoom: 13.5,
+                  onMapReady: () {
+                    _isMapReady = true;
+                    final latest = ref.read(liveDriverLocationProvider);
+                    if (latest != null) {
+                      _moveCameraTo(LatLng(latest.latitude, latest.longitude));
+                    }
+                  },
                 ),
                 children: [
                   MapHelpers.tileLayer(brightness),
                   if (state.routePoints.isNotEmpty)
                     MapHelpers.routePolyline(state.routePoints),
-                  MarkerLayer(markers: [
-                    MapHelpers.shopMarker(point: state.shopPoint),
-                    MapHelpers.destinationMarker(point: state.destPoint),
-                    MapHelpers.driverMarker(driverPoint),
-                  ]),
+                  MarkerLayer(
+                    markers: [
+                      MapHelpers.shopMarker(point: state.shopPoint),
+                      MapHelpers.destinationMarker(point: state.destPoint),
+                      MapHelpers.driverMarker(driverPoint),
+                    ],
+                  ),
                 ],
               ),
 
@@ -150,15 +186,18 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
                 left: AppSpacing.sm,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+                    horizontal: AppSpacing.sm,
+                    vertical: AppSpacing.xs,
+                  ),
                   decoration: BoxDecoration(
                     color: colors.surface.withValues(alpha: 0.95),
                     borderRadius: AppRadius.borderFull,
                     boxShadow: const [
                       BoxShadow(
-                          color: Color(0x20000000),
-                          blurRadius: 8,
-                          offset: Offset(0, 2)),
+                        color: Color(0x20000000),
+                        blurRadius: 8,
+                        offset: Offset(0, 2),
+                      ),
                     ],
                   ),
                   child: Row(
@@ -198,15 +237,18 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
                 right: AppSpacing.sm,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+                    horizontal: AppSpacing.sm,
+                    vertical: AppSpacing.xs,
+                  ),
                   decoration: BoxDecoration(
                     color: colors.surface.withValues(alpha: 0.95),
                     borderRadius: AppRadius.borderFull,
                     boxShadow: const [
                       BoxShadow(
-                          color: Color(0x20000000),
-                          blurRadius: 8,
-                          offset: Offset(0, 2)),
+                        color: Color(0x20000000),
+                        blurRadius: 8,
+                        offset: Offset(0, 2),
+                      ),
                     ],
                   ),
                   child: Text(

@@ -18,6 +18,7 @@ import { AdminModule } from './admin/admin.module';
 import { ProductsModule } from './products/products.module';
 import { CreditsModule } from './credits/credits.module';
 import { TamSurveysModule } from './tam-surveys/tam-surveys.module';
+import { DailyGridModule } from './daily-grid/daily-grid.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { TamSurveysModule } from './tam-surveys/tam-surveys.module';
     ProductsModule,
     CreditsModule,
     TamSurveysModule,
+    DailyGridModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

@@ -2,97 +2,85 @@ import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/customer/home/providers/daily_grid_provider.dart';
+import 'package:printing_app/features/customer/order/providers/order_provider.dart';
+import 'package:printing_app/shared/models/daily_grid_item.dart';
 
-// ─── Data ────────────────────────────────────────────────────────────────────
+// ─── Fallback data (shown on error / while server is unreachable) ─────────────
 
-class _GridItem {
-  const _GridItem({
-    required this.title,
-    required this.subtitle,
-    required this.imageUrl,
-  });
-
-  final String title;
-  final String subtitle;
-  final String imageUrl;
-}
-
-const _kItems = [
-  _GridItem(
+const _kFallback = [
+  DailyGridItem(
+    id: -1,
     title: 'Bond Paper A4',
     subtitle: '₱15 / page',
-    // crisp top-down white paper stack
-    imageUrl:
-        'https://images.unsplash.com/photo-1588580000645-4562a6d2c839'
+    imageUrl: 'https://images.unsplash.com/photo-1588580000645-4562a6d2c839'
         '?w=160&h=160&fit=crop&q=80',
+    category: 'paper',
+    sortOrder: 0,
   ),
-  _GridItem(
+  DailyGridItem(
+    id: -2,
     title: 'A3 Poster',
     subtitle: '₱75 / sheet',
-    // rolled / printed poster on white surface
-    imageUrl:
-        'https://images.unsplash.com/photo-1503455637927-730bce8583c0'
+    imageUrl: 'https://images.unsplash.com/photo-1503455637927-730bce8583c0'
         '?w=160&h=160&fit=crop&q=80',
+    category: 'paper',
+    sortOrder: 1,
   ),
-  _GridItem(
+  DailyGridItem(
+    id: -3,
     title: '3D Print',
     subtitle: 'From ₱120',
-    // dark 3-D printed object
-    imageUrl:
-        'https://images.unsplash.com/photo-1617839625591-e5a789593135'
+    imageUrl: 'https://images.unsplash.com/photo-1617839625591-e5a789593135'
         '?w=160&h=160&fit=crop&q=80',
+    category: '3d',
+    sortOrder: 2,
   ),
-  _GridItem(
+  DailyGridItem(
+    id: -4,
     title: 'Large Banner',
     subtitle: 'From ₱350',
-    // wide-format print / signage
-    imageUrl:
-        'https://images.unsplash.com/photo-1586717791821-3f44a563fa4c'
+    imageUrl: 'https://images.unsplash.com/photo-1586717791821-3f44a563fa4c'
         '?w=160&h=160&fit=crop&q=80',
+    category: 'paper',
+    sortOrder: 3,
   ),
-  _GridItem(
+  DailyGridItem(
+    id: -5,
     title: 'Flyer Print',
     subtitle: '₱12 / sheet',
-    // stack of printed leaflets
-    imageUrl:
-        'https://images.unsplash.com/photo-1601645191163-3fc0d5d64e35'
+    imageUrl: 'https://images.unsplash.com/photo-1601645191163-3fc0d5d64e35'
         '?w=160&h=160&fit=crop&q=80',
+    category: 'paper',
+    sortOrder: 4,
   ),
 ];
 
-// ─── Dimensions ──────────────────────────────────────────────────────────────
+// ─── Dimensions ───────────────────────────────────────────────────────────────
 
-/// Card height AND circle diameter (user requirement: same value).
 const double _kCardH = 88.0;
-
-/// Circle diameter == card height so circle perfectly spans the card vertically.
 const double _kCircleD = _kCardH;
-
-/// Half the circle extends to the LEFT of the card body.
 const double _kCircleOverhang = _kCircleD / 2;
-
-/// Left padding inside card body = half-circle width + small gap.
 const double _kCardPadL = _kCircleOverhang + 10.0;
-
-/// Start in the middle of a large range to allow scrolling both ways.
-/// Value = 5 items × 2000 — effectively infinite.
 const int _kInitialPage = 10000;
 
-// ─── Section widget ──────────────────────────────────────────────────────────
+// ─── Section widget ───────────────────────────────────────────────────────────
 
-class DailyGridSection extends StatefulWidget {
+class DailyGridSection extends ConsumerStatefulWidget {
   const DailyGridSection({super.key});
 
   @override
-  State<DailyGridSection> createState() => _DailyGridSectionState();
+  ConsumerState<DailyGridSection> createState() => _DailyGridSectionState();
 }
 
-class _DailyGridSectionState extends State<DailyGridSection> {
+class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
   late final PageController _pageController;
   Timer? _autoScrollTimer;
 
@@ -101,11 +89,8 @@ class _DailyGridSectionState extends State<DailyGridSection> {
     super.initState();
     _pageController = PageController(
       initialPage: _kInitialPage,
-      // 0.47 → 2 full items + ~6% peek of 3rd on the right
       viewportFraction: 0.47,
     );
-
-    // Auto-advance every 3 seconds
     _autoScrollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (_pageController.hasClients) {
         _pageController.nextPage(
@@ -123,16 +108,28 @@ class _DailyGridSectionState extends State<DailyGridSection> {
     super.dispose();
   }
 
+  void _selectCategory(BuildContext context, String category) {
+    ref.read(orderFlowProvider.notifier).setCategory(category);
+    ref.read(orderFlowProvider.notifier).goToStep(1);
+    context.push(
+      category == 'paper'
+          ? '/customer/order/paper-specs'
+          : '/customer/order/3d-specs',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
 
+    final gridAsync = ref.watch(dailyGridProvider);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Section header ─────────────────────────────────────────────────
+        // ── Section header ─────────────────────────────────────────────
         Padding(
           padding: const EdgeInsets.only(bottom: AppSpacing.sm),
           child: Row(
@@ -144,15 +141,11 @@ class _DailyGridSectionState extends State<DailyGridSection> {
                 children: [
                   Text(
                     'The Daily Grid',
-                    style: AppTypography.h2.copyWith(
-                      color: colors.onBackground,
-                    ),
+                    style: AppTypography.h2.copyWith(color: colors.onBackground),
                   ),
                   Text(
                     'Ready-to-print essentials.',
-                    style: AppTypography.caption.copyWith(
-                      color: colors.brand,
-                    ),
+                    style: AppTypography.caption.copyWith(color: colors.brand),
                   ),
                 ],
               ),
@@ -167,35 +160,107 @@ class _DailyGridSectionState extends State<DailyGridSection> {
           ),
         ),
 
-        // ── Infinite auto-scrolling carousel ───────────────────────────────
-        // OverflowBox lets the carousel bleed past the parent's right padding
-        // without using a negative margin (which Flutter asserts against).
+        // ── Carousel ───────────────────────────────────────────────────
         SizedBox(
           height: _kCardH,
-          child: LayoutBuilder(
-            builder: (context, constraints) => OverflowBox(
-              alignment: Alignment.centerLeft,
-              maxWidth: constraints.maxWidth + AppSpacing.xl,
-              child: SizedBox(
-                width: constraints.maxWidth + AppSpacing.xl,
-                height: _kCardH,
-                child: PageView.builder(
-                  padEnds: false,
-                  controller: _pageController,
-                  itemCount: null, // infinite
-                  itemBuilder: (context, index) {
-                    final item = _kItems[index % _kItems.length];
-                    return Padding(
-                      padding: const EdgeInsets.only(right: AppSpacing.sm),
-                      child: _DailyGridCard(item: item, colors: colors),
-                    );
-                  },
-                ),
-              ),
+          child: gridAsync.when(
+            loading: () => _buildShimmer(colors),
+            error: (_, __) => _buildCarousel(_kFallback, colors),
+            data: (items) => _buildCarousel(
+              items.isEmpty ? _kFallback : items,
+              colors,
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildCarousel(List<DailyGridItem> items, AppColorSet colors) {
+    return LayoutBuilder(
+      builder: (context, constraints) => OverflowBox(
+        alignment: Alignment.centerLeft,
+        maxWidth: constraints.maxWidth + AppSpacing.xl,
+        child: SizedBox(
+          width: constraints.maxWidth + AppSpacing.xl,
+          height: _kCardH,
+          child: PageView.builder(
+            padEnds: false,
+            controller: _pageController,
+            itemCount: null,
+            itemBuilder: (context, index) {
+              final item = items[index % items.length];
+              return Padding(
+                padding: const EdgeInsets.only(right: AppSpacing.sm),
+                child: _DailyGridCard(
+                  item: item,
+                  colors: colors,
+                  onTap: () => _selectCategory(context, item.category),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShimmer(AppColorSet colors) {
+    return LayoutBuilder(
+      builder: (context, constraints) => OverflowBox(
+        alignment: Alignment.centerLeft,
+        maxWidth: constraints.maxWidth + AppSpacing.xl,
+        child: SizedBox(
+          width: constraints.maxWidth + AppSpacing.xl,
+          height: _kCardH,
+          child: Row(
+            children: List.generate(3, (i) {
+              final viewportWidth =
+                  (constraints.maxWidth + AppSpacing.xl) * 0.47;
+              return Padding(
+                padding: const EdgeInsets.only(right: AppSpacing.sm),
+                child: Shimmer.fromColors(
+                  baseColor: colors.surfaceVariant,
+                  highlightColor: colors.surface,
+                  child: SizedBox(
+                    width: viewportWidth,
+                    height: _kCardH,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Positioned(
+                          left: _kCircleOverhang,
+                          right: 0,
+                          top: 0,
+                          bottom: 0,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: colors.surfaceVariant,
+                              borderRadius: AppRadius.borderLg,
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          child: Container(
+                            width: _kCircleD,
+                            height: _kCircleD,
+                            decoration: BoxDecoration(
+                              color: colors.surfaceVariant,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -203,10 +268,15 @@ class _DailyGridSectionState extends State<DailyGridSection> {
 // ─── Card ─────────────────────────────────────────────────────────────────────
 
 class _DailyGridCard extends StatefulWidget {
-  const _DailyGridCard({required this.item, required this.colors});
+  const _DailyGridCard({
+    required this.item,
+    required this.colors,
+    required this.onTap,
+  });
 
-  final _GridItem item;
+  final DailyGridItem item;
   final AppColorSet colors;
+  final VoidCallback onTap;
 
   @override
   State<_DailyGridCard> createState() => _DailyGridCardState();
@@ -221,7 +291,7 @@ class _DailyGridCardState extends State<_DailyGridCard> {
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) {
         setState(() => _pressed = false);
-        context.push('/customer/order/new');
+        widget.onTap();
       },
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(
@@ -244,8 +314,7 @@ class _DailyGridCardState extends State<_DailyGridCard> {
                     color: widget.colors.surface,
                     borderRadius: AppRadius.borderLg,
                     border: Border.all(
-                      color:
-                          widget.colors.outline.withValues(alpha: 0.5),
+                      color: widget.colors.outline.withValues(alpha: 0.5),
                       width: 0.5,
                     ),
                   ),
@@ -269,20 +338,22 @@ class _DailyGridCardState extends State<_DailyGridCard> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        widget.item.subtitle,
-                        style: AppTypography.caption.copyWith(
-                          color: widget.colors.onSurfaceDim,
-                          fontSize: 10,
+                      if (widget.item.subtitle != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.item.subtitle!,
+                          style: AppTypography.caption.copyWith(
+                            color: widget.colors.onSurfaceDim,
+                            fontSize: 10,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
               ),
 
-              // ── Circle photo — diameter == card height ───────────────
+              // ── Circle photo ─────────────────────────────────────────
               Positioned(
                 left: 0,
                 top: 0,
@@ -300,7 +371,7 @@ class _DailyGridCardState extends State<_DailyGridCard> {
   }
 }
 
-// ─── Circle photo widget ──────────────────────────────────────────────────────
+// ─── Circle photo ─────────────────────────────────────────────────────────────
 
 class _CirclePhoto extends StatelessWidget {
   const _CirclePhoto({
@@ -309,7 +380,7 @@ class _CirclePhoto extends StatelessWidget {
     required this.borderColor,
   });
 
-  final String imageUrl;
+  final String? imageUrl;
   final double diameter;
   final Color borderColor;
 
@@ -320,7 +391,6 @@ class _CirclePhoto extends StatelessWidget {
       height: diameter,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        // Border matches the page background so the circle "floats"
         border: Border.all(color: borderColor, width: 2.5),
         boxShadow: const [
           BoxShadow(
@@ -331,32 +401,30 @@ class _CirclePhoto extends StatelessWidget {
         ],
       ),
       child: ClipOval(
-        child: CachedNetworkImage(
-          imageUrl: imageUrl,
-          fit: BoxFit.cover,
-          // Dark tone overlay so image matches the dark UI
-          color: Colors.black.withValues(alpha: 0.20),
-          colorBlendMode: BlendMode.darken,
-          placeholder: (_, _) => Container(
-            color: const Color(0xFF1E1E1E),
-            child: const Center(
-              child: SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 1.5,
-                  color: Color(0xFFFFDE58),
-                ),
-              ),
-            ),
-          ),
-          errorWidget: (_, _, _) => Container(
-            color: const Color(0xFF1A1A1A),
-            child: const Icon(
-              Icons.image_rounded,
-              color: Color(0xFF3A3A3A),
-              size: 22,
-            ),
+        child: imageUrl != null && imageUrl!.isNotEmpty
+            ? CachedNetworkImage(
+                imageUrl: imageUrl!,
+                fit: BoxFit.cover,
+                color: Colors.black.withValues(alpha: 0.20),
+                colorBlendMode: BlendMode.darken,
+                placeholder: (_, _) => _placeholder(),
+                errorWidget: (_, _, _) => _placeholder(),
+              )
+            : _placeholder(),
+      ),
+    );
+  }
+
+  Widget _placeholder() {
+    return Container(
+      color: const Color(0xFF1E1E1E),
+      child: const Center(
+        child: SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(
+            strokeWidth: 1.5,
+            color: Color(0xFFFFDE58),
           ),
         ),
       ),

@@ -7,13 +7,15 @@ import {
 import { Table, Button, Space, Image, Typography } from "antd";
 import { CheckCircleOutlined, CloseCircleOutlined } from "@ant-design/icons";
 import { useApiUrl, useCustomMutation, useNotification } from "@refinedev/core";
+import { useNotificationsContext } from "@/context/notifications-context";
 
 const { Text } = Typography;
 
 export const CreditRequestsList = () => {
   const apiUrl = useApiUrl();
   const { open } = useNotification();
-  
+  const { refreshBadges } = useNotificationsContext();
+
   // Custom fetch to hit the NestJS custom routes for credit approvals
   const { tableProps, tableQueryResult } = useTable({
     resource: "credits/requests/pending",
@@ -36,6 +38,7 @@ export const CreditRequestsList = () => {
           description: "The credits have been successfully added to the user.",
         });
         tableQueryResult.refetch();
+        refreshBadges();
       },
       onError: (error) => {
         open?.({
@@ -60,6 +63,7 @@ export const CreditRequestsList = () => {
           description: "The top-up request has been rejected.",
         });
         tableQueryResult.refetch();
+        refreshBadges();
       },
     });
   };

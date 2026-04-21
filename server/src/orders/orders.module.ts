@@ -12,6 +12,7 @@ import { OrdersGateway } from './orders.gateway';
 import { UsersModule } from '../users/users.module';
 import { CreditsModule } from '../credits/credits.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { DeliveryAssignment } from '../drivers/entities/delivery-assignment.entity';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       PaperSpec,
       ThreeDSpec,
       OrderStatusHistory,
+      DeliveryAssignment,
     ]),
     JwtModule.registerAsync({
       inject: [ConfigService],

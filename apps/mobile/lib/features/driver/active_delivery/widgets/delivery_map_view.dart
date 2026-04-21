@@ -8,11 +8,14 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/services/routing_service.dart';
+import 'package:printing_app/shared/services/websocket_service.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
 /// Driver's active delivery map with real road route and live position.
 class DeliveryMapView extends ConsumerStatefulWidget {
-  const DeliveryMapView({super.key});
+  const DeliveryMapView({super.key, required this.assignmentId});
+
+  final String assignmentId;
 
   @override
   ConsumerState<DeliveryMapView> createState() => _DeliveryMapViewState();
@@ -27,6 +30,7 @@ class _DeliveryMapViewState extends ConsumerState<DeliveryMapView> {
   @override
   void initState() {
     super.initState();
+    unawaited(WebSocketService.instance.connectLocation());
     _loadRoute();
   }
 
@@ -41,7 +45,19 @@ class _DeliveryMapViewState extends ConsumerState<DeliveryMapView> {
       _isLoading = false;
       _driverIndex = (points.length * 0.3).round();
     });
+    _emitDriverLocation();
     _startDriverSimulation();
+  }
+
+  void _emitDriverLocation() {
+    if (_routePoints.isEmpty) return;
+    final point = _routePoints[_driverIndex];
+    WebSocketService.instance.sendDriverLocation({
+      'assignmentId': widget.assignmentId,
+      'latitude': point.latitude,
+      'longitude': point.longitude,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
   }
 
   void _startDriverSimulation() {
@@ -50,19 +66,23 @@ class _DeliveryMapViewState extends ConsumerState<DeliveryMapView> {
         timer.cancel();
         return;
       }
+      var shouldEmitLocation = false;
       setState(() {
         if (_driverIndex < _routePoints.length - 1) {
           _driverIndex++;
+          shouldEmitLocation = true;
         } else {
           timer.cancel();
         }
       });
+      if (shouldEmitLocation) _emitDriverLocation();
     });
   }
 
   @override
   void dispose() {
     _driverTimer?.cancel();
+    WebSocketService.instance.disconnectLocation();
     super.dispose();
   }
 
@@ -77,9 +97,7 @@ class _DeliveryMapViewState extends ConsumerState<DeliveryMapView> {
         borderRadius: AppRadius.borderMd,
         child: Container(
           color: colors.surfaceVariant,
-          child: Center(
-            child: CircularProgressIndicator(color: colors.accent),
-          ),
+          child: Center(child: CircularProgressIndicator(color: colors.accent)),
         ),
       );
     }
@@ -129,7 +147,11 @@ class _DeliveryMapViewState extends ConsumerState<DeliveryMapView> {
                     color: colors.surface.withValues(alpha: 0.95),
                     borderRadius: AppRadius.borderFull,
                     boxShadow: const [
-                      BoxShadow(color: Color(0x20000000), blurRadius: 8, offset: Offset(0, 2)),
+                      BoxShadow(
+                        color: Color(0x20000000),
+                        blurRadius: 8,
+                        offset: Offset(0, 2),
+                      ),
                     ],
                   ),
                   child: Row(
@@ -172,8 +194,10 @@ class _PulsingDotState extends State<_PulsingDot>
   @override
   void initState() {
     super.initState();
-    _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))
-      ..repeat(reverse: true);
+    _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
   }
 
   @override
@@ -185,8 +209,10 @@ class _PulsingDotState extends State<_PulsingDot>
   @override
   Widget build(BuildContext context) {
     return FadeTransition(
-      opacity: Tween(begin: 0.4, end: 1.0)
-          .animate(CurvedAnimation(parent: _c, curve: Curves.easeInOut)),
+      opacity: Tween(
+        begin: 0.4,
+        end: 1.0,
+      ).animate(CurvedAnimation(parent: _c, curve: Curves.easeInOut)),
       child: Container(
         width: 8,
         height: 8,
