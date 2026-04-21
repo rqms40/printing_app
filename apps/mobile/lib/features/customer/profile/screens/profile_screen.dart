@@ -200,6 +200,13 @@ class _ProfileTab extends ConsumerWidget {
             onTap: () => context.push('/customer/uploads'),
             colors: colors,
           ),
+          _Divider(colors: colors),
+          _MenuRow(
+            icon: HugeIcons.strokeRoundedCloudUpload,
+            title: 'Storage & Files',
+            onTap: () => context.push('/customer/profile/storage-settings'),
+            colors: colors,
+          ),
 
           const SizedBox(height: AppSpacing.lg),
 
