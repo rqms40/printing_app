@@ -65,6 +65,11 @@ export class CreateOrderDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsNumber()
+  fileMetadataId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @ValidateNested()
   @Type(() => PaperSpecsDto)
   paperSpecs?: PaperSpecsDto;

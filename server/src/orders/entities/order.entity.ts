@@ -59,6 +59,9 @@ export class Order {
   @Column({ name: 'file_name', nullable: true })
   fileName: string;
 
+  @Column({ name: 'file_metadata_id', nullable: true, type: 'int' })
+  fileMetadataId: number | null;
+
   @Column({ default: 1 })
   quantity: number;
 
