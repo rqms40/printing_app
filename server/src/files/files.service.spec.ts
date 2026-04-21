@@ -95,6 +95,9 @@ describe('FilesService', () => {
           mimeType: 'image/jpeg',
           size: 1024,
           url: fakeUrl,
+          objectKey: expect.stringMatching(
+            /^uploads\/general\/\d{4}\/\d{2}\/\d{2}\/.+\.jpg$/,
+          ),
           uploadedBy: 42,
         }),
       );
