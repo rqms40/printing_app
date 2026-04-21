@@ -22,6 +22,9 @@ export class FileMetadata {
   @Column()
   url: string;
 
+  @Column({ name: 'object_key', nullable: true })
+  objectKey: string;
+
   @Column({ name: 'uploaded_by', nullable: true })
   uploadedBy: number;
 
