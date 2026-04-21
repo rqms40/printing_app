@@ -58,5 +58,16 @@ void main() {
       await tester.tap(find.text('18–24'));
       expect(selected, equals('18_24'));
     });
+
+    testWidgets('renders 5 page dot AnimatedContainer indicators', (tester) async {
+      await tester.pumpWidget(
+        _wrap(AgeRangeSelector(value: null, onChanged: (_) {})),
+      );
+      // 5 dots rendered as AnimatedContainer widgets in the dot row
+      // The scroll row also uses AnimatedContainer for cards (5 cards)
+      // Total AnimatedContainers = 5 (cards) + 5 (dots) = 10
+      // We verify by checking the dot row exists with the right structure
+      expect(find.byType(AnimatedContainer), findsNWidgets(10));
+    });
   });
 }

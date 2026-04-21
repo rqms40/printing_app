@@ -61,6 +61,7 @@ class GenderIdentitySelector extends StatelessWidget {
               decoration: value == 'Prefer not to say'
                   ? TextDecoration.underline
                   : TextDecoration.none,
+              decorationColor: value == 'Prefer not to say' ? colors.brand : null,
             ),
             child: const Text('Prefer not to say'),
           ),

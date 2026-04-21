@@ -5,7 +5,7 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/models/profiling.dart';
 
-const _ageEmojis = {
+const Map<String, String> _ageEmojis = {
   'under_18': '🎒',
   '18_24': '🎓',
   '25_34': '🚀',
@@ -68,7 +68,10 @@ class AgeRangeSelector extends StatelessWidget {
                 width: i == selectedIndex ? 20 : 8,
                 height: 8,
                 decoration: BoxDecoration(
-                  color: i == selectedIndex ? colors.brand : colors.outline,
+                  color: i == selectedIndex ? colors.brand : Colors.transparent,
+                  border: i == selectedIndex
+                      ? null
+                      : Border.all(color: colors.onSurfaceDim, width: 1.5),
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
