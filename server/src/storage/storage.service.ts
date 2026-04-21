@@ -18,19 +18,7 @@ export class StorageService implements OnModuleInit {
       const exists = await this.minioClient.bucketExists(bucket);
       if (!exists) {
         await this.minioClient.makeBucket(bucket);
-        const policy = {
-          Version: '2012-10-17',
-          Statement: [
-            {
-              Effect: 'Allow',
-              Principal: { AWS: ['*'] },
-              Action: ['s3:GetObject'],
-              Resource: [`arn:aws:s3:::${bucket}/*`],
-            },
-          ],
-        };
-        await this.minioClient.setBucketPolicy(bucket, JSON.stringify(policy));
-        this.logger.log(`Bucket '${bucket}' created with public-read policy`);
+        this.logger.log(`Bucket '${bucket}' created (private)`);
       }
     } catch (err) {
       this.logger.error(`Failed to initialize MinIO bucket '${bucket}'`, err);
@@ -52,5 +40,10 @@ export class StorageService implements OnModuleInit {
     const endpoint = this.config.get<string>('MINIO_ENDPOINT', 'localhost');
     const port = this.config.get<number>('MINIO_PORT', 9000);
     return `${scheme}://${endpoint}:${port}/${bucket}/${objectKey}`;
+  }
+
+  async getPresignedUrl(objectKey: string, expirySeconds = 3600): Promise<string> {
+    const bucket = this.config.get<string>('MINIO_BUCKET', 'grid-print');
+    return this.minioClient.presignedGetObject(bucket, objectKey, expirySeconds);
   }
 }

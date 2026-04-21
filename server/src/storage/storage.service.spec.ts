@@ -8,6 +8,7 @@ const mockMinioClient = {
   makeBucket: jest.fn(),
   setBucketPolicy: jest.fn(),
   putObject: jest.fn(),
+  presignedGetObject: jest.fn(),
 };
 
 const mockConfigService = {
@@ -44,16 +45,12 @@ describe('StorageService', () => {
       expect(mockMinioClient.makeBucket).not.toHaveBeenCalled();
     });
 
-    it('creates bucket with public-read policy when it does not exist', async () => {
+    it('creates bucket when it does not exist (no public-read policy)', async () => {
       mockMinioClient.bucketExists.mockResolvedValue(false);
       mockMinioClient.makeBucket.mockResolvedValue(undefined);
-      mockMinioClient.setBucketPolicy.mockResolvedValue(undefined);
       await service.onModuleInit();
       expect(mockMinioClient.makeBucket).toHaveBeenCalledWith('test-bucket');
-      expect(mockMinioClient.setBucketPolicy).toHaveBeenCalledWith(
-        'test-bucket',
-        expect.stringContaining('"Effect":"Allow"'),
-      );
+      expect(mockMinioClient.setBucketPolicy).not.toHaveBeenCalled();
     });
   });
 
@@ -85,6 +82,22 @@ describe('StorageService', () => {
       await expect(
         service.upload(Buffer.from('x'), 'key', 'image/png'),
       ).rejects.toThrow('MinIO unavailable');
+    });
+  });
+
+  describe('getPresignedUrl', () => {
+    it('calls presignedGetObject with correct bucket, key, expiry and returns URL', async () => {
+      const fakeUrl = 'http://localhost:9000/test-bucket/uploads/general/2026/04/21/uuid.jpg?X-Amz-Signature=abc';
+      mockMinioClient.presignedGetObject.mockResolvedValue(fakeUrl);
+
+      const result = await service.getPresignedUrl('uploads/general/2026/04/21/uuid.jpg', 3600);
+
+      expect(mockMinioClient.presignedGetObject).toHaveBeenCalledWith(
+        'test-bucket',
+        'uploads/general/2026/04/21/uuid.jpg',
+        3600,
+      );
+      expect(result).toBe(fakeUrl);
     });
   });
 });
