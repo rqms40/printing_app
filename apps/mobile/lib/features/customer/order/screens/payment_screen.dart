@@ -31,7 +31,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   PaymentMethod? _selectedMethod;
   bool _isProcessing = false;
   bool _isSuccess = false;
-  bool _isLoadingSettings = false;
   bool _creditsOnlyMode = false;
 
   @override
@@ -41,20 +40,18 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   }
 
   Future<void> _fetchSettings() async {
-    setState(() => _isLoadingSettings = true);
     try {
       final res = await ApiClient.instance.get('/credits/settings');
       if (mounted) {
         setState(() {
           _creditsOnlyMode = res.data['creditsOnlyMode'] == true;
-          _isLoadingSettings = false;
           if (_creditsOnlyMode && _selectedMethod != PaymentMethod.gridCredits) {
             _selectedMethod = null;
           }
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _isLoadingSettings = false);
+      // settings load failed silently
     }
   }
 

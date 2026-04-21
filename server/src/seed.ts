@@ -789,24 +789,44 @@ async function seed() {
     {
       user_id: mariaId,
       survey_data: JSON.stringify({
-        0: 4, 1: 4, 2: 4, 3: 4, 4: 5, 5: 5, 6: 4, 7: 5, 8: 5, 9: 5
+        0: 4,
+        1: 4,
+        2: 4,
+        3: 4,
+        4: 5,
+        5: 5,
+        6: 4,
+        7: 5,
+        8: 5,
+        9: 5,
       }),
-      open_forum_feedback: "GRID is amazing! It saved me so much time printing my architectural plans. The UI could be slightly better though.",
+      open_forum_feedback:
+        'GRID is amazing! It saved me so much time printing my architectural plans. The UI could be slightly better though.',
     },
     {
       user_id: juanId,
       survey_data: JSON.stringify({
-        0: 3, 1: 2, 2: 3, 3: 3, 4: 4, 5: 4, 6: 3, 7: 4, 8: 3, 9: 4
+        0: 3,
+        1: 2,
+        2: 3,
+        3: 3,
+        4: 4,
+        5: 4,
+        6: 3,
+        7: 4,
+        8: 3,
+        9: 4,
       }),
-      open_forum_feedback: "It's alright, but sometimes the delivery assignments mismatch map locations.",
-    }
+      open_forum_feedback:
+        "It's alright, but sometimes the delivery assignments mismatch map locations.",
+    },
   ];
 
-  for(const s of mockSurveys) {
+  for (const s of mockSurveys) {
     await ds.query(
       `INSERT INTO tam_surveys (user_id, survey_data, open_forum_feedback, created_at, updated_at)
        VALUES ($1, $2, $3, NOW(), NOW())`,
-       [s.user_id, s.survey_data, s.open_forum_feedback]
+      [s.user_id, s.survey_data, s.open_forum_feedback],
     );
   }
   console.log('✅ 2 TAM surveys created');

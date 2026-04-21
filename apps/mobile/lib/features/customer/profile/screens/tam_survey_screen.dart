@@ -173,7 +173,6 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
   final Map<int, LikertScale> _answers = {};
   String? _comment;
   bool _submitted = false;
-  bool _isSubmitting = false;
 
   late AnimationController _checkController;
 
@@ -211,7 +210,6 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
   }
 
   Future<void> _submit() async {
-    setState(() => _isSubmitting = true);
     try {
       final formattedAnswers = {};
       _answers.forEach((key, value) {
@@ -236,9 +234,7 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _isSubmitting = false);
-      }
+      // submit complete
     }
   }
 
@@ -251,8 +247,6 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
     final answered = _answers.length;
     final total = _tamQuestions.length;
     final progress = total == 0 ? 0.0 : answered / total;
-    final allAnswered = answered == total;
-
     if (_submitted) {
       return Scaffold(
         backgroundColor: colors.background,
@@ -356,7 +350,7 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
 
                 if (i == _tamQuestions.length) {
                   final hasComment = _comment != null && _comment!.trim().isNotEmpty;
-                  final faceColor = const Color(0xFF4CC9F0);
+                  const faceColor = Color(0xFF4CC9F0);
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
