@@ -16,6 +16,7 @@ import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/confirmation_dialog.dart';
 import 'package:printing_app/shared/widgets/section_header.dart';
+import 'package:printing_app/shared/widgets/file_preview_sheet.dart';
 import 'package:printing_app/utils/formatters.dart';
 
 /// Admin detail screen for a single order.
@@ -163,6 +164,23 @@ class _AdminOrderDetailScreenState
                           AppTypography.body.copyWith(color: colors.onSurface),
                     ),
                   ),
+                  if (order.fileMetadataId != null)
+                    TextButton.icon(
+                      onPressed: () => FilePreviewSheet.show(
+                        context,
+                        fileId: order.fileMetadataId!,
+                        fileName: order.fileName!,
+                        mimeType: _mimeFromExtension(
+                            order.fileName!.split('.').last.toLowerCase()),
+                      ),
+                      icon: Icon(Icons.visibility_outlined,
+                          size: 16, color: colors.accent),
+                      label: Text(
+                        'Preview',
+                        style: AppTypography.caption
+                            .copyWith(color: colors.accent),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -366,6 +384,28 @@ class _AdminOrderDetailScreenState
         ),
       ),
     );
+  }
+
+  String _mimeFromExtension(String ext) {
+    switch (ext) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'pdf':
+        return 'application/pdf';
+      case 'stl':
+        return 'model/stl';
+      case 'obj':
+        return 'model/obj';
+      case '3mf':
+        return 'model/3mf';
+      default:
+        return 'application/octet-stream';
+    }
   }
 
   void _showDeclineDialog(BuildContext context, Order order) {

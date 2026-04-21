@@ -17,6 +17,7 @@ import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/confirmation_dialog.dart';
 import 'package:printing_app/shared/widgets/status_badge.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:printing_app/shared/widgets/file_preview_sheet.dart';
 import 'package:printing_app/utils/formatters.dart';
 
 /// Detailed view of a single order.
@@ -122,7 +123,7 @@ class OrderDetailScreen extends ConsumerWidget {
 
             // --- File Info ---
             if (order.fileName != null) ...[
-              _buildFileSection(order, colors)
+              _buildFileSection(context, order, colors)
                   .animate()
                   .fadeIn(duration: 400.ms, delay: 240.ms, curve: Curves.easeOut)
                   .slideY(begin: 0.03, duration: 400.ms, delay: 240.ms, curve: Curves.easeOut),
@@ -241,7 +242,7 @@ class OrderDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildFileSection(Order order, AppColorSet colors) {
+  Widget _buildFileSection(BuildContext context, Order order, AppColorSet colors) {
     final extension = order.fileName!.split('.').last.toUpperCase();
     return AppCard(
       child: Column(
@@ -268,11 +269,50 @@ class OrderDetailScreen extends ConsumerWidget {
                 label: extension,
                 variant: StatusBadgeVariant.neutral,
               ),
+              if (order.fileMetadataId != null)
+                TextButton.icon(
+                  onPressed: () => FilePreviewSheet.show(
+                    context,
+                    fileId: order.fileMetadataId!,
+                    fileName: order.fileName!,
+                    mimeType: _mimeFromExtension(
+                        order.fileName!.split('.').last.toLowerCase()),
+                  ),
+                  icon: Icon(Icons.visibility_outlined,
+                      size: 16, color: colors.accent),
+                  label: Text(
+                    'Preview',
+                    style: AppTypography.caption
+                        .copyWith(color: colors.accent),
+                  ),
+                ),
             ],
           ),
         ],
       ),
     );
+  }
+
+  String _mimeFromExtension(String ext) {
+    switch (ext) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'pdf':
+        return 'application/pdf';
+      case 'stl':
+        return 'model/stl';
+      case 'obj':
+        return 'model/obj';
+      case '3mf':
+        return 'model/3mf';
+      default:
+        return 'application/octet-stream';
+    }
   }
 
   Widget _buildPriceSection(Order order, AppColorSet colors) {
