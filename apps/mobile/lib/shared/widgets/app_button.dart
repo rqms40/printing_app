@@ -11,10 +11,11 @@ enum AppButtonVariant { primary, secondary, ghost, brand }
 
 /// Reusable button following the GRID design system.
 ///
-/// Three variants:
+/// Four variants:
 /// - **primary** -- solid accent background, contrasting text.
 /// - **secondary** -- transparent with 1px accent border.
 /// - **ghost** -- transparent, no border.
+/// - **brand** -- brand-yellow fill (`colors.brand`), black text (`colors.accentOnColor`). In dark mode this is #FFDE58; in light mode it renders as the deep amber brand token.
 class AppButton extends StatefulWidget {
   const AppButton({
     super.key,
@@ -123,8 +124,8 @@ class _AppButtonState extends State<AppButton> {
           borderRadius: AppRadius.borderMd,
           side: BorderSide(color: colors.accent, width: 1),
         );
+      // ghost and brand share the same shape — no border, rounded corners.
       case AppButtonVariant.ghost:
-        return RoundedRectangleBorder(borderRadius: AppRadius.borderMd);
       case AppButtonVariant.brand:
         return RoundedRectangleBorder(borderRadius: AppRadius.borderMd);
     }
