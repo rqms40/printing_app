@@ -2,8 +2,9 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Client } from 'minio';
 import { StorageService } from './storage.service';
+import { MINIO_CLIENT } from './storage.constants';
 
-export const MINIO_CLIENT = 'MINIO_CLIENT';
+export { MINIO_CLIENT } from './storage.constants';
 
 @Global()
 @Module({

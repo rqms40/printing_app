@@ -22,7 +22,7 @@ export class FileMetadata {
   @Column()
   url: string;
 
-  @Column({ name: 'object_key', nullable: true })
+  @Column({ name: 'object_key', type: 'varchar', nullable: true })
   objectKey: string | null;
 
   @Column({ name: 'uploaded_by', nullable: true })

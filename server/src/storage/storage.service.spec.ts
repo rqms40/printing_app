@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { StorageService } from './storage.service';
-import { MINIO_CLIENT } from './storage.module';
+import { MINIO_CLIENT } from './storage.constants';
 
 const mockMinioClient = {
   bucketExists: jest.fn(),
