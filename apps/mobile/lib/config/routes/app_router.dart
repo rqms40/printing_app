@@ -405,7 +405,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             slideTransition(const TamSurveyScreen(), state),
       ),
       GoRoute(
-        path: '/customer/profile/storage-settings',
+        path: StorageSettingsScreen.routeName,
         pageBuilder: (_, state) =>
             slideTransition(const StorageSettingsScreen(), state),
       ),

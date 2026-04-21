@@ -11,6 +11,7 @@ import 'package:printing_app/shared/providers/theme_provider.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/confirmation_dialog.dart';
+import 'package:printing_app/features/customer/profile/screens/storage_settings_screen.dart';
 
 final surveyVisibilityProvider = FutureProvider.autoDispose<bool>((ref) async {
   try {
@@ -204,7 +205,7 @@ class _ProfileTab extends ConsumerWidget {
           _MenuRow(
             icon: HugeIcons.strokeRoundedCloudUpload,
             title: 'Storage & Files',
-            onTap: () => context.push('/customer/profile/storage-settings'),
+            onTap: () => context.push(StorageSettingsScreen.routeName),
             colors: colors,
           ),
 

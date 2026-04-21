@@ -21,6 +21,14 @@ class StorageSettingsScreen extends ConsumerWidget {
     final colors = isDark ? AppColors.dark : AppColors.light;
     final settingsAsync = ref.watch(storageSettingsProvider);
 
+    ref.listen<AsyncValue<StorageSettings>>(storageSettingsProvider, (prev, next) {
+      if (next.hasError && (prev == null || !prev.hasError)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to save — please try again')),
+        );
+      }
+    });
+
     return Scaffold(
       backgroundColor: colors.background,
       body: SafeArea(
@@ -93,7 +101,6 @@ class StorageSettingsScreen extends ConsumerWidget {
     StorageSettings settings,
   ) {
     final isEnabled = settings.fileRetentionDays != null;
-    final notifier = ref.read(storageSettingsProvider.notifier);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.xl),
@@ -137,7 +144,7 @@ class StorageSettingsScreen extends ConsumerWidget {
                     value: isEnabled,
                     activeColor: colors.accent,
                     onChanged: (value) =>
-                        _onToggle(context, ref, notifier, value, settings),
+                        _onToggle(context, ref, value),
                   ),
                 ],
               ),
@@ -160,7 +167,7 @@ class StorageSettingsScreen extends ConsumerWidget {
                     _PeriodDropdown(
                       value: settings.fileRetentionDays!,
                       colors: colors,
-                      onChanged: (days) => notifier.update(days),
+                      onChanged: (days) => ref.read(storageSettingsProvider.notifier).update(days),
                     ),
                   ],
                 ),
@@ -175,10 +182,9 @@ class StorageSettingsScreen extends ConsumerWidget {
   void _onToggle(
     BuildContext context,
     WidgetRef ref,
-    StorageSettingsNotifier notifier,
     bool enable,
-    StorageSettings current,
   ) {
+    final notifier = ref.read(storageSettingsProvider.notifier);
     if (!enable) {
       notifier.update(null);
       return;
@@ -190,11 +196,7 @@ class StorageSettingsScreen extends ConsumerWidget {
           'Your files from completed orders will be automatically deleted after the chosen period. You can turn this off any time.',
       confirmLabel: 'Enable',
       cancelLabel: 'Cancel',
-      onConfirm: () {
-        Navigator.of(context).pop();
-        notifier.update(30);
-      },
-      onCancel: () => Navigator.of(context).pop(),
+      onConfirm: () => notifier.update(30),
     );
   }
 }
