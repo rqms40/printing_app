@@ -10,6 +10,7 @@ class Order {
     required this.category,
     this.fileUrl,
     this.fileName,
+    this.fileMetadataId,
     this.paperSpecs,
     this.threeDSpecs,
     required this.quantity,
@@ -37,6 +38,7 @@ class Order {
   final String category;
   final String? fileUrl;
   final String? fileName;
+  final int? fileMetadataId;
   final PaperSpecs? paperSpecs;
   final ThreeDSpecs? threeDSpecs;
   final int quantity;
@@ -64,6 +66,7 @@ class Order {
     String? category,
     String? fileUrl,
     String? fileName,
+    int? fileMetadataId,
     PaperSpecs? paperSpecs,
     ThreeDSpecs? threeDSpecs,
     int? quantity,
@@ -91,6 +94,7 @@ class Order {
       category: category ?? this.category,
       fileUrl: fileUrl ?? this.fileUrl,
       fileName: fileName ?? this.fileName,
+      fileMetadataId: fileMetadataId ?? this.fileMetadataId,
       paperSpecs: paperSpecs ?? this.paperSpecs,
       threeDSpecs: threeDSpecs ?? this.threeDSpecs,
       quantity: quantity ?? this.quantity,

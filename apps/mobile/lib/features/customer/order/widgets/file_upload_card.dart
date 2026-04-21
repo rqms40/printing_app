@@ -1,15 +1,16 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/shared/widgets/file_type_icon.dart';
 import 'package:printing_app/utils/formatters.dart';
 
 /// Dashed-border upload card for file selection.
-///
-/// Shows an upload prompt when no file is selected; once a file is chosen it
-/// displays the file name, size and a "Change" button.
 class FileUploadCard extends StatelessWidget {
   const FileUploadCard({
     super.key,
@@ -19,25 +20,26 @@ class FileUploadCard extends StatelessWidget {
     this.errorText,
     this.isUploading = false,
     this.uploadProgress = 0,
+    this.localFilePath,
+    this.localFileBytes,
+    this.mimeType,
   });
 
-  /// Called when the card is tapped (to open file picker).
   final VoidCallback onTap;
-
-  /// Name of the selected file, or null if none.
   final String? fileName;
-
-  /// Size in bytes of the selected file.
   final int? fileSize;
-
-  /// Validation error message to display below the card.
   final String? errorText;
-
-  /// Whether an upload animation is in progress.
   final bool isUploading;
-
-  /// Upload progress from 0.0 to 1.0.
   final double uploadProgress;
+
+  /// Local file path for image thumbnail (mobile/desktop).
+  final String? localFilePath;
+
+  /// In-memory bytes for image thumbnail (web).
+  final Uint8List? localFileBytes;
+
+  /// MIME type used to pick the correct FileTypeIcon.
+  final String? mimeType;
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -94,11 +96,49 @@ class FileUploadCard extends StatelessWidget {
     );
   }
 
+  Widget _buildFilePreview(AppColorSet colors) {
+    final isImage = mimeType != null && mimeType!.startsWith('image/');
+
+    if (isImage) {
+      if (localFileBytes != null) {
+        return ClipRRect(
+          borderRadius: AppRadius.borderSm,
+          child: Image.memory(
+            localFileBytes!,
+            width: 52,
+            height: 52,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) =>
+                FileTypeIcon(mimeType: mimeType, size: 52),
+          ),
+        );
+      }
+      if (localFilePath != null) {
+        return ClipRRect(
+          borderRadius: AppRadius.borderSm,
+          child: Image.file(
+            File(localFilePath!),
+            width: 52,
+            height: 52,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) =>
+                FileTypeIcon(mimeType: mimeType, size: 52),
+          ),
+        );
+      }
+    }
+
+    return FileTypeIcon(mimeType: mimeType, size: 52);
+  }
+
   Widget _buildPrompt(AppColorSet colors) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        HugeIcon(icon: HugeIcons.strokeRoundedFileUpload, size: 48, color: colors.onSurfaceDim),
+        HugeIcon(
+            icon: HugeIcons.strokeRoundedFileUpload,
+            size: 48,
+            color: colors.onSurfaceDim),
         const SizedBox(height: AppSpacing.md),
         Text(
           'Tap to select file',
@@ -116,7 +156,7 @@ class FileUploadCard extends StatelessWidget {
   Widget _buildFileInfo(AppColorSet colors) {
     return Row(
       children: [
-        HugeIcon(icon: HugeIcons.strokeRoundedFileValidation, size: 40, color: colors.accent),
+        _buildFilePreview(colors),
         const SizedBox(width: AppSpacing.md),
         Expanded(
           child: Column(
@@ -134,8 +174,8 @@ class FileUploadCard extends StatelessWidget {
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   formatFileSize(fileSize!),
-                  style:
-                      AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+                  style: AppTypography.caption
+                      .copyWith(color: colors.onSurfaceDim),
                 ),
               ],
             ],
@@ -151,7 +191,6 @@ class FileUploadCard extends StatelessWidget {
   }
 }
 
-/// Paints a dashed rectangular border using [CustomPainter].
 class _DashedBorderPainter extends CustomPainter {
   _DashedBorderPainter({
     required this.color,

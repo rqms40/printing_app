@@ -16,6 +16,7 @@ class OrderFlowState {
     this.fileName,
     this.filePath,
     this.fileSize,
+    this.fileMetadataId,
     this.quantity = 1,
     this.pageCount = 1,
     this.deliveryOption = 'pickup',
@@ -37,6 +38,7 @@ class OrderFlowState {
   final String? fileName;
   final String? filePath;
   final int? fileSize;
+  final int? fileMetadataId;
 
   final int quantity;
 
@@ -60,6 +62,7 @@ class OrderFlowState {
     String? fileName,
     String? filePath,
     int? fileSize,
+    int? fileMetadataId,
     int? quantity,
     int? pageCount,
     String? deliveryOption,
@@ -82,6 +85,7 @@ class OrderFlowState {
       fileName: clearFile ? null : (fileName ?? this.fileName),
       filePath: clearFile ? null : (filePath ?? this.filePath),
       fileSize: clearFile ? null : (fileSize ?? this.fileSize),
+      fileMetadataId: clearFile ? null : (fileMetadataId ?? this.fileMetadataId),
       quantity: quantity ?? this.quantity,
       pageCount: pageCount ?? this.pageCount,
       deliveryOption: deliveryOption ?? this.deliveryOption,
@@ -122,6 +126,7 @@ class OrderFlowState {
       'fileName': fileName,
       'filePath': filePath,
       'fileSize': fileSize,
+      'fileMetadataId': fileMetadataId,
       'quantity': quantity,
       'pageCount': pageCount,
       'deliveryOption': deliveryOption,
@@ -209,6 +214,7 @@ class OrderFlowState {
       fileName: map['fileName'] as String?,
       filePath: map['filePath'] as String?,
       fileSize: map['fileSize'] as int?,
+      fileMetadataId: map['fileMetadataId'] as int?,
       quantity: map['quantity'] as int? ?? 1,
       pageCount: map['pageCount'] as int? ?? 1,
       deliveryOption: map['deliveryOption'] as String? ?? 'pickup',
@@ -265,12 +271,19 @@ class OrderFlowNotifier extends StateNotifier<OrderFlowState> {
     required String fileName,
     required String filePath,
     required int fileSize,
+    int? fileMetadataId,
   }) {
     state = state.copyWith(
       fileName: fileName,
       filePath: filePath,
       fileSize: fileSize,
+      fileMetadataId: fileMetadataId,
     );
+    _saveDraft();
+  }
+
+  void setFileMetadataId(int? id) {
+    state = state.copyWith(fileMetadataId: id);
     _saveDraft();
   }
 

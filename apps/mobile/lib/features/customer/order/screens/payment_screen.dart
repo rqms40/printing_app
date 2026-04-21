@@ -312,6 +312,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         category: flowState.category ?? 'paper',
         fileName: flowState.fileName,
         fileUrl: flowState.filePath,
+        fileMetadataId: flowState.fileMetadataId,
         paperSpecs: flowState.paperSpecs,
         threeDSpecs: flowState.threeDSpecs,
         quantity: flowState.quantity,

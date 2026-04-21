@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -15,7 +17,7 @@ import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
 import 'package:printing_app/utils/formatters.dart';
 
-/// Step 3/6 -- File upload.
+/// Step 3/6 -- File upload with real Dio progress.
 class UploadScreen extends ConsumerStatefulWidget {
   const UploadScreen({super.key});
 
@@ -29,7 +31,10 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
     with SingleTickerProviderStateMixin {
   String? _fileName;
   String? _filePath;
+  Uint8List? _fileBytes;
+  String? _fileMimeType;
   int? _fileSize;
+  int? _fileMetadataId;
   String? _errorText;
   bool _isUploading = false;
   double _uploadProgress = 0;
@@ -54,127 +59,173 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
         : AppConstants.threeDMaxSizeMB;
   }
 
+  String _mimeFromExtension(String ext) {
+    switch (ext.toLowerCase()) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'pdf':
+        return 'application/pdf';
+      case 'stl':
+        return 'model/stl';
+      case 'obj':
+        return 'model/obj';
+      case '3mf':
+        return 'model/3mf';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+
   Future<void> _pickFile() async {
-    // Try native file picker first; fall back to mock for demo on
-    // platforms without dialog support (WSL2, headless Linux, etc.)
-    bool usedNativePicker = false;
+    FilePickerResult? result;
+    bool nativeSucceeded = false;
 
     try {
-      FilePickerResult? result;
       try {
         result = await FilePicker.platform.pickFiles(
           type: FileType.custom,
           allowedExtensions: _allowedTypes,
           dialogTitle: 'Select file to print',
+          withData: true,
         );
       } catch (_) {
         result = await FilePicker.platform.pickFiles(
           type: FileType.any,
           dialogTitle: 'Select file to print',
+          withData: true,
         );
       }
-
       if (result != null && result.files.isNotEmpty) {
-        final file = result.files.first;
-        final extension = file.extension?.toLowerCase() ?? '';
-        final sizeInBytes = file.size;
-        final maxBytes = _maxSizeMB * 1024 * 1024;
-
-        if (!_allowedTypes.contains(extension)) {
-          setState(() {
-            _errorText =
-                'Invalid file type ".$extension". Allowed: ${_allowedTypes.map((e) => '.$e').join(', ')}';
-            _fileName = null;
-            _filePath = null;
-            _fileSize = null;
-          });
-          return;
-        }
-
-        if (sizeInBytes > maxBytes) {
-          setState(() {
-            _errorText =
-                'File too large (${formatFileSize(sizeInBytes)}). Maximum: $_maxSizeMB MB';
-            _fileName = null;
-            _filePath = null;
-            _fileSize = null;
-          });
-          return;
-        }
-
-        usedNativePicker = true;
-        setState(() {
-          _errorText = null;
-          _fileName = file.name;
-          _filePath = file.path;
-          _fileSize = sizeInBytes;
-          _isUploading = true;
-          _uploadProgress = 0;
-        });
-      } else {
-        // User cancelled
-        return;
+        nativeSucceeded = true;
       }
     } catch (_) {
-      // Native picker not available — use mock file for demo
-      usedNativePicker = false;
+      nativeSucceeded = false;
     }
 
-    if (!usedNativePicker) {
-      // Generate a realistic mock file for demo purposes
-      final category = ref.read(orderFlowProvider).category ?? 'paper';
-      final mockFiles = category == 'paper'
-          ? [
-              ('Project_Report_Final.pdf', 2457600),
-              ('Thesis_Document.docx', 1843200),
-              ('Event_Poster_A3.png', 5242880),
-              ('Business_Cards_Layout.pdf', 819200),
-            ]
-          : [
-              ('Prototype_Model_v2.stl', 8388608),
-              ('Figurine_Base.obj', 4194304),
-              ('Phone_Case_Design.3mf', 3145728),
-            ];
+    if (!nativeSucceeded || result == null) {
+      _useMockFile();
+      return;
+    }
 
-      final mock = mockFiles[DateTime.now().second % mockFiles.length];
+    final file = result.files.first;
+    final extension = file.extension?.toLowerCase() ?? '';
+    final sizeInBytes = file.size;
+    final maxBytes = _maxSizeMB * 1024 * 1024;
 
+    if (!_allowedTypes.contains(extension)) {
       setState(() {
-        _errorText = null;
-        _fileName = mock.$1;
-        _filePath = '/mock/${mock.$1}';
-        _fileSize = mock.$2;
-        _isUploading = true;
-        _uploadProgress = 0;
+        _errorText =
+            'Invalid file type ".$extension". Allowed: ${_allowedTypes.map((e) => '.$e').join(', ')}';
+        _fileName = null;
+        _filePath = null;
+        _fileBytes = null;
+        _fileSize = null;
       });
+      return;
     }
 
-    await _simulateUpload();
+    if (sizeInBytes > maxBytes) {
+      setState(() {
+        _errorText =
+            'File too large (${formatFileSize(sizeInBytes)}). Maximum: $_maxSizeMB MB';
+        _fileName = null;
+        _filePath = null;
+        _fileBytes = null;
+        _fileSize = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _errorText = null;
+      _fileName = file.name;
+      _filePath = file.path;
+      _fileBytes = file.bytes;
+      _fileMimeType = _mimeFromExtension(extension);
+      _fileSize = sizeInBytes;
+      _fileMetadataId = null;
+      _isUploading = true;
+      _uploadProgress = 0;
+    });
+
+    await _uploadFile(file);
   }
 
-  Future<void> _simulateUpload() async {
-    for (int i = 1; i <= 10; i++) {
-      await Future.delayed(const Duration(milliseconds: 120));
-      if (!mounted) return;
-      setState(() => _uploadProgress = i / 10);
-    }
-    setState(() => _isUploading = false);
+  void _useMockFile() {
+    final category = ref.read(orderFlowProvider).category ?? 'paper';
+    final mockFiles = category == 'paper'
+        ? [
+            ('Project_Report_Final.pdf', 2457600, 'application/pdf'),
+            ('Thesis_Document.pdf', 1843200, 'application/pdf'),
+            ('Event_Poster_A3.png', 5242880, 'image/png'),
+            ('Business_Cards_Layout.pdf', 819200, 'application/pdf'),
+          ]
+        : [
+            ('Prototype_Model_v2.stl', 8388608, 'model/stl'),
+            ('Figurine_Base.obj', 4194304, 'model/obj'),
+            ('Phone_Case_Design.3mf', 3145728, 'model/3mf'),
+          ];
 
-    // After simulated upload completes, try real upload for non-mock files
-    if (_filePath != null && !_filePath!.startsWith('/mock/')) {
-      try {
-        final formData = FormData.fromMap({
-          'file': await MultipartFile.fromFile(_filePath!, filename: _fileName),
+    final mock = mockFiles[DateTime.now().second % mockFiles.length];
+    setState(() {
+      _errorText = null;
+      _fileName = mock.$1;
+      _filePath = null;
+      _fileBytes = null;
+      _fileMimeType = mock.$3;
+      _fileSize = mock.$2;
+      _fileMetadataId = null;
+      _isUploading = false;
+      _uploadProgress = 0;
+    });
+  }
+
+  Future<void> _uploadFile(PlatformFile file) async {
+    try {
+      final MultipartFile multipartFile;
+      if (file.bytes != null) {
+        multipartFile =
+            MultipartFile.fromBytes(file.bytes!, filename: file.name);
+      } else if (file.path != null) {
+        multipartFile =
+            await MultipartFile.fromFile(file.path!, filename: file.name);
+      } else {
+        setState(() {
+          _isUploading = false;
         });
-        final response =
-            await ApiClient.instance.dio.post('/files/upload', data: formData);
-        // Store server URL instead of local path
-        if (mounted) {
-          setState(() {
-            _filePath = response.data['url'] as String? ?? _filePath;
-          });
-        }
-      } catch (_) {
-        // Upload failed -- keep local path, will retry when online
+        return;
+      }
+
+      final formData = FormData.fromMap({'file': multipartFile});
+      final response = await ApiClient.instance.dio.post(
+        '/files/upload',
+        data: formData,
+        onSendProgress: (sent, total) {
+          if (total > 0 && mounted) {
+            setState(() => _uploadProgress = sent / total);
+          }
+        },
+      );
+
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+          _uploadProgress = 1.0;
+          _filePath = (response.data['url'] as String?) ?? _filePath;
+          _fileMetadataId = response.data['id'] as int?;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+          _uploadProgress = 0;
+        });
       }
     }
   }
@@ -214,9 +265,13 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                       'Upload Your File',
                       style: AppTypography.h1
                           .copyWith(color: colors.onBackground),
-                    ).animate()
-                      .fadeIn(duration: 400.ms, curve: Curves.easeOut)
-                      .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
+                    )
+                        .animate()
+                        .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                        .slideY(
+                            begin: 0.03,
+                            duration: 400.ms,
+                            curve: Curves.easeOut),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
                       'Accepted: ${_allowedTypes.map((e) => '.$e').join(', ')} (max $_maxSizeMB MB)',
@@ -231,9 +286,20 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                       errorText: _errorText,
                       isUploading: _isUploading,
                       uploadProgress: _uploadProgress,
-                    ).animate()
-                      .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
-                      .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
+                      localFilePath: _filePath,
+                      localFileBytes: _fileBytes,
+                      mimeType: _fileMimeType,
+                    )
+                        .animate()
+                        .fadeIn(
+                            duration: 400.ms,
+                            delay: 60.ms,
+                            curve: Curves.easeOut)
+                        .slideY(
+                            begin: 0.03,
+                            duration: 400.ms,
+                            delay: 60.ms,
+                            curve: Curves.easeOut),
                   ],
                 ),
               ),
@@ -252,9 +318,15 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                 isDisabled: !_canContinue,
                 onTap: _canContinue ? _onContinue : null,
               ),
-            ).animate()
-              .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
-              .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
+            )
+                .animate()
+                .fadeIn(
+                    duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
+                .slideY(
+                    begin: 0.03,
+                    duration: 400.ms,
+                    delay: 120.ms,
+                    curve: Curves.easeOut),
           ],
         ),
       ),
@@ -266,9 +338,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
           fileName: _fileName!,
           filePath: _filePath ?? '',
           fileSize: _fileSize ?? 0,
+          fileMetadataId: _fileMetadataId,
         );
     ref.read(orderFlowProvider.notifier).nextStep();
-
     context.push('/customer/order/summary');
   }
 }

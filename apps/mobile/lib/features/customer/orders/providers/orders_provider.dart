@@ -146,6 +146,7 @@ Order _parseOrder(Map<String, dynamic> json) {
     category: _readJsonValue(json, 'category')?.toString() ?? '',
     fileUrl: _readJsonValue(json, 'fileUrl', 'file_url')?.toString(),
     fileName: _readJsonValue(json, 'fileName', 'file_name')?.toString(),
+    fileMetadataId: (_readJsonValue(json, 'fileMetadataId', 'file_metadata_id') as num?)?.toInt(),
     paperSpecs: _parsePaperSpecs(
       _readJsonValue(json, 'paperSpecs', 'paper_specs') as Map<String, dynamic>?,
     ),
@@ -280,6 +281,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
         'deliveryOption': order.deliveryOption,
         'fileName': order.fileName,
         'fileUrl': order.fileUrl,
+        'fileMetadataId': order.fileMetadataId,
         'paperSpecs': order.paperSpecs != null
             ? {
                 'paperSize': order.paperSpecs!.paperSize.name,
