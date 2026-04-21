@@ -26,6 +26,11 @@ services:
       MINIO_ROOT_PASSWORD: minioadmin
     volumes:
       - miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   api:
     build: .
@@ -40,8 +45,12 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       NODE_ENV: production
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+      minio:
+        condition: service_healthy
 
 volumes:
   pgdata:

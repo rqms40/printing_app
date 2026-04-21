@@ -47,8 +47,10 @@ export class StorageService implements OnModuleInit {
     await this.minioClient.putObject(bucket, objectKey, buffer, buffer.length, {
       'Content-Type': mimeType,
     });
+    const useSSL = this.config.get<string>('MINIO_USE_SSL', 'false') === 'true';
+    const scheme = useSSL ? 'https' : 'http';
     const endpoint = this.config.get<string>('MINIO_ENDPOINT', 'localhost');
     const port = this.config.get<number>('MINIO_PORT', 9000);
-    return `http://${endpoint}:${port}/${bucket}/${objectKey}`;
+    return `${scheme}://${endpoint}:${port}/${bucket}/${objectKey}`;
   }
 }

@@ -10,6 +10,7 @@ import {
   Request,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { ApiBearerAuth, ApiTags, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FilesService } from './files.service';
@@ -24,7 +25,7 @@ export class FilesController {
 
   @Post('upload')
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
   uploadFile(
     @UploadedFile() file: Express.Multer.File,
     @Request() req: RequestWithUser,
