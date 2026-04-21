@@ -930,7 +930,7 @@ class _ExpiryBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.amber.withOpacity(0.15),
+        color: Colors.amber.withValues(alpha: 0.15),
         borderRadius: AppRadius.borderFull,
         border: Border.all(color: Colors.amber.shade600, width: 0.75),
       ),

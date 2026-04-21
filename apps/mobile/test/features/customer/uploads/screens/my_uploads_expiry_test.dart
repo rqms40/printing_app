@@ -1,6 +1,4 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:printing_app/shared/models/uploaded_file.dart';
 
 // Test the _expiryLabel helper by instantiating it through the widget's logic.
 // We verify badge visibility by building a minimal widget that calls the same
