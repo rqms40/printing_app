@@ -61,10 +61,10 @@ export function TamSurveyShow() {
     return <div style={{ padding: 40 }}>Survey not found.</div>;
   }
 
-  const getAverageScore = (surveyData: any) => {
-    if (!surveyData) return 0;
+  const getAverageScore = (surveyData: any): string => {
+    if (!surveyData) return "0.0";
     const values = Object.values(surveyData) as number[];
-    if (values.length === 0) return 0;
+    if (values.length === 0) return "0.0";
     const sum = values.reduce((acc, val) => acc + val, 0);
     return (sum / values.length).toFixed(1);
   };

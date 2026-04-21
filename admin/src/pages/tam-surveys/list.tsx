@@ -28,10 +28,10 @@ export function TamSurveyList() {
   }, []);
 
   // Compute average score from 10 questions (0-4 values mapped to 1-5 scale)
-  const getAverageScore = (data: any) => {
-    if (!data) return 0;
+  const getAverageScore = (data: any): string => {
+    if (!data) return "0.0";
     const values = Object.values(data) as number[];
-    if (values.length === 0) return 0;
+    if (values.length === 0) return "0.0";
     const sum = values.reduce((acc, val) => acc + val, 0);
     return (sum / values.length).toFixed(1);
   };
@@ -140,7 +140,7 @@ export function TamSurveyList() {
             <Switch
               checked={!!val}
               size="small"
-              onClick={(checked, e) => {
+              onClick={(_checked, e) => {
                 e.stopPropagation();
               }}
               onChange={async (checked) => {
