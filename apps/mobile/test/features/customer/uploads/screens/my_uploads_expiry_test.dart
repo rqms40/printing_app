@@ -23,7 +23,7 @@ void main() {
     });
 
     test('returns null when more than 3 days away', () {
-      final dt = DateTime.now().add(const Duration(days: 4));
+      final dt = DateTime.now().add(const Duration(days: 4, hours: 1));
       expect(expiryLabel(dt), isNull);
     });
 
