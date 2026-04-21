@@ -193,6 +193,13 @@ class _ProfileTab extends ConsumerWidget {
             onTap: () => context.push('/customer/addresses'),
             colors: colors,
           ),
+          _Divider(colors: colors),
+          _MenuRow(
+            icon: HugeIcons.strokeRoundedFolder01,
+            title: 'My Uploads',
+            onTap: () => context.push('/customer/uploads'),
+            colors: colors,
+          ),
 
           const SizedBox(height: AppSpacing.lg),
 

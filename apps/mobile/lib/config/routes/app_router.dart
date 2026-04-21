@@ -45,6 +45,7 @@ import 'package:printing_app/features/customer/profile/screens/terms_screen.dart
 import 'package:printing_app/features/customer/profile/screens/privacy_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/top_up_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/tam_survey_screen.dart';
+import 'package:printing_app/features/customer/uploads/screens/my_uploads_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Driver screens
@@ -401,6 +402,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/customer/profile/survey',
         pageBuilder: (_, state) =>
             slideTransition(const TamSurveyScreen(), state),
+      ),
+      GoRoute(
+        path: '/customer/uploads',
+        pageBuilder: (_, state) =>
+            slideTransition(const MyUploadsScreen(), state),
       ),
 
       // -----------------------------------------------------------------------
