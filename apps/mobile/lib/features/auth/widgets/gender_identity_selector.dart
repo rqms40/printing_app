@@ -49,16 +49,20 @@ class GenderIdentitySelector extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: AppSpacing.md),
-        TextButton(
-          onPressed: () => onChanged('Prefer not to say'),
-          child: Text(
-            'Prefer not to say',
+        const SizedBox(height: AppSpacing.lg),
+        GestureDetector(
+          onTap: () => onChanged('Prefer not to say'),
+          child: AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 180),
             style: AppTypography.bodyBold.copyWith(
               color: value == 'Prefer not to say'
                   ? colors.onBackground
                   : colors.onSurfaceDim,
+              decoration: value == 'Prefer not to say'
+                  ? TextDecoration.underline
+                  : TextDecoration.none,
             ),
+            child: const Text('Prefer not to say'),
           ),
         ),
       ],
@@ -89,7 +93,7 @@ class _GenderCard extends StatelessWidget {
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
-          vertical: AppSpacing.lg,
+          vertical: AppSpacing.xl,
         ),
         decoration: BoxDecoration(
           borderRadius: AppRadius.borderXl,
@@ -97,17 +101,20 @@ class _GenderCard extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: isSelected
-                ? [colors.accent, colors.accentSoft]
-                : [colors.surface, colors.surfaceVariant],
+                ? [colors.brand, colors.brand.withValues(alpha: 0.80)]
+                : [colors.surfaceVariant, colors.surfaceVariant],
           ),
           border: Border.all(
-            color: isSelected ? colors.accent : colors.outline,
+            color: isSelected ? colors.brand : colors.outline,
+            width: isSelected ? 2 : 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: isSelected ? 0.10 : 0.04),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
+              color: isSelected
+                  ? colors.brand.withValues(alpha: 0.30)
+                  : Colors.black.withValues(alpha: 0.04),
+              blurRadius: isSelected ? 24 : 8,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
@@ -115,7 +122,7 @@ class _GenderCard extends StatelessWidget {
           children: [
             Icon(
               icon,
-              size: 36,
+              size: 52,
               color: isSelected ? colors.accentOnColor : colors.onBackground,
             ),
             const SizedBox(height: AppSpacing.sm),
