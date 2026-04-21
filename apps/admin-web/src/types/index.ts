@@ -38,6 +38,7 @@ export interface Order {
   deliveryFee: number;
   paymentLabel: string;
   fileName: string;
+  fileMetadataId?: number;
   specs: OrderSpecs;
   quantity: number;
 }
