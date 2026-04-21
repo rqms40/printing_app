@@ -2,7 +2,9 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import {
   BadRequestException,
+  ForbiddenException,
   InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
 import { FilesService } from './files.service';
 import { FileMetadata } from './entities/file-metadata.entity';
@@ -12,10 +14,12 @@ const mockFileRepo = {
   create: jest.fn(),
   save: jest.fn(),
   findOne: jest.fn(),
+  find: jest.fn(),
 };
 
 const mockStorageService = {
   upload: jest.fn(),
+  getPresignedUrl: jest.fn(),
 };
 
 const makeFile = (
@@ -116,6 +120,89 @@ describe('FilesService', () => {
         InternalServerErrorException,
       );
       expect(mockFileRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getPresignedUrl', () => {
+    const makeFileMeta = (overrides: Partial<any> = {}) => ({
+      id: 1,
+      originalName: 'photo.jpg',
+      mimeType: 'image/jpeg',
+      size: 1024,
+      url: 'http://localhost:9000/grid-print/uploads/general/2026/04/21/uuid.jpg',
+      objectKey: 'uploads/general/2026/04/21/uuid.jpg',
+      uploadedBy: 42,
+      createdAt: new Date(),
+      ...overrides,
+    });
+
+    it('returns presigned URL when owner requests own file', async () => {
+      const fileMeta = makeFileMeta();
+      mockFileRepo.findOne.mockResolvedValue(fileMeta);
+      mockStorageService.getPresignedUrl.mockResolvedValue('http://minio/presigned?sig=abc');
+
+      const result = await service.getPresignedUrl(1, 42, false);
+
+      expect(mockStorageService.getPresignedUrl).toHaveBeenCalledWith(
+        'uploads/general/2026/04/21/uuid.jpg',
+        3600,
+      );
+      expect(result).toBe('http://minio/presigned?sig=abc');
+    });
+
+    it('returns presigned URL when admin requests any file', async () => {
+      const fileMeta = makeFileMeta({ uploadedBy: 99 });
+      mockFileRepo.findOne.mockResolvedValue(fileMeta);
+      mockStorageService.getPresignedUrl.mockResolvedValue('http://minio/presigned?sig=xyz');
+
+      const result = await service.getPresignedUrl(1, 1, true);
+
+      expect(result).toBe('http://minio/presigned?sig=xyz');
+    });
+
+    it('throws ForbiddenException when non-owner non-admin requests file', async () => {
+      const fileMeta = makeFileMeta({ uploadedBy: 99 });
+      mockFileRepo.findOne.mockResolvedValue(fileMeta);
+
+      await expect(service.getPresignedUrl(1, 42, false)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(mockStorageService.getPresignedUrl).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException when file does not exist', async () => {
+      mockFileRepo.findOne.mockResolvedValue(null);
+
+      await expect(service.getPresignedUrl(999, 42, false)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('throws NotFoundException when objectKey is null', async () => {
+      mockFileRepo.findOne.mockResolvedValue(makeFileMeta({ objectKey: null }));
+
+      await expect(service.getPresignedUrl(1, 42, false)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(mockStorageService.getPresignedUrl).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getMyUploads', () => {
+    it('returns files ordered by createdAt DESC for the given userId', async () => {
+      const files = [
+        { id: 2, uploadedBy: 42, createdAt: new Date('2026-04-21') },
+        { id: 1, uploadedBy: 42, createdAt: new Date('2026-04-20') },
+      ];
+      mockFileRepo.find.mockResolvedValue(files);
+
+      const result = await service.getMyUploads(42);
+
+      expect(mockFileRepo.find).toHaveBeenCalledWith({
+        where: { uploadedBy: 42 },
+        order: { createdAt: 'DESC' },
+      });
+      expect(result).toEqual(files);
     });
   });
 });

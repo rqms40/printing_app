@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
   InternalServerErrorException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -70,5 +71,26 @@ export class FilesService {
     const file = await this.fileRepo.findOne({ where: { id } });
     if (!file) throw new NotFoundException('File not found');
     return file;
+  }
+
+  async getPresignedUrl(
+    fileId: number,
+    requestingUserId: number,
+    isAdmin: boolean,
+  ): Promise<string> {
+    const file = await this.fileRepo.findOne({ where: { id: fileId } });
+    if (!file) throw new NotFoundException('File not found');
+    if (!isAdmin && file.uploadedBy !== requestingUserId) {
+      throw new ForbiddenException();
+    }
+    if (!file.objectKey) throw new NotFoundException('File has no storage key');
+    return this.storageService.getPresignedUrl(file.objectKey, 3600);
+  }
+
+  async getMyUploads(userId: number): Promise<FileMetadata[]> {
+    return this.fileRepo.find({
+      where: { uploadedBy: userId },
+      order: { createdAt: 'DESC' },
+    });
   }
 }
