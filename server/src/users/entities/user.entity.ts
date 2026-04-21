@@ -96,6 +96,14 @@ export class User {
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   credits: number;
 
+  @Column({
+    name: 'file_retention_days',
+    type: 'integer',
+    nullable: true,
+    default: null,
+  })
+  fileRetentionDays: number | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
