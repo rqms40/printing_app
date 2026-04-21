@@ -3,11 +3,12 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { FileMetadata } from './entities/file-metadata.entity';
 import { FilesService } from './files.service';
 import { FilesController } from './files.controller';
+import { PurgeService } from './purge.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([FileMetadata])],
   controllers: [FilesController],
-  providers: [FilesService],
+  providers: [FilesService, PurgeService],
   exports: [FilesService],
 })
 export class FilesModule {}

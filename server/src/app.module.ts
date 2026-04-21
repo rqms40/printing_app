@@ -19,6 +19,7 @@ import { ProductsModule } from './products/products.module';
 import { CreditsModule } from './credits/credits.module';
 import { TamSurveysModule } from './tam-surveys/tam-surveys.module';
 import { DailyGridModule } from './daily-grid/daily-grid.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -53,6 +54,9 @@ import { DailyGridModule } from './daily-grid/daily-grid.module';
 
     // Storage (global — MinIO object storage)
     StorageModule,
+
+    // Cron scheduling
+    ScheduleModule.forRoot(),
 
     // Feature modules
     AuthModule,
