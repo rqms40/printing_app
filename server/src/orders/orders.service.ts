@@ -179,9 +179,10 @@ export class OrdersService {
     });
     const order = await this.ordersRepo.findOneOrFail({ where: { id } });
 
-    // Stamp file expiry when order reaches completion
+    // Stamp file expiry when order reaches either terminal completion status
     if (
-      status === OrderStatus.COMPLETED_PICKUP &&
+      (status === OrderStatus.COMPLETED_PICKUP ||
+        status === OrderStatus.DELIVERED) &&
       order.fileMetadataId != null
     ) {
       const owner = await this.usersService.findById(order.userId);

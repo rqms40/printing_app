@@ -351,4 +351,17 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
 
     expect(mockFilesService.stampExpiry).not.toHaveBeenCalled();
   });
+
+  it('stamps expiresAt when delivered and retention is set', async () => {
+    const order = makeOrder({ orderStatus: OrderStatus.DELIVERED });
+    ordersRepo.findOneOrFail.mockResolvedValue(order);
+    ordersRepo.update.mockResolvedValue({});
+    mockUsersService.findById.mockResolvedValue({ fileRetentionDays: 7 });
+    mockUsersService.getFcmToken.mockResolvedValue(null);
+    mockNotifications.create.mockResolvedValue({});
+
+    await service.updateStatus(1, 'delivered');
+
+    expect(mockFilesService.stampExpiry).toHaveBeenCalledWith(5, 7);
+  });
 });
