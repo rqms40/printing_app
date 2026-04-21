@@ -196,7 +196,10 @@ class StorageSettingsScreen extends ConsumerWidget {
           'Your files from completed orders will be automatically deleted after the chosen period. You can turn this off any time.',
       confirmLabel: 'Enable',
       cancelLabel: 'Cancel',
-      onConfirm: () => notifier.update(30),
+      onConfirm: () {
+        Navigator.of(context).pop();
+        notifier.update(30);
+      },
     );
   }
 }
