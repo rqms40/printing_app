@@ -1,7 +1,7 @@
-import { Test } from '@nestjs/testing';
+import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, BadRequestException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
@@ -245,6 +245,59 @@ describe('UsersService', () => {
       const result = await service.findAllByRole('admin');
 
       expect(result).toEqual([]);
+    });
+  });
+});
+
+describe('UsersService — storage settings', () => {
+  let service: UsersService;
+  const repo = {
+    findOne: jest.fn(),
+    findOneOrFail: jest.fn(),
+    update: jest.fn(),
+    find: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+  };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        { provide: getRepositoryToken(User), useValue: repo },
+      ],
+    }).compile();
+    service = module.get<UsersService>(UsersService);
+  });
+
+  describe('getStorageSettings', () => {
+    it('returns fileRetentionDays when set', async () => {
+      repo.findOneOrFail.mockResolvedValue({ id: 1, fileRetentionDays: 7 } as User);
+      expect(await service.getStorageSettings(1)).toEqual({ fileRetentionDays: 7 });
+    });
+
+    it('returns null when fileRetentionDays is null', async () => {
+      repo.findOneOrFail.mockResolvedValue({ id: 1, fileRetentionDays: null } as User);
+      expect(await service.getStorageSettings(1)).toEqual({ fileRetentionDays: null });
+    });
+  });
+
+  describe('updateStorageSettings', () => {
+    it('sets a valid retention period', async () => {
+      repo.update.mockResolvedValue({});
+      await service.updateStorageSettings(1, 30);
+      expect(repo.update).toHaveBeenCalledWith(1, { fileRetentionDays: 30 });
+    });
+
+    it('sets null (disables retention)', async () => {
+      repo.update.mockResolvedValue({});
+      await service.updateStorageSettings(1, null);
+      expect(repo.update).toHaveBeenCalledWith(1, { fileRetentionDays: null });
+    });
+
+    it('rejects an invalid retention value', async () => {
+      await expect(service.updateStorageSettings(1, 14)).rejects.toThrow(BadRequestException);
     });
   });
 });

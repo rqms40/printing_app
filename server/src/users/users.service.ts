@@ -1,4 +1,4 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import { Injectable, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User, UserRole } from './entities/user.entity';
@@ -86,6 +86,24 @@ export class UsersService {
 
   async findAllByRole(role: string): Promise<User[]> {
     return this.usersRepo.find({ where: { role: role as UserRole } });
+  }
+
+  async getStorageSettings(
+    userId: number,
+  ): Promise<{ fileRetentionDays: number | null }> {
+    const user = await this.usersRepo.findOneOrFail({ where: { id: userId } });
+    return { fileRetentionDays: user.fileRetentionDays };
+  }
+
+  async updateStorageSettings(
+    userId: number,
+    fileRetentionDays: number | null,
+  ): Promise<{ fileRetentionDays: number | null }> {
+    if (![null, 1, 7, 30].includes(fileRetentionDays)) {
+      throw new BadRequestException('fileRetentionDays must be null, 1, 7, or 30');
+    }
+    await this.usersRepo.update(userId, { fileRetentionDays });
+    return { fileRetentionDays };
   }
 
   private normalizeProfilingData(data: Partial<UserProfilingInput | User>) {
