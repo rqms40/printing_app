@@ -102,7 +102,6 @@ export class UsersService {
     if (![null, 1, 7, 30].includes(fileRetentionDays)) {
       throw new BadRequestException('fileRetentionDays must be null, 1, 7, or 30');
     }
-    await this.usersRepo.findOneOrFail({ where: { id: userId } });
     await this.usersRepo.update(userId, { fileRetentionDays });
     return { fileRetentionDays };
   }
