@@ -124,7 +124,7 @@ describe('FilesService', () => {
   });
 
   describe('getPresignedUrl', () => {
-    const makeFileMeta = (overrides: Partial<any> = {}) => ({
+    const makeFileMeta = (overrides: Partial<FileMetadata> = {}) => ({
       id: 1,
       originalName: 'photo.jpg',
       mimeType: 'image/jpeg',
@@ -185,6 +185,16 @@ describe('FilesService', () => {
         NotFoundException,
       );
       expect(mockStorageService.getPresignedUrl).not.toHaveBeenCalled();
+    });
+
+    it('throws InternalServerErrorException when storage service fails', async () => {
+      const fileMeta = makeFileMeta();
+      mockFileRepo.findOne.mockResolvedValue(fileMeta);
+      mockStorageService.getPresignedUrl.mockRejectedValue(new Error('MinIO down'));
+
+      await expect(service.getPresignedUrl(1, 42, false)).rejects.toThrow(
+        InternalServerErrorException,
+      );
     });
   });
 
