@@ -733,13 +733,16 @@ class _GridCard extends StatelessWidget {
                           ),
                         ),
                         const Spacer(),
-                        Text(
-                          _shortDate(file.createdAt),
-                          style: AppTypography.caption.copyWith(
-                            color: colors.onSurfaceDim,
-                            fontSize: 10,
+                        if (_expiryLabel(file.expiresAt) case final label?)
+                          _ExpiryBadge(label: label)
+                        else
+                          Text(
+                            _shortDate(file.createdAt),
+                            style: AppTypography.caption.copyWith(
+                              color: colors.onSurfaceDim,
+                              fontSize: 10,
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ],
@@ -872,6 +875,10 @@ class _ListRow extends StatelessWidget {
                       ),
                     ],
                   ),
+                  if (_expiryLabel(file.expiresAt) case final label?) ...[
+                    const SizedBox(height: 3),
+                    _ExpiryBadge(label: label),
+                  ],
                 ],
               ),
             ),
@@ -897,5 +904,44 @@ class _ListRow extends StatelessWidget {
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
     return '${m[dt.month - 1]} ${dt.day}, ${dt.year}';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Expiry helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+String? _expiryLabel(DateTime? expiresAt) {
+  if (expiresAt == null) return null;
+  final diff = expiresAt.difference(DateTime.now());
+  if (diff.isNegative) return null;
+  if (diff.inHours < 24) return 'Expires today';
+  final days = diff.inDays;
+  if (days <= 3) return 'Expires in $days day${days == 1 ? '' : 's'}';
+  return null;
+}
+
+class _ExpiryBadge extends StatelessWidget {
+  const _ExpiryBadge({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.amber.withOpacity(0.15),
+        borderRadius: AppRadius.borderFull,
+        border: Border.all(color: Colors.amber.shade600, width: 0.75),
+      ),
+      child: Text(
+        label,
+        style: AppTypography.caption.copyWith(
+          color: Colors.amber.shade700,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
   }
 }
