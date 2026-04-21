@@ -65,7 +65,7 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(milliseconds: 500));
 
-      expect(find.text('Before we begin'), findsOneWidget);
+      expect(find.textContaining('your rules'), findsOneWidget);
       expect(find.text('Agree & Continue'), findsOneWidget);
       expect(find.text('View Terms & Conditions'), findsOneWidget);
       expect(find.text('Email'), findsNothing);
@@ -82,11 +82,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       await tester.tap(find.text('Agree & Continue'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 600));
 
-      expect(find.text('What should we call you?'), findsOneWidget);
+      expect(find.textContaining('we call you'), findsOneWidget);
       await tester.tap(find.text('Continue'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 600));
 
       expect(find.text('Nickname is required'), findsOneWidget);
       expect(find.text('Tell us a bit about yourself'), findsNothing);
@@ -104,10 +104,12 @@ void main() {
         await tester.pump(const Duration(milliseconds: 500));
 
         await tester.tap(find.text('Agree & Continue'));
-        await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump(const Duration(milliseconds: 300));
 
         await tester.enterText(find.byType(TextField).first, 'Kai');
         await tester.tap(find.text('Continue'));
+        await tester.pump(const Duration(milliseconds: 300));
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('Student'));
@@ -118,6 +120,7 @@ void main() {
         await tester.tap(find.text('Continue'));
         await tester.pumpAndSettle();
 
+        await tester.ensureVisible(find.text('Prefer not to say'));
         await tester.tap(find.text('Prefer not to say'));
         await tester.tap(find.text('Continue'));
         await tester.pumpAndSettle();
@@ -126,7 +129,7 @@ void main() {
         await tester.tap(find.text('Continue'));
         await tester.pumpAndSettle();
 
-        expect(find.text('Hi, Kai'), findsOneWidget);
+        expect(find.textContaining('Hi, Kai'), findsOneWidget);
         expect(find.text('Full Name'), findsOneWidget);
         expect(notifier.registerCalls, 0);
 
@@ -176,6 +179,8 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(milliseconds: 500));
 
+      await tester.ensureVisible(find.text('View Terms & Conditions'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('View Terms & Conditions'));
       await tester.pumpAndSettle();
 

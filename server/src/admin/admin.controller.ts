@@ -69,9 +69,14 @@ export class AdminController {
 
   @Patch('tam-surveys/settings')
   async updateTamSurveySettings(@Body() body: { isEnabled: boolean }) {
-    let settings = await this.tamSurveySettingsRepo.findOne({ where: { id: 1 } });
+    let settings = await this.tamSurveySettingsRepo.findOne({
+      where: { id: 1 },
+    });
     if (!settings) {
-      settings = this.tamSurveySettingsRepo.create({ id: 1, isEnabled: body.isEnabled });
+      settings = this.tamSurveySettingsRepo.create({
+        id: 1,
+        isEnabled: body.isEnabled,
+      });
     } else {
       settings.isEnabled = body.isEnabled;
     }
@@ -513,7 +518,7 @@ export class AdminController {
       relations: ['user'],
       order: { createdAt: 'DESC' },
     });
-    
+
     return surveys.map((s) => ({
       id: s.id,
       user_id: s.userId,

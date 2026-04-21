@@ -12,7 +12,7 @@ import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/auth/widgets/age_range_selector.dart';
 import 'package:printing_app/features/auth/widgets/gender_identity_selector.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
-import 'package:printing_app/shared/widgets/app_text_field.dart';
+import 'package:printing_app/features/auth/widgets/onboarding_hero.dart';
 
 enum _RegisterStep {
   privacy,
@@ -262,16 +262,23 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 260),
+                          duration: const Duration(milliseconds: 280),
                           transitionBuilder: (child, animation) {
                             return FadeTransition(
                               opacity: animation,
-                              child: SlideTransition(
-                                position: Tween<Offset>(
-                                  begin: const Offset(0.04, 0),
-                                  end: Offset.zero,
-                                ).animate(animation),
-                                child: child,
+                              child: ScaleTransition(
+                                scale: Tween<double>(begin: 0.96, end: 1.0).animate(
+                                  CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+                                ),
+                                child: SlideTransition(
+                                  position: Tween<Offset>(
+                                    begin: const Offset(0.04, 0),
+                                    end: Offset.zero,
+                                  ).animate(
+                                    CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+                                  ),
+                                  child: child,
+                                ),
                               ),
                             );
                           },
@@ -323,6 +330,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               ? 'Agree & Continue'
                               : 'Continue',
                           onTap: _next,
+                          variant: AppButtonVariant.brand,
                           isFullWidth: true,
                         ),
                       ),
@@ -333,6 +341,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     label: 'Create Account',
                     onTap: _submit,
                     isLoading: authState.isLoading,
+                    variant: AppButtonVariant.brand,
                     isFullWidth: true,
                   ),
                 const SizedBox(height: AppSpacing.lg),
@@ -372,205 +381,271 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   ) {
     switch (_step) {
       case _RegisterStep.privacy:
-        return _StepScaffold(
-          eyebrow: 'Step 1',
-          title: 'Before we begin',
-          subtitle:
-              'We collect your nickname, profile, gender, age range, and contact info to tailor your experience.',
-          child: _PrivacyCard(
-            colors: colors,
-            onViewTerms: () => context.push('/customer/profile/terms'),
-          ),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            OnboardingHero(
+              icon: Icons.verified_user_rounded,
+              headline: 'Your data,\nyour rules.',
+              subtitle:
+                  'We only collect what we need to personalise your experience.',
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            _PrivacyBulletCard(colors: colors),
+            const SizedBox(height: AppSpacing.lg),
+            Center(
+              child: GestureDetector(
+                onTap: () => context.push('/customer/profile/terms'),
+                child: Text(
+                  'View Terms & Conditions',
+                  style: AppTypography.body.copyWith(
+                    color: colors.onSurfaceDim,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            ),
+          ],
         );
       case _RegisterStep.nickname:
-        return _StepScaffold(
-          eyebrow: 'Step 2',
-          title: 'What should we call you?',
-          subtitle: '',
-          child: AppTextField(
-            controller: _nicknameController,
-            label: 'Nickname',
-            hintText: 'Kai',
-            autofocus: true,
-          ),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            OnboardingHero(
+              icon: Icons.waving_hand_rounded,
+              headline: 'What should\nwe call you?',
+              subtitle: 'This is how we\'ll greet you throughout the app.',
+              withPulse: true,
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            _NicknameInputCard(
+              controller: _nicknameController,
+              colors: colors,
+            ),
+          ],
         );
       case _RegisterStep.category:
-        return _StepScaffold(
-          eyebrow: 'Step 3',
-          title: 'Tell us a bit about yourself',
-          subtitle: 'Pick the lane that feels closest to your work right now.',
-          child: Column(
-            children: [
-              _ChoiceCard(
-                title: 'Student',
-                subtitle: 'school / uni',
-                description:
-                    'Designed for reports, plates, thesis work, and deadline mode.',
-                icon: Icons.school_rounded,
-                isSelected: _draft.profileCategory == 'student',
-                colors: colors,
-                onTap: () {
-                  setState(() {
-                    _draft = _draft.copyWith(
-                      profileCategory: 'student',
-                      profileField: null,
-                      printingPreferences: const [],
-                    );
-                    _stepError = null;
-                  });
-                },
-              ),
-              const SizedBox(height: AppSpacing.md),
-              _ChoiceCard(
-                title: 'Professional',
-                subtitle: 'work / client',
-                description:
-                    'Built for production specs, client decks, site docs, and polished output.',
-                icon: Icons.work_outline_rounded,
-                isSelected: _draft.profileCategory == 'professional',
-                colors: colors,
-                onTap: () {
-                  setState(() {
-                    _draft = _draft.copyWith(
-                      profileCategory: 'professional',
-                      profileField: null,
-                      printingPreferences: const [],
-                    );
-                    _stepError = null;
-                  });
-                },
-              ),
-            ],
-          ),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Hey ${_draft.nickname.isNotEmpty ? _draft.nickname : 'there'},\ntell us about yourself.',
+              style: AppTypography.display.copyWith(color: colors.onBackground),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Pick the lane that fits.',
+              style: AppTypography.bodyLarge.copyWith(color: colors.onSurfaceDim),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            Row(
+              children: [
+                Expanded(
+                  child: _ChoiceCard(
+                    title: 'Student',
+                    subtitle: 'School / uni',
+                    icon: Icons.school_rounded,
+                    isSelected: _draft.profileCategory == 'student',
+                    colors: colors,
+                    onTap: () {
+                      setState(() {
+                        _draft = _draft.copyWith(
+                          profileCategory: 'student',
+                          profileField: null,
+                          printingPreferences: const [],
+                        );
+                        _stepError = null;
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: _ChoiceCard(
+                    title: 'Professional',
+                    subtitle: 'Work / client',
+                    icon: Icons.work_rounded,
+                    isSelected: _draft.profileCategory == 'professional',
+                    colors: colors,
+                    onTap: () {
+                      setState(() {
+                        _draft = _draft.copyWith(
+                          profileCategory: 'professional',
+                          profileField: null,
+                          printingPreferences: const [],
+                        );
+                        _stepError = null;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
         );
       case _RegisterStep.field:
         final fields = profileFieldsForCategory(_draft.profileCategory);
-        return _StepScaffold(
-          eyebrow: 'Step 4',
-          title: profilingPrompt(_draft.profileCategory),
-          subtitle:
-              'We will preselect the print style that best matches this field.',
-          child: Column(
-            children: [
-              for (final field in fields) ...[
-                _ChoiceCard(
-                  title: field.label,
-                  subtitle: field.description,
-                  description:
-                      'Auto-selects ${field.description.split('Pre-selects ').last}',
-                  icon: Icons.auto_awesome_rounded,
-                  isSelected: _draft.profileField == field.value,
-                  colors: colors,
-                  onTap: () {
-                    setState(() {
-                      _draft = _draft.copyWith(
-                        profileField: field.value,
-                        printingPreferences: defaultPrintingPreferencesForField(
-                          field.value,
-                        ),
-                      );
-                      _stepError = null;
-                    });
-                  },
-                ),
-                if (field != fields.last) const SizedBox(height: AppSpacing.md),
-              ],
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            OnboardingHero(
+              icon: _draft.profileCategory == 'professional'
+                  ? Icons.work_rounded
+                  : Icons.school_rounded,
+              headline: profilingPrompt(_draft.profileCategory),
+              subtitle: 'We\'ll preselect your print style automatically.',
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            for (final field in fields) ...[
+              _FieldCard(
+                icon: _fieldIcon(field.value),
+                title: field.label,
+                autoSelectsLabel: field.description,
+                isSelected: _draft.profileField == field.value,
+                colors: colors,
+                onTap: () {
+                  setState(() {
+                    _draft = _draft.copyWith(
+                      profileField: field.value,
+                      printingPreferences: defaultPrintingPreferencesForField(
+                        field.value,
+                      ),
+                    );
+                    _stepError = null;
+                  });
+                },
+              ),
+              if (field != fields.last) const SizedBox(height: AppSpacing.md),
             ],
-          ),
+          ],
         );
       case _RegisterStep.gender:
-        return _StepScaffold(
-          eyebrow: 'Step 5',
-          title: 'How do you identify?',
-          subtitle: 'Choose what feels right for you.',
-          child: GenderIdentitySelector(
-            value: _draft.gender,
-            onChanged: (value) {
-              setState(() {
-                _draft = _draft.copyWith(gender: value);
-                _stepError = null;
-              });
-            },
-          ),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            OnboardingHero(
+              icon: Icons.people_rounded,
+              headline: 'How do you\nidentify?',
+              subtitle: 'Choose what feels right for you.',
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            GenderIdentitySelector(
+              value: _draft.gender,
+              onChanged: (value) {
+                setState(() {
+                  _draft = _draft.copyWith(gender: value);
+                  _stepError = null;
+                });
+              },
+            ),
+          ],
         );
       case _RegisterStep.ageRange:
-        return _StepScaffold(
-          eyebrow: 'Step 6',
-          title:
-              'Age is just a number, but it helps us tailor your experience!',
-          subtitle: '',
-          child: AgeRangeSelector(
-            value: _draft.ageRange,
-            onChanged: (value) {
-              setState(() {
-                _draft = _draft.copyWith(ageRange: value);
-                _stepError = null;
-              });
-            },
-          ),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Age is just a number —\nbut it shapes\nyour experience.',
+              style: AppTypography.display.copyWith(color: colors.onBackground),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Swipe to find your range.',
+              style: AppTypography.bodyLarge.copyWith(color: colors.onSurfaceDim),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            AgeRangeSelector(
+              value: _draft.ageRange,
+              onChanged: (value) {
+                setState(() {
+                  _draft = _draft.copyWith(ageRange: value);
+                  _stepError = null;
+                });
+              },
+            ),
+          ],
         );
       case _RegisterStep.account:
-        return _StepScaffold(
-          eyebrow: 'Step 7',
-          title: 'Hi, ${_draft.nickname}',
-          subtitle:
-              '${profileCategoryLabel(_draft.profileCategory)} / ${profileFieldLabel(_draft.profileField)}',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (_draft.printingPreferences.isNotEmpty)
               Wrap(
                 spacing: AppSpacing.sm,
                 runSpacing: AppSpacing.sm,
                 children: _draft.printingPreferences
                     .map(
-                      (preference) => _SummaryChip(
-                        label: printingPreferenceLabel(preference),
+                      (p) => _SummaryChip(
+                        label: printingPreferenceLabel(p),
                         colors: colors,
                       ),
                     )
                     .toList(),
               ),
-              const SizedBox(height: AppSpacing.xl),
-              AppTextField(
-                controller: _fullNameController,
-                label: 'Full Name',
-                hintText: 'Kai Reyes',
-                errorText: _fullNameError,
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              AppTextField(
-                controller: _emailController,
-                label: 'Email',
-                hintText: 'kai@example.com',
-                keyboardType: TextInputType.emailAddress,
-                errorText: _emailError,
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              AppTextField(
-                controller: _phoneController,
-                label: 'Number',
-                hintText: '+63 917 123 4567',
-                keyboardType: TextInputType.phone,
-                errorText: _phoneError,
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              AppTextField(
-                controller: _passwordController,
-                label: 'Password',
-                hintText: 'Enter your password',
-                obscureText: true,
-                errorText: _passwordError,
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              AppTextField(
-                controller: _confirmPasswordController,
-                label: 'Confirm Password',
-                hintText: 'Confirm your password',
-                obscureText: true,
-                errorText: _confirmPasswordError,
-              ),
-            ],
-          ),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              'Hi, ${_draft.nickname} 👋',
+              style: AppTypography.display.copyWith(color: colors.onBackground),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Let\'s create your account.',
+              style: AppTypography.bodyLarge.copyWith(color: colors.onSurfaceDim),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            _AccountField(
+              controller: _fullNameController,
+              label: 'Full Name',
+              hintText: 'Kai Reyes',
+              prefixIcon: Icons.person_rounded,
+              textInputAction: TextInputAction.next,
+              errorText: _fullNameError,
+              validator: (v) => v.trim().isEmpty ? 'Required' : null,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            _AccountField(
+              controller: _emailController,
+              label: 'Email',
+              hintText: 'kai@example.com',
+              prefixIcon: Icons.mail_rounded,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              errorText: _emailError,
+              validator: (v) =>
+                  v.trim().isEmpty || !v.contains('@') ? 'Invalid email' : null,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            _AccountField(
+              controller: _phoneController,
+              label: 'Phone Number',
+              hintText: '+63 917 123 4567',
+              prefixIcon: Icons.phone_rounded,
+              keyboardType: TextInputType.phone,
+              textInputAction: TextInputAction.next,
+              errorText: _phoneError,
+              validator: (v) => v.trim().isEmpty ? 'Required' : null,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            _AccountField(
+              controller: _passwordController,
+              label: 'Password',
+              hintText: 'Min. 8 characters',
+              prefixIcon: Icons.lock_rounded,
+              obscureText: true,
+              textInputAction: TextInputAction.next,
+              errorText: _passwordError,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            _AccountField(
+              controller: _confirmPasswordController,
+              label: 'Confirm Password',
+              hintText: 'Re-enter your password',
+              prefixIcon: Icons.lock_rounded,
+              obscureText: true,
+              textInputAction: TextInputAction.done,
+              errorText: _confirmPasswordError,
+            ),
+          ],
         );
     }
   }
@@ -608,6 +683,7 @@ class _WizardHeader extends StatelessWidget {
                   borderRadius: AppRadius.borderFull,
                   border: Border.all(color: colors.outline),
                 ),
+                alignment: Alignment.center,
                 child: Icon(
                   Icons.arrow_back_rounded,
                   color: colors.onBackground,
@@ -636,130 +712,10 @@ class _WizardHeader extends StatelessWidget {
   }
 }
 
-class _StepScaffold extends StatelessWidget {
-  const _StepScaffold({
-    required this.eyebrow,
-    required this.title,
-    required this.subtitle,
-    required this.child,
-  });
-
-  final String eyebrow;
-  final String title;
-  final String subtitle;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).brightness == Brightness.dark
-        ? AppColors.dark
-        : AppColors.light;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.xl),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: AppRadius.borderXl,
-        border: Border.all(color: colors.outline),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            eyebrow,
-            style: AppTypography.caption.copyWith(color: colors.brand),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            title,
-            style: AppTypography.h2.copyWith(color: colors.onBackground),
-          ),
-          if (subtitle.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              subtitle,
-              style: AppTypography.body.copyWith(
-                color: colors.onSurfaceDim,
-                height: 1.5,
-              ),
-            ),
-          ],
-          const SizedBox(height: AppSpacing.xl),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _PrivacyCard extends StatelessWidget {
-  const _PrivacyCard({required this.colors, required this.onViewTerms});
-
-  final AppColorSet colors;
-  final VoidCallback onViewTerms;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          decoration: BoxDecoration(
-            color: colors.surfaceVariant,
-            borderRadius: AppRadius.borderLg,
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: colors.brand.withValues(alpha: 0.16),
-                  borderRadius: AppRadius.borderLg,
-                ),
-                child: Icon(Icons.verified_user_outlined, color: colors.brand),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Text(
-                  'Only the essentials. We use this to personalize your experience and keep your account secure.',
-                  style: AppTypography.body.copyWith(
-                    color: colors.onSurface,
-                    height: 1.5,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.lg),
-        GestureDetector(
-          onTap: onViewTerms,
-          child: Text(
-            'View Terms & Conditions',
-            style: AppTypography.bodyBold.copyWith(color: colors.brand),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _ChoiceCard extends StatelessWidget {
   const _ChoiceCard({
     required this.title,
     required this.subtitle,
-    required this.description,
     required this.icon,
     required this.isSelected,
     required this.colors,
@@ -768,7 +724,6 @@ class _ChoiceCard extends StatelessWidget {
 
   final String title;
   final String subtitle;
-  final String description;
   final IconData icon;
   final bool isSelected;
   final AppColorSet colors;
@@ -780,43 +735,115 @@ class _ChoiceCard extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        width: double.infinity,
-        padding: const EdgeInsets.all(AppSpacing.lg),
+        padding: const EdgeInsets.all(AppSpacing.xl),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
             colors: isSelected
-                ? [colors.accent, colors.accentSoft]
-                : [colors.surface, colors.surfaceVariant],
+                ? [colors.brand.withValues(alpha: 0.15), Colors.transparent]
+                : [colors.surfaceVariant, colors.surfaceVariant],
           ),
           borderRadius: AppRadius.borderXl,
           border: Border.all(
-            color: isSelected ? colors.accent : colors.outline,
+            color: isSelected ? colors.brand : colors.outline,
+            width: isSelected ? 2 : 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: isSelected ? 0.10 : 0.04),
-              blurRadius: 22,
-              offset: const Offset(0, 10),
+              color: isSelected
+                  ? colors.brand.withValues(alpha: 0.30)
+                  : Colors.black.withValues(alpha: 0.04),
+              blurRadius: isSelected ? 24 : 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 48,
+              color: isSelected ? colors.brand : colors.onSurfaceDim,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              title,
+              style: AppTypography.h3.copyWith(color: colors.onBackground),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              subtitle,
+              style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FieldCard extends StatelessWidget {
+  const _FieldCard({
+    required this.icon,
+    required this.title,
+    required this.autoSelectsLabel,
+    required this.isSelected,
+    required this.colors,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String autoSelectsLabel;
+  final bool isSelected;
+  final AppColorSet colors;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? colors.brand.withValues(alpha: 0.08)
+              : colors.surfaceVariant,
+          borderRadius: AppRadius.borderXl,
+          border: Border.all(
+            color: isSelected ? colors.brand : colors.outline,
+            width: isSelected ? 2 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isSelected
+                  ? colors.brand.withValues(alpha: 0.25)
+                  : Colors.black.withValues(alpha: 0.04),
+              blurRadius: isSelected ? 20 : 8,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
               width: 52,
               height: 52,
               decoration: BoxDecoration(
                 color: isSelected
-                    ? colors.accentOnColor.withValues(alpha: 0.14)
-                    : colors.brand.withValues(alpha: 0.12),
+                    ? colors.brand.withValues(alpha: 0.15)
+                    : colors.surface,
                 borderRadius: AppRadius.borderLg,
               ),
+              alignment: Alignment.center,
               child: Icon(
                 icon,
-                color: isSelected ? colors.accentOnColor : colors.onBackground,
+                size: 28,
+                color: isSelected ? colors.brand : colors.onSurfaceDim,
               ),
             ),
             const SizedBox(width: AppSpacing.md),
@@ -826,29 +853,25 @@ class _ChoiceCard extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: AppTypography.h3.copyWith(
-                      color: isSelected
-                          ? colors.accentOnColor
-                          : colors.onBackground,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    subtitle,
                     style: AppTypography.bodyBold.copyWith(
-                      color: isSelected
-                          ? colors.accentOnColor
-                          : colors.onSurface,
+                      color: colors.onBackground,
                     ),
                   ),
                   const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    description,
-                    style: AppTypography.caption.copyWith(
-                      color: isSelected
-                          ? colors.accentOnColor
-                          : colors.onSurfaceDim,
-                      height: 1.5,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.brand.withValues(alpha: 0.20),
+                      borderRadius: AppRadius.borderFull,
+                    ),
+                    child: Text(
+                      autoSelectsLabel,
+                      style: AppTypography.caption.copyWith(
+                        color: colors.brand,
+                      ),
                     ),
                   ),
                 ],
@@ -875,12 +898,351 @@ class _SummaryChip extends StatelessWidget {
         vertical: AppSpacing.sm,
       ),
       decoration: BoxDecoration(
-        color: colors.surfaceVariant,
+        color: colors.brand.withValues(alpha: 0.15),
         borderRadius: AppRadius.borderFull,
+        border: Border.all(color: colors.brand.withValues(alpha: 0.40)),
       ),
       child: Text(
         label,
-        style: AppTypography.caption.copyWith(color: colors.onSurface),
+        style: AppTypography.caption.copyWith(color: colors.brand),
+      ),
+    );
+  }
+}
+
+class _PrivacyBulletCard extends StatelessWidget {
+  const _PrivacyBulletCard({required this.colors});
+
+  final AppColorSet colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: colors.surfaceVariant,
+        borderRadius: AppRadius.borderXl,
+        border: Border.all(color: colors.outline),
+      ),
+      child: Column(
+        children: [
+          _BulletRow(label: 'Nickname & profile', colors: colors),
+          const SizedBox(height: AppSpacing.md),
+          _BulletRow(label: 'Contact info', colors: colors),
+          const SizedBox(height: AppSpacing.md),
+          _BulletRow(label: 'Usage preferences', colors: colors),
+        ],
+      ),
+    );
+  }
+}
+
+class _BulletRow extends StatelessWidget {
+  const _BulletRow({required this.label, required this.colors});
+
+  final String label;
+  final AppColorSet colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text('✦', style: TextStyle(color: colors.brand, fontSize: 12)),
+        const SizedBox(width: AppSpacing.md),
+        Text(
+          label,
+          style: AppTypography.body.copyWith(color: colors.onSurface),
+        ),
+      ],
+    );
+  }
+}
+
+IconData _fieldIcon(String fieldValue) {
+  switch (fieldValue) {
+    case 'architecture':
+      return Icons.architecture;
+    case 'engineering':
+      return Icons.precision_manufacturing_rounded;
+    case 'medical_nursing':
+      return Icons.medical_services_rounded;
+    case 'law_arts_others':
+      return Icons.gavel_rounded;
+    case 'architect_designer':
+      return Icons.design_services_rounded;
+    case 'engineer_contractor':
+      return Icons.construction_rounded;
+    case 'medical_professional':
+      return Icons.local_hospital_rounded;
+    case 'business_corporate':
+      return Icons.business_center_rounded;
+    default:
+      return Icons.auto_awesome_rounded;
+  }
+}
+
+class _AccountField extends StatefulWidget {
+  const _AccountField({
+    required this.controller,
+    required this.label,
+    required this.hintText,
+    required this.prefixIcon,
+    this.keyboardType,
+    this.obscureText = false,
+    this.onChanged,
+    this.errorText,
+    this.validator,
+    this.textInputAction,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final String hintText;
+  final IconData prefixIcon;
+  final TextInputType? keyboardType;
+  final bool obscureText;
+  final ValueChanged<String>? onChanged;
+  final String? errorText;
+  final String? Function(String)? validator;
+  final TextInputAction? textInputAction;
+
+  @override
+  State<_AccountField> createState() => _AccountFieldState();
+}
+
+class _AccountFieldState extends State<_AccountField> {
+  late final FocusNode _focusNode;
+  late final VoidCallback _focusListener;
+  bool _isFocused = false;
+  bool _isValid = false;
+  bool _obscured = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _obscured = widget.obscureText;
+    _focusListener = () => setState(() => _isFocused = _focusNode.hasFocus);
+    _focusNode = FocusNode()..addListener(_focusListener);
+  }
+
+  void _handleChange(String value) {
+    final valid = widget.validator != null
+        ? widget.validator!(value) == null
+        : value.trim().isNotEmpty;
+    setState(() => _isValid = valid);
+    widget.onChanged?.call(value);
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_focusListener);
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  AppColorSet _colors(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = _colors(context);
+    final hasError = widget.errorText != null && widget.errorText!.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            color: colors.surface,
+            borderRadius: AppRadius.borderLg,
+            border: Border.all(
+              color: hasError
+                  ? colors.error
+                  : _isFocused
+                      ? colors.brand
+                      : colors.outline,
+              width: _isFocused || hasError ? 2 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                widget.prefixIcon,
+                size: 20,
+                color: _isFocused ? colors.brand : colors.onSurfaceDim,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.label,
+                      style: AppTypography.caption.copyWith(
+                        color: _isFocused ? colors.brand : colors.onSurfaceDim,
+                      ),
+                    ),
+                    TextField(
+                      controller: widget.controller,
+                      focusNode: _focusNode,
+                      obscureText: widget.obscureText ? _obscured : false,
+                      onChanged: _handleChange,
+                      keyboardType: widget.keyboardType,
+                      textInputAction: widget.textInputAction,
+                      style: AppTypography.body.copyWith(
+                        color: colors.onBackground,
+                      ),
+                      cursorColor: colors.brand,
+                      decoration: InputDecoration(
+                        hintText: widget.hintText,
+                        hintStyle: AppTypography.body.copyWith(
+                          color: colors.onSurfaceDim,
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: AppSpacing.xs,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (widget.obscureText)
+                GestureDetector(
+                  onTap: () => setState(() => _obscured = !_obscured),
+                  child: Icon(
+                    _obscured
+                        ? Icons.visibility_off_rounded
+                        : Icons.visibility_rounded,
+                    size: 20,
+                    color: colors.onSurfaceDim,
+                  ),
+                )
+              else if (_isValid && !hasError)
+                Icon(
+                  Icons.check_circle_rounded,
+                  key: const ValueKey('valid'),
+                  size: 20,
+                  color: colors.success,
+                )
+                    .animate()
+                    .fadeIn(duration: 80.ms)
+                    .scale(
+                      begin: const Offset(0.6, 0.6),
+                      duration: 200.ms,
+                      curve: Curves.elasticOut,
+                    ),
+            ],
+          ),
+        ),
+        if (hasError) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Padding(
+            padding: const EdgeInsets.only(left: AppSpacing.sm),
+            child: Text(
+              widget.errorText!,
+              style: AppTypography.caption.copyWith(color: colors.error),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _NicknameInputCard extends StatefulWidget {
+  const _NicknameInputCard({
+    required this.controller,
+    required this.colors,
+  });
+
+  final TextEditingController controller;
+  final AppColorSet colors;
+
+  @override
+  State<_NicknameInputCard> createState() => _NicknameInputCardState();
+}
+
+class _NicknameInputCardState extends State<_NicknameInputCard> {
+  final _focusNode = FocusNode();
+  bool _isFocused = false;
+  late final VoidCallback _focusListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusListener = () => setState(() => _isFocused = _focusNode.hasFocus);
+    _focusNode.addListener(_focusListener);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_focusListener);
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = widget.colors;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.md,
+      ),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: AppRadius.borderLg,
+        border: Border.all(
+          color: _isFocused ? colors.brand : colors.outline,
+          width: _isFocused ? 2 : 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.edit_rounded,
+            size: 20,
+            color: _isFocused ? colors.brand : colors.onSurfaceDim,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: TextField(
+              controller: widget.controller,
+              focusNode: _focusNode,
+              style: AppTypography.bodyLarge.copyWith(
+                color: colors.onBackground,
+              ),
+              cursorColor: colors.brand,
+              decoration: InputDecoration(
+                hintText: 'e.g. Kai',
+                hintStyle: AppTypography.bodyLarge.copyWith(
+                  color: colors.onSurfaceDim,
+                ),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  vertical: AppSpacing.sm,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

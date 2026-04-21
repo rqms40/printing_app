@@ -43,7 +43,10 @@ describe('AdminController analytics', () => {
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
         { provide: getRepositoryToken(User), useValue: usersRepo },
         { provide: getRepositoryToken(TamSurvey), useValue: mockRepo() },
-        { provide: getRepositoryToken(TamSurveySettings), useValue: mockRepo() },
+        {
+          provide: getRepositoryToken(TamSurveySettings),
+          useValue: mockRepo(),
+        },
       ],
     }).compile();
 
