@@ -14,22 +14,27 @@ export class StorageService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     const bucket = this.config.get<string>('MINIO_BUCKET', 'grid-print');
-    const exists = await this.minioClient.bucketExists(bucket);
-    if (!exists) {
-      await this.minioClient.makeBucket(bucket);
-      const policy = {
-        Version: '2012-10-17',
-        Statement: [
-          {
-            Effect: 'Allow',
-            Principal: { AWS: ['*'] },
-            Action: ['s3:GetObject'],
-            Resource: [`arn:aws:s3:::${bucket}/*`],
-          },
-        ],
-      };
-      await this.minioClient.setBucketPolicy(bucket, JSON.stringify(policy));
-      this.logger.log(`Bucket '${bucket}' created with public-read policy`);
+    try {
+      const exists = await this.minioClient.bucketExists(bucket);
+      if (!exists) {
+        await this.minioClient.makeBucket(bucket);
+        const policy = {
+          Version: '2012-10-17',
+          Statement: [
+            {
+              Effect: 'Allow',
+              Principal: { AWS: ['*'] },
+              Action: ['s3:GetObject'],
+              Resource: [`arn:aws:s3:::${bucket}/*`],
+            },
+          ],
+        };
+        await this.minioClient.setBucketPolicy(bucket, JSON.stringify(policy));
+        this.logger.log(`Bucket '${bucket}' created with public-read policy`);
+      }
+    } catch (err) {
+      this.logger.error(`Failed to initialize MinIO bucket '${bucket}'`, err);
+      throw err;
     }
   }
 

@@ -59,7 +59,10 @@ describe('StorageService', () => {
 
   describe('upload', () => {
     it('returns public URL on successful upload', async () => {
-      mockMinioClient.putObject.mockResolvedValue({ etag: 'abc', versionId: null });
+      mockMinioClient.putObject.mockResolvedValue({
+        etag: 'abc',
+        versionId: null,
+      });
       const buffer = Buffer.from('test-image-data');
       const key = 'uploads/general/2026/04/21/test.jpg';
 
@@ -76,7 +79,9 @@ describe('StorageService', () => {
     });
 
     it('propagates error when putObject throws', async () => {
-      mockMinioClient.putObject.mockRejectedValue(new Error('MinIO unavailable'));
+      mockMinioClient.putObject.mockRejectedValue(
+        new Error('MinIO unavailable'),
+      );
       await expect(
         service.upload(Buffer.from('x'), 'key', 'image/png'),
       ).rejects.toThrow('MinIO unavailable');
