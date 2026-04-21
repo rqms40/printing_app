@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Body,
   UseGuards,
   Request,
@@ -11,6 +12,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UpdateStorageSettingsDto } from './dto/update-storage-settings.dto';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
 
 @ApiTags('users')
@@ -48,5 +50,21 @@ export class UsersController {
     const user = await this.usersService.updateProfile(req.user.sub, data);
     const { passwordHash: _ph2, ...result } = user;
     return result;
+  }
+
+  @Get('me/storage-settings')
+  async getStorageSettings(@Request() req: RequestWithUser) {
+    return this.usersService.getStorageSettings(req.user.sub);
+  }
+
+  @Patch('me/storage-settings')
+  async updateStorageSettings(
+    @Request() req: RequestWithUser,
+    @Body() dto: UpdateStorageSettingsDto,
+  ) {
+    return this.usersService.updateStorageSettings(
+      req.user.sub,
+      dto.fileRetentionDays,
+    );
   }
 }
