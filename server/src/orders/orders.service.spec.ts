@@ -1,8 +1,9 @@
-import { Test } from '@nestjs/testing';
+import { Test, TestingModule } from '@nestjs/testing';
+import { FilesService } from '../files/files.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OrdersService } from './orders.service';
-import { Order } from './entities/order.entity';
+import { Order, OrderStatus } from './entities/order.entity';
 import { PaperSpec } from './entities/paper-specs.entity';
 import { ThreeDSpec } from './entities/three-d-specs.entity';
 import { OrdersGateway } from './orders.gateway';
@@ -90,6 +91,7 @@ describe('OrdersService', () => {
         { provide: UsersService, useValue: usersService },
         { provide: CreditsService, useValue: creditsService },
         { provide: NotificationsService, useValue: notificationsService },
+        { provide: FilesService, useValue: { stampExpiry: jest.fn() } },
       ],
     }).compile();
 
@@ -247,5 +249,106 @@ describe('OrdersService', () => {
 
       expect(notificationsService.createForAllAdmins).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('OrdersService.updateStatus — expiresAt stamping', () => {
+  let service: OrdersService;
+  const ordersRepo = {
+    findOneOrFail: jest.fn(),
+    update: jest.fn(),
+    find: jest.fn(),
+    count: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+  };
+  const mockFilesService = { stampExpiry: jest.fn() };
+  const mockUsersService = { findById: jest.fn(), getFcmToken: jest.fn() };
+  const mockGateway = { notifyOrderUpdate: jest.fn() };
+  const mockFirebase = { sendToDevice: jest.fn() };
+  const mockCredits = { subtractCredits: jest.fn() };
+  const mockNotifications = { create: jest.fn(), createForAllAdmins: jest.fn() };
+
+  const makeOrder = (overrides: Partial<Order> = {}): Order =>
+    ({
+      id: 1,
+      orderId: 'ORD-10001',
+      userId: 99,
+      fileMetadataId: 5,
+      orderStatus: OrderStatus.COMPLETED_PICKUP,
+      ...overrides,
+    } as Order);
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        OrdersService,
+        { provide: getRepositoryToken(Order), useValue: ordersRepo },
+        { provide: getRepositoryToken(PaperSpec), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: getRepositoryToken(ThreeDSpec), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: getRepositoryToken(DeliveryAssignment), useValue: { find: jest.fn().mockResolvedValue([]) } },
+        { provide: OrdersGateway, useValue: mockGateway },
+        { provide: FirebaseService, useValue: mockFirebase },
+        { provide: UsersService, useValue: mockUsersService },
+        { provide: CreditsService, useValue: mockCredits },
+        { provide: NotificationsService, useValue: mockNotifications },
+        { provide: FilesService, useValue: mockFilesService },
+      ],
+    }).compile();
+    service = module.get<OrdersService>(OrdersService);
+  });
+
+  it('stamps expiresAt when completed_pickup and retention is set', async () => {
+    const order = makeOrder();
+    ordersRepo.findOneOrFail
+      .mockResolvedValueOnce(order)  // existing (before update)
+      .mockResolvedValueOnce(order); // after update
+    ordersRepo.update.mockResolvedValue({});
+    mockUsersService.findById.mockResolvedValue({ fileRetentionDays: 7 });
+    mockUsersService.getFcmToken.mockResolvedValue(null);
+    mockNotifications.create.mockResolvedValue({});
+
+    await service.updateStatus(1, 'completed_pickup');
+
+    expect(mockFilesService.stampExpiry).toHaveBeenCalledWith(5, 7);
+  });
+
+  it('does not stamp when user fileRetentionDays is null', async () => {
+    const order = makeOrder();
+    ordersRepo.findOneOrFail.mockResolvedValue(order);
+    ordersRepo.update.mockResolvedValue({});
+    mockUsersService.findById.mockResolvedValue({ fileRetentionDays: null });
+    mockUsersService.getFcmToken.mockResolvedValue(null);
+    mockNotifications.create.mockResolvedValue({});
+
+    await service.updateStatus(1, 'completed_pickup');
+
+    expect(mockFilesService.stampExpiry).not.toHaveBeenCalled();
+  });
+
+  it('does not stamp when order has no fileMetadataId', async () => {
+    const order = makeOrder({ fileMetadataId: null });
+    ordersRepo.findOneOrFail.mockResolvedValue(order);
+    ordersRepo.update.mockResolvedValue({});
+    mockUsersService.findById.mockResolvedValue({ fileRetentionDays: 7 });
+    mockUsersService.getFcmToken.mockResolvedValue(null);
+    mockNotifications.create.mockResolvedValue({});
+
+    await service.updateStatus(1, 'completed_pickup');
+
+    expect(mockFilesService.stampExpiry).not.toHaveBeenCalled();
+  });
+
+  it('does not stamp for non-completion statuses', async () => {
+    const order = makeOrder({ orderStatus: OrderStatus.FILE_VERIFIED });
+    ordersRepo.findOneOrFail.mockResolvedValue(order);
+    ordersRepo.update.mockResolvedValue({});
+    mockUsersService.getFcmToken.mockResolvedValue(null);
+    mockNotifications.create.mockResolvedValue({});
+
+    await service.updateStatus(1, 'file_verified');
+
+    expect(mockFilesService.stampExpiry).not.toHaveBeenCalled();
   });
 });

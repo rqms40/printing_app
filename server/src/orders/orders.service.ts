@@ -13,6 +13,7 @@ import { FirebaseService } from '../firebase/firebase.service';
 import { UsersService } from '../users/users.service';
 import { CreditsService } from '../credits/credits.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { FilesService } from '../files/files.service';
 
 @Injectable()
 export class OrdersService {
@@ -30,6 +31,7 @@ export class OrdersService {
     private usersService: UsersService,
     private creditsService: CreditsService,
     private notificationsService: NotificationsService,
+    private readonly filesService: FilesService,
   ) {}
 
   async findByUser(userId: number): Promise<Order[]> {
@@ -176,6 +178,20 @@ export class OrdersService {
       orderStatus: status as OrderStatus,
     });
     const order = await this.ordersRepo.findOneOrFail({ where: { id } });
+
+    // Stamp file expiry when order reaches completion
+    if (
+      status === OrderStatus.COMPLETED_PICKUP &&
+      order.fileMetadataId != null
+    ) {
+      const owner = await this.usersService.findById(order.userId);
+      if (owner?.fileRetentionDays != null) {
+        await this.filesService.stampExpiry(
+          order.fileMetadataId,
+          owner.fileRetentionDays,
+        );
+      }
+    }
 
     // Status → notification copy (shared by FCM push + in-app notification)
     const messages: Record<string, { title: string; body: string }> = {

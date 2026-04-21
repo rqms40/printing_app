@@ -12,6 +12,7 @@ import { OrdersGateway } from './orders.gateway';
 import { UsersModule } from '../users/users.module';
 import { CreditsModule } from '../credits/credits.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { FilesModule } from '../files/files.module';
 import { DeliveryAssignment } from '../drivers/entities/delivery-assignment.entity';
 
 @Module({
@@ -33,6 +34,7 @@ import { DeliveryAssignment } from '../drivers/entities/delivery-assignment.enti
     UsersModule,
     CreditsModule,
     NotificationsModule,
+    FilesModule,
   ],
   providers: [OrdersService, OrdersGateway],
   controllers: [OrdersController],
