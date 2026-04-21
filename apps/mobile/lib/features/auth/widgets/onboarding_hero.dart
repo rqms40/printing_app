@@ -4,18 +4,19 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 
+/// Icon badge, display headline, and optional subtitle for onboarding screens.
 class OnboardingHero extends StatelessWidget {
   const OnboardingHero({
     super.key,
     required this.icon,
     required this.headline,
-    this.subtitle = '',
+    this.subtitle,
     this.withPulse = false,
   });
 
   final IconData icon;
   final String headline;
-  final String subtitle;
+  final String? subtitle;
   final bool withPulse;
 
   AppColorSet _colors(BuildContext context) {
@@ -27,6 +28,7 @@ class OnboardingHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
+    final subtitleText = subtitle;
 
     final badge = Container(
       width: 80,
@@ -35,7 +37,9 @@ class OnboardingHero extends StatelessWidget {
         color: colors.surfaceVariant,
         shape: BoxShape.circle,
       ),
-      child: Icon(icon, size: 48, color: colors.brand),
+      child: Center(
+        child: Icon(icon, size: 48, color: colors.brand),
+      ),
     );
 
     return Column(
@@ -58,10 +62,10 @@ class OnboardingHero extends StatelessWidget {
           headline,
           style: AppTypography.display.copyWith(color: colors.onBackground),
         ),
-        if (subtitle.isNotEmpty) ...[
+        if (subtitleText != null && subtitleText.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.sm),
           Text(
-            subtitle,
+            subtitleText,
             style: AppTypography.bodyLarge.copyWith(
               color: colors.onSurfaceDim,
               height: 1.5,

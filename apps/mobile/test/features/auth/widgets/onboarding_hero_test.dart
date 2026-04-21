@@ -47,7 +47,8 @@ void main() {
         ),
       );
       // Only the headline Text renders; no subtitle Text
-      expect(find.byType(Text), findsOneWidget);
+      expect(find.text('Just a headline'), findsOneWidget);
+      expect(find.byType(Text), findsNWidgets(1));
     });
 
     testWidgets('icon uses brand color in dark mode', (tester) async {
