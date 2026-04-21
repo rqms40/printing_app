@@ -22,7 +22,7 @@ export class TamSurvey {
   user: User;
 
   @Column({ name: 'survey_data', type: 'jsonb' })
-  surveyData: any;
+  surveyData: Record<string, number>;
 
   @Column({ name: 'open_forum_feedback', type: 'text', nullable: true })
   openForumFeedback: string;

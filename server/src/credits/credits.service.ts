@@ -106,7 +106,7 @@ export class CreditsService {
     user.credits = Number(user.credits) + Number(tx.amountCredits);
     await this.usersService.updateProfile(user.id, { credits: user.credits });
 
-    await this.notificationsService.triggerCreditsUpdate(
+    this.notificationsService.triggerCreditsUpdate(
       user.id,
       Number(user.credits),
     );
@@ -212,7 +212,7 @@ export class CreditsService {
     user.credits = Number(user.credits) - amountCredits;
     await this.usersService.updateProfile(user.id, { credits: user.credits });
 
-    await this.notificationsService.triggerCreditsUpdate(
+    this.notificationsService.triggerCreditsUpdate(
       user.id,
       Number(user.credits),
     );

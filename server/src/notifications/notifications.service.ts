@@ -58,7 +58,7 @@ export class NotificationsService {
     return this.notifRepo.count({ where: { userId, isRead: false } });
   }
 
-  async triggerCreditsUpdate(userId: number, newCredits: number): Promise<void> {
+  triggerCreditsUpdate(userId: number, newCredits: number): void {
     try {
       this.gateway.notifyUserCreditsUpdate(userId, newCredits);
     } catch (err) {
