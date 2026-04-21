@@ -1,6 +1,6 @@
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
@@ -113,7 +113,7 @@ class FileUploadCard extends StatelessWidget {
           ),
         );
       }
-      if (localFilePath != null) {
+      if (localFilePath != null && !kIsWeb) {
         return ClipRRect(
           borderRadius: AppRadius.borderSm,
           child: Image.file(

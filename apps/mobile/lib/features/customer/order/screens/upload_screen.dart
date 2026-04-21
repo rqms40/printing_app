@@ -220,11 +220,16 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
           _fileMetadataId = response.data['id'] as int?;
         });
       }
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(() {
           _isUploading = false;
           _uploadProgress = 0;
+          _errorText = 'Upload failed. Please try again.';
+          _fileName = null;
+          _fileSize = null;
+          _fileBytes = null;
+          _fileMetadataId = null;
         });
       }
     }
