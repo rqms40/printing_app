@@ -31,7 +31,7 @@ export class OrdersService {
     private usersService: UsersService,
     private creditsService: CreditsService,
     private notificationsService: NotificationsService,
-    private readonly filesService: FilesService,
+    private filesService: FilesService,
   ) {}
 
   async findByUser(userId: number): Promise<Order[]> {
