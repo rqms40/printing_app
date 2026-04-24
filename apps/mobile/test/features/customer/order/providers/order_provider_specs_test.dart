@@ -64,6 +64,13 @@ void main() {
       notifier.setPaperSpecsFromMap({});
       expect(container.read(orderFlowProvider).paperSpecs, isNull);
     });
+
+    test('uses PaperSize.a4 default for invalid enum value', () {
+      notifier.setCategory('paper');
+      notifier.setPaperSpecsFromMap({'paperSize': 'INVALIDSIZE'});
+      final specs = container.read(orderFlowProvider).paperSpecs!;
+      expect(specs.paperSize, PaperSize.a4);
+    });
   });
 
   group('setThreeDSpecsFromMap', () {
@@ -92,6 +99,17 @@ void main() {
       notifier.setCategory('3d');
       notifier.setThreeDSpecsFromMap({});
       expect(container.read(orderFlowProvider).threeDSpecs, isNull);
+    });
+
+    test('uses defaults for missing fields', () {
+      notifier.setCategory('3d');
+      notifier.setThreeDSpecsFromMap({'material': 'abs'});
+      final specs = container.read(orderFlowProvider).threeDSpecs!;
+      expect(specs.material, Material3D.abs);
+      expect(specs.fileFormat, FileFormat3D.stl);
+      expect(specs.infillPercentage, 20);
+      expect(specs.layerHeight, 0.2);
+      expect(specs.supports, false);
     });
   });
 }

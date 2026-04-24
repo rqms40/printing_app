@@ -161,11 +161,11 @@ class OrderFlowState {
     if (psMap != null) {
       final ps = Map<String, dynamic>.from(psMap as Map);
       paperSpecs = PaperSpecs(
-        paperSize: PaperSize.values.byName(ps['paperSize'] as String),
-        colorMode: ColorMode.values.byName(ps['colorMode'] as String),
-        mediaType: MediaType.values.byName(ps['mediaType'] as String),
-        printSides: PrintSides.values.byName(ps['printSides'] as String),
-        binding: Binding.values.byName(ps['binding'] as String),
+        paperSize: _parseEnum(PaperSize.values, ps['paperSize'] as String?) ?? PaperSize.a4,
+        colorMode: _parseEnum(ColorMode.values, ps['colorMode'] as String?) ?? ColorMode.blackAndWhite,
+        mediaType: _parseEnum(MediaType.values, ps['mediaType'] as String?) ?? MediaType.glossy,
+        printSides: _parseEnum(PrintSides.values, ps['printSides'] as String?) ?? PrintSides.frontOnly,
+        binding: _parseEnum(Binding.values, ps['binding'] as String?) ?? Binding.none,
       );
     }
 
@@ -174,12 +174,12 @@ class OrderFlowState {
     if (tdMap != null) {
       final td = Map<String, dynamic>.from(tdMap as Map);
       threeDSpecs = ThreeDSpecs(
-        fileFormat: FileFormat3D.values.byName(td['fileFormat'] as String),
-        material: Material3D.values.byName(td['material'] as String),
-        color: td['color'] as String,
-        infillPercentage: td['infillPercentage'] as int,
-        layerHeight: (td['layerHeight'] as num).toDouble(),
-        supports: td['supports'] as bool,
+        fileFormat: _parseEnum(FileFormat3D.values, td['fileFormat'] as String?) ?? FileFormat3D.stl,
+        material: _parseEnum(Material3D.values, td['material'] as String?) ?? Material3D.pla,
+        color: td['color'] as String? ?? '',
+        infillPercentage: (td['infillPercentage'] as num?)?.toInt() ?? 20,
+        layerHeight: (td['layerHeight'] as num?)?.toDouble() ?? 0.2,
+        supports: td['supports'] as bool? ?? false,
         notes: td['notes'] as String?,
       );
     }
@@ -270,19 +270,19 @@ class OrderFlowNotifier extends StateNotifier<OrderFlowState> {
   void setPaperSpecsFromMap(Map<String, dynamic> map) {
     if (map.isEmpty) return;
     final specs = PaperSpecs(
-      paperSize: _parseEnum(PaperSize.values, map['paperSize'] as String?) ??
+      paperSize: _parseEnum(PaperSize.values, map['paperSize']?.toString()) ??
           PaperSize.a4,
       colorMode:
-          _parseEnum(ColorMode.values, map['colorMode'] as String?) ??
+          _parseEnum(ColorMode.values, map['colorMode']?.toString()) ??
               ColorMode.blackAndWhite,
       mediaType:
-          _parseEnum(MediaType.values, map['mediaType'] as String?) ??
+          _parseEnum(MediaType.values, map['mediaType']?.toString()) ??
               MediaType.glossy,
       printSides:
-          _parseEnum(PrintSides.values, map['printSides'] as String?) ??
+          _parseEnum(PrintSides.values, map['printSides']?.toString()) ??
               PrintSides.frontOnly,
       binding:
-          _parseEnum(Binding.values, map['binding'] as String?) ?? Binding.none,
+          _parseEnum(Binding.values, map['binding']?.toString()) ?? Binding.none,
     );
     state = state.copyWith(paperSpecs: specs);
     _recalculatePrice();
@@ -293,29 +293,20 @@ class OrderFlowNotifier extends StateNotifier<OrderFlowState> {
     if (map.isEmpty) return;
     final specs = ThreeDSpecs(
       fileFormat:
-          _parseEnum(FileFormat3D.values, map['fileFormat'] as String?) ??
+          _parseEnum(FileFormat3D.values, map['fileFormat']?.toString()) ??
               FileFormat3D.stl,
       material:
-          _parseEnum(Material3D.values, map['material'] as String?) ??
+          _parseEnum(Material3D.values, map['material']?.toString()) ??
               Material3D.pla,
-      color: map['color'] as String? ?? '',
+      color: map['color']?.toString() ?? '',
       infillPercentage: (map['infillPercentage'] as num?)?.toInt() ?? 20,
-      layerHeight: (map['layerHeight'] as num?)?.toDouble() ?? 0.20,
+      layerHeight: (map['layerHeight'] as num?)?.toDouble() ?? 0.2,
       supports: map['supports'] as bool? ?? false,
-      notes: map['notes'] as String?,
+      notes: map['notes']?.toString(),
     );
     state = state.copyWith(threeDSpecs: specs);
     _recalculatePrice();
     _saveDraft();
-  }
-
-  static T? _parseEnum<T extends Enum>(List<T> values, String? name) {
-    if (name == null) return null;
-    try {
-      return values.byName(name);
-    } catch (_) {
-      return null;
-    }
   }
 
   void setFile({
@@ -419,6 +410,15 @@ class OrderFlowNotifier extends StateNotifier<OrderFlowState> {
     }
 
     state = state.copyWith(totalPrice: price);
+  }
+}
+
+T? _parseEnum<T extends Enum>(List<T> values, String? name) {
+  if (name == null) return null;
+  try {
+    return values.byName(name);
+  } catch (_) {
+    return null;
   }
 }
 
