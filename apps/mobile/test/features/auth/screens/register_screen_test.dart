@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/auth/screens/register_screen.dart';
-import 'package:printing_app/shared/widgets/app_button.dart';
 
 class _TestAuthNotifier extends AuthNotifier {
   int registerCalls = 0;
@@ -160,10 +159,10 @@ void main() {
     testWidgets('opens the terms screen from the privacy step', (tester) async {
       final router = GoRouter(
         routes: [
-          GoRoute(path: '/', builder: (_, __) => const RegisterScreen()),
+          GoRoute(path: '/', builder: (_, _) => const RegisterScreen()),
           GoRoute(
             path: '/customer/profile/terms',
-            builder: (_, __) => const Scaffold(body: Text('Terms Destination')),
+            builder: (_, _) => const Scaffold(body: Text('Terms Destination')),
           ),
         ],
       );

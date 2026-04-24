@@ -5,15 +5,6 @@ import 'package:printing_app/features/auth/models/registration_draft.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/auth/screens/profile_setup_screen.dart';
 
-Widget _wrap(Widget child) {
-  return ProviderScope(
-    child: MaterialApp(
-      theme: ThemeData(brightness: Brightness.light),
-      home: child,
-    ),
-  );
-}
-
 Widget _wrapWithAuth(Widget child, {required AuthState state}) {
   return ProviderScope(
     overrides: [
