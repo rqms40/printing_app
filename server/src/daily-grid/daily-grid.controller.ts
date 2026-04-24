@@ -14,7 +14,6 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
-import { extname } from 'path';
 import { randomUUID } from 'crypto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles, RolesGuard } from '../auth/guards/roles.guard';
@@ -22,7 +21,7 @@ import { DailyGridService } from './daily-grid.service';
 import { CreateDailyGridCardDto } from './dto/create-daily-grid-card.dto';
 import { UpdateDailyGridCardDto } from './dto/update-daily-grid-card.dto';
 import { StorageService } from '../storage/storage.service';
-import { ALLOWED_MIME_TYPES } from '../storage/storage.config';
+import { ALLOWED_MIME_TYPES, MIME_TO_EXT } from '../storage/storage.config';
 
 @ApiTags('daily-grid')
 @Controller('daily-grid')
@@ -72,9 +71,14 @@ export class DailyGridController {
   @Post('admin/upload-image')
   @UseInterceptors(
     FileInterceptor('file', {
+      // 5 MB limit for card images (tighter than the general 20 MB file limit)
       limits: { fileSize: 5 * 1024 * 1024 },
       fileFilter: (_req, file, cb) => {
-        cb(null, ALLOWED_MIME_TYPES.includes(file.mimetype));
+        if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+          cb(null, true);
+        } else {
+          cb(new BadRequestException(`Unsupported file type: ${file.mimetype}`), false);
+        }
       },
     }),
   )
@@ -82,7 +86,7 @@ export class DailyGridController {
     @UploadedFile() file: Express.Multer.File,
   ): Promise<{ url: string }> {
     if (!file) throw new BadRequestException('No file provided');
-    const ext = extname(file.originalname).toLowerCase(); // '.jpg', '.png', or ''
+    const ext = MIME_TO_EXT[file.mimetype] ?? '';
     const objectKey = `daily-grid/${randomUUID()}${ext}`;
     const url = await this.storageService.upload(
       file.buffer,
