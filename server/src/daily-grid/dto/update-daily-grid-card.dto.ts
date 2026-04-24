@@ -5,6 +5,7 @@ import {
   IsObject,
   IsOptional,
   IsIn,
+  MinLength,
   ValidateIf,
 } from 'class-validator';
 import type { PaperSpecsShape, ThreeDSpecsShape } from '../entities/daily-grid-card.entity';
@@ -12,6 +13,7 @@ import type { PaperSpecsShape, ThreeDSpecsShape } from '../entities/daily-grid-c
 export class UpdateDailyGridCardDto {
   @IsOptional()
   @IsString()
+  @MinLength(1)
   title?: string;
 
   @IsOptional()
@@ -34,11 +36,13 @@ export class UpdateDailyGridCardDto {
   @IsBoolean()
   isActive?: boolean;
 
+  // null clears the field; @IsOptional skips validation for undefined
   @IsOptional()
   @ValidateIf((o: UpdateDailyGridCardDto) => o.paperSpecs !== null)
   @IsObject()
   paperSpecs?: PaperSpecsShape | null;
 
+  // null clears the field; @IsOptional skips validation for undefined
   @IsOptional()
   @ValidateIf((o: UpdateDailyGridCardDto) => o.threeDSpecs !== null)
   @IsObject()

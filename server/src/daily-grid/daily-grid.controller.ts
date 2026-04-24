@@ -14,12 +14,15 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { extname } from 'path';
+import { randomUUID } from 'crypto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles, RolesGuard } from '../auth/guards/roles.guard';
 import { DailyGridService } from './daily-grid.service';
 import { CreateDailyGridCardDto } from './dto/create-daily-grid-card.dto';
 import { UpdateDailyGridCardDto } from './dto/update-daily-grid-card.dto';
 import { StorageService } from '../storage/storage.service';
+import { ALLOWED_MIME_TYPES } from '../storage/storage.config';
 
 @ApiTags('daily-grid')
 @Controller('daily-grid')
@@ -68,14 +71,19 @@ export class DailyGridController {
   @Roles('admin')
   @Post('admin/upload-image')
   @UseInterceptors(
-    FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }),
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        cb(null, ALLOWED_MIME_TYPES.includes(file.mimetype));
+      },
+    }),
   )
   async uploadImage(
     @UploadedFile() file: Express.Multer.File,
   ): Promise<{ url: string }> {
     if (!file) throw new BadRequestException('No file provided');
-    const ext = (file.originalname.split('.').pop() ?? 'jpg').toLowerCase();
-    const objectKey = `daily-grid/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const ext = extname(file.originalname).toLowerCase(); // '.jpg', '.png', or ''
+    const objectKey = `daily-grid/${randomUUID()}${ext}`;
     const url = await this.storageService.upload(
       file.buffer,
       objectKey,
