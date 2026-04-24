@@ -26,6 +26,12 @@ interface DailyGridCard {
   threeDSpecs: Record<string, unknown> | null;
 }
 
+function filterSpecUndefined(obj: Record<string, unknown> | undefined): Record<string, unknown> | null {
+  if (!obj) return null;
+  const entries = Object.entries(obj).filter(([, v]) => v !== undefined && v !== null);
+  return entries.length > 0 ? Object.fromEntries(entries) : null;
+}
+
 const S = {
   page: { display: 'flex', flexDirection: 'column' as const, gap: 24, paddingBottom: 48 },
   card: {
@@ -190,12 +196,8 @@ export function DailyGridList() {
         category: values.category,
         sortOrder: values.sortOrder ?? 0,
         isActive: values.isActive ?? true,
-        paperSpecs: values.paperSpecs && Object.keys(values.paperSpecs).length > 0
-          ? values.paperSpecs
-          : null,
-        threeDSpecs: values.threeDSpecs && Object.keys(values.threeDSpecs).length > 0
-          ? values.threeDSpecs
-          : null,
+        paperSpecs: filterSpecUndefined(values.paperSpecs as Record<string, unknown> | undefined),
+        threeDSpecs: filterSpecUndefined(values.threeDSpecs as Record<string, unknown> | undefined),
       };
       if (editTarget) {
         await apiClient.patch(`/daily-grid/admin/${editTarget.id}`, payload);
@@ -435,7 +437,16 @@ export function DailyGridList() {
           header: { background: '#141414', borderBottom: '1px solid #2E2E2E' },
         }}
       >
-        <Form form={form} layout="vertical">
+        <Form
+          form={form}
+          layout="vertical"
+          onValuesChange={(changed) => {
+            if ('category' in changed) {
+              form.setFieldValue('paperSpecs', undefined);
+              form.setFieldValue('threeDSpecs', undefined);
+            }
+          }}
+        >
           <Form.Item
             label={<Text style={{ color: '#A0A0A0', fontSize: 12 }}>Title</Text>}
             name="title"
@@ -470,9 +481,7 @@ export function DailyGridList() {
                 formData.append('file', file);
                 setUploadingImage(true);
                 apiClient
-                  .post<{ url: string }>('/daily-grid/admin/upload-image', formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' },
-                  })
+                  .post<{ url: string }>('/daily-grid/admin/upload-image', formData)
                   .then((res) => {
                     form.setFieldValue('imageUrl', res.data.url);
                     setImagePreviewUrl(res.data.url);
