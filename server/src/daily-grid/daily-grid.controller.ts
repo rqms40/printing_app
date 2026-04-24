@@ -8,16 +8,26 @@ import {
   Param,
   ParseIntPipe,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles, RolesGuard } from '../auth/guards/roles.guard';
 import { DailyGridService } from './daily-grid.service';
+import { CreateDailyGridCardDto } from './dto/create-daily-grid-card.dto';
+import { UpdateDailyGridCardDto } from './dto/update-daily-grid-card.dto';
+import { StorageService } from '../storage/storage.service';
 
 @ApiTags('daily-grid')
 @Controller('daily-grid')
 export class DailyGridController {
-  constructor(private readonly service: DailyGridService) {}
+  constructor(
+    private readonly service: DailyGridService,
+    private readonly storageService: StorageService,
+  ) {}
 
   /** Public — customer home screen carousel. */
   @Get()
@@ -38,14 +48,11 @@ export class DailyGridController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Post('admin')
-  create(
-    @Body()
-    body: Partial<import('./entities/daily-grid-card.entity').DailyGridCard>,
-  ) {
-    return this.service.create(body);
+  create(@Body() dto: CreateDailyGridCardDto) {
+    return this.service.create(dto);
   }
 
-  /** Reorder — must be declared before :id to avoid param collision. */
+  /** Must be declared before :id to avoid route collision. */
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
@@ -54,16 +61,38 @@ export class DailyGridController {
     return this.service.reorder(body.ids);
   }
 
+  /** Must be declared before :id to avoid route collision. */
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Post('admin/upload-image')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }),
+  )
+  async uploadImage(
+    @UploadedFile() file: Express.Multer.File,
+  ): Promise<{ url: string }> {
+    if (!file) throw new BadRequestException('No file provided');
+    const ext = (file.originalname.split('.').pop() ?? 'jpg').toLowerCase();
+    const objectKey = `daily-grid/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const url = await this.storageService.upload(
+      file.buffer,
+      objectKey,
+      file.mimetype,
+    );
+    return { url };
+  }
+
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Patch('admin/:id')
   update(
     @Param('id', ParseIntPipe) id: number,
-    @Body()
-    body: Partial<import('./entities/daily-grid-card.entity').DailyGridCard>,
+    @Body() dto: UpdateDailyGridCardDto,
   ) {
-    return this.service.update(id, body);
+    return this.service.update(id, dto);
   }
 
   @ApiBearerAuth()

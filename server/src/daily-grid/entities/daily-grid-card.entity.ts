@@ -6,6 +6,24 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+export interface PaperSpecsShape {
+  paperSize?: string;
+  colorMode?: string;
+  mediaType?: string;
+  printSides?: string;
+  binding?: string;
+}
+
+export interface ThreeDSpecsShape {
+  fileFormat?: string;
+  material?: string;
+  color?: string;
+  infillPercentage?: number;
+  layerHeight?: number;
+  supports?: boolean;
+  notes?: string;
+}
+
 @Entity('daily_grid_cards')
 export class DailyGridCard {
   @PrimaryGeneratedColumn()
@@ -31,24 +49,10 @@ export class DailyGridCard {
   isActive: boolean;
 
   @Column({ name: 'paper_specs', type: 'jsonb', nullable: true })
-  paperSpecs: {
-    paperSize?: string;
-    colorMode?: string;
-    mediaType?: string;
-    printSides?: string;
-    binding?: string;
-  } | null;
+  paperSpecs: PaperSpecsShape | null;
 
   @Column({ name: 'three_d_specs', type: 'jsonb', nullable: true })
-  threeDSpecs: {
-    fileFormat?: string;
-    material?: string;
-    color?: string;
-    infillPercentage?: number;
-    layerHeight?: number;
-    supports?: boolean;
-    notes?: string;
-  } | null;
+  threeDSpecs: ThreeDSpecsShape | null;
 
   @CreateDateColumn()
   createdAt: Date;
