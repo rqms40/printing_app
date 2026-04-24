@@ -30,6 +30,26 @@ export class DailyGridCard {
   @Column({ default: true })
   isActive: boolean;
 
+  @Column({ name: 'paper_specs', type: 'jsonb', nullable: true })
+  paperSpecs: {
+    paperSize?: string;
+    colorMode?: string;
+    mediaType?: string;
+    printSides?: string;
+    binding?: string;
+  } | null;
+
+  @Column({ name: 'three_d_specs', type: 'jsonb', nullable: true })
+  threeDSpecs: {
+    fileFormat?: string;
+    material?: string;
+    color?: string;
+    infillPercentage?: number;
+    layerHeight?: number;
+    supports?: boolean;
+    notes?: string;
+  } | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
