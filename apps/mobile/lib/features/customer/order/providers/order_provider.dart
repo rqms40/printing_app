@@ -219,9 +219,7 @@ class OrderFlowState {
       pageCount: map['pageCount'] as int? ?? 1,
       deliveryOption: map['deliveryOption'] as String? ?? 'pickup',
       deliveryAddress: deliveryAddress,
-      paymentMethod: map['paymentMethod'] != null
-          ? PaymentMethod.values.byName(map['paymentMethod'] as String)
-          : null,
+      paymentMethod: _parseEnum(PaymentMethod.values, map['paymentMethod'] as String?),
       totalPrice: (map['totalPrice'] as num?)?.toDouble() ?? 0,
       deliveryFee: (map['deliveryFee'] as num?)?.toDouble() ?? 0,
     );
