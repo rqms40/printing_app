@@ -7,7 +7,7 @@
 //
 // Otherwise just update the line below.
 
-const String kDefaultServerUrl = 'http://localhost:3000';
+const String kDefaultServerUrl = 'http://192.168.40.201:3000';
 
 /// Resolved server base URL (no trailing slash, no /api).
 /// Prefer --dart-define=SERVER_URL at build time for CI/production.
