@@ -108,11 +108,18 @@ class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
     super.dispose();
   }
 
-  void _selectCategory(BuildContext context, String category) {
-    ref.read(orderFlowProvider.notifier).setCategory(category);
-    ref.read(orderFlowProvider.notifier).goToStep(1);
+  void _onCardTap(BuildContext context, DailyGridItem card) {
+    final notifier = ref.read(orderFlowProvider.notifier);
+    notifier.reset();
+    notifier.setCategory(card.category);
+    if (card.category == 'paper' && card.paperSpecs != null) {
+      notifier.setPaperSpecsFromMap(card.paperSpecs!);
+    } else if (card.category == '3d' && card.threeDSpecs != null) {
+      notifier.setThreeDSpecsFromMap(card.threeDSpecs!);
+    }
+    notifier.goToStep(1);
     context.push(
-      category == 'paper'
+      card.category == 'paper'
           ? '/customer/order/paper-specs'
           : '/customer/order/3d-specs',
     );
@@ -195,7 +202,7 @@ class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
                 child: _DailyGridCard(
                   item: item,
                   colors: colors,
-                  onTap: () => _selectCategory(context, item.category),
+                  onTap: () => _onCardTap(context, item),
                 ),
               );
             },
