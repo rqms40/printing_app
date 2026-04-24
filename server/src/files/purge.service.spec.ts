@@ -20,7 +20,11 @@ describe('PurgeService', () => {
   });
 
   it('runPurgeSweep calls deleteExpired and logs summary', async () => {
-    mockFilesService.deleteExpired.mockResolvedValue({ found: 3, deleted: 2, skipped: 1 });
+    mockFilesService.deleteExpired.mockResolvedValue({
+      found: 3,
+      deleted: 2,
+      skipped: 1,
+    });
     await service.runPurgeSweep();
     expect(mockFilesService.deleteExpired).toHaveBeenCalledTimes(1);
   });

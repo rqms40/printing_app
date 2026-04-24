@@ -55,10 +55,12 @@ export function NotificationsProvider({
 
   // WS subscription
   useEffect(() => {
+    const audio = new Audio('/audio/notification_user.mp3');
     const unsub = subscribeToNotifications((notif) => {
       setNotifications((prev) => [notif, ...prev.slice(0, 49)]);
       setUnreadCount((n) => n + 1);
       refreshBadges();
+      audio.play().catch((e) => console.error('Audio playback failed', e));
     });
     return unsub;
   }, [refreshBadges]);

@@ -41,7 +41,7 @@ class StorageSettingsScreen extends ConsumerWidget {
                 loading: () => Center(
                   child: CircularProgressIndicator(color: colors.accent),
                 ),
-                error: (_, __) => Center(
+                error: (_, _) => Center(
                   child: TextButton.icon(
                     onPressed: () =>
                         ref.read(storageSettingsProvider.notifier).fetch(),
@@ -142,7 +142,7 @@ class StorageSettingsScreen extends ConsumerWidget {
                   const SizedBox(width: AppSpacing.md),
                   Switch(
                     value: isEnabled,
-                    activeColor: colors.accent,
+                    activeThumbColor: colors.accent,
                     onChanged: (value) =>
                         _onToggle(context, ref, value),
                   ),

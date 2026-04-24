@@ -26,6 +26,9 @@ export interface Order {
   id: string;
   order_id: string;
   user_id: string;
+  customer_id?: number;
+  customer_name?: string | null;
+  customer_email?: string | null;
   category: "paper" | "3d";
   file_url?: string;
   file_name?: string;

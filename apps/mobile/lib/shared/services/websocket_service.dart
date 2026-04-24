@@ -27,35 +27,53 @@ class WebSocketService {
 
   // Callbacks registered before the notifications socket is created
   final List<Function(Map<String, dynamic>)> _pendingNotifListeners = [];
+  
+  // Callbacks registered for order updates
+  final List<Function(dynamic)> _orderListeners = [];
 
   String get _baseUrl => kServerUrl;
 
   Future<void> connectOrders({
-    required Function(dynamic) onOrderUpdate,
     VoidCallback? onConnect,
   }) async {
+    if (_ordersSocket?.connected == true) return;
+    if (_ordersSocket != null) {
+      _ordersSocket!.connect();
+      return;
+    }
+
     final token = await TokenStorage.getToken();
     _ordersSocket = io.io(
       '$_baseUrl/ws/orders',
-      io.OptionBuilder().setTransports(['websocket']).setAuth({
-        'token': token ?? '',
-      }).build(),
+      io.OptionBuilder()
+          .setTransports(['websocket'])
+          .setAuth({'token': token ?? ''})
+          .disableAutoConnect()
+          .build(),
     );
     _ordersSocket!.on('orderUpdate', (data) {
-      try {
-        onOrderUpdate(_normalize(data));
-      } catch (e) {
-        debugPrint('WS orderUpdate handler error: $e');
+      final normalized = _normalize(data);
+      for (final cb in _orderListeners) {
+        try {
+          cb(normalized);
+        } catch (e) {
+          debugPrint('WS orderUpdate handler error: $e');
+        }
       }
     });
     _ordersSocket!.on('connect', (_) {
       debugPrint('WS Orders connected');
       onConnect?.call();
     });
-    _ordersSocket!.on(
-      'connect_error',
-      (e) => debugPrint('WS Orders error: $e'),
-    );
+    _ordersSocket!.on('connect_error', (e) => debugPrint('WS Orders error: $e'));
+    _ordersSocket!.connect();
+  }
+
+  /// Register a callback for incoming `orderUpdate` events.
+  void listenForOrderUpdates(Function(dynamic) callback) {
+    if (!_orderListeners.contains(callback)) {
+      _orderListeners.add(callback);
+    }
   }
 
   void subscribeToOrder(String orderId) {
@@ -166,8 +184,9 @@ class WebSocketService {
     _ordersSocket?.disconnect();
     _locationSocket?.disconnect();
     _notificationsSocket?.disconnect();
-    // Null out so the next connectNotifications() creates a fresh socket
+    // Null out so the next connection creates a fresh socket
     // with a new JWT — prevents stale-token room membership after logout.
     _notificationsSocket = null;
+    _ordersSocket = null;
   }
 }

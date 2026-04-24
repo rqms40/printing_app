@@ -3,6 +3,8 @@ import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 
+import 'package:printing_app/shared/services/websocket_service.dart';
+
 /// Monthly data point for charts.
 class MonthlyDataPoint {
   const MonthlyDataPoint({required this.month, required this.value});
@@ -19,6 +21,7 @@ class DashboardKpis {
     required this.readyForPickupCount,
     required this.monthlyRevenue,
     required this.deliveredCount,
+    this.avgTatMins = 0,
   });
 
   final int newOrdersCount;
@@ -26,6 +29,7 @@ class DashboardKpis {
   final int readyForPickupCount;
   final double monthlyRevenue;
   final int deliveredCount;
+  final int avgTatMins;
 }
 
 class DashboardKpisNotifier extends StateNotifier<DashboardKpis> {
@@ -36,8 +40,15 @@ class DashboardKpisNotifier extends StateNotifier<DashboardKpis> {
           readyForPickupCount: 0,
           monthlyRevenue: 0,
           deliveredCount: 0,
+          avgTatMins: 0,
         )) {
     _fetchKpis();
+    _listenToOrderUpdates();
+  }
+
+  void _listenToOrderUpdates() {
+    WebSocketService.instance.listenForOrderUpdates((_) => _fetchKpis());
+    WebSocketService.instance.connectOrders();
   }
 
   Future<void> _fetchKpis() async {
@@ -50,6 +61,7 @@ class DashboardKpisNotifier extends StateNotifier<DashboardKpis> {
         readyForPickupCount: (json['readyForPickupCount'] as num?)?.toInt() ?? 0,
         monthlyRevenue: (json['monthlyRevenue'] as num?)?.toDouble() ?? 0,
         deliveredCount: (json['deliveredCount'] as num?)?.toInt() ?? 0,
+        avgTatMins: (json['avgTatMins'] as num?)?.toInt() ?? 45, // Mock default
       );
     } catch (_) {
       // Offline fallback: compute from mock data
@@ -86,6 +98,7 @@ class DashboardKpisNotifier extends StateNotifier<DashboardKpis> {
         readyForPickupCount: readyForPickup,
         monthlyRevenue: revenue,
         deliveredCount: delivered,
+        avgTatMins: 45, // Fallback MockData TAT
       );
     }
   }
@@ -95,86 +108,8 @@ class DashboardKpisNotifier extends StateNotifier<DashboardKpis> {
 
 /// Provider exposing dashboard KPI data.
 final dashboardKpisProvider =
-    StateNotifierProvider<DashboardKpisNotifier, DashboardKpis>(
+    StateNotifierProvider.autoDispose<DashboardKpisNotifier, DashboardKpis>(
   (ref) => DashboardKpisNotifier(),
 );
 
-class SalesDataNotifier extends StateNotifier<List<MonthlyDataPoint>> {
-  SalesDataNotifier() : super(const []) {
-    _fetchSalesData();
-  }
 
-  Future<void> _fetchSalesData() async {
-    try {
-      final response = await ApiClient.instance.get('/admin/dashboard/sales');
-      final data = response.data as List<dynamic>;
-      state = data
-          .map((json) {
-            final map = json as Map<String, dynamic>;
-            return MonthlyDataPoint(
-              month: map['month'] as String? ?? '',
-              value: (map['value'] as num?)?.toDouble() ?? 0,
-            );
-          })
-          .toList();
-    } catch (_) {
-      // Offline fallback
-      state = const [
-        MonthlyDataPoint(month: 'Oct', value: 45200),
-        MonthlyDataPoint(month: 'Nov', value: 52800),
-        MonthlyDataPoint(month: 'Dec', value: 68500),
-        MonthlyDataPoint(month: 'Jan', value: 41300),
-        MonthlyDataPoint(month: 'Feb', value: 57900),
-        MonthlyDataPoint(month: 'Mar', value: 63400),
-      ];
-    }
-  }
-
-  Future<void> refreshSalesData() async => _fetchSalesData();
-}
-
-/// Provider exposing 6-month sales trend data.
-final salesDataProvider =
-    StateNotifierProvider<SalesDataNotifier, List<MonthlyDataPoint>>(
-  (ref) => SalesDataNotifier(),
-);
-
-class VolumeDataNotifier extends StateNotifier<List<MonthlyDataPoint>> {
-  VolumeDataNotifier() : super(const []) {
-    _fetchVolumeData();
-  }
-
-  Future<void> _fetchVolumeData() async {
-    try {
-      final response = await ApiClient.instance.get('/admin/dashboard/volume');
-      final data = response.data as List<dynamic>;
-      state = data
-          .map((json) {
-            final map = json as Map<String, dynamic>;
-            return MonthlyDataPoint(
-              month: map['month'] as String? ?? '',
-              value: (map['value'] as num?)?.toDouble() ?? 0,
-            );
-          })
-          .toList();
-    } catch (_) {
-      // Offline fallback
-      state = const [
-        MonthlyDataPoint(month: 'Oct', value: 38),
-        MonthlyDataPoint(month: 'Nov', value: 45),
-        MonthlyDataPoint(month: 'Dec', value: 62),
-        MonthlyDataPoint(month: 'Jan', value: 35),
-        MonthlyDataPoint(month: 'Feb', value: 48),
-        MonthlyDataPoint(month: 'Mar', value: 55),
-      ];
-    }
-  }
-
-  Future<void> refreshVolumeData() async => _fetchVolumeData();
-}
-
-/// Provider exposing 6-month order volume data.
-final volumeDataProvider =
-    StateNotifierProvider<VolumeDataNotifier, List<MonthlyDataPoint>>(
-  (ref) => VolumeDataNotifier(),
-);

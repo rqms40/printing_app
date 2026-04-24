@@ -458,6 +458,11 @@ export function normalizeOrder(input: unknown): Order & {
     status_history: normalizeStatusHistory(
       read(record, "status_history", "statusHistory"),
     ),
+    customer_id: read(record, "customer_id", "customerId") !== undefined
+      ? toNumberValue(record, 0, "customer_id", "customerId")
+      : undefined,
+    customer_name: toOptionalString(record, "customer_name", "customerName") ?? null,
+    customer_email: toOptionalString(record, "customer_email", "customerEmail") ?? null,
   };
 }
 

@@ -267,7 +267,10 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
   const mockGateway = { notifyOrderUpdate: jest.fn() };
   const mockFirebase = { sendToDevice: jest.fn() };
   const mockCredits = { subtractCredits: jest.fn() };
-  const mockNotifications = { create: jest.fn(), createForAllAdmins: jest.fn() };
+  const mockNotifications = {
+    create: jest.fn(),
+    createForAllAdmins: jest.fn(),
+  };
 
   const makeOrder = (overrides: Partial<Order> = {}): Order =>
     ({
@@ -277,7 +280,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       fileMetadataId: 5,
       orderStatus: OrderStatus.COMPLETED_PICKUP,
       ...overrides,
-    } as Order);
+    }) as Order;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -285,9 +288,18 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       providers: [
         OrdersService,
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
-        { provide: getRepositoryToken(PaperSpec), useValue: { create: jest.fn(), save: jest.fn() } },
-        { provide: getRepositoryToken(ThreeDSpec), useValue: { create: jest.fn(), save: jest.fn() } },
-        { provide: getRepositoryToken(DeliveryAssignment), useValue: { find: jest.fn().mockResolvedValue([]) } },
+        {
+          provide: getRepositoryToken(PaperSpec),
+          useValue: { create: jest.fn(), save: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(ThreeDSpec),
+          useValue: { create: jest.fn(), save: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(DeliveryAssignment),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
         { provide: OrdersGateway, useValue: mockGateway },
         { provide: FirebaseService, useValue: mockFirebase },
         { provide: UsersService, useValue: mockUsersService },
@@ -302,7 +314,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
   it('stamps expiresAt when completed_pickup and retention is set', async () => {
     const order = makeOrder();
     ordersRepo.findOneOrFail
-      .mockResolvedValueOnce(order)  // existing (before update)
+      .mockResolvedValueOnce(order) // existing (before update)
       .mockResolvedValueOnce(order); // after update
     ordersRepo.update.mockResolvedValue({});
     mockUsersService.findById.mockResolvedValue({ fileRetentionDays: 7 });

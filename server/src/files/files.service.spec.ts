@@ -240,8 +240,16 @@ describe('FilesService', () => {
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         getMany: jest.fn().mockResolvedValue([
-          { id: 1, objectKey: 'key/a.pdf', expiresAt: new Date(Date.now() - 1000) },
-          { id: 2, objectKey: 'key/b.pdf', expiresAt: new Date(Date.now() - 1000) },
+          {
+            id: 1,
+            objectKey: 'key/a.pdf',
+            expiresAt: new Date(Date.now() - 1000),
+          },
+          {
+            id: 2,
+            objectKey: 'key/b.pdf',
+            expiresAt: new Date(Date.now() - 1000),
+          },
         ]),
       };
       mockFileRepo.createQueryBuilder.mockReturnValue(fakeQb);
@@ -260,7 +268,11 @@ describe('FilesService', () => {
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         getMany: jest.fn().mockResolvedValue([
-          { id: 1, objectKey: 'key/a.pdf', expiresAt: new Date(Date.now() - 1000) },
+          {
+            id: 1,
+            objectKey: 'key/a.pdf',
+            expiresAt: new Date(Date.now() - 1000),
+          },
         ]),
       };
       mockFileRepo.createQueryBuilder.mockReturnValue(fakeQb);
@@ -276,9 +288,11 @@ describe('FilesService', () => {
       const fakeQb = {
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([
-          { id: 3, objectKey: null, expiresAt: new Date(Date.now() - 1000) },
-        ]),
+        getMany: jest
+          .fn()
+          .mockResolvedValue([
+            { id: 3, objectKey: null, expiresAt: new Date(Date.now() - 1000) },
+          ]),
       };
       mockFileRepo.createQueryBuilder.mockReturnValue(fakeQb);
       mockFileRepo.delete.mockResolvedValue({});

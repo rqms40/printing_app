@@ -273,13 +273,23 @@ describe('UsersService — storage settings', () => {
 
   describe('getStorageSettings', () => {
     it('returns fileRetentionDays when set', async () => {
-      repo.findOneOrFail.mockResolvedValue({ id: 1, fileRetentionDays: 7 } as User);
-      expect(await service.getStorageSettings(1)).toEqual({ fileRetentionDays: 7 });
+      repo.findOneOrFail.mockResolvedValue({
+        id: 1,
+        fileRetentionDays: 7,
+      } as User);
+      expect(await service.getStorageSettings(1)).toEqual({
+        fileRetentionDays: 7,
+      });
     });
 
     it('returns null when fileRetentionDays is null', async () => {
-      repo.findOneOrFail.mockResolvedValue({ id: 1, fileRetentionDays: null } as User);
-      expect(await service.getStorageSettings(1)).toEqual({ fileRetentionDays: null });
+      repo.findOneOrFail.mockResolvedValue({
+        id: 1,
+        fileRetentionDays: null,
+      } as User);
+      expect(await service.getStorageSettings(1)).toEqual({
+        fileRetentionDays: null,
+      });
     });
   });
 
@@ -297,7 +307,9 @@ describe('UsersService — storage settings', () => {
     });
 
     it('rejects an invalid retention value', async () => {
-      await expect(service.updateStorageSettings(1, 14)).rejects.toThrow(BadRequestException);
+      await expect(service.updateStorageSettings(1, 14)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 });

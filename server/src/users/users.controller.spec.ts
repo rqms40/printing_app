@@ -30,8 +30,12 @@ describe('UsersController — storage settings', () => {
   });
 
   it('PATCH /users/me/storage-settings updates settings', async () => {
-    mockService.updateStorageSettings.mockResolvedValue({ fileRetentionDays: 30 });
-    const result = await controller.updateStorageSettings(mockReq, { fileRetentionDays: 30 });
+    mockService.updateStorageSettings.mockResolvedValue({
+      fileRetentionDays: 30,
+    });
+    const result = await controller.updateStorageSettings(mockReq, {
+      fileRetentionDays: 30,
+    });
     expect(result).toEqual({ fileRetentionDays: 30 });
     expect(mockService.updateStorageSettings).toHaveBeenCalledWith(42, 30);
   });

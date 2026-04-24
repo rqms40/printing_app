@@ -28,7 +28,12 @@ export class FileMetadata {
   @Column({ name: 'uploaded_by', nullable: true })
   uploadedBy: number;
 
-  @Column({ name: 'expires_at', type: 'timestamp', nullable: true, default: null })
+  @Column({
+    name: 'expires_at',
+    type: 'timestamp',
+    nullable: true,
+    default: null,
+  })
   expiresAt: Date | null;
 
   @CreateDateColumn({ name: 'created_at' })

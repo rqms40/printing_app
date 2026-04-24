@@ -26,7 +26,8 @@ void main() {
       expect(find.text('Dashboard'), findsOneWidget);
       expect(find.text('New Orders'), findsOneWidget);
       expect(find.text('In Production'), findsOneWidget);
-      expect(find.text('Monthly Revenue'), findsOneWidget);
+      expect(find.text('Ready'), findsOneWidget);
+      expect(find.text('Delivered'), findsOneWidget);
     });
 
     testWidgets('renders chart sections', (tester) async {
@@ -39,15 +40,7 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(milliseconds: 500));
 
-      // Scroll down to find charts
-      await tester.dragUntilVisible(
-        find.text('Sales Trend'),
-        find.byType(ListView).first,
-        const Offset(0, -300),
-      );
-      await tester.pump(const Duration(milliseconds: 500));
-
-      expect(find.text('Sales Trend'), findsOneWidget);
+      expect(find.text('Average Turnaround Time'), findsOneWidget);
     });
   });
 }

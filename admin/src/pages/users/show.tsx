@@ -2,13 +2,10 @@ import { ListButton, Show } from "@refinedev/antd";
 import {
   Alert,
   Card,
-  Col,
   Descriptions,
   Empty,
-  Row,
   Space,
   Spin,
-  Statistic,
   Table,
   Tag,
   Typography,
@@ -61,30 +58,6 @@ function UserHero({ detail }: { detail: AdminUserDetailPayload["user"] }) {
   );
 }
 
-function MetricsCards({ detail }: { detail: AdminUserDetailPayload["metrics"] }) {
-  return (
-    <Row gutter={[16, 16]}>
-      <Col xs={24} md={8}>
-        <Card>
-          <Statistic title="Total Orders" value={detail.total_orders} />
-        </Card>
-      </Col>
-      <Col xs={24} md={8}>
-        <Card>
-          <Statistic title="Total Spend" value={formatCurrency(detail.total_spend)} />
-        </Card>
-      </Col>
-      <Col xs={24} md={8}>
-        <Card>
-          <Statistic
-            title="Average Order Value"
-            value={formatCurrency(detail.average_order_value)}
-          />
-        </Card>
-      </Col>
-    </Row>
-  );
-}
 
 function ProfileSummary({ detail }: { detail: AdminUserDetailPayload["user"] }) {
   return (
@@ -308,7 +281,6 @@ export function UserShow() {
     >
       <Space direction="vertical" size="large" style={{ width: "100%" }}>
         <UserHero detail={view.detail.user} />
-        <MetricsCards detail={view.detail.metrics} />
         <ProfileSummary detail={view.detail.user} />
         <PrintPreferences preferences={view.detail.user.printing_preferences} />
         <RecentOrders orders={view.detail.recent_orders} />

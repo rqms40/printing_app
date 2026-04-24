@@ -34,7 +34,8 @@ vi.mock("recharts", () => ({
   Tooltip: () => null,
   Legend: () => null,
   Area: () => null,
-  Bar: () => null,
+  Bar: ({ children }: { children: ReactNode }) => <g>{children}</g>,
+  Cell: () => null,
 }));
 
 describe("UsersTab", () => {

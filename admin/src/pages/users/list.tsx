@@ -168,6 +168,18 @@ export function UserList() {
             )}
           />
           <Table.Column
+            dataIndex="id"
+            title="User ID"
+            width={90}
+            render={(v: number) => (
+              <Tooltip title={String(v)}>
+                <span style={{ fontFamily: "monospace", fontSize: 11, color: "#888" }}>
+                  #{v}
+                </span>
+              </Tooltip>
+            )}
+          />
+          <Table.Column
             dataIndex="phone_number"
             title="Phone"
             width={150}

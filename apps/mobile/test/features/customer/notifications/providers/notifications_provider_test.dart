@@ -8,6 +8,7 @@ void main() {
 
   setUpAll(() {
     TestSetup.stubSecureStorage();
+    TestSetup.stubAudioPlayers();
     TestSetup.initApiClient();
   });
 

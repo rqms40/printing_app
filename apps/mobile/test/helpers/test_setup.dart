@@ -10,6 +10,18 @@ class TestSetup {
     ApiClient.instance.init(baseUrl: 'http://mock-test/api');
   }
 
+  /// Stubs out audioplayers method channels so AudioPlayer construction
+  /// doesn't throw MissingPluginException in unit tests.
+  static void stubAudioPlayers() {
+    for (final name in const [
+      'xyz.luan/audioplayers.global',
+      'xyz.luan/audioplayers',
+    ]) {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(MethodChannel(name), (_) async => null);
+    }
+  }
+
   /// Stubs out flutter_secure_storage method channel so TokenStorage
   /// calls don't crash in unit tests.
   static void stubSecureStorage() {

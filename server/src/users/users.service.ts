@@ -1,4 +1,8 @@
-import { Injectable, ConflictException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User, UserRole } from './entities/user.entity';
@@ -100,7 +104,9 @@ export class UsersService {
     fileRetentionDays: number | null,
   ): Promise<{ fileRetentionDays: number | null }> {
     if (![null, 1, 7, 30].includes(fileRetentionDays)) {
-      throw new BadRequestException('fileRetentionDays must be null, 1, 7, or 30');
+      throw new BadRequestException(
+        'fileRetentionDays must be null, 1, 7, or 30',
+      );
     }
     await this.usersRepo.update(userId, { fileRetentionDays });
     return { fileRetentionDays };

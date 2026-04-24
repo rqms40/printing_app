@@ -80,7 +80,10 @@ export class FilesService {
   ): Promise<string> {
     const file = await this.fileRepo.findOne({ where: { id: fileId } });
     if (!file) throw new NotFoundException('File not found');
-    if (!isAdmin && (file.uploadedBy == null || file.uploadedBy !== requestingUserId)) {
+    if (
+      !isAdmin &&
+      (file.uploadedBy == null || file.uploadedBy !== requestingUserId)
+    ) {
       throw new ForbiddenException();
     }
     if (!file.objectKey) throw new NotFoundException('File has no storage key');
@@ -88,7 +91,9 @@ export class FilesService {
       return await this.storageService.getPresignedUrl(file.objectKey, 3600);
     } catch (err) {
       this.logger.error('Failed to generate presigned URL', err);
-      throw new InternalServerErrorException('Could not generate download link');
+      throw new InternalServerErrorException(
+        'Could not generate download link',
+      );
     }
   }
 
@@ -103,13 +108,20 @@ export class FilesService {
     });
   }
 
-  async stampExpiry(fileMetadataId: number, retentionDays: number): Promise<void> {
+  async stampExpiry(
+    fileMetadataId: number,
+    retentionDays: number,
+  ): Promise<void> {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + retentionDays);
     await this.fileRepo.update(fileMetadataId, { expiresAt });
   }
 
-  async deleteExpired(): Promise<{ found: number; deleted: number; skipped: number }> {
+  async deleteExpired(): Promise<{
+    found: number;
+    deleted: number;
+    skipped: number;
+  }> {
     const now = new Date();
     const expired = await this.fileRepo
       .createQueryBuilder('fm')
@@ -125,7 +137,10 @@ export class FilesService {
         try {
           await this.storageService.delete(file.objectKey);
         } catch (err) {
-          this.logger.error(`Failed to delete MinIO object ${file.objectKey}`, err);
+          this.logger.error(
+            `Failed to delete MinIO object ${file.objectKey}`,
+            err,
+          );
           skipped++;
           continue;
         }
