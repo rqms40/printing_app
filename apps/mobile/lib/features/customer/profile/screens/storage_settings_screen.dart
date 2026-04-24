@@ -289,6 +289,17 @@ class _CustomDurationInputState extends State<_CustomDurationInput> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(_CustomDurationInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) {
+      final isPreset = _presets.contains(widget.value);
+      _ctrl.text = isPreset ? '' : '${widget.value}';
+      _error = null;
+      _unit = _Unit.days;
+    }
+  }
+
   void _submit() {
     final raw = int.tryParse(_ctrl.text.trim());
     if (raw == null || raw < 1) {

@@ -160,5 +160,25 @@ void main() {
       expect(find.text('Maximum is 999 days (142 weeks)'), findsOneWidget);
       expect(notifier.lastUpdatedDays, -1);
     });
+
+    testWidgets('text field clears when a preset chip is tapped', (tester) async {
+      final notifier = _FakeStorageNotifier(
+        const StorageSettings(fileRetentionDays: 45),
+      );
+      await tester.pumpWidget(_wrap(notifier));
+      await tester.pump();
+
+      // Verify custom value is shown initially
+      final tf = tester.widget<TextField>(find.byType(TextField));
+      expect(tf.controller?.text, '45');
+
+      // Tap the 7-day chip — notifier updates to 7
+      await tester.tap(find.text('7 days'));
+      await tester.pump();
+
+      // Text field must now be empty (7 is a preset)
+      final tfAfter = tester.widget<TextField>(find.byType(TextField));
+      expect(tfAfter.controller?.text, '');
+    });
   });
 }
