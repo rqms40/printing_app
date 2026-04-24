@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
   Typography, Button, Drawer, Form, Input, InputNumber,
-  Switch, Space, Tag, Spin, App, Popconfirm, Select, Divider, Tooltip,
+  Switch, Space, Tag, Spin, App, Popconfirm, Select, Divider, Tooltip, Upload,
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined,
   ArrowUpOutlined, ArrowDownOutlined, FileTextOutlined,
-  AppstoreOutlined, EyeOutlined, EyeInvisibleOutlined,
+  AppstoreOutlined, EyeOutlined, EyeInvisibleOutlined, UploadOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import { apiClient } from '@/providers/api-client';
@@ -22,6 +22,8 @@ interface DailyGridCard {
   sortOrder: number;
   isActive: boolean;
   createdAt: string;
+  paperSpecs: Record<string, unknown> | null;
+  threeDSpecs: Record<string, unknown> | null;
 }
 
 const S = {
@@ -136,7 +138,9 @@ export function DailyGridList() {
   const [editTarget, setEditTarget] = useState<DailyGridCard | null>(null);
   const [saving, setSaving] = useState(false);
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [form] = Form.useForm();
+  const watchedCategory = Form.useWatch('category', form);
 
   const fetchCards = async () => {
     try {
@@ -169,6 +173,8 @@ export function DailyGridList() {
       category: card.category,
       sortOrder: card.sortOrder,
       isActive: card.isActive,
+      paperSpecs: card.paperSpecs ?? undefined,
+      threeDSpecs: card.threeDSpecs ?? undefined,
     });
     setDrawerOpen(true);
   };
@@ -184,6 +190,12 @@ export function DailyGridList() {
         category: values.category,
         sortOrder: values.sortOrder ?? 0,
         isActive: values.isActive ?? true,
+        paperSpecs: values.paperSpecs && Object.keys(values.paperSpecs).length > 0
+          ? values.paperSpecs
+          : null,
+        threeDSpecs: values.threeDSpecs && Object.keys(values.threeDSpecs).length > 0
+          ? values.threeDSpecs
+          : null,
       };
       if (editTarget) {
         await apiClient.patch(`/daily-grid/admin/${editTarget.id}`, payload);
@@ -439,15 +451,46 @@ export function DailyGridList() {
             <Input placeholder="₱15 / page" maxLength={40} showCount />
           </Form.Item>
 
+          {/* Image Upload */}
           <Form.Item
-            label={<Text style={{ color: '#A0A0A0', fontSize: 12 }}>Image URL</Text>}
+            label={<Text style={{ color: '#A0A0A0', fontSize: 12 }}>Image</Text>}
             name="imageUrl"
-            help={<Text style={{ color: '#444', fontSize: 11 }}>Paste any public image URL (e.g. Unsplash)</Text>}
           >
             <Input
-              placeholder="https://images.unsplash.com/..."
+              placeholder="Image URL (paste or upload below)"
               onChange={(e) => setImagePreviewUrl(e.target.value)}
             />
+          </Form.Item>
+          <Form.Item style={{ marginTop: -16 }}>
+            <Upload
+              accept="image/jpeg,image/png,image/webp"
+              showUploadList={false}
+              beforeUpload={(file) => {
+                const formData = new FormData();
+                formData.append('file', file);
+                setUploadingImage(true);
+                apiClient
+                  .post<{ url: string }>('/daily-grid/admin/upload-image', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                  })
+                  .then((res) => {
+                    form.setFieldValue('imageUrl', res.data.url);
+                    setImagePreviewUrl(res.data.url);
+                    void message.success('Image uploaded');
+                  })
+                  .catch(() => void message.error('Image upload failed'))
+                  .finally(() => setUploadingImage(false));
+                return false; // prevent default upload
+              }}
+            >
+              <Button
+                icon={<UploadOutlined />}
+                loading={uploadingImage}
+                style={{ background: '#1A1A1A', borderColor: '#2E2E2E', color: '#A0A0A0' }}
+              >
+                Upload Image
+              </Button>
+            </Upload>
           </Form.Item>
 
           {/* Live image preview */}
@@ -464,6 +507,8 @@ export function DailyGridList() {
                   sortOrder: 0,
                   isActive: true,
                   createdAt: '',
+                  paperSpecs: null,
+                  threeDSpecs: null,
                 }}
               />
             </div>
@@ -497,6 +542,104 @@ export function DailyGridList() {
               ]}
             />
           </Form.Item>
+
+          {/* Spec section — conditional on category */}
+          {watchedCategory === 'paper' && (
+            <div>
+              <Divider style={{ borderColor: '#2A2A2A', marginBottom: 16 }}>
+                <Text style={{ color: '#555', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                  Paper Specs
+                </Text>
+              </Divider>
+              <Text style={{ color: '#555', fontSize: 11, display: 'block', marginBottom: 12 }}>
+                Optional — leave blank to use customer defaults
+              </Text>
+              <Form.Item label={<Text style={{ color: '#A0A0A0', fontSize: 12 }}>Paper Size</Text>} name={['paperSpecs', 'paperSize']}>
+                <Select allowClear placeholder="Default" options={[
+                  { value: 'a4', label: 'A4' },
+                  { value: 'a3', label: 'A3' },
+                  { value: 'a5', label: 'A5' },
+                  { value: 'a2', label: 'A2' },
+                  { value: 'a1', label: 'A1' },
+                  { value: 'twentyByThirty', label: '20×30' },
+                  { value: 'custom', label: 'Custom' },
+                ]} />
+              </Form.Item>
+              <Form.Item label={<Text style={{ color: '#A0A0A0', fontSize: 12 }}>Color Mode</Text>} name={['paperSpecs', 'colorMode']}>
+                <Select allowClear placeholder="Default" options={[
+                  { value: 'blackAndWhite', label: 'B&W' },
+                  { value: 'fullColor', label: 'Full Color' },
+                ]} />
+              </Form.Item>
+              <Form.Item label={<Text style={{ color: '#A0A0A0', fontSize: 12 }}>Media Type</Text>} name={['paperSpecs', 'mediaType']}>
+                <Select allowClear placeholder="Default" options={[
+                  { value: 'glossy', label: 'Glossy' },
+                  { value: 'matte', label: 'Matte' },
+                ]} />
+              </Form.Item>
+              <Form.Item label={<Text style={{ color: '#A0A0A0', fontSize: 12 }}>Print Sides</Text>} name={['paperSpecs', 'printSides']}>
+                <Select allowClear placeholder="Default" options={[
+                  { value: 'frontOnly', label: 'Front Only' },
+                  { value: 'backToBack', label: 'Back to Back' },
+                ]} />
+              </Form.Item>
+              <Form.Item label={<Text style={{ color: '#A0A0A0', fontSize: 12 }}>Binding</Text>} name={['paperSpecs', 'binding']}>
+                <Select allowClear placeholder="Default" options={[
+                  { value: 'none', label: 'None' },
+                  { value: 'spiral', label: 'Spiral' },
+                  { value: 'staple', label: 'Staple' },
+                  { value: 'premium', label: 'Premium' },
+                ]} />
+              </Form.Item>
+            </div>
+          )}
+
+          {watchedCategory === '3d' && (
+            <div>
+              <Divider style={{ borderColor: '#2A2A2A', marginBottom: 16 }}>
+                <Text style={{ color: '#555', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                  3D Print Specs
+                </Text>
+              </Divider>
+              <Text style={{ color: '#555', fontSize: 11, display: 'block', marginBottom: 12 }}>
+                Optional — leave blank to use customer defaults
+              </Text>
+              <Form.Item label={<Text style={{ color: '#A0A0A0', fontSize: 12 }}>File Format</Text>} name={['threeDSpecs', 'fileFormat']}>
+                <Select allowClear placeholder="Default" options={[
+                  { value: 'stl', label: 'STL' },
+                  { value: 'obj', label: 'OBJ' },
+                  { value: 'threeMf', label: '3MF' },
+                ]} />
+              </Form.Item>
+              <Form.Item label={<Text style={{ color: '#A0A0A0', fontSize: 12 }}>Material</Text>} name={['threeDSpecs', 'material']}>
+                <Select allowClear placeholder="Default" options={[
+                  { value: 'pla', label: 'PLA' },
+                  { value: 'abs', label: 'ABS' },
+                  { value: 'petg', label: 'PETG' },
+                ]} />
+              </Form.Item>
+              <Form.Item label={<Text style={{ color: '#A0A0A0', fontSize: 12 }}>Color</Text>} name={['threeDSpecs', 'color']}>
+                <Input placeholder="e.g. White" />
+              </Form.Item>
+              <Form.Item label={<Text style={{ color: '#A0A0A0', fontSize: 12 }}>Infill %</Text>} name={['threeDSpecs', 'infillPercentage']}>
+                <InputNumber min={0} max={100} placeholder="e.g. 20" style={{ width: '100%' }} />
+              </Form.Item>
+              <Form.Item label={<Text style={{ color: '#A0A0A0', fontSize: 12 }}>Layer Height</Text>} name={['threeDSpecs', 'layerHeight']}>
+                <Select allowClear placeholder="Default" options={[
+                  { value: 0.10, label: '0.10 mm' },
+                  { value: 0.15, label: '0.15 mm' },
+                  { value: 0.20, label: '0.20 mm' },
+                  { value: 0.30, label: '0.30 mm' },
+                ]} />
+              </Form.Item>
+              <Form.Item label={<Text style={{ color: '#A0A0A0', fontSize: 12 }}>Supports</Text>} name={['threeDSpecs', 'supports']} valuePropName="checked">
+                <Switch />
+              </Form.Item>
+              <Form.Item label={<Text style={{ color: '#A0A0A0', fontSize: 12 }}>Notes</Text>} name={['threeDSpecs', 'notes']}>
+                <Input.TextArea rows={3} placeholder="Any additional notes..." />
+              </Form.Item>
+            </div>
+          )}
 
           <Form.Item
             label={<Text style={{ color: '#A0A0A0', fontSize: 12 }}>Sort Order</Text>}
