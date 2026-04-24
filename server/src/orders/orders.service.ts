@@ -172,15 +172,15 @@ export class OrdersService {
   }
 
   async updateStatus(id: number, status: string): Promise<Order> {
+    const orderStatus = status as OrderStatus;
     const existing = await this.ordersRepo.findOneOrFail({ where: { id } });
 
     await this.ordersRepo.update(id, {
-      orderStatus: status as OrderStatus,
+      orderStatus,
     });
     const order = await this.ordersRepo.findOneOrFail({ where: { id } });
 
     // Stamp file expiry when order reaches either terminal completion status
-    const orderStatus = status as OrderStatus;
     if (
       (orderStatus === OrderStatus.COMPLETED_PICKUP ||
         orderStatus === OrderStatus.DELIVERED) &&
@@ -276,7 +276,6 @@ export class OrdersService {
     }
 
     // Notify admins of cancellation / decline
-    const orderStatus = status as OrderStatus;
     if (
       orderStatus === OrderStatus.CANCELLED ||
       orderStatus === OrderStatus.FILE_DECLINED
