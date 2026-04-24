@@ -306,10 +306,10 @@ describe('UsersService — storage settings', () => {
       expect(repo.update).toHaveBeenCalledWith(1, { fileRetentionDays: null });
     });
 
-    it('rejects an invalid retention value', async () => {
-      await expect(service.updateStorageSettings(1, 14)).rejects.toThrow(
-        BadRequestException,
-      );
+    it('accepts a custom retention value', async () => {
+      repo.update.mockResolvedValue({});
+      await service.updateStorageSettings(1, 14);
+      expect(repo.update).toHaveBeenCalledWith(1, { fileRetentionDays: 14 });
     });
   });
 });
