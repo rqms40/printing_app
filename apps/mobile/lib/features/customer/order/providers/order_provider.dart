@@ -176,11 +176,11 @@ class OrderFlowState {
       threeDSpecs = ThreeDSpecs(
         fileFormat: _parseEnum(FileFormat3D.values, td['fileFormat'] as String?) ?? FileFormat3D.stl,
         material: _parseEnum(Material3D.values, td['material'] as String?) ?? Material3D.pla,
-        color: td['color'] as String? ?? '',
+        color: td['color']?.toString() ?? '',
         infillPercentage: (td['infillPercentage'] as num?)?.toInt() ?? 20,
         layerHeight: (td['layerHeight'] as num?)?.toDouble() ?? 0.2,
         supports: td['supports'] as bool? ?? false,
-        notes: td['notes'] as String?,
+        notes: td['notes']?.toString(),
       );
     }
 
