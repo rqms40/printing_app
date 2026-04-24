@@ -111,6 +111,7 @@ class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
   void _onCardTap(BuildContext context, DailyGridItem card) {
     final notifier = ref.read(orderFlowProvider.notifier);
     notifier.reset();
+    // setCategory must come before spec setters — it clears specs internally.
     notifier.setCategory(card.category);
     if (card.category == 'paper' && card.paperSpecs != null) {
       notifier.setPaperSpecsFromMap(card.paperSpecs!);
