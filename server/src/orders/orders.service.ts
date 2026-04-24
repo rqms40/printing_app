@@ -180,9 +180,10 @@ export class OrdersService {
     const order = await this.ordersRepo.findOneOrFail({ where: { id } });
 
     // Stamp file expiry when order reaches either terminal completion status
+    const orderStatus = status as OrderStatus;
     if (
-      (status === OrderStatus.COMPLETED_PICKUP ||
-        status === OrderStatus.DELIVERED) &&
+      (orderStatus === OrderStatus.COMPLETED_PICKUP ||
+        orderStatus === OrderStatus.DELIVERED) &&
       order.fileMetadataId != null
     ) {
       const owner = await this.usersService.findById(order.userId);
