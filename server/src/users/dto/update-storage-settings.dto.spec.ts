@@ -44,4 +44,12 @@ describe('UpdateStorageSettingsDto', () => {
   it('rejects 1.5 (non-integer)', async () => {
     expect((await check(1.5)).length).toBeGreaterThan(0);
   });
+
+  it('accepts 999 (max allowed)', async () => {
+    expect(await check(999)).toHaveLength(0);
+  });
+
+  it('rejects 1000 (exceeds max)', async () => {
+    expect((await check(1000)).length).toBeGreaterThan(0);
+  });
 });
