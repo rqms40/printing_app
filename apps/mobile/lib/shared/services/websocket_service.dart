@@ -262,14 +262,18 @@ class WebSocketService {
       _dispatchChatMessage(_normalize(data));
     });
     _chatSocket!.on('bot-typing', (data) {
-      final d = _normalize(data) as Map<String, dynamic>;
-      final convId = d['conversationId'] as int;
-      for (final cb in List.of(_botTypingListeners)) {
-        try {
-          cb(convId);
-        } catch (e) {
-          debugPrint('WS botTyping error: $e');
+      try {
+        final d = _normalize(data) as Map<String, dynamic>;
+        final convId = d['conversationId'] as int;
+        for (final cb in List.of(_botTypingListeners)) {
+          try {
+            cb(convId);
+          } catch (e) {
+            debugPrint('WS botTyping cb error: $e');
+          }
         }
+      } catch (e) {
+        debugPrint('WS bot-typing parse error: $e');
       }
     });
     _chatSocket!.on('connect', (_) => debugPrint('WS Chat connected'));
@@ -327,10 +331,10 @@ class WebSocketService {
     }
   }
 
-  void listenForBotTyping(Function(int conversationId) callback) {
-    if (!_botTypingListeners.contains(callback)) {
-      _botTypingListeners.add(callback);
-    }
+  /// Returns a removal handle — call it in dispose() to unregister the callback.
+  VoidCallback listenForBotTyping(Function(int conversationId) callback) {
+    _botTypingListeners.add(callback);
+    return () => _botTypingListeners.remove(callback);
   }
 
   void disconnectChat() {
