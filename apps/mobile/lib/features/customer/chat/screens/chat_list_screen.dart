@@ -102,7 +102,9 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
     return Material(
       color: colors.surface,
       child: InkWell(
-        onTap: () => context.push('/customer/chat/${conv.id}'),
+        onTap: () => context.push(
+          '/customer/chat/${conv.id}?type=${conv.type.name}',
+        ),
         splashColor: colors.accent.withValues(alpha: 0.06),
         child: Padding(
           padding: const EdgeInsets.symmetric(

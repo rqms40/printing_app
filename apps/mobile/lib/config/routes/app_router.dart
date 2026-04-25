@@ -47,6 +47,10 @@ import 'package:printing_app/features/customer/profile/screens/top_up_screen.dar
 import 'package:printing_app/features/customer/profile/screens/tam_survey_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/storage_settings_screen.dart';
 import 'package:printing_app/features/customer/uploads/screens/my_uploads_screen.dart';
+import 'package:printing_app/features/customer/chat/models/conversation.dart';
+import 'package:printing_app/features/customer/chat/screens/chat_list_screen.dart';
+import 'package:printing_app/features/customer/chat/screens/chat_select_screen.dart';
+import 'package:printing_app/features/customer/chat/screens/conversation_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Driver screens
@@ -413,6 +417,38 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/customer/uploads',
         pageBuilder: (_, state) =>
             slideTransition(const MyUploadsScreen(), state),
+      ),
+      GoRoute(
+        path: '/customer/chat',
+        pageBuilder: (_, state) =>
+            slideTransition(const ChatListScreen(), state),
+      ),
+      GoRoute(
+        path: '/customer/chat/new',
+        pageBuilder: (_, state) {
+          final orderIdStr = state.uri.queryParameters['orderId'];
+          final orderId =
+              orderIdStr != null ? int.tryParse(orderIdStr) : null;
+          return slideUpTransition(
+            ChatSelectScreen(orderId: orderId),
+            state,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/customer/chat/:id',
+        pageBuilder: (_, state) {
+          final id = int.parse(state.pathParameters['id']!);
+          final typeStr = state.uri.queryParameters['type'] ?? 'admin';
+          final type = ConversationType.values.firstWhere(
+            (t) => t.name == typeStr,
+            orElse: () => ConversationType.admin,
+          );
+          return slideTransition(
+            ConversationScreen(conversationId: id, conversationType: type),
+            state,
+          );
+        },
       ),
 
       // -----------------------------------------------------------------------

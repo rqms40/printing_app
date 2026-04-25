@@ -18,6 +18,7 @@ import 'package:printing_app/features/customer/home/widgets/map_tracking_tile.da
 import 'package:printing_app/features/customer/home/widgets/recent_orders_section.dart';
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
 import 'package:printing_app/shared/services/draft_storage_service.dart';
+import 'package:printing_app/features/customer/chat/widgets/floating_chat_button.dart';
 
 /// Customer home screen — editorial redesign.
 class HomeScreen extends ConsumerStatefulWidget {
@@ -92,10 +93,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final credits =
         (double.tryParse(authState.user?.credits ?? '0') ?? 0.0).toInt();
 
-    return ColoredBox(
-      color: colors.background,
-      child: SafeArea(
-        child: RefreshIndicator(
+    return Stack(
+      children: [
+        ColoredBox(
+          color: colors.background,
+          child: SafeArea(
+            child: RefreshIndicator(
           color: colors.brand,
           backgroundColor: colors.surface,
           onRefresh: ref.read(ordersProvider.notifier).refreshOrders,
@@ -304,6 +307,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
       ),
+        ),
+        Positioned(
+          right: AppSpacing.xl,
+          bottom: 90,
+          child: FloatingChatButton(unreadCount: unreadCount),
+        ),
+      ],
     );
   }
 }

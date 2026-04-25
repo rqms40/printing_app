@@ -34,7 +34,9 @@ class _ChatSelectScreenState extends ConsumerState<ChatSelectScreen> {
     if (!mounted) return;
     setState(() => _isCreating = false);
     if (conv != null) {
-      context.pushReplacement('/customer/chat/${conv.id}');
+      context.pushReplacement(
+        '/customer/chat/${conv.id}?type=${type.name}',
+      );
     }
   }
 
