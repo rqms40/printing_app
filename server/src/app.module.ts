@@ -19,6 +19,7 @@ import { ProductsModule } from './products/products.module';
 import { CreditsModule } from './credits/credits.module';
 import { TamSurveysModule } from './tam-surveys/tam-surveys.module';
 import { DailyGridModule } from './daily-grid/daily-grid.module';
+import { ChatModule } from './chat/chat.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -73,6 +74,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     CreditsModule,
     TamSurveysModule,
     DailyGridModule,
+    ChatModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
