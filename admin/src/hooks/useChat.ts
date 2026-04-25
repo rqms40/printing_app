@@ -52,9 +52,18 @@ export function useConversationThread(conversationId: number | null) {
   useEffect(() => {
     if (!conversationId) return;
 
+    setMessages([]);
+    setIsBotTyping(false);
+
+    const controller = new AbortController();
     apiClient
-      .get<ChatMessage[]>(`/chat/conversations/${conversationId}/messages`)
-      .then((res) => setMessages(res.data));
+      .get<ChatMessage[]>(`/chat/conversations/${conversationId}/messages`, {
+        signal: controller.signal,
+      })
+      .then((res) => setMessages(res.data))
+      .catch(() => {
+        // Silently ignore AbortError on cleanup; network errors leave the list empty.
+      });
 
     joinConversation(conversationId);
     const unsubMsg = subscribeToMessages(conversationId, (msg) => {
@@ -66,6 +75,7 @@ export function useConversationThread(conversationId: number | null) {
     });
 
     return () => {
+      controller.abort();
       leaveConversation(conversationId);
       unsubMsg();
       unsubTyping();
