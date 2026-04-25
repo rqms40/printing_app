@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Order } from './entities/order.entity';
+import { BatchOrder } from './entities/batch-order.entity';
 import { PaperSpec } from './entities/paper-specs.entity';
 import { ThreeDSpec } from './entities/three-d-specs.entity';
 import { OrderStatusHistory } from './entities/order-status-history.entity';
@@ -19,6 +20,7 @@ import { DeliveryAssignment } from '../drivers/entities/delivery-assignment.enti
   imports: [
     TypeOrmModule.forFeature([
       Order,
+      BatchOrder,
       PaperSpec,
       ThreeDSpec,
       OrderStatusHistory,

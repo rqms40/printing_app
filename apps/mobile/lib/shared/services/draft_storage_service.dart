@@ -6,6 +6,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 class DraftStorageService {
   static const _boxName = 'draft_orders';
   static const _draftKey = 'current_draft';
+  static const _cartKey = 'current_cart';
 
   /// Must be called once before [runApp].
   static Future<void> init() async {
@@ -34,4 +35,24 @@ class DraftStorageService {
 
   /// Whether a draft is currently persisted.
   static bool get hasDraft => _box.containsKey(_draftKey);
+
+  /// Saves the serialised cart state separately from the order-flow draft.
+  static Future<void> saveCart(Map<String, dynamic> data) async {
+    await _box.put(_cartKey, data);
+  }
+
+  /// Loads the last saved cart, or `null` if none exists.
+  static Map<String, dynamic>? loadCart() {
+    final data = _box.get(_cartKey);
+    if (data == null) return null;
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  /// Removes the persisted cart without touching the current order draft.
+  static Future<void> clearCart() async {
+    await _box.delete(_cartKey);
+  }
+
+  /// Whether cart state is currently persisted.
+  static bool get hasCart => _box.containsKey(_cartKey);
 }

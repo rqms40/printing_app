@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing_app/features/customer/cart/models/cart_item.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/models/paper_specs.dart';
@@ -39,8 +40,9 @@ OrderStatus _parseOrderStatus(String value) {
 }
 
 PaymentMethod _parsePaymentMethod(String value) {
+  final normalized = value.replaceAll(RegExp(r'[_-]'), '').toLowerCase();
   return PaymentMethod.values.firstWhere(
-    (e) => e.name == value,
+    (e) => e.name.toLowerCase() == normalized,
     orElse: () => PaymentMethod.cod,
   );
 }
@@ -313,6 +315,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
           'deliveryFee': order.deliveryFee,
           'paymentMethod': order.paymentMethod.name,
           'deliveryOption': order.deliveryOption,
+          'deliveryAddressId': _deliveryAddressIdValue(order.deliveryAddressId),
           'fileName': order.fileName,
           'fileUrl': order.fileUrl,
           'fileMetadataId': order.fileMetadataId,
@@ -350,6 +353,42 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     }
   }
 
+  /// Creates a shared-checkout batch and prepends the returned child orders.
+  Future<List<Order>> addBatchOrder({
+    required List<CartItem> items,
+    required String deliveryOption,
+    String? deliveryAddressId,
+    required double deliveryFee,
+    required PaymentMethod paymentMethod,
+  }) async {
+    final addressId = _deliveryAddressIdValue(deliveryAddressId);
+    final response = await ApiClient.instance.post(
+      '/orders/batch',
+      data: {
+        'items': items.map(_cartItemPayload).toList(),
+        'deliveryFee': deliveryFee,
+        'paymentMethod': paymentMethod.name,
+        'deliveryOption': deliveryOption,
+        'deliveryAddressId': addressId,
+      },
+    );
+
+    final data = Map<String, dynamic>.from(response.data as Map);
+    final rawOrders = data['orders'] as List<dynamic>? ?? const [];
+    final createdOrders = rawOrders
+        .map((json) => _parseOrder(Map<String, dynamic>.from(json as Map)))
+        .toList();
+
+    state = [...createdOrders, ...state];
+    for (final order in createdOrders) {
+      WebSocketService.instance.subscribeToOrder(order.orderId);
+    }
+    debugPrint(
+      'OrdersProvider: Batch order created via API: ${createdOrders.length} orders',
+    );
+    return createdOrders;
+  }
+
   /// Cancel an order if it is in a cancellable status.
   Future<void> cancelOrder(String orderId) async {
     // Optimistic local update so the UI responds immediately
@@ -373,6 +412,42 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       await _fetchOrders();
     }
   }
+}
+
+Map<String, dynamic> _cartItemPayload(CartItem item) {
+  return {
+    'category': item.category,
+    'quantity': item.quantity,
+    'totalPrice': item.printSubtotal,
+    'fileName': item.fileName,
+    'fileUrl': item.filePath,
+    'fileMetadataId': item.fileMetadataId,
+    'paperSpecs': item.paperSpecs != null
+        ? {
+            'paperSize': item.paperSpecs!.paperSize.name,
+            'colorMode': item.paperSpecs!.colorMode.name,
+            'mediaType': item.paperSpecs!.mediaType.name,
+            'printSides': item.paperSpecs!.printSides.name,
+            'binding': item.paperSpecs!.binding.name,
+          }
+        : null,
+    'threeDSpecs': item.threeDSpecs != null
+        ? {
+            'fileFormat': item.threeDSpecs!.fileFormat.name,
+            'material': item.threeDSpecs!.material.name,
+            'color': item.threeDSpecs!.color,
+            'infillPercentage': item.threeDSpecs!.infillPercentage,
+            'layerHeight': item.threeDSpecs!.layerHeight,
+            'supports': item.threeDSpecs!.supports,
+            'notes': item.threeDSpecs!.notes,
+          }
+        : null,
+  };
+}
+
+Object? _deliveryAddressIdValue(String? id) {
+  if (id == null || id.isEmpty) return null;
+  return int.tryParse(id) ?? id;
 }
 
 final ordersProvider = StateNotifierProvider<OrdersNotifier, List<Order>>((

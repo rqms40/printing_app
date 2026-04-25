@@ -32,8 +32,9 @@ OrderStatus _parseOrderStatus(String value) {
 }
 
 PaymentMethod _parsePaymentMethod(String value) {
+  final normalized = value.replaceAll(RegExp(r'[_-]'), '').toLowerCase();
   return PaymentMethod.values.firstWhere(
-    (e) => e.name == value,
+    (e) => e.name.toLowerCase() == normalized,
     orElse: () => PaymentMethod.cod,
   );
 }
@@ -99,13 +100,21 @@ Order _parseOrder(Map<String, dynamic> json) {
     fileUrl: json['fileUrl']?.toString(),
     fileName: json['fileName']?.toString(),
     paperSpecs: _parsePaperSpecs(json['paperSpecs'] as Map<String, dynamic>?),
-    threeDSpecs: _parseThreeDSpecs(json['threeDSpecs'] as Map<String, dynamic>?),
+    threeDSpecs: _parseThreeDSpecs(
+      json['threeDSpecs'] as Map<String, dynamic>?,
+    ),
     quantity: int.tryParse(json['quantity']?.toString() ?? '1') ?? 1,
     totalPrice: double.tryParse(json['totalPrice']?.toString() ?? '0') ?? 0,
     deliveryFee: double.tryParse(json['deliveryFee']?.toString() ?? '0') ?? 0,
-    paymentMethod: _parsePaymentMethod(json['paymentMethod']?.toString() ?? 'cod'),
-    paymentStatus: _parsePaymentStatus(json['paymentStatus']?.toString() ?? 'pending'),
-    orderStatus: _parseOrderStatus(json['orderStatus']?.toString() ?? 'orderPlaced'),
+    paymentMethod: _parsePaymentMethod(
+      json['paymentMethod']?.toString() ?? 'cod',
+    ),
+    paymentStatus: _parsePaymentStatus(
+      json['paymentStatus']?.toString() ?? 'pending',
+    ),
+    orderStatus: _parseOrderStatus(
+      json['orderStatus']?.toString() ?? 'orderPlaced',
+    ),
     declineReason: json['declineReason']?.toString(),
     cancellationReason: json['cancellationReason']?.toString(),
     cancelledAt: json['cancelledAt'] is String
@@ -160,24 +169,30 @@ class QueueState {
     switch (activeTab) {
       case QueueTab.newOrders:
         result = result
-            .where((o) =>
-                o.orderStatus == OrderStatus.orderPlaced ||
-                o.orderStatus == OrderStatus.fileVerified)
+            .where(
+              (o) =>
+                  o.orderStatus == OrderStatus.orderPlaced ||
+                  o.orderStatus == OrderStatus.fileVerified,
+            )
             .toList();
         break;
       case QueueTab.inProduction:
         result = result
-            .where((o) =>
-                o.orderStatus == OrderStatus.printingInProgress ||
-                o.orderStatus == OrderStatus.finishingMounting ||
-                o.orderStatus == OrderStatus.qualityChecked)
+            .where(
+              (o) =>
+                  o.orderStatus == OrderStatus.printingInProgress ||
+                  o.orderStatus == OrderStatus.finishingMounting ||
+                  o.orderStatus == OrderStatus.qualityChecked,
+            )
             .toList();
         break;
       case QueueTab.done:
         result = result
-            .where((o) =>
-                o.orderStatus == OrderStatus.delivered ||
-                o.orderStatus == OrderStatus.completedPickup)
+            .where(
+              (o) =>
+                  o.orderStatus == OrderStatus.delivered ||
+                  o.orderStatus == OrderStatus.completedPickup,
+            )
             .toList();
         break;
       case QueueTab.all:
@@ -243,17 +258,15 @@ class QueueNotifier extends StateNotifier<QueueState> {
 
   Future<void> updateOrderStatus(String orderId, OrderStatus newStatus) async {
     try {
-      await ApiClient.instance.patch('/admin/orders/$orderId/status', data: {
-        'status': _toSnakeCase(newStatus.name),
-      });
+      await ApiClient.instance.patch(
+        '/admin/orders/$orderId/status',
+        data: {'status': _toSnakeCase(newStatus.name)},
+      );
     } catch (_) {}
     // Update local state regardless
     final updated = state.orders.map((o) {
       if (o.id == orderId) {
-        return o.copyWith(
-          orderStatus: newStatus,
-          updatedAt: DateTime.now(),
-        );
+        return o.copyWith(orderStatus: newStatus, updatedAt: DateTime.now());
       }
       return o;
     }).toList();
@@ -263,7 +276,6 @@ class QueueNotifier extends StateNotifier<QueueState> {
 }
 
 /// Provider for the queue state.
-final queueProvider =
-    StateNotifierProvider<QueueNotifier, QueueState>((ref) {
+final queueProvider = StateNotifierProvider<QueueNotifier, QueueState>((ref) {
   return QueueNotifier();
 });

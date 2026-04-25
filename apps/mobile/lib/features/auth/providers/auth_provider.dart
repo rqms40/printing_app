@@ -368,6 +368,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  Future<void> refreshProfile() async {
+    if (state.status == AuthStatus.unauthenticated) return;
+
+    try {
+      final response = await ApiClient.instance.get('/users/profile');
+      final user = _parseUser(response.data as Map<String, dynamic>);
+      state = AuthState(
+        status: user.isProfileComplete
+            ? AuthStatus.authenticated
+            : AuthStatus.profileIncomplete,
+        user: user,
+      );
+    } catch (_) {
+      // Profile refresh is best-effort; cancellation should still complete.
+    }
+  }
+
   void _connectNotificationsWs() {
     WebSocketService.instance.connectNotifications(
       onCreditsUpdate: (data) {

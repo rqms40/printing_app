@@ -227,4 +227,31 @@ export class CreditsService {
 
     return this.transactionRepo.save(tx);
   }
+
+  async refundCredits(
+    userId: number,
+    amountCredits: number,
+    referenceId?: string,
+  ): Promise<CreditTransaction> {
+    const user = await this.usersService.findById(userId);
+    if (!user) throw new NotFoundException('User not found');
+
+    user.credits = Number(user.credits) + amountCredits;
+    await this.usersService.updateProfile(user.id, { credits: user.credits });
+
+    this.notificationsService.triggerCreditsUpdate(
+      user.id,
+      Number(user.credits),
+    );
+
+    const tx = this.transactionRepo.create({
+      userId,
+      type: CreditTransactionType.TOP_UP,
+      amountCredits,
+      status: CreditTransactionStatus.APPROVED,
+      referenceId,
+    });
+
+    return this.transactionRepo.save(tx);
+  }
 }

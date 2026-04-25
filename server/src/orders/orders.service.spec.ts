@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { FilesService } from '../files/files.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { OrdersService } from './orders.service';
 import { Order, OrderStatus } from './entities/order.entity';
 import { PaperSpec } from './entities/paper-specs.entity';
@@ -19,9 +19,11 @@ import {
 describe('OrdersService', () => {
   let service: OrdersService;
   let repo: jest.Mocked<Partial<Repository<Order>>>;
+  let batchRepo: jest.Mocked<Partial<Repository<any>>>;
   let paperSpecsRepo: jest.Mocked<Partial<Repository<PaperSpec>>>;
   let threeDSpecsRepo: jest.Mocked<Partial<Repository<ThreeDSpec>>>;
   let assignmentRepo: jest.Mocked<Partial<Repository<DeliveryAssignment>>>;
+  let dataSource: Partial<DataSource>;
   let gateway: Partial<OrdersGateway>;
   let firebaseService: Partial<FirebaseService>;
   let usersService: Partial<UsersService>;
@@ -44,6 +46,11 @@ describe('OrdersService', () => {
       create: jest.fn(),
       save: jest.fn(),
       update: jest.fn(),
+      count: jest.fn(),
+    };
+    batchRepo = {
+      create: jest.fn(),
+      save: jest.fn(),
       count: jest.fn(),
     };
     paperSpecsRepo = {
@@ -71,15 +78,30 @@ describe('OrdersService', () => {
     };
     creditsService = {
       subtractCredits: jest.fn().mockResolvedValue(undefined),
+      refundCredits: jest.fn().mockResolvedValue(undefined),
     };
     notificationsService = {
       createForAllAdmins: jest.fn().mockResolvedValue(undefined),
+    };
+    dataSource = {
+      transaction: jest.fn(async (runInTransaction) =>
+        runInTransaction({
+          getRepository: (entity: { name?: string }) => {
+            if (entity?.name === 'Order') return repo;
+            if (entity?.name === 'PaperSpec') return paperSpecsRepo;
+            if (entity?.name === 'ThreeDSpec') return threeDSpecsRepo;
+            if (entity?.name === 'BatchOrder') return batchRepo;
+            throw new Error(`Unexpected repository ${entity?.name}`);
+          },
+        }),
+      ),
     };
 
     const module = await Test.createTestingModule({
       providers: [
         OrdersService,
         { provide: getRepositoryToken(Order), useValue: repo },
+        { provide: getRepositoryToken('BatchOrder'), useValue: batchRepo },
         { provide: getRepositoryToken(PaperSpec), useValue: paperSpecsRepo },
         { provide: getRepositoryToken(ThreeDSpec), useValue: threeDSpecsRepo },
         {
@@ -92,6 +114,7 @@ describe('OrdersService', () => {
         { provide: CreditsService, useValue: creditsService },
         { provide: NotificationsService, useValue: notificationsService },
         { provide: FilesService, useValue: { stampExpiry: jest.fn() } },
+        { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
 
@@ -139,6 +162,159 @@ describe('OrdersService', () => {
           type: 'order_placed',
           orderRef: mockOrder.orderId,
         }),
+      );
+    });
+
+    it('deducts GRID Credits using print subtotal plus delivery fee', async () => {
+      repo.count.mockResolvedValue(0);
+      repo.create.mockReturnValue(mockOrder);
+      repo.save.mockResolvedValue(mockOrder);
+
+      await service.create({
+        userId: 1,
+        paymentMethod: 'gridCredits',
+        totalPrice: 250,
+        deliveryFee: 30,
+      } as Partial<Order>);
+
+      expect(creditsService.subtractCredits).toHaveBeenCalledWith(
+        1,
+        280,
+        'order_placed',
+      );
+    });
+  });
+
+  describe('createBatch', () => {
+    const batchDto = {
+      deliveryFee: 45,
+      paymentMethod: 'gridCredits',
+      paymentStatus: 'paid',
+      deliveryOption: 'delivery',
+      deliveryAddressId: 9,
+      items: [
+        {
+          category: 'paper',
+          quantity: 2,
+          totalPrice: 120,
+          fileName: 'deck.pdf',
+          fileUrl: 'https://files/deck.pdf',
+          fileMetadataId: 11,
+          paperSpecs: {
+            paperSize: 'A4',
+            colorMode: 'color',
+            mediaType: 'bond',
+            printSides: 'single',
+          },
+        },
+        {
+          category: '3d',
+          quantity: 1,
+          totalPrice: 300,
+          fileName: 'part.stl',
+          fileUrl: 'https://files/part.stl',
+          fileMetadataId: 12,
+          threeDSpecs: {
+            fileFormat: 'stl',
+            material: 'pla',
+            color: 'black',
+            infillPercentage: 20,
+            layerHeight: 0.2,
+            supports: false,
+          },
+        },
+      ],
+    };
+
+    beforeEach(() => {
+      repo.count.mockResolvedValue(0);
+      batchRepo.count.mockResolvedValue(0);
+      batchRepo.create.mockImplementation((data) => ({
+        id: 77,
+        batchRef: 'BATCH-10001',
+        ...data,
+      }));
+      batchRepo.save.mockImplementation(async (batch) => batch);
+
+      let savedOrderId = 0;
+      repo.create.mockImplementation((data) => data as Order);
+      repo.save.mockImplementation(async (order) => ({
+        id: ++savedOrderId,
+        ...order,
+      }));
+      paperSpecsRepo.create.mockImplementation((data) => data as PaperSpec);
+      paperSpecsRepo.save.mockResolvedValue({} as PaperSpec);
+      threeDSpecsRepo.create.mockImplementation((data) => data as ThreeDSpec);
+      threeDSpecsRepo.save.mockResolvedValue({} as ThreeDSpec);
+    });
+
+    it('rejects an empty item list', async () => {
+      await expect(
+        (service as any).createBatch(1, { ...batchDto, items: [] }),
+      ).rejects.toThrow('Batch order requires at least one item');
+    });
+
+    it('saves one BatchOrder and two child Order records', async () => {
+      const result = await (service as any).createBatch(1, batchDto);
+
+      expect(batchRepo.save).toHaveBeenCalledTimes(1);
+      expect(batchRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 1,
+          subtotal: 420,
+          deliveryFee: 45,
+          totalPrice: 465,
+          paymentMethod: 'gridCredits',
+          paymentStatus: 'paid',
+          deliveryOption: 'delivery',
+          deliveryAddressId: 9,
+        }),
+      );
+      expect(repo.save).toHaveBeenCalledTimes(2);
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          batchOrderId: 77,
+          category: 'paper',
+          userId: 1,
+        }),
+      );
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          batchOrderId: 77,
+          category: '3d',
+          userId: 1,
+        }),
+      );
+      expect(result).toEqual({
+        batchId: 'BATCH-10001',
+        orders: expect.arrayContaining([
+          expect.objectContaining({ id: 1, category: 'paper' }),
+          expect.objectContaining({ id: 2, category: '3d' }),
+        ]),
+      });
+    });
+
+    it('allocates shared deliveryFee to the first child only', async () => {
+      await (service as any).createBatch(1, batchDto);
+
+      expect(repo.create).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ deliveryFee: 45 }),
+      );
+      expect(repo.create).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ deliveryFee: 0 }),
+      );
+    });
+
+    it('deducts GRID Credits once for subtotal plus deliveryFee', async () => {
+      await (service as any).createBatch(1, batchDto);
+
+      expect(creditsService.subtractCredits).toHaveBeenCalledTimes(1);
+      expect(creditsService.subtractCredits).toHaveBeenCalledWith(
+        1,
+        465,
+        'order_placed',
       );
     });
   });
@@ -250,6 +426,69 @@ describe('OrdersService', () => {
       expect(notificationsService.createForAllAdmins).not.toHaveBeenCalled();
     });
   });
+
+  describe('cancelOrder', () => {
+    it('refunds GRID Credits before cancelling an eligible credit-paid order', async () => {
+      const creditOrder = {
+        ...mockOrder,
+        userId: 1,
+        totalPrice: 250,
+        deliveryFee: 30,
+        paymentMethod: 'gridCredits',
+        orderStatus: OrderStatus.ORDER_PLACED,
+      } as Order;
+      repo.findOneOrFail.mockResolvedValue(creditOrder);
+      repo.update.mockResolvedValue(undefined as any);
+
+      await service.cancelOrder(1, 1);
+
+      expect(creditsService.refundCredits).toHaveBeenCalledWith(
+        creditOrder.userId,
+        Number(creditOrder.totalPrice) + Number(creditOrder.deliveryFee),
+        creditOrder.orderId,
+      );
+      expect(repo.update).toHaveBeenCalledWith(1, {
+        orderStatus: OrderStatus.CANCELLED,
+        paymentStatus: 'refunded',
+      });
+    });
+
+    it('refunds GRID Credits when the stored payment method is snake_case', async () => {
+      const creditOrder = {
+        ...mockOrder,
+        userId: 1,
+        totalPrice: 250,
+        paymentMethod: 'grid_credits',
+        orderStatus: OrderStatus.FILE_VERIFIED,
+      } as Order;
+      repo.findOneOrFail.mockResolvedValue(creditOrder);
+      repo.update.mockResolvedValue(undefined as any);
+
+      await service.cancelOrder(1, 1);
+
+      expect(creditsService.refundCredits).toHaveBeenCalledWith(
+        creditOrder.userId,
+        Number(creditOrder.totalPrice),
+        creditOrder.orderId,
+      );
+    });
+
+    it('does not refund credits for non-credit payment methods', async () => {
+      const gcashOrder = {
+        ...mockOrder,
+        userId: 1,
+        totalPrice: 250,
+        paymentMethod: 'gcash',
+        orderStatus: OrderStatus.ORDER_PLACED,
+      } as Order;
+      repo.findOneOrFail.mockResolvedValue(gcashOrder);
+      repo.update.mockResolvedValue(undefined as any);
+
+      await service.cancelOrder(1, 1);
+
+      expect(creditsService.refundCredits).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('OrdersService.updateStatus — expiresAt stamping', () => {
@@ -266,7 +505,10 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
   const mockUsersService = { findById: jest.fn(), getFcmToken: jest.fn() };
   const mockGateway = { notifyOrderUpdate: jest.fn() };
   const mockFirebase = { sendToDevice: jest.fn() };
-  const mockCredits = { subtractCredits: jest.fn() };
+  const mockCredits = {
+    subtractCredits: jest.fn(),
+    refundCredits: jest.fn(),
+  };
   const mockNotifications = {
     create: jest.fn(),
     createForAllAdmins: jest.fn(),
@@ -288,6 +530,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       providers: [
         OrdersService,
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
+        { provide: getRepositoryToken('BatchOrder'), useValue: {} },
         {
           provide: getRepositoryToken(PaperSpec),
           useValue: { create: jest.fn(), save: jest.fn() },
@@ -306,6 +549,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         { provide: CreditsService, useValue: mockCredits },
         { provide: NotificationsService, useValue: mockNotifications },
         { provide: FilesService, useValue: mockFilesService },
+        { provide: DataSource, useValue: { transaction: jest.fn() } },
       ],
     }).compile();
     service = module.get<OrdersService>(OrdersService);

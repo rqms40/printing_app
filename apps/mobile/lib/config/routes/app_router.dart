@@ -24,6 +24,7 @@ import 'package:printing_app/features/auth/screens/profile_setup_screen.dart';
 // Customer screens
 // ---------------------------------------------------------------------------
 import 'package:printing_app/features/customer/home/screens/home_screen.dart';
+import 'package:printing_app/features/customer/cart/screens/cart_screen.dart';
 import 'package:printing_app/features/customer/orders/screens/orders_screen.dart';
 import 'package:printing_app/features/customer/orders/screens/order_detail_screen.dart';
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
@@ -135,8 +136,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // -----------------------------------------------------------------------
       GoRoute(
         path: '/splash',
-        pageBuilder: (_, state) =>
-            fadeTransition(const SplashScreen(), state),
+        pageBuilder: (_, state) => fadeTransition(const SplashScreen(), state),
       ),
 
       // -----------------------------------------------------------------------
@@ -144,8 +144,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // -----------------------------------------------------------------------
       GoRoute(
         path: '/auth/login',
-        pageBuilder: (_, state) =>
-            fadeTransition(const LoginScreen(), state),
+        pageBuilder: (_, state) => fadeTransition(const LoginScreen(), state),
       ),
       GoRoute(
         path: '/auth/register',
@@ -192,8 +191,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                   SnackBar(
                     content: Row(
                       children: [
-                        const Icon(Icons.notifications_rounded,
-                            color: Colors.black, size: 16),
+                        const Icon(
+                          Icons.notifications_rounded,
+                          color: Colors.black,
+                          size: 16,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Column(
@@ -228,7 +230,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                     backgroundColor: const Color(0xFFFFDE58),
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                     margin: const EdgeInsets.fromLTRB(16, 0, 16, 80),
                     duration: const Duration(seconds: 4),
                   ),
@@ -287,9 +290,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: ':id',
                     pageBuilder: (_, state) => slideTransition(
-                      OrderDetailScreen(
-                        orderId: state.pathParameters['id']!,
-                      ),
+                      OrderDetailScreen(orderId: state.pathParameters['id']!),
                       state,
                     ),
                   ),
@@ -345,6 +346,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             slideUpTransition(const SummaryScreen(), state),
       ),
       GoRoute(
+        path: CartScreen.routeName,
+        pageBuilder: (_, state) => slideTransition(const CartScreen(), state),
+      ),
+      GoRoute(
         path: '/customer/order/delivery',
         pageBuilder: (_, state) =>
             slideUpTransition(const DeliveryDetailsScreen(), state),
@@ -386,8 +391,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/customer/profile/terms',
-        pageBuilder: (_, state) =>
-            slideTransition(const TermsScreen(), state),
+        pageBuilder: (_, state) => slideTransition(const TermsScreen(), state),
       ),
       GoRoute(
         path: '/customer/profile/privacy',
@@ -396,8 +400,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/customer/profile/top-up',
-        pageBuilder: (_, state) =>
-            slideTransition(const TopUpScreen(), state),
+        pageBuilder: (_, state) => slideTransition(const TopUpScreen(), state),
       ),
       GoRoute(
         path: '/customer/profile/survey',
@@ -479,9 +482,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/driver/deliveries/:id',
         pageBuilder: (_, state) => slideTransition(
-          DeliveryDetailScreen(
-            assignmentId: state.pathParameters['id']!,
-          ),
+          DeliveryDetailScreen(assignmentId: state.pathParameters['id']!),
           state,
         ),
       ),
@@ -555,9 +556,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/admin/queue/:id',
         pageBuilder: (_, state) => scaleTransition(
-          AdminOrderDetailScreen(
-            orderId: state.pathParameters['id']!,
-          ),
+          AdminOrderDetailScreen(orderId: state.pathParameters['id']!),
           state,
         ),
       ),

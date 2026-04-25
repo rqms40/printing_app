@@ -7,6 +7,7 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
+import 'package:printing_app/features/customer/cart/providers/cart_provider.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
@@ -16,6 +17,15 @@ import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
 import 'package:printing_app/utils/formatters.dart';
+
+double paymentScreenOrderTotal({
+  required OrderFlowState flowState,
+  required CartState cartState,
+}) {
+  return cartState.isNotEmpty
+      ? cartState.subtotal + flowState.deliveryFee
+      : flowState.totalPrice + flowState.deliveryFee;
+}
 
 /// Step 6/6 -- Payment method selection and order placement.
 class PaymentScreen extends ConsumerStatefulWidget {
@@ -45,7 +55,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       if (mounted) {
         setState(() {
           _creditsOnlyMode = res.data['creditsOnlyMode'] == true;
-          if (_creditsOnlyMode && _selectedMethod != PaymentMethod.gridCredits) {
+          if (_creditsOnlyMode &&
+              _selectedMethod != PaymentMethod.gridCredits) {
             _selectedMethod = null;
           }
         });
@@ -65,8 +76,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   Widget build(BuildContext context) {
     final colors = _colors(context);
     final state = ref.watch(orderFlowProvider);
+    final cartState = ref.watch(cartProvider);
     final authState = ref.watch(authProvider);
-    final total = state.totalPrice + state.deliveryFee;
+    final total = paymentScreenOrderTotal(
+      flowState: state,
+      cartState: cartState,
+    );
 
     final creditsStr = authState.user?.credits ?? '0.00';
     final currentCredits = double.tryParse(creditsStr) ?? 0.0;
@@ -92,16 +107,16 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           children: [
             Expanded(
               child: ListView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                 children: [
                   const SizedBox(height: AppSpacing.md),
                   const StepIndicator(totalSteps: 6, currentStep: 5),
                   const SizedBox(height: AppSpacing.xl),
                   Text(
                     'Payment',
-                    style:
-                        AppTypography.h1.copyWith(color: colors.onBackground),
+                    style: AppTypography.h1.copyWith(
+                      color: colors.onBackground,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.lg),
 
@@ -149,13 +164,19 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                         Text(
                           formatCurrency(currentCredits),
                           style: AppTypography.bodyBold.copyWith(
-                            color: hasEnoughCredits ? colors.brand : colors.error,
+                            color: hasEnoughCredits
+                                ? colors.brand
+                                : colors.error,
                           ),
                         ),
                         Text(
-                          hasEnoughCredits ? 'Pay using your credits.' : 'Insufficient wallet balance.',
+                          hasEnoughCredits
+                              ? 'Pay using your credits.'
+                              : 'Insufficient wallet balance.',
                           style: AppTypography.caption.copyWith(
-                            color: hasEnoughCredits ? colors.onSurfaceDim : colors.error,
+                            color: hasEnoughCredits
+                                ? colors.onSurfaceDim
+                                : colors.error,
                           ),
                         ),
                       ],
@@ -177,13 +198,15 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                       children: [
                         Text(
                           'Order Total',
-                          style: AppTypography.bodyLarge
-                              .copyWith(color: colors.onSurface),
+                          style: AppTypography.bodyLarge.copyWith(
+                            color: colors.onSurface,
+                          ),
                         ),
                         Text(
                           formatCurrency(total),
-                          style: AppTypography.h2
-                              .copyWith(color: colors.onBackground),
+                          style: AppTypography.h2.copyWith(
+                            color: colors.onBackground,
+                          ),
                         ),
                       ],
                     ),
@@ -229,12 +252,16 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     final isGridCredits = method == PaymentMethod.gridCredits;
 
     final card = AppCard(
-      onTap: isDisabled ? null : () {
-        setState(() => _selectedMethod = method);
-        ref.read(orderFlowProvider.notifier).setPaymentMethod(method);
-      },
+      onTap: isDisabled
+          ? null
+          : () {
+              setState(() => _selectedMethod = method);
+              ref.read(orderFlowProvider.notifier).setPaymentMethod(method);
+            },
       accentColor: isSelected && !isGridCredits ? colors.accent : null,
-      borderColor: isGridCredits && !isDisabled ? colors.brand : (isGridCredits ? colors.outline : null),
+      borderColor: isGridCredits && !isDisabled
+          ? colors.brand
+          : (isGridCredits ? colors.outline : null),
       borderWidth: isGridCredits ? 1.0 : null,
       child: Row(
         children: [
@@ -253,15 +280,21 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               ),
             ),
             child: Center(
-              child: iconWidget ?? (icon != null
-                  ? Text(
-                      icon,
-                      style: AppTypography.h1.copyWith(
-                        color: colors.accent,
-                        fontSize: 22,
-                      ),
-                    )
-                  : HugeIcon(icon: iconData!, size: 24, color: isGridCredits ? colors.brand : colors.accent)),
+              child:
+                  iconWidget ??
+                  (icon != null
+                      ? Text(
+                          icon,
+                          style: AppTypography.h1.copyWith(
+                            color: colors.accent,
+                            fontSize: 22,
+                          ),
+                        )
+                      : HugeIcon(
+                          icon: iconData!,
+                          size: 24,
+                          color: isGridCredits ? colors.brand : colors.accent,
+                        )),
             ),
           ),
           const SizedBox(width: AppSpacing.md),
@@ -271,8 +304,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               children: [
                 Text(
                   label,
-                  style: AppTypography.bodyBold
-                      .copyWith(color: colors.onBackground),
+                  style: AppTypography.bodyBold.copyWith(
+                    color: colors.onBackground,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 if (subtitleWidget != null)
@@ -280,8 +314,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                 else if (subtitle != null)
                   Text(
                     subtitle,
-                    style: AppTypography.caption
-                        .copyWith(color: colors.onSurfaceDim),
+                    style: AppTypography.caption.copyWith(
+                      color: colors.onSurfaceDim,
+                    ),
                   ),
               ],
             ),
@@ -301,6 +336,30 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     try {
       // Build the new order from flow state
       final flowState = ref.read(orderFlowProvider);
+      final cartState = ref.read(cartProvider);
+
+      if (cartState.isNotEmpty) {
+        await ref
+            .read(ordersProvider.notifier)
+            .addBatchOrder(
+              items: cartState.items,
+              deliveryOption: flowState.deliveryOption,
+              deliveryAddressId: flowState.deliveryAddress?.id,
+              deliveryFee: flowState.deliveryFee,
+              paymentMethod: flowState.paymentMethod ?? PaymentMethod.cod,
+            );
+
+        ref.read(cartProvider.notifier).clear();
+        ref.read(orderFlowProvider.notifier).reset();
+
+        if (!mounted) return;
+        setState(() {
+          _isProcessing = false;
+          _isSuccess = true;
+        });
+        return;
+      }
+
       final authState = ref.read(authProvider);
       final userId = authState.user?.id ?? 'unknown';
 
@@ -316,7 +375,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         paperSpecs: flowState.paperSpecs,
         threeDSpecs: flowState.threeDSpecs,
         quantity: flowState.quantity,
-        totalPrice: flowState.totalPrice + flowState.deliveryFee,
+        totalPrice: flowState.totalPrice,
         deliveryFee: flowState.deliveryFee,
         paymentMethod: flowState.paymentMethod ?? PaymentMethod.cod,
         paymentStatus: PaymentStatus.pending,
@@ -328,19 +387,23 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       );
 
       // 1. Create the order via API — captures the server-assigned integer id
-      final createdOrder =
-          await ref.read(ordersProvider.notifier).addOrder(newOrder);
+      final createdOrder = await ref
+          .read(ordersProvider.notifier)
+          .addOrder(newOrder);
 
       // 2. Create payment intent for non-COD methods
       final paymentMethod = flowState.paymentMethod?.name ?? 'cod';
       if (paymentMethod != 'cod') {
         try {
           final orderId = int.tryParse(createdOrder.id) ?? 0;
-          await ApiClient.instance.post('/payments/intent', data: {
-            'orderId': orderId,
-            'paymentMethod': paymentMethod,
-            'amount': flowState.totalPrice + flowState.deliveryFee,
-          });
+          await ApiClient.instance.post(
+            '/payments/intent',
+            data: {
+              'orderId': orderId,
+              'paymentMethod': paymentMethod,
+              'amount': flowState.totalPrice + flowState.deliveryFee,
+            },
+          );
         } catch (_) {
           // Payment API unavailable -- proceed with demo mode
         }
@@ -357,9 +420,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isProcessing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Order failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Order failed: $e')));
     }
   }
 
@@ -374,18 +437,18 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
-                  width: 96,
-                  height: 96,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: colors.success.withValues(alpha: 0.15),
-                  ),
-                  child: Icon(
-                    Icons.check_circle_rounded,
-                    size: 56,
-                    color: colors.success,
-                  ),
-                )
+                      width: 96,
+                      height: 96,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: colors.success.withValues(alpha: 0.15),
+                      ),
+                      child: Icon(
+                        Icons.check_circle_rounded,
+                        size: 56,
+                        color: colors.success,
+                      ),
+                    )
                     .animate()
                     .scale(
                       begin: const Offset(0.3, 0.3),
@@ -396,34 +459,31 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                     .fadeIn(duration: 300.ms),
                 const SizedBox(height: AppSpacing.xl),
                 Text(
-                  'Order Placed!',
-                  style:
-                      AppTypography.h1.copyWith(color: colors.onBackground),
-                )
+                      'Order Placed!',
+                      style: AppTypography.h1.copyWith(
+                        color: colors.onBackground,
+                      ),
+                    )
                     .animate()
                     .fadeIn(delay: 300.ms, duration: 400.ms)
                     .slideY(begin: 0.3, end: 0),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   'Your order has been placed successfully.\nWe will notify you once printing begins.',
-                  style: AppTypography.body
-                      .copyWith(color: colors.onSurfaceDim),
+                  style: AppTypography.body.copyWith(
+                    color: colors.onSurfaceDim,
+                  ),
                   textAlign: TextAlign.center,
-                )
-                    .animate()
-                    .fadeIn(delay: 500.ms, duration: 400.ms),
+                ).animate().fadeIn(delay: 500.ms, duration: 400.ms),
                 const SizedBox(height: AppSpacing.xxl),
                 AppButton(
                   label: 'Back to Home',
                   isFullWidth: true,
                   onTap: () {
                     ref.read(orderFlowProvider.notifier).reset();
-                    Navigator.of(context)
-                        .popUntil((route) => route.isFirst);
+                    Navigator.of(context).popUntil((route) => route.isFirst);
                   },
-                )
-                    .animate()
-                    .fadeIn(delay: 700.ms, duration: 400.ms),
+                ).animate().fadeIn(delay: 700.ms, duration: 400.ms),
               ],
             ),
           ),

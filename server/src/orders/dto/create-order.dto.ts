@@ -5,6 +5,8 @@ import {
   IsBoolean,
   Min,
   ValidateNested,
+  IsArray,
+  ArrayMinSize,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -55,6 +57,11 @@ export class CreateOrderDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsNumber()
+  deliveryAddressId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   fileName?: string;
 
@@ -79,4 +86,77 @@ export class CreateOrderDto {
   @ValidateNested()
   @Type(() => ThreeDSpecsDto)
   threeDSpecs?: ThreeDSpecsDto;
+}
+
+export class CreateBatchOrderItemDto {
+  @ApiProperty({ example: 'paper', enum: ['paper', '3d'] })
+  @IsString()
+  category: string;
+
+  @ApiProperty({ example: 1 })
+  @IsNumber()
+  @Min(1)
+  quantity: number;
+
+  @ApiProperty({ example: 150.0 })
+  @IsNumber()
+  totalPrice: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  fileName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  fileUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  fileMetadataId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PaperSpecsDto)
+  paperSpecs?: PaperSpecsDto;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ThreeDSpecsDto)
+  threeDSpecs?: ThreeDSpecsDto;
+}
+
+export class CreateBatchOrderDto {
+  @ApiProperty({ type: [CreateBatchOrderItemDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => CreateBatchOrderItemDto)
+  items: CreateBatchOrderItemDto[];
+
+  @ApiProperty({ example: 0 })
+  @IsNumber()
+  deliveryFee: number;
+
+  @ApiProperty({ example: 'gcash', enum: ['gcash', 'maya', 'cod'] })
+  @IsString()
+  paymentMethod: string;
+
+  @ApiPropertyOptional({ example: 'pending' })
+  @IsOptional()
+  @IsString()
+  paymentStatus?: string;
+
+  @ApiProperty({ example: 'delivery', enum: ['pickup', 'delivery'] })
+  @IsString()
+  deliveryOption: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  deliveryAddressId?: number;
 }
