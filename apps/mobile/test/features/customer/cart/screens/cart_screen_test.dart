@@ -117,10 +117,51 @@ void main() {
       final decrement = find.byKey(const Key('cart-item-decrement')).first;
       final increment = find.byKey(const Key('cart-item-increment')).first;
 
-      expect(find.byTooltip('Decrease quantity'), findsOneWidget);
-      expect(find.byTooltip('Increase quantity'), findsOneWidget);
+      expect(
+        find.byTooltip('Decrease quantity for proposal.pdf'),
+        findsOneWidget,
+      );
+      expect(
+        find.byTooltip('Increase quantity for proposal.pdf'),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Decrease quantity'), findsNothing);
+      expect(find.byTooltip('Increase quantity'), findsNothing);
       expect(tester.getSize(decrement), const Size(48, 48));
       expect(tester.getSize(increment), const Size(48, 48));
+    },
+  );
+
+  testWidgets(
+    'CartScreen totals do not overflow on narrow large-text screens',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 700);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      container
+          .read(cartProvider.notifier)
+          .addFromOrderFlow(_completePaperFlow(totalPrice: 180));
+
+      await tester.pumpWidget(
+        _wrapWithMaterial(
+          container,
+          const MediaQuery(
+            data: MediaQueryData(
+              size: Size(320, 480),
+              textScaler: TextScaler.linear(2.4),
+            ),
+            child: CartScreen(),
+          ),
+        ),
+      );
+
+      await tester.scrollUntilVisible(find.text('Print subtotal'), 300);
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Print subtotal'), findsOneWidget);
+      expect(find.text('Total before delivery'), findsOneWidget);
     },
   );
 
@@ -148,6 +189,58 @@ void main() {
     expect(find.text('proposal.pdf'), findsOneWidget);
     expect(container.read(cartProvider).items.single.quantity, 2);
   });
+
+  testWidgets('CartScreen undo restores first removed item at original index', (
+    tester,
+  ) async {
+    container.read(cartProvider.notifier)
+      ..addFromOrderFlow(_completePaperFlow(fileName: 'proposal.pdf'))
+      ..addFromOrderFlow(_completePaperFlow(fileName: 'appendix.pdf'));
+
+    await tester.pumpWidget(_wrapWithMaterial(container, const CartScreen()));
+
+    final removedId = container.read(cartProvider).items.first.id;
+
+    await tester.drag(find.byKey(ValueKey(removedId)), const Offset(-600, 0));
+    await tester.pumpAndSettle();
+
+    expect(container.read(cartProvider).items.map((item) => item.fileName), [
+      'appendix.pdf',
+    ]);
+
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+
+    expect(container.read(cartProvider).items.map((item) => item.fileName), [
+      'proposal.pdf',
+      'appendix.pdf',
+    ]);
+  });
+
+  testWidgets(
+    'CartScreen clears stale remove snackbars before showing a new one',
+    (tester) async {
+      container.read(cartProvider.notifier)
+        ..addFromOrderFlow(_completePaperFlow(fileName: 'proposal.pdf'))
+        ..addFromOrderFlow(_completePaperFlow(fileName: 'appendix.pdf'));
+
+      await tester.pumpWidget(_wrapWithMaterial(container, const CartScreen()));
+
+      final firstId = container.read(cartProvider).items.first.id;
+      await tester.drag(find.byKey(ValueKey(firstId)), const Offset(-600, 0));
+      await tester.pumpAndSettle();
+
+      final remainingId = container.read(cartProvider).items.single.id;
+      await tester.drag(
+        find.byKey(ValueKey(remainingId)),
+        const Offset(-600, 0),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Removed proposal.pdf'), findsNothing);
+      expect(find.text('Removed appendix.pdf'), findsOneWidget);
+    },
+  );
 
   testWidgets('CartScreen empty state is scroll safe', (tester) async {
     await tester.pumpWidget(
@@ -236,7 +329,11 @@ void _seedOrderFlow(ProviderContainer container) {
   notifier.seed(_completePaperFlow(totalPrice: 175));
 }
 
-OrderFlowState _completePaperFlow({int quantity = 2, double totalPrice = 125}) {
+OrderFlowState _completePaperFlow({
+  String fileName = 'proposal.pdf',
+  int quantity = 2,
+  double totalPrice = 125,
+}) {
   return OrderFlowState(
     category: 'paper',
     paperSpecs: const PaperSpecs(
@@ -246,8 +343,8 @@ OrderFlowState _completePaperFlow({int quantity = 2, double totalPrice = 125}) {
       printSides: PrintSides.backToBack,
       binding: Binding.spiral,
     ),
-    fileName: 'proposal.pdf',
-    filePath: '/tmp/proposal.pdf',
+    fileName: fileName,
+    filePath: '/tmp/$fileName',
     fileSize: 2048,
     fileMetadataId: 42,
     quantity: quantity,

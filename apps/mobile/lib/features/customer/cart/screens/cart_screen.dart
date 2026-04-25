@@ -110,16 +110,18 @@ class _QueuedJobs extends ConsumerWidget {
                     onDismissed: (_) {
                       final cartNotifier = ref.read(cartProvider.notifier);
                       cartNotifier.removeItem(item.id);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Removed ${item.fileName}'),
-                          action: SnackBarAction(
-                            label: 'Undo',
-                            onPressed: () =>
-                                cartNotifier.restoreItem(item, index),
+                      ScaffoldMessenger.of(context)
+                        ..clearSnackBars()
+                        ..showSnackBar(
+                          SnackBar(
+                            content: Text('Removed ${item.fileName}'),
+                            action: SnackBarAction(
+                              label: 'Undo',
+                              onPressed: () =>
+                                  cartNotifier.restoreItem(item, index),
+                            ),
                           ),
-                        ),
-                      );
+                        );
                     },
                     child: _QueueItemTile(
                       item: item,
@@ -275,6 +277,7 @@ class _QueueItemTile extends StatelessWidget {
                         ),
                       ),
                       _QuantityStepper(
+                        fileName: item.fileName,
                         quantity: item.quantity,
                         colors: colors,
                         onIncrement: onIncrement,
@@ -306,12 +309,14 @@ class _QueueItemTile extends StatelessWidget {
 
 class _QuantityStepper extends StatelessWidget {
   const _QuantityStepper({
+    required this.fileName,
     required this.quantity,
     required this.colors,
     required this.onIncrement,
     required this.onDecrement,
   });
 
+  final String fileName;
   final int quantity;
   final AppColorSet colors;
   final VoidCallback onIncrement;
@@ -333,7 +338,7 @@ class _QuantityStepper extends StatelessWidget {
           _stepperButton(
             key: const Key('cart-item-decrement'),
             icon: HugeIcons.strokeRoundedMinusSign,
-            tooltip: 'Decrease quantity',
+            tooltip: 'Decrease quantity for $fileName',
             onTap: canDecrement ? onDecrement : null,
             color: canDecrement ? colors.onBackground : colors.onSurfaceDim,
           ),
@@ -351,7 +356,7 @@ class _QuantityStepper extends StatelessWidget {
           _stepperButton(
             key: const Key('cart-item-increment'),
             icon: HugeIcons.strokeRoundedPlusSign,
-            tooltip: 'Increase quantity',
+            tooltip: 'Increase quantity for $fileName',
             onTap: onIncrement,
             color: colors.onBackground,
           ),
@@ -416,17 +421,45 @@ class _QueueTotals extends StatelessWidget {
     final style = isStrong ? AppTypography.h3 : AppTypography.body;
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: style.copyWith(
-              color: isStrong ? colors.onBackground : colors.onSurfaceDim,
-            ),
-          ),
-          Text(value, style: style.copyWith(color: colors.onBackground)),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final textScale = MediaQuery.textScalerOf(context).scale(1);
+          final shouldStack = constraints.maxWidth < 360 || textScale > 1.4;
+          final labelStyle = style.copyWith(
+            color: isStrong ? colors.onBackground : colors.onSurfaceDim,
+          );
+          final valueStyle = style.copyWith(color: colors.onBackground);
+
+          if (shouldStack) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(label, style: labelStyle, softWrap: true),
+                const SizedBox(height: 2),
+                Text(value, style: valueStyle, textAlign: TextAlign.end),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Flexible(
+                flex: 3,
+                child: Text(label, style: labelStyle, softWrap: true),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Flexible(
+                flex: 2,
+                child: Text(
+                  value,
+                  style: valueStyle,
+                  textAlign: TextAlign.end,
+                  softWrap: true,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
