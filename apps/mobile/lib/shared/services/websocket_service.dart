@@ -32,8 +32,11 @@ class WebSocketService {
   io.Socket? _notificationsSocket;
   io.Socket? _dailyGridSocket;
 
-  // Callbacks registered before the notifications socket is created
-  final List<Function(Map<String, dynamic>)> _pendingNotifListeners = [];
+  bool get isNotificationsConnected => _notificationsSocket?.connected == true;
+
+  // Persistent callbacks for notification events. Kept outside the socket so
+  // reconnects and token refreshes do not lose UI listeners.
+  final List<Function(Map<String, dynamic>)> _notificationListeners = [];
 
   // Callbacks registered for order updates
   final List<Function(dynamic)> _orderListeners = [];
@@ -132,13 +135,6 @@ class WebSocketService {
     if (_notificationsSocket?.connected == true) return;
     // Socket exists but disconnected — flush pending listeners then reconnect
     if (_notificationsSocket != null) {
-      for (final cb in _pendingNotifListeners) {
-        _notificationsSocket!.on('newNotification', (data) {
-          final d = _normalize(data);
-          if (d is Map<String, dynamic>) cb(d);
-        });
-      }
-      _pendingNotifListeners.clear();
       _notificationsSocket!.connect();
       return;
     }
@@ -155,14 +151,7 @@ class WebSocketService {
       final d = _normalize(data);
       if (d is Map<String, dynamic>) onCreditsUpdate(d);
     });
-    // Apply any listeners registered before the socket was created
-    for (final cb in _pendingNotifListeners) {
-      _notificationsSocket!.on('newNotification', (data) {
-        final d = _normalize(data);
-        if (d is Map<String, dynamic>) cb(d);
-      });
-    }
-    _pendingNotifListeners.clear();
+    _notificationsSocket!.on('newNotification', _dispatchNotification);
     _notificationsSocket!.on(
       'connect',
       (_) => debugPrint('WS Notifications connected'),
@@ -175,16 +164,22 @@ class WebSocketService {
   }
 
   /// Register a callback for incoming `newNotification` events.
-  /// Safe to call before [connectNotifications] — the listener is queued
-  /// and applied once the socket is created.
+  /// Safe to call before [connectNotifications] and across reconnects.
   void listenForNewNotifications(Function(Map<String, dynamic>) callback) {
-    if (_notificationsSocket != null) {
-      _notificationsSocket!.on('newNotification', (data) {
-        final d = _normalize(data);
-        if (d is Map<String, dynamic>) callback(d);
-      });
-    } else {
-      _pendingNotifListeners.add(callback);
+    if (!_notificationListeners.contains(callback)) {
+      _notificationListeners.add(callback);
+    }
+  }
+
+  void _dispatchNotification(dynamic data) {
+    final d = _normalize(data);
+    if (d is! Map<String, dynamic>) return;
+    for (final cb in _notificationListeners) {
+      try {
+        cb(d);
+      } catch (e) {
+        debugPrint('WS newNotification handler error: $e');
+      }
     }
   }
 

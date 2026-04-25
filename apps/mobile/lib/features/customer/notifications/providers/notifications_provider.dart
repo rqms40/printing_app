@@ -12,29 +12,48 @@ export 'notifications_api.dart';
 
 String _stringValue(dynamic value) => value?.toString() ?? '';
 
+dynamic _readJsonValue(
+  Map<String, dynamic> json,
+  String camelKey, [
+  String? snakeKey,
+]) {
+  return json[camelKey] ?? (snakeKey != null ? json[snakeKey] : null);
+}
+
 AppNotification _parseNotification(Map<String, dynamic> json) {
+  final metadata = json['metadata'] is Map
+      ? Map<String, dynamic>.from(json['metadata'] as Map)
+      : const <String, dynamic>{};
+  final orderRef =
+      _readJsonValue(json, 'orderId', 'order_id') ??
+      _readJsonValue(json, 'orderRef', 'order_ref') ??
+      metadata['orderRef'] ??
+      metadata['orderId'];
+
   return AppNotification(
-    id: _stringValue(json['id']).isNotEmpty
-        ? _stringValue(json['id'])
-        : _stringValue(json['_id']),
-    userId: _stringValue(json['userId']),
-    orderId: _stringValue(json['orderId']).isNotEmpty
-        ? _stringValue(json['orderId'])
-        : null,
-    title: _stringValue(json['title']),
-    message: _stringValue(json['message']),
-    type: _stringValue(json['type']).isNotEmpty ? _stringValue(json['type']) : 'info',
-    isRead: json['isRead'] as bool? ?? false,
-    createdAt: json['createdAt'] is String
-        ? DateTime.parse(json['createdAt'] as String)
+    id: _stringValue(_readJsonValue(json, 'id')).isNotEmpty
+        ? _stringValue(_readJsonValue(json, 'id'))
+        : _stringValue(_readJsonValue(json, '_id')),
+    userId: _stringValue(_readJsonValue(json, 'userId', 'user_id')),
+    orderId: _stringValue(orderRef).isNotEmpty ? _stringValue(orderRef) : null,
+    title: _stringValue(_readJsonValue(json, 'title')),
+    message: _stringValue(_readJsonValue(json, 'message')),
+    type: _stringValue(_readJsonValue(json, 'type')).isNotEmpty
+        ? _stringValue(_readJsonValue(json, 'type'))
+        : 'info',
+    isRead: _readJsonValue(json, 'isRead', 'is_read') as bool? ?? false,
+    createdAt: _readJsonValue(json, 'createdAt', 'created_at') is String
+        ? DateTime.parse(
+            _readJsonValue(json, 'createdAt', 'created_at') as String,
+          )
         : DateTime.now(),
   );
 }
 
 class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
   NotificationsNotifier({NotificationsApi? api})
-      : _api = api ?? NotificationsApiImpl(),
-        super([]) {
+    : _api = api ?? NotificationsApiImpl(),
+      super([]) {
     _fetchNotifications();
     _listenToFcmMessages();
     _listenToWsNotifications();
@@ -56,6 +75,9 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
   void _listenToFcmMessages() {
     _fcmSub?.cancel();
     _fcmSub = NotificationService.messageStream.listen((_) {
+      // When WS is active it delivers notifications in real time — suppress
+      // FCM foreground handling to prevent duplicate sound + state churn.
+      if (WebSocketService.instance.isNotificationsConnected) return;
       _fetchNotifications();
       _playNotificationSound();
     });
@@ -92,10 +114,9 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
     } catch (_) {
       // Offline fallback
       _loadedFromApi = false;
-      state = MockData.notifications
-          .where((n) => n.userId == 'usr_001')
-          .toList()
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      state =
+          MockData.notifications.where((n) => n.userId == 'usr_001').toList()
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     }
   }
 
@@ -107,7 +128,9 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
         await _api.markAsRead(id);
       } catch (_) {}
     }
-    state = state.map((n) => n.id == id ? n.copyWith(isRead: true) : n).toList();
+    state = state
+        .map((n) => n.id == id ? n.copyWith(isRead: true) : n)
+        .toList();
   }
 
   Future<void> markAllAsRead() async {
@@ -133,8 +156,8 @@ final notificationsApiProvider = Provider<NotificationsApi>(
 
 final notificationsProvider =
     StateNotifierProvider<NotificationsNotifier, List<AppNotification>>(
-  (ref) => NotificationsNotifier(api: ref.read(notificationsApiProvider)),
-);
+      (ref) => NotificationsNotifier(api: ref.read(notificationsApiProvider)),
+    );
 
 /// Convenience provider for unread count.
 final unreadNotificationsCountProvider = Provider<int>((ref) {
