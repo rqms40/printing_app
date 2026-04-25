@@ -14,6 +14,9 @@ void main() {
     );
     addTearDown(container.dispose);
 
+    // Hold a listener to keep the autoDispose provider alive through invalidation
+    container.listen(dailyGridProvider, (_, __) {});
+
     // Build the provider
     await container.read(dailyGridProvider.future);
     expect(
@@ -24,7 +27,7 @@ void main() {
     // Simulate _onDailyGridUpdated
     container.invalidate(dailyGridProvider);
 
-    // Provider is now in loading state (showing previous value but marked as loading)
+    // Provider is now in loading state (kept alive by the listener above)
     final state = container.read(dailyGridProvider);
     expect(state.isLoading, true);
   });
