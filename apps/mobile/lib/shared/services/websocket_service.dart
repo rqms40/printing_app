@@ -24,6 +24,7 @@ class WebSocketService {
   io.Socket? _ordersSocket;
   io.Socket? _locationSocket;
   io.Socket? _notificationsSocket;
+  io.Socket? _dailyGridSocket;
 
   // Callbacks registered before the notifications socket is created
   final List<Function(Map<String, dynamic>)> _pendingNotifListeners = [];
@@ -180,13 +181,45 @@ class WebSocketService {
     }
   }
 
+  Future<void> connectDailyGrid({required VoidCallback onUpdated}) async {
+    if (_dailyGridSocket?.connected == true) return;
+    if (_dailyGridSocket != null) {
+      _dailyGridSocket!.connect();
+      return;
+    }
+    _dailyGridSocket = io.io(
+      '$_baseUrl/ws/daily-grid',
+      io.OptionBuilder()
+          .setTransports(['websocket'])
+          .disableAutoConnect()
+          .build(),
+    );
+    _dailyGridSocket!.on('dailyGridUpdated', (_) => onUpdated());
+    _dailyGridSocket!.on(
+      'connect',
+      (_) => debugPrint('WS DailyGrid connected'),
+    );
+    _dailyGridSocket!.on(
+      'connect_error',
+      (e) => debugPrint('WS DailyGrid error: $e'),
+    );
+    _dailyGridSocket!.connect();
+  }
+
+  void disconnectDailyGrid() {
+    _dailyGridSocket?.disconnect();
+    _dailyGridSocket = null;
+  }
+
   void disconnect() {
     _ordersSocket?.disconnect();
     _locationSocket?.disconnect();
     _notificationsSocket?.disconnect();
+    _dailyGridSocket?.disconnect();
     // Null out so the next connection creates a fresh socket
     // with a new JWT — prevents stale-token room membership after logout.
     _notificationsSocket = null;
     _ordersSocket = null;
+    _dailyGridSocket = null;
   }
 }
