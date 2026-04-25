@@ -18,6 +18,7 @@ import 'package:printing_app/features/customer/home/widgets/hero_banner.dart';
 import 'package:printing_app/features/customer/home/widgets/map_tracking_tile.dart';
 import 'package:printing_app/features/customer/home/widgets/recent_orders_section.dart';
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
+import 'package:printing_app/features/customer/beta/widgets/beta_indicator.dart';
 import 'package:printing_app/shared/services/draft_storage_service.dart';
 import 'package:printing_app/utils/formatters.dart';
 
@@ -92,10 +93,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final credits = (double.tryParse(authState.user?.credits ?? '0') ?? 0.0)
         .toInt();
 
-    return ColoredBox(
-      color: colors.background,
-      child: SafeArea(
-        child: RefreshIndicator(
+    return Stack(
+      children: [
+        ColoredBox(
+          color: colors.background,
+          child: SafeArea(
+            child: RefreshIndicator(
           color: colors.brand,
           backgroundColor: colors.surface,
           onRefresh: ref.read(ordersProvider.notifier).refreshOrders,
@@ -307,7 +310,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ),
         ),
-      ),
+        ),
+        ),
+        const Positioned(
+          top: 0,
+          right: AppSpacing.md,
+          child: SafeArea(child: BetaIndicator()),
+        ),
+      ],
     );
   }
 }
