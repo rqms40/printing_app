@@ -56,9 +56,9 @@ export class OpenRouterService {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const json = (await res.json()) as {
-        choices: Array<{ message: { content: string } }>;
+        choices?: Array<{ message?: { content?: string } }>;
       };
-      const content = json.choices[0]?.message?.content;
+      const content = json?.choices?.[0]?.message?.content;
       if (!content) throw new Error('Empty response');
       return content;
     } finally {

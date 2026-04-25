@@ -22,7 +22,7 @@ describe('OpenRouterService', () => {
         OPENROUTER_API_KEY: 'test-key',
         OPENROUTER_MODEL: 'nvidia/nemotron-3-nano-30b-a3b:free',
       };
-      if (!values[key]) throw new Error(`Missing: ${key}`);
+      if (!(key in values)) throw new Error(`Missing: ${key}`);
       return values[key];
     },
   };
@@ -95,5 +95,26 @@ describe('OpenRouterService', () => {
     const result = await svc2.complete([{ role: 'user', content: 'Hi' }]);
     expect(result).toBe('fallback reply');
     expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns fallback message when request times out', async () => {
+    jest.useFakeTimers();
+    let aborted = false;
+    mockFetch.mockImplementation(
+      (_url: string, opts: { signal?: AbortSignal }) =>
+        new Promise((_, reject) => {
+          if (opts?.signal) {
+            opts.signal.addEventListener('abort', () => {
+              aborted = true;
+              reject(new DOMException('The operation was aborted.', 'AbortError'));
+            });
+          }
+          jest.advanceTimersByTime(11_000);
+        }),
+    );
+    const result = await service.complete([{ role: 'user', content: 'Hi' }]);
+    jest.useRealTimers();
+    expect(aborted).toBe(true);
+    expect(result).toContain('having trouble');
   });
 });
