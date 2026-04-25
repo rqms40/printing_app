@@ -9,4 +9,9 @@ export class CreateConversationDto {
   @IsInt()
   @IsPositive()
   orderId?: number;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  assignedRiderId?: number;
 }

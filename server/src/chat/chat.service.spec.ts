@@ -53,7 +53,11 @@ describe('ChatService', () => {
       });
 
       expect(convRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ customerId: 5, type: ConversationType.ADMIN }),
+        expect.objectContaining({
+          customerId: 5,
+          type: ConversationType.ADMIN,
+          status: ConversationStatus.OPEN,
+        }),
       );
       expect(result.status).toBe(ConversationStatus.OPEN);
     });
@@ -81,6 +85,14 @@ describe('ChatService', () => {
       openRouter.complete.mockResolvedValue('We offer paper and 3D printing!');
 
       const result = await service.getBotResponse(1, 'What do you offer?');
+
+      expect(msgRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { conversationId: 1 },
+          order: { createdAt: 'DESC' },
+          take: 10,
+        }),
+      );
       expect(openRouter.complete).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.objectContaining({ role: 'system' }),

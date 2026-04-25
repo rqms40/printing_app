@@ -34,6 +34,7 @@ export class ChatService {
       customerId,
       type: dto.type,
       orderId: dto.orderId ?? null,
+      assignedRiderId: dto.assignedRiderId ?? null,
       status: ConversationStatus.OPEN,
     });
     return this.convRepo.save(conv);
