@@ -21,6 +21,9 @@ class WebSocketService {
   static final instance = WebSocketService._();
   WebSocketService._();
 
+  /// When true, [connectDailyGrid] is a no-op. Set in widget tests that pump
+  /// [DailyGridSection] to prevent real socket connection attempts.
+  /// MUST be reset to false in tearDownAll to avoid polluting other test files.
   @visibleForTesting
   static bool disableDailyGridSocketForTests = false;
 
@@ -198,6 +201,7 @@ class WebSocketService {
       return;
     }
     try {
+      // No auth required — daily-grid is a public namespace (same as GET /daily-grid).
       _dailyGridSocket = io.io(
         '$_baseUrl/ws/daily-grid',
         io.OptionBuilder()

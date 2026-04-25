@@ -100,7 +100,7 @@ class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
         );
       }
     });
-    WebSocketService.instance.connectDailyGrid(onUpdated: _onDailyGridUpdated);
+    unawaited(WebSocketService.instance.connectDailyGrid(onUpdated: _onDailyGridUpdated));
   }
 
   @override
