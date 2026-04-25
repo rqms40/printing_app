@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, Repository } from 'typeorm';
 import {
   Conversation,
   ConversationStatus,
@@ -107,7 +107,7 @@ export class ChatService {
     status?: string,
     type?: string,
   ): Promise<Conversation[]> {
-    const where: Partial<Conversation> = {};
+    const where: FindOptionsWhere<Conversation> = {};
     if (status && Object.values(ConversationStatus).includes(status as ConversationStatus)) {
       where.status = status as ConversationStatus;
     }

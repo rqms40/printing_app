@@ -149,7 +149,7 @@ describe('ChatGateway', () => {
       const socket = makeSocket({ data: { userId: 1, role: 'admin' } });
       gateway.handleTyping({ conversationId: 7 }, socket as any);
       expect(socket.to).toHaveBeenCalledWith('conversation:7');
-      const toResult = socket.to.mock.results[0].value as jest.Mock;
+      const toResult = socket.to.mock.results[0].value as jest.Mock & { emit: jest.Mock };
       expect(toResult.emit).toHaveBeenCalledWith('user-typing', {
         conversationId: 7,
         senderRole: SenderRole.ADMIN,
@@ -160,7 +160,7 @@ describe('ChatGateway', () => {
       const socket = makeSocket({ data: { userId: 2, role: 'driver' } });
       gateway.handleTyping({ conversationId: 8 }, socket as any);
       expect(socket.to).toHaveBeenCalledWith('conversation:8');
-      const toResult = socket.to.mock.results[0].value as jest.Mock;
+      const toResult = socket.to.mock.results[0].value as jest.Mock & { emit: jest.Mock };
       expect(toResult.emit).toHaveBeenCalledWith('user-typing', {
         conversationId: 8,
         senderRole: SenderRole.RIDER,
