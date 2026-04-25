@@ -104,6 +104,15 @@ export class User {
   })
   fileRetentionDays: number | null;
 
+  @Column({ name: 'is_beta_user', default: false })
+  isBetaUser: boolean;
+
+  @Column({ name: 'beta_enrolled_at', type: 'timestamp', nullable: true })
+  betaEnrolledAt: Date | null;
+
+  @Column({ name: 'beta_credits_granted', default: false })
+  betaCreditsGranted: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
