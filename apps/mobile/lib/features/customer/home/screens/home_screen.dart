@@ -9,6 +9,7 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
+import 'package:printing_app/features/customer/cart/providers/cart_provider.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart'
     show ordersProvider;
 import 'package:printing_app/features/customer/home/providers/tam_surveys_feed_provider.dart';
@@ -18,6 +19,7 @@ import 'package:printing_app/features/customer/home/widgets/map_tracking_tile.da
 import 'package:printing_app/features/customer/home/widgets/recent_orders_section.dart';
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
 import 'package:printing_app/shared/services/draft_storage_service.dart';
+import 'package:printing_app/utils/formatters.dart';
 
 /// Customer home screen — editorial redesign.
 class HomeScreen extends ConsumerStatefulWidget {
@@ -33,10 +35,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    precacheImage(
-      const AssetImage('assets/animations/bentobox.webp'),
-      context,
-    );
+    precacheImage(const AssetImage('assets/animations/bentobox.webp'), context);
   }
 
   AppColorSet _colors(BuildContext context) {
@@ -61,7 +60,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       'THURSDAY',
       'FRIDAY',
       'SATURDAY',
-      'SUNDAY'
+      'SUNDAY',
     ];
     const months = [
       'JANUARY',
@@ -75,7 +74,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       'SEPTEMBER',
       'OCTOBER',
       'NOVEMBER',
-      'DECEMBER'
+      'DECEMBER',
     ];
     return '${days[now.weekday - 1]}, ${months[now.month - 1]} ${now.day}';
   }
@@ -85,12 +84,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final colors = _colors(context);
     final authState = ref.watch(authProvider);
     final firstName = (authState.user?.fullName ?? 'there').split(' ').first;
+    final cart = ref.watch(cartProvider);
     final hasDraft = !_draftDismissed && DraftStorageService.hasDraft;
 
     final unreadCount = ref.watch(unreadNotificationsCountProvider);
 
-    final credits =
-        (double.tryParse(authState.user?.credits ?? '0') ?? 0.0).toInt();
+    final credits = (double.tryParse(authState.user?.credits ?? '0') ?? 0.0)
+        .toInt();
 
     return ColoredBox(
       color: colors.background,
@@ -101,9 +101,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           onRefresh: ref.read(ordersProvider.notifier).refreshOrders,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            clipBehavior: Clip.none, // allows Daily Grid carousel to bleed to screen edge
-            padding:
-                const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+            clipBehavior:
+                Clip.none, // allows Daily Grid carousel to bleed to screen edge
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -111,53 +111,53 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                 // ── Header ─────────────────────────────────────────────
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _formattedDate(),
-                            style: AppTypography.overline.copyWith(
-                              color: colors.onSurfaceDim,
-                              fontSize: 10,
-                              letterSpacing: 1.5,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          RichText(
-                            text: TextSpan(
-                              style: AppTypography.h2.copyWith(
-                                color: colors.onBackground,
-                              ),
-                              children: [
-                                TextSpan(text: '${_greeting()} '),
-                                TextSpan(
-                                  text: firstName,
-                                  style: AppTypography.h2.copyWith(
-                                    color: colors.brand,
-                                  ),
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _formattedDate(),
+                                style: AppTypography.overline.copyWith(
+                                  color: colors.onSurfaceDim,
+                                  fontSize: 10,
+                                  letterSpacing: 1.5,
                                 ),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(height: 2),
+                              RichText(
+                                text: TextSpan(
+                                  style: AppTypography.h2.copyWith(
+                                    color: colors.onBackground,
+                                  ),
+                                  children: [
+                                    TextSpan(text: '${_greeting()} '),
+                                    TextSpan(
+                                      text: firstName,
+                                      style: AppTypography.h2.copyWith(
+                                        color: colors.brand,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
+                        ),
 
-                    // Notification bell
-                    _NotificationWidget(
-                      colors: colors,
-                      unreadCount: unreadCount,
-                    ),
+                        // Notification bell
+                        _NotificationWidget(
+                          colors: colors,
+                          unreadCount: unreadCount,
+                        ),
 
-                    const SizedBox(width: AppSpacing.xs),
+                        const SizedBox(width: AppSpacing.xs),
 
-                    // Credits chip
-                    _CreditsWidget(colors: colors, credits: credits),
-                  ],
-                )
+                        // Credits chip
+                        _CreditsWidget(colors: colors, credits: credits),
+                      ],
+                    )
                     .animate()
                     .fadeIn(duration: 400.ms, curve: Curves.easeOut)
                     .slideY(
@@ -168,49 +168,64 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                 const SizedBox(height: AppSpacing.lg),
 
+                if (cart.isNotEmpty) ...[
+                  _ResumeQueueCard(colors: colors, cart: cart)
+                      .animate()
+                      .fadeIn(duration: 300.ms, curve: Curves.easeOut)
+                      .slideY(
+                        begin: 0.02,
+                        duration: 300.ms,
+                        curve: Curves.easeOut,
+                      ),
+                  const SizedBox(height: AppSpacing.md),
+                ],
+
                 // ── Draft banner ───────────────────────────────────────
                 if (hasDraft) ...[
                   Container(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    decoration: BoxDecoration(
-                      color: colors.surface,
-                      borderRadius: AppRadius.borderMd,
-                      border: Border.all(color: colors.brand),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.edit_note_rounded,
-                            color: colors.brand),
-                        const SizedBox(width: AppSpacing.sm),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Continue your order',
-                                  style: AppTypography.bodyBold),
-                              Text('You have an unfinished order',
-                                  style: AppTypography.caption),
-                            ],
-                          ),
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        decoration: BoxDecoration(
+                          color: colors.surface,
+                          borderRadius: AppRadius.borderMd,
+                          border: Border.all(color: colors.brand),
                         ),
-                        TextButton(
-                          onPressed: () =>
-                              context.push('/customer/order/new'),
-                          child: Text(
-                            'Resume',
-                            style: TextStyle(color: colors.brand),
-                          ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit_note_rounded, color: colors.brand),
+                            const SizedBox(width: AppSpacing.sm),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Continue your order',
+                                    style: AppTypography.bodyBold,
+                                  ),
+                                  Text(
+                                    'You have an unfinished order',
+                                    style: AppTypography.caption,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () =>
+                                  context.push('/customer/order/new'),
+                              child: Text(
+                                'Resume',
+                                style: TextStyle(color: colors.brand),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close, size: 18),
+                              onPressed: () {
+                                DraftStorageService.clearDraft();
+                                setState(() => _draftDismissed = true);
+                              },
+                            ),
+                          ],
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.close, size: 18),
-                          onPressed: () {
-                            DraftStorageService.clearDraft();
-                            setState(() => _draftDismissed = true);
-                          },
-                        ),
-                      ],
-                    ),
-                  )
+                      )
                       .animate()
                       .fadeIn(duration: 300.ms, curve: Curves.easeOut)
                       .slideY(
@@ -233,9 +248,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       // Left: map tile (50%)
-                      const Expanded(
-                        child: MapTrackingTile(),
-                      ),
+                      const Expanded(child: MapTrackingTile()),
                       const SizedBox(width: AppSpacing.sm),
                       // Right: 3 stacked tiles (50%)
                       Expanded(
@@ -247,8 +260,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               flex: 2,
                               child: _StartPrintingTile(
                                 colors: colors,
-                                onTap: () => context
-                                    .push('/customer/order/new'),
+                                onTap: () =>
+                                    context.push('/customer/order/new'),
                               ),
                             ),
                             const SizedBox(height: AppSpacing.xs + 2),
@@ -259,49 +272,149 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ),
                             const SizedBox(height: AppSpacing.xs + 2),
                             // 3: The Feed (flex 3)
-                            Expanded(
-                              flex: 3,
-                              child: _FeedTile(colors: colors),
-                            ),
+                            Expanded(flex: 3, child: _FeedTile(colors: colors)),
                           ],
                         ),
                       ),
                     ],
                   ),
-                )
-                    .animate()
-                    .fadeIn(
-                      duration: 400.ms,
-                      delay: 100.ms,
-                      curve: Curves.easeOut,
-                    ),
+                ).animate().fadeIn(
+                  duration: 400.ms,
+                  delay: 100.ms,
+                  curve: Curves.easeOut,
+                ),
 
                 const SizedBox(height: AppSpacing.lg),
 
                 // ── Daily Grid ─────────────────────────────────────────
-                const DailyGridSection()
-                    .animate()
-                    .fadeIn(
-                      duration: 400.ms,
-                      delay: 200.ms,
-                      curve: Curves.easeOut,
-                    ),
+                const DailyGridSection().animate().fadeIn(
+                  duration: 400.ms,
+                  delay: 200.ms,
+                  curve: Curves.easeOut,
+                ),
 
                 const SizedBox(height: AppSpacing.lg),
 
                 // ── Recent Orders ──────────────────────────────────────
-                const RecentOrdersSection()
-                    .animate()
-                    .fadeIn(
-                      duration: 400.ms,
-                      delay: 300.ms,
-                      curve: Curves.easeOut,
-                    ),
+                const RecentOrdersSection().animate().fadeIn(
+                  duration: 400.ms,
+                  delay: 300.ms,
+                  curve: Curves.easeOut,
+                ),
 
                 const SizedBox(height: AppSpacing.xxl),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ResumeQueueCard extends StatelessWidget {
+  const _ResumeQueueCard({required this.colors, required this.cart});
+
+  final AppColorSet colors;
+  final CartState cart;
+
+  @override
+  Widget build(BuildContext context) {
+    final jobLabel =
+        '${cart.itemCount} print job${cart.itemCount == 1 ? '' : 's'}';
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => context.push('/customer/cart'),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: AppRadius.borderXl,
+          border: Border.all(color: colors.brand.withValues(alpha: 0.45)),
+          boxShadow: [
+            BoxShadow(
+              color: colors.brand.withValues(alpha: 0.10),
+              blurRadius: 24,
+              offset: const Offset(0, 10),
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: colors.brand.withValues(alpha: 0.14),
+                borderRadius: AppRadius.borderLg,
+              ),
+              child: Center(
+                child: HugeIcon(
+                  icon: HugeIcons.strokeRoundedShoppingCart01,
+                  size: 24,
+                  color: colors.brand,
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Resume your queue',
+                    style: AppTypography.bodyBold.copyWith(
+                      color: colors.onBackground,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Wrap(
+                    spacing: AppSpacing.xs,
+                    runSpacing: 2,
+                    children: [
+                      Text(
+                        jobLabel,
+                        style: AppTypography.caption.copyWith(
+                          color: colors.onSurfaceDim,
+                        ),
+                      ),
+                      Text(
+                        '${formatCurrency(cart.subtotal)} subtotal',
+                        style: AppTypography.caption.copyWith(
+                          color: colors.onSurfaceDim,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm,
+                vertical: 7,
+              ),
+              decoration: BoxDecoration(
+                color: colors.brand,
+                borderRadius: AppRadius.borderMd,
+              ),
+              child: Text(
+                'View queue',
+                style: AppTypography.caption.copyWith(
+                  color: colors.background,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -520,10 +633,7 @@ class _CreditsDropdown extends StatelessWidget {
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: AppRadius.borderXl,
-        border: Border.all(
-          color: _kBrand.withValues(alpha: 0.18),
-          width: 0.75,
-        ),
+        border: Border.all(color: _kBrand.withValues(alpha: 0.18), width: 0.75),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.45),
@@ -618,7 +728,11 @@ class _CreditsDropdown extends StatelessWidget {
                     borderRadius: AppRadius.borderMd,
                   ),
                   child: const Center(
-                    child: Icon(Icons.add_rounded, size: 18, color: Colors.black),
+                    child: Icon(
+                      Icons.add_rounded,
+                      size: 18,
+                      color: Colors.black,
+                    ),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
@@ -656,10 +770,7 @@ String _relativeTime(DateTime dt) {
 }
 
 class _NotificationWidget extends ConsumerStatefulWidget {
-  const _NotificationWidget({
-    required this.colors,
-    required this.unreadCount,
-  });
+  const _NotificationWidget({required this.colors, required this.unreadCount});
 
   final AppColorSet colors;
   final int unreadCount;
@@ -689,8 +800,7 @@ class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
       vsync: this,
       duration: const Duration(milliseconds: 230),
     );
-    _scaleAnim =
-        CurvedAnimation(parent: _animCtrl, curve: Curves.easeOutBack);
+    _scaleAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOutBack);
     _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
   }
 
@@ -728,8 +838,7 @@ class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
         onTap: _close,
         child: Stack(
           children: [
-            const Positioned.fill(
-                child: ColoredBox(color: Colors.transparent)),
+            const Positioned.fill(child: ColoredBox(color: Colors.transparent)),
             CompositedTransformFollower(
               link: _layerLink,
               showWhenUnlinked: false,
@@ -751,8 +860,7 @@ class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
                         onClose: _close,
                         onViewAll: () {
                           _close();
-                          Future.delayed(
-                              const Duration(milliseconds: 180), () {
+                          Future.delayed(const Duration(milliseconds: 180), () {
                             if (stateCtx.mounted) {
                               stateCtx.push('/customer/notifications');
                             }
@@ -763,8 +871,7 @@ class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
                               .read(notificationsProvider.notifier)
                               .markAsRead(id);
                           _close();
-                          Future.delayed(
-                              const Duration(milliseconds: 180), () {
+                          Future.delayed(const Duration(milliseconds: 180), () {
                             if (stateCtx.mounted) {
                               stateCtx.push('/customer/notifications');
                             }
@@ -863,6 +970,7 @@ class _NotificationDropdown extends ConsumerWidget {
   final void Function(String id) onTapNotification;
   final VoidCallback onMarkAllRead;
   final VoidCallback onClear;
+
   /// IDs locally dismissed from the home dropdown — not cleared from DB.
   final Set<String> dismissedIds;
 
@@ -908,7 +1016,11 @@ class _NotificationDropdown extends ConsumerWidget {
           // ── Header ──────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md, AppSpacing.md, AppSpacing.sm, AppSpacing.xs),
+              AppSpacing.md,
+              AppSpacing.md,
+              AppSpacing.sm,
+              AppSpacing.xs,
+            ),
             child: Row(
               children: [
                 Text(
@@ -1210,12 +1322,12 @@ class _StartPrintingTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _YellowBorderTile(
-        colors: colors,
-        icon: HugeIcons.strokeRoundedPrinter,
-        title: 'Start Printing',
-        subtitle: 'New order',
-        onTap: onTap,
-      );
+    colors: colors,
+    icon: HugeIcons.strokeRoundedPrinter,
+    title: 'Start Printing',
+    subtitle: 'New order',
+    onTap: onTap,
+  );
 }
 
 class _DataGridTile extends StatelessWidget {
@@ -1224,11 +1336,11 @@ class _DataGridTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _YellowBorderTile(
-        colors: colors,
-        icon: HugeIcons.strokeRoundedCloudUpload,
-        title: 'The Data Grid',
-        onTap: () => context.push('/customer/uploads'),
-      );
+    colors: colors,
+    icon: HugeIcons.strokeRoundedCloudUpload,
+    title: 'The Data Grid',
+    onTap: () => context.push('/customer/uploads'),
+  );
 }
 
 // ── Right-column tile: The Feed ─────────────────────────────────────────────
@@ -1270,11 +1382,17 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
           shape: RoundedRectangleBorder(borderRadius: AppRadius.borderXl),
           title: Row(
             children: [
-              const Icon(Icons.star_rounded, color: Color(0xFFFFDE58), size: 20),
+              const Icon(
+                Icons.star_rounded,
+                color: Color(0xFFFFDE58),
+                size: 20,
+              ),
               const SizedBox(width: 8),
               Text(
                 '${item.rating.toStringAsFixed(1)} / 5.0',
-                style: AppTypography.bodyBold.copyWith(color: widget.colors.onBackground),
+                style: AppTypography.bodyBold.copyWith(
+                  color: widget.colors.onBackground,
+                ),
               ),
             ],
           ),
@@ -1282,13 +1400,25 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(item.userName, style: AppTypography.bodyBold.copyWith(color: widget.colors.brand)),
-              Text('Student', style: AppTypography.caption.copyWith(color: widget.colors.onSurfaceDim)),
+              Text(
+                item.userName,
+                style: AppTypography.bodyBold.copyWith(
+                  color: widget.colors.brand,
+                ),
+              ),
+              Text(
+                'Student',
+                style: AppTypography.caption.copyWith(
+                  color: widget.colors.onSurfaceDim,
+                ),
+              ),
               const SizedBox(height: 16),
               if (item.feedback != null && item.feedback!.isNotEmpty)
                 Text(
                   item.feedback!,
-                  style: AppTypography.body.copyWith(color: widget.colors.onBackground),
+                  style: AppTypography.body.copyWith(
+                    color: widget.colors.onBackground,
+                  ),
                 )
               else
                 Text(
@@ -1303,7 +1433,10 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: Text('Close', style: TextStyle(color: widget.colors.brand)),
+              child: Text(
+                'Close',
+                style: TextStyle(color: widget.colors.brand),
+              ),
             ),
           ],
         );
@@ -1360,7 +1493,9 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
                   return Center(
                     child: Text(
                       'No community feedback yet.',
-                      style: AppTypography.caption.copyWith(color: widget.colors.onSurfaceDim),
+                      style: AppTypography.caption.copyWith(
+                        color: widget.colors.onSurfaceDim,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   );
@@ -1382,7 +1517,10 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
                     onTap: () => _showFeedbackModal(context, item),
                     behavior: HitTestBehavior.opaque,
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm,
+                        vertical: 4,
+                      ),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -1392,7 +1530,11 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
                               final isFilled = starIdx < item.rating.round();
                               return Icon(
                                 Icons.star_rounded,
-                                color: isFilled ? const Color(0xFFFFDE58) : widget.colors.onSurfaceDim.withValues(alpha: 0.4),
+                                color: isFilled
+                                    ? const Color(0xFFFFDE58)
+                                    : widget.colors.onSurfaceDim.withValues(
+                                        alpha: 0.4,
+                                      ),
                                 size: 14,
                               );
                             }),
@@ -1417,12 +1559,15 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
                             ),
                             textAlign: TextAlign.center,
                           ),
-                          if (item.feedback != null && item.feedback!.isNotEmpty) ...[
+                          if (item.feedback != null &&
+                              item.feedback!.isNotEmpty) ...[
                             const SizedBox(height: 4),
                             Text(
                               '"${item.feedback!}"',
                               style: AppTypography.body.copyWith(
-                                color: widget.colors.onBackground.withValues(alpha: 0.9),
+                                color: widget.colors.onBackground.withValues(
+                                  alpha: 0.9,
+                                ),
                                 fontSize: 9,
                                 height: 1.2,
                               ),
@@ -1438,14 +1583,21 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
                 );
               },
               loading: () => const Center(
-                  child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(color: Color(0xFFFFDE58), strokeWidth: 2.0))),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    color: Color(0xFFFFDE58),
+                    strokeWidth: 2.0,
+                  ),
+                ),
+              ),
               error: (err, _) => Center(
                 child: Text(
                   'Failed to load feed',
-                  style: AppTypography.caption.copyWith(color: Colors.redAccent),
+                  style: AppTypography.caption.copyWith(
+                    color: Colors.redAccent,
+                  ),
                 ),
               ),
             ),
