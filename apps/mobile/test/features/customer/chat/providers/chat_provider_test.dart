@@ -6,8 +6,9 @@ import 'package:dio/dio.dart';
 import 'package:printing_app/features/customer/chat/providers/chat_provider.dart';
 import 'package:printing_app/features/customer/chat/models/conversation.dart';
 import 'package:printing_app/shared/providers/dio_provider.dart';
+import 'package:printing_app/shared/services/websocket_service.dart';
 
-@GenerateMocks([Dio])
+@GenerateMocks([Dio, WebSocketService])
 import 'chat_provider_test.mocks.dart';
 
 void main() {

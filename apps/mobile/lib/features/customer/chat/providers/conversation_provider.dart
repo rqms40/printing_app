@@ -39,12 +39,12 @@ class ConversationState {
 }
 
 class ConversationNotifier extends StateNotifier<ConversationState> {
-  ConversationNotifier(this._conversationId, this._dio)
+  ConversationNotifier(this._conversationId, this._ws, this._dio)
       : super(const ConversationState());
 
   final int _conversationId;
+  final WebSocketService _ws;
   final Dio _dio;
-  final _ws = WebSocketService.instance;
   VoidCallback? _removeBotTypingListener;
   VoidCallback? _removeChatMessageListener;
   bool _initialized = false;
@@ -118,6 +118,7 @@ final conversationProvider = StateNotifierProvider.family<
     ConversationNotifier, ConversationState, int>(
   (ref, conversationId) => ConversationNotifier(
     conversationId,
+    WebSocketService.instance,
     ref.read(dioProvider),
   ),
 );

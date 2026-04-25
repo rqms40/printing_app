@@ -6,7 +6,7 @@ import 'package:printing_app/features/customer/chat/providers/conversation_provi
 import 'package:printing_app/features/customer/chat/models/chat_message.dart';
 import 'package:printing_app/shared/providers/dio_provider.dart';
 
-import 'chat_provider_test.mocks.dart'; // reuse MockDio
+import 'chat_provider_test.mocks.dart'; // reuse MockDio and MockWebSocketService
 
 void main() {
   group('ConversationState', () {
@@ -38,13 +38,15 @@ void main() {
 
   group('ConversationNotifier state logic', () {
     late MockDio mockDio;
+    late MockWebSocketService mockWs;
 
     setUp(() {
       mockDio = MockDio();
+      mockWs = MockWebSocketService();
     });
 
     test('_onMessage appends message to state and clears isBotTyping', () {
-      final notifier = ConversationNotifier(1, mockDio);
+      final notifier = ConversationNotifier(1, MockWebSocketService(), mockDio);
       final msg = ChatMessage(
         id: 20,
         conversationId: 1,
@@ -68,7 +70,7 @@ void main() {
     });
 
     test('_onMessage appends multiple messages in order', () {
-      final notifier = ConversationNotifier(1, mockDio);
+      final notifier = ConversationNotifier(1, MockWebSocketService(), mockDio);
 
       final msg1 = ChatMessage(
         id: 1,
@@ -96,13 +98,13 @@ void main() {
     });
 
     test('_onBotTyping sets isBotTyping true for matching conversation', () {
-      final notifier = ConversationNotifier(1, mockDio);
+      final notifier = ConversationNotifier(1, MockWebSocketService(), mockDio);
       notifier.onBotTypingForTest(1);
       expect(notifier.state.isBotTyping, true);
     });
 
     test('_onBotTyping ignores non-matching conversation', () {
-      final notifier = ConversationNotifier(1, mockDio);
+      final notifier = ConversationNotifier(1, MockWebSocketService(), mockDio);
       notifier.onBotTypingForTest(99);
       expect(notifier.state.isBotTyping, false);
     });
@@ -129,7 +131,7 @@ void main() {
         ),
       );
 
-      final notifier = ConversationNotifier(1, mockDio);
+      final notifier = ConversationNotifier(1, MockWebSocketService(), mockDio);
       await notifier.loadHistoryForTest();
 
       expect(notifier.state.messages, hasLength(1));
@@ -149,11 +151,77 @@ void main() {
         message: 'Network error',
       ));
 
-      final notifier = ConversationNotifier(1, mockDio);
+      final notifier = ConversationNotifier(1, MockWebSocketService(), mockDio);
       await notifier.loadHistoryForTest();
 
       expect(notifier.state.messages, hasLength(0));
       expect(notifier.state.error, isNotNull);
+    });
+
+    test('initialize connects WS, joins conversation, loads history, emits read-messages', () async {
+      when(mockWs.connectChat()).thenAnswer((_) async {});
+      when(mockWs.joinConversation(1)).thenReturn(null);
+      when(mockWs.listenForChatMessages(1, any)).thenReturn(() {});
+      when(mockWs.listenForBotTyping(any)).thenReturn(() {});
+      when(mockWs.emitReadMessages(1)).thenReturn(null);
+
+      when(mockDio.get<List<dynamic>>(
+        '/chat/conversations/1/messages',
+      )).thenAnswer((_) async => Response(
+        data: [],
+        statusCode: 200,
+        requestOptions: RequestOptions(path: '/chat/conversations/1/messages'),
+      ));
+
+      final notifier = ConversationNotifier(1, mockWs, mockDio);
+      await notifier.initialize();
+
+      verify(mockWs.connectChat()).called(1);
+      verify(mockWs.joinConversation(1)).called(1);
+      verify(mockWs.listenForChatMessages(1, any)).called(1);
+      verify(mockWs.listenForBotTyping(any)).called(1);
+      verify(mockWs.emitReadMessages(1)).called(1);
+      expect(notifier.state.isConnected, true);
+      expect(notifier.state.isLoading, false);
+    });
+
+    test('sendMessage calls sendChatMessage on WS with trimmed content', () {
+      when(mockWs.sendChatMessage(1, 'hello')).thenReturn(null);
+
+      final notifier = ConversationNotifier(1, mockWs, mockDio);
+      notifier.sendMessage('  hello  ');
+
+      verify(mockWs.sendChatMessage(1, 'hello')).called(1);
+    });
+
+    test('dispose calls both removal handles and leaveConversation', () async {
+      bool msgRemoveCalled = false;
+      bool botRemoveCalled = false;
+
+      when(mockWs.connectChat()).thenAnswer((_) async {});
+      when(mockWs.joinConversation(1)).thenReturn(null);
+      when(mockWs.listenForChatMessages(1, any))
+          .thenReturn(() { msgRemoveCalled = true; });
+      when(mockWs.listenForBotTyping(any))
+          .thenReturn(() { botRemoveCalled = true; });
+      when(mockWs.emitReadMessages(1)).thenReturn(null);
+      when(mockWs.leaveConversation(1)).thenReturn(null);
+
+      when(mockDio.get<List<dynamic>>(
+        '/chat/conversations/1/messages',
+      )).thenAnswer((_) async => Response(
+        data: [],
+        statusCode: 200,
+        requestOptions: RequestOptions(path: '/chat/conversations/1/messages'),
+      ));
+
+      final notifier = ConversationNotifier(1, mockWs, mockDio);
+      await notifier.initialize();
+      notifier.dispose();
+
+      expect(msgRemoveCalled, isTrue);
+      expect(botRemoveCalled, isTrue);
+      verify(mockWs.leaveConversation(1)).called(1);
     });
   });
 
