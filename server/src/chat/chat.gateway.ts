@@ -17,6 +17,8 @@ export class ChatGateway implements OnGatewayConnection {
   @WebSocketServer()
   server: Server;
 
+  private readonly botInFlight = new Set<number>();
+
   constructor(
     private readonly jwtService: JwtService,
     private readonly chatService: ChatService,
@@ -84,7 +86,9 @@ export class ChatGateway implements OnGatewayConnection {
       .to(`conversation:${data.conversationId}`)
       .emit('message-received', msg);
 
-    await this.triggerBotIfNeeded(data.conversationId, data.content);
+    this.triggerBotIfNeeded(data.conversationId, data.content).catch((err) => {
+      console.error('[ChatGateway] bot trigger error', err);
+    });
 
     return { status: 'ok' };
   }
@@ -93,26 +97,32 @@ export class ChatGateway implements OnGatewayConnection {
     conversationId: number,
     userMessage: string,
   ) {
+    if (this.botInFlight.has(conversationId)) return;
     const conv = await this.chatService.findConversation(conversationId);
     if (!conv || conv.type !== ConversationType.AI) return;
 
-    this.server.to(`conversation:${conversationId}`).emit('bot-typing', {
-      conversationId,
-    });
+    this.botInFlight.add(conversationId);
+    try {
+      this.server.to(`conversation:${conversationId}`).emit('bot-typing', {
+        conversationId,
+      });
 
-    const botText = await this.chatService.getBotResponse(
-      conversationId,
-      userMessage,
-    );
-    const botMsg = await this.chatService.saveMessage(
-      conversationId,
-      null,
-      SenderRole.BOT,
-      botText,
-    );
-    this.server
-      .to(`conversation:${conversationId}`)
-      .emit('bot-response', botMsg);
+      const botText = await this.chatService.getBotResponse(
+        conversationId,
+        userMessage,
+      );
+      const botMsg = await this.chatService.saveMessage(
+        conversationId,
+        null,
+        SenderRole.BOT,
+        botText,
+      );
+      this.server
+        .to(`conversation:${conversationId}`)
+        .emit('bot-response', botMsg);
+    } finally {
+      this.botInFlight.delete(conversationId);
+    }
   }
 
   @SubscribeMessage('typing')
@@ -136,7 +146,9 @@ export class ChatGateway implements OnGatewayConnection {
   @SubscribeMessage('read-messages')
   async handleReadMessages(
     @MessageBody() data: { conversationId: number },
+    @ConnectedSocket() client: Socket,
   ) {
+    if (!client.data.userId) return;
     await this.chatService.markMessagesRead(data.conversationId);
     this.server
       .to(`conversation:${data.conversationId}`)
