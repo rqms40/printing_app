@@ -103,7 +103,7 @@ class _QueuedJobs extends ConsumerWidget {
                 return Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                   child: Dismissible(
-                    key: Key('cart-item-${item.fileName}'),
+                    key: ValueKey(item.id),
                     direction: DismissDirection.endToStart,
                     background: const SizedBox.shrink(),
                     secondaryBackground: _RemoveBackground(colors: colors),
@@ -333,6 +333,7 @@ class _QuantityStepper extends StatelessWidget {
           _stepperButton(
             key: const Key('cart-item-decrement'),
             icon: HugeIcons.strokeRoundedMinusSign,
+            tooltip: 'Decrease quantity',
             onTap: canDecrement ? onDecrement : null,
             color: canDecrement ? colors.onBackground : colors.onSurfaceDim,
           ),
@@ -350,6 +351,7 @@ class _QuantityStepper extends StatelessWidget {
           _stepperButton(
             key: const Key('cart-item-increment'),
             icon: HugeIcons.strokeRoundedPlusSign,
+            tooltip: 'Increase quantity',
             onTap: onIncrement,
             color: colors.onBackground,
           ),
@@ -361,16 +363,17 @@ class _QuantityStepper extends StatelessWidget {
   Widget _stepperButton({
     required Key key,
     required List<List<dynamic>> icon,
+    required String tooltip,
     required VoidCallback? onTap,
     required Color color,
   }) {
     return IconButton(
       key: key,
+      tooltip: tooltip,
       onPressed: onTap,
       icon: HugeIcon(icon: icon, size: 16, color: color),
-      visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,
-      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+      constraints: const BoxConstraints.tightFor(width: 48, height: 48),
       style: IconButton.styleFrom(
         backgroundColor: colors.surface,
         disabledBackgroundColor: colors.surface.withValues(alpha: 0.45),
@@ -389,12 +392,17 @@ class _QueueTotals extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _totalRow('Base price', formatCurrency(subtotal), colors),
+        _totalRow('Print subtotal', formatCurrency(subtotal), colors),
         _totalRow('Delivery fee', 'Calculated next', colors),
         const SizedBox(height: AppSpacing.sm),
         Divider(color: colors.outline),
         const SizedBox(height: AppSpacing.sm),
-        _totalRow('Total', formatCurrency(subtotal), colors, isStrong: true),
+        _totalRow(
+          'Total before delivery',
+          formatCurrency(subtotal),
+          colors,
+          isStrong: true,
+        ),
       ],
     );
   }
@@ -466,46 +474,59 @@ class _EmptyQueue extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            HugeIcon(
-              icon: HugeIcons.strokeRoundedShoppingCart01,
-              size: 56,
-              color: colors.brand,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    HugeIcon(
+                      icon: HugeIcons.strokeRoundedShoppingCart01,
+                      size: 56,
+                      color: colors.brand,
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Text(
+                      'Your queue is empty',
+                      style: AppTypography.h3.copyWith(
+                        color: colors.onBackground,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      'Start a print job, add it here, then check out everything together.',
+                      style: AppTypography.body.copyWith(
+                        color: colors.onSurfaceDim,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: AppSpacing.xl),
+                    AppButton(
+                      label: 'Start Printing',
+                      variant: AppButtonVariant.brand,
+                      isFullWidth: true,
+                      onTap: () => context.go('/customer/order/new'),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    AppButton(
+                      label: 'Back to Home',
+                      variant: AppButtonVariant.secondary,
+                      isFullWidth: true,
+                      onTap: () => context.go('/customer/home'),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: AppSpacing.lg),
-            Text(
-              'Your queue is empty',
-              style: AppTypography.h3.copyWith(color: colors.onBackground),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              'Start a print job, add it here, then check out everything together.',
-              style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            AppButton(
-              label: 'Start Printing',
-              variant: AppButtonVariant.brand,
-              isFullWidth: true,
-              onTap: () => context.go('/customer/order/new'),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            AppButton(
-              label: 'Back to Home',
-              variant: AppButtonVariant.secondary,
-              isFullWidth: true,
-              onTap: () => context.go('/customer/home'),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

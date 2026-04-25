@@ -60,7 +60,8 @@ void main() {
 
     expect(find.text('proposal.pdf'), findsOneWidget);
     expect(find.text('The Queue'), findsOneWidget);
-    expect(find.text('Total'), findsOneWidget);
+    expect(find.text('Print subtotal'), findsOneWidget);
+    expect(find.text('Total before delivery'), findsOneWidget);
     expect(find.text('₱175.00'), findsWidgets);
     expect(find.text('Continue to Delivery'), findsOneWidget);
     expect(find.text('Add another print job'), findsOneWidget);
@@ -104,6 +105,25 @@ void main() {
     expect(container.read(cartProvider).items, hasLength(1));
   });
 
+  testWidgets(
+    'CartScreen quantity controls have accessible labels and targets',
+    (tester) async {
+      container
+          .read(cartProvider.notifier)
+          .addFromOrderFlow(_completePaperFlow(quantity: 2, totalPrice: 180));
+
+      await tester.pumpWidget(_wrapWithMaterial(container, const CartScreen()));
+
+      final decrement = find.byKey(const Key('cart-item-decrement')).first;
+      final increment = find.byKey(const Key('cart-item-increment')).first;
+
+      expect(find.byTooltip('Decrease quantity'), findsOneWidget);
+      expect(find.byTooltip('Increase quantity'), findsOneWidget);
+      expect(tester.getSize(decrement), const Size(48, 48));
+      expect(tester.getSize(increment), const Size(48, 48));
+    },
+  );
+
   testWidgets('CartScreen swipe remove deletes item and undo restores it', (
     tester,
   ) async {
@@ -113,10 +133,9 @@ void main() {
 
     await tester.pumpWidget(_wrapWithMaterial(container, const CartScreen()));
 
-    await tester.drag(
-      find.byKey(const Key('cart-item-proposal.pdf')),
-      const Offset(-600, 0),
-    );
+    final itemId = container.read(cartProvider).items.single.id;
+
+    await tester.drag(find.byKey(ValueKey(itemId)), const Offset(-600, 0));
     await tester.pumpAndSettle();
 
     expect(find.text('proposal.pdf'), findsNothing);
@@ -128,6 +147,24 @@ void main() {
 
     expect(find.text('proposal.pdf'), findsOneWidget);
     expect(container.read(cartProvider).items.single.quantity, 2);
+  });
+
+  testWidgets('CartScreen empty state is scroll safe', (tester) async {
+    await tester.pumpWidget(
+      _wrapWithMaterial(
+        container,
+        const MediaQuery(
+          data: MediaQueryData(
+            size: Size(320, 360),
+            textScaler: TextScaler.linear(2),
+          ),
+          child: CartScreen(),
+        ),
+      ),
+    );
+
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
+    expect(find.text('Your queue is empty'), findsOneWidget);
   });
 
   testWidgets('SummaryScreen has Add to Cart action', (tester) async {
