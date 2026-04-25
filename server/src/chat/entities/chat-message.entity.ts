@@ -30,7 +30,7 @@ export class ChatMessage {
   conversation: Conversation;
 
   @Column({ name: 'sender_id', nullable: true })
-  senderId: number;
+  senderId: number | null;
 
   @Column({ name: 'sender_role', type: 'enum', enum: SenderRole })
   senderRole: SenderRole;

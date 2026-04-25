@@ -41,13 +41,13 @@ export class Conversation {
   type: ConversationType;
 
   @Column({ name: 'order_id', nullable: true })
-  orderId: number;
+  orderId: number | null;
 
   @Column({ name: 'assigned_admin_id', nullable: true })
-  assignedAdminId: number;
+  assignedAdminId: number | null;
 
   @Column({ name: 'assigned_rider_id', nullable: true })
-  assignedRiderId: number;
+  assignedRiderId: number | null;
 
   @Column({
     type: 'enum',
@@ -66,5 +66,5 @@ export class Conversation {
   closedAt: Date;
 
   @OneToMany('ChatMessage', 'conversation')
-  messages: any[];
+  messages: import('./chat-message.entity').ChatMessage[];
 }
