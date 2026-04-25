@@ -93,13 +93,29 @@ describe('ChatService', () => {
           take: 10,
         }),
       );
-      expect(openRouter.complete).toHaveBeenCalledWith(
-        expect.arrayContaining([
-          expect.objectContaining({ role: 'system' }),
-          expect.objectContaining({ role: 'user', content: 'What do you offer?' }),
-        ]),
-      );
+      expect(openRouter.complete).toHaveBeenCalledWith([
+        expect.objectContaining({ role: 'system' }),
+        { role: 'user', content: 'What do you offer?' },
+      ]);
       expect(result).toBe('We offer paper and 3D printing!');
+    });
+
+    it('maps bot messages to assistant role and reverses DESC history to chronological order', async () => {
+      msgRepo.find.mockResolvedValue([
+        // DESC order: newest first
+        { senderRole: SenderRole.BOT, content: 'We offer paper and 3D printing!' },
+        { senderRole: SenderRole.CUSTOMER, content: 'What do you offer?' },
+      ]);
+      openRouter.complete.mockResolvedValue('Great question!');
+
+      await service.getBotResponse(1, 'Follow-up');
+
+      const callArg = openRouter.complete.mock.calls[0][0] as Array<{ role: string; content: string }>;
+      // system prompt first
+      expect(callArg[0].role).toBe('system');
+      // then chronological order: customer question before bot response
+      expect(callArg[1]).toEqual({ role: 'user', content: 'What do you offer?' });
+      expect(callArg[2]).toEqual({ role: 'assistant', content: 'We offer paper and 3D printing!' });
     });
   });
 
@@ -116,6 +132,13 @@ describe('ChatService', () => {
       });
       expect(result.status).toBe(ConversationStatus.ASSIGNED);
     });
+
+    it('propagates error when conversation not found after assignAdmin', async () => {
+      convRepo.update.mockResolvedValue(undefined);
+      convRepo.findOneOrFail.mockRejectedValue(new Error('Entity not found'));
+
+      await expect(service.assignAdmin(999, 1)).rejects.toThrow('Entity not found');
+    });
   });
 
   describe('closeConversation', () => {
@@ -130,6 +153,13 @@ describe('ChatService', () => {
         closedAt: expect.any(Date),
       }));
       expect(result.status).toBe(ConversationStatus.CLOSED);
+    });
+
+    it('propagates error when conversation not found after closeConversation', async () => {
+      convRepo.update.mockResolvedValue(undefined);
+      convRepo.findOneOrFail.mockRejectedValue(new Error('Entity not found'));
+
+      await expect(service.closeConversation(999)).rejects.toThrow('Entity not found');
     });
   });
 

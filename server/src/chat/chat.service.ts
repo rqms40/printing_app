@@ -85,6 +85,7 @@ export class ChatService {
     conversationId: number,
     userMessage: string,
   ): Promise<string> {
+    // Called after the user's message is persisted — history already includes it
     const history = await this.msgRepo.find({
       where: { conversationId },
       order: { createdAt: 'DESC' },
@@ -97,7 +98,6 @@ export class ChatService {
         role: m.senderRole === SenderRole.BOT ? 'assistant' : 'user',
         content: m.content,
       })),
-      { role: 'user', content: userMessage },
     ];
 
     return this.openRouter.complete(messages);
@@ -108,8 +108,12 @@ export class ChatService {
     type?: string,
   ): Promise<Conversation[]> {
     const where: Partial<Conversation> = {};
-    if (status) where.status = status as ConversationStatus;
-    if (type) where.type = type as ConversationType;
+    if (status && Object.values(ConversationStatus).includes(status as ConversationStatus)) {
+      where.status = status as ConversationStatus;
+    }
+    if (type && Object.values(ConversationType).includes(type as ConversationType)) {
+      where.type = type as ConversationType;
+    }
     return this.convRepo.find({
       where,
       order: { createdAt: 'DESC' },
