@@ -81,34 +81,51 @@ class _TypingIndicatorState extends State<TypingIndicator>
   }
 }
 
-class _Dot extends StatelessWidget {
+class _Dot extends StatefulWidget {
   const _Dot({required this.ctrl, required this.index});
   final AnimationController ctrl;
   final int index;
+
+  @override
+  State<_Dot> createState() => _DotState();
+}
+
+class _DotState extends State<_Dot> {
+  late final CurvedAnimation _curved;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    final delay = widget.index * 0.2;
+    _curved = CurvedAnimation(
+      parent: widget.ctrl,
+      curve: Interval(delay, (delay + 0.4).clamp(0.0, 1.0),
+          curve: Curves.easeInOut),
+    );
+    _anim = TweenSequence([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: -5.0), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: -5.0, end: 0.0), weight: 1),
+    ]).animate(_curved);
+  }
+
+  @override
+  void dispose() {
+    _curved.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
-    final delay = index * 0.2;
-    final anim = TweenSequence([
-      TweenSequenceItem(tween: Tween(begin: 0.0, end: -5.0), weight: 1),
-      TweenSequenceItem(tween: Tween(begin: -5.0, end: 0.0), weight: 1),
-    ]).animate(
-      CurvedAnimation(
-        parent: ctrl,
-        curve: Interval(delay, (delay + 0.4).clamp(0.0, 1.0),
-            curve: Curves.easeInOut),
-      ),
-    );
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: AnimatedBuilder(
-        animation: anim,
+        animation: _anim,
         builder: (_, _) => Transform.translate(
-          offset: Offset(0, anim.value),
+          offset: Offset(0, _anim.value),
           child: Container(
             width: 6,
             height: 6,
