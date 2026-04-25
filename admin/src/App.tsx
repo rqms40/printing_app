@@ -22,6 +22,7 @@ import {
   BellOutlined,
   FormOutlined,
   AppstoreOutlined,
+  MessageOutlined,
 } from "@ant-design/icons";
 
 import { gridTheme } from "@/config/theme";
@@ -47,6 +48,7 @@ import { NotificationsPage } from "@/pages/notifications";
 import { TamSurveyList } from "@/pages/tam-surveys/list";
 import { TamSurveyShow } from "@/pages/tam-surveys/show";
 import { DailyGridList } from "@/pages/daily-grid/list";
+import { ChatInboxPage } from "@/pages/chat";
 
 function App() {
   return (
@@ -116,6 +118,11 @@ function App() {
                 list: "/daily-grid",
                 meta: { label: "Daily Grid", icon: <AppstoreOutlined /> },
               },
+              {
+                name: "chat",
+                list: "/chat",
+                meta: { label: "Support Chat", icon: <MessageOutlined /> },
+              },
             ]}
             options={{
               syncWithLocation: true,
@@ -166,6 +173,7 @@ function App() {
                   <Route path="show/:id" element={<TamSurveyShow />} />
                 </Route>
                 <Route path="/daily-grid" element={<DailyGridList />} />
+                <Route path="/chat" element={<ChatInboxPage />} />
               </Route>
 
               <Route
