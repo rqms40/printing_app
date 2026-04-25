@@ -8,6 +8,8 @@ import {
   Query,
   Request,
   UseGuards,
+  NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
@@ -18,6 +20,8 @@ import { CreateConversationDto } from './dto/create-conversation.dto';
 import { ConversationType } from './entities/conversation.entity';
 import type { Conversation } from './entities/conversation.entity';
 import type { ChatMessage } from './entities/chat-message.entity';
+
+type JwtUser = { sub: number; role: string; email: string };
 
 @Controller('chat')
 @UseGuards(JwtAuthGuard)
@@ -30,12 +34,12 @@ export class ChatController {
 
   @Post('conversations')
   async createConversation(
-    @Request() req: { user: { id: number } },
+    @Request() req: { user: JwtUser },
     @Body() dto: CreateConversationDto,
   ): Promise<Conversation> {
-    const conv = await this.chatService.createConversation(req.user.id, dto);
+    const conv = await this.chatService.createConversation(req.user.sub, dto);
     if (dto.type !== ConversationType.AI) {
-      const user = await this.usersService.findById(req.user.id);
+      const user = await this.usersService.findById(req.user.sub);
       this.chatGateway.notifyNewConversation(
         conv,
         user?.fullName ?? user?.nickname ?? 'Customer',
@@ -46,18 +50,25 @@ export class ChatController {
 
   @Get('conversations')
   getConversations(
-    @Request() req: { user: { id: number } },
+    @Request() req: { user: JwtUser },
   ): Promise<Conversation[]> {
-    return this.chatService.getConversations(req.user.id);
+    return this.chatService.getConversations(req.user.sub);
   }
 
   @Get('conversations/:id/messages')
-  getMessages(
+  async getMessages(
     @Param('id') id: string,
     @Query('page') page = '1',
     @Query('limit') limit = '50',
+    @Request() req: { user: JwtUser },
   ): Promise<ChatMessage[]> {
-    return this.chatService.getMessages(+id, +page, +limit);
+    const conv = await this.chatService.findConversation(+id);
+    if (!conv) throw new NotFoundException();
+    if (req.user.role !== 'admin' && conv.customerId !== req.user.sub) {
+      throw new ForbiddenException();
+    }
+    const cappedLimit = Math.min(+limit, 100);
+    return this.chatService.getMessages(+id, +page, cappedLimit);
   }
 
   @Get('admin/conversations')
@@ -75,9 +86,9 @@ export class ChatController {
   @Roles('admin')
   assignConversation(
     @Param('id') id: string,
-    @Request() req: { user: { id: number } },
+    @Request() req: { user: JwtUser },
   ): Promise<Conversation> {
-    return this.chatService.assignAdmin(+id, req.user.id);
+    return this.chatService.assignAdmin(+id, req.user.sub);
   }
 
   @Patch('conversations/:id/close')
