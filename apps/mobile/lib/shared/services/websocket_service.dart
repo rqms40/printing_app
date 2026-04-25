@@ -1,6 +1,7 @@
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'package:flutter/foundation.dart';
 import 'package:printing_app/config/api_config.dart';
+import 'package:printing_app/features/customer/chat/models/chat_message.dart';
 import 'token_storage.dart';
 
 /// Recursively converts `Map<dynamic, dynamic>` and `List<dynamic>` trees
@@ -31,6 +32,9 @@ class WebSocketService {
   io.Socket? _locationSocket;
   io.Socket? _notificationsSocket;
   io.Socket? _dailyGridSocket;
+  io.Socket? _chatSocket;
+  final Map<int, List<Function(ChatMessage)>> _chatMessageListeners = {};
+  final List<Function(int)> _botTypingListeners = [];
 
   // Callbacks registered before the notifications socket is created
   final List<Function(Map<String, dynamic>)> _pendingNotifListeners = [];
@@ -236,16 +240,120 @@ class WebSocketService {
     _dailyGridSocket = null;
   }
 
+  Future<void> connectChat() async {
+    if (_chatSocket?.connected == true) return;
+    if (_chatSocket != null) {
+      _chatSocket!.connect();
+      return;
+    }
+    final token = await TokenStorage.getToken();
+    _chatSocket = io.io(
+      '$_baseUrl/ws/chat',
+      io.OptionBuilder()
+          .setTransports(['websocket'])
+          .setAuth({'token': token ?? ''})
+          .disableAutoConnect()
+          .build(),
+    );
+    _chatSocket!.on('message-received', (data) {
+      _dispatchChatMessage(_normalize(data));
+    });
+    _chatSocket!.on('bot-response', (data) {
+      _dispatchChatMessage(_normalize(data));
+    });
+    _chatSocket!.on('bot-typing', (data) {
+      final d = _normalize(data) as Map<String, dynamic>;
+      final convId = d['conversationId'] as int;
+      for (final cb in List.of(_botTypingListeners)) {
+        try {
+          cb(convId);
+        } catch (e) {
+          debugPrint('WS botTyping error: $e');
+        }
+      }
+    });
+    _chatSocket!.on('connect', (_) => debugPrint('WS Chat connected'));
+    _chatSocket!.on('connect_error', (e) => debugPrint('WS Chat error: $e'));
+    _chatSocket!.connect();
+  }
+
+  void _dispatchChatMessage(dynamic data) {
+    try {
+      final msg = ChatMessage.fromJson(data as Map<String, dynamic>);
+      final listeners = _chatMessageListeners[msg.conversationId] ?? [];
+      for (final cb in List.of(listeners)) {
+        try {
+          cb(msg);
+        } catch (e) {
+          debugPrint('WS chatMsg error: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('WS chat message parse error: $e');
+    }
+  }
+
+  void joinConversation(int conversationId) {
+    _chatSocket?.emit('join-conversation', {'conversationId': conversationId});
+  }
+
+  void leaveConversation(int conversationId) {
+    _chatSocket?.emit('leave-conversation', {'conversationId': conversationId});
+    _chatMessageListeners.remove(conversationId);
+  }
+
+  void sendChatMessage(int conversationId, String content) {
+    _chatSocket?.emit('send-message', {
+      'conversationId': conversationId,
+      'content': content,
+    });
+  }
+
+  void emitTyping(int conversationId) {
+    _chatSocket?.emit('typing', {'conversationId': conversationId});
+  }
+
+  void emitReadMessages(int conversationId) {
+    _chatSocket?.emit('read-messages', {'conversationId': conversationId});
+  }
+
+  void listenForChatMessages(
+    int conversationId,
+    Function(ChatMessage) callback,
+  ) {
+    _chatMessageListeners.putIfAbsent(conversationId, () => []);
+    if (!(_chatMessageListeners[conversationId]!.contains(callback))) {
+      _chatMessageListeners[conversationId]!.add(callback);
+    }
+  }
+
+  void listenForBotTyping(Function(int conversationId) callback) {
+    if (!_botTypingListeners.contains(callback)) {
+      _botTypingListeners.add(callback);
+    }
+  }
+
+  void disconnectChat() {
+    _chatSocket?.disconnect();
+    _chatSocket = null;
+    _chatMessageListeners.clear();
+    _botTypingListeners.clear();
+  }
+
   void disconnect() {
     _ordersSocket?.disconnect();
     _locationSocket?.disconnect();
     _notificationsSocket?.disconnect();
     _dailyGridSocket?.disconnect();
+    _chatSocket?.disconnect();
+    _chatSocket = null;
     // Null out so the next connection creates a fresh socket
     // with a new JWT — prevents stale-token room membership after logout.
     _notificationsSocket = null;
     _ordersSocket = null;
     _dailyGridSocket = null;
     _locationSocket = null;
+    _chatMessageListeners.clear();
+    _botTypingListeners.clear();
   }
 }
