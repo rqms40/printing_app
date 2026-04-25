@@ -6,7 +6,6 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
 import 'package:printing_app/features/customer/cart/providers/cart_provider.dart';
-import 'package:printing_app/features/customer/cart/screens/cart_screen.dart';
 import 'package:printing_app/features/customer/home/screens/home_screen.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/paper_specs.dart';
@@ -36,7 +35,10 @@ Widget _wrapRouter(List<Override> overrides) {
     initialLocation: '/customer/home',
     routes: [
       GoRoute(path: '/customer/home', builder: (_, _) => const HomeScreen()),
-      GoRoute(path: '/customer/cart', builder: (_, _) => const CartScreen()),
+      GoRoute(
+        path: '/customer/cart',
+        builder: (_, _) => const Scaffold(body: Text('Cart route reached')),
+      ),
     ],
   );
 
@@ -136,7 +138,9 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(_wrap(const HomeScreen()));
+      await tester.pumpWidget(
+        _wrap(const HomeScreen(), overrides: [_emptyCartOverride()]),
+      );
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(milliseconds: 500));
 
@@ -170,6 +174,42 @@ void main() {
       expect(find.text('View queue'), findsOneWidget);
     });
 
+    testWidgets('resume queue card exposes button semantics', (tester) async {
+      final semantics = tester.ensureSemantics();
+      try {
+        tester.view.physicalSize = const Size(1080, 3200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          _wrap(
+            const HomeScreen(),
+            overrides: [
+              cartProvider.overrideWith(
+                (_) => _SeededCartNotifier(
+                  CartState(items: [_cartItem(quantity: 2, unitPrice: 90)]),
+                ),
+              ),
+            ],
+          ),
+        );
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(milliseconds: 500));
+
+        expect(
+          tester.getSemantics(find.bySemanticsLabel('Resume your queue')),
+          matchesSemantics(
+            label: 'Resume your queue',
+            isButton: true,
+            hasTapAction: true,
+          ),
+        );
+      } finally {
+        semantics.dispose();
+      }
+    });
+
     testWidgets('tapping resume queue card opens cart screen', (tester) async {
       tester.view.physicalSize = const Size(1080, 3200);
       tester.view.devicePixelRatio = 1.0;
@@ -191,10 +231,15 @@ void main() {
       await tester.tap(find.text('Resume your queue'));
       await tester.pumpAndSettle();
 
-      expect(find.text('The Queue'), findsWidgets);
-      expect(find.text('proposal.pdf'), findsOneWidget);
+      expect(find.text('Cart route reached'), findsOneWidget);
     });
   });
+}
+
+Override _emptyCartOverride() {
+  return cartProvider.overrideWith(
+    (_) => _SeededCartNotifier(const CartState()),
+  );
 }
 
 class _SeededCartNotifier extends CartNotifier {

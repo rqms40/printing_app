@@ -322,99 +322,118 @@ class _ResumeQueueCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final jobLabel =
         '${cart.itemCount} print job${cart.itemCount == 1 ? '' : 's'}';
+    void openQueue() => context.push('/customer/cart');
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => context.push('/customer/cart'),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: colors.surface,
-          borderRadius: AppRadius.borderXl,
-          border: Border.all(color: colors.brand.withValues(alpha: 0.45)),
-          boxShadow: [
-            BoxShadow(
-              color: colors.brand.withValues(alpha: 0.10),
-              blurRadius: 24,
-              offset: const Offset(0, 10),
-            ),
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: colors.brand.withValues(alpha: 0.14),
-                borderRadius: AppRadius.borderLg,
+    return Semantics(
+      button: true,
+      label: 'Resume your queue',
+      onTap: openQueue,
+      child: ExcludeSemantics(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: AppRadius.borderXl,
+            boxShadow: [
+              BoxShadow(
+                color: colors.brand.withValues(alpha: 0.10),
+                blurRadius: 24,
+                offset: const Offset(0, 10),
               ),
-              child: Center(
-                child: HugeIcon(
-                  icon: HugeIcons.strokeRoundedShoppingCart01,
-                  size: 24,
-                  color: colors.brand,
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Material(
+            color: colors.surface,
+            borderRadius: AppRadius.borderXl,
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: openQueue,
+              borderRadius: AppRadius.borderXl,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(AppSpacing.md),
+                decoration: BoxDecoration(
+                  borderRadius: AppRadius.borderXl,
+                  border: Border.all(
+                    color: colors.brand.withValues(alpha: 0.45),
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Resume your queue',
-                    style: AppTypography.bodyBold.copyWith(
-                      color: colors.onBackground,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        color: colors.brand.withValues(alpha: 0.14),
+                        borderRadius: AppRadius.borderLg,
+                      ),
+                      child: Center(
+                        child: HugeIcon(
+                          icon: HugeIcons.strokeRoundedShoppingCart01,
+                          size: 24,
+                          color: colors.brand,
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 3),
-                  Wrap(
-                    spacing: AppSpacing.xs,
-                    runSpacing: 2,
-                    children: [
-                      Text(
-                        jobLabel,
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Resume your queue',
+                            style: AppTypography.bodyBold.copyWith(
+                              color: colors.onBackground,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Wrap(
+                            spacing: AppSpacing.xs,
+                            runSpacing: 2,
+                            children: [
+                              Text(
+                                jobLabel,
+                                style: AppTypography.caption.copyWith(
+                                  color: colors.onSurfaceDim,
+                                ),
+                              ),
+                              Text(
+                                '${formatCurrency(cart.subtotal)} subtotal',
+                                style: AppTypography.caption.copyWith(
+                                  color: colors.onSurfaceDim,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colors.brand,
+                        borderRadius: AppRadius.borderMd,
+                      ),
+                      child: Text(
+                        'View queue',
                         style: AppTypography.caption.copyWith(
-                          color: colors.onSurfaceDim,
+                          color: colors.background,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                      Text(
-                        '${formatCurrency(cart.subtotal)} subtotal',
-                        style: AppTypography.caption.copyWith(
-                          color: colors.onSurfaceDim,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.sm,
-                vertical: 7,
-              ),
-              decoration: BoxDecoration(
-                color: colors.brand,
-                borderRadius: AppRadius.borderMd,
-              ),
-              child: Text(
-                'View queue',
-                style: AppTypography.caption.copyWith(
-                  color: colors.background,
-                  fontWeight: FontWeight.w700,
+                    ),
+                  ],
                 ),
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
