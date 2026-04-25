@@ -54,17 +54,21 @@ export class BetaModeService {
     if (!user) throw new NotFoundException(`User ${userId} not found`);
     if (user.isBetaUser) return;
 
-    const update: Partial<User> = {
-      isBetaUser: true,
-      betaEnrolledAt: new Date(),
-    };
+    const update: Partial<User> = { isBetaUser: true };
+    if (!user.betaEnrolledAt) {
+      update.betaEnrolledAt = new Date();
+    }
+    await this.userRepo.update(userId, update);
 
     if (!user.betaCreditsGranted) {
-      update.credits = Number(user.credits) + 100;
-      update.betaCreditsGranted = true;
+      // Atomic increment with DB-level guard prevents double-grant under concurrent requests
+      await this.userRepo
+        .createQueryBuilder()
+        .update(User)
+        .set({ credits: () => 'credits + 100', betaCreditsGranted: true })
+        .where('id = :id AND beta_credits_granted = false', { id: userId })
+        .execute();
     }
-
-    await this.userRepo.update(userId, update);
   }
 
   async unenrollUser(userId: number): Promise<void> {

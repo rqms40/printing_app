@@ -25,7 +25,9 @@ describe('BetaModeService', () => {
     find: jest.Mock;
     count: jest.Mock;
     update: jest.Mock;
+    createQueryBuilder: jest.Mock;
   };
+  let mockQB: { update: jest.Mock; set: jest.Mock; where: jest.Mock; execute: jest.Mock };
 
   beforeEach(async () => {
     settingsRepo = {
@@ -33,11 +35,18 @@ describe('BetaModeService', () => {
       create: jest.fn().mockReturnValue({ id: 1, isEnabled: false }),
       save: jest.fn().mockImplementation(async (v) => v),
     };
+    mockQB = {
+      update: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
     userRepo = {
       findOne: jest.fn(),
       find: jest.fn(),
       count: jest.fn(),
       update: jest.fn().mockResolvedValue(undefined),
+      createQueryBuilder: jest.fn().mockReturnValue(mockQB),
     };
 
     const module = await Test.createTestingModule({
@@ -68,17 +77,21 @@ describe('BetaModeService', () => {
 
   // ── enrollUser ─────────────────────────────────────────────────────────────
 
-  it('enrollUser sets isBetaUser=true and grants 100 credits on first enroll', async () => {
+  it('enrollUser sets isBetaUser=true and grants 100 credits atomically on first enroll', async () => {
     userRepo.findOne.mockResolvedValue(makeUser({ credits: 50 }));
     await service.enrollUser(1);
     expect(userRepo.update).toHaveBeenCalledWith(
       1,
-      expect.objectContaining({
-        isBetaUser: true,
-        betaCreditsGranted: true,
-        credits: 150,
-      }),
+      expect.objectContaining({ isBetaUser: true }),
     );
+    expect(mockQB.set).toHaveBeenCalledWith(
+      expect.objectContaining({ betaCreditsGranted: true }),
+    );
+    expect(mockQB.where).toHaveBeenCalledWith(
+      expect.stringContaining('beta_credits_granted = false'),
+      expect.objectContaining({ id: 1 }),
+    );
+    expect(mockQB.execute).toHaveBeenCalled();
   });
 
   it('enrollUser is idempotent — does nothing if already enrolled', async () => {
@@ -94,8 +107,17 @@ describe('BetaModeService', () => {
       makeUser({ isBetaUser: false, betaCreditsGranted: true, credits: 150 }),
     );
     await service.enrollUser(1);
+    expect(mockQB.execute).not.toHaveBeenCalled();
+  });
+
+  it('enrollUser preserves original betaEnrolledAt on re-enroll', async () => {
+    const original = new Date('2026-01-01');
+    userRepo.findOne.mockResolvedValue(
+      makeUser({ isBetaUser: false, betaEnrolledAt: original, betaCreditsGranted: true }),
+    );
+    await service.enrollUser(1);
     const [, updateArg] = userRepo.update.mock.calls[0];
-    expect(updateArg).not.toHaveProperty('credits');
+    expect(updateArg).not.toHaveProperty('betaEnrolledAt');
   });
 
   it('enrollUser throws NotFoundException for unknown userId', async () => {
