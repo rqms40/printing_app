@@ -12,6 +12,8 @@ class ConversationState {
   final bool isConnected;
   final String? error;
 
+  static const _keep = Object();
+
   const ConversationState({
     this.messages = const [],
     this.isLoading = false,
@@ -25,14 +27,14 @@ class ConversationState {
     bool? isLoading,
     bool? isBotTyping,
     bool? isConnected,
-    String? error,
+    Object? error = _keep,
   }) =>
       ConversationState(
         messages: messages ?? this.messages,
         isLoading: isLoading ?? this.isLoading,
         isBotTyping: isBotTyping ?? this.isBotTyping,
         isConnected: isConnected ?? this.isConnected,
-        error: error,
+        error: identical(error, _keep) ? this.error : error as String?,
       );
 }
 
@@ -44,12 +46,16 @@ class ConversationNotifier extends StateNotifier<ConversationState> {
   final Dio _dio;
   final _ws = WebSocketService.instance;
   VoidCallback? _removeBotTypingListener;
+  VoidCallback? _removeChatMessageListener;
+  bool _initialized = false;
 
   Future<void> initialize() async {
+    if (_initialized) return;
+    _initialized = true;
     state = state.copyWith(isLoading: true);
     await _ws.connectChat();
     _ws.joinConversation(_conversationId);
-    _ws.listenForChatMessages(_conversationId, _onMessage);
+    _removeChatMessageListener = _ws.listenForChatMessages(_conversationId, _onMessage);
     _removeBotTypingListener = _ws.listenForBotTyping(_onBotTyping);
     await _loadHistory();
     state = state.copyWith(isLoading: false, isConnected: true);
@@ -64,7 +70,7 @@ class ConversationNotifier extends StateNotifier<ConversationState> {
       final msgs = ((res.data) ?? [])
           .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
           .toList();
-      state = state.copyWith(messages: msgs);
+      state = state.copyWith(messages: msgs, error: null);
     } catch (e) {
       state = state.copyWith(error: e.toString());
     }
@@ -102,6 +108,7 @@ class ConversationNotifier extends StateNotifier<ConversationState> {
   @override
   void dispose() {
     _removeBotTypingListener?.call();
+    _removeChatMessageListener?.call();
     _ws.leaveConversation(_conversationId);
     super.dispose();
   }

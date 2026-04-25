@@ -8,6 +8,8 @@ class ChatState {
   final bool isLoading;
   final String? error;
 
+  static const _keep = Object();
+
   const ChatState({
     this.conversations = const [],
     this.isLoading = false,
@@ -17,12 +19,12 @@ class ChatState {
   ChatState copyWith({
     List<Conversation>? conversations,
     bool? isLoading,
-    String? error,
+    Object? error = _keep,
   }) =>
       ChatState(
         conversations: conversations ?? this.conversations,
         isLoading: isLoading ?? this.isLoading,
-        error: error,
+        error: identical(error, _keep) ? this.error : error as String?,
       );
 }
 

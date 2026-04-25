@@ -321,14 +321,14 @@ class WebSocketService {
     _chatSocket?.emit('read-messages', {'conversationId': conversationId});
   }
 
-  void listenForChatMessages(
+  /// Returns a removal handle — call it in dispose() to unregister the callback.
+  VoidCallback listenForChatMessages(
     int conversationId,
     Function(ChatMessage) callback,
   ) {
     _chatMessageListeners.putIfAbsent(conversationId, () => []);
-    if (!(_chatMessageListeners[conversationId]!.contains(callback))) {
-      _chatMessageListeners[conversationId]!.add(callback);
-    }
+    _chatMessageListeners[conversationId]!.add(callback);
+    return () => _chatMessageListeners[conversationId]?.remove(callback);
   }
 
   /// Returns a removal handle — call it in dispose() to unregister the callback.
