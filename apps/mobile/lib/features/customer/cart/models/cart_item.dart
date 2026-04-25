@@ -13,11 +13,17 @@ class CartItem {
     required this.fileMetadataId,
     this.paperSpecs,
     this.threeDSpecs,
-    required this.quantity,
+    required int quantity,
     required this.pageCount,
-    required this.unitPrice,
+    double? unitPrice,
+    double? printSubtotal,
     required this.createdAt,
-  });
+  }) : assert(
+         unitPrice != null || printSubtotal != null,
+         'CartItem requires either unitPrice or printSubtotal.',
+       ),
+       quantity = _normalizeQuantity(quantity),
+       unitPrice = unitPrice ?? printSubtotal! / _normalizeQuantity(quantity);
 
   final String id;
   final String category;

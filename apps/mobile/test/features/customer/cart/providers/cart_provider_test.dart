@@ -147,6 +147,30 @@ void main() {
     },
   );
 
+  test('old persisted cart maps normalize quantity below one', () {
+    final restored = CartItem.fromMap({
+      'id': 'malformed-legacy-item',
+      'category': 'paper',
+      'fileName': 'legacy.pdf',
+      'fileMetadataId': 99,
+      'quantity': 0,
+      'pageCount': 10,
+      'printSubtotal': 360,
+      'createdAt': DateTime(2026, 4, 25).toIso8601String(),
+      'paperSpecs': {
+        'paperSize': PaperSize.a4.name,
+        'colorMode': ColorMode.fullColor.name,
+        'mediaType': MediaType.matte.name,
+        'printSides': PrintSides.frontOnly.name,
+        'binding': Binding.none.name,
+      },
+    });
+
+    expect(restored.quantity, 1);
+    expect(restored.unitPrice, 360);
+    expect(restored.printSubtotal, 360);
+  });
+
   test('rejects incomplete order flow states', () {
     final notifier = container.read(cartProvider.notifier);
 
