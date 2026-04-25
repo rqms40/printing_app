@@ -12,4 +12,9 @@ describe('DailyGridGateway', () => {
     gateway.notifyUpdated();
     expect(gateway.server.emit).toHaveBeenCalledWith('dailyGridUpdated', {});
   });
+
+  it('notifyUpdated does not throw when server is undefined', () => {
+    gateway.server = undefined as any;
+    expect(() => gateway.notifyUpdated()).not.toThrow();
+  });
 });

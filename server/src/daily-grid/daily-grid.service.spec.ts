@@ -88,4 +88,9 @@ describe('DailyGridService — gateway notifications', () => {
     expect(notifyIndex).toBeGreaterThan(0); // at least one update before notify
     expect(callOrder[callOrder.length - 1]).toBe('notify');
   });
+
+  it('reorder with empty array does not call notifyUpdated', async () => {
+    await service.reorder([]);
+    expect(gateway.notifyUpdated).not.toHaveBeenCalled();
+  });
 });

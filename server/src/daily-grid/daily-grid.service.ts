@@ -54,6 +54,7 @@ export class DailyGridService {
   }
 
   async reorder(ids: number[]): Promise<void> {
+    if (ids.length === 0) return;
     await Promise.all(
       ids.map((id, index) => this.repo.update(id, { sortOrder: index })),
     );
