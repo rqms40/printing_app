@@ -71,6 +71,13 @@ describe('ChatGateway', () => {
       await gateway.handleConnection(socket as any);
       expect(socket.join).toHaveBeenCalledWith('admin_inbox');
     });
+
+    it('disconnects client when JWT verification fails', async () => {
+      jwtService.verifyAsync.mockRejectedValue(new Error('Invalid token'));
+      const socket = makeSocket();
+      await gateway.handleConnection(socket as any);
+      expect(socket.disconnect).toHaveBeenCalled();
+    });
   });
 
   describe('handleJoinConversation', () => {
@@ -123,6 +130,55 @@ describe('ChatGateway', () => {
       expect(server.emit).toHaveBeenCalledWith('messages-read', expect.objectContaining({
         conversationId: 5,
       }));
+    });
+  });
+
+  describe('handleTyping', () => {
+    it('broadcasts user-typing with mapped SenderRole to room peers (not sender)', () => {
+      const socket = makeSocket({ data: { userId: 1, role: 'admin' } });
+      gateway.handleTyping({ conversationId: 7 }, socket as any);
+      expect(socket.to).toHaveBeenCalledWith('conversation:7');
+      expect(socket.emit).toHaveBeenCalledWith('user-typing', {
+        conversationId: 7,
+        senderRole: SenderRole.ADMIN,
+      });
+    });
+
+    it('maps driver role to RIDER in user-typing payload', () => {
+      const socket = makeSocket({ data: { userId: 2, role: 'driver' } });
+      gateway.handleTyping({ conversationId: 8 }, socket as any);
+      expect(socket.emit).toHaveBeenCalledWith('user-typing', {
+        conversationId: 8,
+        senderRole: SenderRole.RIDER,
+      });
+    });
+  });
+
+  describe('handleLeaveConversation', () => {
+    it('leaves the conversation room', () => {
+      const socket = makeSocket({ data: { userId: 1, role: 'customer' } });
+      gateway.handleLeaveConversation({ conversationId: 9 }, socket as any);
+      expect(socket.leave).toHaveBeenCalledWith('conversation:9');
+    });
+  });
+
+  describe('notifyNewConversation', () => {
+    it('emits new-conversation to admin_inbox with correct payload', () => {
+      const conv = {
+        id: 100,
+        customerId: 5,
+        type: ConversationType.ADMIN,
+        orderId: null,
+      } as any;
+      gateway.notifyNewConversation(conv, 'Alice');
+      expect(server.to).toHaveBeenCalledWith('admin_inbox');
+      expect(server.emit).toHaveBeenCalledWith('new-conversation', {
+        conversationId: 100,
+        customerId: 5,
+        customerName: 'Alice',
+        type: ConversationType.ADMIN,
+        orderId: null,
+      });
     });
   });
 });

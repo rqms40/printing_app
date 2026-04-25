@@ -84,9 +84,7 @@ export class ChatGateway implements OnGatewayConnection {
       .to(`conversation:${data.conversationId}`)
       .emit('message-received', msg);
 
-    if (senderRole === SenderRole.CUSTOMER) {
-      await this.triggerBotIfNeeded(data.conversationId, data.content);
-    }
+    await this.triggerBotIfNeeded(data.conversationId, data.content);
 
     return { status: 'ok' };
   }
@@ -123,9 +121,15 @@ export class ChatGateway implements OnGatewayConnection {
     @ConnectedSocket() client: Socket,
   ) {
     const role = (client.data.role as string) ?? 'customer';
+    const senderRole =
+      role === 'admin'
+        ? SenderRole.ADMIN
+        : role === 'driver'
+          ? SenderRole.RIDER
+          : SenderRole.CUSTOMER;
     client.to(`conversation:${data.conversationId}`).emit('user-typing', {
       conversationId: data.conversationId,
-      senderRole: role,
+      senderRole,
     });
   }
 
