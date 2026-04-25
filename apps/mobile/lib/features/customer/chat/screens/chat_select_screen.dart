@@ -149,6 +149,7 @@ class _OptionCard extends StatefulWidget {
     required this.isDisabled,
   });
 
+  // HugeIcons SVG path data — List<List<dynamic>> at runtime
   final dynamic icon;
   final String title;
   final String description;
