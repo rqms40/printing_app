@@ -70,7 +70,6 @@ describe('DailyGridService — gateway notifications', () => {
   it('update notifies after updating', async () => {
     await service.update(1, { title: 'Updated' } as any);
     expect(gateway.notifyUpdated).toHaveBeenCalledTimes(1);
-    // update is called twice (first update, then re-fetch via findOne which also updates)
     const notifyIndex = callOrder.lastIndexOf('notify');
     const lastUpdateIndex = callOrder.lastIndexOf('update');
     expect(notifyIndex).toBeGreaterThan(lastUpdateIndex);
