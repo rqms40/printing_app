@@ -12,6 +12,7 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/home/providers/daily_grid_provider.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
 import 'package:printing_app/shared/models/daily_grid_item.dart';
+import 'package:printing_app/shared/services/websocket_service.dart';
 
 // ─── Fallback data (shown on error / while server is unreachable) ─────────────
 
@@ -99,12 +100,14 @@ class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
         );
       }
     });
+    WebSocketService.instance.connectDailyGrid(onUpdated: _onDailyGridUpdated);
   }
 
   @override
   void dispose() {
     _autoScrollTimer?.cancel();
     _pageController.dispose();
+    WebSocketService.instance.disconnectDailyGrid();
     super.dispose();
   }
 
@@ -124,6 +127,10 @@ class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
           ? '/customer/order/paper-specs'
           : '/customer/order/3d-specs',
     );
+  }
+
+  void _onDailyGridUpdated() {
+    if (mounted) ref.invalidate(dailyGridProvider);
   }
 
   @override

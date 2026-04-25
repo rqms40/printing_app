@@ -21,6 +21,9 @@ class WebSocketService {
   static final instance = WebSocketService._();
   WebSocketService._();
 
+  @visibleForTesting
+  static bool disableDailyGridSocketForTests = false;
+
   io.Socket? _ordersSocket;
   io.Socket? _locationSocket;
   io.Socket? _notificationsSocket;
@@ -28,15 +31,13 @@ class WebSocketService {
 
   // Callbacks registered before the notifications socket is created
   final List<Function(Map<String, dynamic>)> _pendingNotifListeners = [];
-  
+
   // Callbacks registered for order updates
   final List<Function(dynamic)> _orderListeners = [];
 
   String get _baseUrl => kServerUrl;
 
-  Future<void> connectOrders({
-    VoidCallback? onConnect,
-  }) async {
+  Future<void> connectOrders({VoidCallback? onConnect}) async {
     if (_ordersSocket?.connected == true) return;
     if (_ordersSocket != null) {
       _ordersSocket!.connect();
@@ -66,7 +67,10 @@ class WebSocketService {
       debugPrint('WS Orders connected');
       onConnect?.call();
     });
-    _ordersSocket!.on('connect_error', (e) => debugPrint('WS Orders error: $e'));
+    _ordersSocket!.on(
+      'connect_error',
+      (e) => debugPrint('WS Orders error: $e'),
+    );
     _ordersSocket!.connect();
   }
 
@@ -187,34 +191,40 @@ class WebSocketService {
   /// while the socket exists (even if disconnected) reuse the original handler.
   /// Call [disconnectDailyGrid] first to force a fresh connection with a new callback.
   Future<void> connectDailyGrid({required VoidCallback onUpdated}) async {
+    if (disableDailyGridSocketForTests) return;
     if (_dailyGridSocket?.connected == true) return;
     if (_dailyGridSocket != null) {
       _dailyGridSocket!.connect();
       return;
     }
-    _dailyGridSocket = io.io(
-      '$_baseUrl/ws/daily-grid',
-      io.OptionBuilder()
-          .setTransports(['websocket'])
-          .disableAutoConnect()
-          .build(),
-    );
-    _dailyGridSocket!.on('dailyGridUpdated', (_) {
-      try {
-        onUpdated();
-      } catch (e) {
-        debugPrint('WS dailyGridUpdated handler error: $e');
-      }
-    });
-    _dailyGridSocket!.on(
-      'connect',
-      (_) => debugPrint('WS DailyGrid connected'),
-    );
-    _dailyGridSocket!.on(
-      'connect_error',
-      (e) => debugPrint('WS DailyGrid error: $e'),
-    );
-    _dailyGridSocket!.connect();
+    try {
+      _dailyGridSocket = io.io(
+        '$_baseUrl/ws/daily-grid',
+        io.OptionBuilder()
+            .setTransports(['websocket'])
+            .disableAutoConnect()
+            .build(),
+      );
+      _dailyGridSocket!.on('dailyGridUpdated', (_) {
+        try {
+          onUpdated();
+        } catch (e) {
+          debugPrint('WS dailyGridUpdated handler error: $e');
+        }
+      });
+      _dailyGridSocket!.on(
+        'connect',
+        (_) => debugPrint('WS DailyGrid connected'),
+      );
+      _dailyGridSocket!.on(
+        'connect_error',
+        (e) => debugPrint('WS DailyGrid error: $e'),
+      );
+      _dailyGridSocket!.connect();
+    } catch (e) {
+      debugPrint('WS DailyGrid connection error: $e');
+      // Connection failure should not crash the app
+    }
   }
 
   void disconnectDailyGrid() {

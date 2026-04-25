@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/home/screens/home_screen.dart';
+import 'package:printing_app/shared/services/websocket_service.dart';
 
 /// Wraps a widget in a minimal MaterialApp with ProviderScope for testing.
 /// Pre-seeds authProvider with a mock customer so greeting displays a name.
@@ -25,11 +26,13 @@ Widget _wrap(Widget child) {
 
 void main() {
   setUpAll(() async {
+    WebSocketService.disableDailyGridSocketForTests = true;
     Hive.init('/tmp/hive_test_home_screen');
     await Hive.openBox('draft_orders');
   });
 
   tearDownAll(() async {
+    WebSocketService.disableDailyGridSocketForTests = false;
     await Hive.close();
   });
 
@@ -88,8 +91,9 @@ void main() {
 
       // Greeting is RichText (time-based + first name only)
       expect(
-        find.byWidgetPredicate((w) =>
-            w is RichText && w.text.toPlainText().contains('Maria')),
+        find.byWidgetPredicate(
+          (w) => w is RichText && w.text.toPlainText().contains('Maria'),
+        ),
         findsWidgets,
       );
     });
