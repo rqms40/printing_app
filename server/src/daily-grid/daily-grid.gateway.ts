@@ -8,6 +8,6 @@ export class DailyGridGateway {
   server: Server;
 
   notifyUpdated(): void {
-    this.server.emit('dailyGridUpdated', {});
+    this.server?.emit('dailyGridUpdated', {});
   }
 }
