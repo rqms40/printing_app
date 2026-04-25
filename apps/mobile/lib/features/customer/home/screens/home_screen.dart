@@ -322,11 +322,13 @@ class _ResumeQueueCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final jobLabel =
         '${cart.itemCount} print job${cart.itemCount == 1 ? '' : 's'}';
+    final subtotalLabel = '${formatCurrency(cart.subtotal)} subtotal';
+    final semanticsLabel = 'Resume your queue, $jobLabel, $subtotalLabel';
     void openQueue() => context.push('/customer/cart');
 
     return Semantics(
       button: true,
-      label: 'Resume your queue',
+      label: semanticsLabel,
       onTap: openQueue,
       child: ExcludeSemantics(
         child: DecoratedBox(
@@ -352,88 +354,159 @@ class _ResumeQueueCard extends StatelessWidget {
             child: InkWell(
               onTap: openQueue,
               borderRadius: AppRadius.borderXl,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(AppSpacing.md),
-                decoration: BoxDecoration(
-                  borderRadius: AppRadius.borderXl,
-                  border: Border.all(
-                    color: colors.brand.withValues(alpha: 0.45),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 46,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        color: colors.brand.withValues(alpha: 0.14),
-                        borderRadius: AppRadius.borderLg,
-                      ),
-                      child: Center(
-                        child: HugeIcon(
-                          icon: HugeIcons.strokeRoundedShoppingCart01,
-                          size: 24,
-                          color: colors.brand,
-                        ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final textScale = MediaQuery.textScalerOf(context).scale(1);
+                  final useStackedCta =
+                      constraints.maxWidth < 360 || textScale >= 1.3;
+                  final icon = _ResumeQueueIcon(colors: colors);
+                  final copy = _ResumeQueueCopy(
+                    colors: colors,
+                    jobLabel: jobLabel,
+                    subtotalLabel: subtotalLabel,
+                  );
+                  final cta = _ResumeQueueCta(colors: colors);
+
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    decoration: BoxDecoration(
+                      borderRadius: AppRadius.borderXl,
+                      border: Border.all(
+                        color: colors.brand.withValues(alpha: 0.45),
                       ),
                     ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Resume your queue',
-                            style: AppTypography.bodyBold.copyWith(
-                              color: colors.onBackground,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Wrap(
-                            spacing: AppSpacing.xs,
-                            runSpacing: 2,
+                    child: useStackedCta
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                jobLabel,
-                                style: AppTypography.caption.copyWith(
-                                  color: colors.onSurfaceDim,
-                                ),
+                              Row(
+                                children: [
+                                  icon,
+                                  const SizedBox(width: AppSpacing.md),
+                                  Expanded(child: copy),
+                                ],
                               ),
-                              Text(
-                                '${formatCurrency(cart.subtotal)} subtotal',
-                                style: AppTypography.caption.copyWith(
-                                  color: colors.onSurfaceDim,
+                              const SizedBox(height: AppSpacing.md),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: cta,
+                              ),
+                            ],
+                          )
+                        : Row(
+                            children: [
+                              icon,
+                              const SizedBox(width: AppSpacing.md),
+                              Expanded(child: copy),
+                              const SizedBox(width: AppSpacing.sm),
+                              Flexible(
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: cta,
                                 ),
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.sm,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colors.brand,
-                        borderRadius: AppRadius.borderMd,
-                      ),
-                      child: Text(
-                        'View queue',
-                        style: AppTypography.caption.copyWith(
-                          color: colors.background,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  );
+                },
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ResumeQueueIcon extends StatelessWidget {
+  const _ResumeQueueIcon({required this.colors});
+
+  final AppColorSet colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 46,
+      height: 46,
+      decoration: BoxDecoration(
+        color: colors.brand.withValues(alpha: 0.14),
+        borderRadius: AppRadius.borderLg,
+      ),
+      child: Center(
+        child: HugeIcon(
+          icon: HugeIcons.strokeRoundedShoppingCart01,
+          size: 24,
+          color: colors.brand,
+        ),
+      ),
+    );
+  }
+}
+
+class _ResumeQueueCopy extends StatelessWidget {
+  const _ResumeQueueCopy({
+    required this.colors,
+    required this.jobLabel,
+    required this.subtotalLabel,
+  });
+
+  final AppColorSet colors;
+  final String jobLabel;
+  final String subtotalLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Resume your queue',
+          style: AppTypography.bodyBold.copyWith(color: colors.onBackground),
+        ),
+        const SizedBox(height: 3),
+        Wrap(
+          spacing: AppSpacing.xs,
+          runSpacing: 2,
+          children: [
+            Text(
+              jobLabel,
+              style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+            ),
+            Text(
+              subtotalLabel,
+              style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ResumeQueueCta extends StatelessWidget {
+  const _ResumeQueueCta({required this.colors});
+
+  final AppColorSet colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 7,
+      ),
+      decoration: BoxDecoration(
+        color: colors.brand,
+        borderRadius: AppRadius.borderMd,
+      ),
+      child: Text(
+        'View queue',
+        softWrap: false,
+        overflow: TextOverflow.ellipsis,
+        style: AppTypography.caption.copyWith(
+          color: colors.background,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );

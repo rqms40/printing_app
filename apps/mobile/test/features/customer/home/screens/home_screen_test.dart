@@ -13,7 +13,11 @@ import 'package:printing_app/shared/services/websocket_service.dart';
 
 /// Wraps a widget in a minimal MaterialApp with ProviderScope for testing.
 /// Pre-seeds authProvider with a mock customer so greeting displays a name.
-Widget _wrap(Widget child, {List<Override> overrides = const []}) {
+Widget _wrap(
+  Widget child, {
+  List<Override> overrides = const [],
+  TextScaler? textScaler,
+}) {
   return ProviderScope(
     overrides: [
       authProvider.overrideWith((_) {
@@ -25,6 +29,12 @@ Widget _wrap(Widget child, {List<Override> overrides = const []}) {
     ],
     child: MaterialApp(
       theme: ThemeData(brightness: Brightness.light),
+      builder: textScaler == null
+          ? null
+          : (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+              child: child!,
+            ),
       home: child,
     ),
   );
@@ -198,9 +208,13 @@ void main() {
         await tester.pump(const Duration(milliseconds: 500));
 
         expect(
-          tester.getSemantics(find.bySemanticsLabel('Resume your queue')),
+          tester.getSemantics(
+            find.bySemanticsLabel(
+              'Resume your queue, 1 print job, ₱180.00 subtotal',
+            ),
+          ),
           matchesSemantics(
-            label: 'Resume your queue',
+            label: 'Resume your queue, 1 print job, ₱180.00 subtotal',
             isButton: true,
             hasTapAction: true,
           ),
@@ -208,6 +222,50 @@ void main() {
       } finally {
         semantics.dispose();
       }
+    });
+
+    testWidgets('resume queue card handles narrow large-text layouts', (
+      tester,
+    ) async {
+      final originalOnError = FlutterError.onError;
+      final flutterErrors = <FlutterErrorDetails>[];
+      FlutterError.onError = flutterErrors.add;
+      addTearDown(() => FlutterError.onError = originalOnError);
+      tester.view.physicalSize = const Size(600, 3200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        _wrap(
+          const HomeScreen(),
+          textScaler: const TextScaler.linear(1.3),
+          overrides: [
+            cartProvider.overrideWith(
+              (_) => _SeededCartNotifier(
+                CartState(items: [_cartItem(quantity: 2, unitPrice: 90)]),
+              ),
+            ),
+          ],
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
+
+      final queueCardOverflows = flutterErrors.where((details) {
+        final errorText = details.toString();
+        if (!errorText.contains('RenderFlex overflowed')) return false;
+        return RegExp(r'home_screen\.dart:(\d+)')
+            .allMatches(errorText)
+            .map((match) => int.parse(match.group(1)!))
+            .any((line) => line >= 300 && line <= 560);
+      });
+
+      expect(queueCardOverflows, isEmpty);
+      expect(find.text('Resume your queue'), findsOneWidget);
+      expect(find.text('1 print job'), findsOneWidget);
+      expect(find.text('₱180.00 subtotal'), findsOneWidget);
+      expect(find.text('View queue'), findsOneWidget);
     });
 
     testWidgets('tapping resume queue card opens cart screen', (tester) async {
