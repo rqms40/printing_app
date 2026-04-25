@@ -181,6 +181,11 @@ class WebSocketService {
     }
   }
 
+  /// Connects to the /ws/daily-grid namespace and listens for [dailyGridUpdated] events.
+  ///
+  /// [onUpdated] is registered only on the first connection. Subsequent calls
+  /// while the socket exists (even if disconnected) reuse the original handler.
+  /// Call [disconnectDailyGrid] first to force a fresh connection with a new callback.
   Future<void> connectDailyGrid({required VoidCallback onUpdated}) async {
     if (_dailyGridSocket?.connected == true) return;
     if (_dailyGridSocket != null) {
@@ -194,7 +199,13 @@ class WebSocketService {
           .disableAutoConnect()
           .build(),
     );
-    _dailyGridSocket!.on('dailyGridUpdated', (_) => onUpdated());
+    _dailyGridSocket!.on('dailyGridUpdated', (_) {
+      try {
+        onUpdated();
+      } catch (e) {
+        debugPrint('WS dailyGridUpdated handler error: $e');
+      }
+    });
     _dailyGridSocket!.on(
       'connect',
       (_) => debugPrint('WS DailyGrid connected'),
@@ -221,5 +232,6 @@ class WebSocketService {
     _notificationsSocket = null;
     _ordersSocket = null;
     _dailyGridSocket = null;
+    _locationSocket = null;
   }
 }
