@@ -8,13 +8,13 @@ import 'package:printing_app/config/theme/app_typography.dart';
 class OnboardingHero extends StatelessWidget {
   const OnboardingHero({
     super.key,
-    required this.icon,
+    this.icon,
     required this.headline,
     this.subtitle,
     this.withPulse = false,
   });
 
-  final IconData icon;
+  final IconData? icon;
   final String headline;
   final String? subtitle;
   final bool withPulse;
@@ -30,34 +30,38 @@ class OnboardingHero extends StatelessWidget {
     final colors = _colors(context);
     final subtitleText = subtitle;
 
-    final badge = Container(
-      width: 80,
-      height: 80,
-      decoration: BoxDecoration(
-        color: colors.surfaceVariant,
-        shape: BoxShape.circle,
-      ),
-      child: Center(
-        child: Icon(icon, size: 48, color: colors.brand),
-      ),
-    );
+    final badge = icon != null
+        ? Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: colors.surfaceVariant,
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Icon(icon, size: 48, color: colors.brand),
+            ),
+          )
+        : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Center(
-          child: withPulse
-              ? badge
-                  .animate(onPlay: (c) => c.repeat(reverse: true))
-                  .scaleXY(
-                    begin: 1.0,
-                    end: 1.06,
-                    duration: 1800.ms,
-                    curve: Curves.easeInOut,
-                  )
-              : badge,
-        ),
-        const SizedBox(height: AppSpacing.xl),
+        if (badge != null) ...[
+          Center(
+            child: withPulse
+                ? badge
+                    .animate(onPlay: (c) => c.repeat(reverse: true))
+                    .scaleXY(
+                      begin: 1.0,
+                      end: 1.06,
+                      duration: 1800.ms,
+                      curve: Curves.easeInOut,
+                    )
+                : badge,
+          ),
+          const SizedBox(height: AppSpacing.xl),
+        ],
         Text(
           headline,
           style: AppTypography.display.copyWith(color: colors.onBackground),

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Notification } from './entities/notification.entity';
+import { MarketingNotification } from './entities/marketing-notification.entity';
 import { NotificationsGateway } from './notifications.gateway';
 import { UsersService } from '../users/users.service';
 
@@ -11,6 +12,8 @@ export class NotificationsService {
 
   constructor(
     @InjectRepository(Notification) private notifRepo: Repository<Notification>,
+    @InjectRepository(MarketingNotification)
+    private marketingNotifRepo: Repository<MarketingNotification>,
     private usersService: UsersService,
     private gateway: NotificationsGateway,
   ) {}
@@ -82,5 +85,35 @@ export class NotificationsService {
 
     const saved = await this.notifRepo.save(rows);
     this.gateway.broadcastToAdmins(saved[0]);
+  }
+
+  // --- Marketing Notifications ---
+
+  async getMarketingNotifications(): Promise<MarketingNotification[]> {
+    return this.marketingNotifRepo.find({ order: { createdAt: 'DESC' } });
+  }
+
+  async createMarketingNotification(
+    data: Partial<MarketingNotification>,
+  ): Promise<MarketingNotification> {
+    const notif = this.marketingNotifRepo.create(data);
+    return this.marketingNotifRepo.save(notif);
+  }
+
+  async updateMarketingNotification(
+    id: number,
+    data: Partial<MarketingNotification>,
+  ): Promise<MarketingNotification> {
+    const notif = await this.marketingNotifRepo.findOne({ where: { id } });
+    if (!notif) throw new NotFoundException('Marketing notification not found');
+    Object.assign(notif, data);
+    return this.marketingNotifRepo.save(notif);
+  }
+
+  async deleteMarketingNotification(id: number): Promise<void> {
+    const result = await this.marketingNotifRepo.delete(id);
+    if (result.affected === 0) {
+      throw new NotFoundException('Marketing notification not found');
+    }
   }
 }

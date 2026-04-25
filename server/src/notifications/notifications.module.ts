@@ -3,14 +3,16 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Notification } from './entities/notification.entity';
+import { MarketingNotification } from './entities/marketing-notification.entity';
 import { NotificationsService } from './notifications.service';
+import { MarketingSchedulerService } from './marketing-scheduler.service';
 import { NotificationsGateway } from './notifications.gateway';
 import { NotificationsController } from './notifications.controller';
 import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Notification]),
+    TypeOrmModule.forFeature([Notification, MarketingNotification]),
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -21,7 +23,11 @@ import { UsersModule } from '../users/users.module';
     UsersModule,
   ],
   controllers: [NotificationsController],
-  providers: [NotificationsService, NotificationsGateway],
+  providers: [
+    NotificationsService,
+    MarketingSchedulerService,
+    NotificationsGateway,
+  ],
   exports: [NotificationsService, NotificationsGateway],
 })
 export class NotificationsModule {}

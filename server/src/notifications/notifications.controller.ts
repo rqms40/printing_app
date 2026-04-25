@@ -1,13 +1,17 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
+  Delete,
   Param,
+  Body,
   UseGuards,
   Request,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+
 import { NotificationsService } from './notifications.service';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
 
@@ -17,6 +21,26 @@ import type { RequestWithUser } from '../common/interfaces/request-with-user';
 @Controller('notifications')
 export class NotificationsController {
   constructor(private notificationsService: NotificationsService) {}
+
+  @Get('marketing')
+  getMarketingNotifications() {
+    return this.notificationsService.getMarketingNotifications();
+  }
+
+  @Post('marketing')
+  createMarketingNotification(@Body() data: any) {
+    return this.notificationsService.createMarketingNotification(data);
+  }
+
+  @Patch('marketing/:id')
+  updateMarketingNotification(@Param('id') id: string, @Body() data: any) {
+    return this.notificationsService.updateMarketingNotification(+id, data);
+  }
+
+  @Delete('marketing/:id')
+  deleteMarketingNotification(@Param('id') id: string) {
+    return this.notificationsService.deleteMarketingNotification(+id);
+  }
 
   @Get()
   getNotifications(@Request() req: RequestWithUser) {

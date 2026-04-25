@@ -13,6 +13,7 @@ import {
 import { CheckOutlined } from "@ant-design/icons";
 import { useNotificationsContext } from "@/context/notifications-context";
 import type { Notification, NotificationType } from "@/types/notification";
+import { MarketingSettings } from "./marketing-settings";
 
 const { Text } = Typography;
 
@@ -53,10 +54,10 @@ export function NotificationsPage() {
   // Mark all read after 1s on page visit
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (unreadCount > 0) markAllRead();
+      if (unreadCount > 0 && activeTab !== "marketing") markAllRead();
     }, 1000);
     return () => clearTimeout(timer);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered =
     activeTab === "all"
@@ -88,13 +89,14 @@ export function NotificationsPage() {
     { key: "orders", label: "Orders" },
     { key: "credits", label: "Credits" },
     { key: "users", label: "Users" },
+    { key: "marketing", label: "Marketing Settings" },
   ];
 
   return (
     <List
       title="Notifications"
       headerButtons={
-        unreadCount > 0 ? (
+        unreadCount > 0 && activeTab !== "marketing" ? (
           <Button
             icon={<CheckOutlined />}
             onClick={() => markAllRead()}
@@ -112,7 +114,9 @@ export function NotificationsPage() {
           style={{ marginBottom: 0 }}
         />
 
-        {filtered.length === 0 ? (
+        {activeTab === "marketing" ? (
+          <MarketingSettings />
+        ) : filtered.length === 0 ? (
           <Empty description="No notifications" style={{ marginTop: 48 }} />
         ) : (
           <AntList

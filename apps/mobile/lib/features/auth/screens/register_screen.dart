@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
@@ -231,16 +232,51 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               colors: [colors.background, colors.surfaceDim],
             ),
           ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.xl,
-              AppSpacing.xl,
-              AppSpacing.xl,
-              AppSpacing.md,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned(
+                top: MediaQuery.sizeOf(context).height * 0.08,
+                left: -150,
+                right: -150,
+                child: IgnorePointer(
+                  child: Container(
+                    height: 500,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          const Color(0xFFFFDE58).withValues(alpha: 0.50),
+                          const Color(0xFFFFDE58).withValues(alpha: 0.0),
+                        ],
+                      ),
+                    ),
+                  )
+                      .animate(onPlay: (controller) => controller.repeat(reverse: true))
+                      .slideX(
+                        begin: -0.15,
+                        end: 0.15,
+                        duration: 5000.ms,
+                        curve: Curves.easeInOutSine,
+                      )
+                      .slideY(
+                        begin: -0.05,
+                        end: 0.05,
+                        duration: 7000.ms,
+                        curve: Curves.easeInOutSine,
+                      ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xl,
+                  AppSpacing.xl,
+                  AppSpacing.xl,
+                  AppSpacing.md,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                 _WizardHeader(
                       stepIndex: _stepIndex,
                       stepCount: _RegisterStep.values.length,
@@ -369,6 +405,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               ],
             ),
           ),
+            ],
+          ),
         ),
       ),
     );
@@ -384,15 +422,28 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const OnboardingHero(
-              icon: Icons.verified_user_rounded,
-              headline: 'Your data,\nyour rules.',
-              subtitle:
-                  'We only collect what we need to personalise your experience.',
-            ),
+            const SizedBox(height: 48),
+            Center(
+              child: SvgPicture.asset(
+                'assets/animations/undraw_certificate.svg',
+                height: 240,
+              ),
+            )
+                .animate()
+                .fadeIn(duration: 500.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.05, end: 0, duration: 500.ms, curve: Curves.easeOutCubic),
+            const SizedBox(height: 64),
+            Center(
+              child: Text(
+                'Your data, your rules.',
+                textAlign: TextAlign.center,
+                style: AppTypography.display.copyWith(color: colors.onBackground),
+              ),
+            )
+                .animate()
+                .fadeIn(delay: 100.ms, duration: 500.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.05, end: 0, delay: 100.ms, duration: 500.ms, curve: Curves.easeOutCubic),
             const SizedBox(height: AppSpacing.xl),
-            _PrivacyBulletCard(colors: colors),
-            const SizedBox(height: AppSpacing.lg),
             Center(
               child: GestureDetector(
                 onTap: () => context.push('/customer/profile/terms'),
@@ -404,19 +455,68 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   ),
                 ),
               ),
-            ),
+            )
+                .animate()
+                .fadeIn(delay: 200.ms, duration: 500.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.05, end: 0, delay: 200.ms, duration: 500.ms, curve: Curves.easeOutCubic),
           ],
         );
       case _RegisterStep.nickname:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const OnboardingHero(
-              icon: Icons.waving_hand_rounded,
-              headline: 'What should\nwe call you?',
-              subtitle: 'This is how we\'ll greet you throughout the app.',
-              withPulse: true,
-            ),
+            Center(
+              child: SizedBox(
+                height: 300,
+                width: 300,
+                child: Stack(
+                  children: [
+                    SvgPicture.asset(
+                      'assets/animations/undraw_friendly-guy-avatar_body.svg',
+                    ),
+                    SvgPicture.asset(
+                      'assets/animations/undraw_friendly-guy-avatar_arm.svg',
+                    )
+                        .animate(onPlay: (controller) => controller.repeat(reverse: true))
+                        .rotate(
+                          begin: 0,
+                          end: 0.05,
+                          alignment: const Alignment(-0.35, 0.35),
+                          duration: 1500.ms,
+                          curve: Curves.easeInOut,
+                        ),
+                  ],
+                ),
+              ),
+            )
+                .animate()
+                .fadeIn(duration: 500.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.05, end: 0, duration: 500.ms, curve: Curves.easeOutCubic),
+            const SizedBox(height: 64),
+            Center(
+              child: Text(
+                'What should we call you?',
+                textAlign: TextAlign.center,
+                style: AppTypography.display.copyWith(color: colors.onBackground),
+              ),
+            )
+                .animate()
+                .fadeIn(delay: 100.ms, duration: 500.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.05, end: 0, delay: 100.ms, duration: 500.ms, curve: Curves.easeOutCubic),
+            const SizedBox(height: AppSpacing.sm),
+            Center(
+              child: Text(
+                'This is how we\'ll greet you throughout the app.',
+                textAlign: TextAlign.center,
+                style: AppTypography.bodyLarge.copyWith(
+                  color: colors.onSurfaceDim,
+                  height: 1.5,
+                ),
+              ),
+            )
+                .animate()
+                .fadeIn(delay: 200.ms, duration: 500.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.05, end: 0, delay: 200.ms, duration: 500.ms, curve: Curves.easeOutCubic),
             const SizedBox(height: AppSpacing.xl),
             _NicknameInputCard(
               controller: _nicknameController,
@@ -438,48 +538,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               style: AppTypography.bodyLarge.copyWith(color: colors.onSurfaceDim),
             ),
             const SizedBox(height: AppSpacing.xl),
-            Row(
-              children: [
-                Expanded(
-                  child: _ChoiceCard(
-                    title: 'Student',
-                    subtitle: 'School / uni',
-                    icon: Icons.school_rounded,
-                    isSelected: _draft.profileCategory == 'student',
-                    colors: colors,
-                    onTap: () {
-                      setState(() {
-                        _draft = _draft.copyWith(
-                          profileCategory: 'student',
-                          profileField: null,
-                          printingPreferences: const [],
-                        );
-                        _stepError = null;
-                      });
-                    },
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: _ChoiceCard(
-                    title: 'Professional',
-                    subtitle: 'Work / client',
-                    icon: Icons.work_rounded,
-                    isSelected: _draft.profileCategory == 'professional',
-                    colors: colors,
-                    onTap: () {
-                      setState(() {
-                        _draft = _draft.copyWith(
-                          profileCategory: 'professional',
-                          profileField: null,
-                          printingPreferences: const [],
-                        );
-                        _stepError = null;
-                      });
-                    },
-                  ),
-                ),
-              ],
+            _CategoryCarousel(
+              selectedCategory: _draft.profileCategory,
+              colors: colors,
+              onChanged: (category) {
+                setState(() {
+                  _draft = _draft.copyWith(
+                    profileCategory: category,
+                    profileField: null,
+                    printingPreferences: const [],
+                  );
+                  _stepError = null;
+                });
+              },
             ),
           ],
         );
@@ -524,8 +595,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const OnboardingHero(
-              icon: Icons.people_rounded,
-              headline: 'How do you\nidentify?',
+              headline: 'How do you identify?',
               subtitle: 'Choose what feels right for you.',
             ),
             const SizedBox(height: AppSpacing.xl),
@@ -716,7 +786,7 @@ class _ChoiceCard extends StatelessWidget {
   const _ChoiceCard({
     required this.title,
     required this.subtitle,
-    required this.icon,
+    required this.svgAsset,
     required this.isSelected,
     required this.colors,
     required this.onTap,
@@ -724,7 +794,7 @@ class _ChoiceCard extends StatelessWidget {
 
   final String title;
   final String subtitle;
-  final IconData icon;
+  final String svgAsset;
   final bool isSelected;
   final AppColorSet colors;
   final VoidCallback onTap;
@@ -735,15 +805,10 @@ class _ChoiceCard extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
+        width: 260,
         padding: const EdgeInsets.all(AppSpacing.xl),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: isSelected
-                ? [colors.brand.withValues(alpha: 0.15), Colors.transparent]
-                : [colors.surfaceVariant, colors.surfaceVariant],
-          ),
+          color: colors.surfaceVariant,
           borderRadius: AppRadius.borderXl,
           border: Border.all(
             color: isSelected ? colors.brand : colors.outline,
@@ -759,26 +824,28 @@ class _ChoiceCard extends StatelessWidget {
             ),
           ],
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 48,
-              color: isSelected ? colors.brand : colors.onSurfaceDim,
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Text(
-              title,
-              style: AppTypography.h3.copyWith(color: colors.onBackground),
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              subtitle,
-              style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
-              textAlign: TextAlign.center,
-            ),
-          ],
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SvgPicture.asset(
+                svgAsset,
+                height: 200,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                title,
+                style: AppTypography.bodyBold.copyWith(color: colors.onBackground),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                subtitle,
+                style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1244,3 +1311,110 @@ class _NicknameInputCardState extends State<_NicknameInputCard> {
     );
   }
 }
+
+class _CategoryCarousel extends StatefulWidget {
+  const _CategoryCarousel({
+    required this.selectedCategory,
+    required this.colors,
+    required this.onChanged,
+  });
+
+  final String? selectedCategory;
+  final AppColorSet colors;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_CategoryCarousel> createState() => _CategoryCarouselState();
+}
+
+class _CategoryCarouselState extends State<_CategoryCarousel> {
+  late PageController _pageController;
+  int _currentPage = 0;
+
+  static const _categories = [
+    (id: 'student', title: 'Student', subtitle: 'School / uni', svg: 'assets/animations/undraw_learning.svg'),
+    (id: 'professional', title: 'Professional', subtitle: 'Work / client', svg: 'assets/animations/undraw_business-call.svg'),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _currentPage = _categories.indexWhere((c) => c.id == widget.selectedCategory);
+    if (_currentPage == -1) _currentPage = 0;
+    
+    _pageController = PageController(
+      initialPage: _currentPage,
+      viewportFraction: 0.65,
+    );
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 380,
+      child: PageView.builder(
+        controller: _pageController,
+        clipBehavior: Clip.none,
+        onPageChanged: (index) {
+          setState(() => _currentPage = index);
+          widget.onChanged(_categories[index].id);
+        },
+        itemCount: _categories.length,
+        itemBuilder: (context, index) {
+          return AnimatedBuilder(
+            animation: _pageController,
+            builder: (context, child) {
+              double value = 0.0;
+              if (_pageController.hasClients && _pageController.position.haveDimensions) {
+                value = _pageController.page! - index;
+              } else {
+                value = _currentPage.toDouble() - index;
+              }
+              
+              final clampedValue = value.clamp(-1.0, 1.0);
+              
+              final angle = clampedValue * 0.2; 
+              final scale = 1.0 - (clampedValue.abs() * 0.20); 
+              
+              final transform = Matrix4.identity()
+                ..setEntry(3, 2, 0.001)
+                ..rotateY(angle)
+                ..scale(scale, scale, 1.0);
+
+              final cat = _categories[index];
+              final isSelected = widget.selectedCategory == cat.id;
+
+              return Center(
+                child: Transform(
+                  transform: transform,
+                  alignment: Alignment.center,
+                  child: _ChoiceCard(
+                    title: cat.title,
+                    subtitle: cat.subtitle,
+                    svgAsset: cat.svg,
+                    isSelected: isSelected,
+                    colors: widget.colors,
+                    onTap: () {
+                      _pageController.animateToPage(
+                        index,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                      );
+                    },
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+

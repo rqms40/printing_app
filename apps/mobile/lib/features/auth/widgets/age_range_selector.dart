@@ -1,19 +1,21 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/models/profiling.dart';
 
-const Map<String, String> _ageEmojis = {
-  'under_18': '🎒',
-  '18_24': '🎓',
-  '25_34': '🚀',
-  '35_44': '💼',
-  '45_plus': '🌟',
+const Map<String, String> _ageSvgs = {
+  'under_18': 'assets/animations/undraw_cool-guy-avatar.svg',
+  '18_24': 'assets/animations/undraw_chill-guy-avatar.svg',
+  '25_34': 'assets/animations/undraw_focused.svg',
+  '35_44': 'assets/animations/undraw_in-the-office.svg',
+  '45_plus': 'assets/animations/undraw_professor-avatar.svg',
 };
 
-class AgeRangeSelector extends StatelessWidget {
+class AgeRangeSelector extends StatefulWidget {
   const AgeRangeSelector({
     super.key,
     required this.value,
@@ -22,6 +24,32 @@ class AgeRangeSelector extends StatelessWidget {
 
   final String? value;
   final ValueChanged<String> onChanged;
+
+  @override
+  State<AgeRangeSelector> createState() => _AgeRangeSelectorState();
+}
+
+class _AgeRangeSelectorState extends State<AgeRangeSelector> {
+  late PageController _pageController;
+  int _currentPage = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentPage = ageRangeOptions.indexWhere((o) => o.value == widget.value);
+    if (_currentPage == -1) _currentPage = 0;
+    
+    _pageController = PageController(
+      initialPage: _currentPage,
+      viewportFraction: 0.65, // Shows peeking cards on the sides
+    );
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -32,51 +60,88 @@ class AgeRangeSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
-    final selectedIndex =
-        ageRangeOptions.indexWhere((o) => o.value == value);
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              for (final option in ageRangeOptions) ...[
-                _AgeRangeCard(
-                  value: option.value,
-                  label: option.label,
-                  description: option.description,
-                  emoji: _ageEmojis[option.value] ?? '📄',
-                  isSelected: value == option.value,
-                  colors: colors,
-                  onTap: () => onChanged(option.value),
-                ),
-                if (option != ageRangeOptions.last)
-                  const SizedBox(width: AppSpacing.sm),
-              ],
-            ],
+        SizedBox(
+          height: 380,
+          child: PageView.builder(
+            controller: _pageController,
+            clipBehavior: Clip.none,
+            onPageChanged: (index) {
+              setState(() => _currentPage = index);
+              widget.onChanged(ageRangeOptions[index].value);
+            },
+            itemCount: ageRangeOptions.length,
+            itemBuilder: (context, index) {
+              return AnimatedBuilder(
+                animation: _pageController,
+                builder: (context, child) {
+                  double value = 0.0;
+                  if (_pageController.hasClients && _pageController.position.haveDimensions) {
+                    value = _pageController.page! - index;
+                  } else {
+                    value = _currentPage.toDouble() - index;
+                  }
+                  
+                  final clampedValue = value.clamp(-1.0, 1.0);
+                  
+                  // CoverFlow Perspective Effect
+                  // Tilted backward on the sides
+                  final angle = clampedValue * 0.2; // Steeper than 0.5, but safe for viewport
+                  final scale = 1.0 - (clampedValue.abs() * 0.20); // Scale down slightly more to fit
+                  
+                  final transform = Matrix4.identity()
+                    ..setEntry(3, 2, 0.001) // Standard perspective
+                    ..rotateY(angle)
+                    ..scale(scale, scale, 1.0);
+
+                  final option = ageRangeOptions[index];
+                  final isSelected = _currentPage == index;
+
+                  return Center(
+                    child: Transform(
+                      transform: transform,
+                      alignment: Alignment.center,
+                      child: _AgeRangeCard(
+                        value: option.value,
+                        label: option.label,
+                        description: option.description,
+                        svgAsset: _ageSvgs[option.value] ?? '',
+                        isSelected: isSelected,
+                        colors: colors,
+                        onTap: () {
+                          _pageController.animateToPage(
+                            index,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOut,
+                          );
+                        },
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
           ),
         ),
-        const SizedBox(height: AppSpacing.md),
+        const SizedBox(height: AppSpacing.xl),
+        // Dots indicator
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             for (int i = 0; i < ageRangeOptions.length; i++) ...[
               AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                width: i == selectedIndex ? 20 : 8,
+                width: i == _currentPage ? 24 : 8,
                 height: 8,
                 decoration: BoxDecoration(
-                  color: i == selectedIndex ? colors.brand : Colors.transparent,
-                  border: i == selectedIndex
-                      ? null
-                      : Border.all(color: colors.onSurfaceDim, width: 1.5),
+                  color: i == _currentPage ? colors.brand : colors.surfaceVariant,
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
               if (i < ageRangeOptions.length - 1)
-                const SizedBox(width: AppSpacing.xs),
+                const SizedBox(width: AppSpacing.sm),
             ],
           ],
         ),
@@ -90,7 +155,7 @@ class _AgeRangeCard extends StatelessWidget {
     required this.value,
     required this.label,
     required this.description,
-    required this.emoji,
+    required this.svgAsset,
     required this.isSelected,
     required this.colors,
     required this.onTap,
@@ -99,7 +164,7 @@ class _AgeRangeCard extends StatelessWidget {
   final String value;
   final String label;
   final String description;
-  final String emoji;
+  final String svgAsset;
   final bool isSelected;
   final AppColorSet colors;
   final VoidCallback onTap;
@@ -110,11 +175,11 @@ class _AgeRangeCard extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        width: 148,
-        padding: const EdgeInsets.all(AppSpacing.md),
+        width: 260,
+        padding: const EdgeInsets.all(AppSpacing.xl),
         decoration: BoxDecoration(
-          borderRadius: AppRadius.borderLg,
-          color: isSelected ? colors.brand : colors.surfaceVariant,
+          color: colors.surfaceVariant,
+          borderRadius: AppRadius.borderXl,
           border: Border.all(
             color: isSelected ? colors.brand : colors.outline,
             width: isSelected ? 2 : 1,
@@ -124,33 +189,34 @@ class _AgeRangeCard extends StatelessWidget {
               color: isSelected
                   ? colors.brand.withValues(alpha: 0.30)
                   : Colors.black.withValues(alpha: 0.04),
-              blurRadius: isSelected ? 20 : 8,
+              blurRadius: isSelected ? 24 : 8,
               offset: const Offset(0, 4),
             ),
           ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(emoji, style: const TextStyle(fontSize: 28)),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              label,
-              style: AppTypography.bodyBold.copyWith(
-                color: isSelected ? colors.accentOnColor : colors.onBackground,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (svgAsset.isNotEmpty)
+                SvgPicture.asset(
+                  svgAsset,
+                  height: 180,
+                ),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                label,
+                style: AppTypography.bodyBold.copyWith(color: colors.onBackground),
               ),
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              description,
-              style: AppTypography.caption.copyWith(
-                color: isSelected
-                    ? colors.accentOnColor.withValues(alpha: 0.80)
-                    : colors.onSurfaceDim,
-                height: 1.4,
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                description,
+                style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+                textAlign: TextAlign.center,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

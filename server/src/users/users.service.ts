@@ -92,6 +92,10 @@ export class UsersService {
     return this.usersRepo.find({ where: { role: role as UserRole } });
   }
 
+  async findAll(): Promise<User[]> {
+    return this.usersRepo.find();
+  }
+
   async getStorageSettings(
     userId: number,
   ): Promise<{ fileRetentionDays: number | null }> {
