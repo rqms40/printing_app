@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
-import { FilePreviewModal } from './FilePreviewModal';
+import { FilePreviewModal } from './file-preview-modal';
 
 describe('FilePreviewModal', () => {
   it('renders image preview when mimeType is image/jpeg', () => {

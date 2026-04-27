@@ -17,7 +17,7 @@ import {
   ORDER_STATUS_LABELS,
 } from "@/types/enums";
 import { StatusBadge } from "@/components/status-badge";
-import { FilePreviewModal } from "@/components/FilePreviewModal";
+import { FilePreviewModal, type FileInspection } from "@/components/file-preview-modal";
 import {
   formatCurrency,
   formatDateTime,
@@ -45,7 +45,7 @@ export function OrderShow() {
   const [declineModalOpen, setDeclineModalOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
   const [previewFile, setPreviewFile] = useState<{
-    url: string; name: string; mimeType: string; inspection: unknown;
+    url: string; name: string; mimeType: string; inspection: FileInspection | null;
   } | null>(null);
 
   useEffect(() => {
@@ -371,7 +371,7 @@ export function OrderShow() {
         fileName={previewFile?.name ?? ''}
         fileUrl={previewFile?.url ?? ''}
         mimeType={previewFile?.mimeType ?? ''}
-        inspection={previewFile?.inspection as never}
+        inspection={previewFile?.inspection}
       />
     </Show>
   );

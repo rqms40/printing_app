@@ -13,7 +13,7 @@ interface SizeValidation {
   orientation?: string;
 }
 
-interface FileInspection {
+export interface FileInspection {
   mimeType: string;
   widthMm: number | null;
   heightMm: number | null;
@@ -25,7 +25,7 @@ interface FileInspection {
   sizeValidation: SizeValidation | null;
 }
 
-interface Props {
+interface FilePreviewModalProps {
   open: boolean;
   onClose: () => void;
   fileName: string;
@@ -34,7 +34,7 @@ interface Props {
   inspection?: FileInspection | null;
 }
 
-export function FilePreviewModal({ open, onClose, fileName, fileUrl, mimeType, inspection }: Props) {
+export function FilePreviewModal({ open, onClose, fileName, fileUrl, mimeType, inspection }: FilePreviewModalProps) {
   const [showRuler, setShowRuler] = useState(false);
   const isImage = mimeType.startsWith('image/');
   const isPdf = mimeType === 'application/pdf';
@@ -151,7 +151,7 @@ export function FilePreviewModal({ open, onClose, fileName, fileUrl, mimeType, i
           {inspection.heightMm && (
             <Descriptions.Item label="Height">{Math.round(inspection.heightMm)}mm</Descriptions.Item>
           )}
-          {inspection.widthPx && (
+          {inspection.widthPx && inspection.heightPx && (
             <Descriptions.Item label="Resolution">{inspection.widthPx}×{inspection.heightPx}px</Descriptions.Item>
           )}
           {inspection.dpi && (
