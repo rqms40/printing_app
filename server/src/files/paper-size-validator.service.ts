@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { SizeValidationResult } from './dto/file-inspection.dto';
-
-const PT_TO_MM = 25.4 / 72;
+import { PT_TO_MM } from './files.constants';
 const TOLERANCE_MM = 5;
 
 const PAPER_SIZES_MM: Record<string, { width: number; height: number }> = {

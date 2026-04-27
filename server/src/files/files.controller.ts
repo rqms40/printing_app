@@ -9,6 +9,7 @@ import {
   UploadedFile,
   ParseIntPipe,
   Request,
+  ForbiddenException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -18,6 +19,7 @@ import { FilesService } from './files.service';
 import { PresignedUrlResponseDto } from './dto/presigned-url.dto';
 import { FileInspectionDto } from './dto/file-inspection.dto';
 import { PaperSizeValidatorService } from './paper-size-validator.service';
+import { PT_TO_MM } from './files.constants';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
 
 @ApiTags('files')
@@ -62,13 +64,16 @@ export class FilesController {
   }
 
   @Get(':id/inspect')
-  @UseGuards(JwtAuthGuard)
   async inspect(
     @Param('id', ParseIntPipe) id: number,
+    @Request() req: RequestWithUser,
     @Query('paperSize') paperSize?: string,
   ): Promise<FileInspectionDto> {
     const file = await this.filesService.findById(id);
-    const PT_TO_MM = 25.4 / 72;
+    const isAdmin = req.user.role === 'admin';
+    if (!isAdmin && (file.uploadedBy == null || file.uploadedBy !== req.user.sub)) {
+      throw new ForbiddenException();
+    }
     const widthMm = file.widthPt ? Number(file.widthPt) * PT_TO_MM : null;
     const heightMm = file.heightPt ? Number(file.heightPt) * PT_TO_MM : null;
     return {
