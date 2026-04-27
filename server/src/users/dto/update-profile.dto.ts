@@ -13,6 +13,7 @@ import {
   ProfileCategory,
   ProfileField,
 } from '../profile.constants';
+import { PrintMode } from '../../orders/print-mode.enum';
 
 export class UpdateProfileDto {
   @ApiPropertyOptional({ example: 'Maria Santos' })
@@ -71,8 +72,8 @@ export class UpdateProfileDto {
   @IsEnum(PrintingPreference, { each: true })
   printingPreferences?: PrintingPreference[];
 
-  @ApiPropertyOptional({ enum: ['fitToPage', 'actualSize'] })
+  @ApiPropertyOptional({ enum: PrintMode })
   @IsOptional()
-  @IsIn(['fitToPage', 'actualSize'])
-  defaultPrintMode?: 'fitToPage' | 'actualSize';
+  @IsIn(Object.values(PrintMode))
+  defaultPrintMode?: PrintMode;
 }

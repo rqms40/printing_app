@@ -9,6 +9,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { PrintMode } from '../print-mode.enum';
 
 export class PaperSpecsDto {
   @IsString() paperSize: string;
@@ -17,8 +18,8 @@ export class PaperSpecsDto {
   @IsString() printSides: string;
   @IsString() @IsOptional() binding?: string;
   @IsOptional()
-  @IsIn(['fitToPage', 'actualSize'])
-  printMode?: 'fitToPage' | 'actualSize';
+  @IsIn(Object.values(PrintMode))
+  printMode?: PrintMode;
 }
 
 export class ThreeDSpecsDto {

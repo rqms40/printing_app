@@ -11,6 +11,7 @@ import {
   ProfileCategory,
   ProfileField,
 } from '../profile.constants';
+import { PrintMode } from '../../orders/print-mode.enum';
 
 export enum UserRole {
   CUSTOMER = 'customer',
@@ -105,7 +106,7 @@ export class User {
   fileRetentionDays: number | null;
 
   @Column({ name: 'default_print_mode', type: 'varchar', length: 20, nullable: true, default: 'fitToPage' })
-  defaultPrintMode: 'fitToPage' | 'actualSize' | null;
+  defaultPrintMode: PrintMode | null;
 
   @Column({ name: 'is_beta_user', default: false })
   isBetaUser: boolean;

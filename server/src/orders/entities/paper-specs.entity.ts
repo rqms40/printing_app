@@ -6,6 +6,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Order } from './order.entity';
+import { PrintMode } from '../print-mode.enum';
 
 @Entity('paper_specs')
 export class PaperSpec {
@@ -35,5 +36,5 @@ export class PaperSpec {
   binding: string;
 
   @Column({ name: 'print_mode', length: 20, nullable: true, default: 'fitToPage' })
-  printMode: string | null;
+  printMode: PrintMode | null;
 }
