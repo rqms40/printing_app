@@ -30,8 +30,12 @@ export class FileAnalysisService {
   private async analyzePdf(buffer: Buffer): Promise<FileAnalysisResult | null> {
     try {
       const pdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
+      const pageCount = pdf.getPageCount();
+      if (pageCount === 0) return null;
       const page = pdf.getPage(0);
       const { width, height } = page.getSize();
+      // Best-effort heuristic: scans raw bytes for /DeviceCMYK reference.
+      // May false-positive on compressed streams; treat result as advisory.
       const hasCmyk = buffer.toString('latin1').includes('/DeviceCMYK');
       return {
         widthPt: width,
@@ -39,7 +43,7 @@ export class FileAnalysisService {
         widthPx: null,
         heightPx: null,
         colorSpace: hasCmyk ? 'cmyk' : 'rgb',
-        pageCount: pdf.getPageCount(),
+        pageCount,
         dpi: null,
       };
     } catch {
