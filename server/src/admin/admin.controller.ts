@@ -291,6 +291,7 @@ export class AdminController {
       category: o.category,
       file_url: o.fileUrl ?? null,
       file_name: o.fileName ?? null,
+      file_metadata_id: o.fileMetadataId ?? null,
       quantity: o.quantity,
       total_price: Number(o.totalPrice),
       delivery_fee: Number(o.deliveryFee),

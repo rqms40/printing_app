@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@ant-design/charts": "^2.2.0",
+    "@react-three/drei": "^9.122.0",
+    "@react-three/fiber": "^8.18.0",
     "@refinedev/antd": "^5.43.0",
     "@refinedev/core": "^4.54.0",
     "@refinedev/react-router-v6": "^4.6.2",
@@ -18,13 +20,15 @@
     "antd": "^5.22.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.7.0",
+    "pdf-lib": "^1.17.1",
     "raw-body": "^3.0.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-leaflet": "^4.2.1",
     "react-router": "^6.28.0",
     "recharts": "^3.8.1",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "three": "^0.184.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
@@ -33,6 +37,7 @@
     "@types/leaflet": "^1.9.21",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.184.0",
     "@vitejs/plugin-react": "^4.3.4",
     "happy-dom": "^20.8.9",
     "typescript": "^5.6.3",

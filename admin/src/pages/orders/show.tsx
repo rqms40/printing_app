@@ -24,6 +24,7 @@ import {
 } from "@/utils/format";
 import type { Order, OrderStatusHistory } from "@/types/order";
 import { apiClient } from "@/providers/api-client";
+import { FileInspectorModal } from "@/components/file-inspector/file-inspector-modal";
 import {
   humanizeEnumValue,
   normalizeAdminDrivers,
@@ -43,6 +44,7 @@ export function OrderShow() {
   const [driverModalOpen, setDriverModalOpen] = useState(false);
   const [declineModalOpen, setDeclineModalOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
+  const [fileInspectorOpen, setFileInspectorOpen] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -190,7 +192,20 @@ export function OrderShow() {
         {/* Specifications */}
         <Card title="Specifications">
           <Descriptions column={2} bordered size="small">
-            <Descriptions.Item label="File">{order.file_name ?? "—"}</Descriptions.Item>
+            <Descriptions.Item label="File">
+              <Space>
+                {order.file_name ?? "—"}
+                {order.file_url && order.file_name && (
+                  <Button
+                    type="primary"
+                    size="small"
+                    onClick={() => setFileInspectorOpen(true)}
+                  >
+                    Inspect File
+                  </Button>
+                )}
+              </Space>
+            </Descriptions.Item>
             <Descriptions.Item label="Quantity">{order.quantity}</Descriptions.Item>
             {order.paper_specs && (
               <>
@@ -327,6 +342,17 @@ export function OrderShow() {
           placeholder="Reason for declining..."
         />
       </Modal>
+
+      {/* File Inspector Modal */}
+      {order.file_url && order.file_name && (
+        <FileInspectorModal
+          open={fileInspectorOpen}
+          onClose={() => setFileInspectorOpen(false)}
+          fileUrl={order.file_url}
+          fileName={order.file_name}
+          fileMetadataId={order.file_metadata_id}
+        />
+      )}
     </Show>
   );
 }
