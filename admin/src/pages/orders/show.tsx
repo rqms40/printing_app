@@ -17,6 +17,7 @@ import {
   ORDER_STATUS_LABELS,
 } from "@/types/enums";
 import { StatusBadge } from "@/components/status-badge";
+import { FilePreviewModal } from "@/components/FilePreviewModal";
 import {
   formatCurrency,
   formatDateTime,
@@ -43,6 +44,9 @@ export function OrderShow() {
   const [driverModalOpen, setDriverModalOpen] = useState(false);
   const [declineModalOpen, setDeclineModalOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
+  const [previewFile, setPreviewFile] = useState<{
+    url: string; name: string; mimeType: string; inspection: unknown;
+  } | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -111,6 +115,18 @@ export function OrderShow() {
     } catch {
       void message.error('Failed to decline order');
     }
+  };
+
+  const openPreview = async (fileUrl: string, fileName: string, mimeType: string, fileMetadataId?: number, paperSize?: string) => {
+    let inspection = null;
+    if (fileMetadataId) {
+      try {
+        const params = paperSize ? `?paperSize=${paperSize}` : '';
+        const res = await apiClient.get(`/files/${fileMetadataId}/inspect${params}`);
+        inspection = res.data;
+      } catch { /* inspection is non-critical */ }
+    }
+    setPreviewFile({ url: fileUrl, name: fileName, mimeType, inspection });
   };
 
   return (
@@ -190,7 +206,28 @@ export function OrderShow() {
         {/* Specifications */}
         <Card title="Specifications">
           <Descriptions column={2} bordered size="small">
-            <Descriptions.Item label="File">{order.file_name ?? "—"}</Descriptions.Item>
+            <Descriptions.Item label="File">
+              {order.file_url && order.file_name ? (
+                <Button
+                  type="link"
+                  size="small"
+                  style={{ padding: 0 }}
+                  onClick={() => {
+                    const name = order.file_name ?? '';
+                    const ext = name.split('.').pop()?.toLowerCase() ?? '';
+                    const mimeType = ext === 'pdf' ? 'application/pdf'
+                      : ['jpg', 'jpeg'].includes(ext) ? 'image/jpeg'
+                      : ext === 'png' ? 'image/png'
+                      : 'application/octet-stream';
+                    void openPreview(order.file_url!, name, mimeType, undefined, order.paper_specs?.paper_size);
+                  }}
+                >
+                  {order.file_name}
+                </Button>
+              ) : (
+                order.file_name ?? "—"
+              )}
+            </Descriptions.Item>
             <Descriptions.Item label="Quantity">{order.quantity}</Descriptions.Item>
             {order.paper_specs && (
               <>
@@ -327,6 +364,15 @@ export function OrderShow() {
           placeholder="Reason for declining..."
         />
       </Modal>
+
+      <FilePreviewModal
+        open={!!previewFile}
+        onClose={() => setPreviewFile(null)}
+        fileName={previewFile?.name ?? ''}
+        fileUrl={previewFile?.url ?? ''}
+        mimeType={previewFile?.mimeType ?? ''}
+        inspection={previewFile?.inspection as never}
+      />
     </Show>
   );
 }
