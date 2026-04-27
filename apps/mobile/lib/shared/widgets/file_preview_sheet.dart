@@ -21,12 +21,16 @@ class FilePreviewSheet extends ConsumerStatefulWidget {
     required this.fileName,
     required this.mimeType,
     this.fileSize,
+    this.widthMm,
+    this.heightMm,
   });
 
   final int fileId;
   final String fileName;
   final String mimeType;
   final int? fileSize;
+  final double? widthMm;
+  final double? heightMm;
 
   static Future<void> show(
     BuildContext context, {
@@ -34,6 +38,8 @@ class FilePreviewSheet extends ConsumerStatefulWidget {
     required String fileName,
     required String mimeType,
     int? fileSize,
+    double? widthMm,
+    double? heightMm,
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -45,6 +51,8 @@ class FilePreviewSheet extends ConsumerStatefulWidget {
         fileName: fileName,
         mimeType: mimeType,
         fileSize: fileSize,
+        widthMm: widthMm,
+        heightMm: heightMm,
       ),
     );
   }
@@ -73,6 +81,8 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
   @override
   void initState() {
     super.initState();
+    _widthMm = widget.widthMm;
+    _heightMm = widget.heightMm;
     _fadeCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
