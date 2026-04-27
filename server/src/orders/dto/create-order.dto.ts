@@ -3,6 +3,7 @@ import {
   IsNumber,
   IsOptional,
   IsBoolean,
+  IsIn,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -15,6 +16,9 @@ export class PaperSpecsDto {
   @IsString() mediaType: string;
   @IsString() printSides: string;
   @IsString() @IsOptional() binding?: string;
+  @IsOptional()
+  @IsIn(['fitToPage', 'actualSize'])
+  printMode?: 'fitToPage' | 'actualSize';
 }
 
 export class ThreeDSpecsDto {

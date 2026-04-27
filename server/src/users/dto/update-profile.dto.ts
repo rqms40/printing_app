@@ -2,6 +2,7 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
+  IsIn,
   IsOptional,
   IsString,
 } from 'class-validator';
@@ -69,4 +70,9 @@ export class UpdateProfileDto {
   @IsArray()
   @IsEnum(PrintingPreference, { each: true })
   printingPreferences?: PrintingPreference[];
+
+  @ApiPropertyOptional({ enum: ['fitToPage', 'actualSize'] })
+  @IsOptional()
+  @IsIn(['fitToPage', 'actualSize'])
+  defaultPrintMode?: 'fitToPage' | 'actualSize';
 }

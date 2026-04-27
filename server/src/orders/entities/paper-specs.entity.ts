@@ -33,4 +33,7 @@ export class PaperSpec {
 
   @Column({ length: 30, default: 'none' })
   binding: string;
+
+  @Column({ name: 'print_mode', length: 20, nullable: true, default: 'fitToPage' })
+  printMode: string | null;
 }

@@ -104,6 +104,9 @@ export class User {
   })
   fileRetentionDays: number | null;
 
+  @Column({ name: 'default_print_mode', type: 'varchar', length: 20, nullable: true, default: 'fitToPage' })
+  defaultPrintMode: 'fitToPage' | 'actualSize' | null;
+
   @Column({ name: 'is_beta_user', default: false })
   isBetaUser: boolean;
 
