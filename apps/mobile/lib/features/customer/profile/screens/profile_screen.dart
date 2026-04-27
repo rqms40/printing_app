@@ -456,11 +456,17 @@ class _PrintModeRowState extends State<_PrintModeRow> {
   }
 
   Future<void> _updatePrintMode(String mode) async {
+    final previous = _printMode;
     setState(() => _printMode = mode);
     try {
-      await ApiClient.instance.patch('/users/me/profile', data: {'defaultPrintMode': mode});
+      await ApiClient.instance.put('/users/profile', data: {'defaultPrintMode': mode});
     } catch (_) {
-      // Silently fail — preference not critical
+      if (mounted) {
+        setState(() => _printMode = previous);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to save print mode preference')),
+        );
+      }
     }
   }
 

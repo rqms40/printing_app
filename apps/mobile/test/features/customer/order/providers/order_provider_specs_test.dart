@@ -75,7 +75,7 @@ void main() {
 
   group('setPrintMode', () {
     test('setPrintMode updates printMode in state', () {
-      final notifier = OrderFlowNotifier();
+      final notifier = container.read(orderFlowProvider.notifier);
       notifier.setPrintMode('actualSize');
       expect(notifier.state.printMode, 'actualSize');
     });
