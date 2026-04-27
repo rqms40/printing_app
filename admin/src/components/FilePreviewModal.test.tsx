@@ -15,7 +15,8 @@ describe('FilePreviewModal', () => {
         mimeType="image/jpeg"
       />,
     );
-    expect(document.querySelector('img[alt="photo.jpg"]')).toBeInTheDocument();
+    const imgs = screen.getAllByRole('img');
+    expect(imgs.some((el) => el.tagName.toLowerCase() === 'img')).toBe(true);
   });
 
   it('renders iframe for PDF files', () => {

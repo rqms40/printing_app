@@ -32,6 +32,7 @@ export interface Order {
   category: "paper" | "3d";
   file_url?: string;
   file_name?: string;
+  file_metadata_id?: number;
   paper_specs?: PaperSpecs;
   three_d_specs?: ThreeDSpecs;
   quantity: number;

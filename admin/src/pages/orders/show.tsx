@@ -219,7 +219,7 @@ export function OrderShow() {
                       : ['jpg', 'jpeg'].includes(ext) ? 'image/jpeg'
                       : ext === 'png' ? 'image/png'
                       : 'application/octet-stream';
-                    void openPreview(order.file_url!, name, mimeType, undefined, order.paper_specs?.paper_size);
+                    void openPreview(order.file_url!, name, mimeType, order.file_metadata_id, order.paper_specs?.paper_size);
                   }}
                 >
                   {order.file_name}
