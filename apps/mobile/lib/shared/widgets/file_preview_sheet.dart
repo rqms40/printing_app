@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfx/pdfx.dart';
@@ -94,18 +97,42 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
     try {
       final response =
           await ApiClient.instance.get('/files/${widget.fileId}/presigned-url');
+      final url = response.data['url'] as String?;
+
       if (mounted) {
-        setState(() {
-          _presignedUrl = response.data['url'] as String?;
-          _loading = false;
-        });
-        _fadeCtrl.forward();
+        // If this is a PDF, eagerly build the controller from URL bytes so
+        // that a fresh controller is always created on each fetch (fixing the
+        // stale-controller-on-retry bug).
+        PdfController? newPdfController;
+        if (url != null && widget.mimeType == 'application/pdf') {
+          final bytes = await Dio().get<List<int>>(
+            url,
+            options: Options(responseType: ResponseType.bytes),
+          );
+          final data = Uint8List.fromList(bytes.data!);
+          newPdfController = PdfController(
+            document: PdfDocument.openData(data),
+          );
+        }
+
+        if (mounted) {
+          _pdfController?.dispose();
+          setState(() {
+            _presignedUrl = url;
+            _pdfController = newPdfController;
+            _loading = false;
+          });
+          _fadeCtrl.forward();
+        } else {
+          newPdfController?.dispose();
+        }
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _error = 'Couldn\'t load preview.';
           _loading = false;
+          _showRuler = false;
         });
       }
     }
@@ -253,22 +280,18 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
         children: [
           FadeTransition(
             opacity: _fadeAnim,
-            child: Builder(builder: (context) {
-              _pdfController ??= PdfController(
-                document: PdfDocument.openFile(_presignedUrl!),
-              );
-              return PdfView(
-                controller: _pdfController!,
-                scrollDirection: Axis.vertical,
-                onDocumentError: (_) {
-                  if (mounted) {
-                    setState(() {
-                      _error = 'Failed to load PDF.';
-                    });
-                  }
-                },
-              );
-            }),
+            child: PdfView(
+              controller: _pdfController!,
+              scrollDirection: Axis.vertical,
+              onDocumentError: (_) {
+                if (mounted) {
+                  setState(() {
+                    _error = 'Failed to load PDF.';
+                    _showRuler = false;
+                  });
+                }
+              },
+            ),
           ),
           if (_showRuler && _widthMm != null && _heightMm != null)
             Positioned.fill(

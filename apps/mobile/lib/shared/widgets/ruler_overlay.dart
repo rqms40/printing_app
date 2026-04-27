@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
+import 'package:printing_app/config/theme/app_typography.dart';
 
 class RulerOverlay extends StatelessWidget {
   const RulerOverlay({
@@ -42,10 +43,9 @@ class RulerOverlay extends StatelessWidget {
             ),
             child: Text(
               '${widthMm.round()}mm × ${heightMm.round()}mm',
-              style: TextStyle(
+              style: AppTypography.caption.copyWith(
                 color: brandColor,
                 fontSize: 11,
-                fontFamily: 'monospace',
                 fontWeight: FontWeight.w600,
               ),
             ),
