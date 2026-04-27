@@ -355,8 +355,8 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                           fileName: _fileName!,
                           mimeType: _fileMimeType ?? 'application/octet-stream',
                           fileSize: _fileSize,
-                          widthMm: _inspection?['widthMm'] as double?,
-                          heightMm: _inspection?['heightMm'] as double?,
+                          widthMm: (_inspection?['widthMm'] as num?)?.toDouble(),
+                          heightMm: (_inspection?['heightMm'] as num?)?.toDouble(),
                         ),
                         child: Text(
                           'Preview file',

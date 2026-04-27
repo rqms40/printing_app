@@ -119,7 +119,9 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
             url,
             options: Options(responseType: ResponseType.bytes),
           );
-          final data = Uint8List.fromList(bytes.data!);
+          final rawBytes = bytes.data;
+          if (rawBytes == null) throw Exception('Empty response body');
+          final data = Uint8List.fromList(rawBytes);
           newPdfController = PdfController(
             document: PdfDocument.openData(data),
           );
@@ -139,7 +141,10 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
       }
     } catch (e) {
       if (mounted) {
+        _pdfController?.dispose();
+        _pdfController = null;
         setState(() {
+          _presignedUrl = null;
           _error = 'Couldn\'t load preview.';
           _loading = false;
           _showRuler = false;
