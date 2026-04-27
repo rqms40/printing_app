@@ -73,6 +73,14 @@ void main() {
     });
   });
 
+  group('setPrintMode', () {
+    test('setPrintMode updates printMode in state', () {
+      final notifier = OrderFlowNotifier();
+      notifier.setPrintMode('actualSize');
+      expect(notifier.state.printMode, 'actualSize');
+    });
+  });
+
   group('setThreeDSpecsFromMap', () {
     test('sets all known 3D fields from map', () {
       notifier.setCategory('3d');

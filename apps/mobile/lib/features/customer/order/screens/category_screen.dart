@@ -6,6 +6,7 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
+import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/app_illustrations.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
@@ -92,6 +93,15 @@ class CategoryScreen extends ConsumerWidget {
   void _selectCategory(BuildContext context, WidgetRef ref, String category) {
     ref.read(orderFlowProvider.notifier).setCategory(category);
     ref.read(orderFlowProvider.notifier).goToStep(1);
+
+    // Pre-fill printMode from the user's saved preference (best-effort).
+    ApiClient.instance.get('/users/profile').then((response) {
+      final data = response.data as Map<String, dynamic>;
+      final defaultMode = (data['defaultPrintMode'] as String?) ?? 'fitToPage';
+      ref.read(orderFlowProvider.notifier).setPrintMode(defaultMode);
+    }).catchError((_) {
+      // Non-critical — keep the current default
+    });
 
     context.push(
       category == 'paper'

@@ -31,6 +31,7 @@ class Order {
     this.trackingLink,
     required this.createdAt,
     required this.updatedAt,
+    this.printMode = 'fitToPage',
   });
 
   final String id;
@@ -61,6 +62,9 @@ class Order {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  /// `'fitToPage'` or `'actualSize'`.
+  final String printMode;
+
   Order copyWith({
     String? id,
     String? orderId,
@@ -89,6 +93,7 @@ class Order {
     String? trackingLink,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? printMode,
   }) {
     return Order(
       id: id ?? this.id,
@@ -119,6 +124,7 @@ class Order {
       trackingLink: trackingLink ?? this.trackingLink,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      printMode: printMode ?? this.printMode,
     );
   }
 
