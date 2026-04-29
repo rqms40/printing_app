@@ -10,6 +10,7 @@ import {
   Select,
   Button,
   App,
+  Alert,
 } from "antd";
 import {
   SearchOutlined,
@@ -29,7 +30,6 @@ import {
   formatDate,
   statusLabel,
 } from "@/utils/format";
-import { mockOrders } from "@/providers/mock-data";
 import { apiClient } from "@/providers/api-client";
 import {
   humanizeEnumValue,
@@ -151,19 +151,27 @@ export function OrderList() {
   const [activeTab, setActiveTab] = useState<TabFilter>("all");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
-  const [orders, setOrders] = useState<Order[]>(mockOrders);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
+    setLoading(true);
+    setError(null);
+
     void apiClient
       .get("/admin/orders")
-      .then((res) => setOrders(normalizeOrders(res.data)))
-      .catch(() => {
-        /* keep mock fallback already in state */
+      .then((res) => {
+        setOrders(normalizeOrders(res.data));
+      })
+      .catch((cause: unknown) => {
+        setOrders([]);
+        setError(cause instanceof Error ? cause.message : "Unable to load orders");
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [reloadKey]);
 
   useEffect(() => {
     return subscribeToOrderUpdates((incoming) => {
@@ -237,6 +245,19 @@ export function OrderList() {
   return (
     <List title="Orders">
       <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+        {error ? (
+          <Alert
+            type="error"
+            showIcon
+            message={error}
+            action={
+              <Button type="link" onClick={() => setReloadKey((value) => value + 1)}>
+                Retry
+              </Button>
+            }
+          />
+        ) : null}
+
         <Space
           wrap
           style={{
@@ -436,6 +457,16 @@ export function OrderList() {
                 {humanizeEnumValue(v, "Unknown")}
               </Tag>
             )}
+          />
+          <Table.Column
+            title="Delivery"
+            dataIndex="deliveryType"
+            width={110}
+            render={(v: string | undefined) =>
+              v === "external" ? <Tag color="purple">External</Tag> :
+              v === "local" ? <Tag color="blue">Local</Tag> :
+              <span>—</span>
+            }
           />
           <Table.Column
             dataIndex="created_at"

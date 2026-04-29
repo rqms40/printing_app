@@ -16,6 +16,7 @@ import {
   ShoppingCartOutlined,
   DashboardOutlined,
   CarOutlined,
+  TruckOutlined,
   TeamOutlined,
   ShoppingOutlined,
   WalletOutlined,
@@ -51,10 +52,19 @@ import { TamSurveyShow } from "@/pages/tam-surveys/show";
 import { DailyGridList } from "@/pages/daily-grid/list";
 import { BetaModePage } from '@/pages/beta-mode';
 import { ChatInboxPage } from "@/pages/chat";
+import { DeliverySlotsTodayPage } from '@/pages/delivery-slots/today';
+import { DeliverySlotTemplatesPage } from '@/pages/delivery-slots/templates';
+import { ExternalDeliveriesPage } from '@/pages/external-deliveries';
+import { DeliverySettingsPage } from '@/pages/admin-settings/delivery';
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true,
+      }}
+    >
       <ConfigProvider theme={gridTheme}>
         <AntdApp>
           <Refine
@@ -130,6 +140,30 @@ function App() {
                 list: "/chat",
                 meta: { label: "Support Chat", icon: <MessageOutlined /> },
               },
+              {
+                name: 'delivery-slots',
+                meta: { label: 'Delivery', icon: <TruckOutlined /> },
+              },
+              {
+                name: 'delivery-slots-today',
+                list: '/delivery-slots/today',
+                meta: { label: "Today's Slots", parent: 'delivery-slots' },
+              },
+              {
+                name: 'delivery-slots-templates',
+                list: '/delivery-slots/templates',
+                meta: { label: 'Slot Templates', parent: 'delivery-slots' },
+              },
+              {
+                name: 'external-deliveries',
+                list: '/external-deliveries',
+                meta: { label: 'External Deliveries', parent: 'delivery-slots' },
+              },
+              {
+                name: 'delivery-settings',
+                list: '/settings/delivery',
+                meta: { label: 'Delivery Settings', parent: 'delivery-slots' },
+              },
             ]}
             options={{
               syncWithLocation: true,
@@ -182,6 +216,10 @@ function App() {
                 <Route path="/daily-grid" element={<DailyGridList />} />
                 <Route path="/beta-mode" element={<BetaModePage />} />
                 <Route path="/chat" element={<ChatInboxPage />} />
+                <Route path="/delivery-slots/today" element={<DeliverySlotsTodayPage />} />
+                <Route path="/delivery-slots/templates" element={<DeliverySlotTemplatesPage />} />
+                <Route path="/external-deliveries" element={<ExternalDeliveriesPage />} />
+                <Route path="/settings/delivery" element={<DeliverySettingsPage />} />
               </Route>
 
               <Route

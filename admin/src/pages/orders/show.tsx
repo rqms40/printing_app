@@ -1,4 +1,3 @@
-import { Show } from "@refinedev/antd";
 import {
   Card,
   Descriptions,
@@ -27,7 +26,8 @@ import { useState, useEffect } from "react";
 import type { OrderStatus } from "@/types/enums";
 import { ORDER_STATUS_TRANSITIONS, ORDER_STATUS_LABELS } from "@/types/enums";
 import { StatusBadge } from "@/components/status-badge";
-import { FilePreviewModal, type FileInspection } from "@/components/file-preview-modal";
+import { FilePreviewModal } from "@/components/file-preview-modal";
+import { ShowPage } from "@/components/show-page";
 import { formatCurrency, formatDateTime, statusLabel } from "@/utils/format";
 import type { Order, OrderItem, OrderStatusHistory } from "@/types/order";
 import { apiClient } from "@/providers/api-client";
@@ -36,6 +36,7 @@ import {
   normalizeAdminDrivers,
   normalizeOrder,
 } from "@/utils/api-normalizers";
+import { loadOrderFilePreview, type OrderFilePreview } from "./preview";
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -97,9 +98,8 @@ export function OrderShow() {
   const [driverModalOpen, setDriverModalOpen] = useState(false);
   const [declineModalOpen, setDeclineModalOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
-  const [previewFile, setPreviewFile] = useState<{
-    url: string; name: string; mimeType: string; inspection: FileInspection | null;
-  } | null>(null);
+  const [previewFile, setPreviewFile] = useState<OrderFilePreview | null>(null);
+  const [previewingFileId, setPreviewingFileId] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -117,19 +117,19 @@ export function OrderShow() {
 
   if (loading) {
     return (
-      <Show title="Order">
+      <ShowPage title="Order" backTo="/orders" contentCard={false}>
         <div style={{ display: "flex", justifyContent: "center", padding: 80 }}>
           <Spin size="large" />
         </div>
-      </Show>
+      </ShowPage>
     );
   }
 
   if (!order) {
     return (
-      <Show title="Order Not Found">
+      <ShowPage title="Order Not Found" backTo="/orders">
         <Text>Order not found.</Text>
-      </Show>
+      </ShowPage>
     );
   }
 
@@ -192,20 +192,34 @@ export function OrderShow() {
     }
   };
 
-  const openPreview = async (fileUrl: string, fileName: string, mimeType: string, fileMetadataId?: number, paperSize?: string) => {
-    let inspection = null;
-    if (fileMetadataId) {
-      try {
-        const params = paperSize ? `?paperSize=${paperSize}` : '';
-        const res = await apiClient.get(`/files/${fileMetadataId}/inspect${params}`);
-        inspection = res.data;
-      } catch { /* inspection is non-critical */ }
+  const openPreview = async (
+    fileUrl: string | null | undefined,
+    fileName: string,
+    fileMetadataId?: number,
+    paperSize?: string,
+  ) => {
+    const previewKey = `${fileMetadataId ?? "legacy"}:${fileName}`;
+    setPreviewingFileId(previewKey);
+    try {
+      const preview = await loadOrderFilePreview({
+        get: apiClient.get.bind(apiClient),
+        fileUrl,
+        fileName,
+        fileMetadataId,
+        paperSize,
+      });
+      setPreviewFile(preview);
+    } catch {
+      void message.error(
+        "Unable to open this file preview. Check that the file still exists in storage.",
+      );
+    } finally {
+      setPreviewingFileId(null);
     }
-    setPreviewFile({ url: fileUrl, name: fileName, mimeType, inspection });
   };
 
   return (
-    <Show title={`Order ${order.order_id}`}>
+    <ShowPage title={`Order ${order.order_id}`} backTo="/orders" contentCard={false}>
       <Space direction="vertical" size="large" style={{ width: "100%" }}>
         {/* Header with actions */}
         <Card>
@@ -302,15 +316,19 @@ export function OrderShow() {
                   <Button
                     type="link"
                     size="small"
+                    loading={
+                      previewingFileId ===
+                      `${item.file_metadata_id ?? "legacy"}:${v}`
+                    }
                     style={{ padding: 0 }}
-                    onClick={() => {
-                      const ext = v.split('.').pop()?.toLowerCase() ?? '';
-                      const mimeType = ext === 'pdf' ? 'application/pdf'
-                        : ['jpg', 'jpeg'].includes(ext) ? 'image/jpeg'
-                        : ext === 'png' ? 'image/png'
-                        : 'application/octet-stream';
-                      void openPreview(item.file_url, v, mimeType, item.file_metadata_id, item.paper_specs?.paper_size);
-                    }}
+                    onClick={() =>
+                      void openPreview(
+                        item.file_url,
+                        v,
+                        item.file_metadata_id,
+                        item.paper_specs?.paper_size,
+                      )
+                    }
                   >
                     {v}
                   </Button>
@@ -367,6 +385,33 @@ export function OrderShow() {
             </Descriptions.Item>
           </Descriptions>
         </Card>
+
+        {/* Delivery / Slot Info */}
+        {(order.deliverySlotBookingId ?? order.destinations ?? order.priorityFee ?? order.priority) && (
+          <Card title="Delivery Info">
+            <Descriptions column={2} bordered size="small">
+              {order.deliverySlotBookingId && (
+                <Descriptions.Item label="Slot Booking">
+                  <Tag color="cyan">Slot #{order.deliverySlotBookingId}</Tag>
+                </Descriptions.Item>
+              )}
+              {(order.priorityFee ?? 0) > 0 || order.priority ? (
+                <Descriptions.Item label="Priority">
+                  <Tag color="gold">Priority</Tag>
+                </Descriptions.Item>
+              ) : null}
+              {order.destinations && Array.isArray(order.destinations) && order.destinations.length > 0 && (
+                <Descriptions.Item label="Destinations" span={2}>
+                  <Space direction="vertical" size={2}>
+                    {(order.destinations as { address?: string; label?: string }[]).map((d, i) => (
+                      <span key={i}>{d.address ?? d.label ?? `Destination ${i + 1}`}</span>
+                    ))}
+                  </Space>
+                </Descriptions.Item>
+              )}
+            </Descriptions>
+          </Card>
+        )}
 
         {/* Admin Notes */}
         <Card title="Admin Notes">
@@ -495,6 +540,6 @@ export function OrderShow() {
         mimeType={previewFile?.mimeType ?? ''}
         inspection={previewFile?.inspection}
       />
-    </Show>
+    </ShowPage>
   );
 }

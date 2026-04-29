@@ -60,6 +60,12 @@ export interface Order {
   created_at: string;
   updated_at: string;
   items?: OrderItem[];
+  // Batch / delivery slot fields (optional — present when order has slot booking)
+  deliverySlotBookingId?: number;
+  priority?: boolean;
+  priorityFee?: number;
+  deliveryType?: "local" | "external";
+  destinations?: { address?: string; label?: string; [key: string]: unknown }[];
 }
 
 export interface OrderItem {
