@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { theme } from "antd";
 
 const KEYFRAMES = `
   @keyframes chatDotBounce {
@@ -11,6 +12,8 @@ const KEYFRAMES = `
 `;
 
 export function TypingIndicator() {
+  const { token } = theme.useToken();
+
   useEffect(() => {
     if (document.getElementById("chat-typing-anim")) return;
     const s = document.createElement("style");
@@ -28,7 +31,7 @@ export function TypingIndicator() {
           alignItems: "center",
           gap: 5,
           padding: "10px 14px",
-          background: "#F5F5F5",
+          background: token.colorBgElevated,
           borderRadius: "14px 14px 14px 4px",
           height: 36,
         }}
@@ -41,7 +44,7 @@ export function TypingIndicator() {
               width: 7,
               height: 7,
               borderRadius: "50%",
-              background: "#8C8C8C",
+              background: token.colorTextSecondary,
             }}
           />
         ))}

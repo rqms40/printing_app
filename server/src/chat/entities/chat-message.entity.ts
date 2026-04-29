@@ -29,14 +29,25 @@ export class ChatMessage {
   @JoinColumn({ name: 'conversation_id' })
   conversation: Conversation;
 
-  @Column({ name: 'sender_id', nullable: true })
+  @Column({ name: 'sender_id', type: 'int', nullable: true })
   senderId: number | null;
 
   @Column({ name: 'sender_role', type: 'enum', enum: SenderRole })
   senderRole: SenderRole;
 
-  @Column({ type: 'text' })
-  content: string;
+  @Column({ type: 'text', nullable: true })
+  content: string | null;
+
+  @Column({ name: 'attachment_file_id', type: 'int', nullable: true })
+  attachmentFileId: number | null;
+
+  @Column({
+    name: 'attachment_mime_type',
+    type: 'varchar',
+    length: 100,
+    nullable: true,
+  })
+  attachmentMimeType: string | null;
 
   @Column({ name: 'is_read', default: false })
   isRead: boolean;

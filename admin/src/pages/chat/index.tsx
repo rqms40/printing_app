@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Layout, Tabs } from "antd";
+import { Layout, Tabs, theme } from "antd";
 import { useChatInbox } from "@/hooks/useChat";
 import { ConversationList } from "@/components/chat/ConversationList";
 import { ChatThread } from "./ChatThread";
@@ -17,6 +17,7 @@ const FILTER_TABS: { key: FilterKey; label: string }[] = [
 ];
 
 export function ChatInboxPage() {
+  const { token } = theme.useToken();
   const { conversations, assignConversation, closeConversation, clearUnread } =
     useChatInbox();
   const [activeConversation, setActiveConversation] =
@@ -42,51 +43,78 @@ export function ChatInboxPage() {
 
   const handleAssign = useCallback(async () => {
     if (!activeConversation) return;
-    await assignConversation(activeConversation.id);
-    setActiveConversation((prev) =>
-      prev ? { ...prev, status: "assigned" } : null,
-    );
+    const updated = await assignConversation(activeConversation.id);
+    setActiveConversation(updated);
   }, [activeConversation, assignConversation]);
 
   const handleClose = useCallback(async () => {
     if (!activeConversation) return;
-    await closeConversation(activeConversation.id);
-    setActiveConversation((prev) =>
-      prev ? { ...prev, status: "closed" } : null,
-    );
+    const updated = await closeConversation(activeConversation.id);
+    setActiveConversation(updated);
   }, [activeConversation, closeConversation]);
 
   return (
-    <Layout style={{ height: "100vh", background: "#FFFFFF" }}>
+    <Layout
+      style={{
+        height: "calc(100vh - 64px)",
+        margin: -24,
+        overflow: "hidden",
+        background: token.colorBgContainer,
+      }}
+    >
       <Sider
-        width={320}
+        width={300}
         style={{
-          background: "#FAFAFA",
-          borderRight: "1px solid #F0F0F0",
+          background: token.colorBgElevated,
+          borderRight: `1px solid ${token.colorBorder}`,
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
+          height: "100%",
         }}
       >
-        <div
-          style={{
-            padding: "16px 16px 0",
-            fontWeight: 700,
-            fontSize: 16,
-            color: "#1A1A1A",
-            borderBottom: "1px solid #F0F0F0",
-          }}
-        >
-          Support Chat
+        {/* Header */}
+        <div style={{ padding: "18px 20px 0", flexShrink: 0 }}>
+          <div
+            style={{
+              fontWeight: 700,
+              fontSize: 15,
+              letterSpacing: "0.01em",
+              color: token.colorText,
+            }}
+          >
+            Support Chat
+            {conversations.length > 0 && (
+              <span
+                style={{
+                  marginLeft: 8,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: token.colorTextSecondary,
+                  background: token.colorBgTextHover,
+                  padding: "1px 7px",
+                  borderRadius: 10,
+                  verticalAlign: "middle",
+                }}
+              >
+                {conversations.length}
+              </span>
+            )}
+          </div>
         </div>
+
+        {/* Filter tabs */}
         <Tabs
           activeKey={filter}
           onChange={(key) => setFilter(key as FilterKey)}
           size="small"
-          style={{ padding: "0 16px" }}
+          style={{ padding: "6px 20px 0", flexShrink: 0 }}
+          tabBarStyle={{ marginBottom: 0, borderBottom: `1px solid ${token.colorBorder}` }}
           items={FILTER_TABS.map((t) => ({ key: t.key, label: t.label }))}
         />
-        <div style={{ flex: 1, overflow: "auto" }}>
+
+        {/* Conversation list */}
+        <div style={{ flex: 1, overflowY: "auto" }}>
           <ConversationList
             conversations={filtered}
             activeId={activeConversation?.id ?? null}
@@ -95,7 +123,7 @@ export function ChatInboxPage() {
         </div>
       </Sider>
       <Content
-        style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}
+        style={{ display: "flex", flexDirection: "column", overflow: "hidden", height: "100%" }}
       >
         <ChatThread
           conversation={activeConversation}

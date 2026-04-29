@@ -1,6 +1,6 @@
-export type ConversationType = 'ai' | 'admin' | 'rider';
-export type ConversationStatus = 'open' | 'assigned' | 'closed';
-export type SenderRole = 'customer' | 'admin' | 'rider' | 'bot';
+export type ConversationType = "ai" | "admin" | "rider";
+export type ConversationStatus = "open" | "assigned" | "closed";
+export type SenderRole = "customer" | "admin" | "rider" | "bot";
 
 export interface Conversation {
   id: number;
@@ -16,8 +16,12 @@ export interface Conversation {
   closedAt: string | null;
 }
 
-export interface NewConversationEvent extends Conversation {
+export interface NewConversationEvent {
+  conversationId: number;
+  customerId: number;
   customerName: string;
+  type: ConversationType;
+  orderId: number | null;
 }
 
 export interface ChatMessage {
@@ -25,7 +29,9 @@ export interface ChatMessage {
   conversationId: number;
   senderId: number | null;
   senderRole: SenderRole;
-  content: string;
+  content: string | null;
+  attachmentFileId: number | null;
+  attachmentMimeType: string | null;
   isRead: boolean;
   readAt: string | null;
   createdAt: string;

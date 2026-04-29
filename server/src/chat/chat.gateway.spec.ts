@@ -81,10 +81,38 @@ describe('ChatGateway', () => {
   });
 
   describe('handleJoinConversation', () => {
-    it('joins the conversation room', () => {
+    it('joins the conversation room for the owning customer', async () => {
       const socket = makeSocket({ data: { userId: 1, role: 'customer' } });
-      gateway.handleJoinConversation({ conversationId: 5 }, socket as any);
+      chatService.findConversation.mockResolvedValue({ customerId: 1 });
+      await gateway.handleJoinConversation(
+        { conversationId: 5 },
+        socket as any,
+      );
       expect(socket.join).toHaveBeenCalledWith('conversation:5');
+    });
+
+    it('rejects room joins by non-owner customers', async () => {
+      const socket = makeSocket({ data: { userId: 1, role: 'customer' } });
+      chatService.findConversation.mockResolvedValue({ customerId: 2 });
+
+      await expect(
+        gateway.handleJoinConversation({ conversationId: 5 }, socket as any),
+      ).rejects.toThrow('Forbidden');
+      expect(socket.join).not.toHaveBeenCalled();
+    });
+
+    it('rejects assigned rider access when the socket role is not driver', async () => {
+      const socket = makeSocket({ data: { userId: 12, role: 'customer' } });
+      chatService.findConversation.mockResolvedValue({
+        customerId: 5,
+        type: ConversationType.RIDER,
+        assignedRiderId: 12,
+      });
+
+      await expect(
+        gateway.handleJoinConversation({ conversationId: 5 }, socket as any),
+      ).rejects.toThrow('Forbidden');
+      expect(socket.join).not.toHaveBeenCalled();
     });
   });
 
@@ -93,11 +121,24 @@ describe('ChatGateway', () => {
       const socket = makeSocket({ data: { userId: 1, role: 'customer' } });
       const saved = { id: 10, conversationId: 5, content: 'Hi' };
       chatService.saveMessage.mockResolvedValue(saved);
-      chatService.findConversation.mockResolvedValue({ type: ConversationType.ADMIN });
+      chatService.findConversation.mockResolvedValue({
+        customerId: 1,
+        type: ConversationType.ADMIN,
+      });
 
-      await gateway.handleSendMessage({ conversationId: 5, content: 'Hi' }, socket as any);
+      await gateway.handleSendMessage(
+        { conversationId: 5, content: 'Hi' },
+        socket as any,
+      );
 
-      expect(chatService.saveMessage).toHaveBeenCalledWith(5, 1, SenderRole.CUSTOMER, 'Hi');
+      expect(chatService.saveMessage).toHaveBeenCalledWith(
+        5,
+        1,
+        SenderRole.CUSTOMER,
+        'Hi',
+        null,
+        null,
+      );
       expect(server.to).toHaveBeenCalledWith('conversation:5');
       expect(server.emit).toHaveBeenCalledWith('message-received', saved);
     });
@@ -108,10 +149,16 @@ describe('ChatGateway', () => {
       chatService.saveMessage
         .mockResolvedValueOnce({ id: 10, content: 'Hello' })
         .mockResolvedValueOnce(botMsg);
-      chatService.findConversation.mockResolvedValue({ type: ConversationType.AI });
+      chatService.findConversation.mockResolvedValue({
+        customerId: 1,
+        type: ConversationType.AI,
+      });
       chatService.getBotResponse.mockResolvedValue('Hi there!');
 
-      await gateway.handleSendMessage({ conversationId: 3, content: 'Hello' }, socket as any);
+      await gateway.handleSendMessage(
+        { conversationId: 3, content: 'Hello' },
+        socket as any,
+      );
       // Flush microtask queue so fire-and-forget triggerBotIfNeeded completes
       await new Promise((r) => setImmediate(r));
 
@@ -123,18 +170,44 @@ describe('ChatGateway', () => {
       expect(botTypingIndex).toBeLessThan(botResponseIndex);
       expect(server.emit).toHaveBeenCalledWith('bot-response', botMsg);
     });
+
+    it('does not trigger GridBot for admin messages in AI conversations', async () => {
+      const socket = makeSocket({ data: { userId: 7, role: 'admin' } });
+      const saved = { id: 12, conversationId: 3, content: 'I can help' };
+      chatService.saveMessage.mockResolvedValue(saved);
+      chatService.findConversation.mockResolvedValue({
+        customerId: 1,
+        type: ConversationType.AI,
+      });
+
+      await gateway.handleSendMessage(
+        { conversationId: 3, content: 'I can help' },
+        socket as any,
+      );
+      await new Promise((r) => setImmediate(r));
+
+      expect(chatService.getBotResponse).not.toHaveBeenCalled();
+      expect(server.emit).not.toHaveBeenCalledWith(
+        'bot-typing',
+        expect.anything(),
+      );
+    });
   });
 
   describe('handleReadMessages', () => {
     it('marks messages read and emits messages-read', async () => {
       const socket = makeSocket({ data: { userId: 7, role: 'customer' } });
       chatService.markMessagesRead.mockResolvedValue(undefined);
+      chatService.findConversation.mockResolvedValue({ customerId: 7 });
       await gateway.handleReadMessages({ conversationId: 5 }, socket as any);
       expect(chatService.markMessagesRead).toHaveBeenCalledWith(5);
       expect(server.to).toHaveBeenCalledWith('conversation:5');
-      expect(server.emit).toHaveBeenCalledWith('messages-read', expect.objectContaining({
-        conversationId: 5,
-      }));
+      expect(server.emit).toHaveBeenCalledWith(
+        'messages-read',
+        expect.objectContaining({
+          conversationId: 5,
+        }),
+      );
     });
 
     it('skips processing when socket has no userId', async () => {
@@ -145,22 +218,31 @@ describe('ChatGateway', () => {
   });
 
   describe('handleTyping', () => {
-    it('broadcasts user-typing with mapped SenderRole to room peers (not sender)', () => {
+    it('broadcasts user-typing with mapped SenderRole to room peers (not sender)', async () => {
       const socket = makeSocket({ data: { userId: 1, role: 'admin' } });
-      gateway.handleTyping({ conversationId: 7 }, socket as any);
+      chatService.findConversation.mockResolvedValue({ customerId: 42 });
+      await gateway.handleTyping({ conversationId: 7 }, socket as any);
       expect(socket.to).toHaveBeenCalledWith('conversation:7');
-      const toResult = socket.to.mock.results[0].value as jest.Mock & { emit: jest.Mock };
+      const toResult = socket.to.mock.results[0].value as jest.Mock & {
+        emit: jest.Mock;
+      };
       expect(toResult.emit).toHaveBeenCalledWith('user-typing', {
         conversationId: 7,
         senderRole: SenderRole.ADMIN,
       });
     });
 
-    it('maps driver role to RIDER in user-typing payload', () => {
+    it('maps driver role to RIDER in user-typing payload', async () => {
       const socket = makeSocket({ data: { userId: 2, role: 'driver' } });
-      gateway.handleTyping({ conversationId: 8 }, socket as any);
+      chatService.findConversation.mockResolvedValue({
+        type: ConversationType.RIDER,
+        assignedRiderId: 2,
+      });
+      await gateway.handleTyping({ conversationId: 8 }, socket as any);
       expect(socket.to).toHaveBeenCalledWith('conversation:8');
-      const toResult = socket.to.mock.results[0].value as jest.Mock & { emit: jest.Mock };
+      const toResult = socket.to.mock.results[0].value as jest.Mock & {
+        emit: jest.Mock;
+      };
       expect(toResult.emit).toHaveBeenCalledWith('user-typing', {
         conversationId: 8,
         senderRole: SenderRole.RIDER,

@@ -5,6 +5,7 @@ import {
   MessageBody,
   ConnectedSocket,
   OnGatewayConnection,
+  WsException,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
@@ -46,10 +47,11 @@ export class ChatGateway implements OnGatewayConnection {
   }
 
   @SubscribeMessage('join-conversation')
-  handleJoinConversation(
+  async handleJoinConversation(
     @MessageBody() data: { conversationId: number },
     @ConnectedSocket() client: Socket,
   ) {
+    await this.assertCanAccessConversation(client, data.conversationId);
     void client.join(`conversation:${data.conversationId}`);
     return { event: 'joined', data: { conversationId: data.conversationId } };
   }
@@ -64,9 +66,16 @@ export class ChatGateway implements OnGatewayConnection {
 
   @SubscribeMessage('send-message')
   async handleSendMessage(
-    @MessageBody() data: { conversationId: number; content: string },
+    @MessageBody()
+    data: {
+      conversationId: number;
+      content?: string;
+      attachmentFileId?: number;
+      attachmentMimeType?: string;
+    },
     @ConnectedSocket() client: Socket,
   ) {
+    await this.assertCanAccessConversation(client, data.conversationId);
     const userId = client.data.userId as number;
     const role = (client.data.role as string) ?? 'customer';
     const senderRole =
@@ -76,21 +85,32 @@ export class ChatGateway implements OnGatewayConnection {
           ? SenderRole.RIDER
           : SenderRole.CUSTOMER;
 
+    const trimmedContent = (data.content ?? '').trim();
+    if (!trimmedContent && !data.attachmentFileId) {
+      throw new WsException('Message must have content or attachment');
+    }
+
     const msg = await this.chatService.saveMessage(
       data.conversationId,
       userId,
       senderRole,
-      data.content,
+      trimmedContent,
+      data.attachmentFileId ?? null,
+      data.attachmentMimeType ?? null,
     );
     this.server
       .to(`conversation:${data.conversationId}`)
       .emit('message-received', msg);
 
-    this.triggerBotIfNeeded(data.conversationId, data.content).catch((err) => {
-      console.error('[ChatGateway] bot trigger error', err);
-    });
+    if (senderRole === SenderRole.CUSTOMER && trimmedContent) {
+      this.triggerBotIfNeeded(data.conversationId, trimmedContent).catch(
+        (err) => {
+          console.error('[ChatGateway] bot trigger error', err);
+        },
+      );
+    }
 
-    return { status: 'ok' };
+    return { status: 'ok', messageId: msg.id };
   }
 
   private async triggerBotIfNeeded(
@@ -126,10 +146,11 @@ export class ChatGateway implements OnGatewayConnection {
   }
 
   @SubscribeMessage('typing')
-  handleTyping(
+  async handleTyping(
     @MessageBody() data: { conversationId: number },
     @ConnectedSocket() client: Socket,
   ) {
+    await this.assertCanAccessConversation(client, data.conversationId);
     const role = (client.data.role as string) ?? 'customer';
     const senderRole =
       role === 'admin'
@@ -149,16 +170,17 @@ export class ChatGateway implements OnGatewayConnection {
     @ConnectedSocket() client: Socket,
   ) {
     if (!client.data.userId) return;
+    await this.assertCanAccessConversation(client, data.conversationId);
     await this.chatService.markMessagesRead(data.conversationId);
     this.server
       .to(`conversation:${data.conversationId}`)
-      .emit('messages-read', { conversationId: data.conversationId, readAt: new Date() });
+      .emit('messages-read', {
+        conversationId: data.conversationId,
+        readAt: new Date(),
+      });
   }
 
-  notifyNewConversation(
-    conv: Conversation,
-    customerName: string,
-  ) {
+  notifyNewConversation(conv: Conversation, customerName: string) {
     this.server.to('admin_inbox').emit('new-conversation', {
       conversationId: conv.id,
       customerId: conv.customerId,
@@ -166,5 +188,35 @@ export class ChatGateway implements OnGatewayConnection {
       type: conv.type,
       orderId: conv.orderId ?? null,
     });
+  }
+
+  private async assertCanAccessConversation(
+    client: Socket,
+    conversationId: number,
+  ): Promise<Conversation> {
+    const userId = client.data.userId as number | undefined;
+    const role = (client.data.role as string | undefined) ?? 'customer';
+    if (!userId) {
+      throw new WsException('Unauthorized');
+    }
+
+    const conversation =
+      await this.chatService.findConversation(conversationId);
+    if (!conversation) {
+      throw new WsException('Conversation not found');
+    }
+
+    const canAccess =
+      role === 'admin' ||
+      conversation.customerId === userId ||
+      (role === 'driver' &&
+        conversation.type === ConversationType.RIDER &&
+        conversation.assignedRiderId === userId);
+
+    if (!canAccess) {
+      throw new WsException('Forbidden');
+    }
+
+    return conversation;
   }
 }

@@ -3,6 +3,7 @@ import {
   ClipboardList, CheckCircle2, XCircle, Printer, Settings, 
   ShieldCheck, Package, Truck, CheckSquare, XSquare, IdCard, MapPin, ChevronDown 
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { OrderStatus } from '../types';
 
 interface StatusDropdownProps {
@@ -10,7 +11,7 @@ interface StatusDropdownProps {
   onStatusChange: (status: OrderStatus) => void;
 }
 
-const statusOptions: { label: OrderStatus; icon: React.FC<any> }[] = [
+const statusOptions: { label: OrderStatus; icon: LucideIcon }[] = [
   { label: 'Order Placed', icon: ClipboardList },
   { label: 'File Verified', icon: CheckCircle2 },
   { label: 'File Declined', icon: XCircle },

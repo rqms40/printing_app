@@ -1,4 +1,6 @@
-import type { Conversation, ConversationStatus } from "@/types/chat";
+import { useState } from "react";
+import { theme } from "antd";
+import type { Conversation, ConversationStatus, ConversationType } from "@/types/chat";
 
 const MONO = "'SFMono-Regular', Consolas, 'Liberation Mono', monospace";
 
@@ -12,6 +14,12 @@ const TYPE_LABEL: Record<string, string> = {
   ai: "AI",
   admin: "Admin",
   rider: "Rider",
+};
+
+const TYPE_COLORS: Record<ConversationType, { bg: string; text: string }> = {
+  ai: { bg: "rgba(59,130,246,0.12)", text: "#93C5FD" },
+  admin: { bg: "rgba(82,196,26,0.12)", text: "#86EFAC" },
+  rider: { bg: "rgba(245,158,11,0.12)", text: "#FCD34D" },
 };
 
 function timeAgo(iso: string): string {
@@ -33,6 +41,9 @@ interface Props {
 }
 
 export function ConversationList({ conversations, activeId, onSelect }: Props) {
+  const { token } = theme.useToken();
+  const [hoveredId, setHoveredId] = useState<number | null>(null);
+
   if (conversations.length === 0) {
     return (
       <div
@@ -41,8 +52,8 @@ export function ConversationList({ conversations, activeId, onSelect }: Props) {
           alignItems: "center",
           justifyContent: "center",
           height: 120,
-          color: "#BFBFBF",
-          fontSize: 13,
+          color: token.colorTextDisabled,
+          fontSize: 12,
           fontFamily: MONO,
           letterSpacing: "0.04em",
         }}
@@ -53,43 +64,57 @@ export function ConversationList({ conversations, activeId, onSelect }: Props) {
   }
 
   return (
-    <div style={{ overflow: "auto", height: "100%" }}>
+    <div>
       {conversations.map((conv) => {
         const isActive = conv.id === activeId;
+        const isHovered = conv.id === hoveredId && !isActive;
         const customerName = conv.customer?.name ?? `Customer #${conv.customerId}`;
+        const dotColor = STATUS_DOT[conv.status] ?? token.colorTextSecondary;
+        const typeColors = TYPE_COLORS[conv.type];
 
         return (
           <div
             key={conv.id}
             onClick={() => onSelect(conv)}
+            onMouseEnter={() => setHoveredId(conv.id)}
+            onMouseLeave={() => setHoveredId(null)}
             style={{
               display: "flex",
-              alignItems: "center",
-              padding: "0 16px",
-              height: 64,
+              alignItems: "flex-start",
+              padding: "13px 20px",
+              paddingLeft: isActive ? 17 : 20,
+              borderLeft: isActive ? "3px solid #FFDE58" : "3px solid transparent",
               cursor: "pointer",
-              background: isActive ? "#FFDE58" : "transparent",
-              borderBottom: "1px solid #F0F0F0",
-              transition: "background 0.12s ease",
-              gap: 10,
+              background: isActive
+                ? "rgba(255,255,255,0.06)"
+                : isHovered
+                ? "rgba(255,255,255,0.03)"
+                : "transparent",
+              borderBottom: `1px solid ${token.colorBorder}`,
+              transition: "background 0.1s ease, border-left-color 0.1s ease",
+              gap: 12,
             }}
           >
+            {/* Status dot — aligned to first text line */}
             <div
               style={{
-                width: 8,
-                height: 8,
+                marginTop: 4,
+                width: 9,
+                height: 9,
                 borderRadius: "50%",
-                background: STATUS_DOT[conv.status] ?? "#8C8C8C",
+                background: dotColor,
                 flexShrink: 0,
-                boxShadow: `0 0 0 2px ${isActive ? "rgba(0,0,0,0.08)" : "#fff"}, 0 0 0 3px ${STATUS_DOT[conv.status] ?? "#8C8C8C"}22`,
+                boxShadow: `0 0 0 2px ${token.colorBgElevated}, 0 0 0 3.5px ${dotColor}44`,
               }}
             />
+
             <div style={{ flex: 1, minWidth: 0 }}>
+              {/* Row 1: name + timestamp */}
               <div
                 style={{
                   display: "flex",
-                  alignItems: "baseline",
                   justifyContent: "space-between",
+                  alignItems: "baseline",
                   gap: 8,
                 }}
               >
@@ -97,7 +122,7 @@ export function ConversationList({ conversations, activeId, onSelect }: Props) {
                   style={{
                     fontWeight: 600,
                     fontSize: 13,
-                    color: "#1A1A1A",
+                    color: token.colorText,
                     whiteSpace: "nowrap",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
@@ -108,32 +133,53 @@ export function ConversationList({ conversations, activeId, onSelect }: Props) {
                 <span
                   style={{
                     fontSize: 10,
-                    color: isActive ? "#595959" : "#8C8C8C",
+                    color: token.colorTextSecondary,
                     flexShrink: 0,
                     fontFamily: MONO,
-                    letterSpacing: "0.04em",
+                    letterSpacing: "0.03em",
                   }}
                 >
                   {timeAgo(conv.updatedAt)}
                 </span>
               </div>
-              <span
+
+              {/* Row 2: type badge + optional order ref */}
+              <div
                 style={{
-                  display: "inline-block",
-                  fontSize: 10,
-                  fontWeight: 700,
-                  color: isActive ? "#1A1A1A" : "#595959",
-                  background: isActive ? "rgba(0,0,0,0.1)" : "#F0F0F0",
-                  padding: "1px 6px",
-                  borderRadius: 3,
-                  marginTop: 3,
-                  fontFamily: MONO,
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  marginTop: 5,
                 }}
               >
-                {TYPE_LABEL[conv.type] ?? conv.type}
-              </span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    fontFamily: MONO,
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    color: typeColors.text,
+                    background: typeColors.bg,
+                    padding: "2px 7px",
+                    borderRadius: 4,
+                  }}
+                >
+                  {TYPE_LABEL[conv.type] ?? conv.type}
+                </span>
+                {conv.orderId && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: token.colorTextSecondary,
+                      fontFamily: MONO,
+                      letterSpacing: "0.02em",
+                    }}
+                  >
+                    #{conv.orderId}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         );

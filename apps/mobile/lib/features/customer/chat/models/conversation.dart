@@ -1,4 +1,5 @@
 enum ConversationType { ai, admin, rider }
+
 enum ConversationStatus { open, assigned, closed }
 
 class Conversation {
@@ -27,23 +28,23 @@ class Conversation {
   });
 
   factory Conversation.fromJson(Map<String, dynamic> json) => Conversation(
-        id: json['id'] as int,
-        customerId: json['customerId'] as int,
-        type: ConversationType.values.firstWhere(
-          (e) => e.name == (json['type'] as String),
-          orElse: () => ConversationType.admin,
-        ),
-        orderId: json['orderId'] as int?,
-        assignedAdminId: json['assignedAdminId'] as int?,
-        assignedRiderId: json['assignedRiderId'] as int?,
-        status: ConversationStatus.values.firstWhere(
-          (e) => e.name == (json['status'] as String),
-          orElse: () => ConversationStatus.open,
-        ),
-        createdAt: DateTime.parse(json['createdAt'] as String),
-        updatedAt: DateTime.parse(json['updatedAt'] as String),
-        closedAt: json['closedAt'] != null
-            ? DateTime.parse(json['closedAt'] as String)
-            : null,
-      );
+    id: json['id'] as int,
+    customerId: json['customerId'] as int,
+    type: ConversationType.values.firstWhere(
+      (e) => e.name == (json['type'] as String),
+      orElse: () => ConversationType.admin,
+    ),
+    orderId: json['orderId'] as int?,
+    assignedAdminId: json['assignedAdminId'] as int?,
+    assignedRiderId: json['assignedRiderId'] as int?,
+    status: ConversationStatus.values.firstWhere(
+      (e) => e.name == (json['status'] as String),
+      orElse: () => ConversationStatus.open,
+    ),
+    createdAt: DateTime.parse(json['createdAt'] as String),
+    updatedAt: DateTime.parse(json['updatedAt'] as String),
+    closedAt: json['closedAt'] != null
+        ? DateTime.parse(json['closedAt'] as String)
+        : null,
+  );
 }

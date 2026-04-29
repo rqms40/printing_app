@@ -34,7 +34,10 @@ export class ChatService {
       customerId,
       type: dto.type,
       orderId: dto.orderId ?? null,
-      assignedRiderId: dto.assignedRiderId ?? null,
+      assignedRiderId:
+        dto.type === ConversationType.RIDER
+          ? (dto.assignedRiderId ?? null)
+          : null,
       status: ConversationStatus.OPEN,
     });
     return this.convRepo.save(conv);
@@ -68,17 +71,31 @@ export class ChatService {
     conversationId: number,
     senderId: number | null,
     senderRole: SenderRole,
-    content: string,
+    content: string | null,
+    attachmentFileId?: number | null,
+    attachmentMimeType?: string | null,
   ): Promise<ChatMessage> {
     const msg = this.msgRepo.create({
       conversationId,
       senderId,
       senderRole,
-      content,
+      content: content && content.length > 0 ? content : null,
+      attachmentFileId: attachmentFileId ?? null,
+      attachmentMimeType: attachmentMimeType ?? null,
     });
     const saved = await this.msgRepo.save(msg);
     await this.convRepo.update(conversationId, { updatedAt: new Date() });
     return saved;
+  }
+
+  async getUnreadCount(customerId: number): Promise<number> {
+    return this.msgRepo
+      .createQueryBuilder('m')
+      .innerJoin('chat_conversations', 'c', 'c.id = m.conversation_id')
+      .where('c.customer_id = :customerId', { customerId })
+      .andWhere('m.sender_role <> :role', { role: SenderRole.CUSTOMER })
+      .andWhere('m.is_read = false')
+      .getCount();
   }
 
   async getBotResponse(
@@ -94,10 +111,13 @@ export class ChatService {
 
     const messages = [
       { role: 'system', content: this.SYSTEM_PROMPT },
-      ...history.reverse().map((m) => ({
-        role: m.senderRole === SenderRole.BOT ? 'assistant' : 'user',
-        content: m.content,
-      })),
+      ...history
+        .reverse()
+        .filter((m) => m.content && m.content.length > 0)
+        .map((m) => ({
+          role: m.senderRole === SenderRole.BOT ? 'assistant' : 'user',
+          content: m.content as string,
+        })),
     ];
 
     return this.openRouter.complete(messages);
@@ -108,10 +128,16 @@ export class ChatService {
     type?: string,
   ): Promise<Conversation[]> {
     const where: FindOptionsWhere<Conversation> = {};
-    if (status && Object.values(ConversationStatus).includes(status as ConversationStatus)) {
+    if (
+      status &&
+      Object.values(ConversationStatus).includes(status as ConversationStatus)
+    ) {
       where.status = status as ConversationStatus;
     }
-    if (type && Object.values(ConversationType).includes(type as ConversationType)) {
+    if (
+      type &&
+      Object.values(ConversationType).includes(type as ConversationType)
+    ) {
       where.type = type as ConversationType;
     }
     return this.convRepo.find({
@@ -129,7 +155,10 @@ export class ChatService {
       assignedAdminId: adminId,
       status: ConversationStatus.ASSIGNED,
     });
-    return this.convRepo.findOneOrFail({ where: { id: conversationId } });
+    return this.convRepo.findOneOrFail({
+      where: { id: conversationId },
+      relations: ['customer'],
+    });
   }
 
   async closeConversation(conversationId: number): Promise<Conversation> {
@@ -137,7 +166,10 @@ export class ChatService {
       status: ConversationStatus.CLOSED,
       closedAt: new Date(),
     });
-    return this.convRepo.findOneOrFail({ where: { id: conversationId } });
+    return this.convRepo.findOneOrFail({
+      where: { id: conversationId },
+      relations: ['customer'],
+    });
   }
 
   async markMessagesRead(conversationId: number): Promise<void> {

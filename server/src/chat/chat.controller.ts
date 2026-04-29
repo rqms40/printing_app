@@ -49,10 +49,16 @@ export class ChatController {
   }
 
   @Get('conversations')
-  getConversations(
-    @Request() req: { user: JwtUser },
-  ): Promise<Conversation[]> {
+  getConversations(@Request() req: { user: JwtUser }): Promise<Conversation[]> {
     return this.chatService.getConversations(req.user.sub);
+  }
+
+  @Get('unread-count')
+  async getUnreadCount(
+    @Request() req: { user: JwtUser },
+  ): Promise<{ count: number }> {
+    const count = await this.chatService.getUnreadCount(req.user.sub);
+    return { count };
   }
 
   @Get('conversations/:id/messages')
@@ -64,7 +70,13 @@ export class ChatController {
   ): Promise<ChatMessage[]> {
     const conv = await this.chatService.findConversation(+id);
     if (!conv) throw new NotFoundException();
-    if (req.user.role !== 'admin' && conv.customerId !== req.user.sub) {
+    const canAccess =
+      req.user.role === 'admin' ||
+      conv.customerId === req.user.sub ||
+      (req.user.role === 'driver' &&
+        conv.type === ConversationType.RIDER &&
+        conv.assignedRiderId === req.user.sub);
+    if (!canAccess) {
       throw new ForbiddenException();
     }
     const cappedLimit = Math.min(+limit, 100);

@@ -11,6 +11,7 @@ import { OrderItem } from './entities/order-item.entity';
 import { DeliveryDestination } from './entities/delivery-destination.entity';
 import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
+import { ExternalDeliveriesController } from './external-deliveries.controller';
 import { OrdersGateway } from './orders.gateway';
 import { UsersModule } from '../users/users.module';
 import { CreditsModule } from '../credits/credits.module';
@@ -47,7 +48,7 @@ import { DeliverySlotsModule } from '../delivery-slots/delivery-slots.module';
     DeliverySlotsModule,
   ],
   providers: [OrdersService, OrdersGateway],
-  controllers: [OrdersController],
+  controllers: [OrdersController, ExternalDeliveriesController],
   exports: [OrdersService, OrdersGateway],
 })
 export class OrdersModule {}

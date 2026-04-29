@@ -71,7 +71,10 @@ export class FilesController {
   ): Promise<FileInspectionDto> {
     const file = await this.filesService.findById(id);
     const isAdmin = req.user.role === 'admin';
-    if (!isAdmin && (file.uploadedBy == null || file.uploadedBy !== req.user.sub)) {
+    if (
+      !isAdmin &&
+      (file.uploadedBy == null || file.uploadedBy !== req.user.sub)
+    ) {
       throw new ForbiddenException();
     }
     const widthMm = file.widthPt ? Number(file.widthPt) * PT_TO_MM : null;
@@ -101,7 +104,18 @@ export class FilesController {
   }
 
   @Get(':id')
-  getFile(@Param('id', ParseIntPipe) id: number) {
-    return this.filesService.findById(id);
+  async getFile(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: RequestWithUser,
+  ) {
+    const file = await this.filesService.findById(id);
+    const isAdmin = req.user.role === 'admin';
+    if (
+      !isAdmin &&
+      (file.uploadedBy == null || file.uploadedBy !== req.user.sub)
+    ) {
+      throw new ForbiddenException();
+    }
+    return file;
   }
 }

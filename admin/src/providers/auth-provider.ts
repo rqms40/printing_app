@@ -79,7 +79,8 @@ export const authProvider: AuthProvider = {
 
       return { authenticated: true };
     } catch {
-      return { authenticated: true };
+      localStorage.removeItem(TOKEN_KEY);
+      return { authenticated: false, redirectTo: "/login" };
     }
   },
 
@@ -94,7 +95,7 @@ export const authProvider: AuthProvider = {
       if (!response.ok) return null;
       return normalizeIdentity(await response.json());
     } catch {
-      return { id: "1", name: "Admin User", email: "admin@grid.ph" };
+      return null;
     }
   },
 

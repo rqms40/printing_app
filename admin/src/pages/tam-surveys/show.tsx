@@ -1,7 +1,7 @@
-import { Show } from "@refinedev/antd";
 import { Typography, Card, Space, Divider, Tag, Spin, theme } from "antd";
 import { useParams } from "react-router-dom";
 import { useState, useEffect } from "react";
+import { ShowPage } from "@/components/show-page";
 import { apiClient } from "@/providers/api-client";
 import { formatDate } from "@/utils/format";
 
@@ -76,8 +76,8 @@ export function TamSurveyShow() {
   if (numScore >= 4) avgColor = "green";
 
   return (
-    <Show title={`Survey - SURV-${data.id}`}>
-      <Card bordered={false}>
+    <ShowPage title={`Survey - SURV-${data.id}`} backTo="/tam-surveys" contentCard={false}>
+      <Card variant="borderless">
         <Title level={4}>Customer Details</Title>
         <Space direction="vertical" size="small" style={{ marginBottom: 24 }}>
           <Text type="secondary">Customer Name</Text>
@@ -154,6 +154,6 @@ export function TamSurveyShow() {
           );
         })()}
       </Card>
-    </Show>
+    </ShowPage>
   );
 }

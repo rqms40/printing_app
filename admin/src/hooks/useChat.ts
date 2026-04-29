@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { apiClient } from "@/providers/api-client";
 import {
   joinConversation,
@@ -8,41 +8,108 @@ import {
   subscribeToNewConversations,
   subscribeToBotTyping,
 } from "@/providers/chat-ws";
-import type { Conversation, ChatMessage, NewConversationEvent } from "@/types/chat";
+import type {
+  Conversation,
+  ChatMessage,
+  NewConversationEvent,
+} from "@/types/chat";
+
+function normalizeNewConversationEvent(
+  event: NewConversationEvent,
+): Conversation {
+  const now = new Date().toISOString();
+  return {
+    id: event.conversationId,
+    customerId: event.customerId,
+    customer: {
+      id: event.customerId,
+      name: event.customerName,
+      email: "",
+    },
+    type: event.type,
+    orderId: event.orderId,
+    assignedAdminId: null,
+    assignedRiderId: null,
+    status: "open",
+    createdAt: now,
+    updatedAt: now,
+    closedAt: null,
+  };
+}
+
+function mergeConversation(
+  current: Conversation,
+  updated: Conversation,
+): Conversation {
+  return {
+    ...current,
+    ...updated,
+    customer: updated.customer ?? current.customer,
+  };
+}
 
 export function useChatInbox() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const conversationsRef = useRef<Conversation[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    apiClient
-      .get<Conversation[]>("/chat/admin/conversations?status=open")
-      .then((res) => setConversations(res.data));
+    apiClient.get<Conversation[]>("/chat/admin/conversations").then((res) => {
+      conversationsRef.current = res.data;
+      setConversations(res.data);
+    });
 
-    const unsub = subscribeToNewConversations((conv: NewConversationEvent) => {
-      setConversations((prev) => [conv, ...prev]);
+    const unsub = subscribeToNewConversations((event: NewConversationEvent) => {
+      const conv = normalizeNewConversationEvent(event);
+      setConversations((prev) => {
+        const next = [conv, ...prev];
+        conversationsRef.current = next;
+        return next;
+      });
       setUnreadCount((n) => n + 1);
     });
     return unsub;
   }, []);
 
   const assignConversation = useCallback(async (id: number) => {
-    await apiClient.patch(`/chat/conversations/${id}/assign`);
-    setConversations((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, status: "assigned" as const } : c)),
+    const res = await apiClient.patch<Conversation>(
+      `/chat/conversations/${id}/assign`,
     );
+    const existing = conversationsRef.current.find((c) => c.id === id);
+    const merged = existing ? mergeConversation(existing, res.data) : res.data;
+    setConversations((prev) =>
+      prev.map((c) => (c.id === id ? mergeConversation(c, res.data) : c)),
+    );
+    conversationsRef.current = conversationsRef.current.map((c) =>
+      c.id === id ? mergeConversation(c, res.data) : c,
+    );
+    return merged;
   }, []);
 
   const closeConversation = useCallback(async (id: number) => {
-    await apiClient.patch(`/chat/conversations/${id}/close`);
-    setConversations((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, status: "closed" as const } : c)),
+    const res = await apiClient.patch<Conversation>(
+      `/chat/conversations/${id}/close`,
     );
+    const existing = conversationsRef.current.find((c) => c.id === id);
+    const merged = existing ? mergeConversation(existing, res.data) : res.data;
+    setConversations((prev) =>
+      prev.map((c) => (c.id === id ? mergeConversation(c, res.data) : c)),
+    );
+    conversationsRef.current = conversationsRef.current.map((c) =>
+      c.id === id ? mergeConversation(c, res.data) : c,
+    );
+    return merged;
   }, []);
 
   const clearUnread = useCallback(() => setUnreadCount(0), []);
 
-  return { conversations, unreadCount, assignConversation, closeConversation, clearUnread };
+  return {
+    conversations,
+    unreadCount,
+    assignConversation,
+    closeConversation,
+    clearUnread,
+  };
 }
 
 export function useConversationThread(conversationId: number | null) {

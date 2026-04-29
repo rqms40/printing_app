@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'package:printing_app/features/customer/chat/models/chat_message.dart';
+import 'package:printing_app/features/customer/chat/providers/chat_provider.dart';
 import 'package:printing_app/shared/providers/dio_provider.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
 
@@ -28,41 +29,65 @@ class ConversationState {
     bool? isBotTyping,
     bool? isConnected,
     Object? error = _keep,
-  }) =>
-      ConversationState(
-        messages: messages ?? this.messages,
-        isLoading: isLoading ?? this.isLoading,
-        isBotTyping: isBotTyping ?? this.isBotTyping,
-        isConnected: isConnected ?? this.isConnected,
-        error: identical(error, _keep) ? this.error : error as String?,
-      );
+  }) => ConversationState(
+    messages: messages ?? this.messages,
+    isLoading: isLoading ?? this.isLoading,
+    isBotTyping: isBotTyping ?? this.isBotTyping,
+    isConnected: isConnected ?? this.isConnected,
+    error: identical(error, _keep) ? this.error : error as String?,
+  );
 }
 
 class ConversationNotifier extends StateNotifier<ConversationState> {
-  ConversationNotifier(this._conversationId, this._ws, this._dio)
-      : super(const ConversationState());
+  ConversationNotifier(this._conversationId, this._ws, this._dio, [this._ref])
+    : super(const ConversationState());
 
   final int _conversationId;
   final WebSocketService _ws;
   final Dio _dio;
+  final Ref? _ref;
+
+  void _refreshGlobalUnreadCount() {
+    final ref = _ref;
+    if (ref == null) return;
+    try {
+      ref.invalidate(chatUnreadCountProvider);
+    } catch (_) {
+      // ref may be disposed during teardown — safe to ignore
+    }
+  }
   VoidCallback? _removeBotTypingListener;
   VoidCallback? _removeChatMessageListener;
+  VoidCallback? _removeMessagesReadListener;
   bool _initialized = false;
 
   Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
     state = state.copyWith(isLoading: true);
-    await _ws.connectChat();
-    _ws.joinConversation(_conversationId);
-    _removeChatMessageListener = _ws.listenForChatMessages(_conversationId, _onMessage);
-    _removeBotTypingListener = _ws.listenForBotTyping(_onBotTyping);
-    await _loadHistory();
-    state = state.copyWith(isLoading: false, isConnected: true);
-    _ws.emitReadMessages(_conversationId);
+    final socketConnected = await _ws.connectChat();
+    if (socketConnected) {
+      _ws.joinConversation(_conversationId);
+      _removeChatMessageListener = _ws.listenForChatMessages(
+        _conversationId,
+        _onMessage,
+      );
+      _removeBotTypingListener = _ws.listenForBotTyping(_onBotTyping);
+      _removeMessagesReadListener =
+          _ws.listenForMessagesRead(_onMessagesRead);
+    }
+    final historyLoaded = await _loadHistory();
+    state = state.copyWith(isLoading: false, isConnected: socketConnected);
+    if (socketConnected && historyLoaded) {
+      _ws.emitReadMessages(_conversationId);
+      _refreshGlobalUnreadCount();
+    }
+    if (!socketConnected) {
+      _initialized = false;
+    }
   }
 
-  Future<void> _loadHistory() async {
+  Future<bool> _loadHistory() async {
     try {
       final res = await _dio.get<List<dynamic>>(
         '/chat/conversations/$_conversationId/messages',
@@ -71,8 +96,10 @@ class ConversationNotifier extends StateNotifier<ConversationState> {
           .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
           .toList();
       state = state.copyWith(messages: msgs, error: null);
+      return true;
     } catch (e) {
       state = state.copyWith(error: e.toString());
+      return false;
     }
   }
 
@@ -81,6 +108,13 @@ class ConversationNotifier extends StateNotifier<ConversationState> {
       messages: [...state.messages, msg],
       isBotTyping: false,
     );
+    // User is currently in the conversation, so any incoming message is
+    // immediately marked read on the server. This keeps the global badge
+    // in sync.
+    if (msg.senderRole != SenderRole.customer && _ws.isChatConnected) {
+      _ws.emitReadMessages(_conversationId);
+      _refreshGlobalUnreadCount();
+    }
   }
 
   void _onBotTyping(int conversationId) {
@@ -89,9 +123,47 @@ class ConversationNotifier extends StateNotifier<ConversationState> {
     }
   }
 
-  void sendMessage(String content) {
-    if (content.trim().isEmpty) return;
-    _ws.sendChatMessage(_conversationId, content.trim());
+  void _onMessagesRead(int conversationId) {
+    if (conversationId != _conversationId) return;
+    final now = DateTime.now();
+    state = state.copyWith(
+      messages: state.messages
+          .map((m) => m.isRead ? m : m.copyWith(isRead: true, readAt: now))
+          .toList(),
+    );
+  }
+
+  bool sendMessage(
+    String content, {
+    int? attachmentFileId,
+    String? attachmentMimeType,
+  }) {
+    final hasAttachment = attachmentFileId != null;
+    if (content.trim().isEmpty && !hasAttachment) return false;
+    if (!_ws.isChatConnected) {
+      state = state.copyWith(isConnected: false);
+      return false;
+    }
+    _ws.sendChatMessage(
+      _conversationId,
+      content.trim(),
+      attachmentFileId: attachmentFileId,
+      attachmentMimeType: attachmentMimeType,
+    );
+    return true;
+  }
+
+  Future<int?> uploadImage(MultipartFile multipartFile) async {
+    try {
+      final formData = FormData.fromMap({'file': multipartFile});
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/files/upload',
+        data: formData,
+      );
+      return res.data?['id'] as int?;
+    } catch (_) {
+      return null;
+    }
   }
 
   void emitTyping() => _ws.emitTyping(_conversationId);
@@ -109,16 +181,19 @@ class ConversationNotifier extends StateNotifier<ConversationState> {
   void dispose() {
     _removeBotTypingListener?.call();
     _removeChatMessageListener?.call();
+    _removeMessagesReadListener?.call();
     _ws.leaveConversation(_conversationId);
+    _refreshGlobalUnreadCount();
     super.dispose();
   }
 }
 
-final conversationProvider = StateNotifierProvider.family<
-    ConversationNotifier, ConversationState, int>(
-  (ref, conversationId) => ConversationNotifier(
-    conversationId,
-    WebSocketService.instance,
-    ref.read(dioProvider),
-  ),
-);
+final conversationProvider =
+    StateNotifierProvider.family<ConversationNotifier, ConversationState, int>(
+      (ref, conversationId) => ConversationNotifier(
+        conversationId,
+        WebSocketService.instance,
+        ref.read(dioProvider),
+        ref,
+      ),
+    );

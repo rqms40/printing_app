@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
+import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/chat/models/conversation.dart';
 import 'package:printing_app/features/customer/chat/providers/chat_provider.dart';
+import 'package:printing_app/features/customer/chat/widgets/chat_avatar.dart';
 
 class ChatSelectScreen extends ConsumerStatefulWidget {
   const ChatSelectScreen({super.key, this.orderId});
@@ -22,20 +24,32 @@ class _ChatSelectScreenState extends ConsumerState<ChatSelectScreen> {
 
   AppColorSet _colors(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark
-          ? AppColors.dark
-          : AppColors.light;
+      ? AppColors.dark
+      : AppColors.light;
+
+  void _goBack() {
+    if (_isCreating) return;
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      context.go('/customer/home');
+    }
+  }
 
   Future<void> _startChat(ConversationType type) async {
     setState(() => _isCreating = true);
-    final conv = await ref.read(chatProvider.notifier).createConversation(
-          type,
-          orderId: widget.orderId,
-        );
+    final conv = await ref
+        .read(chatProvider.notifier)
+        .createConversation(type, orderId: widget.orderId);
     if (!mounted) return;
     setState(() => _isCreating = false);
     if (conv != null) {
-      context.pushReplacement(
-        '/customer/chat/${conv.id}?type=${type.name}',
+      context.pushReplacement('/customer/chat/${conv.id}?type=${type.name}');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not start chat. Please try again.'),
+        ),
       );
     }
   }
@@ -44,103 +58,205 @@ class _ChatSelectScreenState extends ConsumerState<ChatSelectScreen> {
   Widget build(BuildContext context) {
     final colors = _colors(context);
 
-    return ColoredBox(
-      color: colors.background,
-      child: SafeArea(
-        child: Stack(
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(
-                    left: AppSpacing.sm,
-                    top: AppSpacing.sm,
+    return PopScope(
+      canPop: !_isCreating,
+      child: Scaffold(
+        backgroundColor: colors.background,
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(60),
+          child: Container(
+            color: colors.background,
+            child: SafeArea(
+              bottom: false,
+              child: SizedBox(
+                height: 60,
+                child: Row(
+                  children: [
+                    const SizedBox(width: 4),
+                    _IconBackButton(
+                      colors: colors,
+                      onTap: _isCreating ? null : _goBack,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        'New chat',
+                        style: AppTypography.h3.copyWith(
+                          color: colors.onBackground,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        body: SafeArea(
+          top: false,
+          child: Stack(
+            children: [
+              ListView(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xl,
+                  AppSpacing.sm,
+                  AppSpacing.xl,
+                  AppSpacing.xl,
+                ),
+                children: [
+                  Text(
+                    'Start a conversation',
+                    style: AppTypography.h1.copyWith(
+                      color: colors.onBackground,
+                      decoration: TextDecoration.none,
+                    ),
                   ),
-                  child: IconButton(
-                    onPressed: () => context.pop(),
-                    icon: HugeIcon(
-                      icon: HugeIcons.strokeRoundedArrowLeft02,
-                      size: 22,
-                      color: colors.accent,
+                  const SizedBox(height: 6),
+                  Text(
+                    "Choose how you'd like to get help",
+                    style: AppTypography.body.copyWith(
+                      color: colors.onSurfaceDim,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                  if (widget.orderId != null) ...[
+                    const SizedBox(height: AppSpacing.lg),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colors.accent.withValues(alpha: 0.1),
+                        borderRadius: AppRadius.borderMd,
+                      ),
+                      child: Row(
+                        children: [
+                          HugeIcon(
+                            icon: HugeIcons.strokeRoundedPackage,
+                            size: 18,
+                            color: colors.accent,
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              'Linked to order #${widget.orderId}',
+                              style: AppTypography.caption.copyWith(
+                                color: colors.onBackground,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                                decoration: TextDecoration.none,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: AppSpacing.xl),
+                  _OptionCard(
+                    icon: chatIconForConversation(ConversationType.ai),
+                    title: 'GridBot AI',
+                    description:
+                        'Instant answers about printing, pricing, and materials',
+                    isPrimary: true,
+                    isDisabled: _isCreating,
+                    onTap: () => _startChat(ConversationType.ai),
+                    colors: colors,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  _OptionCard(
+                    icon: chatIconForConversation(ConversationType.admin),
+                    title: 'Human Support',
+                    description: 'Talk to a real GRID team member',
+                    isPrimary: false,
+                    isDisabled: _isCreating,
+                    onTap: () => _startChat(ConversationType.admin),
+                    colors: colors,
+                  ),
+                  if (widget.orderId != null) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    _OptionCard(
+                      icon: chatIconForConversation(ConversationType.rider),
+                      title: 'Rider Support',
+                      description: 'Ask about pickup, delivery, or handoff',
+                      isPrimary: false,
+                      isDisabled: _isCreating,
+                      onTap: () => _startChat(ConversationType.rider),
+                      colors: colors,
+                    ),
+                  ],
+                ],
+              ),
+              if (_isCreating)
+                Positioned.fill(
+                  child: Container(
+                    color: colors.background.withValues(alpha: 0.7),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(
+                          color: colors.accent,
+                          strokeWidth: 2,
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        Text(
+                          'Starting chat…',
+                          style: AppTypography.body.copyWith(
+                            color: colors.onSurface,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.xl,
-                    AppSpacing.md,
-                    AppSpacing.xl,
-                    0,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Start a conversation',
-                        style: AppTypography.h1
-                            .copyWith(color: colors.onBackground),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        "Choose how you'd like to get help",
-                        style: AppTypography.body
-                            .copyWith(color: colors.onSurface),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xxl),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                  ),
-                  child: Column(
-                    children: [
-                      _OptionCard(
-                        icon: HugeIcons.strokeRoundedAiBrain01,
-                        title: 'GridBot AI',
-                        description:
-                            'Instant answers about printing, pricing, and materials',
-                        isPrimary: true,
-                        isDisabled: _isCreating,
-                        onTap: () => _startChat(ConversationType.ai),
-                        colors: colors,
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      _OptionCard(
-                        icon: HugeIcons.strokeRoundedUser,
-                        title: 'Human Support',
-                        description:
-                            'Talk to a real GRID team member',
-                        isPrimary: false,
-                        isDisabled: _isCreating,
-                        onTap: () => _startChat(ConversationType.admin),
-                        colors: colors,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            if (_isCreating)
-              Container(
-                color: colors.background.withValues(alpha: 0.6),
-                child: Center(
-                  child: CircularProgressIndicator(
-                    color: colors.accent,
-                    strokeWidth: 2,
-                  ),
-                ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _OptionCard extends StatefulWidget {
+class _IconBackButton extends StatelessWidget {
+  const _IconBackButton({required this.colors, required this.onTap});
+  final AppColorSet colors;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Back',
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: Center(
+              child: HugeIcon(
+                icon: HugeIcons.strokeRoundedArrowLeft01,
+                size: 22,
+                color: onTap == null
+                    ? colors.onSurfaceDim
+                    : colors.onBackground,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OptionCard extends StatelessWidget {
   const _OptionCard({
     required this.icon,
     required this.title,
@@ -151,7 +267,6 @@ class _OptionCard extends StatefulWidget {
     required this.isDisabled,
   });
 
-  // HugeIcons SVG path data — List<List<dynamic>> at runtime
   final dynamic icon;
   final String title;
   final String description;
@@ -161,77 +276,86 @@ class _OptionCard extends StatefulWidget {
   final bool isDisabled;
 
   @override
-  State<_OptionCard> createState() => _OptionCardState();
-}
-
-class _OptionCardState extends State<_OptionCard> {
-  bool _pressed = false;
-
-  @override
   Widget build(BuildContext context) {
-    final bg = widget.isPrimary ? widget.colors.accent : widget.colors.surface;
-    final fg =
-        widget.isPrimary ? widget.colors.accentOnColor : widget.colors.accent;
-    final descColor = widget.isPrimary
-        ? widget.colors.accentOnColor.withValues(alpha: 0.75)
-        : widget.colors.onSurface;
+    final bg = isPrimary ? colors.accent : colors.surface;
+    final fg = isPrimary ? colors.accentOnColor : colors.onBackground;
+    final descColor = isPrimary
+        ? colors.accentOnColor.withValues(alpha: 0.78)
+        : colors.onSurfaceDim;
 
-    return GestureDetector(
-      onTapDown: widget.isDisabled ? null : (_) => setState(() => _pressed = true),
-      onTapUp: widget.isDisabled ? null : (_) {
-        setState(() => _pressed = false);
-        widget.onTap();
-      },
-      onTapCancel: () => setState(() => _pressed = false),
-      child: AnimatedScale(
-        scale: _pressed ? 0.97 : 1.0,
-        duration: const Duration(milliseconds: 120),
+    return Material(
+      color: bg,
+      borderRadius: AppRadius.borderMd,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: isDisabled ? null : onTap,
+        splashColor: isPrimary
+            ? colors.accentOnColor.withValues(alpha: 0.08)
+            : colors.accent.withValues(alpha: 0.08),
+        highlightColor: isPrimary
+            ? colors.accentOnColor.withValues(alpha: 0.04)
+            : colors.accent.withValues(alpha: 0.04),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(16),
-            border: widget.isPrimary
+            borderRadius: AppRadius.borderMd,
+            border: isPrimary
                 ? null
-                : Border.all(color: widget.colors.outline, width: 1.5),
-            boxShadow: widget.isPrimary
-                ? [
-                    BoxShadow(
-                      color: widget.colors.accent.withValues(alpha: 0.18),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ]
-                : null,
+                : Border.all(
+                    color: colors.outline.withValues(alpha: 0.6),
+                  ),
           ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              HugeIcon(icon: widget.icon, size: 28, color: fg),
-              const SizedBox(width: 16),
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: isPrimary
+                      ? colors.accentOnColor.withValues(alpha: 0.14)
+                      : colors.surfaceVariant,
+                  borderRadius: AppRadius.borderMd,
+                ),
+                alignment: Alignment.center,
+                child: HugeIcon(
+                  icon: icon,
+                  size: 22,
+                  color: isPrimary ? fg : colors.accent,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      widget.title,
-                      style: AppTypography.h3.copyWith(color: fg),
+                      title,
+                      style: AppTypography.bodyBold.copyWith(
+                        color: fg,
+                        fontSize: 15,
+                        decoration: TextDecoration.none,
+                      ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 3),
                     Text(
-                      widget.description,
-                      style:
-                          AppTypography.body.copyWith(color: descColor),
+                      description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.body.copyWith(
+                        color: descColor,
+                        fontSize: 13,
+                        decoration: TextDecoration.none,
+                      ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               HugeIcon(
                 icon: HugeIcons.strokeRoundedArrowRight01,
                 size: 20,
-                color: fg.withValues(alpha: 0.6),
+                color: fg.withValues(alpha: 0.55),
               ),
             ],
           ),

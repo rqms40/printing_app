@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
-import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/config/theme/app_colors.dart';
 
+/// Floating circular chat button. Shows an unread badge when [unreadCount] > 0.
+/// Pure icon — no "Chat" label.
 class FloatingChatButton extends StatelessWidget {
   const FloatingChatButton({super.key, this.unreadCount = 0, this.orderId});
   final int unreadCount;
@@ -10,7 +12,7 @@ class FloatingChatButton extends StatelessWidget {
 
   void _onTap(BuildContext context) {
     if (orderId != null) {
-      context.push('/customer/chat?orderId=$orderId');
+      context.push('/customer/chat/new?orderId=$orderId');
     } else {
       context.push('/customer/chat');
     }
@@ -18,62 +20,58 @@ class FloatingChatButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final button = GestureDetector(
-      onTap: () => _onTap(context),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.black,
-          borderRadius: BorderRadius.circular(28),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black26,
-              blurRadius: 8,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const HugeIcon(
+    final colors = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
+
+    final button = Material(
+      color: colors.accent,
+      elevation: 6,
+      shadowColor: colors.onBackground.withValues(alpha: 0.22),
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _onTap(context),
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: 52,
+          height: 52,
+          child: Center(
+            child: HugeIcon(
               icon: HugeIcons.strokeRoundedMessage01,
-              size: 18,
-              color: Colors.white,
+              size: 22,
+              color: colors.accentOnColor,
             ),
-            const SizedBox(width: 6),
-            Text(
-              'Chat',
-              style: AppTypography.button.copyWith(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
 
-    if (unreadCount <= 0) {
-      return button;
-    }
+    if (unreadCount <= 0) return button;
 
-    final badgeLabel = unreadCount > 9 ? '9+' : '$unreadCount';
+    final badgeLabel = unreadCount > 99 ? '99+' : '$unreadCount';
+    final isWide = badgeLabel.length > 1;
 
     return Stack(
       clipBehavior: Clip.none,
       children: [
         button,
         Positioned(
-          top: -4,
-          right: -4,
+          top: -2,
+          right: -2,
           child: Container(
-            width: 18,
-            height: 18,
-            decoration: const BoxDecoration(
-              color: Color(0xFFD32F2F),
-              borderRadius: BorderRadius.all(Radius.circular(9)),
+            constraints: BoxConstraints(
+              minWidth: isWide ? 22 : 20,
+              minHeight: 20,
+            ),
+            padding: EdgeInsets.symmetric(horizontal: isWide ? 6 : 0),
+            decoration: BoxDecoration(
+              color: colors.error,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: colors.background,
+                width: 2,
+              ),
             ),
             alignment: Alignment.center,
             child: Text(
@@ -81,8 +79,9 @@ class FloatingChatButton extends StatelessWidget {
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 10,
-                fontWeight: FontWeight.bold,
-                height: 1,
+                fontWeight: FontWeight.w800,
+                height: 1.1,
+                letterSpacing: 0,
               ),
             ),
           ),

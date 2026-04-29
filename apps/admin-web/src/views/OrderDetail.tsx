@@ -5,6 +5,7 @@ import { mockOrders } from '../data/mockOrders';
 import { Layout } from '../components/Layout';
 import { StatusDropdown } from '../components/StatusDropdown';
 import { ArrowLeft, FileText } from 'lucide-react';
+import type { OrderStatus } from '../types';
 
 export const OrderDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -12,7 +13,9 @@ export const OrderDetail: React.FC = () => {
 
   // Find order
   const orderData = mockOrders.find(o => o.orderId === id);
-  const [currentStatus, setCurrentStatus] = useState(orderData?.status || 'Order Placed');
+  const [currentStatus, setCurrentStatus] = useState<OrderStatus>(
+    orderData?.status ?? 'Order Placed',
+  );
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -57,7 +60,7 @@ export const OrderDetail: React.FC = () => {
         {/* Top Controls */}
         <div className="card" style={{ padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontWeight: 600, fontSize: '0.9375rem' }}>Status</span>
-          <StatusDropdown currentStatus={currentStatus as any} onStatusChange={(s: any) => setCurrentStatus(s)} />
+          <StatusDropdown currentStatus={currentStatus} onStatusChange={setCurrentStatus} />
         </div>
 
         <button style={{

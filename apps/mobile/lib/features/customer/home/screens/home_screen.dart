@@ -21,6 +21,7 @@ import 'package:printing_app/features/customer/notifications/providers/notificat
 import 'package:printing_app/features/customer/beta/widgets/beta_indicator.dart';
 import 'package:printing_app/shared/services/draft_storage_service.dart';
 import 'package:printing_app/utils/formatters.dart';
+import 'package:printing_app/features/customer/chat/providers/chat_provider.dart';
 import 'package:printing_app/features/customer/chat/widgets/floating_chat_button.dart';
 
 /// Customer home screen — editorial redesign.
@@ -321,7 +322,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         Positioned(
           right: AppSpacing.xl,
           bottom: 90,
-          child: FloatingChatButton(unreadCount: unreadCount),
+          child: Consumer(
+            builder: (_, ref, _) {
+              final unread =
+                  ref.watch(chatUnreadCountProvider).asData?.value ?? 0;
+              return FloatingChatButton(unreadCount: unread);
+            },
+          ),
         ),
       ],
     );

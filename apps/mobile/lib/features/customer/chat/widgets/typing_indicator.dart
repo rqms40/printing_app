@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
-import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/config/theme/app_spacing.dart';
+import 'package:printing_app/features/customer/chat/models/chat_message.dart';
+import 'package:printing_app/features/customer/chat/widgets/chat_avatar.dart';
 
 /// Animated three-dot typing indicator shown while the bot is composing.
 class TypingIndicator extends StatefulWidget {
@@ -41,24 +43,13 @@ class _TypingIndicatorState extends State<TypingIndicator>
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              color: colors.surfaceDim,
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              'AI',
-              style: AppTypography.caption.copyWith(
-                color: colors.onSurface,
-                fontWeight: FontWeight.w700,
-                fontSize: 10,
-              ),
-            ),
+          ChatAvatar(
+            icon: chatIconForSender(SenderRole.bot),
+            colors: colors,
+            size: 28,
+            iconSize: 15,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
@@ -100,8 +91,11 @@ class _DotState extends State<_Dot> {
     final delay = widget.index * 0.2;
     _curved = CurvedAnimation(
       parent: widget.ctrl,
-      curve: Interval(delay, (delay + 0.4).clamp(0.0, 1.0),
-          curve: Curves.easeInOut),
+      curve: Interval(
+        delay,
+        (delay + 0.4).clamp(0.0, 1.0),
+        curve: Curves.easeInOut,
+      ),
     );
     _anim = TweenSequence([
       TweenSequenceItem(tween: Tween(begin: 0.0, end: -5.0), weight: 1),

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, Input, Tag } from "antd";
+import { Button, Input, Tag, theme } from "antd";
 import { SendOutlined } from "@ant-design/icons";
 import { useConversationThread } from "@/hooks/useChat";
 import { MessageBubble } from "@/components/chat/MessageBubble";
@@ -21,6 +21,7 @@ interface Props {
 }
 
 export function ChatThread({ conversation, onAssign, onClose }: Props) {
+  const { token } = theme.useToken();
   const { messages, isBotTyping, sendMessage } = useConversationThread(
     conversation?.id ?? null,
   );
@@ -54,8 +55,8 @@ export function ChatThread({ conversation, onAssign, onClose }: Props) {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          background: "#FAFAFA",
-          color: "#BFBFBF",
+          background: token.colorBgContainer,
+          color: token.colorTextDisabled,
           gap: 8,
         }}
       >
@@ -84,7 +85,7 @@ export function ChatThread({ conversation, onAssign, onClose }: Props) {
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        background: "#FFFFFF",
+        background: token.colorBgContainer,
         minWidth: 0,
       }}
     >
@@ -95,8 +96,9 @@ export function ChatThread({ conversation, onAssign, onClose }: Props) {
           alignItems: "center",
           gap: 12,
           padding: "14px 20px",
-          borderBottom: "1px solid #F0F0F0",
+          borderBottom: `1px solid ${token.colorBorder}`,
           flexShrink: 0,
+          background: token.colorBgElevated,
         }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -104,7 +106,7 @@ export function ChatThread({ conversation, onAssign, onClose }: Props) {
             style={{
               fontWeight: 700,
               fontSize: 15,
-              color: "#1A1A1A",
+              color: token.colorText,
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
@@ -116,7 +118,7 @@ export function ChatThread({ conversation, onAssign, onClose }: Props) {
             <div
               style={{
                 fontSize: 11,
-                color: "#8C8C8C",
+                color: token.colorTextSecondary,
                 fontFamily: MONO,
                 marginTop: 1,
               }}
@@ -159,9 +161,10 @@ export function ChatThread({ conversation, onAssign, onClose }: Props) {
           display: "flex",
           gap: 8,
           padding: "12px 16px",
-          borderTop: "1px solid #F0F0F0",
+          borderTop: `1px solid ${token.colorBorder}`,
           flexShrink: 0,
           alignItems: "flex-end",
+          background: token.colorBgElevated,
         }}
       >
         <Input.TextArea
@@ -177,7 +180,6 @@ export function ChatThread({ conversation, onAssign, onClose }: Props) {
           icon={<SendOutlined />}
           onClick={handleSend}
           disabled={!text.trim()}
-          style={{ background: "#1A1A1A", borderColor: "#1A1A1A" }}
         />
       </div>
     </div>

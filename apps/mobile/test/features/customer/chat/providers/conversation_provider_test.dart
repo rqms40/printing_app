@@ -29,11 +29,14 @@ void main() {
       expect(updated.error, null);
     });
 
-    test('copyWith clears error when null passed explicitly via error field', () {
-      const state = ConversationState(error: 'some error');
-      final updated = state.copyWith(error: null);
-      expect(updated.error, null);
-    });
+    test(
+      'copyWith clears error when null passed explicitly via error field',
+      () {
+        const state = ConversationState(error: 'some error');
+        final updated = state.copyWith(error: null);
+        expect(updated.error, null);
+      },
+    );
   });
 
   group('ConversationNotifier state logic', () {
@@ -110,9 +113,9 @@ void main() {
     });
 
     test('_loadHistory populates messages from API', () async {
-      when(mockDio.get<List<dynamic>>(
-        '/chat/conversations/1/messages',
-      )).thenAnswer(
+      when(
+        mockDio.get<List<dynamic>>('/chat/conversations/1/messages'),
+      ).thenAnswer(
         (_) async => Response(
           data: [
             {
@@ -126,8 +129,9 @@ void main() {
             },
           ],
           statusCode: 200,
-          requestOptions:
-              RequestOptions(path: '/chat/conversations/1/messages'),
+          requestOptions: RequestOptions(
+            path: '/chat/conversations/1/messages',
+          ),
         ),
       );
 
@@ -143,13 +147,16 @@ void main() {
     });
 
     test('_loadHistory sets error on exception', () async {
-      when(mockDio.get<List<dynamic>>(
-        '/chat/conversations/1/messages',
-      )).thenThrow(DioException(
-        requestOptions:
-            RequestOptions(path: '/chat/conversations/1/messages'),
-        message: 'Network error',
-      ));
+      when(
+        mockDio.get<List<dynamic>>('/chat/conversations/1/messages'),
+      ).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(
+            path: '/chat/conversations/1/messages',
+          ),
+          message: 'Network error',
+        ),
+      );
 
       final notifier = ConversationNotifier(1, MockWebSocketService(), mockDio);
       await notifier.loadHistoryForTest();
@@ -158,62 +165,156 @@ void main() {
       expect(notifier.state.error, isNotNull);
     });
 
-    test('initialize connects WS, joins conversation, loads history, emits read-messages', () async {
-      when(mockWs.connectChat()).thenAnswer((_) async {});
-      when(mockWs.joinConversation(1)).thenReturn(null);
-      when(mockWs.listenForChatMessages(1, any)).thenReturn(() {});
-      when(mockWs.listenForBotTyping(any)).thenReturn(() {});
-      when(mockWs.emitReadMessages(1)).thenReturn(null);
+    test(
+      'initialize connects WS, joins conversation, loads history, emits read-messages',
+      () async {
+        when(mockWs.connectChat()).thenAnswer((_) async => true);
+        when(mockWs.joinConversation(1)).thenReturn(null);
+        when(mockWs.listenForChatMessages(1, any)).thenReturn(() {});
+        when(mockWs.listenForBotTyping(any)).thenReturn(() {});
+        when(mockWs.emitReadMessages(1)).thenReturn(null);
 
-      when(mockDio.get<List<dynamic>>(
-        '/chat/conversations/1/messages',
-      )).thenAnswer((_) async => Response(
-        data: [],
-        statusCode: 200,
-        requestOptions: RequestOptions(path: '/chat/conversations/1/messages'),
-      ));
+        when(
+          mockDio.get<List<dynamic>>('/chat/conversations/1/messages'),
+        ).thenAnswer(
+          (_) async => Response(
+            data: [],
+            statusCode: 200,
+            requestOptions: RequestOptions(
+              path: '/chat/conversations/1/messages',
+            ),
+          ),
+        );
 
-      final notifier = ConversationNotifier(1, mockWs, mockDio);
-      await notifier.initialize();
+        final notifier = ConversationNotifier(1, mockWs, mockDio);
+        await notifier.initialize();
 
-      verify(mockWs.connectChat()).called(1);
-      verify(mockWs.joinConversation(1)).called(1);
-      verify(mockWs.listenForChatMessages(1, any)).called(1);
-      verify(mockWs.listenForBotTyping(any)).called(1);
-      verify(mockWs.emitReadMessages(1)).called(1);
-      expect(notifier.state.isConnected, true);
-      expect(notifier.state.isLoading, false);
-    });
+        verify(mockWs.connectChat()).called(1);
+        verify(mockWs.joinConversation(1)).called(1);
+        verify(mockWs.listenForChatMessages(1, any)).called(1);
+        verify(mockWs.listenForBotTyping(any)).called(1);
+        verify(mockWs.emitReadMessages(1)).called(1);
+        expect(notifier.state.isConnected, true);
+        expect(notifier.state.isLoading, false);
+      },
+    );
+
+    test(
+      'initialize keeps socket-online state but skips read receipt when history fails',
+      () async {
+        when(mockWs.connectChat()).thenAnswer((_) async => true);
+        when(mockWs.joinConversation(1)).thenReturn(null);
+        when(mockWs.listenForChatMessages(1, any)).thenReturn(() {});
+        when(mockWs.listenForBotTyping(any)).thenReturn(() {});
+
+        when(
+          mockDio.get<List<dynamic>>('/chat/conversations/1/messages'),
+        ).thenThrow(
+          DioException(
+            requestOptions: RequestOptions(
+              path: '/chat/conversations/1/messages',
+            ),
+            message: 'Network error',
+          ),
+        );
+
+        final notifier = ConversationNotifier(1, mockWs, mockDio);
+        await notifier.initialize();
+
+        expect(notifier.state.error, isNotNull);
+        expect(notifier.state.isConnected, true);
+        expect(notifier.state.isLoading, false);
+        verifyNever(mockWs.emitReadMessages(1));
+      },
+    );
+
+    test(
+      'initialize retries room join after an initial socket failure',
+      () async {
+        when(mockWs.connectChat()).thenAnswer((_) async => false);
+
+        when(
+          mockDio.get<List<dynamic>>('/chat/conversations/1/messages'),
+        ).thenAnswer(
+          (_) async => Response(
+            data: [],
+            statusCode: 200,
+            requestOptions: RequestOptions(
+              path: '/chat/conversations/1/messages',
+            ),
+          ),
+        );
+
+        final notifier = ConversationNotifier(1, mockWs, mockDio);
+        await notifier.initialize();
+
+        expect(notifier.state.isConnected, false);
+        verifyNever(mockWs.joinConversation(1));
+
+        when(mockWs.connectChat()).thenAnswer((_) async => true);
+        when(mockWs.joinConversation(1)).thenReturn(null);
+        when(mockWs.listenForChatMessages(1, any)).thenReturn(() {});
+        when(mockWs.listenForBotTyping(any)).thenReturn(() {});
+        when(mockWs.emitReadMessages(1)).thenReturn(null);
+
+        await notifier.initialize();
+
+        expect(notifier.state.isConnected, true);
+        verify(mockWs.joinConversation(1)).called(1);
+        verify(mockWs.listenForChatMessages(1, any)).called(1);
+        verify(mockWs.listenForBotTyping(any)).called(1);
+        verify(mockWs.emitReadMessages(1)).called(1);
+      },
+    );
 
     test('sendMessage calls sendChatMessage on WS with trimmed content', () {
+      when(mockWs.isChatConnected).thenReturn(true);
       when(mockWs.sendChatMessage(1, 'hello')).thenReturn(null);
 
       final notifier = ConversationNotifier(1, mockWs, mockDio);
-      notifier.sendMessage('  hello  ');
+      final sent = notifier.sendMessage('  hello  ');
 
+      expect(sent, isTrue);
       verify(mockWs.sendChatMessage(1, 'hello')).called(1);
+    });
+
+    test('sendMessage refuses to emit when chat socket is disconnected', () {
+      when(mockWs.isChatConnected).thenReturn(false);
+
+      final notifier = ConversationNotifier(1, mockWs, mockDio);
+      final sent = notifier.sendMessage('  hello  ');
+
+      expect(sent, isFalse);
+      expect(notifier.state.isConnected, isFalse);
+      verifyNever(mockWs.sendChatMessage(any, any));
     });
 
     test('dispose calls both removal handles and leaveConversation', () async {
       bool msgRemoveCalled = false;
       bool botRemoveCalled = false;
 
-      when(mockWs.connectChat()).thenAnswer((_) async {});
+      when(mockWs.connectChat()).thenAnswer((_) async => true);
       when(mockWs.joinConversation(1)).thenReturn(null);
-      when(mockWs.listenForChatMessages(1, any))
-          .thenReturn(() { msgRemoveCalled = true; });
-      when(mockWs.listenForBotTyping(any))
-          .thenReturn(() { botRemoveCalled = true; });
+      when(mockWs.listenForChatMessages(1, any)).thenReturn(() {
+        msgRemoveCalled = true;
+      });
+      when(mockWs.listenForBotTyping(any)).thenReturn(() {
+        botRemoveCalled = true;
+      });
       when(mockWs.emitReadMessages(1)).thenReturn(null);
       when(mockWs.leaveConversation(1)).thenReturn(null);
 
-      when(mockDio.get<List<dynamic>>(
-        '/chat/conversations/1/messages',
-      )).thenAnswer((_) async => Response(
-        data: [],
-        statusCode: 200,
-        requestOptions: RequestOptions(path: '/chat/conversations/1/messages'),
-      ));
+      when(
+        mockDio.get<List<dynamic>>('/chat/conversations/1/messages'),
+      ).thenAnswer(
+        (_) async => Response(
+          data: [],
+          statusCode: 200,
+          requestOptions: RequestOptions(
+            path: '/chat/conversations/1/messages',
+          ),
+        ),
+      );
 
       final notifier = ConversationNotifier(1, mockWs, mockDio);
       await notifier.initialize();
@@ -232,9 +333,7 @@ void main() {
     setUp(() {
       mockDio = MockDio();
       container = ProviderContainer(
-        overrides: [
-          dioProvider.overrideWithValue(mockDio),
-        ],
+        overrides: [dioProvider.overrideWithValue(mockDio)],
       );
     });
 

@@ -40,13 +40,13 @@ export class Conversation {
   @Column({ type: 'enum', enum: ConversationType })
   type: ConversationType;
 
-  @Column({ name: 'order_id', nullable: true })
+  @Column({ name: 'order_id', type: 'int', nullable: true })
   orderId: number | null;
 
-  @Column({ name: 'assigned_admin_id', nullable: true })
+  @Column({ name: 'assigned_admin_id', type: 'int', nullable: true })
   assignedAdminId: number | null;
 
-  @Column({ name: 'assigned_rider_id', nullable: true })
+  @Column({ name: 'assigned_rider_id', type: 'int', nullable: true })
   assignedRiderId: number | null;
 
   @Column({

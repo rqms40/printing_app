@@ -8,7 +8,7 @@ import 'package:printing_app/features/customer/chat/models/conversation.dart';
 import 'package:printing_app/shared/providers/dio_provider.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
 
-@GenerateMocks([Dio, WebSocketService])
+@GenerateNiceMocks([MockSpec<Dio>(), MockSpec<WebSocketService>()])
 import 'chat_provider_test.mocks.dart';
 
 void main() {
@@ -19,9 +19,7 @@ void main() {
     setUp(() {
       mockDio = MockDio();
       container = ProviderContainer(
-        overrides: [
-          dioProvider.overrideWithValue(mockDio),
-        ],
+        overrides: [dioProvider.overrideWithValue(mockDio)],
       );
     });
 
@@ -32,6 +30,7 @@ void main() {
       expect(state.conversations, hasLength(0));
       expect(state.isLoading, false);
       expect(state.error, null);
+      expect(state.createError, null);
     });
 
     test('loadConversations populates state.conversations', () async {
@@ -63,11 +62,12 @@ void main() {
     });
 
     test('loadConversations sets error on exception', () async {
-      when(mockDio.get<List<dynamic>>('/chat/conversations'))
-          .thenThrow(DioException(
-        requestOptions: RequestOptions(path: '/chat/conversations'),
-        message: 'Network error',
-      ));
+      when(mockDio.get<List<dynamic>>('/chat/conversations')).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/chat/conversations'),
+          message: 'Network error',
+        ),
+      );
 
       final notifier = container.read(chatProvider.notifier);
       await notifier.loadConversations();
@@ -79,10 +79,12 @@ void main() {
     });
 
     test('createConversation adds to conversations list', () async {
-      when(mockDio.post<Map<String, dynamic>>(
-        '/chat/conversations',
-        data: anyNamed('data'),
-      )).thenAnswer(
+      when(
+        mockDio.post<Map<String, dynamic>>(
+          '/chat/conversations',
+          data: anyNamed('data'),
+        ),
+      ).thenAnswer(
         (_) async => Response(
           data: {
             'id': 2,
@@ -106,10 +108,12 @@ void main() {
     });
 
     test('createConversation with orderId sends orderId in data', () async {
-      when(mockDio.post<Map<String, dynamic>>(
-        '/chat/conversations',
-        data: anyNamed('data'),
-      )).thenAnswer(
+      when(
+        mockDio.post<Map<String, dynamic>>(
+          '/chat/conversations',
+          data: anyNamed('data'),
+        ),
+      ).thenAnswer(
         (_) async => Response(
           data: {
             'id': 3,
@@ -136,13 +140,17 @@ void main() {
     });
 
     test('createConversation returns null on exception', () async {
-      when(mockDio.post<Map<String, dynamic>>(
-        '/chat/conversations',
-        data: anyNamed('data'),
-      )).thenThrow(DioException(
-        requestOptions: RequestOptions(path: '/chat/conversations'),
-        message: 'Network error',
-      ));
+      when(
+        mockDio.post<Map<String, dynamic>>(
+          '/chat/conversations',
+          data: anyNamed('data'),
+        ),
+      ).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/chat/conversations'),
+          message: 'Network error',
+        ),
+      );
 
       final notifier = container.read(chatProvider.notifier);
       final conv = await notifier.createConversation(ConversationType.ai);
@@ -150,6 +158,47 @@ void main() {
       expect(conv, isNull);
       expect(container.read(chatProvider).conversations, hasLength(0));
     });
+
+    test(
+      'createConversation exposes a create-only error on exception',
+      () async {
+        final existing = {
+          'id': 1,
+          'customerId': 5,
+          'type': 'ai',
+          'status': 'open',
+          'createdAt': '2026-04-25T10:00:00.000Z',
+          'updatedAt': '2026-04-25T10:00:00.000Z',
+        };
+        when(mockDio.get<List<dynamic>>('/chat/conversations')).thenAnswer(
+          (_) async => Response(
+            data: [existing],
+            statusCode: 200,
+            requestOptions: RequestOptions(path: '/chat/conversations'),
+          ),
+        );
+        when(
+          mockDio.post<Map<String, dynamic>>(
+            '/chat/conversations',
+            data: anyNamed('data'),
+          ),
+        ).thenThrow(
+          DioException(
+            requestOptions: RequestOptions(path: '/chat/conversations'),
+            message: 'Network error',
+          ),
+        );
+
+        final notifier = container.read(chatProvider.notifier);
+        await notifier.loadConversations();
+        final conv = await notifier.createConversation(ConversationType.ai);
+
+        expect(conv, isNull);
+        expect(container.read(chatProvider).error, isNull);
+        expect(container.read(chatProvider).createError, isNotNull);
+        expect(container.read(chatProvider).conversations, hasLength(1));
+      },
+    );
 
     test('createConversation prepends to existing conversations', () async {
       // First load some conversations
@@ -173,10 +222,12 @@ void main() {
       expect(container.read(chatProvider).conversations, hasLength(1));
 
       // Then create a new one
-      when(mockDio.post<Map<String, dynamic>>(
-        '/chat/conversations',
-        data: anyNamed('data'),
-      )).thenAnswer(
+      when(
+        mockDio.post<Map<String, dynamic>>(
+          '/chat/conversations',
+          data: anyNamed('data'),
+        ),
+      ).thenAnswer(
         (_) async => Response(
           data: {
             'id': 2,
@@ -190,9 +241,9 @@ void main() {
           requestOptions: RequestOptions(path: '/chat/conversations'),
         ),
       );
-      final conv = await container.read(chatProvider.notifier).createConversation(
-        ConversationType.admin,
-      );
+      final conv = await container
+          .read(chatProvider.notifier)
+          .createConversation(ConversationType.admin);
 
       final conversations = container.read(chatProvider).conversations;
       expect(conversations, hasLength(2));

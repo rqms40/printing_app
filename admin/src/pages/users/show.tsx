@@ -1,4 +1,3 @@
-import { ListButton, Show } from "@refinedev/antd";
 import {
   Alert,
   Card,
@@ -17,6 +16,7 @@ import {
   buildAdminUserDetailViewModel,
   loadAdminUserDetail,
 } from "@/pages/users/data";
+import { ShowPage } from "@/components/show-page";
 import { humanizeEnumValue, type AdminUserDetailPayload } from "@/utils/api-normalizers";
 import {
   formatCurrency,
@@ -231,26 +231,23 @@ export function UserShow() {
 
   if (view.kind === "loading") {
     return (
-      <Show
+      <ShowPage
         title={view.title}
-        headerButtons={({ listButtonProps }) =>
-          listButtonProps ? <ListButton {...listButtonProps} /> : null
-        }
+        backTo="/users"
+        contentCard={false}
       >
         <div style={{ display: "flex", justifyContent: "center", padding: 80 }}>
           <Spin size="large" />
         </div>
-      </Show>
+      </ShowPage>
     );
   }
 
   if (view.kind === "error") {
     return (
-      <Show
+      <ShowPage
         title={view.title}
-        headerButtons={({ listButtonProps }) =>
-          listButtonProps ? <ListButton {...listButtonProps} /> : null
-        }
+        backTo="/users"
       >
         <Alert
           type="error"
@@ -268,16 +265,15 @@ export function UserShow() {
             </a>
           }
         />
-      </Show>
+      </ShowPage>
     );
   }
 
   return (
-    <Show
+    <ShowPage
       title={view.detail.user.full_name ?? `User #${view.detail.user.id}`}
-      headerButtons={({ listButtonProps }) =>
-        listButtonProps ? <ListButton {...listButtonProps} /> : null
-      }
+      backTo="/users"
+      contentCard={false}
     >
       <Space direction="vertical" size="large" style={{ width: "100%" }}>
         <UserHero detail={view.detail.user} />
@@ -285,6 +281,6 @@ export function UserShow() {
         <PrintPreferences preferences={view.detail.user.printing_preferences} />
         <RecentOrders orders={view.detail.recent_orders} />
       </Space>
-    </Show>
+    </ShowPage>
   );
 }

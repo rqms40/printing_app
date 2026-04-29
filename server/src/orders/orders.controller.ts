@@ -87,21 +87,4 @@ export class OrdersController {
     return this.ordersService.updateStatus(id, dto.status);
   }
 
-  @Get('admin/external-deliveries')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
-  async adminListExternal(@Query('status') status?: string) {
-    return this.ordersService.listExternalDeliveries(status);
-  }
-
-  @Patch('admin/external-deliveries/:id/status')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
-  async adminUpdateExternal(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() body: { status: 'pending_admin' | 'booked' | 'delivered' },
-  ) {
-    await this.ordersService.updateExternalDeliveryStatus(id, body.status);
-    return { ok: true };
-  }
 }
