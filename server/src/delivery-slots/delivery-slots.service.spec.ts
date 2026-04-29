@@ -162,7 +162,7 @@ describe('DeliverySlotsService', () => {
         }),
       };
       await expect(svc.releaseSlot(tx as any, 7)).rejects.toThrow(
-        'cancellation_closed',
+        'Slot is in progress, cancellation closed',
       );
     });
 

@@ -8,7 +8,10 @@ export class SlotFullException extends ConflictException {
 
 export class CancellationClosedException extends ConflictException {
   constructor() {
-    super({ message: 'cancellation_closed', code: 'cancellation_closed' });
+    super({
+      message: 'Slot is in progress, cancellation closed',
+      code: 'cancellation_closed',
+    });
   }
 }
 
