@@ -21,6 +21,7 @@ import { DeliveryDestination } from './entities/delivery-destination.entity';
 import { DeliverySlotsService } from '../delivery-slots/delivery-slots.service';
 import { DeliverySettingsService } from '../delivery-slots/delivery-settings.service';
 import { DeliverySlotsGateway } from '../delivery-slots/delivery-slots.gateway';
+import { CancellationClosedException } from '../delivery-slots/exceptions';
 
 describe('OrdersService', () => {
   let service: OrdersService;
@@ -1061,5 +1062,91 @@ describe('createBatch with slot + destinations', () => {
 
     expect(capturedBatch.priorityFee).toBe(50);
     expect(capturedBatch.extraDestinationFee).toBe(60); // 2 extra * 30
+  });
+});
+
+describe('cancelBatch', () => {
+  let service: OrdersService;
+
+  let batchOrdersRepo: jest.Mocked<Pick<Repository<any>, 'findOneOrFail'>>;
+  let slotsService: jest.Mocked<Pick<DeliverySlotsService, 'releaseSlot'>>;
+  let dataSource: Partial<DataSource>;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    batchOrdersRepo = {
+      findOneOrFail: jest.fn(),
+    };
+
+    slotsService = {
+      releaseSlot: jest.fn(),
+    };
+
+    // Default transaction mock: provides manager with save + update + findOneOrFail routed to batchOrdersRepo
+    const makeMockManager = () => ({
+      findOneOrFail: jest.fn().mockImplementation(async (_entity: any, opts: any) => {
+        return batchOrdersRepo.findOneOrFail(opts);
+      }),
+      save: jest.fn().mockImplementation(async (entity: any) => entity),
+      update: jest.fn().mockResolvedValue(undefined),
+    });
+
+    dataSource = {
+      transaction: jest.fn(async (cb) => cb(makeMockManager())),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        OrdersService,
+        { provide: getRepositoryToken(Order), useValue: { find: jest.fn(), findOne: jest.fn(), findOneOrFail: jest.fn(), create: jest.fn(), save: jest.fn(), update: jest.fn(), count: jest.fn() } },
+        { provide: getRepositoryToken(OrderItem), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: getRepositoryToken('BatchOrder'), useValue: {} },
+        { provide: getRepositoryToken(PaperSpec), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: getRepositoryToken(ThreeDSpec), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: getRepositoryToken(DeliveryAssignment), useValue: { find: jest.fn().mockResolvedValue([]) } },
+        { provide: getRepositoryToken(Address), useValue: { findOne: jest.fn() } },
+        { provide: getRepositoryToken(DeliveryDestination), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
+        { provide: FirebaseService, useValue: { sendToDevice: jest.fn(), isAvailable: false } },
+        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null) } },
+        { provide: CreditsService, useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() } },
+        { provide: NotificationsService, useValue: { createForAllAdmins: jest.fn().mockResolvedValue(undefined) } },
+        { provide: FilesService, useValue: { stampExpiry: jest.fn() } },
+        { provide: DataSource, useValue: dataSource },
+        { provide: DeliverySlotsService, useValue: slotsService },
+        {
+          provide: DeliverySettingsService,
+          useValue: {
+            isInsideServiceArea: jest.fn().mockResolvedValue(true),
+            getSettings: jest.fn().mockResolvedValue({ priorityFeeAmount: 50, extraDestinationSurcharge: 30 }),
+          },
+        },
+        { provide: DeliverySlotsGateway, useValue: { notifySlotUpdated: jest.fn() } },
+      ],
+    }).compile();
+
+    service = module.get(OrdersService);
+  });
+
+  it('releases slot and marks orders cancelled when before cutoff', async () => {
+    const fakeBatch = { id: 1, userId: 1, slotBookingId: 7 };
+    batchOrdersRepo.findOneOrFail.mockResolvedValue(fakeBatch as any);
+    slotsService.releaseSlot.mockResolvedValue(undefined);
+
+    await service.cancelBatch(1, 1);
+
+    expect(slotsService.releaseSlot).toHaveBeenCalledWith(
+      expect.anything(),
+      7,
+    );
+  });
+
+  it('rejects cancellation past cutoff', async () => {
+    const fakeBatch = { id: 1, userId: 1, slotBookingId: 7 };
+    batchOrdersRepo.findOneOrFail.mockResolvedValue(fakeBatch as any);
+    slotsService.releaseSlot.mockRejectedValue(new CancellationClosedException());
+
+    await expect(service.cancelBatch(1, 1)).rejects.toThrow('cancellation closed');
   });
 });

@@ -10,6 +10,7 @@ import {
   ForbiddenException,
   NotFoundException,
   BadRequestException,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -66,6 +67,16 @@ export class OrdersController {
         throw new BadRequestException(msg);
       throw err;
     }
+  }
+
+  @Patch('batch/:id/cancel')
+  @UseGuards(JwtAuthGuard)
+  async cancelBatch(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: { user: { sub: number } },
+  ) {
+    await this.ordersService.cancelBatch(id, req.user.sub);
+    return { ok: true };
   }
 
   @Patch(':id/status')

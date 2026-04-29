@@ -451,6 +451,24 @@ export class OrdersService {
     return deliveryAddressId;
   }
 
+  async cancelBatch(batchOrderId: number, userId: number): Promise<void> {
+    await this.dataSource.transaction(async (manager) => {
+      const batch = await manager.findOneOrFail(BatchOrder, {
+        where: { id: batchOrderId, userId },
+      });
+      if (batch.slotBookingId) {
+        await this.slotsService.releaseSlot(manager, batch.slotBookingId);
+        batch.slotBookingId = null;
+        await manager.save(batch);
+      }
+      await manager.update(
+        Order,
+        { batchOrderId: batch.id },
+        { orderStatus: 'cancelled' as any },
+      );
+    });
+  }
+
   async cancelOrder(id: number, userId: number): Promise<Order> {
     const order = await this.ordersRepo.findOneOrFail({
       where: { id },
