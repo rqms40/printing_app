@@ -86,4 +86,67 @@ describe('DeliverySlotsService', () => {
       ]);
     });
   });
+
+  describe('bookSlot', () => {
+    it('throws SlotFullException when capacity reached', async () => {
+      const txManager = {
+        findOne: jest.fn().mockResolvedValue({
+          id: 1,
+          dayOfWeek: 4,
+          capacity: 10,
+        }),
+        createQueryBuilder: jest.fn(() => ({
+          innerJoin: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          setLock: jest.fn().mockReturnThis(),
+          getCount: jest.fn().mockResolvedValue(10),
+        })),
+      };
+      await expect(
+        svc.bookSlot(txManager as any, {
+          slotTemplateId: 1,
+          date: '2026-04-30',
+          batchOrderId: 99,
+          priority: false,
+        }),
+      ).rejects.toThrow('Slot is full');
+    });
+
+    it('inserts a booking when capacity not reached', async () => {
+      const inserted = {
+        id: 7,
+        slotTemplateId: 1,
+        date: '2026-04-30',
+        batchOrderId: 99,
+        priority: false,
+      };
+      const txManager = {
+        findOne: jest.fn().mockResolvedValue({
+          id: 1,
+          dayOfWeek: 4,
+          capacity: 10,
+        }),
+        createQueryBuilder: jest.fn(() => ({
+          innerJoin: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          setLock: jest.fn().mockReturnThis(),
+          getCount: jest.fn().mockResolvedValue(8),
+        })),
+        create: jest.fn().mockReturnValue(inserted),
+        save: jest.fn().mockResolvedValue(inserted),
+      };
+
+      const result = await svc.bookSlot(txManager as any, {
+        slotTemplateId: 1,
+        date: '2026-04-30',
+        batchOrderId: 99,
+        priority: false,
+      });
+
+      expect(result).toEqual(inserted);
+      expect(txManager.create).toHaveBeenCalled();
+    });
+  });
 });

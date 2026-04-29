@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { DeliverySlotTemplate } from './entities/delivery-slot-template.entity';
 import { DeliverySlotBooking } from './entities/delivery-slot-booking.entity';
+import { SlotFullException } from './exceptions';
 
 export interface SlotAvailability {
   templateId: number;
@@ -11,6 +12,13 @@ export interface SlotAvailability {
   capacity: number;
   bookedCount: number;
   isFull: boolean;
+}
+
+export interface BookSlotInput {
+  slotTemplateId: number;
+  date: string;
+  batchOrderId: number;
+  priority: boolean;
 }
 
 @Injectable()
@@ -60,5 +68,39 @@ export class DeliverySlotsService {
         isFull: bookedCount >= t.capacity,
       };
     });
+  }
+
+  async bookSlot(
+    manager: EntityManager,
+    input: BookSlotInput,
+  ): Promise<DeliverySlotBooking> {
+    const template = await manager.findOne(DeliverySlotTemplate, {
+      where: { id: input.slotTemplateId, isActive: true },
+    });
+    if (!template) throw new SlotFullException();
+
+    const count = await manager
+      .createQueryBuilder(DeliverySlotBooking, 'b')
+      .innerJoin('batch_orders', 'bo', 'bo.id = b.batch_order_id')
+      .innerJoin(
+        'orders',
+        'o',
+        'o.batch_order_id = bo.id AND o.order_status NOT IN (:...excluded)',
+        { excluded: ['cancelled', 'file_declined'] },
+      )
+      .where('b.slot_template_id = :tid', { tid: input.slotTemplateId })
+      .andWhere('b.date = :date', { date: input.date })
+      .setLock('pessimistic_write')
+      .getCount();
+
+    if (count >= template.capacity) throw new SlotFullException();
+
+    const booking = manager.create(DeliverySlotBooking, {
+      slotTemplateId: input.slotTemplateId,
+      date: input.date,
+      batchOrderId: input.batchOrderId,
+      priority: input.priority,
+    });
+    return manager.save(booking);
   }
 }
