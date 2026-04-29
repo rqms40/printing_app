@@ -15,6 +15,12 @@ describe('DeliverySlotsController', () => {
       providers: [
         { provide: DeliverySlotsService, useValue: slotsService },
         { provide: DeliverySettingsService, useValue: {} },
+        {
+          provide: require('@nestjs/typeorm').getRepositoryToken(
+            require('./entities/delivery-slot-template.entity').DeliverySlotTemplate,
+          ),
+          useValue: { find: jest.fn(), save: jest.fn(), create: jest.fn() },
+        },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -28,5 +34,49 @@ describe('DeliverySlotsController', () => {
     const out = await controller.list('2026-04-30');
     expect(slotsService.getAvailability).toHaveBeenCalledWith('2026-04-30');
     expect(out).toEqual([{ templateId: 1 }]);
+  });
+
+  describe('admin endpoints', () => {
+    const tplRepo = { find: jest.fn(), save: jest.fn(), create: jest.fn() };
+    const settingsService = {
+      getSettings: jest.fn(),
+      updateSettings: jest.fn(),
+    };
+    let adminController: DeliverySlotsController;
+
+    beforeEach(async () => {
+      jest.clearAllMocks();
+      const mod = await Test.createTestingModule({
+        controllers: [DeliverySlotsController],
+        providers: [
+          { provide: DeliverySlotsService, useValue: slotsService },
+          { provide: DeliverySettingsService, useValue: settingsService },
+          {
+            provide: require('@nestjs/typeorm').getRepositoryToken(
+              require('./entities/delivery-slot-template.entity').DeliverySlotTemplate,
+            ),
+            useValue: tplRepo,
+          },
+        ],
+      })
+        .overrideGuard(JwtAuthGuard)
+        .useValue({ canActivate: () => true })
+        .overrideGuard(require('../auth/guards/roles.guard').RolesGuard)
+        .useValue({ canActivate: () => true })
+        .compile();
+      adminController = mod.get(DeliverySlotsController);
+    });
+
+    it('GET /admin/delivery-slot-templates returns full list', async () => {
+      tplRepo.find.mockResolvedValue([{ id: 1 }, { id: 2 }]);
+      const out = await adminController.adminListTemplates();
+      expect(out).toHaveLength(2);
+    });
+
+    it('GET /admin/settings/delivery returns settings', async () => {
+      settingsService.getSettings.mockResolvedValue({ id: 1 });
+      const out = await adminController.adminGetSettings();
+      expect(out).toEqual({ id: 1 });
+    });
   });
 });
