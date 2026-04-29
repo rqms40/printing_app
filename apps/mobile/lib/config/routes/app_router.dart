@@ -52,6 +52,9 @@ import 'package:printing_app/features/customer/chat/models/conversation.dart';
 import 'package:printing_app/features/customer/chat/screens/chat_list_screen.dart';
 import 'package:printing_app/features/customer/chat/screens/chat_select_screen.dart';
 import 'package:printing_app/features/customer/chat/screens/conversation_screen.dart';
+import 'package:printing_app/features/customer/order/screens/destination_groups_screen.dart';
+import 'package:printing_app/features/customer/order/screens/slot_picker_screen.dart';
+import 'package:printing_app/features/customer/order/screens/external_delivery_confirm_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Driver screens
@@ -456,6 +459,21 @@ final routerProvider = Provider<GoRouter>((ref) {
             state,
           );
         },
+      ),
+      GoRoute(
+        path: '/customer/order/destinations',
+        builder: (_, _) => const DestinationGroupsScreen(),
+      ),
+      GoRoute(
+        path: '/customer/order/slot-picker',
+        builder: (_, state) => SlotPickerScreen(
+          date: state.uri.queryParameters['date'] ??
+              DateTime.now().toIso8601String().substring(0, 10),
+        ),
+      ),
+      GoRoute(
+        path: '/customer/order/external-confirm',
+        builder: (_, _) => const ExternalDeliveryConfirmScreen(),
       ),
 
       // -----------------------------------------------------------------------
