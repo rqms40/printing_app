@@ -47,6 +47,7 @@ import 'package:printing_app/features/customer/profile/screens/top_up_screen.dar
 import 'package:printing_app/features/customer/profile/screens/tam_survey_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/storage_settings_screen.dart';
 import 'package:printing_app/features/customer/uploads/screens/my_uploads_screen.dart';
+import 'package:printing_app/features/customer/cart/screens/cart_screen.dart';
 import 'package:printing_app/features/customer/chat/models/conversation.dart';
 import 'package:printing_app/features/customer/chat/screens/chat_list_screen.dart';
 import 'package:printing_app/features/customer/chat/screens/chat_select_screen.dart';
@@ -417,6 +418,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/customer/uploads',
         pageBuilder: (_, state) =>
             slideTransition(const MyUploadsScreen(), state),
+      ),
+      GoRoute(
+        path: CartScreen.routeName,
+        pageBuilder: (_, state) => slideTransition(const CartScreen(), state),
       ),
       GoRoute(
         path: '/customer/chat',

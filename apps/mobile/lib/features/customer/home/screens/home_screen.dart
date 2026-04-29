@@ -17,7 +17,10 @@ import 'package:printing_app/features/customer/home/widgets/hero_banner.dart';
 import 'package:printing_app/features/customer/home/widgets/map_tracking_tile.dart';
 import 'package:printing_app/features/customer/home/widgets/recent_orders_section.dart';
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
+import 'package:printing_app/features/customer/cart/providers/cart_provider.dart';
+import 'package:printing_app/features/customer/beta/widgets/beta_indicator.dart';
 import 'package:printing_app/shared/services/draft_storage_service.dart';
+import 'package:printing_app/utils/formatters.dart';
 import 'package:printing_app/features/customer/chat/widgets/floating_chat_button.dart';
 
 /// Customer home screen — editorial redesign.
@@ -86,6 +89,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final colors = _colors(context);
     final authState = ref.watch(authProvider);
     final firstName = (authState.user?.fullName ?? 'there').split(' ').first;
+    final cart = ref.watch(cartProvider);
     final hasDraft = !_draftDismissed && DraftStorageService.hasDraft;
 
     final unreadCount = ref.watch(unreadNotificationsCountProvider);
@@ -170,6 +174,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
 
                 const SizedBox(height: AppSpacing.lg),
+
+                if (cart.isNotEmpty) ...[
+                  _ResumeQueueCard(colors: colors, cart: cart)
+                      .animate()
+                      .fadeIn(duration: 300.ms, curve: Curves.easeOut)
+                      .slideY(
+                        begin: 0.02,
+                        duration: 300.ms,
+                        curve: Curves.easeOut,
+                      ),
+                  const SizedBox(height: AppSpacing.md),
+                ],
 
                 // ── Draft banner ───────────────────────────────────────
                 if (hasDraft) ...[
@@ -308,12 +324,218 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
       ),
         ),
+        const Positioned(
+          top: 0,
+          right: AppSpacing.md,
+          child: SafeArea(child: BetaIndicator()),
+        ),
         Positioned(
           right: AppSpacing.xl,
           bottom: 90,
           child: FloatingChatButton(unreadCount: unreadCount),
         ),
       ],
+    );
+  }
+}
+
+class _ResumeQueueCard extends StatelessWidget {
+  const _ResumeQueueCard({required this.colors, required this.cart});
+
+  final AppColorSet colors;
+  final CartState cart;
+
+  @override
+  Widget build(BuildContext context) {
+    final jobLabel =
+        '${cart.itemCount} print job${cart.itemCount == 1 ? '' : 's'}';
+    final subtotalLabel = '${formatCurrency(cart.subtotal)} subtotal';
+    final semanticsLabel = 'Resume your queue, $jobLabel, $subtotalLabel';
+    void openQueue() => context.push('/customer/cart');
+
+    return Semantics(
+      button: true,
+      label: semanticsLabel,
+      onTap: openQueue,
+      child: ExcludeSemantics(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: AppRadius.borderXl,
+            boxShadow: [
+              BoxShadow(
+                color: colors.brand.withValues(alpha: 0.10),
+                blurRadius: 24,
+                offset: const Offset(0, 10),
+              ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Material(
+            color: colors.surface,
+            borderRadius: AppRadius.borderXl,
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: openQueue,
+              borderRadius: AppRadius.borderXl,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final textScale = MediaQuery.textScalerOf(context).scale(1);
+                  final useStackedCta =
+                      constraints.maxWidth < 360 || textScale >= 1.3;
+                  final icon = _ResumeQueueIcon(colors: colors);
+                  final copy = _ResumeQueueCopy(
+                    colors: colors,
+                    jobLabel: jobLabel,
+                    subtotalLabel: subtotalLabel,
+                  );
+                  final cta = _ResumeQueueCta(colors: colors);
+
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    decoration: BoxDecoration(
+                      borderRadius: AppRadius.borderXl,
+                      border: Border.all(
+                        color: colors.brand.withValues(alpha: 0.45),
+                      ),
+                    ),
+                    child: useStackedCta
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  icon,
+                                  const SizedBox(width: AppSpacing.md),
+                                  Expanded(child: copy),
+                                ],
+                              ),
+                              const SizedBox(height: AppSpacing.md),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: cta,
+                              ),
+                            ],
+                          )
+                        : Row(
+                            children: [
+                              icon,
+                              const SizedBox(width: AppSpacing.md),
+                              Expanded(child: copy),
+                              const SizedBox(width: AppSpacing.sm),
+                              Flexible(
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: cta,
+                                ),
+                              ),
+                            ],
+                          ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ResumeQueueIcon extends StatelessWidget {
+  const _ResumeQueueIcon({required this.colors});
+
+  final AppColorSet colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 46,
+      height: 46,
+      decoration: BoxDecoration(
+        color: colors.brand.withValues(alpha: 0.14),
+        borderRadius: AppRadius.borderLg,
+      ),
+      child: Center(
+        child: HugeIcon(
+          icon: HugeIcons.strokeRoundedShoppingCart01,
+          size: 24,
+          color: colors.brand,
+        ),
+      ),
+    );
+  }
+}
+
+class _ResumeQueueCopy extends StatelessWidget {
+  const _ResumeQueueCopy({
+    required this.colors,
+    required this.jobLabel,
+    required this.subtotalLabel,
+  });
+
+  final AppColorSet colors;
+  final String jobLabel;
+  final String subtotalLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Resume your queue',
+          style: AppTypography.bodyBold.copyWith(color: colors.onBackground),
+        ),
+        const SizedBox(height: 3),
+        Wrap(
+          spacing: AppSpacing.xs,
+          runSpacing: 2,
+          children: [
+            Text(
+              jobLabel,
+              style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+            ),
+            Text(
+              subtotalLabel,
+              style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ResumeQueueCta extends StatelessWidget {
+  const _ResumeQueueCta({required this.colors});
+
+  final AppColorSet colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 7,
+      ),
+      decoration: BoxDecoration(
+        color: colors.brand,
+        borderRadius: AppRadius.borderMd,
+      ),
+      child: Text(
+        'View queue',
+        softWrap: false,
+        overflow: TextOverflow.ellipsis,
+        style: AppTypography.caption.copyWith(
+          color: colors.background,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
     );
   }
 }

@@ -22,6 +22,7 @@ import {
   BellOutlined,
   FormOutlined,
   AppstoreOutlined,
+  RocketOutlined,
   MessageOutlined,
 } from "@ant-design/icons";
 
@@ -48,6 +49,7 @@ import { NotificationsPage } from "@/pages/notifications";
 import { TamSurveyList } from "@/pages/tam-surveys/list";
 import { TamSurveyShow } from "@/pages/tam-surveys/show";
 import { DailyGridList } from "@/pages/daily-grid/list";
+import { BetaModePage } from '@/pages/beta-mode';
 import { ChatInboxPage } from "@/pages/chat";
 
 function App() {
@@ -119,6 +121,11 @@ function App() {
                 meta: { label: "Daily Grid", icon: <AppstoreOutlined /> },
               },
               {
+                name: 'beta-mode',
+                list: '/beta-mode',
+                meta: { label: 'Beta Mode', icon: <RocketOutlined /> },
+              },
+              {
                 name: "chat",
                 list: "/chat",
                 meta: { label: "Support Chat", icon: <MessageOutlined /> },
@@ -173,6 +180,7 @@ function App() {
                   <Route path="show/:id" element={<TamSurveyShow />} />
                 </Route>
                 <Route path="/daily-grid" element={<DailyGridList />} />
+                <Route path="/beta-mode" element={<BetaModePage />} />
                 <Route path="/chat" element={<ChatInboxPage />} />
               </Route>
 
