@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'package:flutter/foundation.dart';
 import 'package:printing_app/config/api_config.dart';
@@ -33,10 +35,14 @@ class WebSocketService {
   io.Socket? _notificationsSocket;
   io.Socket? _dailyGridSocket;
   io.Socket? _chatSocket;
+  io.Socket? _slotsSocket;
   final Map<int, List<Function(ChatMessage)>> _chatMessageListeners = {};
   final List<Function(int)> _botTypingListeners = [];
+  final List<Function(int)> _messagesReadListeners = [];
+  final List<Function(Map<String, dynamic>)> _slotUpdatedListeners = [];
 
   bool get isNotificationsConnected => _notificationsSocket?.connected == true;
+  bool get isChatConnected => _chatSocket?.connected == true;
 
   // Persistent callbacks for notification events. Kept outside the socket so
   // reconnects and token refreshes do not lose UI listeners.
@@ -235,11 +241,12 @@ class WebSocketService {
     _dailyGridSocket = null;
   }
 
-  Future<void> connectChat() async {
-    if (_chatSocket?.connected == true) return;
+  Future<bool> connectChat() async {
+    if (_chatSocket?.connected == true) return true;
     if (_chatSocket != null) {
+      final connected = _waitForChatConnection(_chatSocket!);
       _chatSocket!.connect();
-      return;
+      return connected;
     }
     final token = await TokenStorage.getToken();
     _chatSocket = io.io(
@@ -271,9 +278,44 @@ class WebSocketService {
         debugPrint('WS bot-typing parse error: $e');
       }
     });
+    _chatSocket!.on('messages-read', (data) {
+      try {
+        final d = _normalize(data) as Map<String, dynamic>;
+        final convId = d['conversationId'] as int;
+        for (final cb in List.of(_messagesReadListeners)) {
+          try {
+            cb(convId);
+          } catch (e) {
+            debugPrint('WS messagesRead cb error: $e');
+          }
+        }
+      } catch (e) {
+        debugPrint('WS messages-read parse error: $e');
+      }
+    });
     _chatSocket!.on('connect', (_) => debugPrint('WS Chat connected'));
     _chatSocket!.on('connect_error', (e) => debugPrint('WS Chat error: $e'));
+    final connected = _waitForChatConnection(_chatSocket!);
     _chatSocket!.connect();
+    return connected;
+  }
+
+  Future<bool> _waitForChatConnection(io.Socket socket) {
+    if (socket.connected) return Future.value(true);
+
+    final completer = Completer<bool>();
+
+    void complete(bool value) {
+      if (!completer.isCompleted) completer.complete(value);
+    }
+
+    socket.once('connect', (_) => complete(true));
+    socket.once('connect_error', (_) => complete(false));
+
+    return completer.future.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () => socket.connected,
+    );
   }
 
   void _dispatchChatMessage(dynamic data) {
@@ -301,10 +343,17 @@ class WebSocketService {
     _chatMessageListeners.remove(conversationId);
   }
 
-  void sendChatMessage(int conversationId, String content) {
+  void sendChatMessage(
+    int conversationId,
+    String content, {
+    int? attachmentFileId,
+    String? attachmentMimeType,
+  }) {
     _chatSocket?.emit('send-message', {
       'conversationId': conversationId,
       'content': content,
+      if (attachmentFileId != null) 'attachmentFileId': attachmentFileId,
+      if (attachmentMimeType != null) 'attachmentMimeType': attachmentMimeType,
     });
   }
 
@@ -332,11 +381,72 @@ class WebSocketService {
     return () => _botTypingListeners.remove(callback);
   }
 
+  /// Returns a removal handle — call it in dispose() to unregister the callback.
+  VoidCallback listenForMessagesRead(Function(int conversationId) callback) {
+    _messagesReadListeners.add(callback);
+    return () => _messagesReadListeners.remove(callback);
+  }
+
+  Future<bool> connectDeliverySlots() async {
+    if (_slotsSocket?.connected == true) return true;
+    if (_slotsSocket != null) {
+      _slotsSocket!.connect();
+      return true;
+    }
+    final token = await TokenStorage.getToken();
+    _slotsSocket = io.io(
+      '$_baseUrl/ws/delivery-slots',
+      io.OptionBuilder()
+          .setTransports(['websocket'])
+          .setAuth({'token': token ?? ''})
+          .disableAutoConnect()
+          .build(),
+    );
+    _slotsSocket!.on('slot-updated', (data) {
+      try {
+        final d = _normalize(data) as Map<String, dynamic>;
+        for (final cb in List.of(_slotUpdatedListeners)) {
+          try {
+            cb(d);
+          } catch (e) {
+            debugPrint('WS slot-updated cb error: $e');
+          }
+        }
+      } catch (e) {
+        debugPrint('WS slot-updated parse error: $e');
+      }
+    });
+    _slotsSocket!.on('connect', (_) => debugPrint('WS Slots connected'));
+    _slotsSocket!.on('connect_error', (e) => debugPrint('WS Slots error: $e'));
+    _slotsSocket!.connect();
+    return true;
+  }
+
+  void subscribeSlots(String date) {
+    _slotsSocket?.emit('subscribe-slots', {'date': date});
+  }
+
+  void unsubscribeSlots(String date) {
+    _slotsSocket?.emit('unsubscribe-slots', {'date': date});
+  }
+
+  VoidCallback listenForSlotUpdates(Function(Map<String, dynamic>) cb) {
+    _slotUpdatedListeners.add(cb);
+    return () => _slotUpdatedListeners.remove(cb);
+  }
+
+  void disconnectDeliverySlots() {
+    _slotsSocket?.disconnect();
+    _slotsSocket = null;
+    _slotUpdatedListeners.clear();
+  }
+
   void disconnectChat() {
     _chatSocket?.disconnect();
     _chatSocket = null;
     _chatMessageListeners.clear();
     _botTypingListeners.clear();
+    _messagesReadListeners.clear();
   }
 
   void disconnect() {
@@ -346,6 +456,8 @@ class WebSocketService {
     _dailyGridSocket?.disconnect();
     _chatSocket?.disconnect();
     _chatSocket = null;
+    _slotsSocket?.disconnect();
+    _slotsSocket = null;
     // Null out so the next connection creates a fresh socket
     // with a new JWT — prevents stale-token room membership after logout.
     _notificationsSocket = null;
@@ -354,5 +466,7 @@ class WebSocketService {
     _locationSocket = null;
     _chatMessageListeners.clear();
     _botTypingListeners.clear();
+    _messagesReadListeners.clear();
+    _slotUpdatedListeners.clear();
   }
 }
