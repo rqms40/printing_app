@@ -74,6 +74,14 @@ class OrderCheckoutNotifier extends StateNotifier<OrderCheckoutState> {
     );
   }
 
+  void renameGroup(String groupId, String label) {
+    state = state.copyWith(
+      groups: state.groups
+          .map((g) => g.id == groupId ? g.copyWith(label: label) : g)
+          .toList(),
+    );
+  }
+
   void selectSlot({required int templateId, required String date}) {
     state = state.copyWith(slotTemplateId: templateId, slotDate: date);
   }
