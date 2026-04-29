@@ -58,6 +58,43 @@ export class BatchOrder {
   @JoinColumn({ name: 'delivery_address_id' })
   deliveryAddress: Address;
 
+  @Column({
+    name: 'delivery_type',
+    type: 'varchar',
+    length: 20,
+    default: 'local',
+  })
+  deliveryType: 'local' | 'external';
+
+  @Column({ name: 'slot_booking_id', type: 'int', nullable: true })
+  slotBookingId: number | null;
+
+  @Column({
+    name: 'priority_fee',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    default: 0,
+  })
+  priorityFee: number;
+
+  @Column({
+    name: 'extra_destination_fee',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    default: 0,
+  })
+  extraDestinationFee: number;
+
+  @Column({
+    name: 'external_delivery_status',
+    type: 'varchar',
+    length: 30,
+    nullable: true,
+  })
+  externalDeliveryStatus: 'pending_admin' | 'booked' | 'delivered' | null;
+
   @OneToMany(() => Order, (order) => order.batchOrder)
   orders: Order[];
 
