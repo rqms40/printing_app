@@ -8,6 +8,7 @@ import { PaperSpec } from './entities/paper-specs.entity';
 import { ThreeDSpec } from './entities/three-d-specs.entity';
 import { OrderStatusHistory } from './entities/order-status-history.entity';
 import { OrderItem } from './entities/order-item.entity';
+import { DeliveryDestination } from './entities/delivery-destination.entity';
 import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
 import { OrdersGateway } from './orders.gateway';
@@ -17,6 +18,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { FilesModule } from '../files/files.module';
 import { DeliveryAssignment } from '../drivers/entities/delivery-assignment.entity';
 import { Address } from '../addresses/entities/address.entity';
+import { DeliverySlotsModule } from '../delivery-slots/delivery-slots.module';
 
 @Module({
   imports: [
@@ -29,6 +31,7 @@ import { Address } from '../addresses/entities/address.entity';
       OrderItem,
       DeliveryAssignment,
       Address,
+      DeliveryDestination,
     ]),
     JwtModule.registerAsync({
       inject: [ConfigService],
@@ -41,6 +44,7 @@ import { Address } from '../addresses/entities/address.entity';
     CreditsModule,
     NotificationsModule,
     FilesModule,
+    DeliverySlotsModule,
   ],
   providers: [OrdersService, OrdersGateway],
   controllers: [OrdersController],

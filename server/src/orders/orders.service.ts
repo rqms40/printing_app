@@ -6,6 +6,7 @@ import { BatchOrder } from './entities/batch-order.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { PaperSpec } from './entities/paper-specs.entity';
 import { ThreeDSpec } from './entities/three-d-specs.entity';
+import { DeliveryDestination } from './entities/delivery-destination.entity';
 import {
   DeliveryAssignment,
   DeliveryStatus,
@@ -18,6 +19,9 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { FilesService } from '../files/files.service';
 import { CreateBatchOrderDto } from './dto/create-order.dto';
 import { Address } from '../addresses/entities/address.entity';
+import { DeliverySlotsService } from '../delivery-slots/delivery-slots.service';
+import { DeliverySettingsService } from '../delivery-slots/delivery-settings.service';
+import { DeliverySlotsGateway } from '../delivery-slots/delivery-slots.gateway';
 
 @Injectable()
 export class OrdersService {
@@ -34,6 +38,8 @@ export class OrdersService {
     private deliveryAssignmentRepo: Repository<DeliveryAssignment>,
     @InjectRepository(Address)
     private addressRepo: Repository<Address>,
+    @InjectRepository(DeliveryDestination)
+    private deliveryDestinationRepo: Repository<DeliveryDestination>,
     private ordersGateway: OrdersGateway,
     private firebaseService: FirebaseService,
     private usersService: UsersService,
@@ -41,6 +47,9 @@ export class OrdersService {
     private notificationsService: NotificationsService,
     private filesService: FilesService,
     private dataSource: DataSource,
+    private slotsService: DeliverySlotsService,
+    private settingsService: DeliverySettingsService,
+    private slotsGateway: DeliverySlotsGateway,
   ) {}
 
   async findByUser(userId: number): Promise<Order[]> {
@@ -194,7 +203,6 @@ export class OrdersService {
       0,
     );
     const deliveryFee = Number(dto.deliveryFee ?? 0);
-    const totalPrice = subtotal + deliveryFee;
     const deliveryAddressId =
       dto.deliveryAddressId == null ? undefined : Number(dto.deliveryAddressId);
     const validatedDeliveryAddressId =
@@ -202,12 +210,36 @@ export class OrdersService {
         ? undefined
         : await this.validateDeliveryAddress(deliveryAddressId, userId);
 
+    // --- Destination resolution ---
+    const destinations = dto.destinations ?? [];
+    let deliveryType: 'local' | 'external' = 'local';
+
+    for (const dest of destinations) {
+      const addr = await this.addressRepo.findOne({ where: { id: dest.addressId } });
+      const inside = await this.settingsService.isInsideServiceArea(
+        addr ? Number(addr.latitude) : null,
+        addr ? Number(addr.longitude) : null,
+      );
+      if (!inside) {
+        deliveryType = 'external';
+        break;
+      }
+    }
+
+    // --- Fee computation ---
+    const settings = await this.settingsService.getSettings();
+    const priorityFee = dto.priority ? Number(settings.priorityFeeAmount) : 0;
+    const extraDestCount = Math.max(0, destinations.length - 1);
+    const extraDestinationFee = extraDestCount * Number(settings.extraDestinationSurcharge);
+    const totalPrice = subtotal + deliveryFee + priorityFee + extraDestinationFee;
+
     const orders = await this.dataSource.transaction(async (manager) => {
       const batchOrdersRepo = manager.getRepository(BatchOrder);
       const txOrdersRepo = manager.getRepository(Order);
       const txOrderItemsRepo = manager.getRepository(OrderItem);
       const txPaperSpecsRepo = manager.getRepository(PaperSpec);
       const txThreeDSpecsRepo = manager.getRepository(ThreeDSpec);
+      const txDestinationRepo = manager.getRepository(DeliveryDestination);
 
       const batchCount = await batchOrdersRepo.count();
       const batchRef = `BATCH-${(10001 + batchCount).toString().padStart(5, '0')}`;
@@ -224,9 +256,50 @@ export class OrdersService {
       });
       const savedBatch = await batchOrdersRepo.save(batch);
 
+      // --- Persist new fields on batch ---
+      savedBatch.deliveryType = deliveryType;
+      savedBatch.priorityFee = priorityFee;
+      savedBatch.extraDestinationFee = extraDestinationFee;
+      savedBatch.externalDeliveryStatus =
+        deliveryType === 'external' ? 'pending_admin' : null;
+      savedBatch.slotBookingId = null;
+      await batchOrdersRepo.save(savedBatch);
+
+      // --- Insert DeliveryDestination rows ---
+      const savedDestinations: DeliveryDestination[] = [];
+      for (let i = 0; i < destinations.length; i++) {
+        const dest = destinations[i];
+        const destEntity = txDestinationRepo.create({
+          batchOrderId: savedBatch.id,
+          addressId: dest.addressId,
+          label: dest.label ?? null,
+          sortOrder: i,
+        });
+        const savedDest = await txDestinationRepo.save(destEntity);
+        savedDestinations.push(savedDest);
+      }
+
+      // --- Book slot if local ---
+      if (
+        deliveryType === 'local' &&
+        dto.slotTemplateId != null &&
+        dto.slotDate != null
+      ) {
+        const booking = await this.slotsService.bookSlot(manager, {
+          slotTemplateId: dto.slotTemplateId,
+          date: dto.slotDate,
+          batchOrderId: savedBatch.id,
+          priority: dto.priority ?? false,
+        });
+        savedBatch.slotBookingId = booking.id;
+        await batchOrdersRepo.save(savedBatch);
+      }
+
       const orderCount = await txOrdersRepo.count();
       const orderId = `ORD-${(10001 + orderCount).toString().padStart(5, '0')}`;
       const firstItem = normalizedItems[0];
+      // For the aggregate order, wire it to the first item's destination (if any)
+      const firstDestId = savedDestinations[normalizedItems[0]?.destinationIndex ?? 0]?.id ?? null;
       const aggregateOrder = txOrdersRepo.create({
         userId,
         orderId,
@@ -248,6 +321,7 @@ export class OrdersService {
             ? (firstItem.fileMetadataId ?? null)
             : null,
         batchOrderId: savedBatch.id,
+        destinationId: firstDestId,
       } as Partial<Order>);
       const savedOrder = await txOrdersRepo.save(aggregateOrder);
 
@@ -265,7 +339,6 @@ export class OrdersService {
         );
         if (item.paperSpecs) {
           const spec = txPaperSpecsRepo.create({
-            orderId: savedOrder.id,
             orderItemId: savedItem.id,
             ...item.paperSpecs,
           });
@@ -304,6 +377,19 @@ export class OrdersService {
 
       return { batchRef: savedBatch.batchRef, orders: [orderWithItems] };
     });
+
+    // --- After transaction: emit WS event if local ---
+    if (deliveryType === 'local' && dto.slotDate != null && dto.slotTemplateId != null) {
+      const counts = await this.slotsService.getAvailability(dto.slotDate);
+      const updated = counts.find((c) => c.templateId === dto.slotTemplateId);
+      if (updated) {
+        this.slotsGateway.notifySlotUpdated({
+          templateId: updated.templateId,
+          date: dto.slotDate,
+          bookedCount: updated.bookedCount,
+        });
+      }
+    }
 
     for (const order of orders.orders) {
       await this.notifyOrderPlaced(order);

@@ -14,8 +14,8 @@ export class PaperSpec {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ name: 'order_id' })
-  orderId: number;
+  @Column({ name: 'order_id', nullable: true })
+  orderId: number | null;
 
   @OneToOne(() => Order, (o) => o.paperSpec)
   @JoinColumn({ name: 'order_id' })
@@ -46,6 +46,6 @@ export class PaperSpec {
   @Column({ length: 30, default: 'none' })
   binding: string;
 
-  @Column({ name: 'print_mode', length: 20, nullable: true, default: 'fitToPage' })
+  @Column({ name: 'print_mode', type: 'varchar', length: 20, nullable: true, default: 'fitToPage' })
   printMode: PrintMode | null;
 }

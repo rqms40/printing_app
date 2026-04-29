@@ -17,6 +17,10 @@ import {
   DeliveryStatus,
 } from '../drivers/entities/delivery-assignment.entity';
 import { Address } from '../addresses/entities/address.entity';
+import { DeliveryDestination } from './entities/delivery-destination.entity';
+import { DeliverySlotsService } from '../delivery-slots/delivery-slots.service';
+import { DeliverySettingsService } from '../delivery-slots/delivery-settings.service';
+import { DeliverySlotsGateway } from '../delivery-slots/delivery-slots.gateway';
 
 describe('OrdersService', () => {
   let service: OrdersService;
@@ -112,6 +116,8 @@ describe('OrdersService', () => {
             if (entity?.name === 'PaperSpec') return paperSpecsRepo;
             if (entity?.name === 'ThreeDSpec') return threeDSpecsRepo;
             if (entity?.name === 'BatchOrder') return batchRepo;
+            if (entity?.name === 'DeliveryDestination')
+              return { create: jest.fn((d) => d), save: jest.fn(async (d) => ({ id: 1, ...d })) };
             throw new Error(`Unexpected repository ${entity?.name}`);
           },
         }),
@@ -131,6 +137,10 @@ describe('OrdersService', () => {
           useValue: assignmentRepo,
         },
         { provide: getRepositoryToken(Address), useValue: addressRepo },
+        {
+          provide: getRepositoryToken(DeliveryDestination),
+          useValue: { create: jest.fn((d) => d), save: jest.fn(async (d) => ({ id: 1, ...d })) },
+        },
         { provide: OrdersGateway, useValue: gateway },
         { provide: FirebaseService, useValue: firebaseService },
         { provide: UsersService, useValue: usersService },
@@ -138,6 +148,27 @@ describe('OrdersService', () => {
         { provide: NotificationsService, useValue: notificationsService },
         { provide: FilesService, useValue: { stampExpiry: jest.fn() } },
         { provide: DataSource, useValue: dataSource },
+        {
+          provide: DeliverySlotsService,
+          useValue: {
+            bookSlot: jest.fn().mockResolvedValue({ id: 1 }),
+            getAvailability: jest.fn().mockResolvedValue([]),
+          },
+        },
+        {
+          provide: DeliverySettingsService,
+          useValue: {
+            isInsideServiceArea: jest.fn().mockResolvedValue(true),
+            getSettings: jest.fn().mockResolvedValue({
+              priorityFeeAmount: 50,
+              extraDestinationSurcharge: 30,
+            }),
+          },
+        },
+        {
+          provide: DeliverySlotsGateway,
+          useValue: { notifySlotUpdated: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -307,7 +338,8 @@ describe('OrdersService', () => {
     it('saves one BatchOrder, one aggregate Order, and two OrderItem records', async () => {
       const result = await (service as any).createBatch(1, batchDto);
 
-      expect(batchRepo.save).toHaveBeenCalledTimes(1);
+      // Two saves: initial creation, then updating deliveryType/fees fields
+      expect(batchRepo.save).toHaveBeenCalledTimes(2);
       expect(batchRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 1,
@@ -666,6 +698,31 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         { provide: NotificationsService, useValue: mockNotifications },
         { provide: FilesService, useValue: mockFilesService },
         { provide: DataSource, useValue: { transaction: jest.fn() } },
+        {
+          provide: getRepositoryToken(DeliveryDestination),
+          useValue: { create: jest.fn(), save: jest.fn() },
+        },
+        {
+          provide: DeliverySlotsService,
+          useValue: {
+            bookSlot: jest.fn().mockResolvedValue({ id: 1 }),
+            getAvailability: jest.fn().mockResolvedValue([]),
+          },
+        },
+        {
+          provide: DeliverySettingsService,
+          useValue: {
+            isInsideServiceArea: jest.fn().mockResolvedValue(true),
+            getSettings: jest.fn().mockResolvedValue({
+              priorityFeeAmount: 50,
+              extraDestinationSurcharge: 30,
+            }),
+          },
+        },
+        {
+          provide: DeliverySlotsGateway,
+          useValue: { notifySlotUpdated: jest.fn() },
+        },
       ],
     }).compile();
     service = module.get<OrdersService>(OrdersService);
@@ -735,5 +792,274 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
     await service.updateStatus(1, 'delivered');
 
     expect(mockFilesService.stampExpiry).toHaveBeenCalledWith(5, 7);
+  });
+});
+
+describe('createBatch with slot + destinations', () => {
+  let service: OrdersService;
+
+  // Repos
+  let batchRepo: jest.Mocked<Partial<Repository<any>>>;
+  let ordersRepo: jest.Mocked<Partial<Repository<Order>>>;
+  let orderItemsRepo: jest.Mocked<Partial<Repository<OrderItem>>>;
+  let paperSpecsRepo: jest.Mocked<Partial<Repository<PaperSpec>>>;
+  let threeDSpecsRepo: jest.Mocked<Partial<Repository<ThreeDSpec>>>;
+  let assignmentRepo: jest.Mocked<Partial<Repository<DeliveryAssignment>>>;
+  let addressRepo: jest.Mocked<Partial<Repository<Address>>>;
+  let destinationRepo: jest.Mocked<Partial<Repository<DeliveryDestination>>>;
+
+  // Services / gateway
+  let slotsService: jest.Mocked<Partial<DeliverySlotsService>>;
+  let settingsService: jest.Mocked<Partial<DeliverySettingsService>>;
+  let slotsGateway: jest.Mocked<Partial<DeliverySlotsGateway>>;
+  let dataSource: Partial<DataSource>;
+
+  // Saved batch reference captured during each test
+  let capturedBatch: any;
+
+  const makeItem = (overrides: Record<string, any> = {}) => ({
+    category: 'paper',
+    quantity: 1,
+    totalPrice: 100,
+    fileName: 'file.pdf',
+    fileUrl: 'https://cdn/file.pdf',
+    ...overrides,
+  });
+
+  const makeAddress = (id: number, lat: number, lng: number): Address =>
+    ({ id, userId: 1, latitude: lat, longitude: lng } as unknown as Address);
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    capturedBatch = null;
+
+    batchRepo = {
+      count: jest.fn().mockResolvedValue(0),
+      create: jest.fn().mockImplementation((data) => ({
+        id: 77,
+        batchRef: 'BATCH-10001',
+        ...data,
+      })),
+      save: jest.fn().mockImplementation(async (b) => {
+        capturedBatch = { ...b };
+        return capturedBatch;
+      }),
+    };
+
+    ordersRepo = {
+      count: jest.fn().mockResolvedValue(0),
+      create: jest.fn().mockImplementation((data) => data as Order),
+      save: jest.fn().mockImplementation(async (o) => ({ id: 1, ...o })),
+      findOneOrFail: jest.fn().mockImplementation(async () => ({
+        id: 1,
+        orderId: 'ORD-10001',
+        category: 'batch',
+        items: [],
+      })),
+    };
+
+    orderItemsRepo = {
+      create: jest.fn().mockImplementation((data) => data as OrderItem),
+      save: jest.fn().mockImplementation(async (item) => ({ id: 1, ...item })),
+    };
+
+    paperSpecsRepo = {
+      create: jest.fn().mockImplementation((data) => data as PaperSpec),
+      save: jest.fn().mockResolvedValue({} as PaperSpec),
+    };
+
+    threeDSpecsRepo = {
+      create: jest.fn().mockImplementation((data) => data as ThreeDSpec),
+      save: jest.fn().mockResolvedValue({} as ThreeDSpec),
+    };
+
+    assignmentRepo = { find: jest.fn().mockResolvedValue([]) };
+
+    addressRepo = {
+      findOne: jest.fn().mockImplementation(async ({ where }: any) =>
+        makeAddress(where.id, 7.07, 125.61),
+      ),
+    };
+
+    destinationRepo = {
+      create: jest.fn().mockImplementation((data) => data as DeliveryDestination),
+      save: jest.fn().mockImplementation(async (d) => ({ id: 200, ...d })),
+    };
+
+    slotsService = {
+      bookSlot: jest.fn().mockResolvedValue({ id: 99 }),
+      getAvailability: jest.fn().mockResolvedValue([]),
+    };
+
+    settingsService = {
+      isInsideServiceArea: jest.fn().mockResolvedValue(true),
+      getSettings: jest.fn().mockResolvedValue({
+        priorityFeeAmount: 50,
+        extraDestinationSurcharge: 30,
+      }),
+    };
+
+    slotsGateway = {
+      notifySlotUpdated: jest.fn(),
+    };
+
+    dataSource = {
+      transaction: jest.fn(async (cb) =>
+        cb({
+          getRepository: (entity: { name?: string }) => {
+            if (entity?.name === 'Order') return ordersRepo;
+            if (entity?.name === 'OrderItem') return orderItemsRepo;
+            if (entity?.name === 'PaperSpec') return paperSpecsRepo;
+            if (entity?.name === 'ThreeDSpec') return threeDSpecsRepo;
+            if (entity?.name === 'BatchOrder') return batchRepo;
+            if (entity?.name === 'DeliveryDestination') return destinationRepo;
+            throw new Error(`Unexpected repo: ${entity?.name}`);
+          },
+        }),
+      ),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        OrdersService,
+        { provide: getRepositoryToken(Order), useValue: ordersRepo },
+        { provide: getRepositoryToken(OrderItem), useValue: orderItemsRepo },
+        { provide: getRepositoryToken('BatchOrder'), useValue: batchRepo },
+        { provide: getRepositoryToken(PaperSpec), useValue: paperSpecsRepo },
+        { provide: getRepositoryToken(ThreeDSpec), useValue: threeDSpecsRepo },
+        {
+          provide: getRepositoryToken(DeliveryAssignment),
+          useValue: assignmentRepo,
+        },
+        { provide: getRepositoryToken(Address), useValue: addressRepo },
+        {
+          provide: getRepositoryToken(DeliveryDestination),
+          useValue: destinationRepo,
+        },
+        { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
+        {
+          provide: FirebaseService,
+          useValue: { sendToDevice: jest.fn(), isAvailable: false },
+        },
+        {
+          provide: UsersService,
+          useValue: { getFcmToken: jest.fn().mockResolvedValue(null) },
+        },
+        {
+          provide: CreditsService,
+          useValue: {
+            subtractCredits: jest.fn().mockResolvedValue(undefined),
+            refundCredits: jest.fn(),
+          },
+        },
+        {
+          provide: NotificationsService,
+          useValue: { createForAllAdmins: jest.fn().mockResolvedValue(undefined) },
+        },
+        { provide: FilesService, useValue: { stampExpiry: jest.fn() } },
+        { provide: DataSource, useValue: dataSource },
+        { provide: DeliverySlotsService, useValue: slotsService },
+        { provide: DeliverySettingsService, useValue: settingsService },
+        { provide: DeliverySlotsGateway, useValue: slotsGateway },
+      ],
+    }).compile();
+
+    service = module.get(OrdersService);
+  });
+
+  it('marks deliveryType=external when any destination is out of radius', async () => {
+    // Address 10 inside, address 11 outside
+    addressRepo.findOne.mockImplementation(async ({ where }: any) => {
+      if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address; // deliveryAddress validation
+      return makeAddress(where.id, 7.07, 125.61);
+    });
+    settingsService.isInsideServiceArea
+      .mockResolvedValueOnce(true)   // destination[0] inside
+      .mockResolvedValueOnce(false); // destination[1] outside
+
+    const dto = {
+      paymentMethod: 'gcash',
+      deliveryOption: 'delivery',
+      deliveryAddressId: 9,
+      slotTemplateId: 1,
+      slotDate: '2026-05-01',
+      destinations: [
+        { addressId: 10, label: 'Home' },
+        { addressId: 11, label: 'Office' },
+      ],
+      items: [makeItem({ destinationIndex: 0 }), makeItem({ destinationIndex: 1 })],
+    };
+
+    await (service as any).createBatch(1, dto);
+
+    expect(capturedBatch.deliveryType).toBe('external');
+    expect(capturedBatch.slotBookingId).toBeNull();
+    expect(capturedBatch.externalDeliveryStatus).toBe('pending_admin');
+    // bookSlot should NOT have been called
+    expect(slotsService.bookSlot).not.toHaveBeenCalled();
+  });
+
+  it('books a slot when all destinations are inside radius', async () => {
+    addressRepo.findOne.mockImplementation(async ({ where }: any) => {
+      if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address;
+      return makeAddress(where.id, 7.07, 125.61);
+    });
+    settingsService.isInsideServiceArea.mockResolvedValue(true);
+    slotsService.bookSlot.mockResolvedValue({ id: 99 } as any);
+
+    const dto = {
+      paymentMethod: 'gcash',
+      deliveryOption: 'delivery',
+      deliveryAddressId: 9,
+      slotTemplateId: 1,
+      slotDate: '2026-05-01',
+      destinations: [{ addressId: 10, label: 'Home' }],
+      items: [makeItem({ destinationIndex: 0 })],
+    };
+
+    await (service as any).createBatch(1, dto);
+
+    expect(capturedBatch.deliveryType).toBe('local');
+    expect(capturedBatch.slotBookingId).toBe(99);
+    expect(slotsService.bookSlot).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ slotTemplateId: 1, date: '2026-05-01', batchOrderId: 77 }),
+    );
+  });
+
+  it('computes priorityFee + extraDestinationFee correctly', async () => {
+    addressRepo.findOne.mockImplementation(async ({ where }: any) => {
+      if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address;
+      return makeAddress(where.id, 7.07, 125.61);
+    });
+    settingsService.isInsideServiceArea.mockResolvedValue(true);
+    settingsService.getSettings.mockResolvedValue({
+      priorityFeeAmount: 50,
+      extraDestinationSurcharge: 30,
+    } as any);
+
+    const dto = {
+      paymentMethod: 'gcash',
+      deliveryOption: 'delivery',
+      deliveryAddressId: 9,
+      slotTemplateId: 1,
+      slotDate: '2026-05-01',
+      priority: true,
+      destinations: [
+        { addressId: 10, label: 'A' },
+        { addressId: 11, label: 'B' },
+        { addressId: 12, label: 'C' },
+      ],
+      items: [
+        makeItem({ destinationIndex: 0 }),
+        makeItem({ destinationIndex: 1 }),
+        makeItem({ destinationIndex: 2 }),
+      ],
+    };
+
+    await (service as any).createBatch(1, dto);
+
+    expect(capturedBatch.priorityFee).toBe(50);
+    expect(capturedBatch.extraDestinationFee).toBe(60); // 2 extra * 30
   });
 });
