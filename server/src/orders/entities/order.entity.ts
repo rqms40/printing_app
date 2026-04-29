@@ -55,6 +55,9 @@ export class Order {
   @Column({ name: 'batch_order_id', nullable: true })
   batchOrderId: number;
 
+  @Column({ name: 'destination_id', type: 'int', nullable: true })
+  destinationId: number | null;
+
   @ManyToOne(() => BatchOrder, (batchOrder) => batchOrder.orders, {
     nullable: true,
     onDelete: 'SET NULL',

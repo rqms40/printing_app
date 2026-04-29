@@ -18,3 +18,15 @@ describe('BatchOrder entity metadata', () => {
     }
   });
 });
+
+import { Order } from './order.entity';
+
+describe('Order entity multi-destination', () => {
+  const cols = getMetadataArgsStorage()
+    .filterColumns(Order)
+    .map((c) => c.propertyName);
+
+  it('has destinationId column', () => {
+    expect(cols).toContain('destinationId');
+  });
+});
