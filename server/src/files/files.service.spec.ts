@@ -9,6 +9,7 @@ import {
 import { FilesService } from './files.service';
 import { FileMetadata } from './entities/file-metadata.entity';
 import { StorageService } from '../storage/storage.service';
+import { FileAnalysisService } from './file-analysis.service';
 
 const mockFileRepo = {
   create: jest.fn(),
@@ -24,6 +25,10 @@ const mockStorageService = {
   upload: jest.fn(),
   getPresignedUrl: jest.fn(),
   delete: jest.fn(),
+};
+
+const mockAnalysisService = {
+  analyze: jest.fn(),
 };
 
 const makeFile = (
@@ -42,7 +47,7 @@ const makeFile = (
   ...overrides,
 });
 
-const makeFileMeta = (overrides: Partial<FileMetadata> = {}) => ({
+const makeFileMeta = (overrides: Partial<FileMetadata> = {}): FileMetadata => ({
   id: 1,
   originalName: 'photo.jpg',
   mimeType: 'image/jpeg',
@@ -52,19 +57,28 @@ const makeFileMeta = (overrides: Partial<FileMetadata> = {}) => ({
   uploadedBy: 42,
   expiresAt: null,
   createdAt: new Date(),
+  widthPt: null,
+  heightPt: null,
+  widthPx: null,
+  heightPx: null,
+  colorSpace: null,
+  pageCount: null,
+  dpi: null,
   ...overrides,
-});
+} as FileMetadata);
 
 describe('FilesService', () => {
   let service: FilesService;
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockAnalysisService.analyze.mockResolvedValue(null);
     const module = await Test.createTestingModule({
       providers: [
         FilesService,
         { provide: getRepositoryToken(FileMetadata), useValue: mockFileRepo },
         { provide: StorageService, useValue: mockStorageService },
+        { provide: FileAnalysisService, useValue: mockAnalysisService },
       ],
     }).compile();
     service = module.get<FilesService>(FilesService);
@@ -102,6 +116,7 @@ describe('FilesService', () => {
         }),
       );
       expect(result).toEqual(savedMeta);
+      expect(mockAnalysisService.analyze).toHaveBeenCalledWith(file.buffer, file.mimetype);
     });
 
     it('throws BadRequestException for disallowed MIME type without calling StorageService', async () => {
@@ -129,6 +144,32 @@ describe('FilesService', () => {
         InternalServerErrorException,
       );
       expect(mockFileRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('persists analysis fields when analysis succeeds', async () => {
+      const file = makeFile();
+      const fakeUrl = 'http://localhost:9000/test.jpg';
+      const analysisResult = {
+        widthPt: null, heightPt: null,
+        widthPx: 1920, heightPx: 1080,
+        colorSpace: 'srgb', pageCount: null, dpi: 96,
+      };
+      mockStorageService.upload.mockResolvedValue(fakeUrl);
+      mockAnalysisService.analyze.mockResolvedValue(analysisResult);
+      const savedMeta = makeFileMeta({ url: fakeUrl, widthPx: 1920, heightPx: 1080, colorSpace: 'srgb', dpi: 96 });
+      mockFileRepo.create.mockReturnValue(savedMeta);
+      mockFileRepo.save.mockResolvedValue(savedMeta);
+
+      await service.storeMetadata(file, 42);
+
+      expect(mockFileRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          widthPx: 1920,
+          heightPx: 1080,
+          colorSpace: 'srgb',
+          dpi: 96,
+        }),
+      );
     });
   });
 

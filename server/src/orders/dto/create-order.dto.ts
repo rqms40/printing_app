@@ -3,11 +3,15 @@ import {
   IsNumber,
   IsOptional,
   IsBoolean,
+  IsIn,
   Min,
   ValidateNested,
+  IsArray,
+  ArrayMinSize,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { PrintMode } from '../print-mode.enum';
 
 export class PaperSpecsDto {
   @IsString() paperSize: string;
@@ -15,14 +19,23 @@ export class PaperSpecsDto {
   @IsString() mediaType: string;
   @IsString() printSides: string;
   @IsString() @IsOptional() binding?: string;
+  @IsOptional()
+  @IsIn(Object.values(PrintMode))
+  printMode?: PrintMode;
 }
 
 export class ThreeDSpecsDto {
   @IsString() fileFormat: string;
   @IsString() material: string;
   @IsString() color: string;
-  @IsNumber() infillPercentage: number;
-  @IsNumber() layerHeight: number;
+  @Type(() => Number)
+  @IsNumber()
+  infillPercentage: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  layerHeight: number;
+
   @IsBoolean() supports: boolean;
   @IsString() @IsOptional() notes?: string;
 }
@@ -33,15 +46,18 @@ export class CreateOrderDto {
   category: string;
 
   @ApiProperty({ example: 1 })
+  @Type(() => Number)
   @IsNumber()
   @Min(1)
   quantity: number;
 
   @ApiProperty({ example: 150.0 })
+  @Type(() => Number)
   @IsNumber()
   totalPrice: number;
 
   @ApiProperty({ example: 0 })
+  @Type(() => Number)
   @IsNumber()
   deliveryFee: number;
 
@@ -55,6 +71,12 @@ export class CreateOrderDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  deliveryAddressId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   fileName?: string;
 
@@ -65,6 +87,7 @@ export class CreateOrderDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   fileMetadataId?: number;
 
@@ -79,4 +102,82 @@ export class CreateOrderDto {
   @ValidateNested()
   @Type(() => ThreeDSpecsDto)
   threeDSpecs?: ThreeDSpecsDto;
+}
+
+export class CreateBatchOrderItemDto {
+  @ApiProperty({ example: 'paper', enum: ['paper', '3d'] })
+  @IsString()
+  category: string;
+
+  @ApiProperty({ example: 1 })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  quantity: number;
+
+  @ApiProperty({ example: 150.0 })
+  @Type(() => Number)
+  @IsNumber()
+  totalPrice: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  fileName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  fileUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  fileMetadataId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PaperSpecsDto)
+  paperSpecs?: PaperSpecsDto;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ThreeDSpecsDto)
+  threeDSpecs?: ThreeDSpecsDto;
+}
+
+export class CreateBatchOrderDto {
+  @ApiProperty({ type: [CreateBatchOrderItemDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => CreateBatchOrderItemDto)
+  items: CreateBatchOrderItemDto[];
+
+  @ApiProperty({ example: 0 })
+  @Type(() => Number)
+  @IsNumber()
+  deliveryFee: number;
+
+  @ApiProperty({ example: 'gcash', enum: ['gcash', 'maya', 'cod'] })
+  @IsString()
+  paymentMethod: string;
+
+  @ApiPropertyOptional({ example: 'pending' })
+  @IsOptional()
+  @IsString()
+  paymentStatus?: string;
+
+  @ApiProperty({ example: 'delivery', enum: ['pickup', 'delivery'] })
+  @IsString()
+  deliveryOption: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  deliveryAddressId?: number;
 }

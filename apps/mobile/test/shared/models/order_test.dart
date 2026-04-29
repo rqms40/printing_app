@@ -13,6 +13,8 @@ void main() {
       id: 'test_001',
       orderId: 'ORD-99999',
       userId: 'usr_001',
+      batchOrderId: '77',
+      batchId: 'BATCH-10001',
       category: 'Poster',
       fileUrl: 'https://example.com/file.pdf',
       fileName: 'file.pdf',
@@ -33,15 +35,40 @@ void main() {
       deliveryAddressId: 'addr_001',
       createdAt: now,
       updatedAt: now,
+      items: [
+        const OrderLineItem(
+          id: 'test_001',
+          orderId: 'ORD-99999',
+          category: 'paper',
+          fileName: 'file.pdf',
+          quantity: 5,
+          totalPrice: 750.0,
+        ),
+        const OrderLineItem(
+          id: 'test_002',
+          orderId: 'ORD-10000',
+          category: '3d',
+          fileName: 'part.stl',
+          quantity: 1,
+          totalPrice: 300.0,
+        ),
+      ],
     );
 
     test('creates with required fields', () {
       expect(sampleOrder.id, 'test_001');
       expect(sampleOrder.orderId, 'ORD-99999');
+      expect(sampleOrder.batchId, 'BATCH-10001');
       expect(sampleOrder.category, 'Poster');
       expect(sampleOrder.quantity, 5);
       expect(sampleOrder.totalPrice, 750.0);
       expect(sampleOrder.orderStatus, OrderStatus.orderPlaced);
+      expect(sampleOrder.isBatchOrder, isTrue);
+      expect(sampleOrder.itemCount, 2);
+      expect(sampleOrder.hasMixedItemTypes, isTrue);
+      expect(sampleOrder.orderTypeShortLabel, 'Mixed');
+      expect(sampleOrder.orderTypeLabel, 'Mixed Printing');
+      expect(sampleOrder.itemSummary, 'file.pdf + part.stl');
     });
 
     test('optional fields default to null', () {
@@ -68,6 +95,8 @@ void main() {
       expect(minimalOrder.declineReason, isNull);
       expect(minimalOrder.assignedDriverId, isNull);
       expect(minimalOrder.deliveryAssignmentId, isNull);
+      expect(minimalOrder.lineItems.single.category, 'paper');
+      expect(minimalOrder.orderTypeLabel, 'Paper Printing');
     });
 
     test('copyWith updates specified fields only', () {
@@ -83,6 +112,8 @@ void main() {
       // Unchanged fields remain the same
       expect(updated.id, sampleOrder.id);
       expect(updated.orderId, sampleOrder.orderId);
+      expect(updated.batchId, sampleOrder.batchId);
+      expect(updated.items, sampleOrder.items);
       expect(updated.totalPrice, sampleOrder.totalPrice);
       expect(updated.paymentMethod, sampleOrder.paymentMethod);
     });

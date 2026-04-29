@@ -247,16 +247,35 @@ export class AdminController {
     for (const order of orders) {
       if (
         order.createdAt < earliestBucket ||
-        order.category !== 'paper' ||
-        !order.paperSpec ||
         order.orderStatus === OrderStatus.CANCELLED ||
         order.orderStatus === OrderStatus.FILE_DECLINED
       ) {
         continue;
       }
 
-      const paperSize = order.paperSpec.paperSize.toUpperCase();
-      totals.set(paperSize, (totals.get(paperSize) ?? 0) + 1);
+      const paperItems =
+        order.items?.filter(
+          (item) => item.category === 'paper' && item.paperSpec,
+        ) ?? [];
+
+      if (paperItems.length > 0) {
+        for (const item of paperItems) {
+          const paperSize = item.paperSpec!.paperSize.toUpperCase();
+          totals.set(
+            paperSize,
+            (totals.get(paperSize) ?? 0) + (item.quantity ?? 1),
+          );
+        }
+        continue;
+      }
+
+      if (order.category === 'paper' && order.paperSpec) {
+        const paperSize = order.paperSpec.paperSize.toUpperCase();
+        totals.set(
+          paperSize,
+          (totals.get(paperSize) ?? 0) + (order.quantity ?? 1),
+        );
+      }
     }
 
     return Array.from(totals.entries())
@@ -279,7 +298,7 @@ export class AdminController {
 
   private async getAnalyticsOrders() {
     return this.ordersRepo.find({
-      relations: ['paperSpec'],
+      relations: ['paperSpec', 'items', 'items.paperSpec'],
     });
   }
 
@@ -325,6 +344,36 @@ export class AdminController {
             notes: o.threeDSpec.notes ?? null,
           }
         : null,
+      items: (o.items ?? []).map((item) => ({
+        id: item.id,
+        order_id: item.orderId,
+        category: item.category,
+        file_url: item.fileUrl ?? null,
+        file_name: item.fileName ?? null,
+        file_metadata_id: item.fileMetadataId ?? null,
+        quantity: item.quantity,
+        total_price: Number(item.totalPrice),
+        paper_specs: item.paperSpec
+          ? {
+              paper_size: item.paperSpec.paperSize,
+              color_mode: item.paperSpec.colorMode,
+              media_type: item.paperSpec.mediaType,
+              print_sides: item.paperSpec.printSides,
+              binding: item.paperSpec.binding,
+            }
+          : null,
+        three_d_specs: item.threeDSpec
+          ? {
+              file_format: item.threeDSpec.fileFormat,
+              material: item.threeDSpec.material,
+              color: item.threeDSpec.color,
+              infill_percentage: item.threeDSpec.infillPercentage,
+              layer_height: Number(item.threeDSpec.layerHeight),
+              supports: item.threeDSpec.supports,
+              notes: item.threeDSpec.notes ?? null,
+            }
+          : null,
+      })),
       status_history: (o.statusHistory ?? []).map((h) => ({
         id: h.id,
         order_id: h.orderId,
@@ -398,7 +447,14 @@ export class AdminController {
   async getAllOrders() {
     const orders = await this.ordersRepo.find({
       order: { createdAt: 'DESC' },
-      relations: ['paperSpec', 'threeDSpec', 'user'],
+      relations: [
+        'paperSpec',
+        'threeDSpec',
+        'items',
+        'items.paperSpec',
+        'items.threeDSpec',
+        'user',
+      ],
     });
     return orders.map((o) => this.mapOrder(o));
   }
@@ -408,7 +464,15 @@ export class AdminController {
   async getOrder(@Param('id', ParseIntPipe) id: number) {
     const order = await this.ordersRepo.findOneOrFail({
       where: { id },
-      relations: ['paperSpec', 'threeDSpec', 'statusHistory', 'user'],
+      relations: [
+        'paperSpec',
+        'threeDSpec',
+        'items',
+        'items.paperSpec',
+        'items.threeDSpec',
+        'statusHistory',
+        'user',
+      ],
     });
     return this.mapOrder(order);
   }

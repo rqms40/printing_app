@@ -15,7 +15,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { OrdersService } from './orders.service';
-import { CreateOrderDto } from './dto/create-order.dto';
+import { CreateBatchOrderDto, CreateOrderDto } from './dto/create-order.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
 
@@ -44,6 +44,14 @@ export class OrdersController {
   @Post()
   createOrder(@Request() req: RequestWithUser, @Body() dto: CreateOrderDto) {
     return this.ordersService.create({ ...dto, userId: req.user.sub });
+  }
+
+  @Post('batch')
+  createBatchOrder(
+    @Request() req: RequestWithUser,
+    @Body() dto: CreateBatchOrderDto,
+  ) {
+    return this.ordersService.createBatch(req.user.sub, dto);
   }
 
   @Patch(':id/cancel')

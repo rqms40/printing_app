@@ -12,6 +12,7 @@ import { extname } from 'path';
 import { randomUUID } from 'crypto';
 import { FileMetadata } from './entities/file-metadata.entity';
 import { StorageService } from '../storage/storage.service';
+import { FileAnalysisService } from './file-analysis.service';
 import {
   ALLOWED_MIME_TYPES,
   MAX_FILE_SIZE_BYTES,
@@ -25,6 +26,7 @@ export class FilesService {
     @InjectRepository(FileMetadata)
     private readonly fileRepo: Repository<FileMetadata>,
     private readonly storageService: StorageService,
+    private readonly analysisService: FileAnalysisService,
   ) {}
 
   async storeMetadata(
@@ -56,6 +58,11 @@ export class FilesService {
       throw new InternalServerErrorException('File upload failed');
     }
 
+    const analysis = await this.analysisService.analyze(
+      file.buffer,
+      file.mimetype,
+    );
+
     const meta = this.fileRepo.create({
       originalName: file.originalname,
       mimeType: file.mimetype,
@@ -63,6 +70,13 @@ export class FilesService {
       url,
       objectKey,
       uploadedBy,
+      widthPt: analysis?.widthPt ?? null,
+      heightPt: analysis?.heightPt ?? null,
+      widthPx: analysis?.widthPx ?? null,
+      heightPx: analysis?.heightPx ?? null,
+      colorSpace: analysis?.colorSpace ?? null,
+      pageCount: analysis?.pageCount ?? null,
+      dpi: analysis?.dpi ?? null,
     });
     return this.fileRepo.save(meta);
   }

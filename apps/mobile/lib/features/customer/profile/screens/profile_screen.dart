@@ -226,6 +226,8 @@ class _ProfileTab extends ConsumerWidget {
             },
             colors: colors,
           ),
+          _Divider(colors: colors),
+          _PrintModeRow(colors: colors),
 
           const SizedBox(height: AppSpacing.lg),
 
@@ -415,6 +417,96 @@ class _MenuToggleRow extends StatelessWidget {
             value: value,
             onChanged: onChanged,
             activeThumbColor: colors.accent,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Stateful row that controls the Default Print Mode preference.
+class _PrintModeRow extends StatefulWidget {
+  const _PrintModeRow({required this.colors});
+
+  final AppColorSet colors;
+
+  @override
+  State<_PrintModeRow> createState() => _PrintModeRowState();
+}
+
+class _PrintModeRowState extends State<_PrintModeRow> {
+  String _printMode = 'fitToPage';
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrintMode();
+  }
+
+  Future<void> _loadPrintMode() async {
+    try {
+      final response = await ApiClient.instance.get('/users/profile');
+      final data = response.data as Map<String, dynamic>;
+      final mode = (data['defaultPrintMode'] as String?) ?? 'fitToPage';
+      if (mounted) setState(() { _printMode = mode; _loaded = true; });
+    } catch (_) {
+      if (mounted) setState(() => _loaded = true);
+    }
+  }
+
+  Future<void> _updatePrintMode(String mode) async {
+    final previous = _printMode;
+    setState(() => _printMode = mode);
+    try {
+      await ApiClient.instance.put('/users/profile', data: {'defaultPrintMode': mode});
+    } catch (_) {
+      if (mounted) {
+        setState(() => _printMode = previous);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to save print mode preference')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xl,
+        vertical: AppSpacing.md,
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.fit_screen_outlined, size: 20, color: widget.colors.onSurface),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Default Print Mode',
+                  style: AppTypography.body.copyWith(color: widget.colors.onSurface),
+                ),
+                Text(
+                  _printMode == 'fitToPage' ? 'Fit to paper' : 'Actual size',
+                  style: AppTypography.caption.copyWith(color: widget.colors.onSurfaceDim),
+                ),
+              ],
+            ),
+          ),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'fitToPage', label: Text('Fit')),
+              ButtonSegment(value: 'actualSize', label: Text('Actual')),
+            ],
+            selected: {_printMode},
+            onSelectionChanged: (val) => _updatePrintMode(val.first),
+            style: ButtonStyle(
+              visualDensity: VisualDensity.compact,
+            ),
           ),
         ],
       ),

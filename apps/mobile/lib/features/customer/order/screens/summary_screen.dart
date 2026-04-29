@@ -6,6 +6,7 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:go_router/go_router.dart';
+import 'package:printing_app/features/customer/cart/providers/cart_provider.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/price_breakdown.dart';
 import 'package:printing_app/shared/models/enums.dart';
@@ -48,56 +49,120 @@ class SummaryScreen extends ConsumerWidget {
           children: [
             Expanded(
               child: ListView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                 children: [
                   const SizedBox(height: AppSpacing.md),
                   const StepIndicator(totalSteps: 6, currentStep: 3),
                   const SizedBox(height: AppSpacing.xl),
                   Text(
-                    'Order Summary',
-                    style:
-                        AppTypography.h1.copyWith(color: colors.onBackground),
-                  ).animate()
-                    .fadeIn(duration: 400.ms, curve: Curves.easeOut)
-                    .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
+                        'Order Summary',
+                        style: AppTypography.h1.copyWith(
+                          color: colors.onBackground,
+                        ),
+                      )
+                      .animate()
+                      .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                      .slideY(
+                        begin: 0.03,
+                        duration: 400.ms,
+                        curve: Curves.easeOut,
+                      ),
                   const SizedBox(height: AppSpacing.lg),
 
                   // Specs card
                   AppCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          isPaper ? 'Paper Printing' : '3D Printing',
-                          style: AppTypography.h3
-                              .copyWith(color: colors.onBackground),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isPaper ? 'Paper Printing' : '3D Printing',
+                              style: AppTypography.h3.copyWith(
+                                color: colors.onBackground,
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.md),
+                            if (isPaper && state.paperSpecs != null) ...[
+                              _specRow(
+                                'Size',
+                                state.paperSpecs!.paperSize.displayName,
+                                colors,
+                              ),
+                              _specRow(
+                                'Color',
+                                state.paperSpecs!.colorMode.displayName,
+                                colors,
+                              ),
+                              _specRow(
+                                'Media',
+                                state.paperSpecs!.mediaType.displayName,
+                                colors,
+                              ),
+                              _specRow(
+                                'Sides',
+                                state.paperSpecs!.printSides.displayName,
+                                colors,
+                              ),
+                              _specRow(
+                                'Binding',
+                                state.paperSpecs!.binding.displayName,
+                                colors,
+                              ),
+                              _specRow('Pages', '${state.pageCount}', colors),
+                            ],
+                            if (!isPaper && state.threeDSpecs != null) ...[
+                              _specRow(
+                                'Format',
+                                state.threeDSpecs!.fileFormat.displayName,
+                                colors,
+                              ),
+                              _specRow(
+                                'Material',
+                                state.threeDSpecs!.material.displayName,
+                                colors,
+                              ),
+                              _specRow(
+                                'Color',
+                                state.threeDSpecs!.color,
+                                colors,
+                              ),
+                              _specRow(
+                                'Infill',
+                                '${state.threeDSpecs!.infillPercentage}%',
+                                colors,
+                              ),
+                              _specRow(
+                                'Layer',
+                                '${state.threeDSpecs!.layerHeight}mm',
+                                colors,
+                              ),
+                              _specRow(
+                                'Supports',
+                                state.threeDSpecs!.supports ? 'Yes' : 'No',
+                                colors,
+                              ),
+                              if (state.threeDSpecs!.notes != null)
+                                _specRow(
+                                  'Notes',
+                                  state.threeDSpecs!.notes!,
+                                  colors,
+                                ),
+                            ],
+                            _specRow('Quantity', '${state.quantity}', colors),
+                          ],
                         ),
-                        const SizedBox(height: AppSpacing.md),
-                        if (isPaper && state.paperSpecs != null) ...[
-                          _specRow('Size', state.paperSpecs!.paperSize.displayName, colors),
-                          _specRow('Color', state.paperSpecs!.colorMode.displayName, colors),
-                          _specRow('Media', state.paperSpecs!.mediaType.displayName, colors),
-                          _specRow('Sides', state.paperSpecs!.printSides.displayName, colors),
-                          _specRow('Binding', state.paperSpecs!.binding.displayName, colors),
-                          _specRow('Pages', '${state.pageCount}', colors),
-                        ],
-                        if (!isPaper && state.threeDSpecs != null) ...[
-                          _specRow('Format', state.threeDSpecs!.fileFormat.displayName, colors),
-                          _specRow('Material', state.threeDSpecs!.material.displayName, colors),
-                          _specRow('Color', state.threeDSpecs!.color, colors),
-                          _specRow('Infill', '${state.threeDSpecs!.infillPercentage}%', colors),
-                          _specRow('Layer', '${state.threeDSpecs!.layerHeight}mm', colors),
-                          _specRow('Supports', state.threeDSpecs!.supports ? 'Yes' : 'No', colors),
-                          if (state.threeDSpecs!.notes != null)
-                            _specRow('Notes', state.threeDSpecs!.notes!, colors),
-                        ],
-                        _specRow('Quantity', '${state.quantity}', colors),
-                      ],
-                    ),
-                  ).animate()
-                    .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
-                    .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
+                      )
+                      .animate()
+                      .fadeIn(
+                        duration: 400.ms,
+                        delay: 60.ms,
+                        curve: Curves.easeOut,
+                      )
+                      .slideY(
+                        begin: 0.03,
+                        duration: 400.ms,
+                        delay: 60.ms,
+                        curve: Curves.easeOut,
+                      ),
                   const SizedBox(height: AppSpacing.md),
 
                   // File info card
@@ -105,8 +170,11 @@ class SummaryScreen extends ConsumerWidget {
                     AppCard(
                       child: Row(
                         children: [
-                          HugeIcon(icon: HugeIcons.strokeRoundedFileValidation,
-                              size: 32, color: colors.accent),
+                          HugeIcon(
+                            icon: HugeIcons.strokeRoundedFileValidation,
+                            size: 32,
+                            color: colors.accent,
+                          ),
                           const SizedBox(width: AppSpacing.md),
                           Expanded(
                             child: Column(
@@ -114,16 +182,18 @@ class SummaryScreen extends ConsumerWidget {
                               children: [
                                 Text(
                                   state.fileName!,
-                                  style: AppTypography.bodyBold
-                                      .copyWith(color: colors.onBackground),
+                                  style: AppTypography.bodyBold.copyWith(
+                                    color: colors.onBackground,
+                                  ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 if (state.fileSize != null)
                                   Text(
                                     formatFileSize(state.fileSize!),
-                                    style: AppTypography.caption
-                                        .copyWith(color: colors.onSurfaceDim),
+                                    style: AppTypography.caption.copyWith(
+                                      color: colors.onSurfaceDim,
+                                    ),
                                   ),
                               ],
                             ),
@@ -134,9 +204,19 @@ class SummaryScreen extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.lg),
 
                   // Price breakdown
-                  _buildPriceBreakdown(state, isPaper).animate()
-                    .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
-                    .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
+                  _buildPriceBreakdown(state, isPaper)
+                      .animate()
+                      .fadeIn(
+                        duration: 400.ms,
+                        delay: 120.ms,
+                        curve: Curves.easeOut,
+                      )
+                      .slideY(
+                        begin: 0.03,
+                        duration: 400.ms,
+                        delay: 120.ms,
+                        curve: Curves.easeOut,
+                      ),
                   const SizedBox(height: AppSpacing.xxl),
                 ],
               ),
@@ -149,13 +229,30 @@ class SummaryScreen extends ConsumerWidget {
                   top: BorderSide(color: colors.outline, width: 0.5),
                 ),
               ),
-              child: AppButton(
-                label: 'Continue to Delivery',
-                isFullWidth: true,
-                onTap: () {
-                  ref.read(orderFlowProvider.notifier).nextStep();
-                  context.push('/customer/order/delivery');
-                },
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AppButton(
+                    label: 'Add to Cart',
+                    variant: AppButtonVariant.secondary,
+                    isFullWidth: true,
+                    onTap: () {
+                      final flow = ref.read(orderFlowProvider);
+                      ref.read(cartProvider.notifier).addFromOrderFlow(flow);
+                      ref.read(orderFlowProvider.notifier).reset();
+                      context.go('/customer/cart');
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  AppButton(
+                    label: 'Continue to Delivery',
+                    isFullWidth: true,
+                    onTap: () {
+                      ref.read(orderFlowProvider.notifier).nextStep();
+                      context.push('/customer/order/delivery');
+                    },
+                  ),
+                ],
               ),
             ),
           ],
@@ -170,12 +267,14 @@ class SummaryScreen extends ConsumerWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style:
-                  AppTypography.body.copyWith(color: colors.onSurfaceDim)),
-          Text(value,
-              style:
-                  AppTypography.bodyBold.copyWith(color: colors.onSurface)),
+          Text(
+            label,
+            style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
+          ),
+          Text(
+            value,
+            style: AppTypography.bodyBold.copyWith(color: colors.onSurface),
+          ),
         ],
       ),
     );
@@ -191,7 +290,8 @@ class SummaryScreen extends ConsumerWidget {
       basePrice = 2.0 * state.pageCount;
       multiplierLabel = 'Size + Color + Media + Sides';
       // Calculate the multiplied amount (before binding, for 1 unit)
-      multiplierAmount = state.totalPrice / state.quantity -
+      multiplierAmount =
+          state.totalPrice / state.quantity -
           _getBindingFee(state.paperSpecs!.binding);
       bindingFee = _getBindingFee(state.paperSpecs!.binding);
     } else {

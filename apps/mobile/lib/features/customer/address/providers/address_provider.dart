@@ -5,25 +5,32 @@ import 'package:printing_app/shared/services/api_client.dart';
 
 Address _parseAddress(Map<String, dynamic> json) {
   return Address(
-    id: json['id'] as String? ?? json['_id'] as String? ?? '',
-    userId: json['userId'] as String? ?? '',
-    label: json['label'] as String? ?? '',
-    fullAddress: json['fullAddress'] as String? ?? '',
+    id: (json['id'] ?? json['_id'])?.toString() ?? '',
+    userId: (json['userId'] ?? json['user_id'])?.toString() ?? '',
+    label: json['label']?.toString() ?? '',
+    fullAddress:
+        (json['fullAddress'] ?? json['full_address'])?.toString() ?? '',
     barangay: json['barangay'] as String?,
-    city: json['city'] as String? ?? '',
+    city: json['city']?.toString() ?? '',
     province: json['province'] as String?,
-    zipCode: json['zipCode'] as String?,
+    zipCode: (json['zipCode'] ?? json['zip_code'])?.toString(),
     landmark: json['landmark'] as String?,
-    latitude: (json['latitude'] as num?)?.toDouble() ?? 0,
-    longitude: (json['longitude'] as num?)?.toDouble() ?? 0,
-    isDefault: json['isDefault'] as bool? ?? false,
-    createdAt: json['createdAt'] is String
-        ? DateTime.parse(json['createdAt'] as String)
+    latitude: _readDouble(json['latitude'], 0),
+    longitude: _readDouble(json['longitude'], 0),
+    isDefault: (json['isDefault'] ?? json['is_default']) as bool? ?? false,
+    createdAt: (json['createdAt'] ?? json['created_at']) is String
+        ? DateTime.parse((json['createdAt'] ?? json['created_at']) as String)
         : DateTime.now(),
-    updatedAt: json['updatedAt'] is String
-        ? DateTime.parse(json['updatedAt'] as String)
+    updatedAt: (json['updatedAt'] ?? json['updated_at']) is String
+        ? DateTime.parse((json['updatedAt'] ?? json['updated_at']) as String)
         : DateTime.now(),
   );
+}
+
+double _readDouble(dynamic value, double fallback) {
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value) ?? fallback;
+  return fallback;
 }
 
 class AddressNotifier extends StateNotifier<List<Address>> {
@@ -42,7 +49,9 @@ class AddressNotifier extends StateNotifier<List<Address>> {
     try {
       final response = await ApiClient.instance.get('/addresses');
       final data = response.data as List<dynamic>;
-      state = data.map((json) => _parseAddress(json as Map<String, dynamic>)).toList();
+      state = data
+          .map((json) => _parseAddress(json as Map<String, dynamic>))
+          .toList();
     } catch (_) {
       // Offline fallback
       state = List.from(MockData.addresses);
@@ -55,36 +64,33 @@ class AddressNotifier extends StateNotifier<List<Address>> {
     if (!canAddMore) return;
 
     try {
-      final response = await ApiClient.instance.post('/addresses', data: {
-        'label': address.label,
-        'fullAddress': address.fullAddress,
-        'barangay': address.barangay,
-        'city': address.city,
-        'province': address.province,
-        'zipCode': address.zipCode,
-        'landmark': address.landmark,
-        'latitude': address.latitude,
-        'longitude': address.longitude,
-        'isDefault': address.isDefault,
-      });
+      final response = await ApiClient.instance.post(
+        '/addresses',
+        data: {
+          'label': address.label,
+          'fullAddress': address.fullAddress,
+          'barangay': address.barangay,
+          'city': address.city,
+          'province': address.province,
+          'zipCode': address.zipCode,
+          'landmark': address.landmark,
+          'latitude': address.latitude,
+          'longitude': address.longitude,
+          'isDefault': address.isDefault,
+        },
+      );
       final newAddr = _parseAddress(response.data as Map<String, dynamic>);
 
       // If new address is default, unset others
       if (newAddr.isDefault) {
-        state = [
-          for (final a in state) a.copyWith(isDefault: false),
-          newAddr,
-        ];
+        state = [for (final a in state) a.copyWith(isDefault: false), newAddr];
       } else {
         state = [...state, newAddr];
       }
     } catch (_) {
       // Offline: add locally
       if (address.isDefault) {
-        state = [
-          for (final a in state) a.copyWith(isDefault: false),
-          address,
-        ];
+        state = [for (final a in state) a.copyWith(isDefault: false), address];
       } else {
         state = [...state, address];
       }
@@ -93,18 +99,21 @@ class AddressNotifier extends StateNotifier<List<Address>> {
 
   Future<void> updateAddress(Address address) async {
     try {
-      await ApiClient.instance.put('/addresses/${address.id}', data: {
-        'label': address.label,
-        'fullAddress': address.fullAddress,
-        'barangay': address.barangay,
-        'city': address.city,
-        'province': address.province,
-        'zipCode': address.zipCode,
-        'landmark': address.landmark,
-        'latitude': address.latitude,
-        'longitude': address.longitude,
-        'isDefault': address.isDefault,
-      });
+      await ApiClient.instance.put(
+        '/addresses/${address.id}',
+        data: {
+          'label': address.label,
+          'fullAddress': address.fullAddress,
+          'barangay': address.barangay,
+          'city': address.city,
+          'province': address.province,
+          'zipCode': address.zipCode,
+          'landmark': address.landmark,
+          'latitude': address.latitude,
+          'longitude': address.longitude,
+          'isDefault': address.isDefault,
+        },
+      );
     } catch (_) {}
     // Update local state regardless
     state = [
@@ -126,14 +135,10 @@ class AddressNotifier extends StateNotifier<List<Address>> {
       await ApiClient.instance.patch('/addresses/$id/default');
     } catch (_) {}
     // Update local state regardless
-    state = [
-      for (final a in state)
-        a.copyWith(isDefault: a.id == id),
-    ];
+    state = [for (final a in state) a.copyWith(isDefault: a.id == id)];
   }
 }
 
-final addressProvider =
-    StateNotifierProvider<AddressNotifier, List<Address>>(
+final addressProvider = StateNotifierProvider<AddressNotifier, List<Address>>(
   (ref) => AddressNotifier(),
 );

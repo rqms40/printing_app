@@ -6,18 +6,29 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Order } from './order.entity';
+import { OrderItem } from './order-item.entity';
 
 @Entity('three_d_specs')
 export class ThreeDSpec {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ name: 'order_id', unique: true })
+  @Column({ name: 'order_id' })
   orderId: number;
 
   @OneToOne(() => Order, (o) => o.threeDSpec)
   @JoinColumn({ name: 'order_id' })
   order: Order;
+
+  @Column({ name: 'order_item_id', nullable: true })
+  orderItemId: number | null;
+
+  @OneToOne(() => OrderItem, (item) => item.threeDSpec, {
+    nullable: true,
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'order_item_id' })
+  orderItem: OrderItem | null;
 
   @Column({ name: 'file_format', length: 10 })
   fileFormat: string;

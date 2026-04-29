@@ -15,6 +15,8 @@ import { Address } from '../../addresses/entities/address.entity';
 import { PaperSpec } from './paper-specs.entity';
 import { ThreeDSpec } from './three-d-specs.entity';
 import { OrderStatusHistory } from './order-status-history.entity';
+import { BatchOrder } from './batch-order.entity';
+import { OrderItem } from './order-item.entity';
 
 export enum OrderStatus {
   ORDER_PLACED = 'order_placed',
@@ -49,6 +51,16 @@ export class Order {
   @ManyToOne(() => User)
   @JoinColumn({ name: 'user_id' })
   user: User;
+
+  @Column({ name: 'batch_order_id', nullable: true })
+  batchOrderId: number;
+
+  @ManyToOne(() => BatchOrder, (batchOrder) => batchOrder.orders, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'batch_order_id' })
+  batchOrder: BatchOrder;
 
   @Column()
   category: string;
@@ -150,4 +162,7 @@ export class Order {
 
   @OneToMany(() => OrderStatusHistory, (h) => h.order)
   statusHistory: OrderStatusHistory[];
+
+  @OneToMany(() => OrderItem, (item) => item.order)
+  items: OrderItem[];
 }

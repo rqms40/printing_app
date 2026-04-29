@@ -19,6 +19,27 @@ export class FileMetadata {
   @Column()
   size: number;
 
+  @Column({ name: 'width_pt', type: 'decimal', precision: 10, scale: 3, nullable: true })
+  widthPt: number | null;
+
+  @Column({ name: 'height_pt', type: 'decimal', precision: 10, scale: 3, nullable: true })
+  heightPt: number | null;
+
+  @Column({ name: 'width_px', type: 'integer', nullable: true })
+  widthPx: number | null;
+
+  @Column({ name: 'height_px', type: 'integer', nullable: true })
+  heightPx: number | null;
+
+  @Column({ name: 'color_space', type: 'varchar', length: 20, nullable: true })
+  colorSpace: string | null;
+
+  @Column({ name: 'page_count', type: 'integer', nullable: true })
+  pageCount: number | null;
+
+  @Column({ name: 'dpi', type: 'integer', nullable: true })
+  dpi: number | null;
+
   @Column()
   url: string;
 

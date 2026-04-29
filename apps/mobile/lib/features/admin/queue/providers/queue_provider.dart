@@ -19,54 +19,83 @@ String _toSnakeCase(String input) {
   );
 }
 
-OrderStatus _parseOrderStatus(String value) {
-  // Handle snake_case from server (e.g. 'order_placed' → 'orderPlaced')
-  final camelCase = value.replaceAllMapped(
-    RegExp(r'_([a-z])'),
+dynamic _readJsonValue(
+  Map<String, dynamic> json,
+  String camelKey, [
+  String? snakeKey,
+]) {
+  return json[camelKey] ?? (snakeKey != null ? json[snakeKey] : null);
+}
+
+int _readInt(dynamic value, int fallback) {
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? fallback;
+  return fallback;
+}
+
+double _readDouble(dynamic value, double fallback) {
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value) ?? fallback;
+  return fallback;
+}
+
+String _toCamelCase(String value) {
+  final normalized = value.replaceAll('-', '_').toLowerCase();
+  return normalized.replaceAllMapped(
+    RegExp(r'_([a-z0-9])'),
     (m) => m.group(1)!.toUpperCase(),
-  );
-  return OrderStatus.values.firstWhere(
-    (e) => e.name == camelCase,
-    orElse: () => OrderStatus.orderPlaced,
   );
 }
 
+T _parseEnum<T extends Enum>(Iterable<T> values, String? value, T fallback) {
+  final normalized = _toCamelCase(value ?? fallback.name);
+  return values.firstWhere((e) => e.name == normalized, orElse: () => fallback);
+}
+
+OrderStatus _parseOrderStatus(String value) {
+  // Handle snake_case from server (e.g. 'order_placed' → 'orderPlaced')
+  return _parseEnum(OrderStatus.values, value, OrderStatus.orderPlaced);
+}
+
 PaymentMethod _parsePaymentMethod(String value) {
+  final normalized = value.replaceAll(RegExp(r'[_-]'), '').toLowerCase();
   return PaymentMethod.values.firstWhere(
-    (e) => e.name == value,
+    (e) => e.name.toLowerCase() == normalized,
     orElse: () => PaymentMethod.cod,
   );
 }
 
 PaymentStatus _parsePaymentStatus(String value) {
-  return PaymentStatus.values.firstWhere(
-    (e) => e.name == value,
-    orElse: () => PaymentStatus.pending,
-  );
+  return _parseEnum(PaymentStatus.values, value, PaymentStatus.pending);
 }
 
 PaperSpecs? _parsePaperSpecs(Map<String, dynamic>? json) {
   if (json == null) return null;
   return PaperSpecs(
-    paperSize: PaperSize.values.firstWhere(
-      (e) => e.name == (json['paperSize'] as String? ?? 'a4'),
-      orElse: () => PaperSize.a4,
+    paperSize: _parseEnum(
+      PaperSize.values,
+      _readJsonValue(json, 'paperSize', 'paper_size')?.toString(),
+      PaperSize.a4,
     ),
-    colorMode: ColorMode.values.firstWhere(
-      (e) => e.name == (json['colorMode'] as String? ?? 'fullColor'),
-      orElse: () => ColorMode.fullColor,
+    colorMode: _parseEnum(
+      ColorMode.values,
+      _readJsonValue(json, 'colorMode', 'color_mode')?.toString(),
+      ColorMode.fullColor,
     ),
-    mediaType: MediaType.values.firstWhere(
-      (e) => e.name == (json['mediaType'] as String? ?? 'matte'),
-      orElse: () => MediaType.matte,
+    mediaType: _parseEnum(
+      MediaType.values,
+      _readJsonValue(json, 'mediaType', 'media_type')?.toString(),
+      MediaType.matte,
     ),
-    printSides: PrintSides.values.firstWhere(
-      (e) => e.name == (json['printSides'] as String? ?? 'frontOnly'),
-      orElse: () => PrintSides.frontOnly,
+    printSides: _parseEnum(
+      PrintSides.values,
+      _readJsonValue(json, 'printSides', 'print_sides')?.toString(),
+      PrintSides.frontOnly,
     ),
-    binding: Binding.values.firstWhere(
-      (e) => e.name == (json['binding'] as String? ?? 'none'),
-      orElse: () => Binding.none,
+    binding: _parseEnum(
+      Binding.values,
+      _readJsonValue(json, 'binding')?.toString(),
+      Binding.none,
     ),
   );
 }
@@ -74,57 +103,183 @@ PaperSpecs? _parsePaperSpecs(Map<String, dynamic>? json) {
 ThreeDSpecs? _parseThreeDSpecs(Map<String, dynamic>? json) {
   if (json == null) return null;
   return ThreeDSpecs(
-    fileFormat: FileFormat3D.values.firstWhere(
-      (e) => e.name == (json['fileFormat'] as String? ?? 'stl'),
-      orElse: () => FileFormat3D.stl,
+    fileFormat: _parseEnum(
+      FileFormat3D.values,
+      _readJsonValue(json, 'fileFormat', 'file_format')?.toString(),
+      FileFormat3D.stl,
     ),
-    material: Material3D.values.firstWhere(
-      (e) => e.name == (json['material'] as String? ?? 'pla'),
-      orElse: () => Material3D.pla,
+    material: _parseEnum(
+      Material3D.values,
+      _readJsonValue(json, 'material')?.toString(),
+      Material3D.pla,
     ),
-    color: json['color'] as String? ?? 'white',
-    infillPercentage: (json['infillPercentage'] as num?)?.toInt() ?? 20,
-    layerHeight: (json['layerHeight'] as num?)?.toDouble() ?? 0.2,
-    supports: json['supports'] as bool? ?? false,
-    notes: json['notes'] as String?,
+    color: _readJsonValue(json, 'color')?.toString() ?? 'white',
+    infillPercentage: _readInt(
+      _readJsonValue(json, 'infillPercentage', 'infill_percentage'),
+      20,
+    ),
+    layerHeight: _readDouble(
+      _readJsonValue(json, 'layerHeight', 'layer_height'),
+      0.2,
+    ),
+    supports: _readJsonValue(json, 'supports') as bool? ?? false,
+    notes: _readJsonValue(json, 'notes')?.toString(),
   );
 }
 
+DateTime _parseDate(dynamic value) {
+  if (value is String) return DateTime.parse(value);
+  return DateTime.now();
+}
+
+DateTime? _parseDateNullable(dynamic value) {
+  if (value is String) return DateTime.parse(value);
+  return null;
+}
+
 Order _parseOrder(Map<String, dynamic> json) {
+  final batch = _readJsonValue(json, 'batchOrder', 'batch_order');
+  final batchJson = batch is Map ? Map<String, dynamic>.from(batch) : null;
+  final itemsJson = _readJsonValue(json, 'items');
+  final items = itemsJson is List
+      ? itemsJson
+            .whereType<Map>()
+            .map((item) => _parseOrderLineItem(Map<String, dynamic>.from(item)))
+            .toList()
+      : const <OrderLineItem>[];
+
   return Order(
-    id: json['id']?.toString() ?? '',
-    orderId: json['orderId']?.toString() ?? '',
-    userId: json['userId']?.toString() ?? '',
-    category: json['category']?.toString() ?? '',
-    fileUrl: json['fileUrl']?.toString(),
-    fileName: json['fileName']?.toString(),
-    paperSpecs: _parsePaperSpecs(json['paperSpecs'] as Map<String, dynamic>?),
-    threeDSpecs: _parseThreeDSpecs(json['threeDSpecs'] as Map<String, dynamic>?),
-    quantity: int.tryParse(json['quantity']?.toString() ?? '1') ?? 1,
-    totalPrice: double.tryParse(json['totalPrice']?.toString() ?? '0') ?? 0,
-    deliveryFee: double.tryParse(json['deliveryFee']?.toString() ?? '0') ?? 0,
-    paymentMethod: _parsePaymentMethod(json['paymentMethod']?.toString() ?? 'cod'),
-    paymentStatus: _parsePaymentStatus(json['paymentStatus']?.toString() ?? 'pending'),
-    orderStatus: _parseOrderStatus(json['orderStatus']?.toString() ?? 'orderPlaced'),
-    declineReason: json['declineReason']?.toString(),
-    cancellationReason: json['cancellationReason']?.toString(),
-    cancelledAt: json['cancelledAt'] is String
-        ? DateTime.parse(json['cancelledAt'] as String)
-        : null,
-    deliveryOption: json['deliveryOption']?.toString() ?? 'delivery',
-    deliveryAddressId: json['deliveryAddressId']?.toString(),
-    assignedDriverId: json['assignedDriverId']?.toString(),
-    estimatedCompletionAt: json['estimatedCompletionAt'] is String
-        ? DateTime.parse(json['estimatedCompletionAt'] as String)
-        : null,
-    adminNotes: json['adminNotes']?.toString(),
-    trackingLink: json['trackingLink']?.toString(),
-    createdAt: json['createdAt'] is String
-        ? DateTime.parse(json['createdAt'] as String)
-        : DateTime.now(),
-    updatedAt: json['updatedAt'] is String
-        ? DateTime.parse(json['updatedAt'] as String)
-        : DateTime.now(),
+    id: _readJsonValue(json, 'id')?.toString() ?? '',
+    orderId: _readJsonValue(json, 'orderId', 'order_id')?.toString() ?? '',
+    userId: _readJsonValue(json, 'userId', 'user_id')?.toString() ?? '',
+    batchOrderId: _readJsonValue(
+      json,
+      'batchOrderId',
+      'batch_order_id',
+    )?.toString(),
+    batchId:
+        _readJsonValue(json, 'batchId', 'batch_id')?.toString() ??
+        batchJson?['batchRef']?.toString(),
+    category: _readJsonValue(json, 'category')?.toString() ?? '',
+    fileUrl: _readJsonValue(json, 'fileUrl', 'file_url')?.toString(),
+    fileName: _readJsonValue(json, 'fileName', 'file_name')?.toString(),
+    fileMetadataId:
+        _readJsonValue(json, 'fileMetadataId', 'file_metadata_id') == null
+        ? null
+        : _readInt(
+            _readJsonValue(json, 'fileMetadataId', 'file_metadata_id'),
+            0,
+          ),
+    paperSpecs: _parsePaperSpecs(
+      _readJsonValue(json, 'paperSpecs', 'paper_specs')
+          as Map<String, dynamic>?,
+    ),
+    threeDSpecs: _parseThreeDSpecs(
+      _readJsonValue(json, 'threeDSpecs', 'three_d_specs')
+          as Map<String, dynamic>?,
+    ),
+    quantity:
+        int.tryParse(_readJsonValue(json, 'quantity')?.toString() ?? '1') ?? 1,
+    totalPrice:
+        double.tryParse(
+          _readJsonValue(json, 'totalPrice', 'total_price')?.toString() ?? '0',
+        ) ??
+        0,
+    deliveryFee:
+        double.tryParse(
+          _readJsonValue(json, 'deliveryFee', 'delivery_fee')?.toString() ??
+              '0',
+        ) ??
+        0,
+    paymentMethod: _parsePaymentMethod(
+      _readJsonValue(json, 'paymentMethod', 'payment_method')?.toString() ??
+          'cod',
+    ),
+    paymentStatus: _parsePaymentStatus(
+      _readJsonValue(json, 'paymentStatus', 'payment_status')?.toString() ??
+          'pending',
+    ),
+    orderStatus: _parseOrderStatus(
+      _readJsonValue(json, 'orderStatus', 'order_status')?.toString() ??
+          'orderPlaced',
+    ),
+    declineReason: _readJsonValue(
+      json,
+      'declineReason',
+      'decline_reason',
+    )?.toString(),
+    cancellationReason: _readJsonValue(
+      json,
+      'cancellationReason',
+      'cancellation_reason',
+    )?.toString(),
+    cancelledAt: _parseDateNullable(
+      _readJsonValue(json, 'cancelledAt', 'cancelled_at'),
+    ),
+    deliveryOption:
+        _readJsonValue(json, 'deliveryOption', 'delivery_option')?.toString() ??
+        'delivery',
+    deliveryAddressId: _readJsonValue(
+      json,
+      'deliveryAddressId',
+      'delivery_address_id',
+    )?.toString(),
+    assignedDriverId: _readJsonValue(
+      json,
+      'assignedDriverId',
+      'assigned_driver_id',
+    )?.toString(),
+    deliveryAssignmentId: _readJsonValue(
+      json,
+      'deliveryAssignmentId',
+      'delivery_assignment_id',
+    )?.toString(),
+    estimatedCompletionAt: _parseDateNullable(
+      _readJsonValue(json, 'estimatedCompletionAt', 'estimated_completion_at'),
+    ),
+    adminNotes: _readJsonValue(json, 'adminNotes', 'admin_notes')?.toString(),
+    trackingLink: _readJsonValue(
+      json,
+      'trackingLink',
+      'tracking_link',
+    )?.toString(),
+    items: items,
+    createdAt: _parseDate(_readJsonValue(json, 'createdAt', 'created_at')),
+    updatedAt: _parseDate(_readJsonValue(json, 'updatedAt', 'updated_at')),
+  );
+}
+
+OrderLineItem _parseOrderLineItem(Map<String, dynamic> json) {
+  return OrderLineItem(
+    id: _readJsonValue(json, 'id')?.toString() ?? '',
+    orderId: _readJsonValue(json, 'orderId', 'order_id')?.toString() ?? '',
+    category: _readJsonValue(json, 'category')?.toString() ?? '',
+    fileUrl: _readJsonValue(json, 'fileUrl', 'file_url')?.toString(),
+    fileName: _readJsonValue(json, 'fileName', 'file_name')?.toString(),
+    fileMetadataId:
+        _readJsonValue(json, 'fileMetadataId', 'file_metadata_id') == null
+        ? null
+        : _readInt(
+            _readJsonValue(json, 'fileMetadataId', 'file_metadata_id'),
+            0,
+          ),
+    paperSpecs: _parsePaperSpecs(
+      (_readJsonValue(json, 'paperSpecs', 'paper_specs') ??
+              _readJsonValue(json, 'paperSpec', 'paper_spec'))
+          as Map<String, dynamic>?,
+    ),
+    threeDSpecs: _parseThreeDSpecs(
+      (_readJsonValue(json, 'threeDSpecs', 'three_d_specs') ??
+              _readJsonValue(json, 'threeDSpec', 'three_d_spec'))
+          as Map<String, dynamic>?,
+    ),
+    quantity:
+        int.tryParse(_readJsonValue(json, 'quantity')?.toString() ?? '1') ?? 1,
+    totalPrice:
+        double.tryParse(
+          _readJsonValue(json, 'totalPrice', 'total_price')?.toString() ?? '0',
+        ) ??
+        0,
   );
 }
 
@@ -160,24 +315,30 @@ class QueueState {
     switch (activeTab) {
       case QueueTab.newOrders:
         result = result
-            .where((o) =>
-                o.orderStatus == OrderStatus.orderPlaced ||
-                o.orderStatus == OrderStatus.fileVerified)
+            .where(
+              (o) =>
+                  o.orderStatus == OrderStatus.orderPlaced ||
+                  o.orderStatus == OrderStatus.fileVerified,
+            )
             .toList();
         break;
       case QueueTab.inProduction:
         result = result
-            .where((o) =>
-                o.orderStatus == OrderStatus.printingInProgress ||
-                o.orderStatus == OrderStatus.finishingMounting ||
-                o.orderStatus == OrderStatus.qualityChecked)
+            .where(
+              (o) =>
+                  o.orderStatus == OrderStatus.printingInProgress ||
+                  o.orderStatus == OrderStatus.finishingMounting ||
+                  o.orderStatus == OrderStatus.qualityChecked,
+            )
             .toList();
         break;
       case QueueTab.done:
         result = result
-            .where((o) =>
-                o.orderStatus == OrderStatus.delivered ||
-                o.orderStatus == OrderStatus.completedPickup)
+            .where(
+              (o) =>
+                  o.orderStatus == OrderStatus.delivered ||
+                  o.orderStatus == OrderStatus.completedPickup,
+            )
             .toList();
         break;
       case QueueTab.all:
@@ -243,17 +404,15 @@ class QueueNotifier extends StateNotifier<QueueState> {
 
   Future<void> updateOrderStatus(String orderId, OrderStatus newStatus) async {
     try {
-      await ApiClient.instance.patch('/admin/orders/$orderId/status', data: {
-        'status': _toSnakeCase(newStatus.name),
-      });
+      await ApiClient.instance.patch(
+        '/admin/orders/$orderId/status',
+        data: {'status': _toSnakeCase(newStatus.name)},
+      );
     } catch (_) {}
     // Update local state regardless
     final updated = state.orders.map((o) {
       if (o.id == orderId) {
-        return o.copyWith(
-          orderStatus: newStatus,
-          updatedAt: DateTime.now(),
-        );
+        return o.copyWith(orderStatus: newStatus, updatedAt: DateTime.now());
       }
       return o;
     }).toList();
@@ -263,7 +422,6 @@ class QueueNotifier extends StateNotifier<QueueState> {
 }
 
 /// Provider for the queue state.
-final queueProvider =
-    StateNotifierProvider<QueueNotifier, QueueState>((ref) {
+final queueProvider = StateNotifierProvider<QueueNotifier, QueueState>((ref) {
   return QueueNotifier();
 });

@@ -15,7 +15,7 @@ void main() {
     addTearDown(container.dispose);
 
     // Hold a listener to keep the autoDispose provider alive through invalidation
-    container.listen(dailyGridProvider, (_, __) {});
+    container.listen(dailyGridProvider, (previous, next) {});
 
     // Build the provider
     await container.read(dailyGridProvider.future);

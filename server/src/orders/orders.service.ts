@@ -1,7 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { Order, OrderStatus } from './entities/order.entity';
+import { BatchOrder } from './entities/batch-order.entity';
+import { OrderItem } from './entities/order-item.entity';
 import { PaperSpec } from './entities/paper-specs.entity';
 import { ThreeDSpec } from './entities/three-d-specs.entity';
 import {
@@ -14,6 +16,8 @@ import { UsersService } from '../users/users.service';
 import { CreditsService } from '../credits/credits.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { FilesService } from '../files/files.service';
+import { CreateBatchOrderDto } from './dto/create-order.dto';
+import { Address } from '../addresses/entities/address.entity';
 
 @Injectable()
 export class OrdersService {
@@ -21,29 +25,38 @@ export class OrdersService {
 
   constructor(
     @InjectRepository(Order) private ordersRepo: Repository<Order>,
+    @InjectRepository(OrderItem)
+    private orderItemsRepo: Repository<OrderItem>,
     @InjectRepository(PaperSpec) private paperSpecsRepo: Repository<PaperSpec>,
     @InjectRepository(ThreeDSpec)
     private threeDSpecsRepo: Repository<ThreeDSpec>,
     @InjectRepository(DeliveryAssignment)
     private deliveryAssignmentRepo: Repository<DeliveryAssignment>,
+    @InjectRepository(Address)
+    private addressRepo: Repository<Address>,
     private ordersGateway: OrdersGateway,
     private firebaseService: FirebaseService,
     private usersService: UsersService,
     private creditsService: CreditsService,
     private notificationsService: NotificationsService,
     private filesService: FilesService,
+    private dataSource: DataSource,
   ) {}
 
   async findByUser(userId: number): Promise<Order[]> {
     const orders = await this.ordersRepo.find({
       where: { userId },
+      relations: ['batchOrder', 'items', 'items.paperSpec', 'items.threeDSpec'],
       order: { createdAt: 'DESC' },
     });
     return this.attachDeliveryAssignmentIds(orders);
   }
 
   async findById(id: number): Promise<Order | null> {
-    const order = await this.ordersRepo.findOne({ where: { id } });
+    const order = await this.ordersRepo.findOne({
+      where: { id },
+      relations: ['batchOrder', 'items', 'items.paperSpec', 'items.threeDSpec'],
+    });
     if (!order) return null;
     const [withTracking] = await this.attachDeliveryAssignmentIds([order]);
     return withTracking;
@@ -87,20 +100,25 @@ export class OrdersService {
     },
   ): Promise<Order> {
     const { paperSpecs, threeDSpecs, ...orderData } = data;
+    if (orderData.deliveryAddressId != null && orderData.userId != null) {
+      orderData.deliveryAddressId = await this.validateDeliveryAddress(
+        Number(orderData.deliveryAddressId),
+        Number(orderData.userId),
+      );
+    }
 
     // Validate and deduct credits if payment method is credits
     if (
-      (orderData.paymentMethod === 'credits' ||
-        orderData.paymentMethod === 'gridCredits') &&
-      orderData.totalPrice &&
-      orderData.totalPrice > 0
+      OrdersService.isCreditPaymentMethod(orderData.paymentMethod) &&
+      Number(orderData.totalPrice ?? 0) + Number(orderData.deliveryFee ?? 0) > 0
     ) {
       if (!orderData.userId) {
         throw new Error('User ID is required to process credit payment');
       }
 
       const userId = orderData.userId;
-      const amountCredits = orderData.totalPrice; // 1 PHP = 1 Credit equivalent locally
+      const amountCredits =
+        Number(orderData.totalPrice ?? 0) + Number(orderData.deliveryFee ?? 0);
 
       // Attempt subtraction, will throw BadRequestException if insufficient
       await this.creditsService.subtractCredits(
@@ -114,10 +132,22 @@ export class OrdersService {
     const orderId = `ORD-${(10001 + count).toString().padStart(5, '0')}`;
     const order = this.ordersRepo.create({ ...orderData, orderId });
     const savedOrder = await this.ordersRepo.save(order);
+    const savedItem = await this.orderItemsRepo.save(
+      this.orderItemsRepo.create({
+        orderId: savedOrder.id,
+        category: savedOrder.category,
+        quantity: savedOrder.quantity,
+        totalPrice: savedOrder.totalPrice,
+        fileName: savedOrder.fileName,
+        fileUrl: savedOrder.fileUrl,
+        fileMetadataId: savedOrder.fileMetadataId,
+      }),
+    );
 
     if (paperSpecs) {
       const spec = this.paperSpecsRepo.create({
         orderId: savedOrder.id,
+        orderItemId: savedItem.id,
         ...paperSpecs,
       });
       await this.paperSpecsRepo.save(spec);
@@ -125,11 +155,164 @@ export class OrdersService {
     if (threeDSpecs) {
       const spec = this.threeDSpecsRepo.create({
         orderId: savedOrder.id,
+        orderItemId: savedItem.id,
         ...threeDSpecs,
       });
       await this.threeDSpecsRepo.save(spec);
     }
 
+    await this.notifyOrderPlaced(savedOrder);
+
+    return savedOrder;
+  }
+
+  async createBatch(
+    userId: number,
+    dto: CreateBatchOrderDto,
+  ): Promise<{ batchId: string; orders: Order[] }> {
+    if (!dto.items || dto.items.length === 0) {
+      throw new BadRequestException('Batch order requires at least one item');
+    }
+
+    const normalizedItems = dto.items.map((item) => ({
+      ...item,
+      quantity: Number(item.quantity ?? 1),
+      totalPrice: Number(item.totalPrice ?? 0),
+      fileMetadataId:
+        item.fileMetadataId == null ? undefined : Number(item.fileMetadataId),
+      threeDSpecs: item.threeDSpecs
+        ? {
+            ...item.threeDSpecs,
+            infillPercentage: Number(item.threeDSpecs.infillPercentage ?? 20),
+            layerHeight: Number(item.threeDSpecs.layerHeight ?? 0.2),
+          }
+        : undefined,
+    }));
+
+    const subtotal = normalizedItems.reduce(
+      (sum, item) => sum + item.totalPrice,
+      0,
+    );
+    const deliveryFee = Number(dto.deliveryFee ?? 0);
+    const totalPrice = subtotal + deliveryFee;
+    const deliveryAddressId =
+      dto.deliveryAddressId == null ? undefined : Number(dto.deliveryAddressId);
+    const validatedDeliveryAddressId =
+      deliveryAddressId == null
+        ? undefined
+        : await this.validateDeliveryAddress(deliveryAddressId, userId);
+
+    const orders = await this.dataSource.transaction(async (manager) => {
+      const batchOrdersRepo = manager.getRepository(BatchOrder);
+      const txOrdersRepo = manager.getRepository(Order);
+      const txOrderItemsRepo = manager.getRepository(OrderItem);
+      const txPaperSpecsRepo = manager.getRepository(PaperSpec);
+      const txThreeDSpecsRepo = manager.getRepository(ThreeDSpec);
+
+      const batchCount = await batchOrdersRepo.count();
+      const batchRef = `BATCH-${(10001 + batchCount).toString().padStart(5, '0')}`;
+      const batch = batchOrdersRepo.create({
+        batchRef,
+        userId,
+        subtotal,
+        deliveryFee,
+        totalPrice,
+        paymentMethod: dto.paymentMethod,
+        paymentStatus: dto.paymentStatus ?? 'pending',
+        deliveryOption: dto.deliveryOption,
+        deliveryAddressId: validatedDeliveryAddressId,
+      });
+      const savedBatch = await batchOrdersRepo.save(batch);
+
+      const orderCount = await txOrdersRepo.count();
+      const orderId = `ORD-${(10001 + orderCount).toString().padStart(5, '0')}`;
+      const firstItem = normalizedItems[0];
+      const aggregateOrder = txOrdersRepo.create({
+        userId,
+        orderId,
+        category: normalizedItems.length > 1 ? 'batch' : firstItem.category,
+        quantity: normalizedItems.reduce((sum, item) => sum + item.quantity, 0),
+        totalPrice: subtotal,
+        deliveryFee,
+        paymentMethod: dto.paymentMethod,
+        paymentStatus: dto.paymentStatus ?? 'pending',
+        deliveryOption: dto.deliveryOption,
+        deliveryAddressId: validatedDeliveryAddressId,
+        fileName:
+          normalizedItems.length > 1
+            ? `${normalizedItems.length} print jobs`
+            : firstItem.fileName,
+        fileUrl: normalizedItems.length === 1 ? firstItem.fileUrl : undefined,
+        fileMetadataId:
+          normalizedItems.length === 1
+            ? (firstItem.fileMetadataId ?? null)
+            : null,
+        batchOrderId: savedBatch.id,
+      } as Partial<Order>);
+      const savedOrder = await txOrdersRepo.save(aggregateOrder);
+
+      for (const item of normalizedItems) {
+        const savedItem = await txOrderItemsRepo.save(
+          txOrderItemsRepo.create({
+            orderId: savedOrder.id,
+            category: item.category,
+            quantity: item.quantity,
+            totalPrice: item.totalPrice,
+            fileName: item.fileName,
+            fileUrl: item.fileUrl,
+            fileMetadataId: item.fileMetadataId,
+          }),
+        );
+        if (item.paperSpecs) {
+          const spec = txPaperSpecsRepo.create({
+            orderId: savedOrder.id,
+            orderItemId: savedItem.id,
+            ...item.paperSpecs,
+          });
+          await txPaperSpecsRepo.save(spec);
+        }
+        if (item.threeDSpecs) {
+          const spec = txThreeDSpecsRepo.create({
+            orderId: savedOrder.id,
+            orderItemId: savedItem.id,
+            ...item.threeDSpecs,
+          });
+          await txThreeDSpecsRepo.save(spec);
+        }
+      }
+
+      if (
+        OrdersService.isCreditPaymentMethod(dto.paymentMethod) &&
+        totalPrice > 0
+      ) {
+        await this.creditsService.subtractCredits(
+          userId,
+          totalPrice,
+          'order_placed',
+        );
+      }
+
+      const orderWithItems = await txOrdersRepo.findOneOrFail({
+        where: { id: savedOrder.id },
+        relations: [
+          'batchOrder',
+          'items',
+          'items.paperSpec',
+          'items.threeDSpec',
+        ],
+      });
+
+      return { batchRef: savedBatch.batchRef, orders: [orderWithItems] };
+    });
+
+    for (const order of orders.orders) {
+      await this.notifyOrderPlaced(order);
+    }
+
+    return { batchId: orders.batchRef, orders: orders.orders };
+  }
+
+  private async notifyOrderPlaced(savedOrder: Order): Promise<void> {
     // Notify via WebSocket — admin queue sees new orders in real-time
     void this.ordersGateway.notifyOrderUpdate(savedOrder.orderId, savedOrder);
 
@@ -151,8 +334,6 @@ export class OrdersService {
         `Admin notification failed for order ${savedOrder.orderId}: ${err}`,
       );
     }
-
-    return savedOrder;
   }
 
   private static readonly CANCELLABLE_STATUSES: OrderStatus[] = [
@@ -160,23 +341,70 @@ export class OrdersService {
     OrderStatus.FILE_VERIFIED,
   ];
 
+  private static isCreditPaymentMethod(paymentMethod?: string): boolean {
+    const normalized = paymentMethod?.replace(/[_-]/g, '').toLowerCase();
+    return normalized === 'credits' || normalized === 'gridcredits';
+  }
+
+  private async validateDeliveryAddress(
+    deliveryAddressId: number,
+    userId: number,
+  ): Promise<number> {
+    if (!Number.isInteger(deliveryAddressId) || deliveryAddressId <= 0) {
+      throw new BadRequestException('Invalid delivery address');
+    }
+
+    const address = await this.addressRepo.findOne({
+      where: { id: deliveryAddressId, userId },
+    });
+
+    if (!address) {
+      throw new BadRequestException('Invalid delivery address');
+    }
+
+    return deliveryAddressId;
+  }
+
   async cancelOrder(id: number, userId: number): Promise<Order> {
-    const order = await this.ordersRepo.findOneOrFail({ where: { id } });
+    const order = await this.ordersRepo.findOneOrFail({
+      where: { id },
+      relations: ['batchOrder', 'items', 'items.paperSpec', 'items.threeDSpec'],
+    });
     if (order.userId !== userId) {
       throw new Error('Forbidden');
     }
     if (!OrdersService.CANCELLABLE_STATUSES.includes(order.orderStatus)) {
       throw new Error('Order cannot be cancelled at this stage');
     }
+
+    if (
+      OrdersService.isCreditPaymentMethod(order.paymentMethod) &&
+      Number(order.totalPrice) + Number(order.deliveryFee ?? 0) > 0
+    ) {
+      const refundAmount =
+        Number(order.totalPrice) + Number(order.deliveryFee ?? 0);
+      await this.creditsService.refundCredits(
+        order.userId,
+        refundAmount,
+        order.orderId,
+      );
+      return this.updateStatus(id, 'cancelled', { paymentStatus: 'refunded' });
+    }
+
     return this.updateStatus(id, 'cancelled');
   }
 
-  async updateStatus(id: number, status: string): Promise<Order> {
+  async updateStatus(
+    id: number,
+    status: string,
+    updates: Partial<Order> = {},
+  ): Promise<Order> {
     const orderStatus = status as OrderStatus;
     const existing = await this.ordersRepo.findOneOrFail({ where: { id } });
 
     await this.ordersRepo.update(id, {
       orderStatus,
+      ...updates,
     });
     const order = await this.ordersRepo.findOneOrFail({ where: { id } });
 

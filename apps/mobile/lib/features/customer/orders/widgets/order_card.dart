@@ -12,11 +12,7 @@ import 'package:printing_app/utils/formatters.dart';
 /// Professional order card with status-tinted icon, clean layout,
 /// and a chevron indicating it's tappable.
 class OrderCard extends StatefulWidget {
-  const OrderCard({
-    super.key,
-    required this.order,
-    this.onTap,
-  });
+  const OrderCard({super.key, required this.order, this.onTap});
 
   final Order order;
   final VoidCallback? onTap;
@@ -95,12 +91,16 @@ class _OrderCardState extends State<OrderCard> {
   }
 
   dynamic _categoryIcon() {
-    switch (widget.order.category.toLowerCase()) {
-      case 'paper':
-      case 'document':
+    if (widget.order.hasMixedItemTypes) {
+      return HugeIcons.strokeRoundedShoppingBag01;
+    }
+    if (widget.order.isBatchOrder) {
+      return HugeIcons.strokeRoundedShoppingBag01;
+    }
+    switch (widget.order.orderTypeShortLabel) {
+      case 'Paper':
         return HugeIcons.strokeRoundedFile02;
-      case '3d':
-      case '3d print':
+      case '3D':
         return HugeIcons.strokeRoundedPackage;
       default:
         return HugeIcons.strokeRoundedPrinter;
@@ -112,6 +112,8 @@ class _OrderCardState extends State<OrderCard> {
     final colors = _colors(context);
     final visual = _visual(colors);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isBatch = widget.order.isBatchOrder;
+    final typeLabel = widget.order.orderTypeShortLabel.toUpperCase();
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -164,10 +166,14 @@ class _OrderCardState extends State<OrderCard> {
                       // Order ID + category tag
                       Row(
                         children: [
-                          Text(
-                            widget.order.orderId,
-                            style: AppTypography.bodyBold.copyWith(
-                              color: colors.onBackground,
+                          Flexible(
+                            child: Text(
+                              widget.order.orderId,
+                              style: AppTypography.bodyBold.copyWith(
+                                color: colors.onBackground,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           const SizedBox(width: AppSpacing.sm),
@@ -190,7 +196,7 @@ class _OrderCardState extends State<OrderCard> {
                                 ),
                                 const SizedBox(width: 3),
                                 Text(
-                                  widget.order.category.toUpperCase(),
+                                  typeLabel,
                                   style: AppTypography.caption.copyWith(
                                     color: colors.onSurfaceDim,
                                     fontSize: 10,
@@ -204,6 +210,18 @@ class _OrderCardState extends State<OrderCard> {
                         ],
                       ),
                       const SizedBox(height: 6),
+
+                      if (isBatch) ...[
+                        Text(
+                          '${widget.order.itemCount} ${widget.order.itemCount == 1 ? 'item' : 'items'} · ${widget.order.itemSummary}',
+                          style: AppTypography.caption.copyWith(
+                            color: colors.onSurfaceDim,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 6),
+                      ],
 
                       // Status label + date
                       Row(
@@ -261,7 +279,12 @@ class _OrderCardState extends State<OrderCard> {
 }
 
 class _OrderVisual {
-  const _OrderVisual(this.icon, this.background, this.foreground, this.statusLabel);
+  const _OrderVisual(
+    this.icon,
+    this.background,
+    this.foreground,
+    this.statusLabel,
+  );
 
   final dynamic icon;
   final Color background;

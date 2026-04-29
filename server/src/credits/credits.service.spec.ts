@@ -46,7 +46,7 @@ describe('CreditsService', () => {
       save: jest.fn(),
     };
     usersService = {
-      findById: jest.fn().mockResolvedValue(mockUser),
+      findById: jest.fn().mockResolvedValue({ ...mockUser }),
       updateProfile: jest.fn().mockResolvedValue(mockUser),
     };
     notificationsService = {
@@ -145,6 +145,40 @@ describe('CreditsService', () => {
 
       await expect(service.approveTopUp(5)).rejects.toThrow(
         BadRequestException,
+      );
+    });
+  });
+
+  describe('refundCredits', () => {
+    it('adds credits back to the user and records an approved credit transaction without requiring a new DB enum value', async () => {
+      const refundTx = {
+        id: 6,
+        userId: 1,
+        type: CreditTransactionType.TOP_UP,
+        amountCredits: 250,
+        status: CreditTransactionStatus.APPROVED,
+        referenceId: 'ORD-10001',
+      } as CreditTransaction;
+      txRepo.create.mockReturnValue(refundTx);
+      txRepo.save.mockResolvedValue(refundTx);
+
+      await service.refundCredits(1, 250, 'ORD-10001');
+
+      expect(usersService.updateProfile).toHaveBeenCalledWith(1, {
+        credits: 1250,
+      });
+      expect(notificationsService.triggerCreditsUpdate).toHaveBeenCalledWith(
+        1,
+        1250,
+      );
+      expect(txRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 1,
+          type: CreditTransactionType.TOP_UP,
+          amountCredits: 250,
+          status: CreditTransactionStatus.APPROVED,
+          referenceId: 'ORD-10001',
+        }),
       );
     });
   });

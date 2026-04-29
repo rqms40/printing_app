@@ -33,7 +33,8 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
 
   /// Group notifications by time: Today, Yesterday, This Week, Earlier
   Map<String, List<AppNotification>> _groupByTime(
-      List<AppNotification> notifications) {
+    List<AppNotification> notifications,
+  ) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
@@ -42,8 +43,11 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     final groups = <String, List<AppNotification>>{};
 
     for (final n in notifications) {
-      final date =
-          DateTime(n.createdAt.year, n.createdAt.month, n.createdAt.day);
+      final date = DateTime(
+        n.createdAt.year,
+        n.createdAt.month,
+        n.createdAt.day,
+      );
       String key;
       if (date == today || date.isAfter(today)) {
         key = 'Today';
@@ -91,8 +95,9 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                       Expanded(
                         child: Text(
                           'Notifications',
-                          style: AppTypography.h1
-                              .copyWith(color: colors.onBackground),
+                          style: AppTypography.h1.copyWith(
+                            color: colors.onBackground,
+                          ),
                         ),
                       ),
                       if (unreadCount > 0)
@@ -135,8 +140,9 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                           const SizedBox(width: 4),
                           Text(
                             'Mark all as read',
-                            style: AppTypography.caption
-                                .copyWith(color: colors.brand),
+                            style: AppTypography.caption.copyWith(
+                              color: colors.brand,
+                            ),
                           ),
                         ],
                       ),
@@ -144,9 +150,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                   ],
                 ],
               ),
-            )
-                .animate()
-                .fadeIn(duration: 350.ms, curve: Curves.easeOut),
+            ).animate().fadeIn(duration: 350.ms, curve: Curves.easeOut),
 
             const SizedBox(height: AppSpacing.sm),
 
@@ -155,22 +159,22 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
               child: _isLoading
                   ? const NotificationListSkeleton()
                   : notifications.isEmpty
-                      ? const EmptyState(
-                          heading: 'All caught up',
-                          body:
-                              'You\'ll see order updates and delivery alerts here.',
-                          icon: HugeIcons.strokeRoundedNotification02,
-                        )
-                      : RefreshIndicator(
-                          color: colors.accent,
-                          backgroundColor: colors.surface,
-                          onRefresh: () async {
-                            await Future.delayed(
-                                const Duration(milliseconds: 500));
-                          },
-                          child:
-                              _buildGroupedList(notifications, colors),
-                        ),
+                  ? const EmptyState(
+                      heading: 'All caught up',
+                      body:
+                          'You\'ll see order updates and delivery alerts here.',
+                      icon: HugeIcons.strokeRoundedNotification02,
+                    )
+                  : RefreshIndicator(
+                      color: colors.accent,
+                      backgroundColor: colors.surface,
+                      onRefresh: () async {
+                        await ref
+                            .read(notificationsProvider.notifier)
+                            .refreshNotifications();
+                      },
+                      child: _buildGroupedList(notifications, colors),
+                    ),
             ),
           ],
         ),
@@ -179,11 +183,12 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   }
 
   Widget _buildGroupedList(
-      List<AppNotification> notifications, AppColorSet colors) {
+    List<AppNotification> notifications,
+    AppColorSet colors,
+  ) {
     final groups = _groupByTime(notifications);
     final orderedKeys = ['Today', 'Yesterday', 'This Week', 'Earlier'];
-    final activeKeys =
-        orderedKeys.where((k) => groups.containsKey(k)).toList();
+    final activeKeys = orderedKeys.where((k) => groups.containsKey(k)).toList();
 
     return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -218,9 +223,9 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
               final index = entry.key;
               final notification = entry.value;
               return _NotificationItem(
-                notification: notification,
-                isLast: index == items.length - 1,
-              )
+                    notification: notification,
+                    isLast: index == items.length - 1,
+                  )
                   .animate()
                   .fadeIn(
                     duration: 350.ms,
@@ -243,10 +248,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
 
 /// Individual notification item with professional layout.
 class _NotificationItem extends ConsumerWidget {
-  const _NotificationItem({
-    required this.notification,
-    this.isLast = false,
-  });
+  const _NotificationItem({required this.notification, this.isLast = false});
 
   final AppNotification notification;
   final bool isLast;
@@ -382,14 +384,15 @@ class _NotificationItem extends ConsumerWidget {
                           Expanded(
                             child: Text(
                               notification.title,
-                              style: (isUnread
-                                      ? AppTypography.bodyBold
-                                      : AppTypography.body)
-                                  .copyWith(
-                                color: isUnread
-                                    ? colors.onBackground
-                                    : colors.onSurface,
-                              ),
+                              style:
+                                  (isUnread
+                                          ? AppTypography.bodyBold
+                                          : AppTypography.body)
+                                      .copyWith(
+                                        color: isUnread
+                                            ? colors.onBackground
+                                            : colors.onSurface,
+                                      ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),

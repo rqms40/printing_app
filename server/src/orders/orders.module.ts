@@ -3,9 +3,11 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Order } from './entities/order.entity';
+import { BatchOrder } from './entities/batch-order.entity';
 import { PaperSpec } from './entities/paper-specs.entity';
 import { ThreeDSpec } from './entities/three-d-specs.entity';
 import { OrderStatusHistory } from './entities/order-status-history.entity';
+import { OrderItem } from './entities/order-item.entity';
 import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
 import { OrdersGateway } from './orders.gateway';
@@ -14,15 +16,19 @@ import { CreditsModule } from '../credits/credits.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { FilesModule } from '../files/files.module';
 import { DeliveryAssignment } from '../drivers/entities/delivery-assignment.entity';
+import { Address } from '../addresses/entities/address.entity';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       Order,
+      BatchOrder,
       PaperSpec,
       ThreeDSpec,
       OrderStatusHistory,
+      OrderItem,
       DeliveryAssignment,
+      Address,
     ]),
     JwtModule.registerAsync({
       inject: [ConfigService],
