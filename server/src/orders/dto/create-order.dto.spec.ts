@@ -39,3 +39,35 @@ describe('CreateBatchOrderDto', () => {
     expect(dto.items[0].threeDSpecs?.layerHeight).toBe(0.2);
   });
 });
+
+import { CreateBatchOrderDto } from './create-order.dto';
+
+describe('CreateBatchOrderDto extended fields', () => {
+  it('accepts slot fields and destinations[]', async () => {
+    const dto = plainToInstance(CreateBatchOrderDto, {
+      items: [
+        {
+          category: 'paper',
+          fileMetadataId: 1,
+          quantity: 1,
+          paperSpecs: {
+            paperSize: 'a4',
+            colorMode: 'blackAndWhite',
+            mediaType: 'glossy',
+            printSides: 'frontOnly',
+            binding: 'none',
+          },
+          destinationIndex: 0,
+        },
+      ],
+      paymentMethod: 'cash',
+      deliveryOption: 'delivery',
+      slotTemplateId: 1,
+      slotDate: '2026-04-30',
+      priority: true,
+      destinations: [{ addressId: 5, label: 'Office' }],
+    });
+    const errors = await validate(dto);
+    expect(errors).toHaveLength(0);
+  });
+});

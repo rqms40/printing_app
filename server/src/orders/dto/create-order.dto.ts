@@ -8,6 +8,10 @@ import {
   ValidateNested,
   IsArray,
   ArrayMinSize,
+  IsInt,
+  IsPositive,
+  Matches,
+  MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -104,6 +108,17 @@ export class CreateOrderDto {
   threeDSpecs?: ThreeDSpecsDto;
 }
 
+export class CreateBatchDestinationDto {
+  @IsInt()
+  @IsPositive()
+  addressId: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  label?: string;
+}
+
 export class CreateBatchOrderItemDto {
   @ApiProperty({ example: 'paper', enum: ['paper', '3d'] })
   @IsString()
@@ -115,10 +130,11 @@ export class CreateBatchOrderItemDto {
   @Min(1)
   quantity: number;
 
-  @ApiProperty({ example: 150.0 })
+  @ApiPropertyOptional({ example: 150.0 })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  totalPrice: number;
+  totalPrice?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -147,6 +163,11 @@ export class CreateBatchOrderItemDto {
   @ValidateNested()
   @Type(() => ThreeDSpecsDto)
   threeDSpecs?: ThreeDSpecsDto;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  destinationIndex?: number;
 }
 
 export class CreateBatchOrderDto {
@@ -157,10 +178,11 @@ export class CreateBatchOrderDto {
   @Type(() => CreateBatchOrderItemDto)
   items: CreateBatchOrderItemDto[];
 
-  @ApiProperty({ example: 0 })
+  @ApiPropertyOptional({ example: 0 })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  deliveryFee: number;
+  deliveryFee?: number;
 
   @ApiProperty({ example: 'gcash', enum: ['gcash', 'maya', 'cod'] })
   @IsString()
@@ -180,4 +202,24 @@ export class CreateBatchOrderDto {
   @Type(() => Number)
   @IsNumber()
   deliveryAddressId?: number;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  slotTemplateId?: number;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  slotDate?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  priority?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateBatchDestinationDto)
+  destinations?: CreateBatchDestinationDto[];
 }
