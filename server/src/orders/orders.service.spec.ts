@@ -22,6 +22,7 @@ import { DeliverySlotsService } from '../delivery-slots/delivery-slots.service';
 import { DeliverySettingsService } from '../delivery-slots/delivery-settings.service';
 import { DeliverySlotsGateway } from '../delivery-slots/delivery-slots.gateway';
 import { CancellationClosedException } from '../delivery-slots/exceptions';
+import { BatchOrder } from './entities/batch-order.entity';
 
 describe('OrdersService', () => {
   let service: OrdersService;
@@ -130,7 +131,7 @@ describe('OrdersService', () => {
         OrdersService,
         { provide: getRepositoryToken(Order), useValue: repo },
         { provide: getRepositoryToken(OrderItem), useValue: orderItemsRepo },
-        { provide: getRepositoryToken('BatchOrder'), useValue: batchRepo },
+        { provide: getRepositoryToken(BatchOrder), useValue: batchRepo },
         { provide: getRepositoryToken(PaperSpec), useValue: paperSpecsRepo },
         { provide: getRepositoryToken(ThreeDSpec), useValue: threeDSpecsRepo },
         {
@@ -675,7 +676,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
           provide: getRepositoryToken(OrderItem),
           useValue: { create: jest.fn(), save: jest.fn() },
         },
-        { provide: getRepositoryToken('BatchOrder'), useValue: {} },
+        { provide: getRepositoryToken(BatchOrder), useValue: {} },
         {
           provide: getRepositoryToken(PaperSpec),
           useValue: { create: jest.fn(), save: jest.fn() },
@@ -925,7 +926,7 @@ describe('createBatch with slot + destinations', () => {
         OrdersService,
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
         { provide: getRepositoryToken(OrderItem), useValue: orderItemsRepo },
-        { provide: getRepositoryToken('BatchOrder'), useValue: batchRepo },
+        { provide: getRepositoryToken(BatchOrder), useValue: batchRepo },
         { provide: getRepositoryToken(PaperSpec), useValue: paperSpecsRepo },
         { provide: getRepositoryToken(ThreeDSpec), useValue: threeDSpecsRepo },
         {
@@ -1101,7 +1102,7 @@ describe('cancelBatch', () => {
         OrdersService,
         { provide: getRepositoryToken(Order), useValue: { find: jest.fn(), findOne: jest.fn(), findOneOrFail: jest.fn(), create: jest.fn(), save: jest.fn(), update: jest.fn(), count: jest.fn() } },
         { provide: getRepositoryToken(OrderItem), useValue: { create: jest.fn(), save: jest.fn() } },
-        { provide: getRepositoryToken('BatchOrder'), useValue: {} },
+        { provide: getRepositoryToken(BatchOrder), useValue: {} },
         { provide: getRepositoryToken(PaperSpec), useValue: { create: jest.fn(), save: jest.fn() } },
         { provide: getRepositoryToken(ThreeDSpec), useValue: { create: jest.fn(), save: jest.fn() } },
         { provide: getRepositoryToken(DeliveryAssignment), useValue: { find: jest.fn().mockResolvedValue([]) } },
@@ -1168,7 +1169,7 @@ describe('listExternalDeliveries and updateExternalDeliveryStatus', () => {
         OrdersService,
         { provide: getRepositoryToken(Order), useValue: { find: jest.fn(), findOne: jest.fn(), findOneOrFail: jest.fn(), create: jest.fn(), save: jest.fn(), update: jest.fn(), count: jest.fn() } },
         { provide: getRepositoryToken(OrderItem), useValue: { create: jest.fn(), save: jest.fn() } },
-        { provide: getRepositoryToken('BatchOrder'), useValue: batchOrdersRepo },
+        { provide: getRepositoryToken(BatchOrder), useValue: batchOrdersRepo },
         { provide: getRepositoryToken(PaperSpec), useValue: { create: jest.fn(), save: jest.fn() } },
         { provide: getRepositoryToken(ThreeDSpec), useValue: { create: jest.fn(), save: jest.fn() } },
         { provide: getRepositoryToken(DeliveryAssignment), useValue: { find: jest.fn().mockResolvedValue([]) } },
