@@ -1,0 +1,26 @@
+import { IsNumber, IsOptional, Min } from 'class-validator';
+
+export class UpdateDeliverySettingsDto {
+  @IsOptional()
+  @IsNumber()
+  serviceCenterLat?: number;
+
+  @IsOptional()
+  @IsNumber()
+  serviceCenterLng?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0.1)
+  serviceRadiusKm?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  priorityFeeAmount?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  extraDestinationSurcharge?: number;
+}
