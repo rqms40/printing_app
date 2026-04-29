@@ -40,6 +40,7 @@ export class OrdersService {
     private addressRepo: Repository<Address>,
     @InjectRepository(DeliveryDestination)
     private deliveryDestinationRepo: Repository<DeliveryDestination>,
+    @InjectRepository('BatchOrder') private batchOrdersRepo: Repository<BatchOrder>,
     private ordersGateway: OrdersGateway,
     private firebaseService: FirebaseService,
     private usersService: UsersService,
@@ -449,6 +450,24 @@ export class OrdersService {
     }
 
     return deliveryAddressId;
+  }
+
+  async listExternalDeliveries(status?: string) {
+    return this.batchOrdersRepo.find({
+      where: {
+        deliveryType: 'external',
+        ...(status ? { externalDeliveryStatus: status as any } : {}),
+      },
+      order: { createdAt: 'DESC' },
+      relations: ['user'],
+    });
+  }
+
+  async updateExternalDeliveryStatus(
+    id: number,
+    status: 'pending_admin' | 'booked' | 'delivered',
+  ): Promise<void> {
+    await this.batchOrdersRepo.update(id, { externalDeliveryStatus: status });
   }
 
   async cancelBatch(batchOrderId: number, userId: number): Promise<void> {

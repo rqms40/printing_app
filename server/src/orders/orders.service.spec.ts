@@ -1150,3 +1150,76 @@ describe('cancelBatch', () => {
     await expect(service.cancelBatch(1, 1)).rejects.toThrow('cancellation closed');
   });
 });
+
+describe('listExternalDeliveries and updateExternalDeliveryStatus', () => {
+  let service: OrdersService;
+  let batchOrdersRepo: jest.Mocked<Pick<Repository<any>, 'find' | 'update'>>;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    batchOrdersRepo = {
+      find: jest.fn(),
+      update: jest.fn(),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        OrdersService,
+        { provide: getRepositoryToken(Order), useValue: { find: jest.fn(), findOne: jest.fn(), findOneOrFail: jest.fn(), create: jest.fn(), save: jest.fn(), update: jest.fn(), count: jest.fn() } },
+        { provide: getRepositoryToken(OrderItem), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: getRepositoryToken('BatchOrder'), useValue: batchOrdersRepo },
+        { provide: getRepositoryToken(PaperSpec), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: getRepositoryToken(ThreeDSpec), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: getRepositoryToken(DeliveryAssignment), useValue: { find: jest.fn().mockResolvedValue([]) } },
+        { provide: getRepositoryToken(Address), useValue: { findOne: jest.fn() } },
+        { provide: getRepositoryToken(DeliveryDestination), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
+        { provide: FirebaseService, useValue: { sendToDevice: jest.fn(), isAvailable: false } },
+        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null) } },
+        { provide: CreditsService, useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() } },
+        { provide: NotificationsService, useValue: { createForAllAdmins: jest.fn().mockResolvedValue(undefined) } },
+        { provide: FilesService, useValue: { stampExpiry: jest.fn() } },
+        { provide: DataSource, useValue: { transaction: jest.fn() } },
+        { provide: DeliverySlotsService, useValue: { bookSlot: jest.fn(), releaseSlot: jest.fn() } },
+        { provide: DeliverySettingsService, useValue: { isInsideServiceArea: jest.fn().mockResolvedValue(true), getSettings: jest.fn().mockResolvedValue({ priorityFeeAmount: 50, extraDestinationSurcharge: 30 }) } },
+        { provide: DeliverySlotsGateway, useValue: { notifySlotUpdated: jest.fn() } },
+      ],
+    }).compile();
+
+    service = module.get(OrdersService);
+  });
+
+  describe('listExternalDeliveries', () => {
+    it('filters by externalDeliveryStatus', async () => {
+      batchOrdersRepo.find.mockResolvedValue([{ id: 1, deliveryType: 'external' }]);
+      const out = await service.listExternalDeliveries('pending_admin');
+      expect(batchOrdersRepo.find).toHaveBeenCalledWith({
+        where: { deliveryType: 'external', externalDeliveryStatus: 'pending_admin' },
+        order: { createdAt: 'DESC' },
+        relations: ['user'],
+      });
+      expect(out).toEqual([{ id: 1, deliveryType: 'external' }]);
+    });
+
+    it('omits status filter when no status passed', async () => {
+      batchOrdersRepo.find.mockResolvedValue([]);
+      await service.listExternalDeliveries(undefined);
+      expect(batchOrdersRepo.find).toHaveBeenCalledWith({
+        where: { deliveryType: 'external' },
+        order: { createdAt: 'DESC' },
+        relations: ['user'],
+      });
+    });
+  });
+
+  describe('updateExternalDeliveryStatus', () => {
+    it('updates the status', async () => {
+      batchOrdersRepo.update.mockResolvedValue({ affected: 1 } as any);
+      await service.updateExternalDeliveryStatus(1, 'booked');
+      expect(batchOrdersRepo.update).toHaveBeenCalledWith(1, {
+        externalDeliveryStatus: 'booked',
+      });
+    });
+  });
+});
