@@ -10,6 +10,7 @@ import 'package:printing_app/features/customer/cart/models/cart_item.dart';
 import 'package:printing_app/features/customer/cart/providers/cart_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
+import 'package:printing_app/shared/widgets/file_type_icon.dart';
 import 'package:printing_app/utils/formatters.dart';
 
 class CartScreen extends ConsumerWidget {
@@ -231,17 +232,8 @@ class _QueueItemTile extends StatelessWidget {
             Container(
               width: 44,
               height: 44,
-              decoration: BoxDecoration(
-                borderRadius: AppRadius.borderMd,
-                border: Border.all(color: colors.onBackground, width: 2),
-              ),
-              child: HugeIcon(
-                icon: item.category == 'paper'
-                    ? HugeIcons.strokeRoundedFile01
-                    : HugeIcons.strokeRoundedCube,
-                size: 24,
-                color: colors.onBackground,
-              ),
+              alignment: Alignment.center,
+              child: FileTypeIcon(mimeType: _mimeForCartItem(item), size: 44),
             ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
@@ -304,6 +296,29 @@ class _QueueItemTile extends StatelessWidget {
       return '${specs.material.displayName}, ${specs.infillPercentage}% infill';
     }
     return item.category == 'paper' ? 'Paper printing' : '3D printing';
+  }
+
+  String _mimeForCartItem(CartItem item) {
+    final extension = item.fileName.split('.').last.toLowerCase();
+    switch (extension) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'pdf':
+        return 'application/pdf';
+      case 'stl':
+        return 'model/stl';
+      case 'obj':
+        return 'model/obj';
+      case '3mf':
+        return 'model/3mf';
+      default:
+        return item.category == '3d' ? 'model/3mf' : 'application/octet-stream';
+    }
   }
 }
 

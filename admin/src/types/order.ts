@@ -1,7 +1,14 @@
 import type {
-  OrderStatus, PaymentMethod, PaymentStatus,
-  PaperSize, ColorMode, MediaType, PrintSides, Binding,
-  FileFormat3D, Material3D,
+  OrderStatus,
+  PaymentMethod,
+  PaymentStatus,
+  PaperSize,
+  ColorMode,
+  MediaType,
+  PrintSides,
+  Binding,
+  FileFormat3D,
+  Material3D,
 } from "./enums";
 
 export interface PaperSpecs {
@@ -29,7 +36,7 @@ export interface Order {
   customer_id?: number;
   customer_name?: string | null;
   customer_email?: string | null;
-  category: "paper" | "3d";
+  category: "paper" | "3d" | "batch";
   file_url?: string;
   file_name?: string;
   paper_specs?: PaperSpecs;
@@ -51,6 +58,20 @@ export interface Order {
   tracking_link?: string;
   created_at: string;
   updated_at: string;
+  items?: OrderItem[];
+}
+
+export interface OrderItem {
+  id: string;
+  order_id?: string;
+  category: "paper" | "3d";
+  file_url?: string;
+  file_name?: string;
+  file_metadata_id?: number;
+  paper_specs?: PaperSpecs;
+  three_d_specs?: ThreeDSpecs;
+  quantity: number;
+  total_price: number;
 }
 
 export interface OrderStatusHistory {

@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { Order, OrderStatus } from './entities/order.entity';
 import { BatchOrder } from './entities/batch-order.entity';
+import { OrderItem } from './entities/order-item.entity';
 import { PaperSpec } from './entities/paper-specs.entity';
 import { ThreeDSpec } from './entities/three-d-specs.entity';
 import {
@@ -16,6 +17,7 @@ import { CreditsService } from '../credits/credits.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { FilesService } from '../files/files.service';
 import { CreateBatchOrderDto } from './dto/create-order.dto';
+import { Address } from '../addresses/entities/address.entity';
 
 @Injectable()
 export class OrdersService {
@@ -23,11 +25,15 @@ export class OrdersService {
 
   constructor(
     @InjectRepository(Order) private ordersRepo: Repository<Order>,
+    @InjectRepository(OrderItem)
+    private orderItemsRepo: Repository<OrderItem>,
     @InjectRepository(PaperSpec) private paperSpecsRepo: Repository<PaperSpec>,
     @InjectRepository(ThreeDSpec)
     private threeDSpecsRepo: Repository<ThreeDSpec>,
     @InjectRepository(DeliveryAssignment)
     private deliveryAssignmentRepo: Repository<DeliveryAssignment>,
+    @InjectRepository(Address)
+    private addressRepo: Repository<Address>,
     private ordersGateway: OrdersGateway,
     private firebaseService: FirebaseService,
     private usersService: UsersService,
@@ -40,13 +46,17 @@ export class OrdersService {
   async findByUser(userId: number): Promise<Order[]> {
     const orders = await this.ordersRepo.find({
       where: { userId },
+      relations: ['batchOrder', 'items', 'items.paperSpec', 'items.threeDSpec'],
       order: { createdAt: 'DESC' },
     });
     return this.attachDeliveryAssignmentIds(orders);
   }
 
   async findById(id: number): Promise<Order | null> {
-    const order = await this.ordersRepo.findOne({ where: { id } });
+    const order = await this.ordersRepo.findOne({
+      where: { id },
+      relations: ['batchOrder', 'items', 'items.paperSpec', 'items.threeDSpec'],
+    });
     if (!order) return null;
     const [withTracking] = await this.attachDeliveryAssignmentIds([order]);
     return withTracking;
@@ -90,6 +100,12 @@ export class OrdersService {
     },
   ): Promise<Order> {
     const { paperSpecs, threeDSpecs, ...orderData } = data;
+    if (orderData.deliveryAddressId != null && orderData.userId != null) {
+      orderData.deliveryAddressId = await this.validateDeliveryAddress(
+        Number(orderData.deliveryAddressId),
+        Number(orderData.userId),
+      );
+    }
 
     // Validate and deduct credits if payment method is credits
     if (
@@ -116,10 +132,22 @@ export class OrdersService {
     const orderId = `ORD-${(10001 + count).toString().padStart(5, '0')}`;
     const order = this.ordersRepo.create({ ...orderData, orderId });
     const savedOrder = await this.ordersRepo.save(order);
+    const savedItem = await this.orderItemsRepo.save(
+      this.orderItemsRepo.create({
+        orderId: savedOrder.id,
+        category: savedOrder.category,
+        quantity: savedOrder.quantity,
+        totalPrice: savedOrder.totalPrice,
+        fileName: savedOrder.fileName,
+        fileUrl: savedOrder.fileUrl,
+        fileMetadataId: savedOrder.fileMetadataId,
+      }),
+    );
 
     if (paperSpecs) {
       const spec = this.paperSpecsRepo.create({
         orderId: savedOrder.id,
+        orderItemId: savedItem.id,
         ...paperSpecs,
       });
       await this.paperSpecsRepo.save(spec);
@@ -127,6 +155,7 @@ export class OrdersService {
     if (threeDSpecs) {
       const spec = this.threeDSpecsRepo.create({
         orderId: savedOrder.id,
+        orderItemId: savedItem.id,
         ...threeDSpecs,
       });
       await this.threeDSpecsRepo.save(spec);
@@ -145,16 +174,38 @@ export class OrdersService {
       throw new BadRequestException('Batch order requires at least one item');
     }
 
-    const subtotal = dto.items.reduce(
-      (sum, item) => sum + Number(item.totalPrice),
+    const normalizedItems = dto.items.map((item) => ({
+      ...item,
+      quantity: Number(item.quantity ?? 1),
+      totalPrice: Number(item.totalPrice ?? 0),
+      fileMetadataId:
+        item.fileMetadataId == null ? undefined : Number(item.fileMetadataId),
+      threeDSpecs: item.threeDSpecs
+        ? {
+            ...item.threeDSpecs,
+            infillPercentage: Number(item.threeDSpecs.infillPercentage ?? 20),
+            layerHeight: Number(item.threeDSpecs.layerHeight ?? 0.2),
+          }
+        : undefined,
+    }));
+
+    const subtotal = normalizedItems.reduce(
+      (sum, item) => sum + item.totalPrice,
       0,
     );
     const deliveryFee = Number(dto.deliveryFee ?? 0);
     const totalPrice = subtotal + deliveryFee;
+    const deliveryAddressId =
+      dto.deliveryAddressId == null ? undefined : Number(dto.deliveryAddressId);
+    const validatedDeliveryAddressId =
+      deliveryAddressId == null
+        ? undefined
+        : await this.validateDeliveryAddress(deliveryAddressId, userId);
 
     const orders = await this.dataSource.transaction(async (manager) => {
       const batchOrdersRepo = manager.getRepository(BatchOrder);
       const txOrdersRepo = manager.getRepository(Order);
+      const txOrderItemsRepo = manager.getRepository(OrderItem);
       const txPaperSpecsRepo = manager.getRepository(PaperSpec);
       const txThreeDSpecsRepo = manager.getRepository(ThreeDSpec);
 
@@ -169,38 +220,53 @@ export class OrdersService {
         paymentMethod: dto.paymentMethod,
         paymentStatus: dto.paymentStatus ?? 'pending',
         deliveryOption: dto.deliveryOption,
-        deliveryAddressId: dto.deliveryAddressId,
+        deliveryAddressId: validatedDeliveryAddressId,
       });
       const savedBatch = await batchOrdersRepo.save(batch);
 
       const orderCount = await txOrdersRepo.count();
-      const savedOrders: Order[] = [];
+      const orderId = `ORD-${(10001 + orderCount).toString().padStart(5, '0')}`;
+      const firstItem = normalizedItems[0];
+      const aggregateOrder = txOrdersRepo.create({
+        userId,
+        orderId,
+        category: normalizedItems.length > 1 ? 'batch' : firstItem.category,
+        quantity: normalizedItems.reduce((sum, item) => sum + item.quantity, 0),
+        totalPrice: subtotal,
+        deliveryFee,
+        paymentMethod: dto.paymentMethod,
+        paymentStatus: dto.paymentStatus ?? 'pending',
+        deliveryOption: dto.deliveryOption,
+        deliveryAddressId: validatedDeliveryAddressId,
+        fileName:
+          normalizedItems.length > 1
+            ? `${normalizedItems.length} print jobs`
+            : firstItem.fileName,
+        fileUrl: normalizedItems.length === 1 ? firstItem.fileUrl : undefined,
+        fileMetadataId:
+          normalizedItems.length === 1
+            ? (firstItem.fileMetadataId ?? null)
+            : null,
+        batchOrderId: savedBatch.id,
+      } as Partial<Order>);
+      const savedOrder = await txOrdersRepo.save(aggregateOrder);
 
-      for (const [index, item] of dto.items.entries()) {
-        const orderId = `ORD-${(10001 + orderCount + index)
-          .toString()
-          .padStart(5, '0')}`;
-        const order = txOrdersRepo.create({
-          userId,
-          orderId,
-          category: item.category,
-          quantity: item.quantity,
-          totalPrice: item.totalPrice,
-          deliveryFee: index === 0 ? deliveryFee : 0,
-          paymentMethod: dto.paymentMethod,
-          paymentStatus: dto.paymentStatus ?? 'pending',
-          deliveryOption: dto.deliveryOption,
-          deliveryAddressId: dto.deliveryAddressId,
-          fileName: item.fileName,
-          fileUrl: item.fileUrl,
-          fileMetadataId: item.fileMetadataId,
-          batchOrderId: savedBatch.id,
-        });
-        const savedOrder = await txOrdersRepo.save(order);
-
+      for (const item of normalizedItems) {
+        const savedItem = await txOrderItemsRepo.save(
+          txOrderItemsRepo.create({
+            orderId: savedOrder.id,
+            category: item.category,
+            quantity: item.quantity,
+            totalPrice: item.totalPrice,
+            fileName: item.fileName,
+            fileUrl: item.fileUrl,
+            fileMetadataId: item.fileMetadataId,
+          }),
+        );
         if (item.paperSpecs) {
           const spec = txPaperSpecsRepo.create({
             orderId: savedOrder.id,
+            orderItemId: savedItem.id,
             ...item.paperSpecs,
           });
           await txPaperSpecsRepo.save(spec);
@@ -208,12 +274,11 @@ export class OrdersService {
         if (item.threeDSpecs) {
           const spec = txThreeDSpecsRepo.create({
             orderId: savedOrder.id,
+            orderItemId: savedItem.id,
             ...item.threeDSpecs,
           });
           await txThreeDSpecsRepo.save(spec);
         }
-
-        savedOrders.push(savedOrder);
       }
 
       if (
@@ -227,7 +292,17 @@ export class OrdersService {
         );
       }
 
-      return { batchRef: savedBatch.batchRef, orders: savedOrders };
+      const orderWithItems = await txOrdersRepo.findOneOrFail({
+        where: { id: savedOrder.id },
+        relations: [
+          'batchOrder',
+          'items',
+          'items.paperSpec',
+          'items.threeDSpec',
+        ],
+      });
+
+      return { batchRef: savedBatch.batchRef, orders: [orderWithItems] };
     });
 
     for (const order of orders.orders) {
@@ -271,8 +346,30 @@ export class OrdersService {
     return normalized === 'credits' || normalized === 'gridcredits';
   }
 
+  private async validateDeliveryAddress(
+    deliveryAddressId: number,
+    userId: number,
+  ): Promise<number> {
+    if (!Number.isInteger(deliveryAddressId) || deliveryAddressId <= 0) {
+      throw new BadRequestException('Invalid delivery address');
+    }
+
+    const address = await this.addressRepo.findOne({
+      where: { id: deliveryAddressId, userId },
+    });
+
+    if (!address) {
+      throw new BadRequestException('Invalid delivery address');
+    }
+
+    return deliveryAddressId;
+  }
+
   async cancelOrder(id: number, userId: number): Promise<Order> {
-    const order = await this.ordersRepo.findOneOrFail({ where: { id } });
+    const order = await this.ordersRepo.findOneOrFail({
+      where: { id },
+      relations: ['batchOrder', 'items', 'items.paperSpec', 'items.threeDSpec'],
+    });
     if (order.userId !== userId) {
       throw new Error('Forbidden');
     }

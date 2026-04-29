@@ -23,8 +23,14 @@ export class ThreeDSpecsDto {
   @IsString() fileFormat: string;
   @IsString() material: string;
   @IsString() color: string;
-  @IsNumber() infillPercentage: number;
-  @IsNumber() layerHeight: number;
+  @Type(() => Number)
+  @IsNumber()
+  infillPercentage: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  layerHeight: number;
+
   @IsBoolean() supports: boolean;
   @IsString() @IsOptional() notes?: string;
 }
@@ -35,15 +41,18 @@ export class CreateOrderDto {
   category: string;
 
   @ApiProperty({ example: 1 })
+  @Type(() => Number)
   @IsNumber()
   @Min(1)
   quantity: number;
 
   @ApiProperty({ example: 150.0 })
+  @Type(() => Number)
   @IsNumber()
   totalPrice: number;
 
   @ApiProperty({ example: 0 })
+  @Type(() => Number)
   @IsNumber()
   deliveryFee: number;
 
@@ -57,6 +66,7 @@ export class CreateOrderDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   deliveryAddressId?: number;
 
@@ -72,6 +82,7 @@ export class CreateOrderDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   fileMetadataId?: number;
 
@@ -94,11 +105,13 @@ export class CreateBatchOrderItemDto {
   category: string;
 
   @ApiProperty({ example: 1 })
+  @Type(() => Number)
   @IsNumber()
   @Min(1)
   quantity: number;
 
   @ApiProperty({ example: 150.0 })
+  @Type(() => Number)
   @IsNumber()
   totalPrice: number;
 
@@ -114,6 +127,7 @@ export class CreateBatchOrderItemDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   fileMetadataId?: number;
 
@@ -139,6 +153,7 @@ export class CreateBatchOrderDto {
   items: CreateBatchOrderItemDto[];
 
   @ApiProperty({ example: 0 })
+  @Type(() => Number)
   @IsNumber()
   deliveryFee: number;
 
@@ -157,6 +172,7 @@ export class CreateBatchOrderDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   deliveryAddressId?: number;
 }

@@ -110,7 +110,7 @@ async function seed() {
       spec_options, service_addons, service_categories,
       notifications, payment_transactions, credit_transactions, credit_settings,
       delivery_assignments, order_status_history,
-      paper_specs, three_d_specs, orders,
+      paper_specs, three_d_specs, order_items, orders, batch_orders,
       addresses, driver_profiles, file_metadata,
       tam_survey_settings, tam_surveys,
       daily_grid_cards,
@@ -325,15 +325,43 @@ async function seed() {
     'SELECT id, order_id FROM orders ORDER BY id',
   );
 
+  const orderItemByOrderId = new Map<string, number>();
+  for (const row of orderRows) {
+    const source = orders.find((order) => order.order_id === row.order_id)!;
+    const [item] = await typedQuery<IdRow>(
+      ds,
+      `INSERT INTO order_items (order_id, category, quantity, total_price, file_name)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id`,
+      [
+        row.id,
+        source.category,
+        source.quantity,
+        source.total_price,
+        `${source.category === 'paper' ? 'document' : 'model'}_${source.order_id.slice(-3)}.${source.category === 'paper' ? 'pdf' : 'stl'}`,
+      ],
+    );
+    orderItemByOrderId.set(row.order_id, item.id);
+  }
+  console.log('✅ Order items added to 6 orders');
+
   // ─── Paper Specs ────────────────────────────────────────────────────
   const paperOrderIds: OrderRow[] = orderRows.filter((r: OrderRow) =>
     ['ORD-10001', 'ORD-10002', 'ORD-10004', 'ORD-10005'].includes(r.order_id),
   );
   for (const o of paperOrderIds) {
     await ds.query(
-      `INSERT INTO paper_specs (order_id, paper_size, color_mode, media_type, print_sides, binding)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [o.id, 'a4', 'fullColor', 'glossy', 'frontOnly', 'none'],
+      `INSERT INTO paper_specs (order_id, order_item_id, paper_size, color_mode, media_type, print_sides, binding)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        o.id,
+        orderItemByOrderId.get(o.order_id),
+        'a4',
+        'fullColor',
+        'glossy',
+        'frontOnly',
+        'none',
+      ],
     );
   }
   console.log('✅ Paper specs added to 4 orders');
@@ -344,9 +372,18 @@ async function seed() {
   );
   for (const o of threeDOrderIds) {
     await ds.query(
-      `INSERT INTO three_d_specs (order_id, file_format, material, color, infill_percentage, layer_height, supports)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [o.id, 'stl', 'pla', 'White', 20, 0.2, false],
+      `INSERT INTO three_d_specs (order_id, order_item_id, file_format, material, color, infill_percentage, layer_height, supports)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        o.id,
+        orderItemByOrderId.get(o.order_id),
+        'stl',
+        'pla',
+        'White',
+        20,
+        0.2,
+        false,
+      ],
     );
   }
   console.log('✅ 3D specs added to 2 orders');

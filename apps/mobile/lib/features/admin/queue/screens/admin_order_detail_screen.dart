@@ -21,10 +21,7 @@ import 'package:printing_app/utils/formatters.dart';
 
 /// Admin detail screen for a single order.
 class AdminOrderDetailScreen extends ConsumerStatefulWidget {
-  const AdminOrderDetailScreen({
-    super.key,
-    required this.orderId,
-  });
+  const AdminOrderDetailScreen({super.key, required this.orderId});
 
   final String orderId;
 
@@ -53,16 +50,15 @@ class _AdminOrderDetailScreenState
   Widget build(BuildContext context) {
     final colors = _colors(context);
     final queueState = ref.watch(queueProvider);
-    final order = queueState.orders.firstWhere(
-      (o) => o.id == widget.orderId,
-    );
-    final history = MockData.orderStatusHistory
-        .where((h) => h.orderId == order.id)
-        .toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final order = queueState.orders.firstWhere((o) => o.id == widget.orderId);
+    final history =
+        MockData.orderStatusHistory.where((h) => h.orderId == order.id).toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-    final showAssignDriver = order.orderStatus == OrderStatus.readyForDispatch ||
+    final showAssignDriver =
+        order.orderStatus == OrderStatus.readyForDispatch ||
         order.orderStatus == OrderStatus.driverAssigned;
+    final lineItems = order.lineItems;
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -90,8 +86,9 @@ class _AdminOrderDetailScreenState
                   children: [
                     Text(
                       'Status',
-                      style: AppTypography.bodyBold
-                          .copyWith(color: colors.onBackground),
+                      style: AppTypography.bodyBold.copyWith(
+                        color: colors.onBackground,
+                      ),
                     ),
                     const SizedBox(width: AppSpacing.md),
                     StatusPicker(
@@ -108,13 +105,17 @@ class _AdminOrderDetailScreenState
                   const SizedBox(height: AppSpacing.sm),
                   Row(
                     children: [
-                      HugeIcon(icon: HugeIcons.strokeRoundedClock01,
-                          size: 16, color: colors.onSurfaceDim),
+                      HugeIcon(
+                        icon: HugeIcons.strokeRoundedClock01,
+                        size: 16,
+                        color: colors.onSurfaceDim,
+                      ),
                       const SizedBox(width: AppSpacing.xs),
                       Text(
                         'ETA: ${formatDateTime(order.estimatedCompletionAt!)}',
-                        style: AppTypography.caption
-                            .copyWith(color: colors.onSurfaceDim),
+                        style: AppTypography.caption.copyWith(
+                          color: colors.onSurfaceDim,
+                        ),
                       ),
                     ],
                   ),
@@ -149,47 +150,21 @@ class _AdminOrderDetailScreenState
             const SizedBox(height: AppSpacing.md),
           ],
 
-          // File info
-          if (order.fileName != null) ...[
-            const SectionHeader(title: 'File Info'),
-            AppCard(
-              child: Row(
-                children: [
-                  HugeIcon(icon: HugeIcons.strokeRoundedFile01, size: 20, color: colors.onSurfaceDim),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      order.fileName!,
-                      style:
-                          AppTypography.body.copyWith(color: colors.onSurface),
-                    ),
-                  ),
-                  if (order.fileMetadataId != null)
-                    TextButton.icon(
-                      onPressed: () => FilePreviewSheet.show(
-                        context,
-                        fileId: order.fileMetadataId!,
-                        fileName: order.fileName!,
-                        mimeType: _mimeFromExtension(
-                            order.fileName!.split('.').last.toLowerCase()),
-                      ),
-                      icon: Icon(Icons.visibility_outlined,
-                          size: 16, color: colors.accent),
-                      label: Text(
-                        'Preview',
-                        style: AppTypography.caption
-                            .copyWith(color: colors.accent),
-                      ),
-                    ),
-                ],
+          SectionHeader(
+            title:
+                '${order.orderTypeLabel} · ${order.itemCount} ${order.itemCount == 1 ? 'item' : 'items'}',
+          ),
+          ...lineItems.asMap().entries.map(
+            (entry) => Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: _buildOrderItemCard(
+                context,
+                entry.value,
+                entry.key + 1,
+                colors,
               ),
             ),
-            const SizedBox(height: AppSpacing.md),
-          ],
-
-          // Specs section
-          const SectionHeader(title: 'Specifications'),
-          _buildSpecsCard(context, order, colors),
+          ),
           const SizedBox(height: AppSpacing.md),
 
           // Price breakdown
@@ -200,7 +175,10 @@ class _AdminOrderDetailScreenState
                 _priceRow('Subtotal', formatCurrency(order.totalPrice), colors),
                 const SizedBox(height: AppSpacing.xs),
                 _priceRow(
-                    'Delivery Fee', formatCurrency(order.deliveryFee), colors),
+                  'Delivery Fee',
+                  formatCurrency(order.deliveryFee),
+                  colors,
+                ),
                 const Divider(),
                 _priceRow(
                   'Total',
@@ -225,8 +203,7 @@ class _AdminOrderDetailScreenState
             AppCard(
               child: Text(
                 'No status changes recorded.',
-                style:
-                    AppTypography.body.copyWith(color: colors.onSurfaceDim),
+                style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
               ),
             )
           else
@@ -238,53 +215,122 @@ class _AdminOrderDetailScreenState
     );
   }
 
-  Widget _buildSpecsCard(
-      BuildContext context, Order order, AppColorSet colors) {
-    if (order.paperSpecs != null) {
-      final specs = order.paperSpecs!;
-      return AppCard(
-        child: Column(
-          children: [
-            _specRow('Category', order.category, colors),
-            _specRow('Paper Size', specs.paperSize.displayName, colors),
-            _specRow('Color Mode', specs.colorMode.displayName, colors),
-            _specRow('Media', specs.mediaType.displayName, colors),
-            _specRow('Sides', specs.printSides.displayName, colors),
-            _specRow('Binding', specs.binding.displayName, colors),
-            _specRow('Quantity', order.quantity.toString(), colors),
-          ],
-        ),
-      );
-    }
-
-    if (order.threeDSpecs != null) {
-      final specs = order.threeDSpecs!;
-      return AppCard(
-        child: Column(
-          children: [
-            _specRow('Category', order.category, colors),
-            _specRow('Format', specs.fileFormat.displayName, colors),
-            _specRow('Material', specs.material.displayName, colors),
-            _specRow('Color', specs.color, colors),
-            _specRow('Infill', '${specs.infillPercentage}%', colors),
-            _specRow(
-                'Layer Height', '${specs.layerHeight}mm', colors),
-            _specRow('Supports', specs.supports ? 'Yes' : 'No', colors),
-            if (specs.notes != null) _specRow('Notes', specs.notes!, colors),
-            _specRow('Quantity', order.quantity.toString(), colors),
-          ],
-        ),
-      );
-    }
-
+  Widget _buildOrderItemCard(
+    BuildContext context,
+    OrderLineItem item,
+    int index,
+    AppColorSet colors,
+  ) {
     return AppCard(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _specRow('Category', order.category, colors),
-          _specRow('Quantity', order.quantity.toString(), colors),
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: colors.accent.withValues(alpha: 0.1),
+                  borderRadius: AppRadius.borderSm,
+                ),
+                child: Center(
+                  child: HugeIcon(
+                    icon: item.category == '3d'
+                        ? HugeIcons.strokeRoundedCube
+                        : HugeIcons.strokeRoundedFile02,
+                    size: 18,
+                    color: colors.accent,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.fileName ?? 'Print job $index',
+                      style: AppTypography.bodyBold.copyWith(
+                        color: colors.onBackground,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${_itemCategoryLabel(item.category)} · Qty ${item.quantity}',
+                      style: AppTypography.caption.copyWith(
+                        color: colors.onSurfaceDim,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (item.fileMetadataId != null && item.fileName != null)
+                TextButton.icon(
+                  onPressed: () => FilePreviewSheet.show(
+                    context,
+                    fileId: item.fileMetadataId!,
+                    fileName: item.fileName!,
+                    mimeType: _mimeFromExtension(
+                      item.fileName!.split('.').last.toLowerCase(),
+                    ),
+                  ),
+                  icon: Icon(
+                    Icons.visibility_outlined,
+                    size: 16,
+                    color: colors.accent,
+                  ),
+                  label: Text(
+                    'Preview',
+                    style: AppTypography.caption.copyWith(color: colors.accent),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          ..._itemSpecRows(item, colors),
+          const Divider(),
+          _specRow('Item Subtotal', formatCurrency(item.totalPrice), colors),
         ],
       ),
     );
+  }
+
+  List<Widget> _itemSpecRows(OrderLineItem item, AppColorSet colors) {
+    final paperSpecs = item.paperSpecs;
+    if (paperSpecs != null) {
+      return [
+        _specRow('Paper Size', paperSpecs.paperSize.displayName, colors),
+        _specRow('Color Mode', paperSpecs.colorMode.displayName, colors),
+        _specRow('Media', paperSpecs.mediaType.displayName, colors),
+        _specRow('Sides', paperSpecs.printSides.displayName, colors),
+        _specRow('Binding', paperSpecs.binding.displayName, colors),
+      ];
+    }
+
+    final threeDSpecs = item.threeDSpecs;
+    if (threeDSpecs != null) {
+      return [
+        _specRow('Format', threeDSpecs.fileFormat.displayName, colors),
+        _specRow('Material', threeDSpecs.material.displayName, colors),
+        _specRow('Color', threeDSpecs.color, colors),
+        _specRow('Infill', '${threeDSpecs.infillPercentage}%', colors),
+        _specRow('Layer Height', '${threeDSpecs.layerHeight}mm', colors),
+        _specRow('Supports', threeDSpecs.supports ? 'Yes' : 'No', colors),
+        if (threeDSpecs.notes != null)
+          _specRow('Notes', threeDSpecs.notes!, colors),
+      ];
+    }
+
+    return [_specRow('Category', _itemCategoryLabel(item.category), colors)];
+  }
+
+  String _itemCategoryLabel(String category) {
+    if (category == '3d') return '3D Print';
+    if (category == 'paper') return 'Paper Print';
+    return category;
   }
 
   Widget _specRow(String label, String value, AppColorSet colors) {
@@ -306,8 +352,12 @@ class _AdminOrderDetailScreenState
     );
   }
 
-  Widget _priceRow(String label, String value, AppColorSet colors,
-      {bool isBold = false}) {
+  Widget _priceRow(
+    String label,
+    String value,
+    AppColorSet colors, {
+    bool isBold = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.xs),
       child: Row(
@@ -329,7 +379,10 @@ class _AdminOrderDetailScreenState
   }
 
   Widget _buildHistoryEntry(
-      BuildContext context, OrderStatusHistory entry, AppColorSet colors) {
+    BuildContext context,
+    OrderStatusHistory entry,
+    AppColorSet colors,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: AppCard(
@@ -352,29 +405,33 @@ class _AdminOrderDetailScreenState
                 children: [
                   Text(
                     '${entry.fromStatus.displayName} \u2192 ${entry.toStatus.displayName}',
-                    style: AppTypography.bodyBold
-                        .copyWith(color: colors.onBackground),
+                    style: AppTypography.bodyBold.copyWith(
+                      color: colors.onBackground,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     formatDateTime(entry.createdAt),
-                    style: AppTypography.caption
-                        .copyWith(color: colors.onSurfaceDim),
+                    style: AppTypography.caption.copyWith(
+                      color: colors.onSurfaceDim,
+                    ),
                   ),
                   if (entry.changedByUserId != null) ...[
                     const SizedBox(height: AppSpacing.xs),
                     Text(
                       'By: ${entry.changedByUserId}',
-                      style: AppTypography.caption
-                          .copyWith(color: colors.onSurfaceDim),
+                      style: AppTypography.caption.copyWith(
+                        color: colors.onSurfaceDim,
+                      ),
                     ),
                   ],
                   if (entry.notes != null) ...[
                     const SizedBox(height: AppSpacing.xs),
                     Text(
                       entry.notes!,
-                      style: AppTypography.caption
-                          .copyWith(color: colors.onSurfaceDim),
+                      style: AppTypography.caption.copyWith(
+                        color: colors.onSurfaceDim,
+                      ),
                     ),
                   ],
                 ],

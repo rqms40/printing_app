@@ -29,7 +29,7 @@ const S = {
 };
 
 export function BetaModePage() {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
 
   const [settings, setSettings] = useState<BetaModeSettings | null>(null);
   const [betaUsers, setBetaUsers] = useState<BetaUserItem[]>([]);
@@ -71,7 +71,7 @@ export function BetaModePage() {
     void load();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleToggle = async (checked: boolean) => {
+  const doToggle = async (checked: boolean) => {
     const prev = settings;
     setSettings((s) => (s ? { ...s, isEnabled: checked } : s));
     setToggleLoading(true);
@@ -84,6 +84,18 @@ export function BetaModePage() {
     } finally {
       setToggleLoading(false);
     }
+  };
+
+  const handleToggle = (checked: boolean) => {
+    modal.confirm({
+      title: checked ? 'Enable Beta Mode?' : 'Disable Beta Mode?',
+      content: checked
+        ? 'Beta indicators will become visible to all enrolled users.'
+        : 'Beta indicators will be hidden from all users.',
+      okText: checked ? 'Enable' : 'Disable',
+      okButtonProps: { danger: !checked },
+      onOk: () => doToggle(checked),
+    });
   };
 
   const handleUnenroll = async (userId: number) => {
@@ -270,7 +282,7 @@ export function BetaModePage() {
           </div>
           <Switch
             checked={settings?.isEnabled ?? false}
-            onChange={(checked) => void handleToggle(checked)}
+            onChange={(checked) => handleToggle(checked)}
             loading={toggleLoading}
             style={settings?.isEnabled ? { backgroundColor: '#FFD700' } : undefined}
           />

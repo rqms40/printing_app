@@ -12,6 +12,7 @@ import 'package:printing_app/features/customer/order/providers/order_provider.da
 import 'package:printing_app/features/customer/order/screens/summary_screen.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/paper_specs.dart';
+import 'package:printing_app/shared/widgets/file_type_icon.dart';
 
 void main() {
   late Directory tempDir;
@@ -66,6 +67,7 @@ void main() {
     expect(find.text('Continue to Delivery'), findsOneWidget);
     expect(find.text('Add another print job'), findsOneWidget);
     expect(find.text('Back to Home'), findsOneWidget);
+    expect(find.byType(FileTypeIcon), findsOneWidget);
   });
 
   testWidgets('CartScreen plus button increases quantity and total', (

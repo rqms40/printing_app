@@ -6,18 +6,29 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Order } from './order.entity';
+import { OrderItem } from './order-item.entity';
 
 @Entity('paper_specs')
 export class PaperSpec {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ name: 'order_id', unique: true })
+  @Column({ name: 'order_id' })
   orderId: number;
 
   @OneToOne(() => Order, (o) => o.paperSpec)
   @JoinColumn({ name: 'order_id' })
   order: Order;
+
+  @Column({ name: 'order_item_id', nullable: true })
+  orderItemId: number | null;
+
+  @OneToOne(() => OrderItem, (item) => item.paperSpec, {
+    nullable: true,
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'order_item_id' })
+  orderItem: OrderItem | null;
 
   @Column({ name: 'paper_size', length: 20 })
   paperSize: string;

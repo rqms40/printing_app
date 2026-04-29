@@ -4,6 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { OrdersService } from './orders.service';
 import { Order, OrderStatus } from './entities/order.entity';
+import { OrderItem } from './entities/order-item.entity';
 import { PaperSpec } from './entities/paper-specs.entity';
 import { ThreeDSpec } from './entities/three-d-specs.entity';
 import { OrdersGateway } from './orders.gateway';
@@ -15,14 +16,17 @@ import {
   DeliveryAssignment,
   DeliveryStatus,
 } from '../drivers/entities/delivery-assignment.entity';
+import { Address } from '../addresses/entities/address.entity';
 
 describe('OrdersService', () => {
   let service: OrdersService;
   let repo: jest.Mocked<Partial<Repository<Order>>>;
+  let orderItemsRepo: jest.Mocked<Partial<Repository<OrderItem>>>;
   let batchRepo: jest.Mocked<Partial<Repository<any>>>;
   let paperSpecsRepo: jest.Mocked<Partial<Repository<PaperSpec>>>;
   let threeDSpecsRepo: jest.Mocked<Partial<Repository<ThreeDSpec>>>;
   let assignmentRepo: jest.Mocked<Partial<Repository<DeliveryAssignment>>>;
+  let addressRepo: jest.Mocked<Partial<Repository<Address>>>;
   let dataSource: Partial<DataSource>;
   let gateway: Partial<OrdersGateway>;
   let firebaseService: Partial<FirebaseService>;
@@ -48,6 +52,10 @@ describe('OrdersService', () => {
       update: jest.fn(),
       count: jest.fn(),
     };
+    orderItemsRepo = {
+      create: jest.fn(),
+      save: jest.fn(),
+    };
     batchRepo = {
       create: jest.fn(),
       save: jest.fn(),
@@ -65,6 +73,10 @@ describe('OrdersService', () => {
       find: jest.fn(),
       findOne: jest.fn(),
     };
+    addressRepo = {
+      findOne: jest.fn(),
+    };
+    addressRepo.findOne.mockResolvedValue({ id: 9, userId: 1 } as Address);
     gateway = {
       notifyOrderUpdate: jest.fn(),
     };
@@ -83,11 +95,20 @@ describe('OrdersService', () => {
     notificationsService = {
       createForAllAdmins: jest.fn().mockResolvedValue(undefined),
     };
+    orderItemsRepo.create.mockImplementation((data) => data as OrderItem);
+    orderItemsRepo.save.mockImplementation(
+      async (item) =>
+        ({
+          id: 1,
+          ...item,
+        }) as OrderItem,
+    );
     dataSource = {
       transaction: jest.fn(async (runInTransaction) =>
         runInTransaction({
           getRepository: (entity: { name?: string }) => {
             if (entity?.name === 'Order') return repo;
+            if (entity?.name === 'OrderItem') return orderItemsRepo;
             if (entity?.name === 'PaperSpec') return paperSpecsRepo;
             if (entity?.name === 'ThreeDSpec') return threeDSpecsRepo;
             if (entity?.name === 'BatchOrder') return batchRepo;
@@ -101,6 +122,7 @@ describe('OrdersService', () => {
       providers: [
         OrdersService,
         { provide: getRepositoryToken(Order), useValue: repo },
+        { provide: getRepositoryToken(OrderItem), useValue: orderItemsRepo },
         { provide: getRepositoryToken('BatchOrder'), useValue: batchRepo },
         { provide: getRepositoryToken(PaperSpec), useValue: paperSpecsRepo },
         { provide: getRepositoryToken(ThreeDSpec), useValue: threeDSpecsRepo },
@@ -108,6 +130,7 @@ describe('OrdersService', () => {
           provide: getRepositoryToken(DeliveryAssignment),
           useValue: assignmentRepo,
         },
+        { provide: getRepositoryToken(Address), useValue: addressRepo },
         { provide: OrdersGateway, useValue: gateway },
         { provide: FirebaseService, useValue: firebaseService },
         { provide: UsersService, useValue: usersService },
@@ -242,6 +265,24 @@ describe('OrdersService', () => {
         id: ++savedOrderId,
         ...order,
       }));
+      repo.findOneOrFail.mockImplementation(
+        async ({ where }: any) =>
+          ({
+            id: where.id,
+            orderId: 'ORD-10001',
+            category: 'batch',
+            items: [{ id: 1 }, { id: 2 }],
+          }) as Order,
+      );
+      let savedItemId = 0;
+      orderItemsRepo.create.mockImplementation((data) => data as OrderItem);
+      orderItemsRepo.save.mockImplementation(
+        async (item) =>
+          ({
+            id: ++savedItemId,
+            ...item,
+          }) as OrderItem,
+      );
       paperSpecsRepo.create.mockImplementation((data) => data as PaperSpec);
       paperSpecsRepo.save.mockResolvedValue({} as PaperSpec);
       threeDSpecsRepo.create.mockImplementation((data) => data as ThreeDSpec);
@@ -254,7 +295,16 @@ describe('OrdersService', () => {
       ).rejects.toThrow('Batch order requires at least one item');
     });
 
-    it('saves one BatchOrder and two child Order records', async () => {
+    it('rejects delivery addresses that do not belong to the user', async () => {
+      addressRepo.findOne.mockResolvedValueOnce(null);
+
+      await expect((service as any).createBatch(1, batchDto)).rejects.toThrow(
+        'Invalid delivery address',
+      );
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+    });
+
+    it('saves one BatchOrder, one aggregate Order, and two OrderItem records', async () => {
       const result = await (service as any).createBatch(1, batchDto);
 
       expect(batchRepo.save).toHaveBeenCalledTimes(1);
@@ -270,40 +320,41 @@ describe('OrdersService', () => {
           deliveryAddressId: 9,
         }),
       );
-      expect(repo.save).toHaveBeenCalledTimes(2);
+      expect(repo.save).toHaveBeenCalledTimes(1);
       expect(repo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           batchOrderId: 77,
-          category: 'paper',
+          category: 'batch',
           userId: 1,
+          totalPrice: 420,
+          deliveryFee: 45,
         }),
       );
-      expect(repo.create).toHaveBeenCalledWith(
+      expect(orderItemsRepo.save).toHaveBeenCalledTimes(2);
+      expect(orderItemsRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          batchOrderId: 77,
+          orderId: 1,
+          category: 'paper',
+        }),
+      );
+      expect(orderItemsRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: 1,
           category: '3d',
-          userId: 1,
         }),
       );
       expect(result).toEqual({
         batchId: 'BATCH-10001',
-        orders: expect.arrayContaining([
-          expect.objectContaining({ id: 1, category: 'paper' }),
-          expect.objectContaining({ id: 2, category: '3d' }),
-        ]),
+        orders: [expect.objectContaining({ id: 1, category: 'batch' })],
       });
     });
 
-    it('allocates shared deliveryFee to the first child only', async () => {
+    it('allocates shared deliveryFee to the aggregate order only', async () => {
       await (service as any).createBatch(1, batchDto);
 
       expect(repo.create).toHaveBeenNthCalledWith(
         1,
         expect.objectContaining({ deliveryFee: 45 }),
-      );
-      expect(repo.create).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({ deliveryFee: 0 }),
       );
     });
 
@@ -315,6 +366,49 @@ describe('OrdersService', () => {
         1,
         465,
         'order_placed',
+      );
+    });
+
+    it('normalizes numeric strings before creating batch order rows', async () => {
+      await (service as any).createBatch(1, {
+        ...batchDto,
+        deliveryFee: '45',
+        deliveryAddressId: '9',
+        items: [
+          {
+            ...batchDto.items[1],
+            quantity: '2',
+            totalPrice: '300.50',
+            fileMetadataId: '12',
+            threeDSpecs: {
+              ...batchDto.items[1].threeDSpecs,
+              infillPercentage: '20',
+              layerHeight: '0.20',
+            },
+          },
+        ],
+      });
+
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          quantity: 2,
+          totalPrice: 300.5,
+          deliveryFee: 45,
+          deliveryAddressId: 9,
+        }),
+      );
+      expect(orderItemsRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          quantity: 2,
+          totalPrice: 300.5,
+          fileMetadataId: 12,
+        }),
+      );
+      expect(threeDSpecsRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          infillPercentage: 20,
+          layerHeight: 0.2,
+        }),
       );
     });
   });
@@ -329,6 +423,12 @@ describe('OrdersService', () => {
 
       expect(repo.find).toHaveBeenCalledWith({
         where: { userId: 1 },
+        relations: [
+          'batchOrder',
+          'items',
+          'items.paperSpec',
+          'items.threeDSpec',
+        ],
         order: { createdAt: 'DESC' },
       });
       expect(result).toEqual(orders);
@@ -367,7 +467,15 @@ describe('OrdersService', () => {
 
       const result = await service.findById(1);
 
-      expect(repo.findOne).toHaveBeenCalledWith({ where: { id: 1 } });
+      expect(repo.findOne).toHaveBeenCalledWith({
+        where: { id: 1 },
+        relations: [
+          'batchOrder',
+          'items',
+          'items.paperSpec',
+          'items.threeDSpec',
+        ],
+      });
       expect(result).toEqual(mockOrder);
     });
   });
@@ -530,6 +638,10 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       providers: [
         OrdersService,
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
+        {
+          provide: getRepositoryToken(OrderItem),
+          useValue: { create: jest.fn(), save: jest.fn() },
+        },
         { provide: getRepositoryToken('BatchOrder'), useValue: {} },
         {
           provide: getRepositoryToken(PaperSpec),
@@ -542,6 +654,10 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         {
           provide: getRepositoryToken(DeliveryAssignment),
           useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: getRepositoryToken(Address),
+          useValue: { findOne: jest.fn() },
         },
         { provide: OrdersGateway, useValue: mockGateway },
         { provide: FirebaseService, useValue: mockFirebase },

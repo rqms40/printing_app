@@ -244,75 +244,174 @@ void main() {
   });
 
   group('OrdersNotifier.addBatchOrder', () {
-    test('posts batch payload and prepends returned child orders', () async {
-      final existingOrder = MockData.orders.first;
+    test(
+      'posts batch payload and prepends one grouped customer order',
+      () async {
+        final existingOrder = MockData.orders.first;
+        final container = ProviderContainer(
+          overrides: [
+            ordersProvider.overrideWith(
+              (ref) => OrdersNotifier(
+                initialState: [existingOrder],
+                skipBootstrap: true,
+              ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        final notifier = container.read(ordersProvider.notifier);
+
+        final createdOrders = await notifier.addBatchOrder(
+          items: [
+            _paperCartItem(printSubtotal: 175),
+            _threeDCartItem(printSubtotal: 240),
+          ],
+          deliveryOption: 'delivery',
+          deliveryAddressId: '9',
+          deliveryFee: 50,
+          paymentMethod: PaymentMethod.gridCredits,
+        );
+
+        expect(createdOrders, hasLength(1));
+        expect(createdOrders.single.orderId, 'BATCH-10001');
+        expect(createdOrders.single.isBatchOrder, isTrue);
+        expect(createdOrders.single.itemCount, 2);
+        expect(createdOrders.single.totalPrice, 415);
+        expect(createdOrders.single.deliveryFee, 50);
+        expect(createdOrders.single.items.map((item) => item.orderId), [
+          'ORD-BATCH-1',
+          'ORD-BATCH-2',
+        ]);
+        expect(container.read(ordersProvider).map((order) => order.orderId), [
+          'BATCH-10001',
+          existingOrder.orderId,
+        ]);
+
+        expect(lastBatchPayload, isNotNull);
+        expect(lastBatchPayload!['deliveryOption'], 'delivery');
+        expect(lastBatchPayload!['deliveryAddressId'], 9);
+        expect(lastBatchPayload!['deliveryFee'], 50);
+        expect(lastBatchPayload!['paymentMethod'], 'gridCredits');
+
+        final items = lastBatchPayload!['items'] as List<dynamic>;
+        expect(items, hasLength(2));
+        expect(items.first, containsPair('category', 'paper'));
+        expect(items.first, containsPair('quantity', 2));
+        expect(items.first, containsPair('totalPrice', 175));
+        expect(items.first, containsPair('fileName', 'proposal.pdf'));
+        expect(items.first, containsPair('fileUrl', '/tmp/proposal.pdf'));
+        expect(items.first, containsPair('fileMetadataId', 42));
+        expect(
+          items.first,
+          containsPair(
+            'paperSpecs',
+            containsPair('paperSize', PaperSize.a4.name),
+          ),
+        );
+
+        expect(items.last, containsPair('category', '3d'));
+        expect(items.last, containsPair('quantity', 3));
+        expect(items.last, containsPair('totalPrice', 240));
+        expect(items.last, containsPair('fileName', 'gear.stl'));
+        expect(
+          items.last,
+          containsPair(
+            'threeDSpecs',
+            containsPair('fileFormat', FileFormat3D.stl.name),
+          ),
+        );
+      },
+    );
+
+    test('omits nonnumeric delivery address ids from batch payload', () async {
       final container = ProviderContainer(
         overrides: [
           ordersProvider.overrideWith(
-            (ref) => OrdersNotifier(
-              initialState: [existingOrder],
-              skipBootstrap: true,
-            ),
+            (ref) =>
+                OrdersNotifier(initialState: const [], skipBootstrap: true),
           ),
         ],
       );
       addTearDown(container.dispose);
-      final notifier = container.read(ordersProvider.notifier);
 
-      final createdOrders = await notifier.addBatchOrder(
-        items: [
-          _paperCartItem(printSubtotal: 175),
-          _threeDCartItem(printSubtotal: 240),
-        ],
-        deliveryOption: 'delivery',
-        deliveryAddressId: '9',
-        deliveryFee: 50,
-        paymentMethod: PaymentMethod.gridCredits,
-      );
-
-      expect(createdOrders.map((order) => order.orderId), [
-        'ORD-BATCH-1',
-        'ORD-BATCH-2',
-      ]);
-      expect(container.read(ordersProvider).map((order) => order.orderId), [
-        'ORD-BATCH-1',
-        'ORD-BATCH-2',
-        existingOrder.orderId,
-      ]);
+      await container
+          .read(ordersProvider.notifier)
+          .addBatchOrder(
+            items: [_paperCartItem(printSubtotal: 175)],
+            deliveryOption: 'delivery',
+            deliveryAddressId: 'addr_001',
+            deliveryFee: 50,
+            paymentMethod: PaymentMethod.gridCredits,
+          );
 
       expect(lastBatchPayload, isNotNull);
-      expect(lastBatchPayload!['deliveryOption'], 'delivery');
-      expect(lastBatchPayload!['deliveryAddressId'], 9);
-      expect(lastBatchPayload!['deliveryFee'], 50);
-      expect(lastBatchPayload!['paymentMethod'], 'gridCredits');
+      expect(lastBatchPayload!['deliveryAddressId'], isNull);
+    });
 
-      final items = lastBatchPayload!['items'] as List<dynamic>;
-      expect(items, hasLength(2));
-      expect(items.first, containsPair('category', 'paper'));
-      expect(items.first, containsPair('quantity', 2));
-      expect(items.first, containsPair('totalPrice', 175));
-      expect(items.first, containsPair('fileName', 'proposal.pdf'));
-      expect(items.first, containsPair('fileUrl', '/tmp/proposal.pdf'));
-      expect(items.first, containsPair('fileMetadataId', 42));
-      expect(
-        items.first,
-        containsPair(
-          'paperSpecs',
-          containsPair('paperSize', PaperSize.a4.name),
-        ),
+    test('parses numeric-string 3D specs from batch response', () async {
+      final now = DateTime(2026, 4, 25, 12).toIso8601String();
+      batchResponseOrders = [
+        {
+          'id': '201',
+          'orderId': 'ORD-AGG-1',
+          'userId': 'usr_001',
+          'batchOrderId': 77,
+          'batchOrder': {'batchRef': 'BATCH-10001'},
+          'category': 'batch',
+          'quantity': '2',
+          'totalPrice': '415.00',
+          'deliveryFee': '50.00',
+          'paymentMethod': 'gridCredits',
+          'paymentStatus': 'pending',
+          'orderStatus': 'orderPlaced',
+          'deliveryOption': 'delivery',
+          'createdAt': now,
+          'updatedAt': now,
+          'items': [
+            {
+              'id': '301',
+              'orderId': 'ORD-ITEM-1',
+              'category': '3d',
+              'fileName': 'gear.stl',
+              'fileMetadataId': '84',
+              'quantity': '1',
+              'totalPrice': '240.00',
+              'threeDSpecs': {
+                'fileFormat': 'stl',
+                'material': 'pla',
+                'color': 'White',
+                'infillPercentage': '20',
+                'layerHeight': '0.20',
+                'supports': false,
+              },
+            },
+          ],
+        },
+      ];
+      final container = ProviderContainer(
+        overrides: [
+          ordersProvider.overrideWith(
+            (ref) =>
+                OrdersNotifier(initialState: const [], skipBootstrap: true),
+          ),
+        ],
       );
+      addTearDown(container.dispose);
 
-      expect(items.last, containsPair('category', '3d'));
-      expect(items.last, containsPair('quantity', 3));
-      expect(items.last, containsPair('totalPrice', 240));
-      expect(items.last, containsPair('fileName', 'gear.stl'));
-      expect(
-        items.last,
-        containsPair(
-          'threeDSpecs',
-          containsPair('fileFormat', FileFormat3D.stl.name),
-        ),
-      );
+      final createdOrders = await container
+          .read(ordersProvider.notifier)
+          .addBatchOrder(
+            items: [_threeDCartItem(printSubtotal: 240)],
+            deliveryOption: 'delivery',
+            deliveryAddressId: '9',
+            deliveryFee: 50,
+            paymentMethod: PaymentMethod.gridCredits,
+          );
+
+      final item = createdOrders.single.items.single;
+      expect(item.fileMetadataId, 84);
+      expect(item.threeDSpecs?.infillPercentage, 20);
+      expect(item.threeDSpecs?.layerHeight, 0.2);
     });
   });
 
@@ -365,6 +464,8 @@ Map<String, dynamic> _orderJson({
     'id': id,
     'orderId': orderId,
     'userId': 'usr_001',
+    'batchOrderId': 77,
+    'batchOrder': {'batchRef': 'BATCH-10001'},
     'category': fileName.endsWith('.stl') ? '3d' : 'paper',
     'fileName': fileName,
     'fileUrl': '/tmp/$fileName',

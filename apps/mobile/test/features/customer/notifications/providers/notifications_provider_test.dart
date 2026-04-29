@@ -3,6 +3,23 @@ import 'package:printing_app/features/customer/notifications/providers/notificat
 
 import '../../../../helpers/test_setup.dart';
 
+class _FakeNotificationsApi implements NotificationsApi {
+  _FakeNotificationsApi(this.notifications);
+
+  final List<Map<String, dynamic>> notifications;
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchNotifications() async {
+    return notifications;
+  }
+
+  @override
+  Future<void> markAllAsRead() async {}
+
+  @override
+  Future<void> markAsRead(String id) async {}
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -32,10 +49,15 @@ void main() {
     test('notifications are sorted newest first', () {
       for (var i = 0; i < notifier.state.length - 1; i++) {
         expect(
-          notifier.state[i].createdAt.isAfter(notifier.state[i + 1].createdAt) ||
-              notifier.state[i].createdAt.isAtSameMomentAs(notifier.state[i + 1].createdAt),
+          notifier.state[i].createdAt.isAfter(
+                notifier.state[i + 1].createdAt,
+              ) ||
+              notifier.state[i].createdAt.isAtSameMomentAs(
+                notifier.state[i + 1].createdAt,
+              ),
           true,
-          reason: 'Notification at index $i should be >= notification at index ${i + 1}',
+          reason:
+              'Notification at index $i should be >= notification at index ${i + 1}',
         );
       }
     });
@@ -98,5 +120,33 @@ void main() {
       // Total count should not change (only isRead changes)
       expect(notifier.state.length, totalBefore);
     });
+
+    test(
+      'parses server orderRef notifications into visible order tags',
+      () async {
+        final serverNotifier = NotificationsNotifier(
+          api: _FakeNotificationsApi([
+            {
+              'id': 99,
+              'user_id': 1,
+              'order_ref': 'ORD-10009',
+              'title': 'Printing Started',
+              'message': 'Your order is being printed.',
+              'type': 'order_printing_in_progress',
+              'is_read': false,
+              'created_at': '2026-04-25T05:00:00.000Z',
+            },
+          ]),
+        );
+        addTearDown(serverNotifier.dispose);
+
+        await Future.delayed(Duration.zero);
+
+        expect(serverNotifier.state, hasLength(1));
+        expect(serverNotifier.state.single.userId, '1');
+        expect(serverNotifier.state.single.orderId, 'ORD-10009');
+        expect(serverNotifier.state.single.isRead, isFalse);
+      },
+    );
   });
 }

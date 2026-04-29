@@ -6,6 +6,18 @@ import 'package:printing_app/shared/models/three_d_specs.dart';
 import 'package:printing_app/shared/services/draft_storage_service.dart';
 import 'package:printing_app/utils/pricing_engine.dart';
 
+int _readInt(dynamic value, int fallback) {
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? fallback;
+  return fallback;
+}
+
+double _readDouble(dynamic value, double fallback) {
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value) ?? fallback;
+  return fallback;
+}
+
 /// Holds the full state for the 6-step order creation flow.
 class OrderFlowState {
   const OrderFlowState({
@@ -85,14 +97,18 @@ class OrderFlowState {
       fileName: clearFile ? null : (fileName ?? this.fileName),
       filePath: clearFile ? null : (filePath ?? this.filePath),
       fileSize: clearFile ? null : (fileSize ?? this.fileSize),
-      fileMetadataId: clearFile ? null : (fileMetadataId ?? this.fileMetadataId),
+      fileMetadataId: clearFile
+          ? null
+          : (fileMetadataId ?? this.fileMetadataId),
       quantity: quantity ?? this.quantity,
       pageCount: pageCount ?? this.pageCount,
       deliveryOption: deliveryOption ?? this.deliveryOption,
-      deliveryAddress:
-          clearAddress ? null : (deliveryAddress ?? this.deliveryAddress),
-      paymentMethod:
-          clearPaymentMethod ? null : (paymentMethod ?? this.paymentMethod),
+      deliveryAddress: clearAddress
+          ? null
+          : (deliveryAddress ?? this.deliveryAddress),
+      paymentMethod: clearPaymentMethod
+          ? null
+          : (paymentMethod ?? this.paymentMethod),
       totalPrice: totalPrice ?? this.totalPrice,
       deliveryFee: deliveryFee ?? this.deliveryFee,
     );
@@ -161,11 +177,21 @@ class OrderFlowState {
     if (psMap != null) {
       final ps = Map<String, dynamic>.from(psMap as Map);
       paperSpecs = PaperSpecs(
-        paperSize: _parseEnum(PaperSize.values, ps['paperSize'] as String?) ?? PaperSize.a4,
-        colorMode: _parseEnum(ColorMode.values, ps['colorMode'] as String?) ?? ColorMode.blackAndWhite,
-        mediaType: _parseEnum(MediaType.values, ps['mediaType'] as String?) ?? MediaType.glossy,
-        printSides: _parseEnum(PrintSides.values, ps['printSides'] as String?) ?? PrintSides.frontOnly,
-        binding: _parseEnum(Binding.values, ps['binding'] as String?) ?? Binding.none,
+        paperSize:
+            _parseEnum(PaperSize.values, ps['paperSize'] as String?) ??
+            PaperSize.a4,
+        colorMode:
+            _parseEnum(ColorMode.values, ps['colorMode'] as String?) ??
+            ColorMode.blackAndWhite,
+        mediaType:
+            _parseEnum(MediaType.values, ps['mediaType'] as String?) ??
+            MediaType.glossy,
+        printSides:
+            _parseEnum(PrintSides.values, ps['printSides'] as String?) ??
+            PrintSides.frontOnly,
+        binding:
+            _parseEnum(Binding.values, ps['binding'] as String?) ??
+            Binding.none,
       );
     }
 
@@ -174,11 +200,15 @@ class OrderFlowState {
     if (tdMap != null) {
       final td = Map<String, dynamic>.from(tdMap as Map);
       threeDSpecs = ThreeDSpecs(
-        fileFormat: _parseEnum(FileFormat3D.values, td['fileFormat'] as String?) ?? FileFormat3D.stl,
-        material: _parseEnum(Material3D.values, td['material'] as String?) ?? Material3D.pla,
+        fileFormat:
+            _parseEnum(FileFormat3D.values, td['fileFormat'] as String?) ??
+            FileFormat3D.stl,
+        material:
+            _parseEnum(Material3D.values, td['material'] as String?) ??
+            Material3D.pla,
         color: td['color']?.toString() ?? '',
-        infillPercentage: (td['infillPercentage'] as num?)?.toInt() ?? 20,
-        layerHeight: (td['layerHeight'] as num?)?.toDouble() ?? 0.2,
+        infillPercentage: _readInt(td['infillPercentage'], 20),
+        layerHeight: _readDouble(td['layerHeight'], 0.2),
         supports: td['supports'] as bool? ?? false,
         notes: td['notes']?.toString(),
       );
@@ -219,7 +249,10 @@ class OrderFlowState {
       pageCount: map['pageCount'] as int? ?? 1,
       deliveryOption: map['deliveryOption'] as String? ?? 'pickup',
       deliveryAddress: deliveryAddress,
-      paymentMethod: _parseEnum(PaymentMethod.values, map['paymentMethod'] as String?),
+      paymentMethod: _parseEnum(
+        PaymentMethod.values,
+        map['paymentMethod'] as String?,
+      ),
       totalPrice: (map['totalPrice'] as num?)?.toDouble() ?? 0,
       deliveryFee: (map['deliveryFee'] as num?)?.toDouble() ?? 0,
     );
@@ -268,19 +301,21 @@ class OrderFlowNotifier extends StateNotifier<OrderFlowState> {
   void setPaperSpecsFromMap(Map<String, dynamic> map) {
     if (map.isEmpty) return;
     final specs = PaperSpecs(
-      paperSize: _parseEnum(PaperSize.values, map['paperSize']?.toString()) ??
+      paperSize:
+          _parseEnum(PaperSize.values, map['paperSize']?.toString()) ??
           PaperSize.a4,
       colorMode:
           _parseEnum(ColorMode.values, map['colorMode']?.toString()) ??
-              ColorMode.blackAndWhite,
+          ColorMode.blackAndWhite,
       mediaType:
           _parseEnum(MediaType.values, map['mediaType']?.toString()) ??
-              MediaType.glossy,
+          MediaType.glossy,
       printSides:
           _parseEnum(PrintSides.values, map['printSides']?.toString()) ??
-              PrintSides.frontOnly,
+          PrintSides.frontOnly,
       binding:
-          _parseEnum(Binding.values, map['binding']?.toString()) ?? Binding.none,
+          _parseEnum(Binding.values, map['binding']?.toString()) ??
+          Binding.none,
     );
     state = state.copyWith(paperSpecs: specs);
     _recalculatePrice();
@@ -292,13 +327,13 @@ class OrderFlowNotifier extends StateNotifier<OrderFlowState> {
     final specs = ThreeDSpecs(
       fileFormat:
           _parseEnum(FileFormat3D.values, map['fileFormat']?.toString()) ??
-              FileFormat3D.stl,
+          FileFormat3D.stl,
       material:
           _parseEnum(Material3D.values, map['material']?.toString()) ??
-              Material3D.pla,
+          Material3D.pla,
       color: map['color']?.toString() ?? '',
-      infillPercentage: (map['infillPercentage'] as num?)?.toInt() ?? 20,
-      layerHeight: (map['layerHeight'] as num?)?.toDouble() ?? 0.2,
+      infillPercentage: _readInt(map['infillPercentage'], 20),
+      layerHeight: _readDouble(map['layerHeight'], 0.2),
       supports: map['supports'] as bool? ?? false,
       notes: map['notes']?.toString(),
     );
@@ -423,5 +458,5 @@ T? _parseEnum<T extends Enum>(List<T> values, String? name) {
 /// Global provider for the order creation flow.
 final orderFlowProvider =
     StateNotifierProvider<OrderFlowNotifier, OrderFlowState>(
-  (ref) => OrderFlowNotifier(),
-);
+      (ref) => OrderFlowNotifier(),
+    );

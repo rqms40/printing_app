@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
@@ -13,6 +15,8 @@ import 'package:printing_app/features/customer/order/providers/order_provider.da
 import 'package:printing_app/features/customer/order/widgets/file_upload_card.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
+import 'package:printing_app/shared/widgets/file_preview_sheet.dart';
+import 'package:printing_app/shared/widgets/file_type_icon.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
 import 'package:printing_app/utils/formatters.dart';
 
@@ -188,11 +192,15 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
     try {
       final MultipartFile multipartFile;
       if (file.bytes != null) {
-        multipartFile =
-            MultipartFile.fromBytes(file.bytes!, filename: file.name);
+        multipartFile = MultipartFile.fromBytes(
+          file.bytes!,
+          filename: file.name,
+        );
       } else if (!kIsWeb && file.path != null) {
-        multipartFile =
-            await MultipartFile.fromFile(file.path!, filename: file.name);
+        multipartFile = await MultipartFile.fromFile(
+          file.path!,
+          filename: file.name,
+        );
       } else {
         setState(() {
           _isUploading = false;
@@ -257,8 +265,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
           children: [
             Expanded(
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -266,71 +273,79 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                     const StepIndicator(totalSteps: 6, currentStep: 2),
                     const SizedBox(height: AppSpacing.xl),
                     Text(
-                      'Upload Your File',
-                      style: AppTypography.h1
-                          .copyWith(color: colors.onBackground),
-                    )
+                          'Upload Your File',
+                          style: AppTypography.h1.copyWith(
+                            color: colors.onBackground,
+                          ),
+                        )
                         .animate()
                         .fadeIn(duration: 400.ms, curve: Curves.easeOut)
                         .slideY(
-                            begin: 0.03,
-                            duration: 400.ms,
-                            curve: Curves.easeOut),
+                          begin: 0.03,
+                          duration: 400.ms,
+                          curve: Curves.easeOut,
+                        ),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
                       'Accepted: ${_allowedTypes.map((e) => '.$e').join(', ')} (max $_maxSizeMB MB)',
-                      style: AppTypography.caption
-                          .copyWith(color: colors.onSurfaceDim),
+                      style: AppTypography.caption.copyWith(
+                        color: colors.onSurfaceDim,
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.xl),
                     FileUploadCard(
-                      onTap: _pickFile,
-                      fileName: _fileName,
-                      fileSize: _fileSize,
-                      errorText: _errorText,
-                      isUploading: _isUploading,
-                      uploadProgress: _uploadProgress,
-                      localFilePath: _filePath,
-                      localFileBytes: _fileBytes,
-                      mimeType: _fileMimeType,
-                    )
+                          onTap: _pickFile,
+                          onPreview: _fileName != null && !_isUploading
+                              ? _showPreview
+                              : null,
+                          fileName: _fileName,
+                          fileSize: _fileSize,
+                          errorText: _errorText,
+                          isUploading: _isUploading,
+                          uploadProgress: _uploadProgress,
+                          localFilePath: _filePath,
+                          localFileBytes: _fileBytes,
+                          mimeType: _fileMimeType,
+                        )
                         .animate()
                         .fadeIn(
-                            duration: 400.ms,
-                            delay: 60.ms,
-                            curve: Curves.easeOut)
+                          duration: 400.ms,
+                          delay: 60.ms,
+                          curve: Curves.easeOut,
+                        )
                         .slideY(
-                            begin: 0.03,
-                            duration: 400.ms,
-                            delay: 60.ms,
-                            curve: Curves.easeOut),
+                          begin: 0.03,
+                          duration: 400.ms,
+                          delay: 60.ms,
+                          curve: Curves.easeOut,
+                        ),
                   ],
                 ),
               ),
             ),
             Container(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              decoration: BoxDecoration(
-                color: colors.surface,
-                border: Border(
-                  top: BorderSide(color: colors.outline, width: 0.5),
-                ),
-              ),
-              child: AppButton(
-                label: 'Continue',
-                isFullWidth: true,
-                isDisabled: !_canContinue,
-                onTap: _canContinue ? _onContinue : null,
-              ),
-            )
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  decoration: BoxDecoration(
+                    color: colors.surface,
+                    border: Border(
+                      top: BorderSide(color: colors.outline, width: 0.5),
+                    ),
+                  ),
+                  child: AppButton(
+                    label: 'Continue',
+                    isFullWidth: true,
+                    isDisabled: !_canContinue,
+                    onTap: _canContinue ? _onContinue : null,
+                  ),
+                )
                 .animate()
-                .fadeIn(
-                    duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
+                .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
                 .slideY(
-                    begin: 0.03,
-                    duration: 400.ms,
-                    delay: 120.ms,
-                    curve: Curves.easeOut),
+                  begin: 0.03,
+                  duration: 400.ms,
+                  delay: 120.ms,
+                  curve: Curves.easeOut,
+                ),
           ],
         ),
       ),
@@ -338,7 +353,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
   }
 
   void _onContinue() {
-    ref.read(orderFlowProvider.notifier).setFile(
+    ref
+        .read(orderFlowProvider.notifier)
+        .setFile(
           fileName: _fileName!,
           filePath: _filePath ?? '',
           fileSize: _fileSize ?? 0,
@@ -346,5 +363,179 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
         );
     ref.read(orderFlowProvider.notifier).nextStep();
     context.push('/customer/order/summary');
+  }
+
+  void _showPreview() {
+    final fileName = _fileName;
+    final mimeType = _fileMimeType;
+    if (fileName == null || mimeType == null) return;
+
+    final metadataId = _fileMetadataId;
+    if (metadataId != null) {
+      FilePreviewSheet.show(
+        context,
+        fileId: metadataId,
+        fileName: fileName,
+        mimeType: mimeType,
+        fileSize: _fileSize,
+      );
+      return;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      useSafeArea: true,
+      builder: (_) => _LocalUploadPreviewSheet(
+        fileName: fileName,
+        mimeType: mimeType,
+        fileSize: _fileSize,
+        filePath: _filePath,
+        fileBytes: _fileBytes,
+      ),
+    );
+  }
+}
+
+class _LocalUploadPreviewSheet extends StatelessWidget {
+  const _LocalUploadPreviewSheet({
+    required this.fileName,
+    required this.mimeType,
+    this.fileSize,
+    this.filePath,
+    this.fileBytes,
+  });
+
+  final String fileName;
+  final String mimeType;
+  final int? fileSize;
+  final String? filePath;
+  final Uint8List? fileBytes;
+
+  AppColorSet _colors(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = _colors(context);
+    final height = MediaQuery.of(context).size.height * 0.82;
+
+    return Container(
+      height: height,
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: colors.outline.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.sm,
+              AppSpacing.md,
+            ),
+            child: Row(
+              children: [
+                FileTypeIcon(mimeType: mimeType, size: 32),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        fileName,
+                        style: AppTypography.bodyBold.copyWith(
+                          color: colors.onBackground,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (fileSize != null)
+                        Text(
+                          formatFileSize(fileSize!),
+                          style: AppTypography.caption.copyWith(
+                            color: colors.onSurfaceDim,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: Icon(Icons.close_rounded, color: colors.onSurfaceDim),
+                  tooltip: 'Close',
+                ),
+              ],
+            ),
+          ),
+          Divider(color: colors.outline.withValues(alpha: 0.5), height: 1),
+          Expanded(child: _buildPreview(colors)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPreview(AppColorSet colors) {
+    if (mimeType.startsWith('image/')) {
+      final bytes = fileBytes;
+      if (bytes != null) {
+        return InteractiveViewer(
+          minScale: 0.5,
+          maxScale: 6,
+          child: Center(child: Image.memory(bytes, fit: BoxFit.contain)),
+        );
+      }
+      if (filePath != null && !kIsWeb) {
+        return InteractiveViewer(
+          minScale: 0.5,
+          maxScale: 6,
+          child: Center(
+            child: Image.file(File(filePath!), fit: BoxFit.contain),
+          ),
+        );
+      }
+    }
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FileTypeIcon(mimeType: mimeType, size: 64),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              fileName,
+              style: AppTypography.bodyBold.copyWith(
+                color: colors.onBackground,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Preview will be available after upload for supported files.',
+              style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

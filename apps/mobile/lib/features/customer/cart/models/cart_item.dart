@@ -179,6 +179,18 @@ int _normalizeQuantity(int? quantity) {
   return quantity;
 }
 
+int _readInt(dynamic value, int fallback) {
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? fallback;
+  return fallback;
+}
+
+double _readDouble(dynamic value, double fallback) {
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value) ?? fallback;
+  return fallback;
+}
+
 PaperSpecs? _paperSpecsFromMap(dynamic data) {
   if (data == null) return null;
   final map = Map<String, dynamic>.from(data as Map);
@@ -211,8 +223,8 @@ ThreeDSpecs? _threeDSpecsFromMap(dynamic data) {
         _parseEnum(Material3D.values, map['material']?.toString()) ??
         Material3D.pla,
     color: map['color']?.toString() ?? '',
-    infillPercentage: (map['infillPercentage'] as num?)?.toInt() ?? 20,
-    layerHeight: (map['layerHeight'] as num?)?.toDouble() ?? 0.2,
+    infillPercentage: _readInt(map['infillPercentage'], 20),
+    layerHeight: _readDouble(map['layerHeight'], 0.2),
     supports: map['supports'] as bool? ?? false,
     notes: map['notes']?.toString(),
   );

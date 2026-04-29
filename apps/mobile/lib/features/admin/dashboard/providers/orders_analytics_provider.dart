@@ -6,10 +6,7 @@ import 'package:printing_app/shared/models/order.dart';
 
 /// Matches the dashboard analytics point structure
 class DashboardAnalyticsPoint {
-  const DashboardAnalyticsPoint({
-    required this.label,
-    required this.value,
-  });
+  const DashboardAnalyticsPoint({required this.label, required this.value});
 
   final String label;
   final num value;
@@ -29,8 +26,9 @@ class DashboardAnalyticsResponse {
 
 enum DashboardAnalyticsPeriod { days7, days30, months6 }
 
-final ordersAnalyticsPeriodProvider =
-    StateProvider<DashboardAnalyticsPeriod>((ref) => DashboardAnalyticsPeriod.days7);
+final ordersAnalyticsPeriodProvider = StateProvider<DashboardAnalyticsPeriod>(
+  (ref) => DashboardAnalyticsPeriod.days7,
+);
 
 DateTime _startOfUtcDay(DateTime date) {
   return DateTime.utc(date.year, date.month, date.day);
@@ -52,7 +50,7 @@ const _monthLabels = [
   'Sep',
   'Oct',
   'Nov',
-  'Dec'
+  'Dec',
 ];
 
 String _formatDayLabel(DateTime date) {
@@ -91,12 +89,9 @@ List<_Bucket> _buildBuckets(DashboardAnalyticsPeriod period, DateTime now) {
 
   return List.generate(days, (index) {
     final d = start.add(Duration(days: index));
-    final key = '${d.year}-${d.month.toString().padLeft(2, "0")}-${d.day.toString().padLeft(2, "0")}';
-    return _Bucket(
-      key: key,
-      label: _formatDayLabel(d),
-      start: d,
-    );
+    final key =
+        '${d.year}-${d.month.toString().padLeft(2, "0")}-${d.day.toString().padLeft(2, "0")}';
+    return _Bucket(key: key, label: _formatDayLabel(d), start: d);
   });
 }
 
@@ -142,11 +137,20 @@ DashboardAnalyticsResponse _deriveDashboardAnalyticsFromOrders(
       tatTrend[bucketKey] = (tatTrend[bucketKey] ?? 0) + 120;
     }
 
-    if (order.category == 'paper' &&
-        order.paperSpecs != null &&
-        !_isExcludedFromPaperDemand(order.orderStatus)) {
-      final size = order.paperSpecs!.paperSize.name.toUpperCase();
-      paperSizeDemand[size] = (paperSizeDemand[size] ?? 0) + 1;
+    if (!_isExcludedFromPaperDemand(order.orderStatus)) {
+      final paperItems = order.items
+          .where((item) => item.category == 'paper' && item.paperSpecs != null)
+          .toList();
+
+      if (paperItems.isNotEmpty) {
+        for (final item in paperItems) {
+          final size = item.paperSpecs!.paperSize.name.toUpperCase();
+          paperSizeDemand[size] = (paperSizeDemand[size] ?? 0) + item.quantity;
+        }
+      } else if (order.category == 'paper' && order.paperSpecs != null) {
+        final size = order.paperSpecs!.paperSize.name.toUpperCase();
+        paperSizeDemand[size] = (paperSizeDemand[size] ?? 0) + order.quantity;
+      }
     }
   }
 
@@ -159,10 +163,20 @@ DashboardAnalyticsResponse _deriveDashboardAnalyticsFromOrders(
 
   return DashboardAnalyticsResponse(
     tatTrend: buckets
-        .map((b) => DashboardAnalyticsPoint(label: b.label, value: tatTrend[b.key] ?? 0))
+        .map(
+          (b) => DashboardAnalyticsPoint(
+            label: b.label,
+            value: tatTrend[b.key] ?? 0,
+          ),
+        )
         .toList(),
     volume: buckets
-        .map((b) => DashboardAnalyticsPoint(label: b.label, value: volume[b.key] ?? 0))
+        .map(
+          (b) => DashboardAnalyticsPoint(
+            label: b.label,
+            value: volume[b.key] ?? 0,
+          ),
+        )
         .toList(),
     paperSizeDemand: paperDemandList,
   );

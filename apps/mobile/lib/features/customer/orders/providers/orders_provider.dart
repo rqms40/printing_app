@@ -27,6 +27,18 @@ dynamic _readJsonValue(
   return json[camelKey] ?? (snakeKey != null ? json[snakeKey] : null);
 }
 
+int _readInt(dynamic value, int fallback) {
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? fallback;
+  return fallback;
+}
+
+double _readDouble(dynamic value, double fallback) {
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value) ?? fallback;
+  return fallback;
+}
+
 OrderStatus _parseOrderStatus(String value) {
   // Handle snake_case from server (e.g. 'order_placed' → 'orderPlaced')
   final camelCase = value.replaceAllMapped(
@@ -106,24 +118,46 @@ Material3D _parseMaterial3D(String value) {
 PaperSpecs? _parsePaperSpecs(Map<String, dynamic>? json) {
   if (json == null) return null;
   return PaperSpecs(
-    paperSize: _parsePaperSize(json['paperSize'] as String? ?? 'a4'),
-    colorMode: _parseColorMode(json['colorMode'] as String? ?? 'fullColor'),
-    mediaType: _parseMediaType(json['mediaType'] as String? ?? 'matte'),
-    printSides: _parsePrintSides(json['printSides'] as String? ?? 'frontOnly'),
-    binding: _parseBinding(json['binding'] as String? ?? 'none'),
+    paperSize: _parsePaperSize(
+      _readJsonValue(json, 'paperSize', 'paper_size')?.toString() ?? 'a4',
+    ),
+    colorMode: _parseColorMode(
+      _readJsonValue(json, 'colorMode', 'color_mode')?.toString() ??
+          'fullColor',
+    ),
+    mediaType: _parseMediaType(
+      _readJsonValue(json, 'mediaType', 'media_type')?.toString() ?? 'matte',
+    ),
+    printSides: _parsePrintSides(
+      _readJsonValue(json, 'printSides', 'print_sides')?.toString() ??
+          'frontOnly',
+    ),
+    binding: _parseBinding(
+      _readJsonValue(json, 'binding')?.toString() ?? 'none',
+    ),
   );
 }
 
 ThreeDSpecs? _parseThreeDSpecs(Map<String, dynamic>? json) {
   if (json == null) return null;
   return ThreeDSpecs(
-    fileFormat: _parseFileFormat3D(json['fileFormat'] as String? ?? 'stl'),
-    material: _parseMaterial3D(json['material'] as String? ?? 'pla'),
-    color: json['color'] as String? ?? 'white',
-    infillPercentage: (json['infillPercentage'] as num?)?.toInt() ?? 20,
-    layerHeight: (json['layerHeight'] as num?)?.toDouble() ?? 0.2,
-    supports: json['supports'] as bool? ?? false,
-    notes: json['notes'] as String?,
+    fileFormat: _parseFileFormat3D(
+      _readJsonValue(json, 'fileFormat', 'file_format')?.toString() ?? 'stl',
+    ),
+    material: _parseMaterial3D(
+      _readJsonValue(json, 'material')?.toString() ?? 'pla',
+    ),
+    color: _readJsonValue(json, 'color')?.toString() ?? 'white',
+    infillPercentage: _readInt(
+      _readJsonValue(json, 'infillPercentage', 'infill_percentage'),
+      20,
+    ),
+    layerHeight: _readDouble(
+      _readJsonValue(json, 'layerHeight', 'layer_height'),
+      0.2,
+    ),
+    supports: _readJsonValue(json, 'supports') as bool? ?? false,
+    notes: _readJsonValue(json, 'notes')?.toString(),
   );
 }
 
@@ -138,16 +172,38 @@ DateTime? _parseDateNullable(dynamic value) {
 }
 
 Order _parseOrder(Map<String, dynamic> json) {
+  final batch = _readJsonValue(json, 'batchOrder', 'batch_order');
+  final batchJson = batch is Map ? Map<String, dynamic>.from(batch) : null;
+  final itemsJson = _readJsonValue(json, 'items');
+  final items = itemsJson is List
+      ? itemsJson
+            .whereType<Map>()
+            .map((item) => _parseOrderLineItem(Map<String, dynamic>.from(item)))
+            .toList()
+      : const <OrderLineItem>[];
+
   return Order(
     id: _readJsonValue(json, 'id')?.toString() ?? '',
     orderId: _readJsonValue(json, 'orderId', 'order_id')?.toString() ?? '',
     userId: _readJsonValue(json, 'userId', 'user_id')?.toString() ?? '',
+    batchOrderId: _readJsonValue(
+      json,
+      'batchOrderId',
+      'batch_order_id',
+    )?.toString(),
+    batchId:
+        _readJsonValue(json, 'batchId', 'batch_id')?.toString() ??
+        batchJson?['batchRef']?.toString(),
     category: _readJsonValue(json, 'category')?.toString() ?? '',
     fileUrl: _readJsonValue(json, 'fileUrl', 'file_url')?.toString(),
     fileName: _readJsonValue(json, 'fileName', 'file_name')?.toString(),
     fileMetadataId:
-        (_readJsonValue(json, 'fileMetadataId', 'file_metadata_id') as num?)
-            ?.toInt(),
+        _readJsonValue(json, 'fileMetadataId', 'file_metadata_id') == null
+        ? null
+        : _readInt(
+            _readJsonValue(json, 'fileMetadataId', 'file_metadata_id'),
+            0,
+          ),
     paperSpecs: _parsePaperSpecs(
       _readJsonValue(json, 'paperSpecs', 'paper_specs')
           as Map<String, dynamic>?,
@@ -221,9 +277,122 @@ Order _parseOrder(Map<String, dynamic> json) {
       'trackingLink',
       'tracking_link',
     )?.toString(),
+    items: items,
     createdAt: _parseDate(_readJsonValue(json, 'createdAt', 'created_at')),
     updatedAt: _parseDate(_readJsonValue(json, 'updatedAt', 'updated_at')),
   );
+}
+
+OrderLineItem _parseOrderLineItem(Map<String, dynamic> json) {
+  return OrderLineItem(
+    id: _readJsonValue(json, 'id')?.toString() ?? '',
+    orderId: _readJsonValue(json, 'orderId', 'order_id')?.toString() ?? '',
+    category: _readJsonValue(json, 'category')?.toString() ?? '',
+    fileUrl: _readJsonValue(json, 'fileUrl', 'file_url')?.toString(),
+    fileName: _readJsonValue(json, 'fileName', 'file_name')?.toString(),
+    fileMetadataId:
+        _readJsonValue(json, 'fileMetadataId', 'file_metadata_id') == null
+        ? null
+        : _readInt(
+            _readJsonValue(json, 'fileMetadataId', 'file_metadata_id'),
+            0,
+          ),
+    paperSpecs: _parsePaperSpecs(
+      (_readJsonValue(json, 'paperSpecs', 'paper_specs') ??
+              _readJsonValue(json, 'paperSpec', 'paper_spec'))
+          as Map<String, dynamic>?,
+    ),
+    threeDSpecs: _parseThreeDSpecs(
+      (_readJsonValue(json, 'threeDSpecs', 'three_d_specs') ??
+              _readJsonValue(json, 'threeDSpec', 'three_d_spec'))
+          as Map<String, dynamic>?,
+    ),
+    quantity:
+        int.tryParse(_readJsonValue(json, 'quantity')?.toString() ?? '1') ?? 1,
+    totalPrice:
+        double.tryParse(
+          _readJsonValue(json, 'totalPrice', 'total_price')?.toString() ?? '0',
+        ) ??
+        0,
+  );
+}
+
+OrderLineItem _lineItemFromOrder(Order order) {
+  return OrderLineItem(
+    id: order.id,
+    orderId: order.orderId,
+    category: order.category,
+    fileUrl: order.fileUrl,
+    fileName: order.fileName,
+    fileMetadataId: order.fileMetadataId,
+    paperSpecs: order.paperSpecs,
+    threeDSpecs: order.threeDSpecs,
+    quantity: order.quantity,
+    totalPrice: order.totalPrice,
+  );
+}
+
+List<Order> _groupBatchOrders(List<Order> orders) {
+  final grouped = <Order>[];
+  final batchBuckets = <String, List<Order>>{};
+
+  for (final order in orders) {
+    if (order.items.isNotEmpty) {
+      grouped.add(order);
+      continue;
+    }
+    final batchKey = order.batchId ?? order.batchOrderId;
+    if (batchKey == null || batchKey.isEmpty) {
+      grouped.add(
+        order.items.isEmpty
+            ? order.copyWith(items: [_lineItemFromOrder(order)])
+            : order,
+      );
+      continue;
+    }
+    batchBuckets.putIfAbsent(batchKey, () => []).add(order);
+  }
+
+  for (final entry in batchBuckets.entries) {
+    final children = entry.value
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    final first = children.first;
+    final latest = children.reduce(
+      (a, b) => a.updatedAt.isAfter(b.updatedAt) ? a : b,
+    );
+    final allTerminal = children.every(
+      (order) => terminalStatuses.contains(order.orderStatus),
+    );
+    final hasCancelled = children.any(
+      (order) => order.orderStatus == OrderStatus.cancelled,
+    );
+    final totalPrint = children.fold<double>(
+      0,
+      (sum, order) => sum + order.totalPrice,
+    );
+    final totalDelivery = children.fold<double>(
+      0,
+      (sum, order) => sum + order.deliveryFee,
+    );
+
+    grouped.add(
+      first.copyWith(
+        orderId: first.batchId ?? entry.key,
+        category: 'batch',
+        fileName: '${children.length} print jobs',
+        quantity: children.fold<int>(0, (sum, order) => sum + order.quantity),
+        totalPrice: totalPrint,
+        deliveryFee: totalDelivery,
+        orderStatus: allTerminal
+            ? (hasCancelled ? OrderStatus.cancelled : latest.orderStatus)
+            : latest.orderStatus,
+        items: children.map(_lineItemFromOrder).toList(growable: false),
+        updatedAt: latest.updatedAt,
+      ),
+    );
+  }
+
+  return grouped..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 }
 
 class OrdersNotifier extends StateNotifier<List<Order>> {
@@ -288,9 +457,9 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     try {
       final response = await ApiClient.instance.get('/orders');
       final data = response.data as List<dynamic>;
-      state = data
-          .map((json) => _parseOrder(json as Map<String, dynamic>))
-          .toList();
+      state = _groupBatchOrders(
+        data.map((json) => _parseOrder(json as Map<String, dynamic>)).toList(),
+      );
       debugPrint('OrdersProvider: Loaded ${state.length} orders from API');
     } catch (e) {
       debugPrint('OrdersProvider: API failed ($e), using MockData');
@@ -353,7 +522,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     }
   }
 
-  /// Creates a shared-checkout batch and prepends the returned child orders.
+  /// Creates a shared-checkout batch and prepends one customer-facing order.
   Future<List<Order>> addBatchOrder({
     required List<CartItem> items,
     required String deliveryOption,
@@ -374,10 +543,17 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     );
 
     final data = Map<String, dynamic>.from(response.data as Map);
+    final batchId = data['batchId']?.toString();
     final rawOrders = data['orders'] as List<dynamic>? ?? const [];
-    final createdOrders = rawOrders
-        .map((json) => _parseOrder(Map<String, dynamic>.from(json as Map)))
-        .toList();
+    final createdOrders = _groupBatchOrders(
+      rawOrders.map((json) {
+        final orderJson = Map<String, dynamic>.from(json as Map);
+        if (batchId != null && batchId.isNotEmpty) {
+          orderJson['batchId'] = batchId;
+        }
+        return _parseOrder(orderJson);
+      }).toList(),
+    );
 
     state = [...createdOrders, ...state];
     for (final order in createdOrders) {
@@ -445,9 +621,9 @@ Map<String, dynamic> _cartItemPayload(CartItem item) {
   };
 }
 
-Object? _deliveryAddressIdValue(String? id) {
+int? _deliveryAddressIdValue(String? id) {
   if (id == null || id.isEmpty) return null;
-  return int.tryParse(id) ?? id;
+  return int.tryParse(id);
 }
 
 final ordersProvider = StateNotifierProvider<OrdersNotifier, List<Order>>((
