@@ -500,7 +500,7 @@ class _QueueActionBar extends StatelessWidget {
             label: 'Continue to Delivery',
             variant: AppButtonVariant.brand,
             isFullWidth: true,
-            onTap: () => context.push('/customer/order/delivery'),
+            onTap: () => context.push('/customer/order/destinations'),
           ),
           const SizedBox(height: AppSpacing.sm),
           AppButton(
