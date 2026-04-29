@@ -1,0 +1,50 @@
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { DeliverySettings } from './entities/delivery-settings.entity';
+import { GeoRadiusService } from './geo-radius.service';
+
+@Injectable()
+export class DeliverySettingsService {
+  constructor(
+    @InjectRepository(DeliverySettings)
+    private readonly repo: Repository<DeliverySettings>,
+    private readonly geo: GeoRadiusService,
+  ) {}
+
+  async getSettings(): Promise<DeliverySettings> {
+    const existing = await this.repo.findOne({ where: { id: 1 } });
+    if (existing) return existing;
+    return this.repo.save(
+      this.repo.create({
+        id: 1,
+        serviceCenterLat: 7.0731,
+        serviceCenterLng: 125.6128,
+        serviceRadiusKm: 25,
+        priorityFeeAmount: 50,
+        extraDestinationSurcharge: 30,
+      }),
+    );
+  }
+
+  async updateSettings(
+    patch: Partial<DeliverySettings>,
+  ): Promise<DeliverySettings> {
+    const current = await this.getSettings();
+    Object.assign(current, patch);
+    return this.repo.save(current);
+  }
+
+  async isInsideServiceArea(
+    lat: number | null,
+    lng: number | null,
+  ): Promise<boolean> {
+    const s = await this.getSettings();
+    return this.geo.isInsideRadius(
+      lat,
+      lng,
+      { lat: Number(s.serviceCenterLat), lng: Number(s.serviceCenterLng) },
+      Number(s.serviceRadiusKm),
+    );
+  }
+}
