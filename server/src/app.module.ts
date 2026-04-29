@@ -22,6 +22,7 @@ import { DailyGridModule } from './daily-grid/daily-grid.module';
 import { BetaModeModule } from './beta-mode/beta-mode.module';
 import { ChatModule } from './chat/chat.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { DeliverySlotsModule } from './delivery-slots/delivery-slots.module';
 
 @Module({
   imports: [
@@ -77,6 +78,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     DailyGridModule,
     BetaModeModule,
     ChatModule,
+    DeliverySlotsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
