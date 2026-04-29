@@ -183,4 +183,43 @@ describe('DeliverySlotsService', () => {
       expect(tx.remove).toHaveBeenCalled();
     });
   });
+
+  describe('getTodaySnapshot', () => {
+    it('returns templates and bookings for the date', async () => {
+      templateRepo.find.mockResolvedValue([
+        { id: 1, dayOfWeek: 4, startTime: '09:30:00', endTime: '11:30:00', capacity: 10 },
+      ]);
+      const qb = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        leftJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
+        getRawAndEntities: jest.fn().mockResolvedValue({
+          entities: [{ id: 7, slotTemplateId: 1, batchOrderId: 99 }],
+          raw: [{}],
+        }),
+      };
+      bookingRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const out = await svc.getTodaySnapshot('2026-04-30');
+      expect(out.templates).toHaveLength(1);
+      expect(out.bookings).toHaveLength(1);
+    });
+  });
+
+  describe('reorderBookings', () => {
+    it('updates priorityRank atomically for each id', async () => {
+      const txManager = { update: jest.fn().mockResolvedValue(undefined) };
+      dataSource.transaction.mockImplementation(async (cb: any) => cb(txManager));
+
+      await svc.reorderBookings([3, 1, 2]);
+
+      expect(txManager.update).toHaveBeenCalledTimes(3);
+      expect(txManager.update).toHaveBeenNthCalledWith(1, expect.anything(), 3, { priorityRank: 1 });
+      expect(txManager.update).toHaveBeenNthCalledWith(2, expect.anything(), 1, { priorityRank: 2 });
+      expect(txManager.update).toHaveBeenNthCalledWith(3, expect.anything(), 2, { priorityRank: 3 });
+    });
+  });
 });

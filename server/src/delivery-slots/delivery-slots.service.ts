@@ -119,4 +119,33 @@ export class DeliverySlotsService {
     }
     await manager.remove(booking);
   }
+
+  async getTodaySnapshot(date: string) {
+    const dayOfWeek = new Date(date + 'T00:00:00Z').getUTCDay();
+    const templates = await this.templateRepo.find({
+      where: { dayOfWeek, isActive: true },
+      order: { startTime: 'ASC' },
+    });
+    const result = await this.bookingRepo
+      .createQueryBuilder('b')
+      .leftJoinAndSelect('b.slotTemplate', 'tpl')
+      .leftJoin('batch_orders', 'bo', 'bo.id = b.batch_order_id')
+      .leftJoin('users', 'u', 'u.id = bo.user_id')
+      .where('b.date = :date', { date })
+      .addSelect(['bo.id', 'bo.batch_ref'])
+      .addSelect(['u.full_name', 'u.email'])
+      .orderBy('b.priority_rank', 'ASC', 'NULLS LAST')
+      .addOrderBy('b.booked_at', 'ASC')
+      .getRawAndEntities();
+
+    return { templates, bookings: result.entities, raw: result.raw };
+  }
+
+  async reorderBookings(orderedIds: number[]) {
+    await this.dataSource.transaction(async (m) => {
+      for (let i = 0; i < orderedIds.length; i++) {
+        await m.update(DeliverySlotBooking, orderedIds[i], { priorityRank: i + 1 });
+      }
+    });
+  }
 }

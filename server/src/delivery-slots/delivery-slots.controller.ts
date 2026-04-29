@@ -83,4 +83,20 @@ export class DeliverySlotsController {
   async adminUpdateSettings(@Body() dto: UpdateDeliverySettingsDto) {
     return this.settingsService.updateSettings(dto);
   }
+
+  @Get('admin/delivery-slots/today')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  async adminTodayDashboard(@Query('date') date?: string) {
+    const today = date ?? new Date().toISOString().slice(0, 10);
+    return this.slotsService.getTodaySnapshot(today);
+  }
+
+  @Patch('admin/slot-bookings/order')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  async adminReorderBookings(@Body() body: { orderedIds: number[] }) {
+    await this.slotsService.reorderBookings(body.orderedIds);
+    return { ok: true };
+  }
 }
