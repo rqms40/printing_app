@@ -13,6 +13,7 @@ import {
   ProfileCategory,
   ProfileField,
 } from './profile.constants';
+import { PrintMode } from '../orders/print-mode.enum';
 
 type UserProfilingInput = {
   fullName?: string;
@@ -26,6 +27,7 @@ type UserProfilingInput = {
   course?: string;
   organization?: string;
   printingPreferences?: PrintingPreference[];
+  defaultPrintMode?: PrintMode;
 };
 
 @Injectable()
@@ -155,6 +157,10 @@ export class UsersService {
       normalized.printingPreferences = Array.from(
         new Set(data.printingPreferences),
       );
+    }
+
+    if (data.defaultPrintMode !== undefined) {
+      normalized.defaultPrintMode = data.defaultPrintMode ?? null;
     }
 
     return normalized;

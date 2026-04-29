@@ -384,6 +384,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         deliveryAddressId: flowState.deliveryAddress?.id,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
+        printMode: flowState.printMode,
       );
 
       // 1. Create the order via API — captures the server-assigned integer id

@@ -439,6 +439,9 @@ export function normalizeOrder(input: unknown): Order & {
     })(),
     file_url: toOptionalString(record, "file_url", "fileUrl"),
     file_name: toOptionalString(record, "file_name", "fileName"),
+    file_metadata_id: read(record, "file_metadata_id", "fileMetadataId") !== undefined
+      ? toNumberValue(record, 0, "file_metadata_id", "fileMetadataId") || undefined
+      : undefined,
     paper_specs: normalizePaperSpecs(read(record, "paper_specs", "paperSpec")),
     three_d_specs: normalizeThreeDSpecs(
       read(record, "three_d_specs", "threeDSpec"),

@@ -8,6 +8,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
+import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:go_router/go_router.dart';
@@ -41,6 +42,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
   String? _errorText;
   bool _isUploading = false;
   double _uploadProgress = 0;
+  Map<String, dynamic>? _inspection;
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -220,12 +222,24 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
       );
 
       if (mounted) {
+        final fileMetadataId = response.data['id'] as int?;
         setState(() {
           _isUploading = false;
           _uploadProgress = 1.0;
           _filePath = (response.data['url'] as String?) ?? _filePath;
-          _fileMetadataId = response.data['id'] as int?;
+          _fileMetadataId = fileMetadataId;
         });
+
+        // Fetch inspection results after upload
+        final paperSizeName = ref.read(orderFlowProvider).paperSpecs?.paperSize.name;
+        if (fileMetadataId != null && paperSizeName != null) {
+          try {
+            final res = await ApiClient.instance.get(
+              '/files/$fileMetadataId/inspect?paperSize=$paperSizeName',
+            );
+            if (mounted) setState(() => _inspection = res.data as Map<String, dynamic>);
+          } catch (_) {}
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -314,11 +328,55 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                           curve: Curves.easeOut,
                         )
                         .slideY(
-                          begin: 0.03,
-                          duration: 400.ms,
-                          delay: 60.ms,
-                          curve: Curves.easeOut,
+                            begin: 0.03,
+                            duration: 400.ms,
+                            delay: 60.ms,
+                            curve: Curves.easeOut),
+                    if (_inspection != null) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      if (_inspection!['colorSpace'] == 'cmyk')
+                        _InspectionChip(
+                          icon: Icons.palette_outlined,
+                          label: 'CMYK — print ready',
+                          color: Colors.green,
                         ),
+                      if (_inspection!['colorSpace'] != null && _inspection!['colorSpace'] != 'cmyk')
+                        _InspectionChip(
+                          icon: Icons.palette_outlined,
+                          label: 'RGB — colors may shift when printed',
+                          color: Colors.orange,
+                        ),
+                      if (_inspection!['sizeValidation']?['status'] == 'mismatch')
+                        _InspectionChip(
+                          icon: Icons.warning_amber_rounded,
+                          label: _inspection!['sizeValidation']['message'] as String,
+                          color: Colors.red,
+                        ),
+                      if (_inspection!['sizeValidation']?['status'] == 'match')
+                        _InspectionChip(
+                          icon: Icons.check_circle_outline,
+                          label: 'Size matches ${ref.read(orderFlowProvider).paperSpecs?.paperSize.name.toUpperCase() ?? ""}',
+                          color: Colors.green,
+                        ),
+                    ],
+                    if (_fileMetadataId != null && _fileName != null) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      GestureDetector(
+                        onTap: () => FilePreviewSheet.show(
+                          context,
+                          fileId: _fileMetadataId!,
+                          fileName: _fileName!,
+                          mimeType: _fileMimeType ?? 'application/octet-stream',
+                          fileSize: _fileSize,
+                          widthMm: (_inspection?['widthMm'] as num?)?.toDouble(),
+                          heightMm: (_inspection?['heightMm'] as num?)?.toDouble(),
+                        ),
+                        child: Text(
+                          'Preview file',
+                          style: AppTypography.caption.copyWith(color: colors.accent),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -535,6 +593,35 @@ class _LocalUploadPreviewSheet extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _InspectionChip extends StatelessWidget {
+  const _InspectionChip({ required this.icon, required this.label, required this.color });
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: AppSpacing.xs),
+          Flexible(
+            child: Text(label, style: TextStyle(fontSize: 12, color: color)),
+          ),
+        ],
       ),
     );
   }

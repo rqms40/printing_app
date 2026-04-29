@@ -6,16 +6,22 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
+import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/app_illustrations.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
 
 /// Step 1/6 -- Category selection (Paper Printing or 3D Printing).
-class CategoryScreen extends ConsumerWidget {
+class CategoryScreen extends ConsumerStatefulWidget {
   const CategoryScreen({super.key});
 
   static const routeName = '/order/category';
 
+  @override
+  ConsumerState<CategoryScreen> createState() => _CategoryScreenState();
+}
+
+class _CategoryScreenState extends ConsumerState<CategoryScreen> {
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
@@ -23,7 +29,25 @@ class CategoryScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void initState() {
+    super.initState();
+    _loadDefaultPrintMode();
+  }
+
+  Future<void> _loadDefaultPrintMode() async {
+    try {
+      final res = await ApiClient.instance.get('/users/profile');
+      final mode = (res.data['defaultPrintMode'] as String?) ?? 'fitToPage';
+      if (mounted) {
+        ref.read(orderFlowProvider.notifier).setPrintMode(mode);
+      }
+    } catch (_) {
+      // Non-critical — keep the current default
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final colors = _colors(context);
 
     return Scaffold(
@@ -63,7 +87,7 @@ class CategoryScreen extends ConsumerWidget {
                       ),
                       title: 'Paper Printing',
                       description: 'Documents, posters, photos',
-                      onTap: () => _selectCategory(context, ref, 'paper'),
+                      onTap: () => _selectCategory('paper'),
                     ).animate()
                       .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
                       .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
@@ -75,7 +99,7 @@ class CategoryScreen extends ConsumerWidget {
                       ),
                       title: '3D Printing',
                       description: 'Models, prototypes, figures',
-                      onTap: () => _selectCategory(context, ref, '3d'),
+                      onTap: () => _selectCategory('3d'),
                     ).animate()
                       .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
                       .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
@@ -89,11 +113,10 @@ class CategoryScreen extends ConsumerWidget {
     );
   }
 
-  void _selectCategory(BuildContext context, WidgetRef ref, String category) {
+  Future<void> _selectCategory(String category) async {
     ref.read(orderFlowProvider.notifier).setCategory(category);
     ref.read(orderFlowProvider.notifier).goToStep(1);
-
-    context.push(
+    await context.push(
       category == 'paper'
           ? '/customer/order/paper-specs'
           : '/customer/order/3d-specs',

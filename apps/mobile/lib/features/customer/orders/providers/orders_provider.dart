@@ -495,6 +495,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
                   'mediaType': order.paperSpecs!.mediaType.name,
                   'printSides': order.paperSpecs!.printSides.name,
                   'binding': order.paperSpecs!.binding.name,
+                  'printMode': order.printMode,
                 }
               : null,
           'threeDSpecs': order.threeDSpecs != null

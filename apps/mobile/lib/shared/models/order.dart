@@ -60,6 +60,7 @@ class Order {
     this.items = const [],
     required this.createdAt,
     required this.updatedAt,
+    this.printMode = 'fitToPage',
   });
 
   final String id;
@@ -92,6 +93,9 @@ class Order {
   final List<OrderLineItem> items;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  /// `'fitToPage'` or `'actualSize'`.
+  final String printMode;
 
   List<OrderLineItem> get lineItems {
     if (items.isNotEmpty) return items;
@@ -169,6 +173,7 @@ class Order {
     List<OrderLineItem>? items,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? printMode,
   }) {
     return Order(
       id: id ?? this.id,
@@ -202,6 +207,7 @@ class Order {
       items: items ?? this.items,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      printMode: printMode ?? this.printMode,
     );
   }
 

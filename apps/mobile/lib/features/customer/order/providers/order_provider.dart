@@ -36,6 +36,7 @@ class OrderFlowState {
     this.paymentMethod,
     this.totalPrice = 0,
     this.deliveryFee = 0,
+    this.printMode = 'fitToPage',
   });
 
   /// Current step index (0-5).
@@ -66,6 +67,9 @@ class OrderFlowState {
   final double totalPrice;
   final double deliveryFee;
 
+  /// `'fitToPage'` or `'actualSize'`.
+  final String printMode;
+
   OrderFlowState copyWith({
     int? currentStep,
     String? category,
@@ -82,6 +86,7 @@ class OrderFlowState {
     PaymentMethod? paymentMethod,
     double? totalPrice,
     double? deliveryFee,
+    String? printMode,
     // Allow explicit null clearing
     bool clearPaperSpecs = false,
     bool clearThreeDSpecs = false,
@@ -111,6 +116,7 @@ class OrderFlowState {
           : (paymentMethod ?? this.paymentMethod),
       totalPrice: totalPrice ?? this.totalPrice,
       deliveryFee: deliveryFee ?? this.deliveryFee,
+      printMode: printMode ?? this.printMode,
     );
   }
 
@@ -167,6 +173,7 @@ class OrderFlowState {
       'paymentMethod': paymentMethod?.name,
       'totalPrice': totalPrice,
       'deliveryFee': deliveryFee,
+      'printMode': printMode,
     };
   }
 
@@ -255,6 +262,7 @@ class OrderFlowState {
       ),
       totalPrice: (map['totalPrice'] as num?)?.toDouble() ?? 0,
       deliveryFee: (map['deliveryFee'] as num?)?.toDouble() ?? 0,
+      printMode: map['printMode'] as String? ?? 'fitToPage',
     );
   }
 }
@@ -392,6 +400,11 @@ class OrderFlowNotifier extends StateNotifier<OrderFlowState> {
 
   void setPaymentMethod(PaymentMethod method) {
     state = state.copyWith(paymentMethod: method);
+    _saveDraft();
+  }
+
+  void setPrintMode(String mode) {
+    state = state.copyWith(printMode: mode);
     _saveDraft();
   }
 

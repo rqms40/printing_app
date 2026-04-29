@@ -27,6 +27,7 @@ import { useState, useEffect } from "react";
 import type { OrderStatus } from "@/types/enums";
 import { ORDER_STATUS_TRANSITIONS, ORDER_STATUS_LABELS } from "@/types/enums";
 import { StatusBadge } from "@/components/status-badge";
+import { FilePreviewModal, type FileInspection } from "@/components/file-preview-modal";
 import { formatCurrency, formatDateTime, statusLabel } from "@/utils/format";
 import type { Order, OrderItem, OrderStatusHistory } from "@/types/order";
 import { apiClient } from "@/providers/api-client";
@@ -96,6 +97,9 @@ export function OrderShow() {
   const [driverModalOpen, setDriverModalOpen] = useState(false);
   const [declineModalOpen, setDeclineModalOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
+  const [previewFile, setPreviewFile] = useState<{
+    url: string; name: string; mimeType: string; inspection: FileInspection | null;
+  } | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -186,6 +190,18 @@ export function OrderShow() {
     } catch {
       void message.error("Failed to decline order");
     }
+  };
+
+  const openPreview = async (fileUrl: string, fileName: string, mimeType: string, fileMetadataId?: number, paperSize?: string) => {
+    let inspection = null;
+    if (fileMetadataId) {
+      try {
+        const params = paperSize ? `?paperSize=${paperSize}` : '';
+        const res = await apiClient.get(`/files/${fileMetadataId}/inspect${params}`);
+        inspection = res.data;
+      } catch { /* inspection is non-critical */ }
+    }
+    setPreviewFile({ url: fileUrl, name: fileName, mimeType, inspection });
   };
 
   return (
@@ -281,7 +297,25 @@ export function OrderShow() {
             <Table.Column
               title="File"
               dataIndex="file_name"
-              render={(v) => v ?? "—"}
+              render={(v: string | null, item: any) =>
+                v && item.file_url ? (
+                  <Button
+                    type="link"
+                    size="small"
+                    style={{ padding: 0 }}
+                    onClick={() => {
+                      const ext = v.split('.').pop()?.toLowerCase() ?? '';
+                      const mimeType = ext === 'pdf' ? 'application/pdf'
+                        : ['jpg', 'jpeg'].includes(ext) ? 'image/jpeg'
+                        : ext === 'png' ? 'image/png'
+                        : 'application/octet-stream';
+                      void openPreview(item.file_url, v, mimeType, item.file_metadata_id, item.paper_specs?.paper_size);
+                    }}
+                  >
+                    {v}
+                  </Button>
+                ) : (v ?? "—")
+              }
             />
             <Table.Column title="Qty" dataIndex="quantity" width={80} />
             <Table.Column
@@ -452,6 +486,15 @@ export function OrderShow() {
           placeholder="Reason for declining..."
         />
       </Modal>
+
+      <FilePreviewModal
+        open={!!previewFile}
+        onClose={() => setPreviewFile(null)}
+        fileName={previewFile?.name ?? ''}
+        fileUrl={previewFile?.url ?? ''}
+        mimeType={previewFile?.mimeType ?? ''}
+        inspection={previewFile?.inspection}
+      />
     </Show>
   );
 }

@@ -1,14 +1,17 @@
+import 'dart:typed_data';
+
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/foundation.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import 'package:pdfx/pdfx.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/widgets/file_type_icon.dart';
+import 'package:printing_app/shared/widgets/ruler_overlay.dart';
 import 'package:printing_app/utils/formatters.dart';
 
 class FilePreviewSheet extends ConsumerStatefulWidget {
@@ -18,12 +21,16 @@ class FilePreviewSheet extends ConsumerStatefulWidget {
     required this.fileName,
     required this.mimeType,
     this.fileSize,
+    this.widthMm,
+    this.heightMm,
   });
 
   final int fileId;
   final String fileName;
   final String mimeType;
   final int? fileSize;
+  final double? widthMm;
+  final double? heightMm;
 
   static Future<void> show(
     BuildContext context, {
@@ -31,6 +38,8 @@ class FilePreviewSheet extends ConsumerStatefulWidget {
     required String fileName,
     required String mimeType,
     int? fileSize,
+    double? widthMm,
+    double? heightMm,
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -42,6 +51,8 @@ class FilePreviewSheet extends ConsumerStatefulWidget {
         fileName: fileName,
         mimeType: mimeType,
         fileSize: fileSize,
+        widthMm: widthMm,
+        heightMm: heightMm,
       ),
     );
   }
@@ -57,6 +68,10 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
   String? _error;
   late AnimationController _fadeCtrl;
   late Animation<double> _fadeAnim;
+  bool _showRuler = false;
+  PdfController? _pdfController;
+  double? _widthMm;
+  double? _heightMm;
 
   AppColorSet _colors(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark
@@ -66,6 +81,8 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
   @override
   void initState() {
     super.initState();
+    _widthMm = widget.widthMm;
+    _heightMm = widget.heightMm;
     _fadeCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -77,6 +94,7 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
   @override
   void dispose() {
     _fadeCtrl.dispose();
+    _pdfController?.dispose();
     super.dispose();
   }
 
@@ -89,18 +107,47 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
     try {
       final response =
           await ApiClient.instance.get('/files/${widget.fileId}/presigned-url');
+      final url = response.data['url'] as String?;
+
       if (mounted) {
-        setState(() {
-          _presignedUrl = response.data['url'] as String?;
-          _loading = false;
-        });
-        _fadeCtrl.forward();
+        // If this is a PDF, eagerly build the controller from URL bytes so
+        // that a fresh controller is always created on each fetch (fixing the
+        // stale-controller-on-retry bug).
+        PdfController? newPdfController;
+        if (url != null && widget.mimeType == 'application/pdf') {
+          final bytes = await Dio().get<List<int>>(
+            url,
+            options: Options(responseType: ResponseType.bytes),
+          );
+          final rawBytes = bytes.data;
+          if (rawBytes == null) throw Exception('Empty response body');
+          final data = Uint8List.fromList(rawBytes);
+          newPdfController = PdfController(
+            document: PdfDocument.openData(data),
+          );
+        }
+
+        if (mounted) {
+          _pdfController?.dispose();
+          setState(() {
+            _presignedUrl = url;
+            _pdfController = newPdfController;
+            _loading = false;
+          });
+          _fadeCtrl.forward();
+        } else {
+          newPdfController?.dispose();
+        }
       }
     } catch (e) {
       if (mounted) {
+        _pdfController?.dispose();
+        _pdfController = null;
         setState(() {
+          _presignedUrl = null;
           _error = 'Couldn\'t load preview.';
           _loading = false;
+          _showRuler = false;
         });
       }
     }
@@ -186,6 +233,19 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
               ],
             ),
           ),
+          if (_presignedUrl != null)
+            IconButton(
+              icon: Icon(
+                Icons.straighten_rounded,
+                color: _showRuler
+                    ? (Theme.of(context).brightness == Brightness.dark
+                        ? AppColors.brandDark
+                        : AppColors.brandLight)
+                    : Colors.white60,
+              ),
+              onPressed: () => setState(() => _showRuler = !_showRuler),
+              tooltip: 'Toggle ruler',
+            ),
           IconButton(
             onPressed: () => Navigator.of(context).pop(),
             icon: Icon(Icons.close_rounded, color: colors.onSurfaceDim),
@@ -204,38 +264,55 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
     final mime = widget.mimeType;
 
     if (mime.startsWith('image/')) {
-      return FadeTransition(
-        opacity: _fadeAnim,
-        child: InteractiveViewer(
-          minScale: 0.5,
-          maxScale: 6,
-          child: Center(
-            child: CachedNetworkImage(
-              imageUrl: url,
-              fit: BoxFit.contain,
-              fadeInDuration: const Duration(milliseconds: 200),
-              placeholder: (_, _) => _buildLoading(colors),
-              errorWidget: (_, _, _) => _buildError(colors),
+      return Stack(
+        children: [
+          FadeTransition(
+            opacity: _fadeAnim,
+            child: InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 6,
+              child: Center(
+                child: CachedNetworkImage(
+                  imageUrl: url,
+                  fit: BoxFit.contain,
+                  fadeInDuration: const Duration(milliseconds: 200),
+                  placeholder: (_, _) => _buildLoading(colors),
+                  errorWidget: (_, _, _) => _buildError(colors),
+                ),
+              ),
             ),
           ),
-        ),
+          if (_showRuler && _widthMm != null && _heightMm != null)
+            Positioned.fill(
+              child: RulerOverlay(widthMm: _widthMm!, heightMm: _heightMm!),
+            ),
+        ],
       );
     }
 
     if (mime == 'application/pdf') {
-      if (kIsWeb) return _buildUnsupported(colors, url);
-      return FadeTransition(
-        opacity: _fadeAnim,
-        child: SfPdfViewer.network(
-          url,
-          onDocumentLoadFailed: (_) {
-            if (mounted) {
-              setState(() {
-                _error = 'Failed to load PDF.';
-              });
-            }
-          },
-        ),
+      return Stack(
+        children: [
+          FadeTransition(
+            opacity: _fadeAnim,
+            child: PdfView(
+              controller: _pdfController!,
+              scrollDirection: Axis.vertical,
+              onDocumentError: (_) {
+                if (mounted) {
+                  setState(() {
+                    _error = 'Failed to load PDF.';
+                    _showRuler = false;
+                  });
+                }
+              },
+            ),
+          ),
+          if (_showRuler && _widthMm != null && _heightMm != null)
+            Positioned.fill(
+              child: RulerOverlay(widthMm: _widthMm!, heightMm: _heightMm!),
+            ),
+        ],
       );
     }
 
