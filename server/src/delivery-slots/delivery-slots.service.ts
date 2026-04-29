@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { DeliverySlotTemplate } from './entities/delivery-slot-template.entity';
 import { DeliverySlotBooking } from './entities/delivery-slot-booking.entity';
-import { SlotFullException } from './exceptions';
+import { SlotFullException, CancellationClosedException } from './exceptions';
 
 export interface SlotAvailability {
   templateId: number;
@@ -102,5 +102,21 @@ export class DeliverySlotsService {
       priority: input.priority,
     });
     return manager.save(booking);
+  }
+
+  async releaseSlot(
+    manager: EntityManager,
+    bookingId: number,
+  ): Promise<void> {
+    const booking = await manager.findOne(DeliverySlotBooking, {
+      where: { id: bookingId },
+      relations: ['slotTemplate'],
+    });
+    if (!booking) return;
+    const slotStart = new Date(`${booking.date}T${booking.slotTemplate.startTime}`);
+    if (Date.now() >= slotStart.getTime()) {
+      throw new CancellationClosedException();
+    }
+    await manager.remove(booking);
   }
 }

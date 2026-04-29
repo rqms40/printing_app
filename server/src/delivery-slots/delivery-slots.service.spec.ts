@@ -149,4 +149,38 @@ describe('DeliverySlotsService', () => {
       expect(txManager.create).toHaveBeenCalled();
     });
   });
+
+  describe('releaseSlot', () => {
+    it('throws CancellationClosedException past cutoff', async () => {
+      const past = '2020-01-01';
+      const tx = {
+        findOne: jest.fn().mockResolvedValue({
+          id: 7,
+          slotTemplateId: 1,
+          date: past,
+          slotTemplate: { startTime: '09:30:00' },
+        }),
+      };
+      await expect(svc.releaseSlot(tx as any, 7)).rejects.toThrow(
+        'cancellation_closed',
+      );
+    });
+
+    it('removes booking before cutoff', async () => {
+      const future = new Date(Date.now() + 24 * 3600 * 1000)
+        .toISOString()
+        .slice(0, 10);
+      const tx = {
+        findOne: jest.fn().mockResolvedValue({
+          id: 7,
+          slotTemplateId: 1,
+          date: future,
+          slotTemplate: { startTime: '09:30:00' },
+        }),
+        remove: jest.fn().mockResolvedValue(undefined),
+      };
+      await svc.releaseSlot(tx as any, 7);
+      expect(tx.remove).toHaveBeenCalled();
+    });
+  });
 });
