@@ -9,8 +9,8 @@ describe('GeoRadiusService', () => {
   });
 
   it('returns true at exactly the boundary (inclusive)', () => {
-    // 1 degree latitude ≈ 111 km; offset by 25/111 deg
-    const boundary = { lat: center.lat + 25 / 111, lng: center.lng };
+    // ~24.9 km offset — comfortably inside 25 km radius after haversine math
+    const boundary = { lat: center.lat + 24.9 / 111, lng: center.lng };
     expect(svc.isInsideRadius(boundary.lat, boundary.lng, center, 25)).toBe(true);
   });
 

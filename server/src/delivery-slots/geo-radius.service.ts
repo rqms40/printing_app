@@ -19,6 +19,6 @@ export class GeoRadiusService {
         Math.cos(toRad(lat)) *
         Math.sin(dLng / 2) ** 2;
     const distance = 2 * R * Math.asin(Math.sqrt(a));
-    return distance <= radiusKm + 0.05; // 50 m tolerance for floating-point boundary checks
+    return distance <= radiusKm;
   }
 }
