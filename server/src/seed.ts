@@ -114,6 +114,7 @@ async function seed() {
       addresses, driver_profiles, file_metadata,
       tam_survey_settings, tam_surveys,
       daily_grid_cards,
+      delivery_slot_bookings, delivery_slot_templates, delivery_settings,
       users
     RESTART IDENTITY CASCADE
   `);
@@ -905,6 +906,42 @@ async function seed() {
     );
   }
   console.log('✅ 5 Daily Grid cards seeded');
+
+  // ─── Delivery Slot Templates (Mon–Fri) ──────────────────────────────
+  const [slotCount] = await typedQuery<CountRow>(
+    ds,
+    'SELECT count(*) FROM delivery_slot_templates',
+  );
+  if (parseInt(slotCount.count) === 0) {
+    for (let day = 1; day <= 5; day++) {
+      for (const [start, end] of [
+        ['09:30:00', '11:30:00'],
+        ['14:00:00', '16:00:00'],
+        ['21:00:00', '23:00:00'],
+      ]) {
+        await ds.query(
+          `INSERT INTO delivery_slot_templates (day_of_week, start_time, end_time, capacity)
+           VALUES ($1, $2, $3, $4)`,
+          [day, start, end, 10],
+        );
+      }
+    }
+    console.log('✅ 15 delivery slot templates seeded');
+  }
+
+  // ─── Delivery Settings (singleton row) ──────────────────────────────
+  const [settingsCount] = await typedQuery<CountRow>(
+    ds,
+    'SELECT count(*) FROM delivery_settings WHERE id = 1',
+  );
+  if (parseInt(settingsCount.count) === 0) {
+    await ds.query(
+      `INSERT INTO delivery_settings (service_center_lat, service_center_lng, service_radius_km, priority_fee_amount, extra_destination_surcharge)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [7.0731, 125.6128, 25, 50, 30],
+    );
+    console.log('✅ Delivery settings seeded');
+  }
 
   console.log('\n🎉 Seed complete!\n');
   console.log('Login credentials (all use password: password123):');

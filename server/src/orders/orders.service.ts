@@ -40,7 +40,7 @@ export class OrdersService {
     private addressRepo: Repository<Address>,
     @InjectRepository(DeliveryDestination)
     private deliveryDestinationRepo: Repository<DeliveryDestination>,
-    @InjectRepository('BatchOrder') private batchOrdersRepo: Repository<BatchOrder>,
+    @InjectRepository(BatchOrder) private batchOrdersRepo: Repository<BatchOrder>,
     private ordersGateway: OrdersGateway,
     private firebaseService: FirebaseService,
     private usersService: UsersService,
