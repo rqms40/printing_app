@@ -530,17 +530,39 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     String? deliveryAddressId,
     required double deliveryFee,
     required PaymentMethod paymentMethod,
+    int? slotTemplateId,
+    String? slotDate,
+    bool priority = false,
+    List<Map<String, dynamic>> destinations = const [],
+    List<int> itemDestinationIndices = const [],
   }) async {
     final addressId = _deliveryAddressIdValue(deliveryAddressId);
+
+    final mappedItems = items.indexed.map((entry) {
+      final idx = entry.$1;
+      final item = entry.$2;
+      final payload = _cartItemPayload(item);
+      final destIndex = idx < itemDestinationIndices.length
+          ? itemDestinationIndices[idx]
+          : 0;
+      return {...payload, 'destinationIndex': destIndex};
+    }).toList();
+
+    final body = <String, dynamic>{
+      'items': mappedItems,
+      'deliveryFee': deliveryFee,
+      'paymentMethod': paymentMethod.name,
+      'deliveryOption': deliveryOption,
+      'deliveryAddressId': addressId,
+      'priority': priority,
+      if (slotTemplateId != null) 'slotTemplateId': slotTemplateId,
+      if (slotDate != null) 'slotDate': slotDate,
+      if (destinations.isNotEmpty) 'destinations': destinations,
+    };
+
     final response = await ApiClient.instance.post(
       '/orders/batch',
-      data: {
-        'items': items.map(_cartItemPayload).toList(),
-        'deliveryFee': deliveryFee,
-        'paymentMethod': paymentMethod.name,
-        'deliveryOption': deliveryOption,
-        'deliveryAddressId': addressId,
-      },
+      data: body,
     );
 
     final data = Map<String, dynamic>.from(response.data as Map);

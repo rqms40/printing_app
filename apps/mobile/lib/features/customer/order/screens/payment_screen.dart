@@ -8,6 +8,7 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/cart/providers/cart_provider.dart';
+import 'package:printing_app/features/customer/order/providers/order_checkout_provider.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
@@ -339,6 +340,21 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       final cartState = ref.read(cartProvider);
 
       if (cartState.isNotEmpty) {
+        final checkout = ref.read(orderCheckoutProvider);
+
+        // Build per-item destination indices from checkout groups
+        final itemDestinationIndices = cartState.items.map((item) {
+          for (var i = 0; i < checkout.groups.length; i++) {
+            if (checkout.groups[i].itemIds.contains(item.id)) return i;
+          }
+          return 0;
+        }).toList();
+
+        final destinations = checkout.groups
+            .where((g) => g.addressId != null)
+            .map((g) => <String, dynamic>{'addressId': g.addressId, 'label': g.label})
+            .toList();
+
         await ref
             .read(ordersProvider.notifier)
             .addBatchOrder(
@@ -347,8 +363,14 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               deliveryAddressId: flowState.deliveryAddress?.id,
               deliveryFee: flowState.deliveryFee,
               paymentMethod: flowState.paymentMethod ?? PaymentMethod.cod,
+              slotTemplateId: checkout.slotTemplateId,
+              slotDate: checkout.slotDate,
+              priority: checkout.priority,
+              destinations: destinations,
+              itemDestinationIndices: itemDestinationIndices,
             );
 
+        ref.read(orderCheckoutProvider.notifier).reset();
         ref.read(cartProvider.notifier).clear();
         ref.read(orderFlowProvider.notifier).reset();
 

@@ -7,6 +7,7 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/customer/cart/providers/cart_provider.dart';
+import 'package:printing_app/features/customer/order/providers/order_checkout_provider.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/price_breakdown.dart';
 import 'package:printing_app/shared/models/enums.dart';
@@ -31,6 +32,7 @@ class SummaryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = _colors(context);
     final state = ref.watch(orderFlowProvider);
+    final checkout = ref.watch(orderCheckoutProvider);
     final isPaper = state.category == 'paper';
 
     return Scaffold(
@@ -203,6 +205,24 @@ class SummaryScreen extends ConsumerWidget {
                     ),
                   const SizedBox(height: AppSpacing.lg),
 
+                  // Batch delivery info (destinations / slot / priority)
+                  if (checkout.groups.isNotEmpty || checkout.slotTemplateId != null || checkout.priority)
+                    _buildBatchDeliveryInfo(checkout, colors)
+                        .animate()
+                        .fadeIn(
+                          duration: 400.ms,
+                          delay: 100.ms,
+                          curve: Curves.easeOut,
+                        )
+                        .slideY(
+                          begin: 0.03,
+                          duration: 400.ms,
+                          delay: 100.ms,
+                          curve: Curves.easeOut,
+                        ),
+                  if (checkout.groups.isNotEmpty || checkout.slotTemplateId != null || checkout.priority)
+                    const SizedBox(height: AppSpacing.md),
+
                   // Price breakdown
                   _buildPriceBreakdown(state, isPaper)
                       .animate()
@@ -257,6 +277,59 @@ class SummaryScreen extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBatchDeliveryInfo(OrderCheckoutState checkout, AppColorSet colors) {
+    String deliveryLabel;
+    if (checkout.slotTemplateId != null) {
+      final datePart = checkout.slotDate ?? '';
+      deliveryLabel = datePart.isNotEmpty
+          ? 'Delivery slot reserved · $datePart'
+          : 'Delivery slot reserved';
+    } else {
+      deliveryLabel = 'External courier (admin-managed)';
+    }
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Batch Delivery',
+            style: AppTypography.h3.copyWith(color: colors.onBackground),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          if (checkout.groups.isNotEmpty)
+            _specRow(
+              'Destinations',
+              '${checkout.groups.length}',
+              colors,
+            ),
+          _specRow('Delivery', deliveryLabel, colors),
+          if (checkout.priority)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.xs),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: colors.accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'Priority drop +\u20b150',
+                  style: AppTypography.caption.copyWith(
+                    color: colors.accent,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
