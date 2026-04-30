@@ -32,7 +32,7 @@ describe('DeliverySlotsController', () => {
   it('GET /delivery-slots returns availability for date', async () => {
     slotsService.getAvailability.mockResolvedValue([{ templateId: 1 }]);
     const out = await controller.list('2026-04-30');
-    expect(slotsService.getAvailability).toHaveBeenCalledWith('2026-04-30');
+    expect(slotsService.getAvailability).toHaveBeenCalledWith('2026-04-30', { pickupOnly: false });
     expect(out).toEqual([{ templateId: 1 }]);
   });
 

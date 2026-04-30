@@ -26,6 +26,9 @@ export class DeliverySlotTemplate {
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 
+  @Column({ name: 'allows_pickup', default: true })
+  allowsPickup: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

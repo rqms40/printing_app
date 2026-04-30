@@ -31,10 +31,21 @@ export class DeliverySlotsService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async getAvailability(date: string): Promise<SlotAvailability[]> {
+  async getAvailability(
+    date: string,
+    opts: { pickupOnly?: boolean } = {},
+  ): Promise<SlotAvailability[]> {
     const dayOfWeek = new Date(date + 'T00:00:00Z').getUTCDay();
+    const where: {
+      dayOfWeek: number;
+      isActive: boolean;
+      allowsPickup?: boolean;
+    } = { dayOfWeek, isActive: true };
+    if (opts.pickupOnly === true) {
+      where.allowsPickup = true;
+    }
     const templates = await this.templateRepo.find({
-      where: { dayOfWeek, isActive: true },
+      where,
       order: { startTime: 'ASC' },
     });
 

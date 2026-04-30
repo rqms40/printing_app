@@ -85,6 +85,59 @@ describe('DeliverySlotsService', () => {
         },
       ]);
     });
+
+    it('filters templates to allowsPickup=true when pickupOnly is set', async () => {
+      // Simulate the repo returning only allows-pickup templates (the where clause does the filter)
+      templateRepo.find.mockResolvedValue([
+        {
+          id: 1,
+          dayOfWeek: 4,
+          startTime: '09:30:00',
+          endTime: '11:30:00',
+          capacity: 10,
+          allowsPickup: true,
+        },
+      ]);
+      const qb = {
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      };
+      bookingRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const result = await svc.getAvailability('2026-04-30', { pickupOnly: true });
+
+      expect(templateRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ allowsPickup: true }),
+        }),
+      );
+      expect(result).toHaveLength(1);
+      expect(result[0].templateId).toBe(1);
+    });
+
+    it('does not filter on allowsPickup when pickupOnly is not set', async () => {
+      templateRepo.find.mockResolvedValue([]);
+      const qb = {
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      };
+      bookingRepo.createQueryBuilder.mockReturnValue(qb);
+
+      await svc.getAvailability('2026-04-30');
+
+      const call = templateRepo.find.mock.calls[0][0];
+      expect(call.where).not.toHaveProperty('allowsPickup');
+    });
   });
 
   describe('bookSlot', () => {

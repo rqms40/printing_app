@@ -31,8 +31,13 @@ export class DeliverySlotsController {
   ) {}
 
   @Get('delivery-slots')
-  async list(@Query('date') date: string) {
-    return this.slotsService.getAvailability(date);
+  async list(
+    @Query('date') date: string,
+    @Query('pickupOnly') pickupOnly?: string,
+  ) {
+    return this.slotsService.getAvailability(date, {
+      pickupOnly: pickupOnly === 'true',
+    });
   }
 
   @Get('admin/delivery-slot-templates')
