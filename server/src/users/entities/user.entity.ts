@@ -126,6 +126,15 @@ export class User {
   @Column({ name: 'beta_credits_granted', default: false })
   betaCreditsGranted: boolean;
 
+  /**
+   * When true, this user is exempt from the post-delivery TAM survey
+   * lockout — they can keep logging in and using the app even when beta
+   * mode is on and they have a pending requirement. Set by admin from
+   * the Beta Members admin page.
+   */
+  @Column({ name: 'is_beta_survey_exempt', default: false })
+  isBetaSurveyExempt: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

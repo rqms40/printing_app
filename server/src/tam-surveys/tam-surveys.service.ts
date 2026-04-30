@@ -142,6 +142,16 @@ export class TamSurveysService {
       return { accountStatus: 'active', holds: [] };
     }
 
+    // Admin-granted bypass: this user can log in repeatedly even when beta
+    // mode is on and they have pending requirements.
+    const user = await this.usersRepo.findOne({
+      where: { id: userId },
+      select: ['id', 'isBetaSurveyExempt'],
+    });
+    if (user?.isBetaSurveyExempt) {
+      return { accountStatus: 'active', holds: [] };
+    }
+
     const requirement = await this.requirementsRepo.findOne({
       where: {
         userId,

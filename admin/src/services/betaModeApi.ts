@@ -36,3 +36,46 @@ export async function enrollUser(userId: number): Promise<void> {
 export async function unenrollUser(userId: number): Promise<void> {
   await apiClient.delete(`/beta-mode/users/${userId}/enroll`);
 }
+
+export interface BetaMemberRow {
+  id: number;
+  email: string;
+  fullName: string | null;
+  betaEnrolledAt: string | null;
+  betaCreditsGranted: boolean;
+  isBetaSurveyExempt: boolean;
+  pendingSurveyCount: number;
+}
+
+export interface BetaMembersPage {
+  rows: BetaMemberRow[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export async function searchBetaMembers(opts: {
+  search?: string;
+  page?: number;
+  limit?: number;
+}): Promise<BetaMembersPage> {
+  const params = new URLSearchParams();
+  if (opts.search) params.set('search', opts.search);
+  if (opts.page) params.set('page', String(opts.page));
+  if (opts.limit) params.set('limit', String(opts.limit));
+  const res = await apiClient.get(
+    `/beta-mode/members${params.toString() ? '?' + params.toString() : ''}`,
+  );
+  return res.data as BetaMembersPage;
+}
+
+export async function setBetaSurveyExempt(
+  userId: number,
+  exempt: boolean,
+): Promise<{ id: number; isBetaSurveyExempt: boolean }> {
+  const res = await apiClient.patch(
+    `/beta-mode/users/${userId}/survey-exempt`,
+    { exempt },
+  );
+  return res.data as { id: number; isBetaSurveyExempt: boolean };
+}

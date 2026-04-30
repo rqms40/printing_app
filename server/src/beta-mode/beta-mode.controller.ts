@@ -7,6 +7,7 @@ import {
   Param,
   Body,
   ParseIntPipe,
+  Query,
   UseGuards,
   Req,
   HttpCode,
@@ -58,6 +59,31 @@ export class BetaModeController {
   @HttpCode(204)
   unenrollUser(@Param('userId', ParseIntPipe) userId: number) {
     return this.service.unenrollUser(userId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Get('members')
+  searchMembers(
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.service.searchBetaMembers({
+      search,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Patch('users/:userId/survey-exempt')
+  setSurveyExempt(
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() body: { exempt: boolean },
+  ) {
+    return this.service.setBetaSurveyExempt(userId, !!body.exempt);
   }
 
   @UseGuards(JwtAuthGuard)
