@@ -11,26 +11,42 @@ import 'package:printing_app/features/customer/order/providers/delivery_slot_pro
 
 enum NextBatchReason { allFull, dayOver, weekend, midDay }
 
+class UpcomingSlot {
+  const UpcomingSlot({
+    required this.startTime,
+    required this.endTime,
+    required this.bookedCount,
+    required this.capacity,
+  });
+  final String startTime;
+  final String endTime;
+  final int bookedCount;
+  final int capacity;
+  bool get isFull => bookedCount >= capacity;
+}
+
 class NextBatchInfo {
   const NextBatchInfo({
     required this.reason,
     required this.todayDate,
-    required this.nextDate,
+    required this.relevantDate,
+    required this.relevantIsToday,
+    required this.upcoming,
     this.nextSlotStart,
     this.nextSlotEnd,
-    this.todaysLastEnd,
-    this.bookedTotal = 0,
-    this.capacityTotal = 0,
   });
 
   final NextBatchReason reason;
   final String todayDate;
-  final String nextDate;
+  final String relevantDate;
+  final bool relevantIsToday;
+  final List<UpcomingSlot> upcoming;
   final String? nextSlotStart;
   final String? nextSlotEnd;
-  final String? todaysLastEnd;
-  final int bookedTotal;
-  final int capacityTotal;
+
+  int get bookedTotal =>
+      upcoming.fold(0, (acc, s) => acc + s.bookedCount);
+  int get capacityTotal => upcoming.fold(0, (acc, s) => acc + s.capacity);
 }
 
 String _formatDateLabel(DateTime d) {
@@ -70,8 +86,19 @@ DateTime _parseDateTime(String date, String hms) {
   );
 }
 
-/// Looks at today's slots; if all are full or all have ended, returns
-/// information that drives the dialog. Returns `null` if nothing to show.
+List<UpcomingSlot> _toUpcoming(Iterable<DeliverySlot> slots) => slots
+    .map((s) => UpcomingSlot(
+          startTime: s.startTime,
+          endTime: s.endTime,
+          bookedCount: s.bookedCount,
+          capacity: s.capacity,
+        ))
+    .toList()
+  ..sort((a, b) => a.startTime.compareTo(b.startTime));
+
+/// Returns information for the dialog whenever today is constrained
+/// (mid-day, full, day-over, or weekend). Capacity is scoped only to the
+/// **remaining** slots — past/missed slots are excluded.
 final nextBatchInfoProvider = Provider.autoDispose<NextBatchInfo?>((ref) {
   final now = DateTime.now();
   final today = _isoDate(now);
@@ -83,14 +110,25 @@ final nextBatchInfoProvider = Provider.autoDispose<NextBatchInfo?>((ref) {
 
   final slots = todayState.slots;
 
+  // Slots that haven't started yet today (the only ones a customer can book
+  // for today's runs without conflict — past/in-progress are excluded).
+  final remainingToday = slots
+      .where((s) => _parseDateTime(today, s.startTime).isAfter(now))
+      .toList()
+    ..sort((a, b) => a.startTime.compareTo(b.startTime));
+
+  final tomState = ref.watch(deliverySlotProvider(tomorrow));
+  final tomSlots = tomState.slots;
+
+  // Weekend / no templates today.
   if (slots.isEmpty) {
-    final probe = ref.watch(deliverySlotProvider(tomorrow));
-    final tom = probe.slots;
-    final firstTom = tom.isNotEmpty ? tom.first : null;
+    final firstTom = tomSlots.isNotEmpty ? tomSlots.first : null;
     return NextBatchInfo(
       reason: NextBatchReason.weekend,
       todayDate: today,
-      nextDate: firstTom != null ? tomorrow : dayAfter,
+      relevantDate: firstTom != null ? tomorrow : dayAfter,
+      relevantIsToday: false,
+      upcoming: _toUpcoming(tomSlots),
       nextSlotStart: firstTom?.startTime,
       nextSlotEnd: firstTom?.endTime,
     );
@@ -104,18 +142,8 @@ final nextBatchInfoProvider = Provider.autoDispose<NextBatchInfo?>((ref) {
     (s) => _parseDateTime(today, s.startTime).isBefore(now),
   );
 
-  // Find the next bookable slot (today first, then tomorrow).
-  final upcomingToday = slots
-      .where((s) =>
-          !s.isFull &&
-          _parseDateTime(today, s.startTime).isAfter(now))
-      .toList()
-    ..sort((a, b) => a.startTime.compareTo(b.startTime));
-  final nextToday = upcomingToday.isNotEmpty ? upcomingToday.first : null;
-
-  final probe = ref.watch(deliverySlotProvider(tomorrow));
-  final firstTom = probe.slots.isNotEmpty ? probe.slots.first : null;
-
+  // Decide reason; if nothing has started yet and today still has its full
+  // schedule ahead, suppress the dialog entirely.
   final NextBatchReason reason;
   if (allFull) {
     reason = NextBatchReason.allFull;
@@ -127,26 +155,27 @@ final nextBatchInfoProvider = Provider.autoDispose<NextBatchInfo?>((ref) {
     return null;
   }
 
-  final lastEnd = slots
-      .map((s) => s.endTime)
-      .reduce((a, b) => a.compareTo(b) >= 0 ? a : b);
-  final booked = slots.fold<int>(0, (acc, s) => acc + s.bookedCount);
-  final cap = slots.fold<int>(0, (acc, s) => acc + s.capacity);
-
-  final nextSlot = nextToday ?? firstTom;
-  final nextDateStr = nextToday != null
+  // Capacity is scoped to upcoming slots only.
+  // - If today still has not-yet-started slots → use those (ignore missed).
+  // - Otherwise fall back to tomorrow.
+  final useToday = remainingToday.isNotEmpty;
+  final upcoming = useToday
+      ? _toUpcoming(remainingToday)
+      : _toUpcoming(tomSlots);
+  final relevantDate = useToday
       ? today
-      : (firstTom != null ? tomorrow : dayAfter);
+      : (tomSlots.isNotEmpty ? tomorrow : dayAfter);
+
+  final firstUpcoming = upcoming.isNotEmpty ? upcoming.first : null;
 
   return NextBatchInfo(
     reason: reason,
     todayDate: today,
-    nextDate: nextDateStr,
-    nextSlotStart: nextSlot?.startTime,
-    nextSlotEnd: nextSlot?.endTime,
-    todaysLastEnd: lastEnd,
-    bookedTotal: booked,
-    capacityTotal: cap,
+    relevantDate: relevantDate,
+    relevantIsToday: useToday,
+    upcoming: upcoming,
+    nextSlotStart: firstUpcoming?.startTime,
+    nextSlotEnd: firstUpcoming?.endTime,
   );
 });
 
@@ -156,27 +185,13 @@ class NextBatchDialog extends StatefulWidget {
   final NextBatchInfo info;
 
   static Future<void> show(BuildContext context, NextBatchInfo info) async {
-    await showGeneralDialog<void>(
+    await showModalBottomSheet<void>(
       context: context,
-      barrierLabel: 'next-batch',
-      barrierDismissible: true,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.55),
-      transitionDuration: const Duration(milliseconds: 320),
-      pageBuilder: (_, _, _) => const SizedBox.shrink(),
-      transitionBuilder: (ctx, anim, _, _) {
-        final curved = CurvedAnimation(
-          parent: anim,
-          curve: Curves.easeOutCubic,
-          reverseCurve: Curves.easeInCubic,
-        );
-        return Opacity(
-          opacity: curved.value,
-          child: Transform.translate(
-            offset: Offset(0, (1 - curved.value) * 18),
-            child: NextBatchDialog(info: info),
-          ),
-        );
-      },
+      builder: (_) => NextBatchDialog(info: info),
     );
   }
 
@@ -217,151 +232,198 @@ class _NextBatchDialogState extends State<NextBatchDialog> {
   @override
   Widget build(BuildContext context) {
     final info = widget.info;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final colors = isDark ? AppColors.dark : AppColors.light;
-    final brand = isDark ? AppColors.brandDark : AppColors.brandLight;
 
+    // Force dark sheet so brand yellow has high contrast.
+    const sheetBg = Color(0xFF111111);
+    const sheetSurface = Color(0xFF1A1A1A);
+    const sheetOutline = Color(0xFF2A2A2A);
+    const onSheet = Color(0xFFEDEDED);
+    const onSheetDim = Color(0xFF8A8A8A);
+    const brand = AppColors.brandDark;
+
+    final eyebrow = switch (info.reason) {
+      NextBatchReason.allFull => 'TODAY · BATCHES FULL',
+      NextBatchReason.dayOver => "TODAY · DAY OVER",
+      NextBatchReason.weekend => 'TODAY · NO RUNS',
+      NextBatchReason.midDay => 'TODAY · IN PROGRESS',
+    };
     final headline = switch (info.reason) {
       NextBatchReason.allFull => "Today's batches are full",
       NextBatchReason.dayOver => "Today's last batch has departed",
       NextBatchReason.weekend => "No deliveries scheduled today",
-      NextBatchReason.midDay => "You've passed today's first batch",
-    };
-    final subhead = switch (info.reason) {
-      NextBatchReason.allFull =>
-        "Every slot today is fully booked. New orders will join the next available batch.",
-      NextBatchReason.dayOver =>
-        "We've already finished today's runs. New orders will join the next available batch.",
-      NextBatchReason.weekend =>
-        "Batch deliveries run Monday to Friday. Place your order anytime — it'll go out on the next batch day.",
-      NextBatchReason.midDay =>
-        "Order now to ride the next batch out. Here's how today's schedule shapes up.",
+      NextBatchReason.midDay => "Catch the next batch",
     };
 
-    final nextDate = DateTime.parse(info.nextDate);
-    final nextLabel = _formatDateLabel(nextDate);
+    final relevantDate = DateTime.parse(info.relevantDate);
+    final relevantDateLabel = info.relevantIsToday
+        ? 'TODAY'
+        : _formatDateLabel(relevantDate).toUpperCase();
     final nextSlotLabel = info.nextSlotStart != null && info.nextSlotEnd != null
         ? '${_format12h(info.nextSlotStart!)} – ${_format12h(info.nextSlotEnd!)}'
         : 'First available slot';
 
     final isLast = _page == _pageCount - 1;
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              decoration: BoxDecoration(
-                color: colors.surface,
-                borderRadius: AppRadius.borderXl,
-                border: Border.all(color: colors.outline, width: 1),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.45),
-                    blurRadius: 32,
-                    offset: const Offset(0, 12),
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewPadding.bottom,
+      ),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: sheetBg,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Drag handle
+              Padding(
+                padding: const EdgeInsets.only(top: 10, bottom: 6),
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: onSheetDim.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                ],
+                ),
               ),
-              child: ClipRRect(
-                borderRadius: AppRadius.borderXl,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+              // Header row
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xl,
+                  AppSpacing.sm,
+                  AppSpacing.sm,
+                  AppSpacing.md,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _Header(
-                      colors: colors,
-                      brand: brand,
-                      headline: headline,
-                      subhead: subhead,
-                      reason: info.reason,
-                    ),
-                    SizedBox(
-                      height: 320,
-                      child: PageView(
-                        controller: _controller,
-                        onPageChanged: (i) => setState(() => _page = i),
-                        children: [
-                          _PageStatus(
-                            colors: colors,
-                            brand: brand,
-                            dateLabel: nextLabel,
-                            slotLabel: nextSlotLabel,
-                            booked: info.bookedTotal,
-                            capacity: info.capacityTotal,
-                          ),
-                          _PageHowItWorks(colors: colors, brand: brand),
-                          _PageSchedule(colors: colors, brand: brand),
-                          _PagePriority(colors: colors, brand: brand),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.xl,
-                        AppSpacing.md,
-                        AppSpacing.xl,
-                        AppSpacing.xl,
-                      ),
+                    Expanded(
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _PageDots(
-                            count: _pageCount,
-                            current: _page,
-                            colors: colors,
-                            brand: brand,
+                          Text(
+                            eyebrow,
+                            style: AppTypography.overline.copyWith(
+                              color: brand,
+                              fontSize: 10,
+                              letterSpacing: 1.4,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
-                          const SizedBox(height: AppSpacing.md),
-                          Row(
-                            children: [
-                              if (_page > 0)
-                                Expanded(
-                                  child: _SecondaryButton(
-                                    colors: colors,
-                                    label: 'Back',
-                                    onTap: _back,
-                                  ),
-                                )
-                              else
-                                Expanded(
-                                  child: _SecondaryButton(
-                                    colors: colors,
-                                    label: 'Skip',
-                                    onTap: () =>
-                                        Navigator.of(context).pop(),
-                                  ),
-                                ),
-                              const SizedBox(width: AppSpacing.sm),
-                              Expanded(
-                                flex: 2,
-                                child: _PrimaryButton(
-                                  colors: colors,
-                                  label: isLast
-                                      ? 'Got it'
-                                      : (_page == 0
-                                          ? 'See how it works'
-                                          : 'Next'),
-                                  onTap: _next,
-                                ),
-                              ),
-                            ],
+                          const SizedBox(height: 4),
+                          Text(
+                            headline,
+                            style: AppTypography.h3.copyWith(
+                              color: onSheet,
+                              fontWeight: FontWeight.w700,
+                              height: 1.2,
+                            ),
                           ),
                         ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      splashRadius: 20,
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: onSheetDim,
+                        size: 22,
                       ),
                     ),
                   ],
                 ),
               ),
-            )
-                .animate()
-                .scale(
-                  duration: 360.ms,
-                  curve: Curves.easeOutBack,
-                  begin: const Offset(0.94, 0.94),
-                  end: const Offset(1, 1),
+              // Pages
+              SizedBox(
+                height: 240,
+                child: PageView(
+                  controller: _controller,
+                  onPageChanged: (i) => setState(() => _page = i),
+                  children: [
+                    _SheetPageStatus(
+                      surface: sheetSurface,
+                      outline: sheetOutline,
+                      onSheet: onSheet,
+                      onSheetDim: onSheetDim,
+                      brand: brand,
+                      reason: info.reason,
+                      relevantDateLabel: relevantDateLabel,
+                      relevantIsToday: info.relevantIsToday,
+                      nextSlotLabel: nextSlotLabel,
+                      upcoming: info.upcoming,
+                      booked: info.bookedTotal,
+                      capacity: info.capacityTotal,
+                    ),
+                    _SheetPageHowItWorks(
+                      onSheet: onSheet,
+                      onSheetDim: onSheetDim,
+                      brand: brand,
+                    ),
+                    _SheetPageSchedule(
+                      surface: sheetSurface,
+                      outline: sheetOutline,
+                      onSheet: onSheet,
+                      onSheetDim: onSheetDim,
+                      brand: brand,
+                    ),
+                    _SheetPagePriority(
+                      surface: sheetSurface,
+                      onSheet: onSheet,
+                      onSheetDim: onSheetDim,
+                      brand: brand,
+                    ),
+                  ],
                 ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              // Page dots
+              _SheetPageDots(
+                count: _pageCount,
+                current: _page,
+                brand: brand,
+                dim: onSheetDim,
+              ),
+              // Footer CTAs
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xl,
+                  AppSpacing.md,
+                  AppSpacing.xl,
+                  AppSpacing.lg,
+                ),
+                child: Row(
+                  children: [
+                    if (_page > 0)
+                      Expanded(
+                        child: _SheetSecondaryBtn(
+                          onSheet: onSheet,
+                          outline: sheetOutline,
+                          label: 'Back',
+                          onTap: _back,
+                        ),
+                      ),
+                    if (_page > 0) const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      flex: _page == 0 ? 1 : 2,
+                      child: _SheetPrimaryBtn(
+                        brand: brand,
+                        label: isLast
+                            ? 'Got it'
+                            : (_page == 0
+                                ? 'See how it works'
+                                : 'Next'),
+                        onTap: _next,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -369,397 +431,90 @@ class _NextBatchDialogState extends State<NextBatchDialog> {
   }
 }
 
-// ── Pages ────────────────────────────────────────────────────────────────
+// ── Sheet primitives ─────────────────────────────────────────────────────
 
-class _PageStatus extends StatelessWidget {
-  const _PageStatus({
-    required this.colors,
-    required this.brand,
-    required this.dateLabel,
-    required this.slotLabel,
-    required this.booked,
-    required this.capacity,
-  });
-
-  final AppColorSet colors;
-  final Color brand;
-  final String dateLabel;
-  final String slotLabel;
-  final int booked;
-  final int capacity;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.xl,
-        AppSpacing.lg,
-        AppSpacing.xl,
-        0,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _SectionLabel(colors: colors, text: 'YOUR NEXT WINDOW'),
-          const SizedBox(height: AppSpacing.sm),
-          _NextBatchCard(
-            colors: colors,
-            brand: brand,
-            dateLabel: dateLabel,
-            slotLabel: slotLabel,
-          ),
-          if (capacity > 0) ...[
-            const SizedBox(height: AppSpacing.lg),
-            _CapacityStrip(
-              colors: colors,
-              brand: brand,
-              booked: booked,
-              total: capacity,
-            ),
-          ],
-          const Spacer(),
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.sm),
-            decoration: BoxDecoration(
-              color: colors.surfaceVariant,
-              borderRadius: AppRadius.borderMd,
-            ),
-            child: Row(
-              children: [
-                HugeIcon(
-                  icon: HugeIcons.strokeRoundedInformationCircle,
-                  size: 16,
-                  color: colors.onSurfaceDim,
-                ),
-                const SizedBox(width: AppSpacing.xs),
-                Expanded(
-                  child: Text(
-                    'Swipe or tap Next to see how batch delivery works.',
-                    style: AppTypography.caption.copyWith(
-                      color: colors.onSurface,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PageHowItWorks extends StatelessWidget {
-  const _PageHowItWorks({required this.colors, required this.brand});
-  final AppColorSet colors;
-  final Color brand;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.xl,
-        AppSpacing.lg,
-        AppSpacing.xl,
-        0,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _SectionLabel(colors: colors, text: 'HOW BATCH DELIVERY WORKS'),
-          const SizedBox(height: AppSpacing.md),
-          _ExplainerStep(
-            colors: colors,
-            brand: brand,
-            index: '01',
-            title: 'Orders bundle into batches',
-            body:
-                'Each batch is a single delivery run. Up to 10 orders share one slot, riding together to keep fees low.',
-          ),
-          const SizedBox(height: AppSpacing.md),
-          _ExplainerStep(
-            colors: colors,
-            brand: brand,
-            index: '02',
-            title: 'You pick the slot at checkout',
-            body:
-                'Choose a window when you place your order. Your batch goes out at the start of that window.',
-          ),
-          const SizedBox(height: AppSpacing.md),
-          _ExplainerStep(
-            colors: colors,
-            brand: brand,
-            index: '03',
-            title: 'Track the run in real-time',
-            body:
-                'Once the rider picks up your batch, the home screen shows the truck on its route.',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PageSchedule extends StatelessWidget {
-  const _PageSchedule({required this.colors, required this.brand});
-  final AppColorSet colors;
-  final Color brand;
-
-  @override
-  Widget build(BuildContext context) {
-    final slots = const [
-      ('Morning', '9:30 AM', '11:30 AM'),
-      ('Afternoon', '2:00 PM', '4:00 PM'),
-      ('Evening', '9:00 PM', '11:00 PM'),
-    ];
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.xl,
-        AppSpacing.lg,
-        AppSpacing.xl,
-        0,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _SectionLabel(colors: colors, text: "TODAY'S WINDOWS"),
-          const SizedBox(height: 4),
-          Text(
-            'Three batches a day · Mon–Fri',
-            style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          for (final s in slots) ...[
-            _SlotRow(
-              colors: colors,
-              brand: brand,
-              label: s.$1,
-              start: s.$2,
-              end: s.$3,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-          ],
-          const Spacer(),
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.sm),
-            decoration: BoxDecoration(
-              color: colors.surfaceVariant,
-              borderRadius: AppRadius.borderMd,
-            ),
-            child: Text(
-              'Saturday & Sunday: no batch runs. Orders queue for Monday morning.',
-              style: AppTypography.caption.copyWith(color: colors.onSurface),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PagePriority extends StatelessWidget {
-  const _PagePriority({required this.colors, required this.brand});
-  final AppColorSet colors;
-  final Color brand;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.xl,
-        AppSpacing.lg,
-        AppSpacing.xl,
-        0,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _SectionLabel(colors: colors, text: 'NEED IT FIRST?'),
-          const SizedBox(height: AppSpacing.sm),
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            decoration: BoxDecoration(
-              color: colors.accent,
-              borderRadius: AppRadius.borderLg,
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: brand.withValues(alpha: 0.18),
-                    borderRadius: AppRadius.borderMd,
-                  ),
-                  child: HugeIcon(
-                    icon: HugeIcons.strokeRoundedFlash,
-                    color: brand,
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Priority drop · ₱50',
-                        style: AppTypography.bodyLarge.copyWith(
-                          color: colors.accentOnColor,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Front of the line within your slot.',
-                        style: AppTypography.caption.copyWith(
-                          color: colors.accentOnColor.withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          _BulletRow(
-            colors: colors,
-            brand: brand,
-            text: 'Same delivery window — your batch is unloaded first.',
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          _BulletRow(
-            colors: colors,
-            brand: brand,
-            text: 'Toggle priority at the slot picker before paying.',
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          _BulletRow(
-            colors: colors,
-            brand: brand,
-            text: 'Capacity is shared — if a slot is full, even priority waits.',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SlotRow extends StatelessWidget {
-  const _SlotRow({
-    required this.colors,
+class _SheetPrimaryBtn extends StatelessWidget {
+  const _SheetPrimaryBtn({
     required this.brand,
     required this.label,
-    required this.start,
-    required this.end,
+    required this.onTap,
   });
-  final AppColorSet colors;
   final Color brand;
   final String label;
-  final String start;
-  final String end;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
-      decoration: BoxDecoration(
-        color: colors.surfaceVariant,
-        borderRadius: AppRadius.borderMd,
-        border: Border.all(color: colors.outlineVariant, width: 1),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 6,
-            height: 28,
-            decoration: BoxDecoration(
-              color: brand,
-              borderRadius: AppRadius.borderFull,
-            ),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        height: 48,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: brand,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          label,
+          style: AppTypography.body.copyWith(
+            color: const Color(0xFF111111),
+            fontWeight: FontWeight.w700,
           ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: AppTypography.body.copyWith(
-                    color: colors.onBackground,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            '$start – $end',
-            style: AppTypography.caption.copyWith(
-              color: colors.onSurface,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _BulletRow extends StatelessWidget {
-  const _BulletRow({
-    required this.colors,
-    required this.brand,
-    required this.text,
+class _SheetSecondaryBtn extends StatelessWidget {
+  const _SheetSecondaryBtn({
+    required this.onSheet,
+    required this.outline,
+    required this.label,
+    required this.onTap,
   });
-  final AppColorSet colors;
-  final Color brand;
-  final String text;
+  final Color onSheet;
+  final Color outline;
+  final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          margin: const EdgeInsets.only(top: 7),
-          width: 5,
-          height: 5,
-          decoration: BoxDecoration(
-            color: brand,
-            borderRadius: AppRadius.borderFull,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        height: 48,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: outline, width: 1),
+        ),
+        child: Text(
+          label,
+          style: AppTypography.body.copyWith(
+            color: onSheet,
+            fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: Text(
-            text,
-            style: AppTypography.caption.copyWith(
-              color: colors.onSurface,
-              height: 1.5,
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
 
-class _PageDots extends StatelessWidget {
-  const _PageDots({
+class _SheetPageDots extends StatelessWidget {
+  const _SheetPageDots({
     required this.count,
     required this.current,
-    required this.colors,
     required this.brand,
+    required this.dim,
   });
   final int count;
   final int current;
-  final AppColorSet colors;
   final Color brand;
+  final Color dim;
 
   @override
   Widget build(BuildContext context) {
@@ -773,10 +528,8 @@ class _PageDots extends StatelessWidget {
             width: i == current ? 22 : 6,
             height: 6,
             decoration: BoxDecoration(
-              color: i == current
-                  ? brand
-                  : colors.onSurfaceDim.withValues(alpha: 0.3),
-              borderRadius: AppRadius.borderFull,
+              color: i == current ? brand : dim.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(3),
             ),
           ),
           if (i != count - 1) const SizedBox(width: 6),
@@ -786,232 +539,429 @@ class _PageDots extends StatelessWidget {
   }
 }
 
-class _Header extends StatelessWidget {
-  const _Header({
-    required this.colors,
+// ── Sheet pages ──────────────────────────────────────────────────────────
+
+class _SheetPageStatus extends StatelessWidget {
+  const _SheetPageStatus({
+    required this.surface,
+    required this.outline,
+    required this.onSheet,
+    required this.onSheetDim,
     required this.brand,
-    required this.headline,
-    required this.subhead,
     required this.reason,
+    required this.relevantDateLabel,
+    required this.relevantIsToday,
+    required this.nextSlotLabel,
+    required this.upcoming,
+    required this.booked,
+    required this.capacity,
   });
-
-  final AppColorSet colors;
+  final Color surface;
+  final Color outline;
+  final Color onSheet;
+  final Color onSheetDim;
   final Color brand;
-  final String headline;
-  final String subhead;
   final NextBatchReason reason;
+  final String relevantDateLabel;
+  final bool relevantIsToday;
+  final String nextSlotLabel;
+  final List<UpcomingSlot> upcoming;
+  final int booked;
+  final int capacity;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.xl,
-        AppSpacing.xl,
-        AppSpacing.xl,
-        AppSpacing.lg,
-      ),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            colors.accent,
-            colors.accent.withValues(alpha: 0.92),
-          ],
-        ),
-      ),
-      child: Stack(
-        clipBehavior: Clip.none,
+    final remaining = capacity - booked;
+    final pct = capacity == 0 ? 0.0 : (booked / capacity).clamp(0.0, 1.0);
+    final capacityLabel =
+        relevantIsToday ? 'REMAINING TODAY' : "TOMORROW'S CAPACITY";
+    final summary = switch (reason) {
+      NextBatchReason.allFull =>
+        'Every batch today is fully booked.',
+      NextBatchReason.dayOver =>
+        "Today's last batch has departed.",
+      NextBatchReason.weekend =>
+        'No batch runs scheduled today.',
+      NextBatchReason.midDay =>
+        'You missed earlier batches today, but more are still open.',
+    };
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Positioned(
-            right: -20,
-            top: -28,
-            child: Container(
-              width: 140,
-              height: 140,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: brand.withValues(alpha: 0.10),
-              ),
+          Text(
+            summary,
+            style: AppTypography.body.copyWith(
+              color: onSheet,
+              height: 1.4,
             ),
           ),
-          Positioned(
-            right: 22,
-            top: 12,
-            child: HugeIcon(
-              icon: HugeIcons.strokeRoundedClock01,
-              size: 56,
-              color: brand.withValues(alpha: 0.65),
-            )
-                .animate(onPlay: (c) => c.repeat(reverse: true))
-                .moveY(begin: 0, end: -3, duration: 1800.ms, curve: Curves.easeInOut),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.sm,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: brand.withValues(alpha: 0.18),
-                  borderRadius: AppRadius.borderFull,
-                  border: Border.all(
-                    color: brand.withValues(alpha: 0.45),
-                    width: 1,
-                  ),
-                ),
-                child: Text(
-                  switch (reason) {
-                    NextBatchReason.allFull => 'BATCH FULL',
-                    NextBatchReason.dayOver => "TODAY'S DAY OVER",
-                    NextBatchReason.weekend => 'NO RUNS TODAY',
-                    NextBatchReason.midDay => 'BATCH SCHEDULE',
-                  },
-                  style: AppTypography.overline.copyWith(
-                    color: brand,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.4,
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              SizedBox(
-                width: 240,
-                child: Text(
-                  headline,
-                  style: AppTypography.h2.copyWith(
-                    color: colors.accentOnColor,
-                    height: 1.15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              SizedBox(
-                width: 280,
-                child: Text(
-                  subhead,
-                  style: AppTypography.caption.copyWith(
-                    color: colors.accentOnColor.withValues(alpha: 0.75),
-                    height: 1.45,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _NextBatchCard extends StatelessWidget {
-  const _NextBatchCard({
-    required this.colors,
-    required this.brand,
-    required this.dateLabel,
-    required this.slotLabel,
-  });
-
-  final AppColorSet colors;
-  final Color brand;
-  final String dateLabel;
-  final String slotLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: colors.surfaceVariant,
-        borderRadius: AppRadius.borderLg,
-        border: Border.all(color: colors.outlineVariant, width: 1),
-      ),
-      child: Row(
-        children: [
+          const SizedBox(height: AppSpacing.md),
+          // Hero next-slot strip
           Container(
-            width: 44,
-            height: 44,
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.sm,
+              AppSpacing.md,
+              AppSpacing.sm,
+            ),
             decoration: BoxDecoration(
-              color: brand.withValues(alpha: 0.14),
-              borderRadius: AppRadius.borderMd,
+              color: surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: outline, width: 1),
             ),
-            child: HugeIcon(
-              icon: HugeIcons.strokeRoundedDeliveryTruck02,
-              color: brand,
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Text(
-                  'NEXT AVAILABLE BATCH',
-                  style: AppTypography.overline.copyWith(
-                    color: colors.onSurfaceDim,
-                    fontSize: 9,
-                    letterSpacing: 1.4,
+                Container(
+                  width: 4,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: brand,
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  dateLabel,
-                  style: AppTypography.bodyLarge.copyWith(
-                    color: colors.onBackground,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Text(
-                  slotLabel,
-                  style: AppTypography.caption.copyWith(
-                    color: colors.onSurface,
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        relevantIsToday
+                            ? 'NEXT BATCH · TODAY'
+                            : 'NEXT BATCH · $relevantDateLabel',
+                        style: AppTypography.overline.copyWith(
+                          color: onSheetDim,
+                          fontSize: 9,
+                          letterSpacing: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        nextSlotLabel,
+                        style: AppTypography.bodyLarge.copyWith(
+                          color: onSheet,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
+          if (upcoming.length > 1) ...[
+            const SizedBox(height: 6),
+            for (final s in upcoming.skip(1).take(2))
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 4,
+                      height: 18,
+                      margin: const EdgeInsets.symmetric(horizontal: 14),
+                      decoration: BoxDecoration(
+                        color: onSheetDim.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'then ${_format12h(s.startTime)} – ${_format12h(s.endTime)}',
+                      style: AppTypography.caption.copyWith(
+                        color: onSheetDim,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (s.isFull)
+                      Text(
+                        'Full',
+                        style: AppTypography.caption.copyWith(
+                          color: brand,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      )
+                    else
+                      Text(
+                        '${s.capacity - s.bookedCount} open',
+                        style: AppTypography.caption.copyWith(
+                          color: onSheetDim,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+          if (capacity > 0) ...[
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                Text(
+                  capacityLabel,
+                  style: AppTypography.overline.copyWith(
+                    color: onSheetDim,
+                    fontSize: 9,
+                    letterSpacing: 1.4,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '$remaining of $capacity open',
+                  style: AppTypography.caption.copyWith(
+                    color: onSheet,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Stack(
+                children: [
+                  Container(height: 6, color: surface),
+                  FractionallySizedBox(
+                    widthFactor: pct,
+                    child: Container(height: 6, color: brand),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel({required this.colors, required this.text});
-  final AppColorSet colors;
-  final String text;
+class _SheetPageHowItWorks extends StatelessWidget {
+  const _SheetPageHowItWorks({
+    required this.onSheet,
+    required this.onSheetDim,
+    required this.brand,
+  });
+  final Color onSheet;
+  final Color onSheetDim;
+  final Color brand;
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: AppTypography.overline.copyWith(
-        color: colors.onSurfaceDim,
-        fontSize: 10,
-        letterSpacing: 1.6,
-        fontWeight: FontWeight.w700,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SheetStep(
+            brand: brand,
+            onSheet: onSheet,
+            onSheetDim: onSheetDim,
+            index: '01',
+            title: 'Orders bundle into batches',
+            body:
+                'Up to 10 orders share a single delivery run, keeping fees low.',
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _SheetStep(
+            brand: brand,
+            onSheet: onSheet,
+            onSheetDim: onSheetDim,
+            index: '02',
+            title: 'You pick the slot at checkout',
+            body:
+                'Choose a delivery window. Your batch heads out at the start of it.',
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _SheetStep(
+            brand: brand,
+            onSheet: onSheet,
+            onSheetDim: onSheetDim,
+            index: '03',
+            title: 'Track the run live',
+            body:
+                'Once the rider picks up, you can watch the truck on the home map.',
+          ),
+        ],
       ),
     );
   }
 }
 
-class _ExplainerStep extends StatelessWidget {
-  const _ExplainerStep({
-    required this.colors,
+class _SheetPageSchedule extends StatelessWidget {
+  const _SheetPageSchedule({
+    required this.surface,
+    required this.outline,
+    required this.onSheet,
+    required this.onSheetDim,
     required this.brand,
+  });
+  final Color surface;
+  final Color outline;
+  final Color onSheet;
+  final Color onSheetDim;
+  final Color brand;
+
+  @override
+  Widget build(BuildContext context) {
+    final slots = const [
+      ('Morning', '9:30 AM – 11:30 AM'),
+      ('Afternoon', '2:00 PM – 4:00 PM'),
+      ('Evening', '9:00 PM – 11:00 PM'),
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Three batches a day · Mon–Fri',
+            style: AppTypography.caption.copyWith(color: onSheetDim),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          for (final s in slots) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: 12,
+              ),
+              decoration: BoxDecoration(
+                color: surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: outline, width: 1),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 4,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color: brand,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Text(
+                      s.$1,
+                      style: AppTypography.body.copyWith(
+                        color: onSheet,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    s.$2,
+                    style: AppTypography.caption.copyWith(
+                      color: onSheetDim,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SheetPagePriority extends StatelessWidget {
+  const _SheetPagePriority({
+    required this.surface,
+    required this.onSheet,
+    required this.onSheetDim,
+    required this.brand,
+  });
+  final Color surface;
+  final Color onSheet;
+  final Color onSheetDim;
+  final Color brand;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(
+              color: brand,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                HugeIcon(
+                  icon: HugeIcons.strokeRoundedFlash,
+                  color: const Color(0xFF111111),
+                  size: 26,
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Priority drop · ₱50',
+                        style: AppTypography.bodyLarge.copyWith(
+                          color: const Color(0xFF111111),
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Front of the line within your slot.',
+                        style: AppTypography.caption.copyWith(
+                          color: const Color(0xFF111111).withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _SheetBullet(
+            brand: brand,
+            onSheet: onSheet,
+            text: 'Same window — your order is unloaded first.',
+          ),
+          const SizedBox(height: 6),
+          _SheetBullet(
+            brand: brand,
+            onSheet: onSheet,
+            text: 'Toggle priority on the slot picker before paying.',
+          ),
+          const SizedBox(height: 6),
+          _SheetBullet(
+            brand: brand,
+            onSheet: onSheet,
+            text: 'Capacity is shared — even priority waits if a slot is full.',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SheetStep extends StatelessWidget {
+  const _SheetStep({
+    required this.brand,
+    required this.onSheet,
+    required this.onSheetDim,
     required this.index,
     required this.title,
     required this.body,
   });
-
-  final AppColorSet colors;
   final Color brand;
+  final Color onSheet;
+  final Color onSheetDim;
   final String index;
   final String title;
   final String body;
@@ -1022,7 +972,7 @@ class _ExplainerStep extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: 36,
+          width: 30,
           child: Text(
             index,
             style: AppTypography.h3.copyWith(
@@ -1040,7 +990,7 @@ class _ExplainerStep extends StatelessWidget {
               Text(
                 title,
                 style: AppTypography.body.copyWith(
-                  color: colors.onBackground,
+                  color: onSheet,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -1048,7 +998,7 @@ class _ExplainerStep extends StatelessWidget {
               Text(
                 body,
                 style: AppTypography.caption.copyWith(
-                  color: colors.onSurface,
+                  color: onSheetDim,
                   height: 1.45,
                 ),
               ),
@@ -1060,146 +1010,41 @@ class _ExplainerStep extends StatelessWidget {
   }
 }
 
-class _StepDivider extends StatelessWidget {
-  const _StepDivider();
-
-  @override
-  Widget build(BuildContext context) =>
-      const SizedBox(height: AppSpacing.md);
-}
-
-class _CapacityStrip extends StatelessWidget {
-  const _CapacityStrip({
-    required this.colors,
+class _SheetBullet extends StatelessWidget {
+  const _SheetBullet({
     required this.brand,
-    required this.booked,
-    required this.total,
+    required this.onSheet,
+    required this.text,
   });
-
-  final AppColorSet colors;
   final Color brand;
-  final int booked;
-  final int total;
+  final Color onSheet;
+  final String text;
 
   @override
   Widget build(BuildContext context) {
-    final pct = total == 0 ? 0.0 : (booked / total).clamp(0.0, 1.0);
-    return Column(
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(
-              "TODAY'S CAPACITY",
-              style: AppTypography.overline.copyWith(
-                color: colors.onSurfaceDim,
-                fontSize: 9,
-                letterSpacing: 1.5,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const Spacer(),
-            Text(
-              '$booked / $total',
-              style: AppTypography.caption.copyWith(
-                color: colors.onSurface,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
+        Container(
+          margin: const EdgeInsets.only(top: 7),
+          width: 5,
+          height: 5,
+          decoration: BoxDecoration(
+            color: brand,
+            borderRadius: BorderRadius.circular(3),
+          ),
         ),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: AppRadius.borderFull,
-          child: Stack(
-            children: [
-              Container(height: 6, color: colors.surfaceDim),
-              FractionallySizedBox(
-                widthFactor: pct,
-                child: Container(
-                  height: 6,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [brand, brand.withValues(alpha: 0.6)],
-                    ),
-                  ),
-                ),
-              ),
-            ],
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Text(
+            text,
+            style: AppTypography.caption.copyWith(
+              color: onSheet,
+              height: 1.5,
+            ),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _PrimaryButton extends StatelessWidget {
-  const _PrimaryButton({
-    required this.colors,
-    required this.label,
-    required this.onTap,
-  });
-
-  final AppColorSet colors;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: AppRadius.borderLg,
-      child: Container(
-        height: 48,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: colors.accent,
-          borderRadius: AppRadius.borderLg,
-        ),
-        child: Text(
-          label,
-          style: AppTypography.body.copyWith(
-            color: colors.accentOnColor,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SecondaryButton extends StatelessWidget {
-  const _SecondaryButton({
-    required this.colors,
-    required this.label,
-    required this.onTap,
-  });
-
-  final AppColorSet colors;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: AppRadius.borderLg,
-      child: Container(
-        height: 48,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: colors.surface,
-          borderRadius: AppRadius.borderLg,
-          border: Border.all(color: colors.outline, width: 1),
-        ),
-        child: Text(
-          label,
-          style: AppTypography.body.copyWith(
-            color: colors.onBackground,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
     );
   }
 }
