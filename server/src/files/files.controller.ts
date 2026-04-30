@@ -117,6 +117,18 @@ export class FilesController {
       };
     }
 
+    let previewGlbUrl: string | null = null;
+    if (file.previewGlbObjectKey) {
+      try {
+        previewGlbUrl = await this.filesService.getPresignedUrlForKey(
+          file.previewGlbObjectKey,
+          3600,
+        );
+      } catch {
+        /* non-fatal */
+      }
+    }
+
     return {
       mimeType: file.mimeType,
       widthMm,
@@ -140,6 +152,7 @@ export class FilesController {
         : null,
       modelBounds,
       printerLimits,
+      previewGlbUrl,
     };
   }
 

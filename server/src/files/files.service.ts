@@ -82,6 +82,21 @@ export class FilesService {
       file.originalname,
     );
 
+    let previewGlbObjectKey: string | null = null;
+    if (analysis?.glbBuffer && analysis.glbBuffer.length > 0) {
+      const previewKey = `${objectKey}.preview.glb`;
+      try {
+        await this.storageService.upload(
+          analysis.glbBuffer,
+          previewKey,
+          'model/gltf-binary',
+        );
+        previewGlbObjectKey = previewKey;
+      } catch (err) {
+        this.logger.warn(`Preview GLB upload failed for ${objectKey}: ${err}`);
+      }
+    }
+
     const meta = this.fileRepo.create({
       originalName: file.originalname,
       mimeType: file.mimetype,
@@ -100,6 +115,7 @@ export class FilesService {
       model3dDepthMm: analysis?.model3dDepthMm ?? null,
       model3dHeightMm: analysis?.model3dHeightMm ?? null,
       model3dTriangleCount: analysis?.model3dTriangleCount ?? null,
+      previewGlbObjectKey,
     });
     return this.fileRepo.save(meta);
   }
@@ -132,6 +148,10 @@ export class FilesService {
         'Could not generate download link',
       );
     }
+  }
+
+  async getPresignedUrlForKey(objectKey: string, ttl: number): Promise<string> {
+    return this.storageService.getPresignedUrl(objectKey, ttl);
   }
 
   async getMyUploads(userId: number): Promise<FileMetadata[]> {

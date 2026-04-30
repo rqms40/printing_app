@@ -16,6 +16,7 @@ export interface FileAnalysisResult {
   model3dDepthMm: number | null;
   model3dHeightMm: number | null;
   model3dTriangleCount: number | null;
+  glbBuffer?: Buffer; // only set when we converted (e.g., 3MF)
 }
 
 const EMPTY: FileAnalysisResult = {
@@ -52,6 +53,7 @@ export class FileAnalysisService {
           model3dDepthMm: bounds.depthMm,
           model3dHeightMm: bounds.heightMm,
           model3dTriangleCount: bounds.triangleCount,
+          glbBuffer: bounds.glbBuffer,
         };
       }
       if (mimeType === 'application/pdf') return this.analyzePdf(buffer);

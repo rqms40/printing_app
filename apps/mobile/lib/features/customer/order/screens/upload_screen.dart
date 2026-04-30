@@ -405,6 +405,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                       Model3dPreview(
                         fileUrl: _filePath ?? '',
                         filename: _fileName ?? '',
+                        previewGlbUrl: _inspection?['previewGlbUrl'] as String?,
                       ),
                       if (_inspection!['printerLimits'] != null) ...[
                         const SizedBox(height: 16),

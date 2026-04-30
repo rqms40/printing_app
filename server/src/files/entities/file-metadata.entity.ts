@@ -93,4 +93,12 @@ export class FileMetadata {
     nullable: true,
   })
   model3dTriangleCount: number | null;
+
+  @Column({
+    name: 'preview_glb_object_key',
+    type: 'varchar',
+    length: 512,
+    nullable: true,
+  })
+  previewGlbObjectKey: string | null;
 }

@@ -38,4 +38,5 @@ export class FileInspectionDto {
   sizeValidation: SizeValidationResult | null;
   modelBounds: ModelBoundsDto | null;
   printerLimits: PrinterLimitsDto | null;
+  previewGlbUrl: string | null;
 }

@@ -17,3 +17,13 @@ describe('FileMetadata 3D columns', () => {
     }
   });
 });
+
+describe('FileMetadata preview GLB column', () => {
+  const cols = getMetadataArgsStorage()
+    .filterColumns(FileMetadata)
+    .map((c) => c.propertyName);
+
+  it('has previewGlbObjectKey column', () => {
+    expect(cols).toContain('previewGlbObjectKey');
+  });
+});

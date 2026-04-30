@@ -9,14 +9,24 @@ class Model3dPreview extends StatefulWidget {
     super.key,
     required this.fileUrl,
     required this.filename,
+    this.previewGlbUrl,
   });
 
   final String fileUrl;
   final String filename;
+  final String? previewGlbUrl;
 
   bool get _isSupported {
     final lower = filename.toLowerCase();
-    return lower.endsWith('.stl') || lower.endsWith('.obj');
+    if (lower.endsWith('.stl') || lower.endsWith('.obj')) return true;
+    if (lower.endsWith('.3mf')) return previewGlbUrl != null;
+    return false;
+  }
+
+  String get _resolvedSrc {
+    final lower = filename.toLowerCase();
+    if (lower.endsWith('.3mf') && previewGlbUrl != null) return previewGlbUrl!;
+    return fileUrl;
   }
 
   @override
@@ -51,7 +61,7 @@ class _Model3dPreviewState extends State<Model3dPreview> {
       clipBehavior: Clip.antiAlias,
       child: Flutter3DViewer(
         controller: _controller,
-        src: widget.fileUrl,
+        src: widget._resolvedSrc,
         progressBarColor: colors.brand,
       ),
     );
