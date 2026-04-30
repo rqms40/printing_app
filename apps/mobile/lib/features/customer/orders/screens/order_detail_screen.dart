@@ -19,6 +19,7 @@ import 'package:printing_app/shared/widgets/confirmation_dialog.dart';
 import 'package:printing_app/shared/widgets/status_badge.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/file_preview_sheet.dart';
+import 'package:printing_app/features/customer/orders/widgets/admin_status_banner.dart';
 import 'package:printing_app/utils/formatters.dart';
 
 /// Detailed view of a single order.
@@ -76,6 +77,15 @@ class OrderDetailScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // --- Admin Status Banner ---
+            if (order.adminStatusNote != null) ...[
+              AdminStatusBanner(
+                note: order.adminStatusNote!,
+                estimatedCompletionAt: order.estimatedCompletionAt,
+              ),
+              const SizedBox(height: 16),
+            ],
+
             // --- Status Timeline ---
             AppCard(
                   child: OrderStatusTimeline(
