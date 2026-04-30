@@ -9,6 +9,10 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/providers/theme_provider.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
+import 'package:printing_app/utils/formatters.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
 
 // ---------------------------------------------------------------------------
 // TAM Questionnaire Data
@@ -83,6 +87,21 @@ extension LikertScaleExt on LikertScale {
         return _FaceExpression.good;
       case LikertScale.stronglyAgree:
         return _FaceExpression.veryGood;
+    }
+  }
+
+  String get soundEffect {
+    switch (this) {
+      case LikertScale.stronglyDisagree:
+        return 'audio/Strongly_Disagree.wav';
+      case LikertScale.disagree:
+        return 'audio/Disagree.wav';
+      case LikertScale.neutral:
+        return 'audio/Neutral.wav';
+      case LikertScale.agree:
+        return 'audio/Agree.wav';
+      case LikertScale.stronglyAgree:
+        return 'audio/Strongly_Agree.wav';
     }
   }
 }
@@ -192,10 +211,15 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
   }
 
   void _openQuestion(int index) {
+    final recentOrders = ref.read(recentOrdersProvider);
+    final lastOrder = recentOrders.isNotEmpty ? recentOrders.first : null;
+    final dynamicPrice = lastOrder != null ? formatCurrency(lastOrder.totalPrice) : 'your typical order amount';
+
     Navigator.of(context).push(
       _SurveyFlowRoute(
         startIndex: index,
         questions: _tamQuestions,
+        dynamicPrice: dynamicPrice,
         answers: _answers,
         initialComment: _comment,
         onAnswer: (idx, scale) {
@@ -666,6 +690,7 @@ class _SurveyFlowRoute extends PageRoute<void> {
     required this.startIndex,
     required this.questions,
     required this.answers,
+    required this.dynamicPrice,
     required this.initialComment,
     required this.onAnswer,
     required this.onComment,
@@ -674,6 +699,7 @@ class _SurveyFlowRoute extends PageRoute<void> {
   final int startIndex;
   final List<TamQuestion> questions;
   final Map<int, LikertScale> answers;
+  final String dynamicPrice;
   final String? initialComment;
   final void Function(int, LikertScale) onAnswer;
   final void Function(String) onComment;
@@ -712,6 +738,7 @@ class _SurveyFlowRoute extends PageRoute<void> {
           startIndex: startIndex,
           questions: questions,
           answers: answers,
+          dynamicPrice: dynamicPrice,
           initialComment: initialComment,
           onAnswer: onAnswer,
           onComment: onComment,
@@ -736,6 +763,7 @@ class _SurveyFlowScreen extends StatefulWidget {
     required this.startIndex,
     required this.questions,
     required this.answers,
+    required this.dynamicPrice,
     required this.initialComment,
     required this.onAnswer,
     required this.onComment,
@@ -744,6 +772,7 @@ class _SurveyFlowScreen extends StatefulWidget {
   final int startIndex;
   final List<TamQuestion> questions;
   final Map<int, LikertScale> answers;
+  final String dynamicPrice;
   final String? initialComment;
   final void Function(int, LikertScale) onAnswer;
   final void Function(String) onComment;
@@ -799,6 +828,7 @@ class _SurveyFlowScreenState extends State<_SurveyFlowScreen> {
           );
         } else {
           return _OpenForumPage(
+            dynamicPrice: widget.dynamicPrice,
             initialText: widget.initialComment,
             onConfirm: (text) {
               widget.onComment(text);
@@ -850,6 +880,8 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
   late Animation<double> _labelFade;
   late Animation<double> _pulse;
 
+  late AudioPlayer _audioPlayer;
+
   @override
   void initState() {
     super.initState();
@@ -879,12 +911,15 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
+    _audioPlayer = AudioPlayer();
+
     _faceController.forward();
     _labelController.forward();
   }
 
   @override
   void dispose() {
+    _audioPlayer.dispose();
     _faceController.dispose();
     _labelController.dispose();
     _pulseController.dispose();
@@ -897,6 +932,12 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
 
     if (newScale != _currentScale) {
       HapticFeedback.selectionClick();
+      try {
+        final source = kIsWeb
+            ? UrlSource('assets/${newScale.soundEffect}')
+            : AssetSource(newScale.soundEffect);
+        _audioPlayer.play(source);
+      } catch (_) {}
       setState(() {
         _sliderValue = value;
         _currentScale = newScale;
@@ -1418,11 +1459,13 @@ class _ConfirmButtonState extends State<_ConfirmButton> {
 
 class _OpenForumPage extends StatefulWidget {
   const _OpenForumPage({
+    required this.dynamicPrice,
     this.initialText,
     required this.onConfirm,
     required this.onClose,
   });
 
+  final String dynamicPrice;
   final String? initialText;
   final void Function(String) onConfirm;
   final VoidCallback onClose;
@@ -1434,29 +1477,39 @@ class _OpenForumPage extends StatefulWidget {
 class _OpenForumPageState extends State<_OpenForumPage> {
   late TextEditingController _featureController;
   late TextEditingController _deliveryController;
+  late TextEditingController _priceController;
+  late TextEditingController _uploadController;
 
   @override
   void initState() {
     super.initState();
     String feature = '';
     String delivery = '';
+    String price = '';
+    String upload = '';
     if (widget.initialText != null && widget.initialText!.isNotEmpty) {
       try {
         final map = jsonDecode(widget.initialText!);
         feature = map['feature'] ?? '';
         delivery = map['delivery'] ?? '';
+        price = map['price_value'] ?? '';
+        upload = map['upload_friction'] ?? '';
       } catch (e) {
         feature = widget.initialText!;
       }
     }
     _featureController = TextEditingController(text: feature);
     _deliveryController = TextEditingController(text: delivery);
+    _priceController = TextEditingController(text: price);
+    _uploadController = TextEditingController(text: upload);
   }
 
   @override
   void dispose() {
     _featureController.dispose();
     _deliveryController.dispose();
+    _priceController.dispose();
+    _uploadController.dispose();
     super.dispose();
   }
 
@@ -1465,6 +1518,8 @@ class _OpenForumPageState extends State<_OpenForumPage> {
     final data = jsonEncode({
       'feature': _featureController.text,
       'delivery': _deliveryController.text,
+      'price_value': _priceController.text,
+      'upload_friction': _uploadController.text,
     });
     widget.onConfirm(data);
   }
@@ -1529,79 +1584,138 @@ class _OpenForumPageState extends State<_OpenForumPage> {
             ),
             const SizedBox(height: AppSpacing.md),
             Expanded(
-              child: Padding(
+              child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-                child: Column(
-                  children: [
-                    Text(
-                      'What is one feature or service you wish GRID would add in the future?',
-                      textAlign: TextAlign.left,
-                      style: AppTypography.body.copyWith(
-                        color: textColor,
-                        fontWeight: FontWeight.w600,
+                children: [
+                  Text(
+                    'If this service wasn\'t free today, would you have paid ${widget.dynamicPrice} for the convenience of not leaving your location?',
+                    textAlign: TextAlign.left,
+                    style: AppTypography.body.copyWith(
+                      color: textColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Container(
+                    height: 100,
+                    decoration: BoxDecoration(
+                      color: textColor.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: textColor.withValues(alpha: 0.1),
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.sm),
-                    Expanded(
-                      flex: 3,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: textColor.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: textColor.withValues(alpha: 0.1),
-                          ),
-                        ),
-                        child: TextField(
-                          controller: _featureController,
-                          maxLines: null,
-                          expands: true,
-                          style: AppTypography.body.copyWith(color: textColor),
-                          decoration: InputDecoration(
-                            hintText: 'Share your thoughts...',
-                            hintStyle: AppTypography.body.copyWith(color: dimColor),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.all(AppSpacing.md),
-                          ),
-                        ),
+                    child: TextField(
+                      controller: _priceController,
+                      maxLines: null,
+                      expands: true,
+                      style: AppTypography.body.copyWith(color: textColor),
+                      decoration: InputDecoration(
+                        hintText: 'Share your thoughts...',
+                        hintStyle: AppTypography.body.copyWith(color: dimColor),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.all(AppSpacing.md),
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.lg),
-                    Text(
-                      '(Optional) Any additional comments regarding your experience?',
-                      textAlign: TextAlign.left,
-                      style: AppTypography.body.copyWith(
-                        color: textColor,
-                        fontWeight: FontWeight.w600,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  Text(
+                    'At which point in the upload process did you feel like closing the app?',
+                    textAlign: TextAlign.left,
+                    style: AppTypography.body.copyWith(
+                      color: textColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Container(
+                    height: 100,
+                    decoration: BoxDecoration(
+                      color: textColor.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: textColor.withValues(alpha: 0.1),
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.sm),
-                    Expanded(
-                      flex: 2,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: textColor.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: textColor.withValues(alpha: 0.1),
-                          ),
-                        ),
-                        child: TextField(
-                          controller: _deliveryController,
-                          maxLines: null,
-                          expands: true,
-                          style: AppTypography.body.copyWith(color: textColor),
-                          decoration: InputDecoration(
-                            hintText: 'Optional comments...',
-                            hintStyle: AppTypography.body.copyWith(color: dimColor),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.all(AppSpacing.md),
-                          ),
-                        ),
+                    child: TextField(
+                      controller: _uploadController,
+                      maxLines: null,
+                      expands: true,
+                      style: AppTypography.body.copyWith(color: textColor),
+                      decoration: InputDecoration(
+                        hintText: 'Share your thoughts...',
+                        hintStyle: AppTypography.body.copyWith(color: dimColor),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.all(AppSpacing.md),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  Text(
+                    'What is one feature or service you wish GRID would add in the future?',
+                    textAlign: TextAlign.left,
+                    style: AppTypography.body.copyWith(
+                      color: textColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Container(
+                    height: 100,
+                    decoration: BoxDecoration(
+                      color: textColor.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: textColor.withValues(alpha: 0.1),
+                      ),
+                    ),
+                    child: TextField(
+                      controller: _featureController,
+                      maxLines: null,
+                      expands: true,
+                      style: AppTypography.body.copyWith(color: textColor),
+                      decoration: InputDecoration(
+                        hintText: 'Share your thoughts...',
+                        hintStyle: AppTypography.body.copyWith(color: dimColor),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.all(AppSpacing.md),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  Text(
+                    '(Optional) Any additional comments regarding your experience?',
+                    textAlign: TextAlign.left,
+                    style: AppTypography.body.copyWith(
+                      color: textColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Container(
+                    height: 100,
+                    decoration: BoxDecoration(
+                      color: textColor.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: textColor.withValues(alpha: 0.1),
+                      ),
+                    ),
+                    child: TextField(
+                      controller: _deliveryController,
+                      maxLines: null,
+                      expands: true,
+                      style: AppTypography.body.copyWith(color: textColor),
+                      decoration: InputDecoration(
+                        hintText: 'Optional comments...',
+                        hintStyle: AppTypography.body.copyWith(color: dimColor),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.all(AppSpacing.md),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                ],
               ),
             ),
             const SizedBox(height: AppSpacing.xl),
