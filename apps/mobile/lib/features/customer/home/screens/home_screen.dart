@@ -191,15 +191,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                 const SizedBox(height: AppSpacing.lg),
 
-                _ResumeQueueCard(colors: colors, cart: cart)
-                    .animate()
-                    .fadeIn(duration: 300.ms, curve: Curves.easeOut)
-                    .slideY(
-                      begin: 0.02,
-                      duration: 300.ms,
-                      curve: Curves.easeOut,
-                    ),
-                const SizedBox(height: AppSpacing.md),
+                if (cart.items.isNotEmpty) ...[
+                  _ResumeQueueCard(colors: colors, cart: cart)
+                      .animate()
+                      .fadeIn(duration: 300.ms, curve: Curves.easeOut)
+                      .slideY(
+                        begin: 0.02,
+                        duration: 300.ms,
+                        curve: Curves.easeOut,
+                      ),
+                  const SizedBox(height: AppSpacing.md),
+                ],
 
                 // ── Hero banner ────────────────────────────────────────
                 const HeroBanner(),
@@ -299,35 +301,24 @@ class _ResumeQueueCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final count = cart.itemCount;
-    final isEmpty = count == 0;
     final plural = count == 1 ? 'item' : 'items';
     final formattedSubtotal = formatCurrency(cart.subtotal);
+    final semanticsLabel =
+        'You left $count $plural in your queue, $formattedSubtotal, tap to resume';
 
-    final title = isEmpty
-        ? 'No items in your queue yet'
-        : 'You left $count $plural in your queue';
-    final subtitle = isEmpty
-        ? 'Tap to start a new order'
-        : '$formattedSubtotal · tap to finish';
-    final semanticsLabel = isEmpty
-        ? 'Queue is empty, tap to start a new order'
-        : 'You left $count $plural in your queue, $formattedSubtotal, tap to resume';
-
-    void onTap() => context.push(
-          isEmpty ? '/customer/order/new' : '/customer/order/checkout',
-        );
+    void openQueue() => context.push('/customer/order/checkout');
 
     return Semantics(
       button: true,
       label: semanticsLabel,
-      onTap: onTap,
+      onTap: openQueue,
       child: ExcludeSemantics(
         child: Material(
           color: colors.surface,
           borderRadius: AppRadius.borderLg,
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: onTap,
+            onTap: openQueue,
             borderRadius: AppRadius.borderLg,
             child: Container(
               decoration: BoxDecoration(
@@ -344,19 +335,14 @@ class _ResumeQueueCard extends StatelessWidget {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: isEmpty
-                          ? colors.surfaceVariant
-                          : colors.brand,
+                      color: colors.brand,
                       borderRadius: AppRadius.borderMd,
-                      border: isEmpty
-                          ? Border.all(color: colors.outline, width: 1)
-                          : null,
                     ),
                     alignment: Alignment.center,
-                    child: HugeIcon(
+                    child: const HugeIcon(
                       icon: HugeIcons.strokeRoundedShoppingBasket01,
                       size: 18,
-                      color: isEmpty ? colors.onSurfaceDim : Colors.black,
+                      color: Colors.black,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -366,19 +352,17 @@ class _ResumeQueueCard extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          title,
+                          'You left $count $plural in your queue',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTypography.bodyBold.copyWith(
-                            color: isEmpty
-                                ? colors.onSurfaceDim
-                                : colors.onBackground,
+                            color: colors.onBackground,
                             fontSize: 13.5,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          subtitle,
+                          '$formattedSubtotal · tap to finish',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTypography.caption.copyWith(
@@ -395,9 +379,7 @@ class _ResumeQueueCard extends StatelessWidget {
                     size: 18,
                     color: colors.onSurfaceDim,
                   )
-                      .animate(
-                        onPlay: (c) => isEmpty ? null : c.repeat(reverse: true),
-                      )
+                      .animate(onPlay: (c) => c.repeat(reverse: true))
                       .moveX(
                         begin: -2,
                         end: 2,

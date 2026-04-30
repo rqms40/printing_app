@@ -270,7 +270,6 @@ export class OrdersService {
     // --- Fee computation ---
     const settings = await this.settingsService.getSettings();
     const speedTier = dto.speedTier ?? DeliverySpeedTier.STANDARD;
-
     const isPriority = speedTier === DeliverySpeedTier.PRIORITY;
     const priorityFee = isPriority ? Number(settings.priorityFeeAmount) : 0;
     const extraDestCount = Math.max(0, destinations.length - 1);
@@ -297,6 +296,38 @@ export class OrdersService {
         throw new BadRequestException({
           message: `Model exceeds printer build volume (${w}×${d}×${h}mm vs ${profile.buildVolumeWidthMm}×${profile.buildVolumeDepthMm}×${profile.buildVolumeHeightMm}mm)`,
           code: 'model_exceeds_build_volume',
+        });
+      }
+    }
+
+    // --- Standard/Express delivery requires a bookable slot today ---
+    // Both implicitly happen "today". If today has no slot still open
+    // for booking (all full or all already ended), reject with a clear
+    // code so the client can prompt the user to pick Pickup or Schedule.
+    const isImmediateTier =
+      speedTier === DeliverySpeedTier.STANDARD ||
+      speedTier === DeliverySpeedTier.PRIORITY;
+    if (
+      dto.deliveryOption === 'delivery' &&
+      deliveryType === 'local' &&
+      isImmediateTier &&
+      dto.slotTemplateId == null
+    ) {
+      const today = new Date().toISOString().slice(0, 10);
+      const todaySlots = await this.slotsService.getAvailability(today);
+      const now = new Date();
+      const hasBookable = todaySlots.some((s) => {
+        if (s.isFull) return false;
+        const [hh, mm] = s.endTime.split(':').map(Number);
+        const end = new Date(now);
+        end.setHours(hh, mm, 0, 0);
+        return end.getTime() > now.getTime();
+      });
+      if (!hasBookable) {
+        throw new BadRequestException({
+          code: 'no_slot_available_today',
+          message:
+            'No delivery slot is available right now. Please choose Pickup or Schedule a future slot.',
         });
       }
     }

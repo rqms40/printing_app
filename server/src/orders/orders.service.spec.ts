@@ -169,7 +169,7 @@ describe('OrdersService', () => {
           provide: DeliverySlotsService,
           useValue: {
             bookSlot: jest.fn().mockResolvedValue({ id: 1 }),
-            getAvailability: jest.fn().mockResolvedValue([]),
+            getAvailability: jest.fn().mockResolvedValue([{ templateId: 1, startTime: '00:00:00', endTime: '23:59:00', capacity: 10, bookedCount: 0, isFull: false }]),
           },
         },
         {
@@ -848,7 +848,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
           provide: DeliverySlotsService,
           useValue: {
             bookSlot: jest.fn().mockResolvedValue({ id: 1 }),
-            getAvailability: jest.fn().mockResolvedValue([]),
+            getAvailability: jest.fn().mockResolvedValue([{ templateId: 1, startTime: '00:00:00', endTime: '23:59:00', capacity: 10, bookedCount: 0, isFull: false }]),
           },
         },
         {
@@ -1108,7 +1108,7 @@ describe('createBatch with slot + destinations', () => {
 
     slotsService = {
       bookSlot: jest.fn().mockResolvedValue({ id: 99 }),
-      getAvailability: jest.fn().mockResolvedValue([]),
+      getAvailability: jest.fn().mockResolvedValue([{ templateId: 1, startTime: '00:00:00', endTime: '23:59:00', capacity: 10, bookedCount: 0, isFull: false }]),
     };
 
     settingsService = {

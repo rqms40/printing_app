@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   App,
   Button,
@@ -58,6 +59,7 @@ function format12h(hms: string) {
 
 export function DeliverySlotsTodayPage() {
   const { message, modal } = App.useApp();
+  const navigate = useNavigate();
   const [snapshot, setSnapshot] = useState<TodaySnapshot>({
     templates: [],
     bookings: [],
@@ -307,6 +309,13 @@ export function DeliverySlotsTodayPage() {
                     return (
                       <div
                         key={b.id}
+                        onClick={(e) => {
+                          // Ignore clicks that originated on inner action buttons.
+                          if ((e.target as HTMLElement).closest("button")) return;
+                          if (b.batchOrderId != null) {
+                            navigate(`/orders/show/${b.batchOrderId}`);
+                          }
+                        }}
                         style={{
                           padding: "12px 16px",
                           borderTop: "1px solid rgba(255,255,255,0.06)",
@@ -315,7 +324,9 @@ export function DeliverySlotsTodayPage() {
                           alignItems: "center",
                           gap: 12,
                           position: "relative",
+                          cursor: "pointer",
                         }}
+                        title="Open order detail"
                       >
                         {isExpress && (
                           <div

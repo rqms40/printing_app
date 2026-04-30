@@ -37,6 +37,7 @@ import 'package:printing_app/features/customer/order/screens/paper_specs_screen.
 import 'package:printing_app/features/customer/order/screens/three_d_specs_screen.dart';
 import 'package:printing_app/features/customer/order/screens/upload_screen.dart';
 import 'package:printing_app/features/customer/order/screens/checkout_screen.dart';
+import 'package:printing_app/features/customer/order/screens/order_success_screen.dart';
 import 'package:printing_app/features/customer/tracking/screens/delivery_tracking_screen.dart';
 import 'package:printing_app/features/customer/address/screens/address_list_screen.dart';
 import 'package:printing_app/features/customer/address/screens/address_picker_screen.dart';
@@ -370,6 +371,19 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/customer/order/checkout',
         pageBuilder: (_, state) =>
             slideUpTransition(const CheckoutScreen(), state),
+      ),
+      GoRoute(
+        path: '/customer/order/success',
+        pageBuilder: (_, state) {
+          final extra = (state.extra as Map?) ?? const {};
+          final refs = (extra['orderRefs'] as List?)?.cast<String>() ??
+              const <String>[];
+          final firstId = extra['firstOrderId'] as int?;
+          return slideUpTransition(
+            OrderSuccessScreen(orderRefs: refs, firstOrderId: firstId),
+            state,
+          );
+        },
       ),
       GoRoute(
         path: '/customer/orders/:id/track',

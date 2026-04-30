@@ -92,6 +92,30 @@ function App() {
                 meta: { label: "Drivers", icon: <CarOutlined /> },
               },
               {
+                name: 'delivery-slots',
+                meta: { label: 'Delivery', icon: <TruckOutlined /> },
+              },
+              {
+                name: 'delivery-slots-today',
+                list: '/delivery-slots/today',
+                meta: { label: "Today's Slots", parent: 'delivery-slots' },
+              },
+              {
+                name: 'delivery-slots-templates',
+                list: '/delivery-slots/templates',
+                meta: { label: 'Slot Templates', parent: 'delivery-slots' },
+              },
+              {
+                name: 'external-deliveries',
+                list: '/external-deliveries',
+                meta: { label: 'External Deliveries', parent: 'delivery-slots' },
+              },
+              {
+                name: 'delivery-settings',
+                list: '/settings/delivery',
+                meta: { label: 'Delivery Settings', parent: 'delivery-slots' },
+              },
+              {
                 name: "users",
                 list: "/users",
                 show: "/users/show/:id",
@@ -141,30 +165,6 @@ function App() {
                 name: "chat",
                 list: "/chat",
                 meta: { label: "Support Chat", icon: <MessageOutlined /> },
-              },
-              {
-                name: 'delivery-slots',
-                meta: { label: 'Delivery', icon: <TruckOutlined /> },
-              },
-              {
-                name: 'delivery-slots-today',
-                list: '/delivery-slots/today',
-                meta: { label: "Today's Slots", parent: 'delivery-slots' },
-              },
-              {
-                name: 'delivery-slots-templates',
-                list: '/delivery-slots/templates',
-                meta: { label: 'Slot Templates', parent: 'delivery-slots' },
-              },
-              {
-                name: 'external-deliveries',
-                list: '/external-deliveries',
-                meta: { label: 'External Deliveries', parent: 'delivery-slots' },
-              },
-              {
-                name: 'delivery-settings',
-                list: '/settings/delivery',
-                meta: { label: 'Delivery Settings', parent: 'delivery-slots' },
               },
               {
                 name: 'printer-profile',
