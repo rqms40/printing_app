@@ -638,6 +638,10 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     return createdOrders;
   }
 
+  Future<void> placeCheckout(dynamic state) async {
+    throw UnimplementedError();
+  }
+
   /// Cancel an order if it is in a cancellable status.
   Future<void> cancelOrder(String orderId) async {
     // Optimistic local update so the UI responds immediately
