@@ -7,6 +7,7 @@ import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/services/notification_service.dart';
 import 'package:printing_app/shared/services/token_storage.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
+import 'package:printing_app/features/customer/home/widgets/next_batch_session_trigger.dart';
 
 // ---------------------------------------------------------------------------
 // Auth status
@@ -128,6 +129,10 @@ class AuthState {
 // ---------------------------------------------------------------------------
 // Auth notifier
 // ---------------------------------------------------------------------------
+// Imported here so logout() can clear the session-scoped flag. Lives in
+// the home/widgets layer because that's where it's read.
+// (Avoids creating a yet-another barrel just for this constant.)
+
 class AuthNotifier extends StateNotifier<AuthState> {
   AuthNotifier([this._ref]) : super(AuthState.unauthenticated()) {
     _listenToFcmMessages();
@@ -351,6 +356,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await TokenStorage.clearToken();
     WebSocketService.instance.disconnect();
     _ref?.read(accountStateProvider.notifier).clear();
+    // Reset session-scoped UI flags so they fire again on next login.
+    _ref?.read(nextBatchShownThisSessionProvider.notifier).state = false;
     state = AuthState.unauthenticated();
   }
 

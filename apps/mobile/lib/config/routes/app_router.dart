@@ -26,6 +26,7 @@ import 'package:printing_app/features/auth/screens/profile_setup_screen.dart';
 // Customer screens
 // ---------------------------------------------------------------------------
 import 'package:printing_app/features/customer/home/screens/home_screen.dart';
+import 'package:printing_app/features/customer/home/widgets/next_batch_session_trigger.dart';
 import 'package:printing_app/features/customer/orders/screens/orders_screen.dart';
 import 'package:printing_app/features/customer/orders/screens/order_detail_screen.dart';
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
@@ -259,7 +260,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                 );
             });
 
-            return ScaffoldWithNav(
+            return NextBatchSessionTrigger(
+              child: ScaffoldWithNav(
               currentIndex: navigationShell.currentIndex,
               showFab: true,
               onTap: (i) => navigationShell.goBranch(
@@ -290,6 +292,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 ),
               ],
               child: navigationShell,
+            ),
             );
           },
         ),

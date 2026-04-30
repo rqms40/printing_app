@@ -16,7 +16,6 @@ import 'package:printing_app/features/customer/orders/providers/orders_provider.
     show ordersProvider;
 import 'package:printing_app/features/customer/home/providers/tam_surveys_feed_provider.dart';
 import 'package:printing_app/features/customer/home/widgets/daily_grid_section.dart';
-import 'package:printing_app/features/customer/home/widgets/next_batch_dialog.dart';
 import 'package:printing_app/features/customer/order/providers/delivery_slot_provider.dart';
 import 'package:printing_app/features/customer/home/widgets/hero_banner.dart';
 import 'package:printing_app/features/customer/home/widgets/map_tracking_tile.dart';
@@ -35,8 +34,6 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  bool _nextBatchChecked = false;
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -57,14 +54,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ref.read(deliverySlotProvider(today).notifier).refresh();
       ref.read(deliverySlotProvider(tomStr).notifier).refresh();
     });
-  }
-
-  Future<void> _maybeShowNextBatchDialog() async {
-    if (_nextBatchChecked || !mounted) return;
-    final info = ref.read(nextBatchInfoProvider);
-    if (info == null) return;
-    _nextBatchChecked = true;
-    await NextBatchDialog.show(context, info);
   }
 
   AppColorSet _colors(BuildContext context) {
@@ -120,19 +109,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final credits = (double.tryParse(authState.user?.credits ?? '0') ?? 0.0)
         .toInt();
 
-    ref.listen<NextBatchInfo?>(nextBatchInfoProvider, (prev, next) {
-      if (next != null) {
-        WidgetsBinding.instance.addPostFrameCallback(
-          (_) => _maybeShowNextBatchDialog(),
-        );
-      }
-    });
-    final immediate = ref.watch(nextBatchInfoProvider);
-    if (immediate != null && !_nextBatchChecked) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _maybeShowNextBatchDialog(),
-      );
-    }
+    // NextBatchDialog is now triggered at the customer-shell level via
+    // NextBatchSessionTrigger so it fires reliably on first login regardless
+    // of which tab the user lands on.
 
     return Stack(
       children: [
@@ -212,17 +191,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                 const SizedBox(height: AppSpacing.lg),
 
-                if (cart.items.isNotEmpty) ...[
-                  _ResumeQueueCard(colors: colors, cart: cart)
-                      .animate()
-                      .fadeIn(duration: 300.ms, curve: Curves.easeOut)
-                      .slideY(
-                        begin: 0.02,
-                        duration: 300.ms,
-                        curve: Curves.easeOut,
-                      ),
-                  const SizedBox(height: AppSpacing.md),
-                ],
+                _ResumeQueueCard(colors: colors, cart: cart)
+                    .animate()
+                    .fadeIn(duration: 300.ms, curve: Curves.easeOut)
+                    .slideY(
+                      begin: 0.02,
+                      duration: 300.ms,
+                      curve: Curves.easeOut,
+                    ),
+                const SizedBox(height: AppSpacing.md),
 
                 // ── Hero banner ────────────────────────────────────────
                 const HeroBanner(),
@@ -322,23 +299,35 @@ class _ResumeQueueCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final count = cart.itemCount;
+    final isEmpty = count == 0;
     final plural = count == 1 ? 'item' : 'items';
     final formattedSubtotal = formatCurrency(cart.subtotal);
-    final semanticsLabel =
-        'You left $count $plural in your queue, $formattedSubtotal, tap to resume';
-    void openQueue() => context.push('/customer/order/checkout');
+
+    final title = isEmpty
+        ? 'No items in your queue yet'
+        : 'You left $count $plural in your queue';
+    final subtitle = isEmpty
+        ? 'Tap to start a new order'
+        : '$formattedSubtotal · tap to finish';
+    final semanticsLabel = isEmpty
+        ? 'Queue is empty, tap to start a new order'
+        : 'You left $count $plural in your queue, $formattedSubtotal, tap to resume';
+
+    void onTap() => context.push(
+          isEmpty ? '/customer/order/new' : '/customer/order/checkout',
+        );
 
     return Semantics(
       button: true,
       label: semanticsLabel,
-      onTap: openQueue,
+      onTap: onTap,
       child: ExcludeSemantics(
         child: Material(
           color: colors.surface,
           borderRadius: AppRadius.borderLg,
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: openQueue,
+            onTap: onTap,
             borderRadius: AppRadius.borderLg,
             child: Container(
               decoration: BoxDecoration(
@@ -355,14 +344,19 @@ class _ResumeQueueCard extends StatelessWidget {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: colors.brand,
+                      color: isEmpty
+                          ? colors.surfaceVariant
+                          : colors.brand,
                       borderRadius: AppRadius.borderMd,
+                      border: isEmpty
+                          ? Border.all(color: colors.outline, width: 1)
+                          : null,
                     ),
                     alignment: Alignment.center,
-                    child: const HugeIcon(
+                    child: HugeIcon(
                       icon: HugeIcons.strokeRoundedShoppingBasket01,
                       size: 18,
-                      color: Colors.black,
+                      color: isEmpty ? colors.onSurfaceDim : Colors.black,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -372,17 +366,19 @@ class _ResumeQueueCard extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'You left $count $plural in your queue',
+                          title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTypography.bodyBold.copyWith(
-                            color: colors.onBackground,
+                            color: isEmpty
+                                ? colors.onSurfaceDim
+                                : colors.onBackground,
                             fontSize: 13.5,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '$formattedSubtotal · tap to finish',
+                          subtitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTypography.caption.copyWith(
@@ -399,7 +395,9 @@ class _ResumeQueueCard extends StatelessWidget {
                     size: 18,
                     color: colors.onSurfaceDim,
                   )
-                      .animate(onPlay: (c) => c.repeat(reverse: true))
+                      .animate(
+                        onPlay: (c) => isEmpty ? null : c.repeat(reverse: true),
+                      )
                       .moveX(
                         begin: -2,
                         end: 2,
