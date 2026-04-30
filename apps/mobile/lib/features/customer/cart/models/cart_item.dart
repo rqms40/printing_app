@@ -118,7 +118,7 @@ class CartItem {
     };
   }
 
-  CartItem copyWith({int? quantity, double? unitPrice}) {
+  CartItem copyWith({int? quantity, double? unitPrice, int? pageCount}) {
     return CartItem(
       id: id,
       category: category,
@@ -129,7 +129,7 @@ class CartItem {
       paperSpecs: paperSpecs,
       threeDSpecs: threeDSpecs,
       quantity: quantity ?? this.quantity,
-      pageCount: pageCount,
+      pageCount: pageCount ?? this.pageCount,
       unitPrice: unitPrice ?? this.unitPrice,
       createdAt: createdAt,
     );
