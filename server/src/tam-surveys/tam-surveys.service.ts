@@ -65,6 +65,33 @@ export class TamSurveysService {
     return { success: true, surveyId: saved.id };
   }
 
+  async getApprovedFeed() {
+    const surveys = await this.tamSurveysRepo.find({
+      where: { isApprovedForFeed: true },
+      relations: ['user'],
+      order: { createdAt: 'DESC' },
+    });
+
+    return surveys.map((s) => {
+      let rating = 5.0;
+      if (s.surveyData) {
+        const values = Object.values(s.surveyData);
+        if (values.length > 0) {
+          const sum = values.reduce((acc, val) => acc + Number(val), 0);
+          rating = Number((sum / values.length).toFixed(1));
+        }
+      }
+
+      return {
+        id: s.id,
+        user_name: s.user?.fullName ?? s.user?.email ?? 'Customer',
+        rating,
+        feedback: s.openForumFeedback ?? null,
+        created_at: s.createdAt,
+      };
+    });
+  }
+
   async createPostDeliveryRequirementIfNeeded(
     order: Pick<Order, 'id' | 'orderId' | 'userId'>,
   ): Promise<TamSurveyRequirement | null> {

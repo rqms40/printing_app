@@ -616,7 +616,7 @@ export class AdminController {
   @Get('tam-surveys')
   async getTamSurveys() {
     const surveys = await this.tamSurveysRepo.find({
-      relations: ['user'],
+      relations: ['user', 'order'],
       order: { createdAt: 'DESC' },
     });
 
@@ -624,6 +624,9 @@ export class AdminController {
       id: s.id,
       user_id: s.userId,
       user_name: s.user?.fullName ?? s.user?.email ?? 'Unknown',
+      order_id: s.orderId ?? null,
+      order_ref: s.order?.orderId ?? null,
+      requirement_id: s.requirementId ?? null,
       open_forum_feedback: s.openForumFeedback ?? null,
       survey_data: s.surveyData,
       is_approved_for_feed: s.isApprovedForFeed,
@@ -636,12 +639,15 @@ export class AdminController {
   async getTamSurveyShow(@Param('id', ParseIntPipe) id: number) {
     const s = await this.tamSurveysRepo.findOneOrFail({
       where: { id },
-      relations: ['user'],
+      relations: ['user', 'order'],
     });
     return {
       id: s.id,
       user_id: s.userId,
       user_name: s.user?.fullName ?? s.user?.email ?? 'Unknown',
+      order_id: s.orderId ?? null,
+      order_ref: s.order?.orderId ?? null,
+      requirement_id: s.requirementId ?? null,
       open_forum_feedback: s.openForumFeedback ?? null,
       survey_data: s.surveyData,
       is_approved_for_feed: s.isApprovedForFeed,

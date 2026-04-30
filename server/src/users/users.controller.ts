@@ -14,13 +14,17 @@ import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateStorageSettingsDto } from './dto/update-storage-settings.dto';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
+import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 
 @ApiTags('users')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UsersController {
-  constructor(private usersService: UsersService) {}
+  constructor(
+    private usersService: UsersService,
+    private tamSurveysService: TamSurveysService,
+  ) {}
 
   @Get('profile')
   async getProfile(@Request() req: RequestWithUser) {
@@ -55,6 +59,11 @@ export class UsersController {
   @Get('me/storage-settings')
   async getStorageSettings(@Request() req: RequestWithUser) {
     return this.usersService.getStorageSettings(req.user.sub);
+  }
+
+  @Get('me/account-state')
+  async getAccountState(@Request() req: RequestWithUser) {
+    return this.tamSurveysService.getAccountState(req.user.sub);
   }
 
   @Patch('me/storage-settings')

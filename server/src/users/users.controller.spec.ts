@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
+import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 
 describe('UsersController — storage settings', () => {
   let controller: UsersController;
@@ -11,13 +12,19 @@ describe('UsersController — storage settings', () => {
     getStorageSettings: jest.fn(),
     updateStorageSettings: jest.fn(),
   };
+  const mockTamSurveysService = {
+    getAccountState: jest.fn(),
+  };
   const mockReq = { user: { sub: 42 } } as any;
 
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UsersController],
-      providers: [{ provide: UsersService, useValue: mockService }],
+      providers: [
+        { provide: UsersService, useValue: mockService },
+        { provide: TamSurveysService, useValue: mockTamSurveysService },
+      ],
     }).compile();
     controller = module.get<UsersController>(UsersController);
   });
@@ -38,5 +45,20 @@ describe('UsersController — storage settings', () => {
     });
     expect(result).toEqual({ fileRetentionDays: 30 });
     expect(mockService.updateStorageSettings).toHaveBeenCalledWith(42, 30);
+  });
+
+  it('GET /users/me/account-state returns account gate state', async () => {
+    mockTamSurveysService.getAccountState.mockResolvedValue({
+      accountStatus: 'survey_required',
+      holds: [{ requirementId: 123, orderId: 55 }],
+    });
+
+    const result = await controller.getAccountState(mockReq);
+
+    expect(result).toEqual({
+      accountStatus: 'survey_required',
+      holds: [{ requirementId: 123, orderId: 55 }],
+    });
+    expect(mockTamSurveysService.getAccountState).toHaveBeenCalledWith(42);
   });
 });
