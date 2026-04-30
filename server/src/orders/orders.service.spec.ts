@@ -1,8 +1,9 @@
-import { Logger } from '@nestjs/common';
+import { ForbiddenException, Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { FilesService } from '../files/files.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, MoreThanOrEqual, Repository } from 'typeorm';
+import { BETA_ORDER_LIMIT_REACHED } from './dto/beta-order-limit.error';
 import { OrdersService } from './orders.service';
 import { Order, OrderStatus } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
@@ -97,6 +98,7 @@ describe('OrdersService', () => {
     };
     usersService = {
       getFcmToken: jest.fn().mockResolvedValue(null),
+      findById: jest.fn(),
     };
     creditsService = {
       subtractCredits: jest.fn().mockResolvedValue(undefined),
@@ -645,6 +647,77 @@ describe('OrdersService', () => {
       await service.cancelOrder(1, 1);
 
       expect(creditsService.refundCredits).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('beta order limit', () => {
+    const enrolledAt = new Date('2026-04-01T00:00:00Z');
+
+    it('allows non-beta users regardless of order count', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({
+        id: 7,
+        isBetaUser: false,
+        betaEnrolledAt: null,
+      });
+      const countSpy = repo.count as jest.Mock;
+      countSpy.mockClear();
+      await expect(service.assertBetaOrderLimit(7)).resolves.toBeUndefined();
+      expect(countSpy).not.toHaveBeenCalled();
+    });
+
+    it('allows beta users with zero orders since enrollment', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({
+        id: 7,
+        isBetaUser: true,
+        betaEnrolledAt: enrolledAt,
+      });
+      (repo.count as jest.Mock).mockResolvedValue(0);
+      await expect(service.assertBetaOrderLimit(7)).resolves.toBeUndefined();
+    });
+
+    it('throws BETA_ORDER_LIMIT_REACHED for beta users with >=1 order since enrollment', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({
+        id: 7,
+        isBetaUser: true,
+        betaEnrolledAt: enrolledAt,
+      });
+      (repo.count as jest.Mock).mockResolvedValue(1);
+      await expect(service.assertBetaOrderLimit(7)).rejects.toMatchObject({
+        response: { code: BETA_ORDER_LIMIT_REACHED },
+      });
+      await expect(service.assertBetaOrderLimit(7)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+    });
+
+    it('counts only orders with createdAt >= betaEnrolledAt', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({
+        id: 7,
+        isBetaUser: true,
+        betaEnrolledAt: enrolledAt,
+      });
+      const countSpy = repo.count as jest.Mock;
+      countSpy.mockClear();
+      countSpy.mockResolvedValue(0);
+      await service.assertBetaOrderLimit(7);
+      expect(countSpy).toHaveBeenCalledWith({
+        where: {
+          userId: 7,
+          createdAt: MoreThanOrEqual(enrolledAt),
+        },
+      });
+    });
+
+    it('treats missing betaEnrolledAt as no limit (defensive)', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({
+        id: 7,
+        isBetaUser: true,
+        betaEnrolledAt: null,
+      });
+      const countSpy = repo.count as jest.Mock;
+      countSpy.mockClear();
+      await expect(service.assertBetaOrderLimit(7)).resolves.toBeUndefined();
+      expect(countSpy).not.toHaveBeenCalled();
     });
   });
 });

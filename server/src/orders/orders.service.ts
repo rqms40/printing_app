@@ -1,6 +1,15 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, In, MoreThanOrEqual, Repository } from 'typeorm';
+import {
+  BETA_ORDER_LIMIT_MESSAGE,
+  BETA_ORDER_LIMIT_REACHED,
+} from './dto/beta-order-limit.error';
 import { Order, OrderStatus } from './entities/order.entity';
 import { BatchOrder } from './entities/batch-order.entity';
 import { OrderItem } from './entities/order-item.entity';
@@ -109,6 +118,24 @@ export class OrdersService {
         deliveryAssignmentId: assignmentByOrderId.get(order.id)?.id ?? null,
       }),
     );
+  }
+
+  async assertBetaOrderLimit(userId: number): Promise<void> {
+    const user = await this.usersService.findById(userId);
+    if (!user?.isBetaUser || !user.betaEnrolledAt) return;
+
+    const count = await this.ordersRepo.count({
+      where: {
+        userId,
+        createdAt: MoreThanOrEqual(user.betaEnrolledAt),
+      },
+    });
+    if (count >= 1) {
+      throw new ForbiddenException({
+        code: BETA_ORDER_LIMIT_REACHED,
+        message: BETA_ORDER_LIMIT_MESSAGE,
+      });
+    }
   }
 
   async create(
