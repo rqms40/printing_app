@@ -620,7 +620,15 @@ export class OrdersService {
       orderStatus === OrderStatus.DELIVERED ||
       orderStatus === OrderStatus.COMPLETED_PICKUP
     ) {
-      await this.tamSurveysService.createPostDeliveryRequirementIfNeeded(order);
+      try {
+        await this.tamSurveysService.createPostDeliveryRequirementIfNeeded(
+          order,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `Post-delivery survey requirement failed for order ${order.orderId}: ${err}`,
+        );
+      }
     }
 
     // Status → notification copy (shared by FCM push + in-app notification)

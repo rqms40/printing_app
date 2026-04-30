@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { FilesService } from '../files/files.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -851,6 +852,36 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
     expect(
       mockTamSurveysService.createPostDeliveryRequirementIfNeeded,
     ).toHaveBeenCalledWith(order);
+  });
+
+  it('continues notification flow when survey requirement creation fails', async () => {
+    const order = makeOrder({ orderStatus: OrderStatus.DELIVERED });
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    ordersRepo.findOneOrFail.mockResolvedValue(order);
+    ordersRepo.update.mockResolvedValue({});
+    mockUsersService.findById.mockResolvedValue({ fileRetentionDays: null });
+    mockUsersService.getFcmToken.mockResolvedValue(null);
+    mockTamSurveysService.createPostDeliveryRequirementIfNeeded.mockRejectedValueOnce(
+      new Error('survey unavailable'),
+    );
+    mockNotifications.create.mockResolvedValue({});
+
+    try {
+      await expect(service.updateStatus(1, 'delivered')).resolves.toEqual(order);
+
+      expect(mockNotifications.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: order.userId,
+          type: 'order_delivered',
+          orderRef: order.orderId,
+        }),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Post-delivery survey requirement failed'),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('does not create a survey requirement for non-completion statuses', async () => {
