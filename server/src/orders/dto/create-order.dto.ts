@@ -219,11 +219,6 @@ export class CreateBatchOrderDto {
   @IsEnum(DeliverySpeedTier)
   speedTier?: DeliverySpeedTier;
 
-  /** @deprecated Use speedTier='priority' instead. Removed in Phase 4. */
-  @IsOptional()
-  @IsBoolean()
-  priority?: boolean;
-
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })

@@ -64,7 +64,7 @@ describe('CreateBatchOrderDto extended fields', () => {
       deliveryOption: 'delivery',
       slotTemplateId: 1,
       slotDate: '2026-04-30',
-      priority: true,
+      speedTier: 'priority',
       destinations: [{ addressId: 5, label: 'Office' }],
     });
     const errors = await validate(dto);

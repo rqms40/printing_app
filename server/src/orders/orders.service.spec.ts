@@ -1279,7 +1279,7 @@ describe('createBatch with slot + destinations', () => {
       deliveryAddressId: 9,
       slotTemplateId: 1,
       slotDate: '2026-05-01',
-      priority: true,
+      speedTier: DeliverySpeedTier.PRIORITY,
       destinations: [
         { addressId: 10, label: 'A' },
         { addressId: 11, label: 'B' },
@@ -1298,35 +1298,7 @@ describe('createBatch with slot + destinations', () => {
     expect(capturedBatch.extraDestinationFee).toBe(60); // 2 extra * 30
   });
 
-  it('speedTier="priority" produces same priorityFee as legacy priority=true', async () => {
-    addressRepo.findOne.mockImplementation(async ({ where }: any) => {
-      if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address;
-      return makeAddress(where.id, 7.07, 125.61);
-    });
-    settingsService.isInsideServiceArea.mockResolvedValue(true);
-    settingsService.getSettings.mockResolvedValue({
-      priorityFeeAmount: 50,
-      extraDestinationSurcharge: 30,
-    } as any);
-
-    const dto = {
-      paymentMethod: 'gcash',
-      deliveryOption: 'delivery',
-      deliveryAddressId: 9,
-      slotTemplateId: 1,
-      slotDate: '2026-05-01',
-      speedTier: DeliverySpeedTier.PRIORITY,
-      destinations: [{ addressId: 10, label: 'Home' }],
-      items: [makeItem({ destinationIndex: 0 })],
-    };
-
-    await (service as any).createBatch(1, dto);
-
-    expect(capturedBatch.priorityFee).toBe(50);
-    expect(capturedBatch.speedTier).toBe(DeliverySpeedTier.PRIORITY);
-  });
-
-  it('defaults to speedTier="standard" with priorityFee=0 when neither flag set', async () => {
+  it('defaults to speedTier="standard" with priorityFee=0 when speedTier not set', async () => {
     addressRepo.findOne.mockImplementation(async ({ where }: any) => {
       if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address;
       return makeAddress(where.id, 7.07, 125.61);

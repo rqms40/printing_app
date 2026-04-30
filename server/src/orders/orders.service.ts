@@ -269,9 +269,7 @@ export class OrdersService {
 
     // --- Fee computation ---
     const settings = await this.settingsService.getSettings();
-    const speedTier =
-      (dto as { speedTier?: DeliverySpeedTier }).speedTier ??
-      ((dto.priority ?? false) ? DeliverySpeedTier.PRIORITY : DeliverySpeedTier.STANDARD);
+    const speedTier = dto.speedTier ?? DeliverySpeedTier.STANDARD;
 
     const isPriority = speedTier === DeliverySpeedTier.PRIORITY;
     const priorityFee = isPriority ? Number(settings.priorityFeeAmount) : 0;
@@ -360,7 +358,7 @@ export class OrdersService {
           slotTemplateId: dto.slotTemplateId,
           date: dto.slotDate,
           batchOrderId: savedBatch.id,
-          priority: dto.priority ?? false,
+          priority: isPriority,
         });
         savedBatch.slotBookingId = booking.id;
         await batchOrdersRepo.save(savedBatch);
