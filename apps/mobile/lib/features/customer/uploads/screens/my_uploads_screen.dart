@@ -779,7 +779,7 @@ class _GridCard extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete file?'),
+        title: const Text('Are you sure you want to delete?'),
         content: Text(
           '${file.originalName} will be permanently removed from your uploads and cloud storage. This cannot be undone.',
         ),
@@ -798,11 +798,15 @@ class _GridCard extends ConsumerWidget {
     );
     if (confirmed != true) return;
     final ok = await ref.read(myUploadsProvider.notifier).deleteFile(file.id);
-    if (!ok) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Could not delete file. Try again.')),
-      );
-    }
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          ok ? 'Deleted ${file.originalName}' : 'Could not delete file. Try again.',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 }
 
@@ -985,7 +989,7 @@ class _ListRow extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete file?'),
+        title: const Text('Are you sure you want to delete?'),
         content: Text(
           '${file.originalName} will be permanently removed from your uploads and cloud storage. This cannot be undone.',
         ),
@@ -1004,11 +1008,15 @@ class _ListRow extends ConsumerWidget {
     );
     if (confirmed != true) return;
     final ok = await ref.read(myUploadsProvider.notifier).deleteFile(file.id);
-    if (!ok) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Could not delete file. Try again.')),
-      );
-    }
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          ok ? 'Deleted ${file.originalName}' : 'Could not delete file. Try again.',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 }
 
