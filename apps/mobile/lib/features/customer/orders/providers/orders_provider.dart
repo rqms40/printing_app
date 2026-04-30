@@ -646,11 +646,57 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     if (state.paymentMethod == null) {
       throw StateError('paymentMethod is required');
     }
-    final destinations = state.drops
-        .where((d) => d.addressId != null)
-        .map((d) => {'addressId': d.addressId!, 'label': d.label})
-        .toList();
     final addressIdString = state.singleAddress?.id;
+
+    // Multi-drop: expand each item by quantity so each copy lands at its
+    // assigned destination. Build parallel `items` and `itemDestinationIndices`
+    // lists indexed into `destinations`.
+    if (state.mode == DeliveryMode.multidrop) {
+      final destinations = state.drops
+          .where((d) => d.addressId != null)
+          .map((d) => {'addressId': d.addressId!, 'label': d.label})
+          .toList();
+      final dropIndexById = <String, int>{};
+      var validIdx = 0;
+      for (final d in state.drops) {
+        if (d.addressId != null) {
+          dropIndexById[d.id] = validIdx;
+          validIdx++;
+        }
+      }
+
+      final expandedItems = <CartItem>[];
+      final indices = <int>[];
+      for (final item in state.items) {
+        final assignments =
+            state.unitAssignments[item.id] ?? const <String?>[];
+        for (var copy = 0; copy < item.quantity; copy++) {
+          final dropId =
+              copy < assignments.length ? assignments[copy] : null;
+          final di = dropId == null ? null : dropIndexById[dropId];
+          // Skip copies whose drop has no address — caller should block this
+          // upstream, but be defensive.
+          if (di == null) continue;
+          expandedItems.add(item.copyWith(quantity: 1));
+          indices.add(di);
+        }
+      }
+
+      return addBatchOrder(
+        items: expandedItems,
+        deliveryOption: 'delivery',
+        deliveryAddressId: null,
+        deliveryFee: 0,
+        paymentMethod: state.paymentMethod!,
+        slotTemplateId: state.scheduledSlot?.templateId,
+        slotDate: state.scheduledSlot?.date,
+        priority: state.speedTier == DeliverySpeedTier.priority,
+        speedTier: state.speedTier,
+        destinations: destinations,
+        itemDestinationIndices: indices,
+      );
+    }
+
     return addBatchOrder(
       items: state.items,
       deliveryOption:
@@ -662,7 +708,6 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       slotDate: state.scheduledSlot?.date,
       priority: state.speedTier == DeliverySpeedTier.priority,
       speedTier: state.speedTier,
-      destinations: destinations,
     );
   }
 

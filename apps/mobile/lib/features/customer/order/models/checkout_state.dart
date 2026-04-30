@@ -30,6 +30,7 @@ class CheckoutState {
     this.paymentMethod,
     this.leaveAtDoor = false,
     this.riderNote = '',
+    this.unitAssignments = const {},
   });
 
   final List<CartItem> items;
@@ -41,6 +42,12 @@ class CheckoutState {
   final PaymentMethod? paymentMethod;
   final bool leaveAtDoor;
   final String riderNote;
+
+  /// Per-item, per-copy assignment to a [DestinationGroup.id].
+  /// Length of each list must equal the matching item's quantity.
+  /// `null` entries mean the copy is unassigned (rare — only when a drop was
+  /// removed and there is no remaining drop to fall back to).
+  final Map<String, List<String?>> unitAssignments;
 
   int get itemCount => items.length;
   double get subtotal => items.fold(0.0, (s, i) => s + i.printSubtotal);
@@ -55,6 +62,7 @@ class CheckoutState {
     PaymentMethod? paymentMethod,
     bool? leaveAtDoor,
     String? riderNote,
+    Map<String, List<String?>>? unitAssignments,
   }) => CheckoutState(
     items: items ?? this.items,
     mode: mode ?? this.mode,
@@ -65,5 +73,6 @@ class CheckoutState {
     paymentMethod: paymentMethod ?? this.paymentMethod,
     leaveAtDoor: leaveAtDoor ?? this.leaveAtDoor,
     riderNote: riderNote ?? this.riderNote,
+    unitAssignments: unitAssignments ?? this.unitAssignments,
   );
 }

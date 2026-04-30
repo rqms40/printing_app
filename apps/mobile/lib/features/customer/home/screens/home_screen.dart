@@ -322,10 +322,10 @@ class _ResumeQueueCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final count = cart.itemCount;
-    final plural = count == 1 ? 'job' : 'jobs';
+    final plural = count == 1 ? 'item' : 'items';
     final formattedSubtotal = formatCurrency(cart.subtotal);
     final semanticsLabel =
-        'You left $count print $plural in your queue, $formattedSubtotal, tap to resume';
+        'You left $count $plural in your queue, $formattedSubtotal, tap to resume';
     void openQueue() => context.push('/customer/order/checkout');
 
     return Semantics(
@@ -360,7 +360,7 @@ class _ResumeQueueCard extends StatelessWidget {
                     ),
                     alignment: Alignment.center,
                     child: const HugeIcon(
-                      icon: HugeIcons.strokeRoundedFile02,
+                      icon: HugeIcons.strokeRoundedShoppingBasket01,
                       size: 18,
                       color: Colors.black,
                     ),
