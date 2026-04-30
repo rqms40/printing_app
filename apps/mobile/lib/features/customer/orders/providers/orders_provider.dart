@@ -271,6 +271,12 @@ Order _parseOrder(Map<String, dynamic> json) {
     estimatedCompletionAt: _parseDateNullable(
       _readJsonValue(json, 'estimatedCompletionAt', 'estimated_completion_at'),
     ),
+    adminStatusNote:
+        _readJsonValue(json, 'adminStatusNote', 'admin_status_note')
+            ?.toString(),
+    adminStatusSetAt: _parseDateNullable(
+      _readJsonValue(json, 'adminStatusSetAt', 'admin_status_set_at'),
+    ),
     adminNotes: _readJsonValue(json, 'adminNotes', 'admin_notes')?.toString(),
     trackingLink: _readJsonValue(
       json,

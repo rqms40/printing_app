@@ -55,6 +55,8 @@ class Order {
     this.assignedDriverId,
     this.deliveryAssignmentId,
     this.estimatedCompletionAt,
+    this.adminStatusNote,
+    this.adminStatusSetAt,
     this.adminNotes,
     this.trackingLink,
     this.items = const [],
@@ -88,6 +90,8 @@ class Order {
   final String? assignedDriverId;
   final String? deliveryAssignmentId;
   final DateTime? estimatedCompletionAt;
+  final String? adminStatusNote;
+  final DateTime? adminStatusSetAt;
   final String? adminNotes;
   final String? trackingLink;
   final List<OrderLineItem> items;
@@ -168,6 +172,8 @@ class Order {
     String? assignedDriverId,
     String? deliveryAssignmentId,
     DateTime? estimatedCompletionAt,
+    String? adminStatusNote,
+    DateTime? adminStatusSetAt,
     String? adminNotes,
     String? trackingLink,
     List<OrderLineItem>? items,
@@ -202,6 +208,8 @@ class Order {
       deliveryAssignmentId: deliveryAssignmentId ?? this.deliveryAssignmentId,
       estimatedCompletionAt:
           estimatedCompletionAt ?? this.estimatedCompletionAt,
+      adminStatusNote: adminStatusNote ?? this.adminStatusNote,
+      adminStatusSetAt: adminStatusSetAt ?? this.adminStatusSetAt,
       adminNotes: adminNotes ?? this.adminNotes,
       trackingLink: trackingLink ?? this.trackingLink,
       items: items ?? this.items,
