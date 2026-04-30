@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing_app/features/customer/beta/exceptions/beta_order_limit_exception.dart';
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
@@ -546,6 +548,16 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       WebSocketService.instance.subscribeToOrder(newOrder.orderId);
       debugPrint('OrdersProvider: Order created via API: ${newOrder.orderId}');
       return newOrder;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403) {
+        final data = e.response?.data;
+        if (data is Map && data['code'] == 'BETA_ORDER_LIMIT_REACHED') {
+          throw const BetaOrderLimitException();
+        }
+      }
+      debugPrint('OrdersProvider: API create failed ($e), adding locally');
+      state = [order, ...state];
+      return order;
     } catch (e) {
       debugPrint('OrdersProvider: API create failed ($e), adding locally');
       state = [order, ...state];
@@ -590,7 +602,18 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       if (destinations.isNotEmpty) 'destinations': destinations,
     };
 
-    final response = await ApiClient.instance.post('/orders/batch', data: body);
+    final Response response;
+    try {
+      response = await ApiClient.instance.post('/orders/batch', data: body);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403) {
+        final data = e.response?.data;
+        if (data is Map && data['code'] == 'BETA_ORDER_LIMIT_REACHED') {
+          throw const BetaOrderLimitException();
+        }
+      }
+      rethrow;
+    }
 
     final data = Map<String, dynamic>.from(response.data as Map);
     final batchId = data['batchId']?.toString();

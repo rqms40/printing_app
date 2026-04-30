@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
+import 'package:printing_app/features/customer/beta/exceptions/beta_order_limit_exception.dart';
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
 import 'package:printing_app/features/customer/cart/providers/cart_provider.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
@@ -23,6 +24,8 @@ void main() {
 
   Map<String, dynamic>? lastBatchPayload;
   var batchResponseOrders = <Map<String, dynamic>>[];
+  final forceBetaLimitPaths = <String>{};
+  final force500Paths = <String>{};
 
   setUpAll(() {
     const secureStorageChannel = MethodChannel(
@@ -49,6 +52,41 @@ void main() {
           if (options.path == '/orders' && options.method == 'GET') {
             handler.resolve(
               Response(requestOptions: options, statusCode: 200, data: []),
+            );
+            return;
+          }
+
+          if (forceBetaLimitPaths.contains(options.path)) {
+            handler.reject(
+              DioException(
+                requestOptions: options,
+                response: Response(
+                  requestOptions: options,
+                  statusCode: 403,
+                  data: {
+                    'statusCode': 403,
+                    'code': 'BETA_ORDER_LIMIT_REACHED',
+                    'message':
+                        'Beta testers may place only one order during the beta program.',
+                  },
+                ),
+                type: DioExceptionType.badResponse,
+              ),
+            );
+            return;
+          }
+
+          if (force500Paths.contains(options.path)) {
+            handler.reject(
+              DioException(
+                requestOptions: options,
+                response: Response(
+                  requestOptions: options,
+                  statusCode: 500,
+                  data: {'message': 'boom'},
+                ),
+                type: DioExceptionType.badResponse,
+              ),
             );
             return;
           }
@@ -82,6 +120,8 @@ void main() {
       _orderJson(id: '101', orderId: 'ORD-BATCH-1', fileName: 'proposal.pdf'),
       _orderJson(id: '102', orderId: 'ORD-BATCH-2', fileName: 'gear.stl'),
     ];
+    forceBetaLimitPaths.clear();
+    force500Paths.clear();
   });
 
   tearDown(() async {
@@ -460,6 +500,131 @@ void main() {
       expect(item.fileMetadataId, 84);
       expect(item.threeDSpecs?.infillPercentage, 20);
       expect(item.threeDSpecs?.layerHeight, 0.2);
+    });
+  });
+
+  group('OrdersNotifier — beta order limit', () {
+    test('addBatchOrder throws BetaOrderLimitException on 403 with code', () async {
+      forceBetaLimitPaths.add('/orders/batch');
+
+      final container = ProviderContainer(
+        overrides: [
+          ordersProvider.overrideWith(
+            (ref) =>
+                OrdersNotifier(initialState: const [], skipBootstrap: true),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await expectLater(
+        container.read(ordersProvider.notifier).addBatchOrder(
+              items: [_paperCartItem(printSubtotal: 175)],
+              deliveryOption: 'delivery',
+              deliveryAddressId: '9',
+              deliveryFee: 50,
+              paymentMethod: PaymentMethod.gridCredits,
+            ),
+        throwsA(isA<BetaOrderLimitException>()),
+      );
+    });
+
+    test('addBatchOrder rethrows generic 500s without conversion', () async {
+      force500Paths.add('/orders/batch');
+
+      final container = ProviderContainer(
+        overrides: [
+          ordersProvider.overrideWith(
+            (ref) =>
+                OrdersNotifier(initialState: const [], skipBootstrap: true),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await expectLater(
+        container.read(ordersProvider.notifier).addBatchOrder(
+              items: [_paperCartItem(printSubtotal: 175)],
+              deliveryOption: 'delivery',
+              deliveryAddressId: '9',
+              deliveryFee: 50,
+              paymentMethod: PaymentMethod.gridCredits,
+            ),
+        throwsA(isNot(isA<BetaOrderLimitException>())),
+      );
+    });
+
+    test('addOrder throws BetaOrderLimitException on 403 with code (no local fallback)', () async {
+      forceBetaLimitPaths.add('/orders');
+
+      final container = ProviderContainer(
+        overrides: [
+          ordersProvider.overrideWith(
+            (ref) =>
+                OrdersNotifier(initialState: const [], skipBootstrap: true),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final newOrder = Order(
+        id: 'test_new',
+        orderId: 'ORD-99999',
+        userId: 'usr_001',
+        category: 'paper',
+        quantity: 1,
+        totalPrice: 100,
+        deliveryFee: 0,
+        paymentMethod: PaymentMethod.cod,
+        paymentStatus: PaymentStatus.pending,
+        orderStatus: OrderStatus.orderPlaced,
+        deliveryOption: 'delivery',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      final notifier = container.read(ordersProvider.notifier);
+      await expectLater(
+        notifier.addOrder(newOrder),
+        throwsA(isA<BetaOrderLimitException>()),
+      );
+      // Local fallback must NOT have happened.
+      expect(container.read(ordersProvider), isEmpty);
+    });
+
+    test('addOrder falls back locally on generic 500', () async {
+      force500Paths.add('/orders');
+
+      final container = ProviderContainer(
+        overrides: [
+          ordersProvider.overrideWith(
+            (ref) =>
+                OrdersNotifier(initialState: const [], skipBootstrap: true),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final newOrder = Order(
+        id: 'test_new_fallback',
+        orderId: 'ORD-99998',
+        userId: 'usr_001',
+        category: 'paper',
+        quantity: 1,
+        totalPrice: 100,
+        deliveryFee: 0,
+        paymentMethod: PaymentMethod.cod,
+        paymentStatus: PaymentStatus.pending,
+        orderStatus: OrderStatus.orderPlaced,
+        deliveryOption: 'delivery',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      final notifier = container.read(ordersProvider.notifier);
+      final result = await notifier.addOrder(newOrder);
+      expect(result.id, 'test_new_fallback');
+      expect(container.read(ordersProvider).map((o) => o.id), ['test_new_fallback']);
     });
   });
 
