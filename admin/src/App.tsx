@@ -25,6 +25,7 @@ import {
   AppstoreOutlined,
   RocketOutlined,
   MessageOutlined,
+  PrinterOutlined,
 } from "@ant-design/icons";
 
 import { gridTheme } from "@/config/theme";
@@ -56,6 +57,7 @@ import { DeliverySlotsTodayPage } from '@/pages/delivery-slots/today';
 import { DeliverySlotTemplatesPage } from '@/pages/delivery-slots/templates';
 import { ExternalDeliveriesPage } from '@/pages/external-deliveries';
 import { DeliverySettingsPage } from '@/pages/admin-settings/delivery';
+import { PrinterProfilePage } from '@/pages/admin-settings/printer';
 
 function App() {
   return (
@@ -164,6 +166,11 @@ function App() {
                 list: '/settings/delivery',
                 meta: { label: 'Delivery Settings', parent: 'delivery-slots' },
               },
+              {
+                name: 'printer-profile',
+                list: '/settings/printer',
+                meta: { label: 'Printer Profile', parent: 'delivery-slots', icon: <PrinterOutlined /> },
+              },
             ]}
             options={{
               syncWithLocation: true,
@@ -220,6 +227,7 @@ function App() {
                 <Route path="/delivery-slots/templates" element={<DeliverySlotTemplatesPage />} />
                 <Route path="/external-deliveries" element={<ExternalDeliveriesPage />} />
                 <Route path="/settings/delivery" element={<DeliverySettingsPage />} />
+                <Route path="/settings/printer" element={<PrinterProfilePage />} />
               </Route>
 
               <Route
