@@ -110,10 +110,11 @@ final nextBatchInfoProvider = Provider.autoDispose<NextBatchInfo?>((ref) {
 
   final slots = todayState.slots;
 
-  // Slots that haven't started yet today (the only ones a customer can book
-  // for today's runs without conflict — past/in-progress are excluded).
+  // "Bookable today" = end time hasn't passed yet. An in-progress slot
+  // (started but not ended, e.g. 1 PM–4 PM at 1:41 PM) is still bookable —
+  // the backend accepts new bookings until the slot ends.
   final remainingToday = slots
-      .where((s) => _parseDateTime(today, s.startTime).isAfter(now))
+      .where((s) => _parseDateTime(today, s.endTime).isAfter(now))
       .toList()
     ..sort((a, b) => a.startTime.compareTo(b.startTime));
 
@@ -134,37 +135,32 @@ final nextBatchInfoProvider = Provider.autoDispose<NextBatchInfo?>((ref) {
     );
   }
 
+  // If any slot today is still bookable (not full + not yet ended),
+  // the user has options — suppress the dialog entirely.
+  final hasBookable = remainingToday.any((s) => !s.isFull);
+  if (hasBookable) return null;
+
   final allFull = slots.every((s) => s.isFull);
   final allEnded = slots.every(
     (s) => _parseDateTime(today, s.endTime).isBefore(now),
   );
-  final firstStarted = slots.any(
-    (s) => _parseDateTime(today, s.startTime).isBefore(now),
-  );
 
-  // Decide reason; if nothing has started yet and today still has its full
-  // schedule ahead, suppress the dialog entirely.
+  // Reaching here means no slot is bookable today: either all full or all
+  // ended. Both lead the customer to look at tomorrow.
   final NextBatchReason reason;
-  if (allFull) {
-    reason = NextBatchReason.allFull;
-  } else if (allEnded) {
+  if (allEnded) {
     reason = NextBatchReason.dayOver;
-  } else if (firstStarted) {
-    reason = NextBatchReason.midDay;
+  } else if (allFull) {
+    reason = NextBatchReason.allFull;
   } else {
-    return null;
+    // Mixed (some ended, others full) — still no bookable slot, treat as
+    // mid-day to nudge the user to tomorrow.
+    reason = NextBatchReason.midDay;
   }
 
-  // Capacity is scoped to upcoming slots only.
-  // - If today still has not-yet-started slots → use those (ignore missed).
-  // - Otherwise fall back to tomorrow.
-  final useToday = remainingToday.isNotEmpty;
-  final upcoming = useToday
-      ? _toUpcoming(remainingToday)
-      : _toUpcoming(tomSlots);
-  final relevantDate = useToday
-      ? today
-      : (tomSlots.isNotEmpty ? tomorrow : dayAfter);
+  // Capacity is scoped to tomorrow's slots since today has nothing bookable.
+  final upcoming = _toUpcoming(tomSlots);
+  final relevantDate = tomSlots.isNotEmpty ? tomorrow : dayAfter;
 
   final firstUpcoming = upcoming.isNotEmpty ? upcoming.first : null;
 
@@ -172,7 +168,7 @@ final nextBatchInfoProvider = Provider.autoDispose<NextBatchInfo?>((ref) {
     reason: reason,
     todayDate: today,
     relevantDate: relevantDate,
-    relevantIsToday: useToday,
+    relevantIsToday: false,
     upcoming: upcoming,
     nextSlotStart: firstUpcoming?.startTime,
     nextSlotEnd: firstUpcoming?.endTime,
