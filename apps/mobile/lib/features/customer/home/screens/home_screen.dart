@@ -1610,8 +1610,10 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.end,
+          spacing: 6,
+          runSpacing: 2,
           children: [
             Text(
               'The Feed',
@@ -1622,7 +1624,6 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
                 height: 1.0,
               ),
             ),
-            const SizedBox(width: 6),
             Padding(
               padding: const EdgeInsets.only(bottom: 2),
               child: Text(
@@ -1631,6 +1632,7 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
                   color: const Color(0xFFFFDE58),
                   fontSize: 10,
                 ),
+                softWrap: true,
               ),
             ),
           ],

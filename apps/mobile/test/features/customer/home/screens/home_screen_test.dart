@@ -6,6 +6,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
 import 'package:printing_app/features/customer/cart/providers/cart_provider.dart';
+import 'package:printing_app/features/customer/home/providers/tam_surveys_feed_provider.dart';
 import 'package:printing_app/features/customer/home/screens/home_screen.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/paper_specs.dart';
@@ -268,6 +269,43 @@ void main() {
       expect(find.text('View queue'), findsOneWidget);
     });
 
+    testWidgets('feed header handles narrow layouts without overflowing', (
+      tester,
+    ) async {
+      final originalOnError = FlutterError.onError;
+      final flutterErrors = <FlutterErrorDetails>[];
+      FlutterError.onError = flutterErrors.add;
+      tester.view.physicalSize = const Size(320, 2200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      try {
+        await tester.pumpWidget(
+          _wrap(
+            const HomeScreen(),
+            overrides: [_feedOverride()],
+          ),
+        );
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(milliseconds: 500));
+      } finally {
+        FlutterError.onError = originalOnError;
+      }
+
+      final feedHeaderOverflows = flutterErrors.where((details) {
+        final errorText = details.toString();
+        if (!errorText.contains('RenderFlex overflowed')) return false;
+        return RegExp(r'home_screen\.dart:(\d+)')
+            .allMatches(errorText)
+            .map((match) => int.parse(match.group(1)!))
+            .any((line) => line >= 1600 && line <= 1650);
+      });
+
+      expect(feedHeaderOverflows, isEmpty);
+      expect(find.text('Community feedback.'), findsOneWidget);
+    });
+
     testWidgets('tapping resume queue card opens cart screen', (tester) async {
       tester.view.physicalSize = const Size(1080, 3200);
       tester.view.devicePixelRatio = 1.0;
@@ -292,6 +330,10 @@ void main() {
       expect(find.text('Cart route reached'), findsOneWidget);
     });
   });
+}
+
+Override _feedOverride() {
+  return feedSurveysProvider.overrideWith((_) async => const []);
 }
 
 Override _emptyCartOverride() {
