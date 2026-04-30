@@ -117,6 +117,9 @@ export class User {
   @Column({ name: 'default_print_mode', type: 'varchar', length: 20, nullable: true, default: 'fitToPage' })
   defaultPrintMode: PrintMode | null;
 
+  @Column({ name: 'default_payment_method', type: 'varchar', length: 20, nullable: true })
+  defaultPaymentMethod: 'gcash' | 'maya' | 'cod' | 'credits' | null;
+
   @Column({ name: 'is_beta_user', default: false })
   isBetaUser: boolean;
 

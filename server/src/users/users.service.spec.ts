@@ -312,4 +312,19 @@ describe('UsersService — storage settings', () => {
       expect(repo.update).toHaveBeenCalledWith(1, { fileRetentionDays: 14 });
     });
   });
+
+  describe('setDefaultPaymentMethod', () => {
+    it('saves the new default to the user record', async () => {
+      repo.update!.mockResolvedValue({ affected: 1 } as never);
+      await service.setDefaultPaymentMethod(1, 'gcash');
+      expect(repo.update).toHaveBeenCalledWith(1, { defaultPaymentMethod: 'gcash' });
+    });
+
+    it('rejects unknown methods', async () => {
+      await expect(
+        service.setDefaultPaymentMethod(1, 'crypto' as never),
+      ).rejects.toThrow(BadRequestException);
+      expect(repo.update).not.toHaveBeenCalled();
+    });
+  });
 });

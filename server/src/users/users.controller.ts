@@ -76,4 +76,13 @@ export class UsersController {
       dto.fileRetentionDays,
     );
   }
+
+  @Patch('me/default-payment-method')
+  async setDefaultPaymentMethod(
+    @Request() req: RequestWithUser,
+    @Body() body: { method: 'gcash' | 'maya' | 'cod' | 'credits' },
+  ) {
+    await this.usersService.setDefaultPaymentMethod(req.user.sub, body.method);
+    return { ok: true };
+  }
 }

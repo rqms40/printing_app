@@ -1,6 +1,7 @@
 import {
   Injectable,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -32,6 +33,8 @@ type UserProfilingInput = {
 
 @Injectable()
 export class UsersService {
+  private static readonly VALID_PAYMENT_METHODS = ['gcash', 'maya', 'cod', 'credits'] as const;
+
   constructor(@InjectRepository(User) private usersRepo: Repository<User>) {}
 
   async findByEmail(email: string): Promise<User | null> {
@@ -106,6 +109,16 @@ export class UsersService {
   ): Promise<{ fileRetentionDays: number | null }> {
     await this.usersRepo.update(userId, { fileRetentionDays });
     return { fileRetentionDays };
+  }
+
+  async setDefaultPaymentMethod(
+    userId: number,
+    method: 'gcash' | 'maya' | 'cod' | 'credits',
+  ): Promise<void> {
+    if (!UsersService.VALID_PAYMENT_METHODS.includes(method)) {
+      throw new BadRequestException('invalid payment method');
+    }
+    await this.usersRepo.update(userId, { defaultPaymentMethod: method });
   }
 
   private normalizeProfilingData(data: Partial<UserProfilingInput | User>) {
