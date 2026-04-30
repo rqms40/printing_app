@@ -8,6 +8,8 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
+import { Order } from '../../orders/entities/order.entity';
+import { TamSurveyRequirement } from './tam-survey-requirement.entity';
 
 @Entity('tam_surveys')
 export class TamSurvey {
@@ -20,6 +22,20 @@ export class TamSurvey {
   @ManyToOne(() => User)
   @JoinColumn({ name: 'user_id' })
   user: User;
+
+  @Column({ name: 'order_id', type: 'int', nullable: true })
+  orderId: number | null;
+
+  @ManyToOne(() => Order, { nullable: true })
+  @JoinColumn({ name: 'order_id' })
+  order: Order | null;
+
+  @Column({ name: 'requirement_id', type: 'int', nullable: true })
+  requirementId: number | null;
+
+  @ManyToOne(() => TamSurveyRequirement, { nullable: true })
+  @JoinColumn({ name: 'requirement_id' })
+  requirement: TamSurveyRequirement | null;
 
   @Column({ name: 'survey_data', type: 'jsonb' })
   surveyData: Record<string, number>;

@@ -94,6 +94,15 @@ export class User {
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 
+  @Column({ name: 'account_hold_reason', type: 'varchar', length: 50, nullable: true })
+  accountHoldReason: string | null;
+
+  @Column({ name: 'account_held_at', type: 'timestamp', nullable: true })
+  accountHeldAt: Date | null;
+
+  @Column({ name: 'beta_completed_at', type: 'timestamp', nullable: true })
+  betaCompletedAt: Date | null;
+
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   credits: number;
 
