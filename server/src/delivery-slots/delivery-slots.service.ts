@@ -148,4 +148,47 @@ export class DeliverySlotsService {
       }
     });
   }
+
+  /**
+   * Toggle the express/priority flag on a single booking and reposition it
+   * within its slot. When `priority=true` the booking is jumped to the top
+   * (rank 1) and the other ranked siblings are pushed down. When `false`
+   * the rank is cleared so it falls back to FIFO.
+   */
+  async setPriority(bookingId: number, priority: boolean) {
+    return this.dataSource.transaction(async (m) => {
+      const booking = await m.findOne(DeliverySlotBooking, {
+        where: { id: bookingId },
+      });
+      if (!booking) {
+        throw new SlotFullException();
+      }
+
+      if (priority) {
+        const siblings = await m.find(DeliverySlotBooking, {
+          where: {
+            slotTemplateId: booking.slotTemplateId,
+            date: booking.date,
+          },
+          order: { priorityRank: 'ASC', bookedAt: 'ASC' },
+        });
+        let rank = 2;
+        for (const s of siblings) {
+          if (s.id === bookingId) continue;
+          await m.update(DeliverySlotBooking, s.id, { priorityRank: rank++ });
+        }
+        await m.update(DeliverySlotBooking, bookingId, {
+          priority: true,
+          priorityRank: 1,
+        });
+      } else {
+        await m.update(DeliverySlotBooking, bookingId, {
+          priority: false,
+          priorityRank: null,
+        });
+      }
+
+      return m.findOne(DeliverySlotBooking, { where: { id: bookingId } });
+    });
+  }
 }

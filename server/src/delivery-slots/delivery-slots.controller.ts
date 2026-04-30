@@ -99,4 +99,18 @@ export class DeliverySlotsController {
     await this.slotsService.reorderBookings(body.orderedIds);
     return { ok: true };
   }
+
+  @Patch('admin/slot-bookings/:id/priority')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  async adminSetPriority(
+    @Param('id') id: string,
+    @Body() body: { priority: boolean },
+  ) {
+    const updated = await this.slotsService.setPriority(
+      Number(id),
+      body.priority,
+    );
+    return { ok: true, booking: updated };
+  }
 }
