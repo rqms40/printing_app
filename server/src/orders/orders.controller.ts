@@ -19,6 +19,7 @@ import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { OrdersService } from './orders.service';
 import { CreateBatchOrderDto, CreateOrderDto } from './dto/create-order.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
+import { UpdateManualStatusDto } from './dto/update-manual-status.dto';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
 
 @ApiTags('orders')
@@ -85,6 +86,16 @@ export class OrdersController {
   @UseGuards(RolesGuard)
   updateStatus(@Param('id') id: number, @Body() dto: UpdateStatusDto) {
     return this.ordersService.updateStatus(id, dto.status);
+  }
+
+  @Patch('admin/orders/:id/manual-status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  async updateManualStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateManualStatusDto,
+  ) {
+    return this.ordersService.updateManualStatus(id, dto);
   }
 
 }
