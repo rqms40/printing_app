@@ -129,7 +129,8 @@ export class Model3dAnalysisService {
   }
 
   private async analyze3mf(buffer: Buffer): Promise<Model3dBounds | null> {
-    const JSZip = (await import('jszip')).default;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const JSZip = require('jszip');
     const zip = await JSZip.loadAsync(buffer);
     const matches = zip.file(/3D\/3dmodel\.model$/i);
     const entry = matches[0];

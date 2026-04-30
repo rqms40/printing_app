@@ -40,4 +40,48 @@ describe('Model3dAnalysisService', () => {
     const buf = Buffer.alloc(50);
     expect(await svc.analyze(buf, 'broken.stl')).toBeNull();
   });
+
+  it('parses OBJ vertices', async () => {
+    const obj = `
+v 0 0 0
+v 10 0 0
+v 0 5 2
+v 10 5 2
+f 1 2 3
+`;
+    const out = await svc.analyze(Buffer.from(obj), 'box.obj');
+    expect(out!.widthMm).toBe(10);
+    expect(out!.depthMm).toBe(5);
+    expect(out!.heightMm).toBe(2);
+  });
+
+  it('parses 3MF and converts inch to mm', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const JSZip = require('jszip');
+    const zip = new JSZip();
+    zip.file(
+      '3D/3dmodel.model',
+      `<?xml version="1.0"?>
+<model unit="inch" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+  <resources>
+    <object id="1">
+      <mesh>
+        <vertices>
+          <vertex x="0" y="0" z="0"/>
+          <vertex x="1" y="0" z="0"/>
+          <vertex x="0" y="1" z="0"/>
+          <vertex x="0" y="0" z="1"/>
+        </vertices>
+      </mesh>
+    </object>
+  </resources>
+</model>`,
+    );
+    const buffer = await zip.generateAsync({ type: 'nodebuffer' });
+    const out = await svc.analyze(buffer, 'cube.3mf');
+    expect(out!.unit).toBe('inch');
+    expect(out!.widthMm).toBeCloseTo(25.4, 2);
+    expect(out!.depthMm).toBeCloseTo(25.4, 2);
+    expect(out!.heightMm).toBeCloseTo(25.4, 2);
+  });
 });
