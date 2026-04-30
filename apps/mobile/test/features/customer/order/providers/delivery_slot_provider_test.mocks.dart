@@ -1109,6 +1109,15 @@ class MockWebSocketService extends _i1.Mock implements _i10.WebSocketService {
           as bool);
 
   @override
+  int get orderListenerCountForTests =>
+      (super.noSuchMethod(
+            Invocation.getter(#orderListenerCountForTests),
+            returnValue: 0,
+            returnValueForMissingStub: 0,
+          )
+          as int);
+
+  @override
   _i8.Future<void> connectOrders({_i11.VoidCallback? onConnect}) =>
       (super.noSuchMethod(
             Invocation.method(#connectOrders, [], {#onConnect: onConnect}),
@@ -1118,11 +1127,21 @@ class MockWebSocketService extends _i1.Mock implements _i10.WebSocketService {
           as _i8.Future<void>);
 
   @override
-  void listenForOrderUpdates(dynamic Function(dynamic)? callback) =>
-      super.noSuchMethod(
-        Invocation.method(#listenForOrderUpdates, [callback]),
-        returnValueForMissingStub: null,
-      );
+  void dispatchOrderUpdateForTests(dynamic data) => super.noSuchMethod(
+    Invocation.method(#dispatchOrderUpdateForTests, [data]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i11.VoidCallback listenForOrderUpdates(
+    dynamic Function(dynamic)? callback,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#listenForOrderUpdates, [callback]),
+            returnValue: () {},
+            returnValueForMissingStub: () {},
+          )
+          as _i11.VoidCallback);
 
   @override
   void subscribeToOrder(String? orderId) => super.noSuchMethod(
