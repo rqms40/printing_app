@@ -1152,6 +1152,82 @@ describe('cancelBatch', () => {
   });
 });
 
+describe('updateManualStatus', () => {
+  let service: OrdersService;
+  let ordersRepo: jest.Mocked<Pick<Repository<Order>, 'findOneOrFail' | 'save'>>;
+  let notificationsService: jest.Mocked<Pick<NotificationsService, 'create' | 'createForAllAdmins'>>;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    ordersRepo = {
+      findOneOrFail: jest.fn(),
+      save: jest.fn(),
+    };
+
+    notificationsService = {
+      create: jest.fn().mockResolvedValue({}),
+      createForAllAdmins: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        OrdersService,
+        { provide: getRepositoryToken(Order), useValue: { find: jest.fn(), findOne: jest.fn(), findOneOrFail: ordersRepo.findOneOrFail, create: jest.fn(), save: ordersRepo.save, update: jest.fn(), count: jest.fn() } },
+        { provide: getRepositoryToken(OrderItem), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: getRepositoryToken(BatchOrder), useValue: {} },
+        { provide: getRepositoryToken(PaperSpec), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: getRepositoryToken(ThreeDSpec), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: getRepositoryToken(DeliveryAssignment), useValue: { find: jest.fn().mockResolvedValue([]) } },
+        { provide: getRepositoryToken(Address), useValue: { findOne: jest.fn() } },
+        { provide: getRepositoryToken(DeliveryDestination), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
+        { provide: FirebaseService, useValue: { sendToDevice: jest.fn(), isAvailable: false } },
+        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null) } },
+        { provide: CreditsService, useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() } },
+        { provide: NotificationsService, useValue: notificationsService },
+        { provide: FilesService, useValue: { stampExpiry: jest.fn() } },
+        { provide: DataSource, useValue: { transaction: jest.fn() } },
+        { provide: DeliverySlotsService, useValue: { bookSlot: jest.fn(), releaseSlot: jest.fn(), getAvailability: jest.fn().mockResolvedValue([]) } },
+        { provide: DeliverySettingsService, useValue: { isInsideServiceArea: jest.fn().mockResolvedValue(true), getSettings: jest.fn().mockResolvedValue({ priorityFeeAmount: 50, extraDestinationSurcharge: 30 }) } },
+        { provide: DeliverySlotsGateway, useValue: { notifySlotUpdated: jest.fn() } },
+      ],
+    }).compile();
+
+    service = module.get(OrdersService);
+  });
+
+  it('fires notification on first set', async () => {
+    ordersRepo.findOneOrFail.mockResolvedValue({
+      id: 5, userId: 7, adminStatusNote: null, adminStatusSetAt: null,
+    } as Order);
+    ordersRepo.save.mockImplementation(async (o) => o as Order);
+
+    await service.updateManualStatus(5, {
+      note: 'Reprinting',
+      estimatedCompletionAt: '2026-05-01T08:00:00Z',
+    });
+
+    expect(notificationsService.create).toHaveBeenCalled();
+  });
+
+  it('does NOT fire notification on subsequent edit', async () => {
+    ordersRepo.findOneOrFail.mockResolvedValue({
+      id: 5, userId: 7, adminStatusNote: 'Old',
+      adminStatusSetAt: new Date(),
+    } as Order);
+    ordersRepo.save.mockImplementation(async (o) => o as Order);
+    notificationsService.create.mockClear();
+
+    await service.updateManualStatus(5, {
+      note: 'Newer',
+      estimatedCompletionAt: null,
+    });
+
+    expect(notificationsService.create).not.toHaveBeenCalled();
+  });
+});
+
 describe('listExternalDeliveries and updateExternalDeliveryStatus', () => {
   let service: OrdersService;
   let batchOrdersRepo: jest.Mocked<Pick<Repository<any>, 'find' | 'update'>>;

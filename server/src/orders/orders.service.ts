@@ -18,6 +18,7 @@ import { CreditsService } from '../credits/credits.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { FilesService } from '../files/files.service';
 import { CreateBatchOrderDto } from './dto/create-order.dto';
+import { UpdateManualStatusDto } from './dto/update-manual-status.dto';
 import { Address } from '../addresses/entities/address.entity';
 import { DeliverySlotsService } from '../delivery-slots/delivery-slots.service';
 import { DeliverySettingsService } from '../delivery-slots/delivery-settings.service';
@@ -461,6 +462,44 @@ export class OrdersService {
       order: { createdAt: 'DESC' },
       relations: ['user'],
     });
+  }
+
+  async updateManualStatus(
+    orderId: number,
+    dto: UpdateManualStatusDto,
+  ): Promise<Order> {
+    const order = await this.ordersRepo.findOneOrFail({
+      where: { id: orderId },
+    });
+    const wasFirstSet = order.adminStatusSetAt === null && dto.note !== null;
+    order.adminStatusNote = dto.note;
+    order.estimatedCompletionAt = dto.estimatedCompletionAt
+      ? new Date(dto.estimatedCompletionAt)
+      : null;
+    if (dto.note !== null && order.adminStatusSetAt === null) {
+      order.adminStatusSetAt = new Date();
+    }
+    const saved = await this.ordersRepo.save(order);
+
+    if (wasFirstSet) {
+      try {
+        await this.notificationsService.create({
+          userId: order.userId,
+          title: `Order #ORD-${order.id} update`,
+          body: dto.note ?? '',
+          message: dto.note ?? '',
+          type: 'order_admin_status',
+          orderRef: order.orderId,
+          metadata: { orderId: order.id },
+        } as any);
+      } catch (err) {
+        this.logger.warn(
+          `Manual status notification failed for order ${orderId}: ${err}`,
+        );
+      }
+    }
+
+    return saved;
   }
 
   async updateExternalDeliveryStatus(
