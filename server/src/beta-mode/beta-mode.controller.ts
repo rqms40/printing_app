@@ -86,6 +86,13 @@ export class BetaModeController {
     return this.service.setBetaSurveyExempt(userId, !!body.exempt);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Post('users/:userId/reset-order-limit')
+  resetOrderLimit(@Param('userId', ParseIntPipe) userId: number) {
+    return this.service.resetOrderLimit(userId);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('me')
   getBetaStatus(@Req() req: { user: { sub: number } }) {
