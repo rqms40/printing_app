@@ -1164,7 +1164,7 @@ describe('createBatch with slot + destinations', () => {
           provide: UsersService,
           useValue: {
             getFcmToken: jest.fn().mockResolvedValue(null),
-            findById: jest.fn().mockResolvedValue(undefined),
+            findById: jest.fn().mockResolvedValue(null),
           },
         },
         {
@@ -1343,7 +1343,7 @@ describe('cancelBatch', () => {
         { provide: getRepositoryToken(FileMetadata), useValue: { findOneOrFail: jest.fn() } },
         { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
         { provide: FirebaseService, useValue: { sendToDevice: jest.fn(), isAvailable: false } },
-        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null), findById: jest.fn().mockResolvedValue(undefined) } },
+        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null), findById: jest.fn().mockResolvedValue(null) } },
         { provide: CreditsService, useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() } },
         { provide: NotificationsService, useValue: { createForAllAdmins: jest.fn().mockResolvedValue(undefined) } },
         {
@@ -1425,7 +1425,7 @@ describe('updateManualStatus', () => {
         { provide: getRepositoryToken(FileMetadata), useValue: { findOneOrFail: jest.fn() } },
         { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
         { provide: FirebaseService, useValue: { sendToDevice: jest.fn(), isAvailable: false } },
-        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null), findById: jest.fn().mockResolvedValue(undefined) } },
+        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null), findById: jest.fn().mockResolvedValue(null) } },
         { provide: CreditsService, useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() } },
         { provide: NotificationsService, useValue: notificationsService },
         {
@@ -1508,7 +1508,7 @@ describe('createBatch — 3D bounds enforcement', () => {
         { provide: getRepositoryToken(FileMetadata), useValue: fileMetadataRepo },
         { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
         { provide: FirebaseService, useValue: { sendToDevice: jest.fn(), isAvailable: false } },
-        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null), findById: jest.fn().mockResolvedValue(undefined) } },
+        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null), findById: jest.fn().mockResolvedValue(null) } },
         { provide: CreditsService, useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() } },
         { provide: NotificationsService, useValue: { createForAllAdmins: jest.fn().mockResolvedValue(undefined) } },
         {
@@ -1585,7 +1585,7 @@ describe('listExternalDeliveries and updateExternalDeliveryStatus', () => {
         { provide: getRepositoryToken(FileMetadata), useValue: { findOneOrFail: jest.fn() } },
         { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
         { provide: FirebaseService, useValue: { sendToDevice: jest.fn(), isAvailable: false } },
-        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null), findById: jest.fn().mockResolvedValue(undefined) } },
+        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null), findById: jest.fn().mockResolvedValue(null) } },
         { provide: CreditsService, useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() } },
         { provide: NotificationsService, useValue: { createForAllAdmins: jest.fn().mockResolvedValue(undefined) } },
         {
