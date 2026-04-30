@@ -79,3 +79,12 @@ export async function setBetaSurveyExempt(
   );
   return res.data as { id: number; isBetaSurveyExempt: boolean };
 }
+
+export async function resetOrderLimit(
+  userId: number,
+): Promise<{ id: number; betaEnrolledAt: string }> {
+  const res = await apiClient.post(
+    `/beta-mode/users/${userId}/reset-order-limit`,
+  );
+  return res.data as { id: number; betaEnrolledAt: string };
+}
