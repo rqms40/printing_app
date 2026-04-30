@@ -40,15 +40,7 @@ class CheckoutScreen extends ConsumerWidget {
         backgroundColor: colors.surface,
         elevation: 0,
         scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: HugeIcon(
-            icon: HugeIcons.strokeRoundedArrowLeft01,
-            color: colors.onBackground,
-            size: 22,
-          ),
-          onPressed: () => context.pop(),
-        ),
-        titleSpacing: 0,
+        iconTheme: IconThemeData(color: colors.onBackground),
         title: Text(
           'Checkout',
           style: AppTypography.h3.copyWith(
