@@ -70,11 +70,12 @@ class AccountState {
               .toList()
         : <SurveyRequirementHold>[];
 
-    return AccountState(
-      status: rawStatus == 'survey_required'
-          ? AccountGateStatus.surveyRequired
-          : AccountGateStatus.active,
-      holds: holds,
-    );
+    final status = switch (rawStatus) {
+      'active' => AccountGateStatus.active,
+      'survey_required' => AccountGateStatus.surveyRequired,
+      _ => AccountGateStatus.unknown,
+    };
+
+    return AccountState(status: status, holds: holds);
   }
 }
