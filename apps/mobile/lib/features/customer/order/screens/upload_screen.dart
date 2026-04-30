@@ -8,7 +8,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:printing_app/config/constants/app_constants.dart';
-import 'package:printing_app/config/feature_flags.dart';
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
@@ -551,13 +550,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
           fileMetadataId: _fileMetadataId,
         );
     ref.read(orderFlowProvider.notifier).nextStep();
-
-    const flags = FeatureFlags();
-    if (flags.checkoutV2) {
-      _appendToCheckoutAndNavigate();
-    } else {
-      context.push('/customer/order/summary');
-    }
+    _appendToCheckoutAndNavigate();
   }
 
   void _appendToCheckoutAndNavigate() {

@@ -7,9 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:printing_app/features/customer/beta/exceptions/beta_order_limit_exception.dart';
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
-import 'package:printing_app/features/customer/cart/providers/cart_provider.dart';
-import 'package:printing_app/features/customer/order/providers/order_provider.dart';
-import 'package:printing_app/features/customer/order/screens/payment_screen.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
@@ -625,26 +622,6 @@ void main() {
       final result = await notifier.addOrder(newOrder);
       expect(result.id, 'test_new_fallback');
       expect(container.read(ordersProvider).map((o) => o.id), ['test_new_fallback']);
-    });
-  });
-
-  group('PaymentScreen cart checkout', () {
-    test('total uses cart subtotal plus shared delivery fee', () {
-      final total = paymentScreenOrderTotal(
-        flowState: const OrderFlowState(
-          totalPrice: 999,
-          deliveryOption: 'delivery',
-          deliveryFee: 50,
-        ),
-        cartState: CartState(
-          items: [
-            _paperCartItem(printSubtotal: 175),
-            _threeDCartItem(printSubtotal: 240),
-          ],
-        ),
-      );
-
-      expect(total, 465);
     });
   });
 

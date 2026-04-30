@@ -26,7 +26,6 @@ import 'package:printing_app/features/auth/screens/profile_setup_screen.dart';
 // Customer screens
 // ---------------------------------------------------------------------------
 import 'package:printing_app/features/customer/home/screens/home_screen.dart';
-import 'package:printing_app/features/customer/cart/screens/cart_screen.dart';
 import 'package:printing_app/features/customer/orders/screens/orders_screen.dart';
 import 'package:printing_app/features/customer/orders/screens/order_detail_screen.dart';
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
@@ -36,10 +35,7 @@ import 'package:printing_app/features/customer/order/screens/category_screen.dar
 import 'package:printing_app/features/customer/order/screens/paper_specs_screen.dart';
 import 'package:printing_app/features/customer/order/screens/three_d_specs_screen.dart';
 import 'package:printing_app/features/customer/order/screens/upload_screen.dart';
-import 'package:printing_app/features/customer/order/screens/summary_screen.dart';
 import 'package:printing_app/features/customer/order/screens/checkout_screen.dart';
-import 'package:printing_app/features/customer/order/screens/delivery_details_screen.dart';
-import 'package:printing_app/features/customer/order/screens/payment_screen.dart';
 import 'package:printing_app/features/customer/tracking/screens/delivery_tracking_screen.dart';
 import 'package:printing_app/features/customer/address/screens/address_list_screen.dart';
 import 'package:printing_app/features/customer/address/screens/address_picker_screen.dart';
@@ -56,9 +52,6 @@ import 'package:printing_app/features/customer/chat/models/conversation.dart';
 import 'package:printing_app/features/customer/chat/screens/chat_list_screen.dart';
 import 'package:printing_app/features/customer/chat/screens/chat_select_screen.dart';
 import 'package:printing_app/features/customer/chat/screens/conversation_screen.dart';
-import 'package:printing_app/features/customer/order/screens/destination_groups_screen.dart';
-import 'package:printing_app/features/customer/order/screens/slot_picker_screen.dart';
-import 'package:printing_app/features/customer/order/screens/external_delivery_confirm_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Driver screens
@@ -371,28 +364,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             slideUpTransition(const UploadScreen(), state),
       ),
       GoRoute(
-        path: '/customer/order/summary',
-        pageBuilder: (_, state) =>
-            slideUpTransition(const SummaryScreen(), state),
-      ),
-      GoRoute(
         path: '/customer/order/checkout',
         pageBuilder: (_, state) =>
             slideUpTransition(const CheckoutScreen(), state),
       ),
       GoRoute(
-        path: CartScreen.routeName,
-        pageBuilder: (_, state) => slideTransition(const CartScreen(), state),
-      ),
-      GoRoute(
-        path: '/customer/order/delivery',
-        pageBuilder: (_, state) =>
-            slideUpTransition(const DeliveryDetailsScreen(), state),
-      ),
-      GoRoute(
-        path: '/customer/order/payment',
-        pageBuilder: (_, state) =>
-            slideUpTransition(const PaymentScreen(), state),
+        path: '/customer/cart',
+        redirect: (_, _) => '/customer/order/checkout',
       ),
       GoRoute(
         path: '/customer/orders/:id/track',
@@ -458,10 +436,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             slideTransition(const MyUploadsScreen(), state),
       ),
       GoRoute(
-        path: CartScreen.routeName,
-        pageBuilder: (_, state) => slideTransition(const CartScreen(), state),
-      ),
-      GoRoute(
         path: '/customer/chat',
         pageBuilder: (_, state) =>
             slideTransition(const ChatListScreen(), state),
@@ -495,23 +469,6 @@ final routerProvider = Provider<GoRouter>((ref) {
           );
         },
       ),
-      GoRoute(
-        path: '/customer/order/destinations',
-        builder: (_, _) => const DestinationGroupsScreen(),
-      ),
-      GoRoute(
-        path: '/customer/order/slot-picker',
-        builder: (_, state) => SlotPickerScreen(
-          date:
-              state.uri.queryParameters['date'] ??
-              DateTime.now().toIso8601String().substring(0, 10),
-        ),
-      ),
-      GoRoute(
-        path: '/customer/order/external-confirm',
-        builder: (_, _) => const ExternalDeliveryConfirmScreen(),
-      ),
-
       // -----------------------------------------------------------------------
       // Driver shell (3 tabs: Deliveries, History, Profile)
       // -----------------------------------------------------------------------
