@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/features/customer/beta/exceptions/beta_order_limit_exception.dart';
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
+import 'package:printing_app/features/customer/order/models/checkout_state.dart';
+import 'package:printing_app/features/customer/order/models/delivery_speed_tier.dart';
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
@@ -575,6 +577,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     int? slotTemplateId,
     String? slotDate,
     bool priority = false,
+    DeliverySpeedTier speedTier = DeliverySpeedTier.standard,
     List<Map<String, dynamic>> destinations = const [],
     List<int> itemDestinationIndices = const [],
   }) async {
@@ -597,6 +600,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       'deliveryOption': deliveryOption,
       'deliveryAddressId': addressId,
       'priority': priority,
+      'speedTier': speedTier.toApi(),
       'slotTemplateId': ?slotTemplateId,
       'slotDate': ?slotDate,
       if (destinations.isNotEmpty) 'destinations': destinations,
@@ -638,8 +642,28 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     return createdOrders;
   }
 
-  Future<void> placeCheckout(dynamic state) async {
-    throw UnimplementedError();
+  Future<List<Order>> placeCheckout(CheckoutState state) {
+    if (state.paymentMethod == null) {
+      throw StateError('paymentMethod is required');
+    }
+    final destinations = state.drops
+        .where((d) => d.addressId != null)
+        .map((d) => {'addressId': d.addressId!, 'label': d.label})
+        .toList();
+    final addressIdString = state.singleAddress?.id;
+    return addBatchOrder(
+      items: state.items,
+      deliveryOption:
+          state.mode == DeliveryMode.pickup ? 'pickup' : 'delivery',
+      deliveryAddressId: addressIdString,
+      deliveryFee: 0,
+      paymentMethod: state.paymentMethod!,
+      slotTemplateId: state.scheduledSlot?.templateId,
+      slotDate: state.scheduledSlot?.date,
+      priority: state.speedTier == DeliverySpeedTier.priority,
+      speedTier: state.speedTier,
+      destinations: destinations,
+    );
   }
 
   /// Cancel an order if it is in a cancellable status.
