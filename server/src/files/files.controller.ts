@@ -19,6 +19,7 @@ import { FilesService } from './files.service';
 import { PresignedUrlResponseDto } from './dto/presigned-url.dto';
 import { FileInspectionDto } from './dto/file-inspection.dto';
 import { PaperSizeValidatorService } from './paper-size-validator.service';
+import { PrinterProfileService } from '../printer-profile/printer-profile.service';
 import { PT_TO_MM } from './files.constants';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
 
@@ -30,6 +31,7 @@ export class FilesController {
   constructor(
     private filesService: FilesService,
     private paperSizeValidator: PaperSizeValidatorService,
+    private printerProfileService: PrinterProfileService,
   ) {}
 
   @Post('upload')
@@ -79,6 +81,42 @@ export class FilesController {
     }
     const widthMm = file.widthPt ? Number(file.widthPt) * PT_TO_MM : null;
     const heightMm = file.heightPt ? Number(file.heightPt) * PT_TO_MM : null;
+
+    const has3d =
+      file.model3dWidthMm != null &&
+      file.model3dDepthMm != null &&
+      file.model3dHeightMm != null;
+
+    let modelBounds: FileInspectionDto['modelBounds'] = null;
+    let printerLimits: FileInspectionDto['printerLimits'] = null;
+
+    if (has3d) {
+      const w = Number(file.model3dWidthMm);
+      const d = Number(file.model3dDepthMm);
+      const h = Number(file.model3dHeightMm);
+      modelBounds = {
+        widthMm: w,
+        depthMm: d,
+        heightMm: h,
+        triangleCount: file.model3dTriangleCount ?? null,
+        unit: 'mm' as const,
+      };
+      const profile = await this.printerProfileService.getProfile();
+      const overflowAxes: ('width' | 'depth' | 'height')[] = [];
+      if (w > profile.buildVolumeWidthMm) overflowAxes.push('width');
+      if (d > profile.buildVolumeDepthMm) overflowAxes.push('depth');
+      if (h > profile.buildVolumeHeightMm) overflowAxes.push('height');
+      printerLimits = {
+        profileName: profile.name,
+        widthMm: profile.buildVolumeWidthMm,
+        depthMm: profile.buildVolumeDepthMm,
+        heightMm: profile.buildVolumeHeightMm,
+        maxFileSizeMb: profile.maxFileSizeMb,
+        fits: overflowAxes.length === 0,
+        overflowAxes,
+      };
+    }
+
     return {
       mimeType: file.mimeType,
       widthMm,
@@ -100,6 +138,8 @@ export class FilesController {
             paperSize,
           )
         : null,
+      modelBounds,
+      printerLimits,
     };
   }
 
