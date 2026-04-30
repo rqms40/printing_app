@@ -43,6 +43,7 @@ Create:
 - `apps/mobile/lib/features/customer/profile/providers/account_state_provider.dart` — refresh/clear state.
 - `apps/mobile/lib/features/customer/profile/screens/required_tam_survey_screen.dart` — non-dismissible required survey.
 - `apps/mobile/test/features/customer/profile/account_state_test.dart` — model/provider parsing tests.
+- `apps/mobile/test/features/customer/profile/screens/required_tam_survey_screen_test.dart` — forced screen pop and answer gating tests.
 
 Modify:
 - `apps/mobile/lib/features/auth/providers/auth_provider.dart` — parse held login message, refresh/clear account state, expose optional login notice.
@@ -1627,11 +1628,11 @@ Change constructor:
 
 ```dart
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier(this._ref) : super(AuthState.unauthenticated()) {
+  AuthNotifier([this._ref]) : super(AuthState.unauthenticated()) {
     _listenToFcmMessages();
   }
 
-  final Ref _ref;
+  final Ref? _ref;
 ```
 
 Change provider:
@@ -1647,19 +1648,19 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>(
 After successful `login`, `register`, and `tryAutoLogin` authenticated state assignment, add:
 
 ```dart
-      await _ref.read(accountStateProvider.notifier).refresh();
+      await _ref?.read(accountStateProvider.notifier).refresh();
 ```
 
 In `logout()`, before setting unauthenticated:
 
 ```dart
-    _ref.read(accountStateProvider.notifier).clear();
+    _ref?.read(accountStateProvider.notifier).clear();
 ```
 
 In `tryAutoLogin()` catch block, add:
 
 ```dart
-      _ref.read(accountStateProvider.notifier).clear();
+      _ref?.read(accountStateProvider.notifier).clear();
 ```
 
 - [ ] **Step 3: Preserve held-login message**
@@ -1691,16 +1692,16 @@ Update `_AuthChangeNotifier` constructor:
   }
 ```
 
-In `redirect`, after auth/profile checks and before authenticated users on auth pages redirect to onboarding, add:
+In `redirect`, after the `isOnSplash` check and before the onboarding/auth/profile redirect blocks, add:
 
 ```dart
       final accountState = ref.read(accountStateProvider);
       final isForcedSurvey = state.matchedLocation == '/customer/survey/required';
-      if (isAuth && accountState.status == AccountGateStatus.surveyRequired) {
-        return isForcedSurvey ? null : '/customer/survey/required';
-      }
       if (isForcedSurvey && !isAuth) {
         return '/auth/login';
+      }
+      if (isAuth && accountState.status == AccountGateStatus.surveyRequired) {
+        return isForcedSurvey ? null : '/customer/survey/required';
       }
       if (isForcedSurvey &&
           isAuth &&
@@ -1801,8 +1802,91 @@ git commit -m "feat(mobile): gate app on required survey state"
 
 **Files:**
 - Create: `apps/mobile/lib/features/customer/profile/screens/required_tam_survey_screen.dart`
+- Create: `apps/mobile/test/features/customer/profile/screens/required_tam_survey_screen_test.dart`
 
-- [ ] **Step 1: Create required screen**
+- [ ] **Step 1: Write forced screen widget tests**
+
+Create `apps/mobile/test/features/customer/profile/screens/required_tam_survey_screen_test.dart`:
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:printing_app/features/customer/profile/models/account_state.dart';
+import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
+import 'package:printing_app/features/customer/profile/screens/required_tam_survey_screen.dart';
+
+class _FakeAccountStateNotifier extends AccountStateNotifier {
+  _FakeAccountStateNotifier() {
+    state = AccountState(
+      status: AccountGateStatus.surveyRequired,
+      holds: [
+        SurveyRequirementHold(
+          requirementId: 123,
+          orderId: 55,
+          orderRef: 'ORD-10055',
+          requiredAt: DateTime.utc(2026, 4, 30, 12),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<void> refresh() async {}
+}
+
+Widget _wrap() {
+  return ProviderScope(
+    overrides: [
+      accountStateProvider.overrideWith((ref) => _FakeAccountStateNotifier()),
+    ],
+    child: const MaterialApp(home: RequiredTamSurveyScreen()),
+  );
+}
+
+void main() {
+  group('RequiredTamSurveyScreen', () {
+    testWidgets('disables system pop', (tester) async {
+      await tester.pumpWidget(_wrap());
+
+      expect(
+        find.byWidgetPredicate(
+          (widget) => widget is PopScope<dynamic> && widget.canPop == false,
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('keeps Next disabled until the current question is answered',
+        (tester) async {
+      await tester.pumpWidget(_wrap());
+
+      var nextButton =
+          tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Next'));
+      expect(nextButton.onPressed, isNull);
+
+      await tester.tap(find.text('Agree'));
+      await tester.pump();
+
+      nextButton =
+          tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Next'));
+      expect(nextButton.onPressed, isNotNull);
+    });
+  });
+}
+```
+
+- [ ] **Step 2: Run failing widget test**
+
+Run:
+
+```bash
+cd apps/mobile && /home/jd/fvm/versions/3.41.6/bin/flutter test test/features/customer/profile/screens/required_tam_survey_screen_test.dart
+```
+
+Expected: fail because `required_tam_survey_screen.dart` does not exist.
+
+- [ ] **Step 3: Create required screen**
 
 Create `apps/mobile/lib/features/customer/profile/screens/required_tam_survey_screen.dart`:
 
@@ -2203,7 +2287,7 @@ class _ThankYou extends StatelessWidget {
 }
 ```
 
-- [ ] **Step 2: Analyze required survey screen**
+- [ ] **Step 4: Analyze required survey screen**
 
 Run:
 
@@ -2213,20 +2297,23 @@ cd apps/mobile && /home/jd/fvm/versions/3.41.6/bin/flutter analyze lib/features/
 
 Expected: no errors.
 
-- [ ] **Step 3: Run mobile focused tests**
+- [ ] **Step 5: Run mobile focused tests**
 
 Run:
 
 ```bash
-cd apps/mobile && /home/jd/fvm/versions/3.41.6/bin/flutter test test/features/customer/profile/account_state_test.dart
+cd apps/mobile && /home/jd/fvm/versions/3.41.6/bin/flutter test \
+  test/features/customer/profile/account_state_test.dart \
+  test/features/customer/profile/screens/required_tam_survey_screen_test.dart
 ```
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add apps/mobile/lib/features/customer/profile/screens/required_tam_survey_screen.dart
+git add apps/mobile/lib/features/customer/profile/screens/required_tam_survey_screen.dart \
+        apps/mobile/test/features/customer/profile/screens/required_tam_survey_screen_test.dart
 git commit -m "feat(mobile): add required beta survey screen"
 ```
 
