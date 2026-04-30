@@ -242,11 +242,44 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
         }
       }
     } catch (e) {
+      // Surface actual cause: DioException type → user-actionable message,
+      // anything else → log full exception. Keeps debugging humane and gives
+      // the user concrete feedback instead of a generic retry prompt.
+      String message = 'Upload failed. Please try again.';
+      if (e is DioException) {
+        switch (e.type) {
+          case DioExceptionType.connectionTimeout:
+          case DioExceptionType.sendTimeout:
+          case DioExceptionType.receiveTimeout:
+            message = 'Upload timed out. Check your connection and retry.';
+            break;
+          case DioExceptionType.connectionError:
+            message = 'Cannot reach the server. Check your network.';
+            break;
+          case DioExceptionType.badResponse:
+            final status = e.response?.statusCode;
+            final body = e.response?.data;
+            if (status == 400) {
+              final serverMsg = (body is Map && body['message'] is String)
+                  ? body['message'] as String
+                  : 'File rejected by server.';
+              message = serverMsg;
+            } else if (status == 413) {
+              message = 'File is too large.';
+            } else {
+              message = 'Server error ($status). Please try again.';
+            }
+            break;
+          default:
+            message = 'Upload error: ${e.message ?? e.type.name}';
+        }
+      }
+      debugPrint('[upload_screen] upload failed: $e');
       if (mounted) {
         setState(() {
           _isUploading = false;
           _uploadProgress = 0;
-          _errorText = 'Upload failed. Please try again.';
+          _errorText = message;
           _fileName = null;
           _fileSize = null;
           _fileBytes = null;
