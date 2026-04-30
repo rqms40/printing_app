@@ -1,3 +1,5 @@
+import { MODULE_METADATA } from '@nestjs/common/constants';
+import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';
 import { getMetadataArgsStorage } from 'typeorm';
 import { TamSurvey } from './entities/tam-survey.entity';
 import {
@@ -5,6 +7,7 @@ import {
   TamSurveyRequirementReason,
   TamSurveyRequirementStatus,
 } from './entities/tam-survey-requirement.entity';
+import { TamSurveysModule } from './tam-surveys.module';
 import { User } from '../users/entities/user.entity';
 
 describe('TAM survey post-delivery metadata', () => {
@@ -55,5 +58,20 @@ describe('TAM survey post-delivery metadata', () => {
     expect(TamSurveyRequirementReason.POST_DELIVERY).toBe('post_delivery');
     expect(TamSurveyRequirementStatus.PENDING).toBe('pending');
     expect(TamSurveyRequirementStatus.SUBMITTED).toBe('submitted');
+  });
+
+  it('registers TamSurveyRequirement in the survey TypeOrm feature module', () => {
+    const imports = Reflect.getMetadata(
+      MODULE_METADATA.IMPORTS,
+      TamSurveysModule,
+    );
+    const typeOrmFeature = imports.find(
+      (entry: { module?: unknown }) => entry.module === TypeOrmModule,
+    );
+    const providers = typeOrmFeature.providers.map(
+      (provider: { provide: unknown }) => provider.provide,
+    );
+
+    expect(providers).toContain(getRepositoryToken(TamSurveyRequirement));
   });
 });
