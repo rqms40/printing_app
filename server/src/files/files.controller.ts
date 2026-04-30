@@ -124,11 +124,29 @@ export class FilesController {
       };
     }
 
+    // Always surface a presigned URL the mobile client can fetch. We use the
+    // presigned flow (which honors MINIO_PUBLIC_URL) so the URL is reachable
+    // when the user accesses the app via a LAN IP rather than localhost.
+    //
+    // - 3MF / STL / OBJ → server-built GLB sibling at file.previewGlbObjectKey
+    // - GLB / GLTF      → the original object IS the renderable preview
     let previewGlbUrl: string | null = null;
-    if (file.previewGlbObjectKey) {
+    const ext = file.originalName
+      ? file.originalName.toLowerCase().slice(
+          file.originalName.lastIndexOf('.'),
+        )
+      : '';
+    const isNativelyRenderable =
+      ext === '.glb' || ext === '.gltf' || ext === '.obj';
+    const previewKey = file.previewGlbObjectKey
+      ? file.previewGlbObjectKey
+      : isNativelyRenderable
+        ? file.objectKey
+        : null;
+    if (previewKey) {
       try {
         previewGlbUrl = await this.filesService.getPresignedUrlForKey(
-          file.previewGlbObjectKey,
+          previewKey,
           3600,
         );
       } catch {

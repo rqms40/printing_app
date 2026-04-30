@@ -36,6 +36,18 @@ export class StorageService implements OnModuleInit {
     await this.minioClient.putObject(bucket, objectKey, buffer, buffer.length, {
       'Content-Type': mimeType,
     });
+
+    // Construct the publicly-fetchable URL. Prefer MINIO_PUBLIC_URL when set
+    // (LAN IP, https proxy, etc.) so clients on different networks than the
+    // server can actually load the asset. Fall back to the internal endpoint
+    // only when no public URL is configured.
+    const publicUrl = this.config.get<string>('MINIO_PUBLIC_URL');
+    if (publicUrl) {
+      const trimmed = publicUrl.endsWith('/')
+        ? publicUrl.slice(0, -1)
+        : publicUrl;
+      return `${trimmed}/${bucket}/${objectKey}`;
+    }
     const useSSL = this.config.get<string>('MINIO_USE_SSL', 'false') === 'true';
     const scheme = useSSL ? 'https' : 'http';
     const endpoint = this.config.get<string>('MINIO_ENDPOINT', 'localhost');
