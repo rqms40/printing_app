@@ -23,6 +23,7 @@ import { BetaModeModule } from './beta-mode/beta-mode.module';
 import { ChatModule } from './chat/chat.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { DeliverySlotsModule } from './delivery-slots/delivery-slots.module';
+import { PrinterProfileModule } from './printer-profile/printer-profile.module';
 
 @Module({
   imports: [
@@ -79,6 +80,7 @@ import { DeliverySlotsModule } from './delivery-slots/delivery-slots.module';
     BetaModeModule,
     ChatModule,
     DeliverySlotsModule,
+    PrinterProfileModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
