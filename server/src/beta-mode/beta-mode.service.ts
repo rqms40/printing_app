@@ -199,6 +199,19 @@ export class BetaModeService {
     return { id: userId, isBetaSurveyExempt: exempt };
   }
 
+  async resetOrderLimit(
+    userId: number,
+  ): Promise<{ id: number; betaEnrolledAt: Date }> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException(`User ${userId} not found`);
+    if (!user.isBetaUser) {
+      throw new NotFoundException(`User ${userId} is not a beta member`);
+    }
+    const newEnrolledAt = new Date();
+    await this.userRepo.update(userId, { betaEnrolledAt: newEnrolledAt });
+    return { id: userId, betaEnrolledAt: newEnrolledAt };
+  }
+
   async getBetaStatus(userId: number): Promise<{
     globallyEnabled: boolean;
     isBetaUser: boolean;

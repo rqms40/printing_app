@@ -224,4 +224,43 @@ describe('BetaModeService', () => {
     expect(result[1].rank).toBe(2);
     expect(result[0].betaEnrolledAt).toBe(t1);
   });
+
+  describe('resetOrderLimit', () => {
+    it('updates betaEnrolledAt to a recent timestamp for a beta user', async () => {
+      userRepo.findOne.mockResolvedValue({
+        id: 7,
+        isBetaUser: true,
+        betaEnrolledAt: new Date('2026-04-01T00:00:00Z'),
+      } as any);
+      userRepo.update.mockResolvedValue(undefined as any);
+
+      const before = Date.now();
+      const result = await service.resetOrderLimit(7);
+      const after = Date.now();
+
+      expect(userRepo.update).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({ betaEnrolledAt: expect.any(Date) }),
+      );
+      const updateCalls = (userRepo.update as jest.Mock).mock.calls;
+      const passedDate: Date = updateCalls[updateCalls.length - 1][1].betaEnrolledAt;
+      expect(passedDate.getTime()).toBeGreaterThanOrEqual(before);
+      expect(passedDate.getTime()).toBeLessThanOrEqual(after);
+      expect(result.id).toBe(7);
+      expect(result.betaEnrolledAt).toBeInstanceOf(Date);
+    });
+
+    it('throws NotFoundException when user does not exist', async () => {
+      userRepo.findOne.mockResolvedValue(null);
+      await expect(service.resetOrderLimit(7)).rejects.toThrow(/not found/i);
+    });
+
+    it('throws NotFoundException when user is not a beta member', async () => {
+      userRepo.findOne.mockResolvedValue({
+        id: 7,
+        isBetaUser: false,
+      } as any);
+      await expect(service.resetOrderLimit(7)).rejects.toThrow(/not a beta/i);
+    });
+  });
 });
