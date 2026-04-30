@@ -59,4 +59,38 @@ export class FileMetadata {
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
+
+  @Column({
+    name: 'model_3d_width_mm',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+  })
+  model3dWidthMm: number | null;
+
+  @Column({
+    name: 'model_3d_depth_mm',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+  })
+  model3dDepthMm: number | null;
+
+  @Column({
+    name: 'model_3d_height_mm',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+  })
+  model3dHeightMm: number | null;
+
+  @Column({
+    name: 'model_3d_triangle_count',
+    type: 'int',
+    nullable: true,
+  })
+  model3dTriangleCount: number | null;
 }
