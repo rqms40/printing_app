@@ -440,7 +440,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           final orderId =
               orderIdStr != null ? int.tryParse(orderIdStr) : null;
           return slideUpTransition(
-            ChatSelectScreen(orderId: orderId),
+            ChatSelectScreen(
+              orderId: orderId,
+              draftMessage: state.uri.queryParameters['draft'],
+            ),
             state,
           );
         },

@@ -8,12 +8,14 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/chat/models/conversation.dart';
 import 'package:printing_app/features/customer/chat/providers/chat_provider.dart';
+import 'package:printing_app/features/customer/chat/providers/conversation_provider.dart';
 import 'package:printing_app/features/customer/chat/widgets/chat_avatar.dart';
 
 class ChatSelectScreen extends ConsumerStatefulWidget {
-  const ChatSelectScreen({super.key, this.orderId});
+  const ChatSelectScreen({super.key, this.orderId, this.draftMessage});
 
   final int? orderId;
+  final String? draftMessage;
 
   @override
   ConsumerState<ChatSelectScreen> createState() => _ChatSelectScreenState();
@@ -44,6 +46,14 @@ class _ChatSelectScreenState extends ConsumerState<ChatSelectScreen> {
     if (!mounted) return;
     setState(() => _isCreating = false);
     if (conv != null) {
+      if (widget.draftMessage != null && widget.draftMessage!.isNotEmpty) {
+        final notifier = ref.read(conversationProvider(conv.id).notifier);
+        // Initialize the WS connection then send. Fire-and-forget; the destination
+        // screen will see the message replay over WS.
+        notifier.initialize().then((_) {
+          notifier.sendMessage(widget.draftMessage!);
+        });
+      }
       context.pushReplacement('/customer/chat/${conv.id}?type=${type.name}');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
