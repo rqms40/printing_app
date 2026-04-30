@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsBoolean,
   IsIn,
+  IsEnum,
   Min,
   ValidateNested,
   IsArray,
@@ -16,6 +17,7 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { PrintMode } from '../print-mode.enum';
+import { DeliverySpeedTier } from '../enums/delivery-speed-tier.enum';
 
 export class PaperSpecsDto {
   @IsString() paperSize: string;
@@ -213,6 +215,11 @@ export class CreateBatchOrderDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   slotDate?: string;
 
+  @IsOptional()
+  @IsEnum(DeliverySpeedTier)
+  speedTier?: DeliverySpeedTier;
+
+  /** @deprecated Use speedTier='priority' instead. Removed in Phase 4. */
   @IsOptional()
   @IsBoolean()
   priority?: boolean;
