@@ -36,7 +36,14 @@ export class FilesController {
 
   @Post('upload')
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      // Match the largest allowed type (3D files at 200 MB). Multer
+      // truncates anything larger and surfaces a multer error.
+      limits: { fileSize: 200 * 1024 * 1024 },
+    }),
+  )
   uploadFile(
     @UploadedFile() file: Express.Multer.File,
     @Request() req: RequestWithUser,

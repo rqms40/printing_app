@@ -64,24 +64,28 @@ export class FilesService {
     const datePath = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
     const objectKey = `uploads/${purpose}/${datePath}/${randomUUID()}${fileExt}`;
 
-    let url: string;
-    try {
-      url = await this.storageService.upload(
-        file.buffer,
-        objectKey,
-        file.mimetype,
-      );
-    } catch (err) {
-      this.logger.error('MinIO upload failed', err);
-      throw new InternalServerErrorException('File upload failed');
-    }
+    // Run the original-file upload concurrently with content analysis.
+    // Analysis only needs the in-memory buffer, not the upload result, so
+    // there's no dependency between them. This roughly halves end-to-end
+    // latency for 3D files where parsing + GLB encoding takes >100 ms.
+    const uploadPromise = this.storageService
+      .upload(file.buffer, objectKey, file.mimetype)
+      .catch((err: unknown) => {
+        this.logger.error('MinIO upload failed', err);
+        throw new InternalServerErrorException('File upload failed');
+      });
 
-    const analysis = await this.analysisService.analyze(
-      file.buffer,
-      file.mimetype,
-      file.originalname,
-    );
+    const analysisPromise = this.analysisService
+      .analyze(file.buffer, file.mimetype, file.originalname)
+      .catch((err: unknown) => {
+        this.logger.warn(`File analysis failed (non-fatal): ${String(err)}`);
+        return null;
+      });
 
+    const [url, analysis] = await Promise.all([uploadPromise, analysisPromise]);
+
+    // For 3D models that produced a GLB preview, kick off the sibling upload
+    // immediately. Failure is non-fatal — the original file is still saved.
     let previewGlbObjectKey: string | null = null;
     if (analysis?.glbBuffer && analysis.glbBuffer.length > 0) {
       const previewKey = `${objectKey}.preview.glb`;
