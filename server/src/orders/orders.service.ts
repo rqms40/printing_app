@@ -316,12 +316,18 @@ export class OrdersService {
       const today = new Date().toISOString().slice(0, 10);
       const todaySlots = await this.slotsService.getAvailability(today);
       const now = new Date();
+      // A slot is usable for an immediate (Standard/Express) drop only if it
+      // is live RIGHT NOW: start ≤ now < end, AND not full. A slot starting
+      // hours from now (e.g. 9:30 AM seen at 1 AM) doesn't count.
       const hasBookable = todaySlots.some((s) => {
         if (s.isFull) return false;
-        const [hh, mm] = s.endTime.split(':').map(Number);
+        const [eh, em] = s.endTime.split(':').map(Number);
+        const [sh, sm] = s.startTime.split(':').map(Number);
         const end = new Date(now);
-        end.setHours(hh, mm, 0, 0);
-        return end.getTime() > now.getTime();
+        end.setHours(eh, em, 0, 0);
+        const start = new Date(now);
+        start.setHours(sh, sm, 0, 0);
+        return start.getTime() <= now.getTime() && end.getTime() > now.getTime();
       });
       if (!hasBookable) {
         throw new BadRequestException({

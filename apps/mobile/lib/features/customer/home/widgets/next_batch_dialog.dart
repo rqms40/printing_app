@@ -110,13 +110,15 @@ final nextBatchInfoProvider = Provider.autoDispose<NextBatchInfo?>((ref) {
 
   final slots = todayState.slots;
 
-  // "Bookable today" = end time hasn't passed yet. An in-progress slot
-  // (started but not ended, e.g. 1 PM–4 PM at 1:41 PM) is still bookable —
-  // the backend accepts new bookings until the slot ends.
-  final remainingToday = slots
-      .where((s) => _parseDateTime(today, s.endTime).isAfter(now))
-      .toList()
-    ..sort((a, b) => a.startTime.compareTo(b.startTime));
+  // A slot is "live right now" if it has started, hasn't ended, and isn't
+  // full. Only live slots make Standard/Express delivery actually possible
+  // — a future slot today (e.g. 9:30 AM at 1 AM) cannot accept an immediate
+  // drop. The reminder dialog should fire whenever no slot is live.
+  bool isLive(DeliverySlot s) {
+    final start = _parseDateTime(today, s.startTime);
+    final end = _parseDateTime(today, s.endTime);
+    return !start.isAfter(now) && end.isAfter(now) && !s.isFull;
+  }
 
   final tomState = ref.watch(deliverySlotProvider(tomorrow));
   final tomSlots = tomState.slots;
@@ -135,40 +137,45 @@ final nextBatchInfoProvider = Provider.autoDispose<NextBatchInfo?>((ref) {
     );
   }
 
-  // If any slot today is still bookable (not full + not yet ended),
-  // the user has options — suppress the dialog entirely.
-  final hasBookable = remainingToday.any((s) => !s.isFull);
-  if (hasBookable) return null;
+  // If a slot is live right now, the user has an option — suppress dialog.
+  if (slots.any(isLive)) return null;
 
-  final allFull = slots.every((s) => s.isFull);
+  // No live slot. Decide reason + which day's upcoming slots to surface.
   final allEnded = slots.every(
     (s) => _parseDateTime(today, s.endTime).isBefore(now),
   );
+  final allFull = slots.every((s) => s.isFull);
 
-  // Reaching here means no slot is bookable today: either all full or all
-  // ended. Both lead the customer to look at tomorrow.
+  // Today's slots that haven't started yet AND aren't full — i.e. coming up.
+  final upcomingToday = slots.where((s) {
+    final start = _parseDateTime(today, s.startTime);
+    return start.isAfter(now) && !s.isFull;
+  }).toList()
+    ..sort((a, b) => a.startTime.compareTo(b.startTime));
+
   final NextBatchReason reason;
   if (allEnded) {
     reason = NextBatchReason.dayOver;
   } else if (allFull) {
     reason = NextBatchReason.allFull;
   } else {
-    // Mixed (some ended, others full) — still no bookable slot, treat as
-    // mid-day to nudge the user to tomorrow.
+    // Pre-day (e.g. 1 AM, slots start at 9:30) or mid-day gap.
     reason = NextBatchReason.midDay;
   }
 
-  // Capacity is scoped to tomorrow's slots since today has nothing bookable.
-  final upcoming = _toUpcoming(tomSlots);
-  final relevantDate = tomSlots.isNotEmpty ? tomorrow : dayAfter;
-
+  // Prefer today's upcoming slots; fall back to tomorrow.
+  final useToday = upcomingToday.isNotEmpty;
+  final upcoming = useToday ? _toUpcoming(upcomingToday) : _toUpcoming(tomSlots);
+  final relevantDate = useToday
+      ? today
+      : (tomSlots.isNotEmpty ? tomorrow : dayAfter);
   final firstUpcoming = upcoming.isNotEmpty ? upcoming.first : null;
 
   return NextBatchInfo(
     reason: reason,
     todayDate: today,
     relevantDate: relevantDate,
-    relevantIsToday: false,
+    relevantIsToday: useToday,
     upcoming: upcoming,
     nextSlotStart: firstUpcoming?.startTime,
     nextSlotEnd: firstUpcoming?.endTime,

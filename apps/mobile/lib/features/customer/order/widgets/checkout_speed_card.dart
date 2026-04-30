@@ -15,9 +15,10 @@ import 'package:printing_app/utils/formatters.dart';
 class CheckoutSpeedCard extends ConsumerWidget {
   const CheckoutSpeedCard({super.key});
 
-  /// True if any of today's slots is still bookable right now (not full
-  /// AND end time hasn't passed). Mirrors the server-side check in
-  /// OrdersService.createBatch.
+  /// True if any of today's slots is **live right now** — start time has
+  /// passed, end time hasn't, and capacity isn't exhausted. Standard /
+  /// Express delivery only makes sense during a live slot. Mirrors the
+  /// server-side check in OrdersService.createBatch.
   bool _hasBookableTodaySlot(WidgetRef ref) {
     final now = DateTime.now();
     final today =
@@ -26,9 +27,11 @@ class CheckoutSpeedCard extends ConsumerWidget {
     if (slots.isEmpty) return false;
     return slots.any((s) {
       if (s.isFull) return false;
-      final parts = s.endTime.split(':').map(int.parse).toList();
-      final end = DateTime(now.year, now.month, now.day, parts[0], parts[1]);
-      return end.isAfter(now);
+      final eParts = s.endTime.split(':').map(int.parse).toList();
+      final sParts = s.startTime.split(':').map(int.parse).toList();
+      final end = DateTime(now.year, now.month, now.day, eParts[0], eParts[1]);
+      final start = DateTime(now.year, now.month, now.day, sParts[0], sParts[1]);
+      return !start.isAfter(now) && end.isAfter(now);
     });
   }
 
