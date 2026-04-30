@@ -65,7 +65,7 @@ export function TamSurveyList() {
         rowKey="id"
         size="middle"
         loading={loading}
-        scroll={{ x: 800 }}
+        scroll={{ x: 930 }}
         onRow={(record) => ({
           onClick: () => navigate(`/tam-surveys/show/${record.id}`),
           style: { cursor: "pointer" },
@@ -86,6 +86,20 @@ export function TamSurveyList() {
           title="Customer"
           dataIndex="user_name"
           width={150}
+        />
+        <Table.Column
+          title="Order"
+          dataIndex="order_ref"
+          width={130}
+          render={(v) =>
+            v ? (
+              <Tag color="blue" style={{ fontFamily: "monospace" }}>
+                {v}
+              </Tag>
+            ) : (
+              <Tag>Voluntary</Tag>
+            )
+          }
         />
         <Table.Column
           title="Avg Score"

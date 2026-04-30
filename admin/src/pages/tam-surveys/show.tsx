@@ -84,6 +84,19 @@ export function TamSurveyShow() {
           <Text strong style={{ fontSize: 16 }}>{data.user_name}</Text>
           <Text type="secondary" style={{ marginTop: 8 }}>Submitted On</Text>
           <Text>{formatDate(data.created_at)}</Text>
+          {data.order_ref && (
+            <>
+              <Text type="secondary" style={{ marginTop: 8 }}>Linked Order</Text>
+              <Space size="small">
+                <Tag color="blue" style={{ width: "fit-content", fontFamily: "monospace" }}>
+                  {data.order_ref}
+                </Tag>
+                {data.requirement_id && (
+                  <Text type="secondary">Requirement #{data.requirement_id}</Text>
+                )}
+              </Space>
+            </>
+          )}
           <Text type="secondary" style={{ marginTop: 8 }}>Overall Score</Text>
           <Tag color={avgColor} style={{ fontSize: 16, padding: '4px 12px' }}>{avgScore} / 5.0</Tag>
         </Space>
