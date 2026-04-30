@@ -28,6 +28,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { FilesService } from '../files/files.service';
 import { FileMetadata } from '../files/entities/file-metadata.entity';
 import { CreateBatchOrderDto } from './dto/create-order.dto';
+import { DeliverySpeedTier } from './enums/delivery-speed-tier.enum';
 import { UpdateManualStatusDto } from './dto/update-manual-status.dto';
 import { Address } from '../addresses/entities/address.entity';
 import { DeliverySlotsService } from '../delivery-slots/delivery-slots.service';
@@ -268,7 +269,12 @@ export class OrdersService {
 
     // --- Fee computation ---
     const settings = await this.settingsService.getSettings();
-    const priorityFee = dto.priority ? Number(settings.priorityFeeAmount) : 0;
+    const speedTier =
+      (dto as { speedTier?: DeliverySpeedTier }).speedTier ??
+      ((dto.priority ?? false) ? DeliverySpeedTier.PRIORITY : DeliverySpeedTier.STANDARD);
+
+    const isPriority = speedTier === DeliverySpeedTier.PRIORITY;
+    const priorityFee = isPriority ? Number(settings.priorityFeeAmount) : 0;
     const extraDestCount = Math.max(0, destinations.length - 1);
     const extraDestinationFee = extraDestCount * Number(settings.extraDestinationSurcharge);
     const totalPrice = subtotal + deliveryFee + priorityFee + extraDestinationFee;
@@ -323,6 +329,7 @@ export class OrdersService {
       // --- Persist new fields on batch ---
       savedBatch.deliveryType = deliveryType;
       savedBatch.priorityFee = priorityFee;
+      savedBatch.speedTier = speedTier;
       savedBatch.extraDestinationFee = extraDestinationFee;
       savedBatch.externalDeliveryStatus =
         deliveryType === 'external' ? 'pending_admin' : null;
