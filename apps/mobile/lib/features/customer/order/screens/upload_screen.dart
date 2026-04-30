@@ -6,7 +6,11 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import 'package:printing_app/config/constants/app_constants.dart';
+import 'package:printing_app/config/feature_flags.dart';
+import 'package:printing_app/features/customer/cart/models/cart_item.dart';
+import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -547,7 +551,40 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
           fileMetadataId: _fileMetadataId,
         );
     ref.read(orderFlowProvider.notifier).nextStep();
-    context.push('/customer/order/summary');
+
+    const flags = FeatureFlags();
+    if (flags.checkoutV2) {
+      _appendToCheckoutAndNavigate();
+    } else {
+      context.push('/customer/order/summary');
+    }
+  }
+
+  void _appendToCheckoutAndNavigate() {
+    final flow = ref.read(orderFlowProvider);
+    final item = CartItem(
+      id: const Uuid().v4(),
+      category: flow.category!,
+      fileName: flow.fileName!,
+      filePath: flow.filePath,
+      fileSize: flow.fileSize,
+      fileMetadataId: flow.fileMetadataId ?? 0,
+      paperSpecs: flow.category == 'paper' ? flow.paperSpecs : null,
+      threeDSpecs: flow.category == '3d' ? flow.threeDSpecs : null,
+      quantity: flow.quantity,
+      pageCount: flow.pageCount,
+      printSubtotal: flow.totalPrice,
+      createdAt: DateTime.now(),
+    );
+    ref.read(checkoutProvider.notifier).addItem(item);
+
+    final isAddMode =
+        GoRouterState.of(context).uri.queryParameters['mode'] == 'add';
+    if (isAddMode) {
+      context.go('/customer/order/checkout');
+    } else {
+      context.push('/customer/order/checkout');
+    }
   }
 
   void _showPreview() {

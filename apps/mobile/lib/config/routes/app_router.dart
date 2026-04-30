@@ -37,6 +37,7 @@ import 'package:printing_app/features/customer/order/screens/paper_specs_screen.
 import 'package:printing_app/features/customer/order/screens/three_d_specs_screen.dart';
 import 'package:printing_app/features/customer/order/screens/upload_screen.dart';
 import 'package:printing_app/features/customer/order/screens/summary_screen.dart';
+import 'package:printing_app/features/customer/order/screens/checkout_screen.dart';
 import 'package:printing_app/features/customer/order/screens/delivery_details_screen.dart';
 import 'package:printing_app/features/customer/order/screens/payment_screen.dart';
 import 'package:printing_app/features/customer/tracking/screens/delivery_tracking_screen.dart';
@@ -371,6 +372,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/customer/order/summary',
         pageBuilder: (_, state) =>
             slideUpTransition(const SummaryScreen(), state),
+      ),
+      GoRoute(
+        path: '/customer/order/checkout',
+        pageBuilder: (_, state) =>
+            slideUpTransition(const CheckoutScreen(), state),
       ),
       GoRoute(
         path: CartScreen.routeName,
