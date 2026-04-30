@@ -419,40 +419,50 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   }
 
   final Future<void> Function()? onCompletionUpdate;
+  VoidCallback? _removeOrderUpdateListener;
 
   Future<void> _connectWebSocket() async {
     try {
-      WebSocketService.instance.listenForOrderUpdates((data) {
-        try {
-          if (data is Map<String, dynamic>) {
-            final updated = _parseOrder(data);
-            final index = state.indexWhere(
-              (order) =>
-                  order.id == updated.id || order.orderId == updated.orderId,
-            );
-
-            if (index >= 0) {
-              final next = [...state];
-              next[index] = updated;
-              state = next;
-              if (updated.orderStatus == OrderStatus.delivered ||
-                  updated.orderStatus == OrderStatus.completedPickup) {
-                unawaited(onCompletionUpdate?.call());
-              }
-            } else {
-              _fetchOrders();
-            }
-          }
-        } catch (e) {
-          debugPrint('OrdersProvider: WS order parse error: $e');
-        }
-      });
+      _removeOrderUpdateListener = WebSocketService.instance
+          .listenForOrderUpdates(_handleOrderUpdate);
       await WebSocketService.instance.connectOrders(
         onConnect: _subscribeToAllOrders,
       );
     } catch (e) {
       debugPrint('WebSocket connection failed: $e');
     }
+  }
+
+  void _handleOrderUpdate(dynamic data) {
+    try {
+      if (data is Map<String, dynamic>) {
+        final updated = _parseOrder(data);
+        final index = state.indexWhere(
+          (order) => order.id == updated.id || order.orderId == updated.orderId,
+        );
+
+        if (index >= 0) {
+          final next = [...state];
+          next[index] = updated;
+          state = next;
+          if (updated.orderStatus == OrderStatus.delivered ||
+              updated.orderStatus == OrderStatus.completedPickup) {
+            unawaited(onCompletionUpdate?.call());
+          }
+        } else {
+          _fetchOrders();
+        }
+      }
+    } catch (e) {
+      debugPrint('OrdersProvider: WS order parse error: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _removeOrderUpdateListener?.call();
+    _removeOrderUpdateListener = null;
+    super.dispose();
   }
 
   /// Emits a `subscribe` event for every order currently in state.
@@ -475,12 +485,14 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     try {
       final response = await ApiClient.instance.get('/orders');
       final data = response.data as List<dynamic>;
+      if (!mounted) return;
       state = _groupBatchOrders(
         data.map((json) => _parseOrder(json as Map<String, dynamic>)).toList(),
       );
       debugPrint('OrdersProvider: Loaded ${state.length} orders from API');
     } catch (e) {
       debugPrint('OrdersProvider: API failed ($e), using MockData');
+      if (!mounted) return;
       state = List.of(MockData.orders);
     }
     // Subscribe to all loaded orders in case socket connected before fetch completed.

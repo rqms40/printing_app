@@ -16,6 +16,7 @@ import 'package:printing_app/shared/models/paper_specs.dart';
 import 'package:printing_app/shared/models/three_d_specs.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/services/api_client.dart';
+import 'package:printing_app/shared/services/websocket_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -41,6 +42,13 @@ void main() {
                 statusCode: 200,
                 data: {'creditsOnlyMode': false},
               ),
+            );
+            return;
+          }
+
+          if (options.path == '/orders' && options.method == 'GET') {
+            handler.resolve(
+              Response(requestOptions: options, statusCode: 200, data: []),
             );
             return;
           }
@@ -240,6 +248,46 @@ void main() {
 
       expect(updated.length, initialCount + 1);
       expect(updated.first.orderId, 'ORD-99999');
+    });
+  });
+
+  group('OrdersNotifier lifecycle', () {
+    test('dispose unregisters websocket completion listener', () async {
+      WebSocketService.disableOrdersSocketForTests = true;
+      WebSocketService.instance.disconnect();
+      addTearDown(() {
+        WebSocketService.disableOrdersSocketForTests = false;
+        WebSocketService.instance.disconnect();
+      });
+
+      var completionRefreshes = 0;
+      final initialOrder = MockData.orders.first.copyWith(
+        orderStatus: OrderStatus.orderPlaced,
+      );
+      final notifier = OrdersNotifier(
+        initialState: [initialOrder],
+        onCompletionUpdate: () async {
+          completionRefreshes++;
+        },
+      );
+
+      await Future<void>.delayed(Duration.zero);
+      expect(WebSocketService.instance.orderListenerCountForTests, 1);
+
+      notifier.dispose();
+      expect(WebSocketService.instance.orderListenerCountForTests, 0);
+
+      WebSocketService.instance.dispatchOrderUpdateForTests(
+        _orderJson(
+          id: initialOrder.id,
+          orderId: initialOrder.orderId,
+          fileName: initialOrder.fileName ?? 'completed.pdf',
+          orderStatus: 'delivered',
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(completionRefreshes, 0);
     });
   });
 
@@ -458,6 +506,7 @@ Map<String, dynamic> _orderJson({
   required String id,
   required String orderId,
   required String fileName,
+  String orderStatus = 'orderPlaced',
 }) {
   final now = DateTime(2026, 4, 25, 12).toIso8601String();
   return {
@@ -475,7 +524,7 @@ Map<String, dynamic> _orderJson({
     'deliveryFee': orderId.endsWith('1') ? 50 : 0,
     'paymentMethod': 'gridCredits',
     'paymentStatus': 'pending',
-    'orderStatus': 'orderPlaced',
+    'orderStatus': orderStatus,
     'deliveryOption': 'delivery',
     'deliveryAddressId': 9,
     'createdAt': now,

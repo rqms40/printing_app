@@ -30,6 +30,11 @@ class WebSocketService {
   @visibleForTesting
   static bool disableDailyGridSocketForTests = false;
 
+  /// When true, [connectOrders] is a no-op. Set in tests that exercise order
+  /// listeners without opening a real socket.
+  @visibleForTesting
+  static bool disableOrdersSocketForTests = false;
+
   io.Socket? _ordersSocket;
   io.Socket? _locationSocket;
   io.Socket? _notificationsSocket;
@@ -54,6 +59,10 @@ class WebSocketService {
   String get _baseUrl => kServerUrl;
 
   Future<void> connectOrders({VoidCallback? onConnect}) async {
+    if (disableOrdersSocketForTests) {
+      onConnect?.call();
+      return;
+    }
     if (_ordersSocket?.connected == true) return;
     if (_ordersSocket != null) {
       _ordersSocket!.connect();
@@ -70,14 +79,7 @@ class WebSocketService {
           .build(),
     );
     _ordersSocket!.on('orderUpdate', (data) {
-      final normalized = _normalize(data);
-      for (final cb in _orderListeners) {
-        try {
-          cb(normalized);
-        } catch (e) {
-          debugPrint('WS orderUpdate handler error: $e');
-        }
-      }
+      _dispatchOrderUpdate(data);
     });
     _ordersSocket!.on('connect', (_) {
       debugPrint('WS Orders connected');
@@ -90,11 +92,31 @@ class WebSocketService {
     _ordersSocket!.connect();
   }
 
-  /// Register a callback for incoming `orderUpdate` events.
-  void listenForOrderUpdates(Function(dynamic) callback) {
+  void _dispatchOrderUpdate(dynamic data) {
+    final normalized = _normalize(data);
+    for (final cb in List.of(_orderListeners)) {
+      try {
+        cb(normalized);
+      } catch (e) {
+        debugPrint('WS orderUpdate handler error: $e');
+      }
+    }
+  }
+
+  @visibleForTesting
+  int get orderListenerCountForTests => _orderListeners.length;
+
+  @visibleForTesting
+  void dispatchOrderUpdateForTests(dynamic data) {
+    _dispatchOrderUpdate(data);
+  }
+
+  /// Returns a removal handle — call it in dispose() to unregister the callback.
+  VoidCallback listenForOrderUpdates(Function(dynamic) callback) {
     if (!_orderListeners.contains(callback)) {
       _orderListeners.add(callback);
     }
+    return () => _orderListeners.remove(callback);
   }
 
   void subscribeToOrder(String orderId) {
@@ -352,8 +374,8 @@ class WebSocketService {
     _chatSocket?.emit('send-message', {
       'conversationId': conversationId,
       'content': content,
-      if (attachmentFileId != null) 'attachmentFileId': attachmentFileId,
-      if (attachmentMimeType != null) 'attachmentMimeType': attachmentMimeType,
+      'attachmentFileId': ?attachmentFileId,
+      'attachmentMimeType': ?attachmentMimeType,
     });
   }
 
@@ -468,5 +490,6 @@ class WebSocketService {
     _botTypingListeners.clear();
     _messagesReadListeners.clear();
     _slotUpdatedListeners.clear();
+    _orderListeners.clear();
   }
 }
