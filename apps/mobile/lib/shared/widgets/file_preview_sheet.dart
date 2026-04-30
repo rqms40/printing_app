@@ -69,9 +69,18 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
   late AnimationController _fadeCtrl;
   late Animation<double> _fadeAnim;
   bool _showRuler = false;
+  int _rulerScaleIndex = 0;
   PdfController? _pdfController;
   double? _widthMm;
   double? _heightMm;
+
+  int get _rulerScale => kRulerScales[_rulerScaleIndex];
+
+  void _cycleRulerScale() {
+    setState(() {
+      _rulerScaleIndex = (_rulerScaleIndex + 1) % kRulerScales.length;
+    });
+  }
 
   AppColorSet _colors(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark
@@ -104,48 +113,67 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
       _error = null;
     });
     _fadeCtrl.reset();
+    String stage = 'request';
     try {
+      stage = 'request';
       final response =
           await ApiClient.instance.get('/files/${widget.fileId}/presigned-url');
       final url = response.data['url'] as String?;
 
-      if (mounted) {
-        // If this is a PDF, eagerly build the controller from URL bytes so
-        // that a fresh controller is always created on each fetch (fixing the
-        // stale-controller-on-retry bug).
-        PdfController? newPdfController;
-        if (url != null && widget.mimeType == 'application/pdf') {
-          final bytes = await Dio().get<List<int>>(
-            url,
-            options: Options(responseType: ResponseType.bytes),
-          );
-          final rawBytes = bytes.data;
-          if (rawBytes == null) throw Exception('Empty response body');
-          final data = Uint8List.fromList(rawBytes);
-          newPdfController = PdfController(
-            document: PdfDocument.openData(data),
-          );
-        }
+      if (!mounted) return;
 
-        if (mounted) {
-          _pdfController?.dispose();
-          setState(() {
-            _presignedUrl = url;
-            _pdfController = newPdfController;
-            _loading = false;
-          });
-          _fadeCtrl.forward();
-        } else {
-          newPdfController?.dispose();
+      // If this is a PDF, eagerly build the controller from URL bytes so
+      // that a fresh controller is always created on each fetch (fixing the
+      // stale-controller-on-retry bug).
+      PdfController? newPdfController;
+      if (url != null && widget.mimeType == 'application/pdf') {
+        stage = 'download';
+        final bytes = await Dio().get<List<int>>(
+          url,
+          options: Options(
+            responseType: ResponseType.bytes,
+            receiveTimeout: const Duration(seconds: 30),
+          ),
+        );
+        final rawBytes = bytes.data;
+        if (rawBytes == null || rawBytes.isEmpty) {
+          throw Exception('Empty PDF response body');
         }
+        final data = Uint8List.fromList(rawBytes);
+        stage = 'parse';
+        // Pre-resolve the document so a parse error surfaces here (with a
+        // clean stage label) instead of disappearing into PdfController.
+        final document = await PdfDocument.openData(data);
+        newPdfController = PdfController(document: Future.value(document));
       }
+
+      if (!mounted) {
+        newPdfController?.dispose();
+        return;
+      }
+
+      _pdfController?.dispose();
+      setState(() {
+        _presignedUrl = url;
+        _pdfController = newPdfController;
+        _loading = false;
+      });
+      _fadeCtrl.forward();
     } catch (e) {
+      // ignore: avoid_print
+      print('[FilePreviewSheet] $stage failed: $e');
       if (mounted) {
         _pdfController?.dispose();
         _pdfController = null;
+        final reason = switch (stage) {
+          'request' => "We couldn't fetch the file link.",
+          'download' => "Couldn't download the PDF.",
+          'parse' => "This PDF couldn't be opened.",
+          _ => "Couldn't load preview.",
+        };
         setState(() {
           _presignedUrl = null;
-          _error = 'Couldn\'t load preview.';
+          _error = reason;
           _loading = false;
           _showRuler = false;
         });
@@ -233,19 +261,55 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
               ],
             ),
           ),
-          if (_presignedUrl != null)
-            IconButton(
-              icon: Icon(
-                Icons.straighten_rounded,
-                color: _showRuler
-                    ? (Theme.of(context).brightness == Brightness.dark
-                        ? AppColors.brandDark
-                        : AppColors.brandLight)
-                    : Colors.white60,
-              ),
-              onPressed: () => setState(() => _showRuler = !_showRuler),
-              tooltip: 'Toggle ruler',
-            ),
+          Builder(
+            builder: (context) {
+              final brand = Theme.of(context).brightness == Brightness.dark
+                  ? AppColors.brandDark
+                  : AppColors.brandLight;
+              return Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Material(
+                  color: _showRuler
+                      ? brand.withValues(alpha: 0.18)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () => setState(() => _showRuler = !_showRuler),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.straighten_rounded,
+                            size: 18,
+                            color:
+                                _showRuler ? brand : colors.onSurfaceDim,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Ruler',
+                            style: AppTypography.caption.copyWith(
+                              color: _showRuler
+                                  ? brand
+                                  : colors.onSurfaceDim,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
           IconButton(
             onPressed: () => Navigator.of(context).pop(),
             icon: Icon(Icons.close_rounded, color: colors.onSurfaceDim),
@@ -282,9 +346,14 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
               ),
             ),
           ),
-          if (_showRuler && _widthMm != null && _heightMm != null)
+          if (_showRuler)
             Positioned.fill(
-              child: RulerOverlay(widthMm: _widthMm!, heightMm: _heightMm!),
+              child: RulerOverlay(
+                widthMm: _widthMm ?? 210.0,
+                heightMm: _heightMm ?? 297.0,
+                scale: _rulerScale,
+                onCycleScale: _cycleRulerScale,
+              ),
             ),
         ],
       );
@@ -308,9 +377,14 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
               },
             ),
           ),
-          if (_showRuler && _widthMm != null && _heightMm != null)
+          if (_showRuler)
             Positioned.fill(
-              child: RulerOverlay(widthMm: _widthMm!, heightMm: _heightMm!),
+              child: RulerOverlay(
+                widthMm: _widthMm ?? 210.0,
+                heightMm: _heightMm ?? 297.0,
+                scale: _rulerScale,
+                onCycleScale: _cycleRulerScale,
+              ),
             ),
         ],
       );

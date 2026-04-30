@@ -11,6 +11,7 @@ import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 import 'package:printing_app/shared/providers/theme_provider.dart';
 import 'package:printing_app/shared/services/api_client.dart';
+import 'package:printing_app/shared/widgets/grid_logo.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // ---------------------------------------------------------------------------
@@ -173,6 +174,7 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
   final Map<int, LikertScale> _answers = {};
   String? _comment;
   bool _submitted = false;
+  bool _autoLaunched = false;
 
   late AnimationController _checkController;
 
@@ -183,6 +185,16 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
       vsync: this,
       duration: const Duration(milliseconds: 800),
     );
+    if (widget.isRequired) {
+      // Required mode skips the overview and drops the user straight into
+      // the face-slider PageView, matching the original "slide → face" UX.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_submitted && !_autoLaunched) {
+          _autoLaunched = true;
+          _openQuestion(0);
+        }
+      });
+    }
   }
 
   @override
@@ -347,6 +359,143 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
       );
     }
 
+    if (widget.isRequired) {
+      // Auto-launched flow covers this screen; if it ever pops back without
+      // submission (e.g. network failure on submit), show a retry path
+      // instead of the overview list.
+      final allAnswered = _answers.length == _tamQuestions.length;
+      return PopScope(
+        canPop: false,
+        child: Scaffold(
+          backgroundColor: colors.background,
+          body: SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.xl,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: colors.brand,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Text(
+                      allAnswered
+                          ? 'Submitting your beta feedback…'
+                          : 'Opening your beta feedback survey…',
+                      textAlign: TextAlign.center,
+                      style: AppTypography.body
+                          .copyWith(color: colors.onSurface),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      'You will land back on the login screen once submitted.',
+                      textAlign: TextAlign.center,
+                      style: AppTypography.caption
+                          .copyWith(color: colors.onSurfaceDim),
+                    ),
+                    const SizedBox(height: AppSpacing.xxl),
+                    TextButton.icon(
+                      onPressed: () {
+                        if (allAnswered) {
+                          _submit();
+                        } else {
+                          _openQuestion(0);
+                        }
+                      },
+                      icon: Icon(
+                        allAnswered
+                            ? Icons.refresh_rounded
+                            : Icons.poll_rounded,
+                        color: colors.onSurface,
+                        size: 18,
+                      ),
+                      label: Text(
+                        allAnswered ? 'Retry submission' : 'Open survey',
+                        style: AppTypography.button
+                            .copyWith(color: colors.onSurface),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    Container(
+                      width: 56,
+                      height: 1,
+                      color: colors.outline.withValues(alpha: 0.5),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    TextButton.icon(
+                      onPressed: () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            backgroundColor: colors.surface,
+                            title: Text(
+                              'Sign out and use another account?',
+                              style: AppTypography.h3
+                                  .copyWith(color: colors.onBackground),
+                            ),
+                            content: Text(
+                              'Your beta feedback is still required for this account. '
+                              'You can come back and finish it anytime by signing back in.',
+                              style: AppTypography.body
+                                  .copyWith(color: colors.onSurface),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.of(ctx).pop(false),
+                                child: Text(
+                                  'Stay',
+                                  style: AppTypography.button.copyWith(
+                                    color: colors.onSurfaceDim,
+                                  ),
+                                ),
+                              ),
+                              FilledButton(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: colors.accent,
+                                  foregroundColor: colors.accentOnColor,
+                                ),
+                                onPressed: () =>
+                                    Navigator.of(ctx).pop(true),
+                                child: const Text('Sign out'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirm != true || !context.mounted) return;
+                        await ref.read(authProvider.notifier).logout();
+                        if (context.mounted) context.go('/auth/login');
+                      },
+                      icon: Icon(
+                        Icons.logout_rounded,
+                        color: colors.onSurfaceDim,
+                        size: 16,
+                      ),
+                      label: Text(
+                        'Sign out & log in to a different account',
+                        style: AppTypography.caption.copyWith(
+                          color: colors.onSurfaceDim,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return PopScope(
       canPop: !widget.isRequired,
       child: Scaffold(
@@ -447,12 +596,24 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
                         const SizedBox(height: AppSpacing.lg),
                         Padding(
                           padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                          child: Text(
-                            'OPEN FORUM',
-                            style: AppTypography.overline.copyWith(
-                              color: colors.onSurfaceDim,
-                              letterSpacing: 1.5,
-                            ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              GridLogo(
+                                size: 18,
+                                foregroundColor: colors.onSurfaceDim,
+                                secondaryColor:
+                                    colors.onSurfaceDim.withValues(alpha: 0.5),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Text(
+                                'OPEN FORUM',
+                                style: AppTypography.overline.copyWith(
+                                  color: colors.onSurfaceDim,
+                                  letterSpacing: 1.5,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         GestureDetector(

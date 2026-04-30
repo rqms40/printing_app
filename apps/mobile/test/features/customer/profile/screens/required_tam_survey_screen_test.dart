@@ -140,21 +140,15 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
-    testWidgets('uses the shared TAM overview and face slider flow', (
+    testWidgets('auto-launches the face-slider flow without overview', (
       tester,
     ) async {
       await tester.pumpWidget(_wrap());
-      await tester.pump(const Duration(seconds: 1));
-
-      expect(find.text('Survey'), findsOneWidget);
-      expect(
-        find.text('Help us improve GRID by sharing your experience.'),
-        findsOneWidget,
-      );
-      expect(find.byType(Slider), findsNothing);
-
-      await tester.tap(find.byKey(const ValueKey('tam-question-1')));
+      // First frame paints the placeholder, the post-frame callback then
+      // pushes the face-slider modal route (~450ms transition).
       await tester.pump();
+      expect(find.text('Opening your beta feedback survey…'), findsOneWidget);
+
       await tester.pump(const Duration(milliseconds: 700));
 
       final slider = tester.widget<Slider>(find.byType(Slider));
@@ -162,6 +156,7 @@ void main() {
       expect(slider.max, 4);
       expect(slider.divisions, 4);
       expect(find.text('NEUTRAL'), findsOneWidget);
+      expect(find.text('Question 1 of 14'), findsOneWidget);
 
       final sliderRect = tester.getRect(find.byType(Slider));
       await tester.tapAt(Offset(sliderRect.right - 8, sliderRect.center.dy));
@@ -181,9 +176,6 @@ void main() {
     testWidgets('submits required survey payload and logs out', (tester) async {
       final authNotifier = _TestAuthNotifier();
       await tester.pumpWidget(_wrapWithRouter(authNotifier));
-      await tester.pump(const Duration(seconds: 1));
-
-      await tester.tap(find.byKey(const ValueKey('tam-question-1')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 700));
 
