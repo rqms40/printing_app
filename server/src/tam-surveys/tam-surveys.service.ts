@@ -18,6 +18,7 @@ import {
   TamSurveyRequirementStatus,
 } from './entities/tam-survey-requirement.entity';
 import { TamSurvey } from './entities/tam-survey.entity';
+import { BetaModeSettings } from '../beta-mode/entities/beta-mode-settings.entity';
 
 const REQUIRED_SURVEY_QUESTION_COUNT = 14;
 const POSTGRES_UNIQUE_VIOLATION = '23505';
@@ -43,6 +44,8 @@ export class TamSurveysService {
     private readonly requirementsRepo: Repository<TamSurveyRequirement>,
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
+    @InjectRepository(BetaModeSettings)
+    private readonly betaModeSettingsRepo: Repository<BetaModeSettings>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -95,6 +98,8 @@ export class TamSurveysService {
   async createPostDeliveryRequirementIfNeeded(
     order: Pick<Order, 'id' | 'orderId' | 'userId'>,
   ): Promise<TamSurveyRequirement | null> {
+    if (!(await this.isBetaModeEnabled())) return null;
+
     const user = await this.usersRepo.findOne({ where: { id: order.userId } });
     if (!user?.isBetaUser) return null;
 
@@ -133,6 +138,10 @@ export class TamSurveysService {
   }
 
   async getAccountState(userId: number): Promise<AccountStateResponse> {
+    if (!(await this.isBetaModeEnabled())) {
+      return { accountStatus: 'active', holds: [] };
+    }
+
     const requirement = await this.requirementsRepo.findOne({
       where: {
         userId,
@@ -219,6 +228,11 @@ export class TamSurveysService {
       'code' in error &&
       error.code === POSTGRES_UNIQUE_VIOLATION
     );
+  }
+
+  private async isBetaModeEnabled(): Promise<boolean> {
+    const settings = await this.betaModeSettingsRepo.find();
+    return settings[0]?.isEnabled ?? false;
   }
 
   private validateSurveyData(

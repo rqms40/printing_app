@@ -15,7 +15,7 @@ const makeUser = (overrides: Partial<User> = {}): User =>
     betaCreditsGranted: false,
     credits: 50,
     ...overrides,
-  } as User);
+  }) as User;
 
 describe('BetaModeService', () => {
   let service: BetaModeService;
@@ -27,7 +27,12 @@ describe('BetaModeService', () => {
     update: jest.Mock;
     createQueryBuilder: jest.Mock;
   };
-  let mockQB: { update: jest.Mock; set: jest.Mock; where: jest.Mock; execute: jest.Mock };
+  let mockQB: {
+    update: jest.Mock;
+    set: jest.Mock;
+    where: jest.Mock;
+    execute: jest.Mock;
+  };
 
   beforeEach(async () => {
     settingsRepo = {
@@ -52,7 +57,10 @@ describe('BetaModeService', () => {
     const module = await Test.createTestingModule({
       providers: [
         BetaModeService,
-        { provide: getRepositoryToken(BetaModeSettings), useValue: settingsRepo },
+        {
+          provide: getRepositoryToken(BetaModeSettings),
+          useValue: settingsRepo,
+        },
         { provide: getRepositoryToken(User), useValue: userRepo },
       ],
     }).compile();
@@ -73,6 +81,29 @@ describe('BetaModeService', () => {
     await service.getSettings();
     expect(settingsRepo.create).toHaveBeenCalled();
     expect(settingsRepo.save).toHaveBeenCalled();
+  });
+
+  it('updateSettings disables beta mode and reopens beta survey held accounts', async () => {
+    settingsRepo.find.mockResolvedValue([{ id: 1, isEnabled: true }]);
+
+    const result = await service.updateSettings(false);
+
+    expect(result.isEnabled).toBe(false);
+    expect(userRepo.update).toHaveBeenCalledWith(
+      { isActive: false, accountHoldReason: 'beta_survey_complete' },
+      { isActive: true, accountHoldReason: null, accountHeldAt: null },
+    );
+  });
+
+  it('updateSettings does not reopen held accounts when enabling beta mode', async () => {
+    settingsRepo.find.mockResolvedValue([{ id: 1, isEnabled: false }]);
+
+    await service.updateSettings(true);
+
+    expect(userRepo.update).not.toHaveBeenCalledWith(
+      { isActive: false, accountHoldReason: 'beta_survey_complete' },
+      expect.anything(),
+    );
   });
 
   // ── enrollUser ─────────────────────────────────────────────────────────────
@@ -113,7 +144,11 @@ describe('BetaModeService', () => {
   it('enrollUser preserves original betaEnrolledAt on re-enroll', async () => {
     const original = new Date('2026-01-01');
     userRepo.findOne.mockResolvedValue(
-      makeUser({ isBetaUser: false, betaEnrolledAt: original, betaCreditsGranted: true }),
+      makeUser({
+        isBetaUser: false,
+        betaEnrolledAt: original,
+        betaCreditsGranted: true,
+      }),
     );
     await service.enrollUser(1);
     const [, updateArg] = userRepo.update.mock.calls[0];
@@ -148,7 +183,11 @@ describe('BetaModeService', () => {
 
     const result = await service.getBetaStatus(1);
 
-    expect(result).toEqual({ globallyEnabled: true, isBetaUser: false, rank: null });
+    expect(result).toEqual({
+      globallyEnabled: true,
+      isBetaUser: false,
+      rank: null,
+    });
     expect(userRepo.count).not.toHaveBeenCalled();
   });
 
@@ -162,7 +201,11 @@ describe('BetaModeService', () => {
 
     const result = await service.getBetaStatus(1);
 
-    expect(result).toEqual({ globallyEnabled: true, isBetaUser: true, rank: 3 });
+    expect(result).toEqual({
+      globallyEnabled: true,
+      isBetaUser: true,
+      rank: 3,
+    });
   });
 
   // ── getBetaUsers ───────────────────────────────────────────────────────────

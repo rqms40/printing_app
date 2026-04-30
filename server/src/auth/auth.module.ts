@@ -7,6 +7,7 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UsersModule } from '../users/users.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { BetaModeModule } from '../beta-mode/beta-mode.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       }),
     }),
     NotificationsModule,
+    BetaModeModule,
   ],
   providers: [AuthService, JwtStrategy],
   controllers: [AuthController],

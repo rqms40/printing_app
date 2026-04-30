@@ -4,6 +4,8 @@ import { Repository, LessThanOrEqual } from 'typeorm';
 import { BetaModeSettings } from './entities/beta-mode-settings.entity';
 import { User } from '../users/entities/user.entity';
 
+const BETA_SURVEY_COMPLETE_HOLD_REASON = 'beta_survey_complete';
+
 @Injectable()
 export class BetaModeService {
   constructor(
@@ -16,7 +18,11 @@ export class BetaModeService {
   async getSettings(): Promise<BetaModeSettings> {
     let settings = await this.settingsRepo.find();
     if (settings.length === 0) {
-      settings = [await this.settingsRepo.save(this.settingsRepo.create({ isEnabled: false }))];
+      settings = [
+        await this.settingsRepo.save(
+          this.settingsRepo.create({ isEnabled: false }),
+        ),
+      ];
     }
     return settings[0];
   }
@@ -24,17 +30,36 @@ export class BetaModeService {
   async updateSettings(isEnabled: boolean): Promise<BetaModeSettings> {
     const settings = await this.getSettings();
     settings.isEnabled = isEnabled;
-    return this.settingsRepo.save(settings);
+    const saved = await this.settingsRepo.save(settings);
+
+    if (!isEnabled) {
+      await this.reopenCompletedBetaSurveyHolds();
+    }
+
+    return saved;
   }
 
-  async getBetaUsers(): Promise<Array<{
-    rank: number;
-    id: number;
-    email: string;
-    fullName: string | null;
-    betaEnrolledAt: Date;
-    betaCreditsGranted: boolean;
-  }>> {
+  async reopenCompletedBetaSurveyHolds(userId?: number): Promise<void> {
+    await this.userRepo.update(
+      {
+        ...(userId == null ? {} : { id: userId }),
+        isActive: false,
+        accountHoldReason: BETA_SURVEY_COMPLETE_HOLD_REASON,
+      },
+      { isActive: true, accountHoldReason: null, accountHeldAt: null },
+    );
+  }
+
+  async getBetaUsers(): Promise<
+    Array<{
+      rank: number;
+      id: number;
+      email: string;
+      fullName: string | null;
+      betaEnrolledAt: Date;
+      betaCreditsGranted: boolean;
+    }>
+  > {
     const users = await this.userRepo.find({
       where: { isBetaUser: true },
       order: { betaEnrolledAt: 'ASC' },
@@ -86,11 +111,18 @@ export class BetaModeService {
     const user = await this.userRepo.findOne({ where: { id: userId } });
 
     if (!user || !user.isBetaUser || !user.betaEnrolledAt) {
-      return { globallyEnabled: settings.isEnabled, isBetaUser: false, rank: null };
+      return {
+        globallyEnabled: settings.isEnabled,
+        isBetaUser: false,
+        rank: null,
+      };
     }
 
     const rank = await this.userRepo.count({
-      where: { isBetaUser: true, betaEnrolledAt: LessThanOrEqual(user.betaEnrolledAt) },
+      where: {
+        isBetaUser: true,
+        betaEnrolledAt: LessThanOrEqual(user.betaEnrolledAt),
+      },
     });
 
     return { globallyEnabled: settings.isEnabled, isBetaUser: true, rank };

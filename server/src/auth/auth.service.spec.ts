@@ -5,12 +5,14 @@ import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException, ConflictException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { NotificationsService } from '../notifications/notifications.service';
+import { BetaModeService } from '../beta-mode/beta-mode.service';
 
 describe('AuthService', () => {
   let authService: AuthService;
   let usersService: Partial<UsersService>;
   let jwtService: Partial<JwtService>;
   let notificationsService: Partial<NotificationsService>;
+  let betaModeService: Partial<BetaModeService>;
 
   const mockUser = {
     id: 1,
@@ -27,6 +29,10 @@ describe('AuthService', () => {
     notificationsService = {
       createForAllAdmins: jest.fn().mockResolvedValue(undefined),
     };
+    betaModeService = {
+      getSettings: jest.fn().mockResolvedValue({ id: 1, isEnabled: true }),
+      reopenCompletedBetaSurveyHolds: jest.fn().mockResolvedValue(undefined),
+    };
     usersService = {
       findByEmail: jest.fn(),
       create: jest.fn(),
@@ -41,6 +47,7 @@ describe('AuthService', () => {
         { provide: UsersService, useValue: usersService },
         { provide: JwtService, useValue: jwtService },
         { provide: NotificationsService, useValue: notificationsService },
+        { provide: BetaModeService, useValue: betaModeService },
       ],
     }).compile();
 
@@ -211,6 +218,34 @@ describe('AuthService', () => {
         authService.login('test@example.com', 'password123'),
       ).rejects.toThrow(
         'Beta testing completed. Your account will reopen at full release.',
+      );
+    });
+
+    it('reopens beta survey held users when beta mode is disabled', async () => {
+      const hashedPassword = await bcrypt.hash('password123', 10);
+      (usersService.findByEmail as jest.Mock).mockResolvedValue({
+        ...mockUser,
+        passwordHash: hashedPassword,
+        isActive: false,
+        accountHoldReason: 'beta_survey_complete',
+      });
+      (betaModeService.getSettings as jest.Mock).mockResolvedValue({
+        id: 1,
+        isEnabled: false,
+      });
+
+      const result = await authService.login('test@example.com', 'password123');
+
+      expect(
+        betaModeService.reopenCompletedBetaSurveyHolds,
+      ).toHaveBeenCalledWith(1);
+      expect(result.access_token).toBe('mock-jwt-token');
+      expect(result.user).toEqual(
+        expect.objectContaining({
+          isActive: true,
+          accountHoldReason: null,
+          accountHeldAt: null,
+        }),
       );
     });
   });

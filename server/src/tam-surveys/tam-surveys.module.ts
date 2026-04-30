@@ -7,6 +7,7 @@ import { TamSurveysController } from './tam-surveys.controller';
 import { TamSurveysService } from './tam-surveys.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { User } from '../users/entities/user.entity';
+import { BetaModeSettings } from '../beta-mode/entities/beta-mode-settings.entity';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { User } from '../users/entities/user.entity';
       TamSurvey,
       TamSurveyRequirement,
       TamSurveySettings,
+      BetaModeSettings,
       User,
     ]),
     forwardRef(() => NotificationsModule),

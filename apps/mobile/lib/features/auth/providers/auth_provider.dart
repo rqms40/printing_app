@@ -291,6 +291,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       ),
     };
     state = AuthState(status: AuthStatus.authenticated, user: users[role]!);
+    _ref?.read(accountStateProvider.notifier).clear();
   }
 
   Future<bool> completeProfile({

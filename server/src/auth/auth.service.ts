@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { BetaModeService } from '../beta-mode/beta-mode.service';
 import { User } from '../users/entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import {
@@ -31,6 +32,7 @@ export class AuthService {
     private usersService: UsersService,
     private jwtService: JwtService,
     private notificationsService: NotificationsService,
+    private betaModeService: BetaModeService,
   ) {}
 
   async register(
@@ -67,6 +69,21 @@ export class AuthService {
 
     if (user.isActive === false) {
       if (user.accountHoldReason === 'beta_survey_complete') {
+        const betaSettings = await this.betaModeService.getSettings();
+        if (!betaSettings.isEnabled) {
+          await this.betaModeService.reopenCompletedBetaSurveyHolds(user.id);
+          const reopenedUser = {
+            ...user,
+            isActive: true,
+            accountHoldReason: null,
+            accountHeldAt: null,
+          } as User;
+          const { passwordHash: _ph, ...result } = reopenedUser;
+          return {
+            user: result,
+            access_token: this.generateToken(reopenedUser),
+          };
+        }
         throw new UnauthorizedException(
           'Beta testing completed. Your account will reopen at full release.',
         );

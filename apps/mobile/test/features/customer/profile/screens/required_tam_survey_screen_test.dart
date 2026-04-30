@@ -128,23 +128,25 @@ void main() {
       );
     });
 
-    testWidgets('keeps Next disabled until the current question is answered', (
-      tester,
-    ) async {
+    testWidgets('uses the TAM face slider question flow', (tester) async {
       await tester.pumpWidget(_wrap());
 
-      var nextButton = tester.widget<ElevatedButton>(
-        find.widgetWithText(ElevatedButton, 'Next'),
-      );
-      expect(nextButton.onPressed, isNull);
+      final slider = tester.widget<Slider>(find.byType(Slider));
+      expect(slider.min, 0);
+      expect(slider.max, 4);
+      expect(slider.divisions, 4);
+      expect(find.text('NEUTRAL'), findsOneWidget);
 
-      await tester.tap(find.text('Agree'));
+      final sliderRect = tester.getRect(find.byType(Slider));
+      await tester.tapAt(Offset(sliderRect.right - 8, sliderRect.center.dy));
       await tester.pump();
 
-      nextButton = tester.widget<ElevatedButton>(
-        find.widgetWithText(ElevatedButton, 'Next'),
-      );
-      expect(nextButton.onPressed, isNotNull);
+      expect(find.text('STRONGLY\nAGREE'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Next'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Question 2 of 14'), findsOneWidget);
     });
 
     testWidgets('submits required survey payload and logs out', (tester) async {
@@ -152,8 +154,6 @@ void main() {
       await tester.pumpWidget(_wrapWithRouter(authNotifier));
 
       for (var i = 0; i < 14; i += 1) {
-        await tester.tap(find.text('Strongly Agree'));
-        await tester.pump();
         await tester.tap(find.widgetWithText(ElevatedButton, 'Next'));
         await tester.pumpAndSettle();
       }
@@ -166,7 +166,7 @@ void main() {
         find.byType(TextField).at(1),
         'Fast delivery and clear updates.',
       );
-      await tester.tap(find.widgetWithText(ElevatedButton, 'Submit Feedback'));
+      await tester.tap(find.text('Submit Feedback'));
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(lastSurveyPath, '/tam-surveys/requirements/123/submit');
@@ -177,7 +177,7 @@ void main() {
 
       final surveyData = lastSurveyPayload?['surveyData'] as Map?;
       expect(surveyData, hasLength(14));
-      expect(surveyData?.values, everyElement(4));
+      expect(surveyData?.values, everyElement(2));
 
       await tester.pump(const Duration(milliseconds: 1400));
       await tester.pumpAndSettle();

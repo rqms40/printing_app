@@ -11,6 +11,7 @@ import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { TamSurveysService } from './tam-surveys.service';
 import { TamSurvey } from './entities/tam-survey.entity';
+import { BetaModeSettings } from '../beta-mode/entities/beta-mode-settings.entity';
 import {
   TamSurveyRequirement,
   TamSurveyRequirementReason,
@@ -92,6 +93,7 @@ describe('TamSurveysService', () => {
   let service: TamSurveysService;
   let surveyRepo: jest.Mocked<Partial<Repository<TamSurvey>>>;
   let requirementRepo: jest.Mocked<Partial<Repository<TamSurveyRequirement>>>;
+  let betaModeSettingsRepo: jest.Mocked<Partial<Repository<BetaModeSettings>>>;
   let userRepo: any;
   let transactionalManager: any;
   let dataSource: any;
@@ -118,7 +120,12 @@ describe('TamSurveysService', () => {
     requirementRepo = {
       findOne: jest.fn(),
       create: jest.fn((data) => data as TamSurveyRequirement),
-      save: jest.fn(async (req) => ({ id: 123, ...req }) as TamSurveyRequirement),
+      save: jest.fn(
+        async (req) => ({ id: 123, ...req }) as TamSurveyRequirement,
+      ),
+    };
+    betaModeSettingsRepo = {
+      find: jest.fn().mockResolvedValue([{ id: 1, isEnabled: true }]),
     };
     userRepo = {
       findOne: jest.fn(),
@@ -143,6 +150,10 @@ describe('TamSurveysService', () => {
         {
           provide: getRepositoryToken(TamSurveyRequirement),
           useValue: requirementRepo,
+        },
+        {
+          provide: getRepositoryToken(BetaModeSettings),
+          useValue: betaModeSettingsRepo,
         },
         { provide: getRepositoryToken(User), useValue: userRepo },
         { provide: DataSource, useValue: dataSource },
@@ -181,8 +192,23 @@ describe('TamSurveysService', () => {
     expect(requirementRepo.save).not.toHaveBeenCalled();
   });
 
+  it('does not create a requirement when beta mode is disabled', async () => {
+    betaModeSettingsRepo.find.mockResolvedValue([{ id: 1, isEnabled: false }]);
+    userRepo.findOne.mockResolvedValue(betaUser);
+
+    const result = await service.createPostDeliveryRequirementIfNeeded(order);
+
+    expect(result).toBeNull();
+    expect(requirementRepo.findOne).not.toHaveBeenCalled();
+    expect(requirementRepo.save).not.toHaveBeenCalled();
+  });
+
   it('returns the existing requirement instead of duplicating', async () => {
-    const existing = { id: 77, userId: 10, orderId: 55 } as TamSurveyRequirement;
+    const existing = {
+      id: 77,
+      userId: 10,
+      orderId: 55,
+    } as TamSurveyRequirement;
     userRepo.findOne.mockResolvedValue(betaUser);
     requirementRepo.findOne.mockResolvedValue(existing);
 
@@ -193,7 +219,11 @@ describe('TamSurveysService', () => {
   });
 
   it('returns the existing requirement when a concurrent create hits the unique constraint', async () => {
-    const existing = { id: 77, userId: 10, orderId: 55 } as TamSurveyRequirement;
+    const existing = {
+      id: 77,
+      userId: 10,
+      orderId: 55,
+    } as TamSurveyRequirement;
     userRepo.findOne.mockResolvedValue(betaUser);
     requirementRepo.findOne
       .mockResolvedValueOnce(null)
@@ -234,6 +264,15 @@ describe('TamSurveysService', () => {
         },
       ],
     });
+  });
+
+  it('returns active account state while beta mode is disabled', async () => {
+    betaModeSettingsRepo.find.mockResolvedValue([{ id: 1, isEnabled: false }]);
+
+    const result = await service.getAccountState(10);
+
+    expect(result).toEqual({ accountStatus: 'active', holds: [] });
+    expect(requirementRepo.findOne).not.toHaveBeenCalled();
   });
 
   it('submits a requirement and holds the beta account', async () => {

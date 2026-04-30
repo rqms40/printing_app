@@ -9,5 +9,6 @@ import { BetaModeController } from './beta-mode.controller';
   imports: [TypeOrmModule.forFeature([BetaModeSettings, User])],
   providers: [BetaModeService],
   controllers: [BetaModeController],
+  exports: [BetaModeService],
 })
 export class BetaModeModule {}

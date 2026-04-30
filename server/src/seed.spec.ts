@@ -13,4 +13,19 @@ describe('seed script', () => {
 
     expect(seedSource).toContain('order_items');
   });
+
+  it('includes beta_mode_settings in the fresh reset truncate list', () => {
+    const seedSource = readFileSync(join(__dirname, 'seed.ts'), 'utf8');
+
+    expect(seedSource).toContain('beta_mode_settings');
+  });
+
+  it('seeds beta mode disabled after reset', () => {
+    const seedSource = readFileSync(join(__dirname, 'seed.ts'), 'utf8');
+
+    expect(seedSource).toContain(
+      'INSERT INTO beta_mode_settings (is_enabled) VALUES ($1)',
+    );
+    expect(seedSource).toContain('[\n    false,\n  ]');
+  });
 });

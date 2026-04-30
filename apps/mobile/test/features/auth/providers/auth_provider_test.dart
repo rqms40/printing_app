@@ -1,5 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
+import 'package:printing_app/features/customer/profile/models/account_state.dart';
+import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 
 import '../../../helpers/test_setup.dart';
 
@@ -106,6 +109,42 @@ void main() {
 
       notifier.devBypass('admin');
       expect(notifier.state.user!.role, 'admin');
+    });
+
+    test('devBypass clears stale survey gate state', () async {
+      final container = ProviderContainer(
+        overrides: [
+          accountStateProvider.overrideWith(
+            (ref) => AccountStateNotifier(
+              fetchAccountState: () async => {
+                'accountStatus': 'survey_required',
+                'holds': [
+                  {
+                    'requirementId': 1,
+                    'orderId': 10,
+                    'orderRef': 'ORD-10010',
+                    'requiredAt': '2026-04-30T00:00:00.000Z',
+                  },
+                ],
+              },
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(accountStateProvider.notifier).refresh();
+      expect(
+        container.read(accountStateProvider).status,
+        AccountGateStatus.surveyRequired,
+      );
+
+      container.read(authProvider.notifier).devBypass('customer');
+
+      expect(
+        container.read(accountStateProvider).status,
+        AccountGateStatus.unknown,
+      );
     });
   });
 

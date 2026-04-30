@@ -112,7 +112,8 @@ async function seed() {
       delivery_assignments, order_status_history,
       paper_specs, three_d_specs, order_items, orders, batch_orders,
       addresses, driver_profiles, file_metadata,
-      tam_survey_settings, tam_surveys,
+      beta_mode_settings,
+      tam_survey_settings, tam_surveys, tam_survey_requirements,
       daily_grid_cards,
       delivery_slot_bookings, delivery_slot_templates, delivery_settings,
       printer_profiles,
@@ -121,6 +122,10 @@ async function seed() {
   `);
 
   // Sequences were already reset by TRUNCATE ... RESTART IDENTITY above
+  await ds.query('INSERT INTO beta_mode_settings (is_enabled) VALUES ($1)', [
+    false,
+  ]);
+  console.log('✅ Beta mode reset to disabled');
 
   for (const u of users) {
     await ds.query(
