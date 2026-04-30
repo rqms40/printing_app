@@ -279,7 +279,12 @@ describe('DeliverySlotsService', () => {
 
   describe('reorderBookings', () => {
     it('updates priorityRank atomically for each id', async () => {
-      const txManager = { update: jest.fn().mockResolvedValue(undefined) };
+      const txManager = {
+        // findOne reads the first booking so the post-commit broadcast knows
+        // which date room to fire on.
+        findOne: jest.fn().mockResolvedValue({ id: 3, date: '2026-04-30' }),
+        update: jest.fn().mockResolvedValue(undefined),
+      };
       dataSource.transaction.mockImplementation(async (cb: any) => cb(txManager));
 
       await svc.reorderBookings([3, 1, 2]);

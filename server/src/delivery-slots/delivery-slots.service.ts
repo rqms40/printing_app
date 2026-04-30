@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { DeliverySlotTemplate } from './entities/delivery-slot-template.entity';
 import { DeliverySlotBooking } from './entities/delivery-slot-booking.entity';
 import { SlotFullException, CancellationClosedException } from './exceptions';
+import { DeliverySlotsGateway } from './delivery-slots.gateway';
 
 export interface SlotAvailability {
   templateId: number;
@@ -29,6 +30,7 @@ export class DeliverySlotsService {
     @InjectRepository(DeliverySlotBooking)
     private readonly bookingRepo: Repository<DeliverySlotBooking>,
     private readonly dataSource: DataSource,
+    @Optional() private readonly gateway?: DeliverySlotsGateway,
   ) {}
 
   async getAvailability(
@@ -137,7 +139,12 @@ export class DeliverySlotsService {
     if (Date.now() >= slotStart.getTime()) {
       throw new CancellationClosedException();
     }
+    const releasedDate = booking.date;
     await manager.remove(booking);
+    // Broadcast so admin views drop the row in real time. Fires after the
+    // remove() above; the parent transaction may still roll back, in which
+    // case subscribers harmlessly re-fetch and find the booking still there.
+    this.gateway?.notifyDateChanged(releasedDate);
   }
 
   async getTodaySnapshot(date: string) {
@@ -197,11 +204,20 @@ export class DeliverySlotsService {
   }
 
   async reorderBookings(orderedIds: number[]) {
+    if (orderedIds.length === 0) return;
+    let affectedDate: string | null = null;
     await this.dataSource.transaction(async (m) => {
+      // Capture the date once so we can broadcast after commit. All ordered
+      // ids must belong to the same slot/date; we just read the first.
+      const first = await m.findOne(DeliverySlotBooking, {
+        where: { id: orderedIds[0] },
+      });
+      affectedDate = first?.date ?? null;
       for (let i = 0; i < orderedIds.length; i++) {
         await m.update(DeliverySlotBooking, orderedIds[i], { priorityRank: i + 1 });
       }
     });
+    if (affectedDate) this.gateway?.notifyDateChanged(affectedDate);
   }
 
   /**
@@ -211,7 +227,7 @@ export class DeliverySlotsService {
    * the rank is cleared so it falls back to FIFO.
    */
   async setPriority(bookingId: number, priority: boolean) {
-    return this.dataSource.transaction(async (m) => {
+    const updated = await this.dataSource.transaction(async (m) => {
       const booking = await m.findOne(DeliverySlotBooking, {
         where: { id: bookingId },
       });
@@ -245,5 +261,7 @@ export class DeliverySlotsService {
 
       return m.findOne(DeliverySlotBooking, { where: { id: bookingId } });
     });
+    if (updated?.date) this.gateway?.notifyDateChanged(updated.date);
+    return updated;
   }
 }

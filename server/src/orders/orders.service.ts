@@ -34,6 +34,7 @@ import { Address } from '../addresses/entities/address.entity';
 import { DeliverySlotsService } from '../delivery-slots/delivery-slots.service';
 import { DeliverySettingsService } from '../delivery-slots/delivery-settings.service';
 import { DeliverySlotsGateway } from '../delivery-slots/delivery-slots.gateway';
+import { DeliverySlotBooking } from '../delivery-slots/entities/delivery-slot-booking.entity';
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
 import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 
@@ -781,6 +782,29 @@ export class OrdersService {
         this.logger.warn(
           `Customer notification failed for status ${status}: ${err}`,
         );
+      }
+    }
+
+    // Slot count changed for the affected date — broadcast so admin Today's
+    // Slots refreshes in real time. Only relevant when the order has a
+    // slotted batch and the new status is terminal (cancelled / declined).
+    if (
+      (orderStatus === OrderStatus.CANCELLED ||
+        orderStatus === OrderStatus.FILE_DECLINED) &&
+      order.batchOrderId != null
+    ) {
+      try {
+        const batch = await this.batchOrdersRepo.findOne({
+          where: { id: order.batchOrderId },
+        });
+        if (batch?.slotBookingId != null) {
+          const booking = await this.dataSource
+            .getRepository(DeliverySlotBooking)
+            .findOne({ where: { id: batch.slotBookingId } });
+          if (booking?.date) this.slotsGateway.notifyDateChanged(booking.date);
+        }
+      } catch (err) {
+        this.logger.warn(`Slot WS broadcast on cancel failed: ${err}`);
       }
     }
 

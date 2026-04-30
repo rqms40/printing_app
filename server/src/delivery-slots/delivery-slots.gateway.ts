@@ -51,4 +51,13 @@ export class DeliverySlotsGateway implements OnGatewayConnection {
   }) {
     this.server.to(`slots:${payload.date}`).emit('slot-updated', payload);
   }
+
+  /// Fire a generic "this date's bookings changed" event. Use when the
+  /// thing that changed isn't a single template's count (e.g. reorder,
+  /// express toggle, cancellation). Subscribers re-fetch on receipt.
+  notifyDateChanged(date: string) {
+    this.server
+      .to(`slots:${date}`)
+      .emit('slot-updated', { date, reason: 'changed' });
+  }
 }
