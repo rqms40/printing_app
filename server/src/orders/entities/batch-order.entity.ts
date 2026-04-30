@@ -11,6 +11,7 @@ import {
 import { User } from '../../users/entities/user.entity';
 import { Address } from '../../addresses/entities/address.entity';
 import { Order } from './order.entity';
+import { DeliverySpeedTier } from '../enums/delivery-speed-tier.enum';
 
 @Entity('batch_orders')
 export class BatchOrder {
@@ -77,6 +78,14 @@ export class BatchOrder {
     default: 0,
   })
   priorityFee: number;
+
+  @Column({
+    name: 'speed_tier',
+    type: 'varchar',
+    length: 20,
+    default: DeliverySpeedTier.STANDARD,
+  })
+  speedTier: DeliverySpeedTier;
 
   @Column({
     name: 'extra_destination_fee',
