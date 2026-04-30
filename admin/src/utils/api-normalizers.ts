@@ -511,6 +511,12 @@ export function normalizeOrder(input: unknown): Order & {
       toOptionalString(record, "customer_name", "customerName") ?? null,
     customer_email:
       toOptionalString(record, "customer_email", "customerEmail") ?? null,
+    adminStatusNote:
+      toOptionalString(record, "adminStatusNote") ?? null,
+    estimatedCompletionAt:
+      toOptionalString(record, "estimatedCompletionAt") ?? null,
+    adminStatusSetAt:
+      toOptionalString(record, "adminStatusSetAt") ?? null,
   };
 }
 

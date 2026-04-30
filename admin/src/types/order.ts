@@ -56,6 +56,9 @@ export interface Order {
   assigned_driver_id?: string;
   estimated_completion_at?: string;
   admin_notes?: string;
+  adminStatusNote?: string | null;
+  estimatedCompletionAt?: string | null;
+  adminStatusSetAt?: string | null;
   tracking_link?: string;
   created_at: string;
   updated_at: string;

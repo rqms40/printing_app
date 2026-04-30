@@ -37,6 +37,7 @@ import {
   normalizeOrder,
 } from "@/utils/api-normalizers";
 import { loadOrderFilePreview, type OrderFilePreview } from "./preview";
+import { ManualStatusCard } from "./components/manual-status-card";
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -435,6 +436,16 @@ export function OrderShow() {
             }}
           />
         </Card>
+
+        <ManualStatusCard
+          orderId={order.id}
+          initialNote={order.adminStatusNote ?? null}
+          initialCompletionAt={order.estimatedCompletionAt ?? null}
+          onUpdated={async () => {
+            const res = await apiClient.get(`/admin/orders/${id}`);
+            setOrder(normalizeOrder(res.data));
+          }}
+        />
 
         {/* Status History */}
         <Card title="Status History">
