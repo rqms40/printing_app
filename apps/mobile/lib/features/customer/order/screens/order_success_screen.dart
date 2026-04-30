@@ -72,9 +72,19 @@ class OrderSuccessScreen extends StatelessWidget {
                   label: isMulti ? 'View orders' : 'Track order',
                   icon: HugeIcons.strokeRoundedLocation01,
                   colors: colors,
-                  onTap: () => context.go(
-                    isMulti ? '/customer/orders' : '/customer/orders/$firstOrderId/track',
-                  ),
+                  onTap: () {
+                    // Always land on the Orders tab so the bottom-nav stays
+                    // active. For a single-item checkout, push the order
+                    // detail on top of the list so the user sees their just-
+                    // placed order immediately. For multi-item checkouts the
+                    // list is the right landing page.
+                    context.go('/customer/orders');
+                    if (!isMulti) {
+                      Future.microtask(
+                        () => context.push('/customer/orders/$firstOrderId'),
+                      );
+                    }
+                  },
                 ),
                 const SizedBox(height: AppSpacing.sm),
               ],

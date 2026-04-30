@@ -1,4 +1,4 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { DeliverySlotTemplate } from './entities/delivery-slot-template.entity';
@@ -30,7 +30,7 @@ export class DeliverySlotsService {
     @InjectRepository(DeliverySlotBooking)
     private readonly bookingRepo: Repository<DeliverySlotBooking>,
     private readonly dataSource: DataSource,
-    @Optional() private readonly gateway?: DeliverySlotsGateway,
+    private readonly gateway: DeliverySlotsGateway,
   ) {}
 
   async getAvailability(
@@ -144,7 +144,7 @@ export class DeliverySlotsService {
     // Broadcast so admin views drop the row in real time. Fires after the
     // remove() above; the parent transaction may still roll back, in which
     // case subscribers harmlessly re-fetch and find the booking still there.
-    this.gateway?.notifyDateChanged(releasedDate);
+    this.gateway.notifyDateChanged(releasedDate);
   }
 
   async getTodaySnapshot(date: string) {
@@ -217,7 +217,7 @@ export class DeliverySlotsService {
         await m.update(DeliverySlotBooking, orderedIds[i], { priorityRank: i + 1 });
       }
     });
-    if (affectedDate) this.gateway?.notifyDateChanged(affectedDate);
+    if (affectedDate) this.gateway.notifyDateChanged(affectedDate);
   }
 
   /**
@@ -261,7 +261,7 @@ export class DeliverySlotsService {
 
       return m.findOne(DeliverySlotBooking, { where: { id: bookingId } });
     });
-    if (updated?.date) this.gateway?.notifyDateChanged(updated.date);
+    if (updated?.date) this.gateway.notifyDateChanged(updated.date);
     return updated;
   }
 }

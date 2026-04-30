@@ -878,7 +878,12 @@ class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
                                 const Duration(milliseconds: 180),
                                 () {
                                   if (stateCtx.mounted) {
-                                    stateCtx.push('/customer/notifications');
+                                    // go() switches the StatefulShellRoute
+                                    // branch so the bottom-nav "Notifications"
+                                    // tab activates. push() would have
+                                    // stacked over the current tab and left
+                                    // the wrong nav item highlighted.
+                                    stateCtx.go('/customer/notifications');
                                   }
                                 },
                               );
@@ -892,7 +897,7 @@ class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
                                 const Duration(milliseconds: 180),
                                 () {
                                   if (stateCtx.mounted) {
-                                    stateCtx.push('/customer/notifications');
+                                    stateCtx.go('/customer/notifications');
                                   }
                                 },
                               );

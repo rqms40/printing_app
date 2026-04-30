@@ -133,9 +133,18 @@ export function DeliverySlotsTodayPage() {
       refresh(selectedDate);
       refreshWeekCounts(selectedDate);
     });
+    // Polling fallback — re-fetch every 5s in case the WS event isn't
+    // delivered (network blip, gateway misroute, etc.). Keeps the page
+    // honest even if WS goes silent. Background fetches don't toggle the
+    // loading spinner.
+    const pollId = setInterval(() => {
+      refresh(selectedDate);
+      refreshWeekCounts(selectedDate);
+    }, 5000);
     return () => {
       socket.off("slot-updated");
       disconnectDeliverySlotsWS();
+      clearInterval(pollId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);

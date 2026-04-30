@@ -6,6 +6,7 @@ import {
   ConnectedSocket,
   OnGatewayConnection,
 } from '@nestjs/websockets';
+import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 
@@ -13,6 +14,7 @@ import { JwtService } from '@nestjs/jwt';
 export class DeliverySlotsGateway implements OnGatewayConnection {
   @WebSocketServer()
   server: Server;
+  private readonly logger = new Logger('DeliverySlotsGateway');
 
   constructor(private readonly jwtService: JwtService) {}
 
@@ -28,20 +30,22 @@ export class DeliverySlotsGateway implements OnGatewayConnection {
   }
 
   @SubscribeMessage('subscribe-slots')
-  handleSubscribe(
+  async handleSubscribe(
     @MessageBody() data: { date: string },
     @ConnectedSocket() client: Socket,
   ) {
-    void client.join(`slots:${data.date}`);
+    const room = `slots:${data.date}`;
+    await client.join(room);
+    this.logger.log(`socket ${client.id} joined ${room}`);
     return { ok: true };
   }
 
   @SubscribeMessage('unsubscribe-slots')
-  handleUnsubscribe(
+  async handleUnsubscribe(
     @MessageBody() data: { date: string },
     @ConnectedSocket() client: Socket,
   ) {
-    void client.leave(`slots:${data.date}`);
+    await client.leave(`slots:${data.date}`);
   }
 
   notifySlotUpdated(payload: {
@@ -49,15 +53,17 @@ export class DeliverySlotsGateway implements OnGatewayConnection {
     date: string;
     bookedCount: number;
   }) {
-    this.server.to(`slots:${payload.date}`).emit('slot-updated', payload);
+    const room = `slots:${payload.date}`;
+    this.logger.log(`broadcast slot-updated → ${room}`);
+    this.server.to(room).emit('slot-updated', payload);
   }
 
   /// Fire a generic "this date's bookings changed" event. Use when the
   /// thing that changed isn't a single template's count (e.g. reorder,
   /// express toggle, cancellation). Subscribers re-fetch on receipt.
   notifyDateChanged(date: string) {
-    this.server
-      .to(`slots:${date}`)
-      .emit('slot-updated', { date, reason: 'changed' });
+    const room = `slots:${date}`;
+    this.logger.log(`broadcast date-changed → ${room}`);
+    this.server.to(room).emit('slot-updated', { date, reason: 'changed' });
   }
 }

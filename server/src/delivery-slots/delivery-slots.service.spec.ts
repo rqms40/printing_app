@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { DeliverySlotsService } from './delivery-slots.service';
 import { DeliverySlotTemplate } from './entities/delivery-slot-template.entity';
 import { DeliverySlotBooking } from './entities/delivery-slot-booking.entity';
+import { DeliverySlotsGateway } from './delivery-slots.gateway';
 
 describe('DeliverySlotsService', () => {
   let svc: DeliverySlotsService;
@@ -27,6 +28,13 @@ describe('DeliverySlotsService', () => {
           useValue: bookingRepo,
         },
         { provide: DataSource, useValue: dataSource },
+        {
+          provide: DeliverySlotsGateway,
+          useValue: {
+            notifySlotUpdated: jest.fn(),
+            notifyDateChanged: jest.fn(),
+          },
+        },
       ],
     }).compile();
     svc = mod.get(DeliverySlotsService);
