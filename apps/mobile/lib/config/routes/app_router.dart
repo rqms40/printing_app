@@ -5,6 +5,8 @@ import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/routes/page_transitions.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/auth/models/registration_draft.dart';
+import 'package:printing_app/features/customer/profile/models/account_state.dart';
+import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 import 'package:printing_app/shared/widgets/app_bottom_nav.dart';
 import 'package:printing_app/shared/widgets/scaffold_with_nav.dart';
 
@@ -46,6 +48,7 @@ import 'package:printing_app/features/customer/profile/screens/terms_screen.dart
 import 'package:printing_app/features/customer/profile/screens/privacy_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/top_up_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/tam_survey_screen.dart';
+import 'package:printing_app/features/customer/profile/screens/required_tam_survey_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/storage_settings_screen.dart';
 import 'package:printing_app/features/customer/uploads/screens/my_uploads_screen.dart';
 import 'package:printing_app/features/customer/chat/models/conversation.dart';
@@ -90,6 +93,7 @@ final _rootNavigatorKey = GlobalKey<NavigatorState>();
 class _AuthChangeNotifier extends ChangeNotifier {
   _AuthChangeNotifier(this._ref) {
     _ref.listen(authProvider, (_, _) => notifyListeners());
+    _ref.listen(accountStateProvider, (_, _) => notifyListeners());
   }
   final Ref _ref;
 }
@@ -117,6 +121,22 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // Let the splash screen and onboarding through without redirect
       if (isOnSplash) return null;
+
+      final accountState = ref.read(accountStateProvider);
+      final isForcedSurvey =
+          state.matchedLocation == '/customer/survey/required';
+      if (isForcedSurvey && !isAuth) {
+        return '/auth/login';
+      }
+      if (isAuth && accountState.status == AccountGateStatus.surveyRequired) {
+        return isForcedSurvey ? null : '/customer/survey/required';
+      }
+      if (isForcedSurvey &&
+          isAuth &&
+          accountState.status != AccountGateStatus.surveyRequired) {
+        return '/customer/home';
+      }
+
       if (isOnOnboarding && isAuth) return null;
 
       // Unauthenticated users must go to login
@@ -415,6 +435,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             slideTransition(const TamSurveyScreen(), state),
       ),
       GoRoute(
+        path: '/customer/survey/required',
+        pageBuilder: (_, state) =>
+            fadeTransition(const RequiredTamSurveyScreen(), state),
+      ),
+      GoRoute(
         path: StorageSettingsScreen.routeName,
         pageBuilder: (_, state) =>
             slideTransition(const StorageSettingsScreen(), state),
@@ -437,8 +462,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/customer/chat/new',
         pageBuilder: (_, state) {
           final orderIdStr = state.uri.queryParameters['orderId'];
-          final orderId =
-              orderIdStr != null ? int.tryParse(orderIdStr) : null;
+          final orderId = orderIdStr != null ? int.tryParse(orderIdStr) : null;
           return slideUpTransition(
             ChatSelectScreen(
               orderId: orderId,
@@ -470,7 +494,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/customer/order/slot-picker',
         builder: (_, state) => SlotPickerScreen(
-          date: state.uri.queryParameters['date'] ??
+          date:
+              state.uri.queryParameters['date'] ??
               DateTime.now().toIso8601String().substring(0, 10),
         ),
       ),

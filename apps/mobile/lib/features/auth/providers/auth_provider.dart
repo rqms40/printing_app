@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/services/notification_service.dart';
 import 'package:printing_app/shared/services/token_storage.dart';
@@ -128,10 +129,11 @@ class AuthState {
 // Auth notifier
 // ---------------------------------------------------------------------------
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier() : super(AuthState.unauthenticated()) {
+  AuthNotifier([this._ref]) : super(AuthState.unauthenticated()) {
     _listenToFcmMessages();
   }
 
+  final Ref? _ref;
   StreamSubscription<Map<String, dynamic>>? _fcmSub;
 
   void _listenToFcmMessages() {
@@ -169,6 +171,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
             : AuthStatus.profileIncomplete,
         user: user,
       );
+      await _ref?.read(accountStateProvider.notifier).refresh();
       _connectNotificationsWs();
     } on DioException catch (e) {
       final message = e.response?.data is Map
@@ -230,6 +233,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
             : AuthStatus.profileIncomplete,
         user: user,
       );
+      await _ref?.read(accountStateProvider.notifier).refresh();
     } on DioException catch (e) {
       final message = e.response?.data is Map
           ? (e.response!.data as Map)['message']?.toString() ??
@@ -345,6 +349,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> logout() async {
     await TokenStorage.clearToken();
     WebSocketService.instance.disconnect();
+    _ref?.read(accountStateProvider.notifier).clear();
     state = AuthState.unauthenticated();
   }
 
@@ -361,9 +366,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
             : AuthStatus.profileIncomplete,
         user: user,
       );
+      await _ref?.read(accountStateProvider.notifier).refresh();
       _connectNotificationsWs();
     } catch (_) {
       await TokenStorage.clearToken();
+      _ref?.read(accountStateProvider.notifier).clear();
       // Token expired or invalid — stay unauthenticated
     }
   }
@@ -458,5 +465,5 @@ class AuthNotifier extends StateNotifier<AuthState> {
 // Provider
 // ---------------------------------------------------------------------------
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>(
-  (ref) => AuthNotifier(),
+  (ref) => AuthNotifier(ref),
 );

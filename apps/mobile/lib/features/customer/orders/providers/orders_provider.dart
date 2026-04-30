@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
+import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/models/paper_specs.dart';
@@ -271,9 +274,11 @@ Order _parseOrder(Map<String, dynamic> json) {
     estimatedCompletionAt: _parseDateNullable(
       _readJsonValue(json, 'estimatedCompletionAt', 'estimated_completion_at'),
     ),
-    adminStatusNote:
-        _readJsonValue(json, 'adminStatusNote', 'admin_status_note')
-            ?.toString(),
+    adminStatusNote: _readJsonValue(
+      json,
+      'adminStatusNote',
+      'admin_status_note',
+    )?.toString(),
     adminStatusSetAt: _parseDateNullable(
       _readJsonValue(json, 'adminStatusSetAt', 'admin_status_set_at'),
     ),
@@ -405,12 +410,15 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   OrdersNotifier({
     List<Order> initialState = const [],
     bool skipBootstrap = false,
+    this.onCompletionUpdate,
   }) : super(initialState) {
     if (!skipBootstrap) {
       _fetchOrders();
       _connectWebSocket();
     }
   }
+
+  final Future<void> Function()? onCompletionUpdate;
 
   Future<void> _connectWebSocket() async {
     try {
@@ -427,6 +435,10 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
               final next = [...state];
               next[index] = updated;
               state = next;
+              if (updated.orderStatus == OrderStatus.delivered ||
+                  updated.orderStatus == OrderStatus.completedPickup) {
+                unawaited(onCompletionUpdate?.call());
+              }
             } else {
               _fetchOrders();
             }
@@ -561,15 +573,12 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       'deliveryOption': deliveryOption,
       'deliveryAddressId': addressId,
       'priority': priority,
-      if (slotTemplateId != null) 'slotTemplateId': slotTemplateId,
-      if (slotDate != null) 'slotDate': slotDate,
+      'slotTemplateId': ?slotTemplateId,
+      'slotDate': ?slotDate,
       if (destinations.isNotEmpty) 'destinations': destinations,
     };
 
-    final response = await ApiClient.instance.post(
-      '/orders/batch',
-      data: body,
-    );
+    final response = await ApiClient.instance.post('/orders/batch', data: body);
 
     final data = Map<String, dynamic>.from(response.data as Map);
     final batchId = data['batchId']?.toString();
@@ -658,7 +667,9 @@ int? _deliveryAddressIdValue(String? id) {
 final ordersProvider = StateNotifierProvider<OrdersNotifier, List<Order>>((
   ref,
 ) {
-  return OrdersNotifier();
+  return OrdersNotifier(
+    onCompletionUpdate: () => ref.read(accountStateProvider.notifier).refresh(),
+  );
 });
 
 /// Reactive list of active (non-terminal) orders, sorted newest-updated first.
