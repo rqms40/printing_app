@@ -649,7 +649,7 @@ class _FilterChips extends StatelessWidget {
 // Grid card
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _GridCard extends StatelessWidget {
+class _GridCard extends ConsumerWidget {
   const _GridCard({
     required this.file,
     required this.colors,
@@ -669,7 +669,7 @@ class _GridCard extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final accent = _accentFor(file.mimeType);
 
     return GestureDetector(
@@ -680,6 +680,7 @@ class _GridCard extends StatelessWidget {
         mimeType: file.mimeType,
         fileSize: file.size,
       ),
+      onLongPress: () => _confirmDelete(context, ref),
       child: Container(
         decoration: BoxDecoration(
           color: colors.surface,
@@ -687,66 +688,73 @@ class _GridCard extends StatelessWidget {
           border: Border.all(color: colors.outline, width: 0.75),
         ),
         clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Stack(
           children: [
-            // Color-coded type strip
-            Container(height: 3, color: accent),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Icon
-                    FileTypeIcon(mimeType: file.mimeType, size: 44),
-                    const Spacer(),
-                    // Name
-                    Text(
-                      file.originalName,
-                      style: AppTypography.caption.copyWith(
-                        color: colors.onBackground,
-                        fontWeight: FontWeight.w600,
-                        height: 1.4,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    // Meta row
-                    Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(height: 3, color: accent),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Size pill
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: colors.surfaceVariant,
-                            borderRadius: AppRadius.borderFull,
-                          ),
-                          child: Text(
-                            formatFileSize(file.size),
-                            style: AppTypography.caption.copyWith(
-                              color: colors.onSurfaceDim,
-                              fontSize: 10,
-                            ),
-                          ),
-                        ),
+                        FileTypeIcon(mimeType: file.mimeType, size: 44),
                         const Spacer(),
-                        if (_expiryLabel(file.expiresAt) case final label?)
-                          _ExpiryBadge(label: label)
-                        else
-                          Text(
-                            _shortDate(file.createdAt),
-                            style: AppTypography.caption.copyWith(
-                              color: colors.onSurfaceDim,
-                              fontSize: 10,
-                            ),
+                        Text(
+                          file.originalName,
+                          style: AppTypography.caption.copyWith(
+                            color: colors.onBackground,
+                            fontWeight: FontWeight.w600,
+                            height: 1.4,
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: colors.surfaceVariant,
+                                borderRadius: AppRadius.borderFull,
+                              ),
+                              child: Text(
+                                formatFileSize(file.size),
+                                style: AppTypography.caption.copyWith(
+                                  color: colors.onSurfaceDim,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ),
+                            const Spacer(),
+                            if (_expiryLabel(file.expiresAt) case final label?)
+                              _ExpiryBadge(label: label)
+                            else
+                              Text(
+                                _shortDate(file.createdAt),
+                                style: AppTypography.caption.copyWith(
+                                  color: colors.onSurfaceDim,
+                                  fontSize: 10,
+                                ),
+                              ),
+                          ],
+                        ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
+              ],
+            ),
+            Positioned(
+              top: 6,
+              right: 6,
+              child: _DeleteIconButton(
+                colors: colors,
+                onTap: () => _confirmDelete(context, ref),
               ),
             ),
           ],
@@ -765,13 +773,74 @@ class _GridCard extends StatelessWidget {
     ];
     return '${m[dt.month - 1]} ${dt.day}';
   }
+
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete file?'),
+        content: Text(
+          '${file.originalName} will be permanently removed from your uploads and cloud storage. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final ok = await ref.read(myUploadsProvider.notifier).deleteFile(file.id);
+    if (!ok) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not delete file. Try again.')),
+      );
+    }
+  }
+}
+
+class _DeleteIconButton extends StatelessWidget {
+  const _DeleteIconButton({required this.colors, required this.onTap});
+  final AppColorSet colors;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.55),
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: const SizedBox(
+          width: 30,
+          height: 30,
+          child: Center(
+            child: HugeIcon(
+              icon: HugeIcons.strokeRoundedDelete02,
+              size: 14,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // List row
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _ListRow extends StatelessWidget {
+class _ListRow extends ConsumerWidget {
   const _ListRow({
     required this.file,
     required this.colors,
@@ -791,7 +860,7 @@ class _ListRow extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final accent = _accentFor(file.mimeType);
 
     return InkWell(
@@ -802,6 +871,7 @@ class _ListRow extends StatelessWidget {
         mimeType: file.mimeType,
         fileSize: file.size,
       ),
+      onLongPress: () => _confirmDelete(context, ref),
       splashColor: colors.accent.withValues(alpha: 0.06),
       highlightColor: colors.surfaceVariant.withValues(alpha: 0.5),
       child: Padding(
@@ -883,10 +953,14 @@ class _ListRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
-            HugeIcon(
-              icon: HugeIcons.strokeRoundedArrowRight01,
-              size: 16,
-              color: colors.onSurfaceDim,
+            IconButton(
+              tooltip: 'Delete file',
+              onPressed: () => _confirmDelete(context, ref),
+              icon: HugeIcon(
+                icon: HugeIcons.strokeRoundedDelete02,
+                size: 18,
+                color: colors.onSurfaceDim,
+              ),
             ),
           ],
         ),
@@ -904,6 +978,37 @@ class _ListRow extends StatelessWidget {
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
     return '${m[dt.month - 1]} ${dt.day}, ${dt.year}';
+  }
+
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete file?'),
+        content: Text(
+          '${file.originalName} will be permanently removed from your uploads and cloud storage. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final ok = await ref.read(myUploadsProvider.notifier).deleteFile(file.id);
+    if (!ok) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not delete file. Try again.')),
+      );
+    }
   }
 }
 

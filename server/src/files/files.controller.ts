@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Delete,
   Param,
   Query,
   UseGuards,
@@ -10,6 +11,7 @@ import {
   ParseIntPipe,
   Request,
   ForbiddenException,
+  HttpCode,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -195,5 +197,15 @@ export class FilesController {
       throw new ForbiddenException();
     }
     return file;
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  async deleteFile(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: RequestWithUser,
+  ): Promise<void> {
+    const isAdmin = req.user.role === 'admin';
+    await this.filesService.deleteOwnedFile(id, req.user.sub, isAdmin);
   }
 }

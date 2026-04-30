@@ -158,6 +158,49 @@ export class FilesService {
     return this.storageService.getPresignedUrl(objectKey, ttl);
   }
 
+  /**
+   * Permanently deletes a file the user owns: removes the original from
+   * MinIO, the preview-GLB sibling (if any), and the DB row. Throws if the
+   * caller doesn't own the file (admins bypass via `isAdmin`).
+   */
+  async deleteOwnedFile(
+    fileId: number,
+    requestingUserId: number,
+    isAdmin: boolean,
+  ): Promise<void> {
+    const file = await this.fileRepo.findOne({ where: { id: fileId } });
+    if (!file) throw new NotFoundException('File not found');
+    if (
+      !isAdmin &&
+      (file.uploadedBy == null || file.uploadedBy !== requestingUserId)
+    ) {
+      throw new ForbiddenException();
+    }
+
+    // Delete MinIO objects first; tolerate "not found" so a partial state
+    // (object already gone) still cleans up the DB row. Hard errors on the
+    // primary object propagate so the caller knows storage is broken.
+    if (file.objectKey) {
+      try {
+        await this.storageService.delete(file.objectKey);
+      } catch (err) {
+        this.logger.warn(
+          `Primary object delete failed for ${file.objectKey}: ${err}`,
+        );
+      }
+    }
+    if (file.previewGlbObjectKey) {
+      try {
+        await this.storageService.delete(file.previewGlbObjectKey);
+      } catch (err) {
+        this.logger.warn(
+          `Preview GLB delete failed for ${file.previewGlbObjectKey}: ${err}`,
+        );
+      }
+    }
+    await this.fileRepo.delete(fileId);
+  }
+
   async getMyUploads(userId: number): Promise<FileMetadata[]> {
     const now = new Date();
     return this.fileRepo.find({
