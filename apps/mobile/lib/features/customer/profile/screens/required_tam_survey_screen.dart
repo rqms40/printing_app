@@ -20,7 +20,8 @@ class RequiredTamSurveyScreen extends ConsumerStatefulWidget {
 class _RequiredTamSurveyScreenState
     extends ConsumerState<RequiredTamSurveyScreen> {
   final PageController _pageController = PageController();
-  final TextEditingController _feedbackController = TextEditingController();
+  final TextEditingController _featureController = TextEditingController();
+  final TextEditingController _deliveryController = TextEditingController();
   final Map<int, int> _answers = {};
 
   int _page = 0;
@@ -55,7 +56,8 @@ class _RequiredTamSurveyScreenState
   @override
   void dispose() {
     _pageController.dispose();
-    _feedbackController.dispose();
+    _featureController.dispose();
+    _deliveryController.dispose();
     super.dispose();
   }
 
@@ -85,7 +87,10 @@ class _RequiredTamSurveyScreenState
             for (final entry in _answers.entries)
               entry.key.toString(): entry.value,
           },
-          'openForumFeedback': _feedbackController.text.trim(),
+          'openForumFeedback': {
+            'feature': _featureController.text.trim(),
+            'delivery': _deliveryController.text.trim(),
+          },
         },
       );
 
@@ -139,7 +144,8 @@ class _RequiredTamSurveyScreenState
                           if (index == _questions.length) {
                             return _OpenFeedbackPage(
                               colors: colors,
-                              controller: _feedbackController,
+                              featureController: _featureController,
+                              deliveryController: _deliveryController,
                             );
                           }
 
@@ -353,10 +359,15 @@ class _AnswerTile extends StatelessWidget {
 }
 
 class _OpenFeedbackPage extends StatelessWidget {
-  const _OpenFeedbackPage({required this.colors, required this.controller});
+  const _OpenFeedbackPage({
+    required this.colors,
+    required this.featureController,
+    required this.deliveryController,
+  });
 
   final AppColorSet colors;
-  final TextEditingController controller;
+  final TextEditingController featureController;
+  final TextEditingController deliveryController;
 
   @override
   Widget build(BuildContext context) {
@@ -374,11 +385,21 @@ class _OpenFeedbackPage extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.lg),
         TextField(
-          controller: controller,
-          maxLines: 5,
+          controller: featureController,
+          maxLines: 4,
           textInputAction: TextInputAction.newline,
           decoration: const InputDecoration(
-            labelText: 'Open feedback',
+            labelText: 'What feature or service should GRID add?',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        TextField(
+          controller: deliveryController,
+          maxLines: 4,
+          textInputAction: TextInputAction.newline,
+          decoration: const InputDecoration(
+            labelText: 'Any comments about your order experience?',
             border: OutlineInputBorder(),
           ),
         ),

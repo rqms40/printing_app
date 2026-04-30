@@ -78,6 +78,7 @@ void main() {
 
   Map<String, dynamic>? lastSurveyPayload;
   String? lastSurveyPath;
+  Interceptor? apiInterceptor;
 
   setUpAll(() {
     const secureStorageChannel = MethodChannel(
@@ -87,21 +88,27 @@ void main() {
         .setMockMethodCallHandler(secureStorageChannel, (_) async => null);
 
     ApiClient.instance.init(baseUrl: 'http://mock-test/api');
-    ApiClient.instance.dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) {
-          if (options.path == '/tam-surveys/requirements/123/submit') {
-            lastSurveyPath = options.path;
-            lastSurveyPayload = Map<String, dynamic>.from(options.data as Map);
-            handler.resolve(
-              Response(requestOptions: options, statusCode: 201, data: {}),
-            );
-            return;
-          }
-          handler.next(options);
-        },
-      ),
+    apiInterceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        if (options.path == '/tam-surveys/requirements/123/submit') {
+          lastSurveyPath = options.path;
+          lastSurveyPayload = Map<String, dynamic>.from(options.data as Map);
+          handler.resolve(
+            Response(requestOptions: options, statusCode: 201, data: {}),
+          );
+          return;
+        }
+        handler.next(options);
+      },
     );
+    ApiClient.instance.dio.interceptors.add(apiInterceptor!);
+  });
+
+  tearDownAll(() {
+    final interceptor = apiInterceptor;
+    if (interceptor != null) {
+      ApiClient.instance.dio.interceptors.remove(interceptor);
+    }
   });
 
   setUp(() {
@@ -152,17 +159,21 @@ void main() {
       }
 
       await tester.enterText(
-        find.byType(TextField),
+        find.byType(TextField).at(0),
+        'Add saved presets.',
+      );
+      await tester.enterText(
+        find.byType(TextField).at(1),
         'Fast delivery and clear updates.',
       );
       await tester.tap(find.widgetWithText(ElevatedButton, 'Submit Feedback'));
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(lastSurveyPath, '/tam-surveys/requirements/123/submit');
-      expect(
-        lastSurveyPayload?['openForumFeedback'],
-        'Fast delivery and clear updates.',
-      );
+      expect(lastSurveyPayload?['openForumFeedback'], {
+        'feature': 'Add saved presets.',
+        'delivery': 'Fast delivery and clear updates.',
+      });
 
       final surveyData = lastSurveyPayload?['surveyData'] as Map?;
       expect(surveyData, hasLength(14));
