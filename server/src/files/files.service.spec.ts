@@ -120,11 +120,27 @@ describe('FilesService', () => {
     });
 
     it('throws BadRequestException for disallowed MIME type without calling StorageService', async () => {
-      const file = makeFile({ mimetype: 'video/mp4' });
+      // Both MIME and extension must be unrecognized — extension whitelist
+      // accepts .stl/.obj/.3mf/etc even when MIME is generic, so the bad-input
+      // fixture has to use a non-whitelisted extension as well.
+      const file = makeFile({ mimetype: 'video/mp4', originalname: 'clip.mp4' });
       await expect(service.storeMetadata(file, 1)).rejects.toThrow(
         new BadRequestException('File type not allowed'),
       );
       expect(mockStorageService.upload).not.toHaveBeenCalled();
+    });
+
+    it('accepts a 3MF upload with octet-stream MIME (3D-print case)', async () => {
+      const file = makeFile({
+        mimetype: 'application/octet-stream',
+        originalname: 'model.3mf',
+      });
+      mockFileRepo.create.mockReturnValue({ id: 99 });
+      mockFileRepo.save.mockResolvedValue({ id: 99 });
+      mockStorageService.upload.mockResolvedValue('http://x/y');
+      mockAnalysisService.analyze.mockResolvedValue(null);
+      await service.storeMetadata(file, 1);
+      expect(mockStorageService.upload).toHaveBeenCalled();
     });
 
     it('throws BadRequestException for file over 20 MB without calling StorageService', async () => {

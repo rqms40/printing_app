@@ -15,6 +15,7 @@ import { StorageService } from '../storage/storage.service';
 import { FileAnalysisService } from './file-analysis.service';
 import {
   ALLOWED_MIME_TYPES,
+  ALLOWED_EXTENSIONS,
   MAX_FILE_SIZE_BYTES,
 } from '../storage/storage.config';
 
@@ -34,17 +35,23 @@ export class FilesService {
     uploadedBy?: number,
     purpose = 'general',
   ): Promise<FileMetadata> {
-    if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+    const fileExt = extname(file.originalname).toLowerCase();
+    const mimeOk = ALLOWED_MIME_TYPES.includes(file.mimetype);
+    const extOk = ALLOWED_EXTENSIONS.includes(fileExt);
+    // Accept the file when either the MIME is explicitly whitelisted OR the
+    // extension is allowed (covers browsers reporting `application/octet-stream`
+    // for .stl/.obj/.3mf). This still rejects arbitrary binaries because the
+    // extension whitelist is small and explicit.
+    if (!mimeOk && !extOk) {
       throw new BadRequestException('File type not allowed');
     }
     if (file.size > MAX_FILE_SIZE_BYTES) {
       throw new BadRequestException('File exceeds 20 MB limit');
     }
 
-    const ext = extname(file.originalname).toLowerCase();
     const now = new Date();
     const datePath = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
-    const objectKey = `uploads/${purpose}/${datePath}/${randomUUID()}${ext}`;
+    const objectKey = `uploads/${purpose}/${datePath}/${randomUUID()}${fileExt}`;
 
     let url: string;
     try {
