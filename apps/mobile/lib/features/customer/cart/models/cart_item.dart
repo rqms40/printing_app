@@ -118,16 +118,26 @@ class CartItem {
     };
   }
 
-  CartItem copyWith({int? quantity, double? unitPrice, int? pageCount}) {
+  CartItem copyWith({
+    int? quantity,
+    double? unitPrice,
+    int? pageCount,
+    PaperSpecs? paperSpecs,
+    ThreeDSpecs? threeDSpecs,
+    String? fileName,
+    String? filePath,
+    int? fileSize,
+    int? fileMetadataId,
+  }) {
     return CartItem(
       id: id,
       category: category,
-      fileName: fileName,
-      filePath: filePath,
-      fileSize: fileSize,
-      fileMetadataId: fileMetadataId,
-      paperSpecs: paperSpecs,
-      threeDSpecs: threeDSpecs,
+      fileName: fileName ?? this.fileName,
+      filePath: filePath ?? this.filePath,
+      fileSize: fileSize ?? this.fileSize,
+      fileMetadataId: fileMetadataId ?? this.fileMetadataId,
+      paperSpecs: paperSpecs ?? this.paperSpecs,
+      threeDSpecs: threeDSpecs ?? this.threeDSpecs,
       quantity: quantity ?? this.quantity,
       pageCount: pageCount ?? this.pageCount,
       unitPrice: unitPrice ?? this.unitPrice,

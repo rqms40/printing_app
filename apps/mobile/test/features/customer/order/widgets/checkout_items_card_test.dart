@@ -27,6 +27,6 @@ void main() {
 
     expect(find.text('thesis.pdf'), findsOneWidget);
     expect(find.text('3'), findsOneWidget);
-    expect(find.text('+ Add Items'), findsOneWidget);
+    expect(find.text('Add Items'), findsOneWidget);
   });
 }

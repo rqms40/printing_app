@@ -570,6 +570,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
       createdAt: DateTime.now(),
     );
     ref.read(checkoutProvider.notifier).addItem(item);
+    // Reset the in-flight order draft so navigating back to Upload
+    // does not re-add the same item on a second Continue tap.
+    ref.read(orderFlowProvider.notifier).reset();
 
     final isAddMode =
         GoRouterState.of(context).uri.queryParameters['mode'] == 'add';

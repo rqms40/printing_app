@@ -28,9 +28,9 @@ void main() {
       child: MaterialApp.router(routerConfig: router),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('Your prints'), findsOneWidget);
-    expect(find.text('How fast?'), findsOneWidget);
-    expect(find.text('Payment'), findsOneWidget);
+    expect(find.text('Order summary'), findsOneWidget);
+    expect(find.text('Delivery options'), findsOneWidget);
+    expect(find.text('Payment method'), findsOneWidget);
     expect(find.text('Place Order'), findsOneWidget);
   });
 }

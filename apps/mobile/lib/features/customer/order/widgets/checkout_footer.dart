@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
@@ -49,6 +50,7 @@ class CheckoutFooter extends ConsumerWidget {
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
@@ -76,14 +78,40 @@ class CheckoutFooter extends ConsumerWidget {
                 ],
               ),
               const Spacer(),
-              Expanded(
-                child: _PlaceOrderButton(
-                  enabled: canPlace,
-                  onTap: canPlace ? onPlaceOrder : null,
-                  colors: colors,
+              GestureDetector(
+                onTap: () => context.go('/customer/home'),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      HugeIcon(
+                        icon: HugeIcons.strokeRoundedHome01,
+                        size: 16,
+                        color: colors.onSurfaceDim,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Home',
+                        style: AppTypography.caption.copyWith(
+                          color: colors.onSurfaceDim,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _PlaceOrderButton(
+            enabled: canPlace,
+            onTap: canPlace ? onPlaceOrder : null,
+            colors: colors,
           ),
         ],
       ),
@@ -110,7 +138,8 @@ class _PlaceOrderButton extends StatelessWidget {
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
-          height: 52,
+          height: 56,
+          width: double.infinity,
           decoration: BoxDecoration(
             color: enabled ? colors.brand : colors.brand.withValues(alpha: 0.4),
             borderRadius: AppRadius.borderXl,
@@ -131,15 +160,15 @@ class _PlaceOrderButton extends StatelessWidget {
                 'Place Order',
                 style: AppTypography.bodyBold.copyWith(
                   color: colors.background,
-                  fontSize: 15,
+                  fontSize: 16,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: 0.2,
+                  letterSpacing: 0.3,
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               HugeIcon(
                 icon: HugeIcons.strokeRoundedArrowRight01,
-                size: 18,
+                size: 20,
                 color: colors.background,
               ),
             ],

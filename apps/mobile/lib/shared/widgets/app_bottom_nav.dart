@@ -50,9 +50,9 @@ const kQuickActions = <QuickActionItem>[
     isPrimary: true,
   ),
   QuickActionItem(
-    label: 'Reprint',
-    icon: HugeIcons.strokeRoundedRepeat,
-    isComingSoon: true,
+    label: 'Your Queue',
+    icon: HugeIcons.strokeRoundedFile02,
+    route: '/customer/order/checkout',
   ),
   QuickActionItem(
     label: 'Support',

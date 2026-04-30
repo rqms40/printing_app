@@ -22,7 +22,6 @@ import 'package:printing_app/features/customer/home/widgets/hero_banner.dart';
 import 'package:printing_app/features/customer/home/widgets/map_tracking_tile.dart';
 import 'package:printing_app/features/customer/home/widgets/recent_orders_section.dart';
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
-import 'package:printing_app/shared/services/draft_storage_service.dart';
 import 'package:printing_app/utils/formatters.dart';
 import 'package:printing_app/features/customer/chat/providers/chat_provider.dart';
 import 'package:printing_app/features/customer/chat/widgets/floating_chat_button.dart';
@@ -36,7 +35,6 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  bool _draftDismissed = false;
   bool _nextBatchChecked = false;
 
   @override
@@ -116,7 +114,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final authState = ref.watch(authProvider);
     final firstName = (authState.user?.fullName ?? 'there').split(' ').first;
     final cart = ref.watch(checkoutProvider);
-    final hasDraft = !_draftDismissed && DraftStorageService.hasDraft;
 
     final unreadCount = ref.watch(unreadNotificationsCountProvider);
 
@@ -227,62 +224,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(height: AppSpacing.md),
                 ],
 
-                // ── Draft banner ───────────────────────────────────────
-                if (hasDraft) ...[
-                  Container(
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        decoration: BoxDecoration(
-                          color: colors.surface,
-                          borderRadius: AppRadius.borderMd,
-                          border: Border.all(color: colors.brand),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit_note_rounded, color: colors.brand),
-                            const SizedBox(width: AppSpacing.sm),
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Continue your order',
-                                    style: AppTypography.bodyBold,
-                                  ),
-                                  Text(
-                                    'You have an unfinished order',
-                                    style: AppTypography.caption,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () =>
-                                  context.push('/customer/order/new'),
-                              child: Text(
-                                'Resume',
-                                style: TextStyle(color: colors.brand),
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close, size: 18),
-                              onPressed: () {
-                                DraftStorageService.clearDraft();
-                                setState(() => _draftDismissed = true);
-                              },
-                            ),
-                          ],
-                        ),
-                      )
-                      .animate()
-                      .fadeIn(duration: 300.ms, curve: Curves.easeOut)
-                      .slideY(
-                        begin: 0.02,
-                        duration: 300.ms,
-                        curve: Curves.easeOut,
-                      ),
-                  const SizedBox(height: AppSpacing.md),
-                ],
-
                 // ── Hero banner ────────────────────────────────────────
                 const HeroBanner(),
 
@@ -380,10 +321,11 @@ class _ResumeQueueCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final jobLabel =
-        '${cart.itemCount} print job${cart.itemCount == 1 ? '' : 's'}';
-    final subtotalLabel = '${formatCurrency(cart.subtotal)} subtotal';
-    final semanticsLabel = 'Resume your queue, $jobLabel, $subtotalLabel';
+    final count = cart.itemCount;
+    final plural = count == 1 ? 'job' : 'jobs';
+    final formattedSubtotal = formatCurrency(cart.subtotal);
+    final semanticsLabel =
+        'You left $count print $plural in your queue, $formattedSubtotal, tap to resume';
     void openQueue() => context.push('/customer/order/checkout');
 
     return Semantics(
@@ -391,182 +333,83 @@ class _ResumeQueueCard extends StatelessWidget {
       label: semanticsLabel,
       onTap: openQueue,
       child: ExcludeSemantics(
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: AppRadius.borderXl,
-            boxShadow: [
-              BoxShadow(
-                color: colors.brand.withValues(alpha: 0.10),
-                blurRadius: 24,
-                offset: const Offset(0, 10),
+        child: Material(
+          color: colors.surface,
+          borderRadius: AppRadius.borderLg,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: openQueue,
+            borderRadius: AppRadius.borderLg,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: AppRadius.borderLg,
+                border: Border.all(color: colors.outline, width: 1),
               ),
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
               ),
-            ],
-          ),
-          child: Material(
-            color: colors.surface,
-            borderRadius: AppRadius.borderXl,
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: openQueue,
-              borderRadius: AppRadius.borderXl,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final textScale = MediaQuery.textScalerOf(context).scale(1);
-                  final useStackedCta =
-                      constraints.maxWidth < 360 || textScale >= 1.3;
-                  final icon = _ResumeQueueIcon(colors: colors);
-                  final copy = _ResumeQueueCopy(
-                    colors: colors,
-                    jobLabel: jobLabel,
-                    subtotalLabel: subtotalLabel,
-                  );
-                  final cta = _ResumeQueueCta(colors: colors);
-
-                  return Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(AppSpacing.md),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
                     decoration: BoxDecoration(
-                      borderRadius: AppRadius.borderXl,
-                      border: Border.all(
-                        color: colors.brand.withValues(alpha: 0.45),
-                      ),
+                      color: colors.brand,
+                      borderRadius: AppRadius.borderMd,
                     ),
-                    child: useStackedCta
-                        ? Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  icon,
-                                  const SizedBox(width: AppSpacing.md),
-                                  Expanded(child: copy),
-                                ],
-                              ),
-                              const SizedBox(height: AppSpacing.md),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: cta,
-                              ),
-                            ],
-                          )
-                        : Row(
-                            children: [
-                              icon,
-                              const SizedBox(width: AppSpacing.md),
-                              Expanded(child: copy),
-                              const SizedBox(width: AppSpacing.sm),
-                              Flexible(
-                                child: Align(
-                                  alignment: Alignment.centerRight,
-                                  child: cta,
-                                ),
-                              ),
-                            ],
+                    alignment: Alignment.center,
+                    child: const HugeIcon(
+                      icon: HugeIcons.strokeRoundedFile02,
+                      size: 18,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'You left $count $plural in your queue',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.bodyBold.copyWith(
+                            color: colors.onBackground,
+                            fontSize: 13.5,
                           ),
-                  );
-                },
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '$formattedSubtotal · tap to finish',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.caption.copyWith(
+                            color: colors.onSurfaceDim,
+                            fontSize: 11.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  HugeIcon(
+                    icon: HugeIcons.strokeRoundedArrowRight01,
+                    size: 18,
+                    color: colors.onSurfaceDim,
+                  )
+                      .animate(onPlay: (c) => c.repeat(reverse: true))
+                      .moveX(
+                        begin: -2,
+                        end: 2,
+                        duration: 1100.ms,
+                        curve: Curves.easeInOut,
+                      ),
+                ],
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ResumeQueueIcon extends StatelessWidget {
-  const _ResumeQueueIcon({required this.colors});
-
-  final AppColorSet colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 46,
-      height: 46,
-      decoration: BoxDecoration(
-        color: colors.brand.withValues(alpha: 0.14),
-        borderRadius: AppRadius.borderLg,
-      ),
-      child: Center(
-        child: HugeIcon(
-          icon: HugeIcons.strokeRoundedShoppingCart01,
-          size: 24,
-          color: colors.brand,
-        ),
-      ),
-    );
-  }
-}
-
-class _ResumeQueueCopy extends StatelessWidget {
-  const _ResumeQueueCopy({
-    required this.colors,
-    required this.jobLabel,
-    required this.subtotalLabel,
-  });
-
-  final AppColorSet colors;
-  final String jobLabel;
-  final String subtotalLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Resume your queue',
-          style: AppTypography.bodyBold.copyWith(color: colors.onBackground),
-        ),
-        const SizedBox(height: 3),
-        Wrap(
-          spacing: AppSpacing.xs,
-          runSpacing: 2,
-          children: [
-            Text(
-              jobLabel,
-              style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
-            ),
-            Text(
-              subtotalLabel,
-              style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _ResumeQueueCta extends StatelessWidget {
-  const _ResumeQueueCta({required this.colors});
-
-  final AppColorSet colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
-        vertical: 7,
-      ),
-      decoration: BoxDecoration(
-        color: colors.brand,
-        borderRadius: AppRadius.borderMd,
-      ),
-      child: Text(
-        'View queue',
-        softWrap: false,
-        overflow: TextOverflow.ellipsis,
-        style: AppTypography.caption.copyWith(
-          color: colors.background,
-          fontWeight: FontWeight.w700,
         ),
       ),
     );

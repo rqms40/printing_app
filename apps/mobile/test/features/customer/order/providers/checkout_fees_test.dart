@@ -7,38 +7,30 @@ import 'package:printing_app/features/customer/order/providers/checkout_provider
 
 void main() {
   group('checkoutFeesProvider', () {
-    test('standard tier: base delivery 60, no priority surcharge', () {
+    test('standard tier: 25 delivery fee, no priority surcharge', () {
       final c = ProviderContainer();
       c.read(checkoutProvider.notifier).addItem(_item('a', 200));
       final fees = c.read(checkoutFeesProvider);
       expect(fees.subtotal, 200);
-      expect(fees.deliveryFee, 60);
+      expect(fees.deliveryFee, 25);
       expect(fees.priorityFee, 0);
       expect(fees.extraDropFee, 0);
-      expect(fees.serviceFee, 4);
-      expect(fees.total, 264);
+      expect(fees.serviceFee, 2);
+      expect(fees.total, 227);
     });
 
-    test('priority tier adds 50 surcharge', () {
+    test('express tier: 45 delivery fee, no separate surcharge', () {
       final c = ProviderContainer();
       final n = c.read(checkoutProvider.notifier);
       n.addItem(_item('a', 200));
       n.setSpeedTier(DeliverySpeedTier.priority);
       final fees = c.read(checkoutFeesProvider);
-      expect(fees.priorityFee, 50);
-      expect(fees.total, 314);
+      expect(fees.deliveryFee, 45);
+      expect(fees.priorityFee, 0);
+      expect(fees.total, 247);
     });
 
-    test('saver tier: 35 delivery fee', () {
-      final c = ProviderContainer();
-      final n = c.read(checkoutProvider.notifier);
-      n.addItem(_item('a', 200));
-      n.setSpeedTier(DeliverySpeedTier.saver);
-      final fees = c.read(checkoutFeesProvider);
-      expect(fees.deliveryFee, 35);
-    });
-
-    test('multidrop with 2 drops adds 30 extra-drop fee', () {
+    test('multidrop with 2 drops adds 15 extra-drop fee', () {
       final c = ProviderContainer();
       final n = c.read(checkoutProvider.notifier);
       n.addItem(_item('a', 200));
@@ -47,7 +39,7 @@ void main() {
         const DestinationGroup(id: '2', label: 'B', itemIds: []),
       ]);
       final fees = c.read(checkoutFeesProvider);
-      expect(fees.extraDropFee, 30);
+      expect(fees.extraDropFee, 15);
     });
   });
 }

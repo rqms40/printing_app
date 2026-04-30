@@ -23,7 +23,7 @@ void main() {
       child: const MaterialApp(home: Scaffold(body: MultidropGroups())),
     ));
     expect(find.text('Drop 1'), findsOneWidget);
-    expect(find.text('+ Add another drop'), findsOneWidget);
+    expect(find.text('Add another drop'), findsOneWidget);
   });
 
   testWidgets('+ Add another drop appends an empty group', (tester) async {
@@ -35,7 +35,7 @@ void main() {
       container: container,
       child: const MaterialApp(home: Scaffold(body: MultidropGroups())),
     ));
-    await tester.tap(find.text('+ Add another drop'));
+    await tester.tap(find.text('Add another drop'));
     await tester.pump();
     expect(container.read(checkoutProvider).drops.length, 2);
   });

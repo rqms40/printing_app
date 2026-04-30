@@ -19,9 +19,9 @@ class QuickActionsStrip extends StatelessWidget {
       isPrimary: true,
     ),
     _QuickActionData(
-      label: 'Reprint',
-      icon: HugeIcons.strokeRoundedRepeat,
-      isComingSoon: true,
+      label: 'Your Queue',
+      icon: HugeIcons.strokeRoundedFile02,
+      route: '/customer/order/checkout',
     ),
     _QuickActionData(
       label: 'Upload',

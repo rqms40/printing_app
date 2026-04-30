@@ -22,27 +22,30 @@ class CheckoutSpeedCard extends ConsumerWidget {
         ? AppColors.dark
         : AppColors.light;
 
+    // Express tier preview shows the express fee directly so users see the
+    // real number without selecting it. Standard + Scheduled use the current
+    // computed delivery fee (which depends on the active tier).
+    const expressFeePreview = 45.0;
+    const standardFeePreview = 25.0;
+
     final tiers = <_TierSpec>[
       _TierSpec(
         DeliverySpeedTier.priority,
-        'Priority',
+        'Express',
         '~15 min · arrives first',
-        fees.deliveryFee + 50,
+        state.speedTier == DeliverySpeedTier.priority
+            ? fees.deliveryFee
+            : expressFeePreview,
         HugeIcons.strokeRoundedFlash,
       ),
       _TierSpec(
         DeliverySpeedTier.standard,
         'Standard',
         '~30 min · most popular',
-        fees.deliveryFee,
+        state.speedTier == DeliverySpeedTier.standard
+            ? fees.deliveryFee
+            : standardFeePreview,
         HugeIcons.strokeRoundedClock01,
-      ),
-      _TierSpec(
-        DeliverySpeedTier.saver,
-        'Saver',
-        '~60 min · cheaper',
-        35,
-        HugeIcons.strokeRoundedLeaf01,
       ),
       _TierSpec(
         DeliverySpeedTier.scheduled,
@@ -50,7 +53,9 @@ class CheckoutSpeedCard extends ConsumerWidget {
         state.scheduledSlot == null
             ? 'Pick a time slot'
             : '${state.scheduledSlot!.date} · ${state.scheduledSlot!.startTime.substring(0, 5)}',
-        fees.deliveryFee,
+        state.speedTier == DeliverySpeedTier.scheduled
+            ? fees.deliveryFee
+            : standardFeePreview,
         HugeIcons.strokeRoundedCalendar03,
       ),
     ];

@@ -41,23 +41,67 @@ class CheckoutItemsCard extends ConsumerWidget {
           for (var i = 0; i < state.items.length; i++) ...[
             if (i > 0)
               Divider(color: colors.outline.withValues(alpha: 0.2), height: 1),
-            _ItemRow(
-              item: state.items[i],
-              colors: colors,
-              onEdit: () async {
-                final updated = await EditItemSheet.show(context, item: state.items[i]);
-                if (updated != null) notifier.replaceItem(updated);
-              },
-              onDecrement: () => notifier.setQuantity(
-                state.items[i].id,
-                (state.items[i].quantity - 1).clamp(1, 9999),
-              ),
-              onIncrement: () => notifier.setQuantity(
-                state.items[i].id,
-                state.items[i].quantity + 1,
+            Dismissible(
+              key: ValueKey('cart-${state.items[i].id}'),
+              direction: DismissDirection.endToStart,
+              background: const SizedBox.shrink(),
+              secondaryBackground: _SwipeRemoveBg(colors: colors),
+              onDismissed: (_) => notifier.removeItem(state.items[i].id),
+              child: _ItemRow(
+                item: state.items[i],
+                colors: colors,
+                onEdit: () async {
+                  final updated =
+                      await EditItemSheet.show(context, item: state.items[i]);
+                  if (updated != null) notifier.replaceItem(updated);
+                },
+                onDecrement: () {
+                  final current = state.items[i];
+                  if (current.quantity <= 1) {
+                    notifier.removeItem(current.id);
+                  } else {
+                    notifier.setQuantity(current.id, current.quantity - 1);
+                  }
+                },
+                onIncrement: () => notifier.setQuantity(
+                  state.items[i].id,
+                  state.items[i].quantity + 1,
+                ),
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SwipeRemoveBg extends StatelessWidget {
+  const _SwipeRemoveBg({required this.colors});
+  final AppColorSet colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      alignment: Alignment.centerRight,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      color: colors.error.withValues(alpha: 0.12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          HugeIcon(
+            icon: HugeIcons.strokeRoundedDelete02,
+            size: 18,
+            color: colors.error,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            'Remove',
+            style: AppTypography.bodyBold.copyWith(
+              color: colors.error,
+              fontSize: 13,
+            ),
+          ),
         ],
       ),
     );

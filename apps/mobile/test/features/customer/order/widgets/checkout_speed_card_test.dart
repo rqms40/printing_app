@@ -6,27 +6,28 @@ import 'package:printing_app/features/customer/order/providers/checkout_provider
 import 'package:printing_app/features/customer/order/widgets/checkout_speed_card.dart';
 
 void main() {
-  testWidgets('renders 4 tier rows and selects standard by default', (tester) async {
+  testWidgets('renders Express, Standard, Scheduled rows; standard default',
+      (tester) async {
     final container = ProviderContainer();
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container,
       child: const MaterialApp(home: Scaffold(body: CheckoutSpeedCard())),
     ));
-    expect(find.text('Priority'), findsOneWidget);
+    expect(find.text('Express'), findsOneWidget);
     expect(find.text('Standard'), findsOneWidget);
-    expect(find.text('Saver'), findsOneWidget);
     expect(find.text('Scheduled'), findsOneWidget);
+    expect(find.text('Saver'), findsNothing);
     expect(container.read(checkoutProvider).speedTier, DeliverySpeedTier.standard);
   });
 
-  testWidgets('tapping Saver updates state', (tester) async {
+  testWidgets('tapping Express updates state to priority tier', (tester) async {
     final container = ProviderContainer();
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container,
       child: const MaterialApp(home: Scaffold(body: CheckoutSpeedCard())),
     ));
-    await tester.tap(find.text('Saver'));
+    await tester.tap(find.text('Express'));
     await tester.pump();
-    expect(container.read(checkoutProvider).speedTier, DeliverySpeedTier.saver);
+    expect(container.read(checkoutProvider).speedTier, DeliverySpeedTier.priority);
   });
 }

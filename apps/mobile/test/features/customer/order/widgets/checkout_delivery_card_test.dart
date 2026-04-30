@@ -12,7 +12,8 @@ void main() {
       container: container,
       child: const MaterialApp(home: Scaffold(body: CheckoutDeliveryCard())),
     ));
-    expect(find.text('Delivery'), findsOneWidget);
+    // Section heading + segmented chip both render "Delivery"; ensure both pills present.
+    expect(find.text('Delivery'), findsNWidgets(2));
     expect(find.text('Pickup'), findsOneWidget);
     expect(find.text('Multi-drop'), findsOneWidget);
   });
