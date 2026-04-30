@@ -79,6 +79,7 @@ export class FilesService {
     const analysis = await this.analysisService.analyze(
       file.buffer,
       file.mimetype,
+      file.originalname,
     );
 
     const meta = this.fileRepo.create({
@@ -95,6 +96,10 @@ export class FilesService {
       colorSpace: analysis?.colorSpace ?? null,
       pageCount: analysis?.pageCount ?? null,
       dpi: analysis?.dpi ?? null,
+      model3dWidthMm: analysis?.model3dWidthMm ?? null,
+      model3dDepthMm: analysis?.model3dDepthMm ?? null,
+      model3dHeightMm: analysis?.model3dHeightMm ?? null,
+      model3dTriangleCount: analysis?.model3dTriangleCount ?? null,
     });
     return this.fileRepo.save(meta);
   }

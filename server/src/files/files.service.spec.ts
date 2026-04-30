@@ -120,6 +120,7 @@ describe('FilesService', () => {
       expect(mockAnalysisService.analyze).toHaveBeenCalledWith(
         file.buffer,
         file.mimetype,
+        file.originalname,
       );
     });
 
@@ -270,6 +271,33 @@ describe('FilesService', () => {
           heightPx: 1080,
           colorSpace: 'srgb',
           dpi: 96,
+        }),
+      );
+    });
+
+    it('persists 3D bounds when analyzer returns model3d result', async () => {
+      const file = makeFile({
+        mimetype: 'application/octet-stream',
+        originalname: 'thing.stl',
+      });
+      mockStorageService.upload.mockResolvedValue('http://x/y');
+      mockAnalysisService.analyze.mockResolvedValue({
+        widthPt: null, heightPt: null, widthPx: null, heightPx: null,
+        colorSpace: null, pageCount: null, dpi: null,
+        model3dWidthMm: 50, model3dDepthMm: 60, model3dHeightMm: 70,
+        model3dTriangleCount: 12,
+      });
+      mockFileRepo.create.mockReturnValue({ id: 1 });
+      mockFileRepo.save.mockResolvedValue({ id: 1 });
+
+      await service.storeMetadata(file, 1);
+
+      expect(mockFileRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model3dWidthMm: 50,
+          model3dDepthMm: 60,
+          model3dHeightMm: 70,
+          model3dTriangleCount: 12,
         }),
       );
     });

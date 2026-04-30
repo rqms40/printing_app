@@ -1,11 +1,13 @@
 import { PDFDocument } from 'pdf-lib';
 import { FileAnalysisService } from './file-analysis.service';
+import { Model3dAnalysisService } from './model-3d-analysis.service';
 
 describe('FileAnalysisService', () => {
   let service: FileAnalysisService;
 
   beforeEach(() => {
-    service = new FileAnalysisService();
+    const model3d = { analyze: jest.fn().mockResolvedValue(null) } as unknown as Model3dAnalysisService;
+    service = new FileAnalysisService(model3d);
   });
 
   it('returns null for unsupported mime type', async () => {
