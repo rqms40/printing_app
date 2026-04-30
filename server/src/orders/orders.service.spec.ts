@@ -720,6 +720,48 @@ describe('OrdersService', () => {
       expect(countSpy).not.toHaveBeenCalled();
     });
   });
+
+  describe('beta limit gating on writes', () => {
+    const enrolledAt = new Date('2026-04-01T00:00:00Z');
+
+    beforeEach(() => {
+      (usersService.findById as jest.Mock).mockResolvedValue({
+        id: 7,
+        isBetaUser: true,
+        betaEnrolledAt: enrolledAt,
+      });
+      (repo.count as jest.Mock).mockResolvedValue(1);
+    });
+
+    it('create() rejects beta user past the cap', async () => {
+      await expect(
+        service.create({
+          userId: 7,
+          category: 'paper',
+          quantity: 1,
+          totalPrice: 0,
+        }),
+      ).rejects.toMatchObject({
+        response: { code: 'BETA_ORDER_LIMIT_REACHED' },
+      });
+    });
+
+    it('createBatch() rejects without opening a transaction', async () => {
+      const txSpy = dataSource.transaction as jest.Mock;
+      txSpy.mockClear();
+      await expect(
+        service.createBatch(7, {
+          items: [{ category: 'paper', quantity: 1, totalPrice: 0 }],
+          deliveryFee: 0,
+          paymentMethod: 'cod',
+          deliveryOption: 'delivery',
+        } as any),
+      ).rejects.toMatchObject({
+        response: { code: 'BETA_ORDER_LIMIT_REACHED' },
+      });
+      expect(txSpy).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('OrdersService.updateStatus — expiresAt stamping', () => {
@@ -1120,7 +1162,10 @@ describe('createBatch with slot + destinations', () => {
         },
         {
           provide: UsersService,
-          useValue: { getFcmToken: jest.fn().mockResolvedValue(null) },
+          useValue: {
+            getFcmToken: jest.fn().mockResolvedValue(null),
+            findById: jest.fn().mockResolvedValue(undefined),
+          },
         },
         {
           provide: CreditsService,
@@ -1298,7 +1343,7 @@ describe('cancelBatch', () => {
         { provide: getRepositoryToken(FileMetadata), useValue: { findOneOrFail: jest.fn() } },
         { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
         { provide: FirebaseService, useValue: { sendToDevice: jest.fn(), isAvailable: false } },
-        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null) } },
+        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null), findById: jest.fn().mockResolvedValue(undefined) } },
         { provide: CreditsService, useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() } },
         { provide: NotificationsService, useValue: { createForAllAdmins: jest.fn().mockResolvedValue(undefined) } },
         {
@@ -1380,7 +1425,7 @@ describe('updateManualStatus', () => {
         { provide: getRepositoryToken(FileMetadata), useValue: { findOneOrFail: jest.fn() } },
         { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
         { provide: FirebaseService, useValue: { sendToDevice: jest.fn(), isAvailable: false } },
-        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null) } },
+        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null), findById: jest.fn().mockResolvedValue(undefined) } },
         { provide: CreditsService, useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() } },
         { provide: NotificationsService, useValue: notificationsService },
         {
@@ -1463,7 +1508,7 @@ describe('createBatch — 3D bounds enforcement', () => {
         { provide: getRepositoryToken(FileMetadata), useValue: fileMetadataRepo },
         { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
         { provide: FirebaseService, useValue: { sendToDevice: jest.fn(), isAvailable: false } },
-        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null) } },
+        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null), findById: jest.fn().mockResolvedValue(undefined) } },
         { provide: CreditsService, useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() } },
         { provide: NotificationsService, useValue: { createForAllAdmins: jest.fn().mockResolvedValue(undefined) } },
         {
@@ -1540,7 +1585,7 @@ describe('listExternalDeliveries and updateExternalDeliveryStatus', () => {
         { provide: getRepositoryToken(FileMetadata), useValue: { findOneOrFail: jest.fn() } },
         { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
         { provide: FirebaseService, useValue: { sendToDevice: jest.fn(), isAvailable: false } },
-        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null) } },
+        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null), findById: jest.fn().mockResolvedValue(undefined) } },
         { provide: CreditsService, useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() } },
         { provide: NotificationsService, useValue: { createForAllAdmins: jest.fn().mockResolvedValue(undefined) } },
         {

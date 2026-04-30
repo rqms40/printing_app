@@ -144,6 +144,9 @@ export class OrdersService {
       threeDSpecs?: Partial<ThreeDSpec>;
     },
   ): Promise<Order> {
+    if (data.userId != null) {
+      await this.assertBetaOrderLimit(Number(data.userId));
+    }
     const { paperSpecs, threeDSpecs, ...orderData } = data;
     if (orderData.deliveryAddressId != null && orderData.userId != null) {
       orderData.deliveryAddressId = await this.validateDeliveryAddress(
@@ -215,6 +218,7 @@ export class OrdersService {
     userId: number,
     dto: CreateBatchOrderDto,
   ): Promise<{ batchId: string; orders: Order[] }> {
+    await this.assertBetaOrderLimit(userId);
     if (!dto.items || dto.items.length === 0) {
       throw new BadRequestException('Batch order requires at least one item');
     }
