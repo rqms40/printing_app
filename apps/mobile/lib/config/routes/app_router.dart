@@ -369,10 +369,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             slideUpTransition(const CheckoutScreen(), state),
       ),
       GoRoute(
-        path: '/customer/cart',
-        redirect: (_, _) => '/customer/order/checkout',
-      ),
-      GoRoute(
         path: '/customer/orders/:id/track',
         pageBuilder: (_, state) =>
             slideTransition(const DeliveryTrackingScreen(), state),

@@ -5,7 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
-import 'package:printing_app/features/customer/cart/providers/cart_provider.dart';
+import 'package:printing_app/features/customer/order/models/checkout_state.dart';
+import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
 import 'package:printing_app/features/customer/home/providers/tam_surveys_feed_provider.dart';
 import 'package:printing_app/features/customer/home/screens/home_screen.dart';
 import 'package:printing_app/shared/models/enums.dart';
@@ -47,7 +48,7 @@ Widget _wrapRouter(List<Override> overrides) {
     routes: [
       GoRoute(path: '/customer/home', builder: (_, _) => const HomeScreen()),
       GoRoute(
-        path: '/customer/cart',
+        path: '/customer/order/checkout',
         builder: (_, _) => const Scaffold(body: Text('Cart route reached')),
       ),
     ],
@@ -168,9 +169,9 @@ void main() {
         _wrap(
           const HomeScreen(),
           overrides: [
-            cartProvider.overrideWith(
+            checkoutProvider.overrideWith(
               (_) => _SeededCartNotifier(
-                CartState(items: [_cartItem(quantity: 2, unitPrice: 90)]),
+                CheckoutState(items: [_cartItem(quantity: 2, unitPrice: 90)]),
               ),
             ),
           ],
@@ -197,9 +198,9 @@ void main() {
           _wrap(
             const HomeScreen(),
             overrides: [
-              cartProvider.overrideWith(
+              checkoutProvider.overrideWith(
                 (_) => _SeededCartNotifier(
-                  CartState(items: [_cartItem(quantity: 2, unitPrice: 90)]),
+                  CheckoutState(items: [_cartItem(quantity: 2, unitPrice: 90)]),
                 ),
               ),
             ],
@@ -242,9 +243,9 @@ void main() {
           const HomeScreen(),
           textScaler: const TextScaler.linear(1.3),
           overrides: [
-            cartProvider.overrideWith(
+            checkoutProvider.overrideWith(
               (_) => _SeededCartNotifier(
-                CartState(items: [_cartItem(quantity: 2, unitPrice: 90)]),
+                CheckoutState(items: [_cartItem(quantity: 2, unitPrice: 90)]),
               ),
             ),
           ],
@@ -314,9 +315,9 @@ void main() {
 
       await tester.pumpWidget(
         _wrapRouter([
-          cartProvider.overrideWith(
+          checkoutProvider.overrideWith(
             (_) => _SeededCartNotifier(
-              CartState(items: [_cartItem(quantity: 2, unitPrice: 90)]),
+              CheckoutState(items: [_cartItem(quantity: 2, unitPrice: 90)]),
             ),
           ),
         ]),
@@ -337,13 +338,13 @@ Override _feedOverride() {
 }
 
 Override _emptyCartOverride() {
-  return cartProvider.overrideWith(
-    (_) => _SeededCartNotifier(const CartState()),
+  return checkoutProvider.overrideWith(
+    (_) => _SeededCartNotifier(const CheckoutState()),
   );
 }
 
-class _SeededCartNotifier extends CartNotifier {
-  _SeededCartNotifier(CartState initial) : super() {
+class _SeededCartNotifier extends CheckoutNotifier {
+  _SeededCartNotifier(CheckoutState initial) : super() {
     state = initial;
   }
 }

@@ -10,7 +10,8 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
-import 'package:printing_app/features/customer/cart/providers/cart_provider.dart';
+import 'package:printing_app/features/customer/order/models/checkout_state.dart';
+import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart'
     show ordersProvider;
 import 'package:printing_app/features/customer/home/providers/tam_surveys_feed_provider.dart';
@@ -114,7 +115,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final colors = _colors(context);
     final authState = ref.watch(authProvider);
     final firstName = (authState.user?.fullName ?? 'there').split(' ').first;
-    final cart = ref.watch(cartProvider);
+    final cart = ref.watch(checkoutProvider);
     final hasDraft = !_draftDismissed && DraftStorageService.hasDraft;
 
     final unreadCount = ref.watch(unreadNotificationsCountProvider);
@@ -214,7 +215,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                 const SizedBox(height: AppSpacing.lg),
 
-                if (cart.isNotEmpty) ...[
+                if (cart.items.isNotEmpty) ...[
                   _ResumeQueueCard(colors: colors, cart: cart)
                       .animate()
                       .fadeIn(duration: 300.ms, curve: Curves.easeOut)
@@ -375,7 +376,7 @@ class _ResumeQueueCard extends StatelessWidget {
   const _ResumeQueueCard({required this.colors, required this.cart});
 
   final AppColorSet colors;
-  final CartState cart;
+  final CheckoutState cart;
 
   @override
   Widget build(BuildContext context) {
@@ -383,7 +384,7 @@ class _ResumeQueueCard extends StatelessWidget {
         '${cart.itemCount} print job${cart.itemCount == 1 ? '' : 's'}';
     final subtotalLabel = '${formatCurrency(cart.subtotal)} subtotal';
     final semanticsLabel = 'Resume your queue, $jobLabel, $subtotalLabel';
-    void openQueue() => context.push('/customer/cart');
+    void openQueue() => context.push('/customer/order/checkout');
 
     return Semantics(
       button: true,
