@@ -294,20 +294,42 @@ export function DeliverySlotTemplatesPage() {
                 {/* Day header */}
                 <div
                   style={{
-                    padding: "8px 10px",
-                    borderRadius: 8,
+                    padding: "10px 10px 8px",
+                    borderRadius: 10,
                     background: isToday
-                      ? "rgba(255,222,88,0.10)"
-                      : "transparent",
-                    border: `1px solid ${isToday ? "rgba(255,222,88,0.30)" : "transparent"}`,
+                      ? "rgba(255,222,88,0.12)"
+                      : token.colorBgContainer,
+                    border: `1px solid ${
+                      isToday ? "rgba(255,222,88,0.40)" : token.colorBorder
+                    }`,
                     textAlign: "center",
+                    position: "relative",
                   }}
                 >
+                  {isToday && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: -7,
+                        left: "50%",
+                        transform: "translateX(-50%)",
+                        background: "#FFDE58",
+                        color: "#111",
+                        fontSize: 8,
+                        fontWeight: 800,
+                        letterSpacing: "0.10em",
+                        padding: "2px 6px",
+                        borderRadius: 99,
+                      }}
+                    >
+                      TODAY
+                    </div>
+                  )}
                   <div
                     style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      letterSpacing: "0.12em",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      letterSpacing: "0.14em",
                       color: isToday ? "#FFDE58" : token.colorTextSecondary,
                     }}
                   >
@@ -315,14 +337,27 @@ export function DeliverySlotTemplatesPage() {
                   </div>
                   <div
                     style={{
-                      fontSize: 10,
-                      color: token.colorTextTertiary,
+                      fontSize: 16,
+                      fontWeight: 800,
+                      color: isToday ? "#FFDE58" : token.colorText,
                       marginTop: 2,
+                      letterSpacing: -0.3,
+                    }}
+                  >
+                    {slots.reduce((sum, s) => sum + (s.isActive ? s.capacity : 0), 0) || "—"}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 9,
+                      color: token.colorTextTertiary,
+                      marginTop: 0,
+                      fontWeight: 700,
+                      letterSpacing: "0.06em",
                     }}
                   >
                     {slots.length === 0
-                      ? "No slots"
-                      : `${slots.length} slot${slots.length > 1 ? "s" : ""}`}
+                      ? "NO SLOTS"
+                      : `${slots.length} SLOT${slots.length > 1 ? "S" : ""}`}
                   </div>
                 </div>
 
