@@ -54,7 +54,12 @@ class FileTypeIcon extends StatelessWidget {
     if (mimeType.contains('word') || mimeType.contains('document')) {
       return (HugeIcons.strokeRoundedDoc01, Colors.blue.shade700);
     }
-    if (mimeType.contains('stl') || mimeType.contains('obj') || mimeType.contains('3mf')) {
+    if (mimeType.contains('stl') ||
+        mimeType.contains('obj') ||
+        mimeType.contains('3mf') ||
+        mimeType.contains('gltf') ||
+        mimeType.contains('glb') ||
+        mimeType.contains('model/')) {
       return (HugeIcons.strokeRoundedCube, Colors.purple);
     }
     return (HugeIcons.strokeRoundedFile01, colors.onSurfaceDim);

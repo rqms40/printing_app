@@ -18,7 +18,12 @@ class Model3dPreview extends StatefulWidget {
 
   bool get _isSupported {
     final lower = filename.toLowerCase();
-    if (lower.endsWith('.stl') || lower.endsWith('.obj')) return true;
+    if (lower.endsWith('.stl') ||
+        lower.endsWith('.obj') ||
+        lower.endsWith('.glb') ||
+        lower.endsWith('.gltf')) {
+      return true;
+    }
     if (lower.endsWith('.3mf')) return previewGlbUrl != null;
     return false;
   }

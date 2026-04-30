@@ -13,14 +13,17 @@ export const ALLOWED_MIME_TYPES: string[] = [
   'application/x-tgif',
   'model/3mf',
   'application/vnd.ms-package.3dmanufacturing-3dmodel+xml',
+  // glTF binary (preferred 3D format — renders natively on flutter_3d_controller)
+  'model/gltf-binary',
+  'model/gltf+json',
   // Browsers commonly fall back to this for unrecognized binary uploads
-  // (.stl/.obj/.3mf typically arrive as octet-stream from Flutter web/Android)
+  // (.stl/.obj/.3mf/.glb typically arrive as octet-stream from Flutter web/Android)
   'application/octet-stream',
   // Some browsers send zip MIME for .3mf since it's a zipped container
   'application/zip',
 ];
 
-export const THREE_D_EXTENSIONS: string[] = ['.stl', '.obj', '.3mf'];
+export const THREE_D_EXTENSIONS: string[] = ['.stl', '.obj', '.3mf', '.glb', '.gltf'];
 
 /**
  * Extensions allowed when MIME type is a generic fallback like
@@ -37,6 +40,8 @@ export const ALLOWED_EXTENSIONS: string[] = [
   '.stl',
   '.obj',
   '.3mf',
+  '.glb',
+  '.gltf',
 ];
 
 export const PAPER_MAX_FILE_SIZE_MB = 50;
@@ -58,6 +63,8 @@ export const MIME_TO_EXT: Record<string, string> = {
   'application/x-tgif': '.obj',
   'model/3mf': '.3mf',
   'application/vnd.ms-package.3dmanufacturing-3dmodel+xml': '.3mf',
+  'model/gltf-binary': '.glb',
+  'model/gltf+json': '.gltf',
 };
 
 export const MIME_ALLOWED_EXTENSIONS: Record<string, string[]> = {
@@ -72,6 +79,8 @@ export const MIME_ALLOWED_EXTENSIONS: Record<string, string[]> = {
   'application/x-tgif': ['.obj'],
   'model/3mf': ['.3mf'],
   'application/vnd.ms-package.3dmanufacturing-3dmodel+xml': ['.3mf'],
+  'model/gltf-binary': ['.glb'],
+  'model/gltf+json': ['.gltf'],
   'application/octet-stream': ALLOWED_EXTENSIONS,
   'application/zip': ['.3mf'],
 };

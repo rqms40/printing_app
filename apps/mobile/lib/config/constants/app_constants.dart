@@ -19,7 +19,7 @@ class AppConstants {
     'docx',
   ];
 
-  static const List<String> threeDTypes = ['stl', 'obj', '3mf'];
+  static const List<String> threeDTypes = ['stl', 'obj', '3mf', 'glb', 'gltf'];
 
   // ---------------------------------------------------------------------------
   // Pricing

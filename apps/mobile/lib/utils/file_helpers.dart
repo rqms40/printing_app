@@ -17,7 +17,7 @@ const _allowedDocumentExtensions = {
 };
 
 /// Allowed file extensions for 3D print uploads.
-const _allowed3DExtensions = {'stl', 'obj', '3mf'};
+const _allowed3DExtensions = {'stl', 'obj', '3mf', 'glb', 'gltf'};
 
 /// Maximum file size in bytes (50 MB).
 const maxFileSizeBytes = 50 * 1024 * 1024;
