@@ -14,6 +14,8 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/file_upload_card.dart';
+import 'package:printing_app/features/customer/order/widgets/model_3d_preview.dart';
+import 'package:printing_app/features/customer/order/widgets/printer_limits_card.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/file_preview_sheet.dart';
@@ -215,18 +217,27 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
         });
 
         // Fetch inspection results after upload
+        final category = ref.read(orderFlowProvider).category;
         final paperSizeName = ref
             .read(orderFlowProvider)
             .paperSpecs
             ?.paperSize
             .name;
-        if (fileMetadataId != null && paperSizeName != null) {
+        if (fileMetadataId != null) {
           try {
-            final res = await ApiClient.instance.get(
-              '/files/$fileMetadataId/inspect?paperSize=$paperSizeName',
-            );
-            if (mounted)
-              setState(() => _inspection = res.data as Map<String, dynamic>);
+            final String inspectUrl;
+            if (category == '3d') {
+              inspectUrl = '/files/$fileMetadataId/inspect';
+            } else if (paperSizeName != null) {
+              inspectUrl = '/files/$fileMetadataId/inspect?paperSize=$paperSizeName';
+            } else {
+              inspectUrl = '';
+            }
+            if (inspectUrl.isNotEmpty) {
+              final res = await ApiClient.instance.get(inspectUrl);
+              if (mounted)
+                setState(() => _inspection = res.data as Map<String, dynamic>);
+            }
           } catch (_) {}
         }
       }
@@ -251,6 +262,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
+    final category = ref.watch(orderFlowProvider).category;
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -267,7 +279,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
         child: Column(
           children: [
             Expanded(
-              child: Padding(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -376,6 +388,55 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                         ),
                       ),
                     ],
+                    if (category == '3d' && _inspection != null) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        'File Preview',
+                        style: AppTypography.h3.copyWith(
+                            color: colors.onBackground),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _fileName ?? '',
+                        style: AppTypography.caption
+                            .copyWith(color: colors.onSurfaceDim),
+                      ),
+                      const SizedBox(height: 12),
+                      Model3dPreview(
+                        fileUrl: _filePath ?? '',
+                        filename: _fileName ?? '',
+                      ),
+                      if (_inspection!['printerLimits'] != null) ...[
+                        const SizedBox(height: 16),
+                        PrinterLimitsCard(
+                          printerName:
+                              (_inspection!['printerLimits']['profileName']
+                                      as String?) ??
+                                  'Printer',
+                          widthMm: (_inspection!['printerLimits']['widthMm']
+                                  as num)
+                              .toInt(),
+                          depthMm: (_inspection!['printerLimits']['depthMm']
+                                  as num)
+                              .toInt(),
+                          heightMm: (_inspection!['printerLimits']['heightMm']
+                                  as num)
+                              .toInt(),
+                          modelWidthMm: (_inspection!['modelBounds']
+                                  ?['widthMm'] as num?)
+                              ?.toDouble(),
+                          modelDepthMm: (_inspection!['modelBounds']
+                                  ?['depthMm'] as num?)
+                              ?.toDouble(),
+                          modelHeightMm: (_inspection!['modelBounds']
+                                  ?['heightMm'] as num?)
+                              ?.toDouble(),
+                          fits:
+                              _inspection!['printerLimits']['fits'] as bool,
+                        ),
+                      ],
+                    ],
+                    const SizedBox(height: AppSpacing.lg),
                   ],
                 ),
               ),
@@ -388,12 +449,33 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                       top: BorderSide(color: colors.outline, width: 0.5),
                     ),
                   ),
-                  child: AppButton(
-                    label: 'Continue',
-                    isFullWidth: true,
-                    isDisabled: !_canContinue,
-                    onTap: _canContinue ? _onContinue : null,
-                  ),
+                  child: category == '3d' &&
+                          _inspection?['printerLimits']?['fits'] == false
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            AppButton(
+                              label: 'Unavailable for Beta Testing',
+                              variant: AppButtonVariant.secondary,
+                              isFullWidth: true,
+                              isDisabled: true,
+                              onTap: null,
+                            ),
+                            const SizedBox(height: 8),
+                            AppButton(
+                              label: 'Chat with us for personalization',
+                              variant: AppButtonVariant.brand,
+                              isFullWidth: true,
+                              onTap: _openOversizedChat,
+                            ),
+                          ],
+                        )
+                      : AppButton(
+                          label: 'Continue',
+                          isFullWidth: true,
+                          isDisabled: !_canContinue,
+                          onTap: _canContinue ? _onContinue : null,
+                        ),
                 )
                 .animate()
                 .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
@@ -406,6 +488,18 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
           ],
         ),
       ),
+    );
+  }
+
+  void _openOversizedChat() {
+    final w = (_inspection?['modelBounds']?['widthMm'] as num?)?.toStringAsFixed(0) ?? '?';
+    final d = (_inspection?['modelBounds']?['depthMm'] as num?)?.toStringAsFixed(0) ?? '?';
+    final h = (_inspection?['modelBounds']?['heightMm'] as num?)?.toStringAsFixed(0) ?? '?';
+    final filename = _fileName ?? 'my model';
+    final draftMessage =
+        "Hi! I'm uploading $filename ($w×$d×$h mm) but it exceeds the printer build volume — can you help with personalization?";
+    context.push(
+      '/customer/chat/new?type=admin&draft=${Uri.encodeComponent(draftMessage)}',
     );
   }
 
