@@ -142,19 +142,27 @@ describe('DeliverySlotsService', () => {
 
   describe('bookSlot', () => {
     it('throws SlotFullException when capacity reached', async () => {
+      const template = { id: 1, dayOfWeek: 4, capacity: 10 };
+      let qbCall = 0;
       const txManager = {
-        findOne: jest.fn().mockResolvedValue({
-          id: 1,
-          dayOfWeek: 4,
-          capacity: 10,
+        findOne: jest.fn().mockResolvedValue(template),
+        createQueryBuilder: jest.fn(() => {
+          qbCall += 1;
+          // First call locks the template; second counts bookings.
+          return qbCall === 1
+            ? {
+                where: jest.fn().mockReturnThis(),
+                andWhere: jest.fn().mockReturnThis(),
+                setLock: jest.fn().mockReturnThis(),
+                getOne: jest.fn().mockResolvedValue(template),
+              }
+            : {
+                innerJoin: jest.fn().mockReturnThis(),
+                where: jest.fn().mockReturnThis(),
+                andWhere: jest.fn().mockReturnThis(),
+                getCount: jest.fn().mockResolvedValue(10),
+              };
         }),
-        createQueryBuilder: jest.fn(() => ({
-          innerJoin: jest.fn().mockReturnThis(),
-          where: jest.fn().mockReturnThis(),
-          andWhere: jest.fn().mockReturnThis(),
-          setLock: jest.fn().mockReturnThis(),
-          getCount: jest.fn().mockResolvedValue(10),
-        })),
       };
       await expect(
         svc.bookSlot(txManager as any, {
@@ -174,19 +182,26 @@ describe('DeliverySlotsService', () => {
         batchOrderId: 99,
         priority: false,
       };
+      const template = { id: 1, dayOfWeek: 4, capacity: 10 };
+      let qbCall = 0;
       const txManager = {
-        findOne: jest.fn().mockResolvedValue({
-          id: 1,
-          dayOfWeek: 4,
-          capacity: 10,
+        findOne: jest.fn().mockResolvedValue(template),
+        createQueryBuilder: jest.fn(() => {
+          qbCall += 1;
+          return qbCall === 1
+            ? {
+                where: jest.fn().mockReturnThis(),
+                andWhere: jest.fn().mockReturnThis(),
+                setLock: jest.fn().mockReturnThis(),
+                getOne: jest.fn().mockResolvedValue(template),
+              }
+            : {
+                innerJoin: jest.fn().mockReturnThis(),
+                where: jest.fn().mockReturnThis(),
+                andWhere: jest.fn().mockReturnThis(),
+                getCount: jest.fn().mockResolvedValue(8),
+              };
         }),
-        createQueryBuilder: jest.fn(() => ({
-          innerJoin: jest.fn().mockReturnThis(),
-          where: jest.fn().mockReturnThis(),
-          andWhere: jest.fn().mockReturnThis(),
-          setLock: jest.fn().mockReturnThis(),
-          getCount: jest.fn().mockResolvedValue(8),
-        })),
         create: jest.fn().mockReturnValue(inserted),
         save: jest.fn().mockResolvedValue(inserted),
       };

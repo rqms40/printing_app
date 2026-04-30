@@ -85,11 +85,21 @@ export class DeliverySlotsService {
     manager: EntityManager,
     input: BookSlotInput,
   ): Promise<DeliverySlotBooking> {
-    const template = await manager.findOne(DeliverySlotTemplate, {
-      where: { id: input.slotTemplateId, isActive: true },
-    });
+    // Lock the template row first to serialize concurrent bookings for the
+    // same template+date. Postgres does not allow FOR UPDATE on aggregate
+    // queries, so we cannot lock via the COUNT statement. Locking the parent
+    // template row is the canonical workaround — it gates capacity checks
+    // for everyone trying to book this template.
+    const template = await manager
+      .createQueryBuilder(DeliverySlotTemplate, 't')
+      .where('t.id = :id', { id: input.slotTemplateId })
+      .andWhere('t.is_active = TRUE')
+      .setLock('pessimistic_write')
+      .getOne();
     if (!template) throw new SlotFullException();
 
+    // Count active bookings for this template+date. No row lock here —
+    // serialization comes from the template lock above.
     const count = await manager
       .createQueryBuilder(DeliverySlotBooking, 'b')
       .innerJoin('batch_orders', 'bo', 'bo.id = b.batch_order_id')
@@ -101,7 +111,6 @@ export class DeliverySlotsService {
       )
       .where('b.slot_template_id = :tid', { tid: input.slotTemplateId })
       .andWhere('b.date = :date', { date: input.date })
-      .setLock('pessimistic_write')
       .getCount();
 
     if (count >= template.capacity) throw new SlotFullException();
