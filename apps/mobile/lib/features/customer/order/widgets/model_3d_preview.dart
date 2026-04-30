@@ -16,25 +16,27 @@ class Model3dPreview extends StatefulWidget {
   final String filename;
   final String? previewGlbUrl;
 
+  /// Native flutter_3d_controller renders GLB/GLTF (via model-viewer) and OBJ
+  /// (via three.js OBJLoader). STL and 3MF are NOT directly supported — we
+  /// rely on a server-converted GLB sibling exposed via [previewGlbUrl].
   bool get _isSupported {
     final lower = filename.toLowerCase();
-    if (lower.endsWith('.stl') ||
-        lower.endsWith('.obj') ||
-        lower.endsWith('.glb') ||
-        lower.endsWith('.gltf')) {
-      return true;
-    }
-    if (lower.endsWith('.3mf')) return previewGlbUrl != null;
+    if (previewGlbUrl != null) return true;
+    if (lower.endsWith('.glb') || lower.endsWith('.gltf')) return true;
+    if (lower.endsWith('.obj')) return true;
     return false;
   }
 
+  /// Always prefer the server-built GLB preview when available — it works
+  /// across STL/3MF/OBJ uniformly. Fall back to the original URL only when
+  /// the format is one model-viewer can render directly.
   String get _resolvedSrc {
-    final lower = filename.toLowerCase();
-    if (lower.endsWith('.3mf') && previewGlbUrl != null) return previewGlbUrl!;
+    if (previewGlbUrl != null) return previewGlbUrl!;
     return fileUrl;
   }
 
-  bool get _isObj => filename.toLowerCase().endsWith('.obj');
+  bool get _isObj =>
+      previewGlbUrl == null && filename.toLowerCase().endsWith('.obj');
 
   @override
   State<Model3dPreview> createState() => _Model3dPreviewState();

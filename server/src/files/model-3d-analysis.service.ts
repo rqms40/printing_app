@@ -46,14 +46,29 @@ export class Model3dAnalysisService {
     if (buffer.length < expectedSize) {
       return this.analyzeStlAscii(buffer);
     }
+
+    // Pre-allocate flat position + index arrays so we can hand them straight
+    // to the GLB encoder. Each STL triangle stores its own 3 vertices (no
+    // shared indices), so we just emit sequential indices [0,1,2,3,...].
+    const vertexFloatCount = triangleCount * 9; // 3 vertices × 3 floats
+    const positions = new Float32Array(vertexFloatCount);
+    const indices = new Uint32Array(triangleCount * 3);
+
     let minX = Infinity, minY = Infinity, minZ = Infinity;
     let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    let posIdx = 0;
+    let idxIdx = 0;
+    let baseIndex = 0;
+
     for (let i = 0; i < triangleCount; i++) {
       const base = 84 + i * 50 + 12;
       for (let v = 0; v < 3; v++) {
         const x = buffer.readFloatLE(base + v * 12);
         const y = buffer.readFloatLE(base + v * 12 + 4);
         const z = buffer.readFloatLE(base + v * 12 + 8);
+        positions[posIdx++] = x;
+        positions[posIdx++] = y;
+        positions[posIdx++] = z;
         if (x < minX) minX = x;
         if (y < minY) minY = y;
         if (z < minZ) minZ = z;
@@ -61,14 +76,27 @@ export class Model3dAnalysisService {
         if (y > maxY) maxY = y;
         if (z > maxZ) maxZ = z;
       }
+      indices[idxIdx++] = baseIndex++;
+      indices[idxIdx++] = baseIndex++;
+      indices[idxIdx++] = baseIndex++;
     }
+
     if (!isFinite(minX)) return null;
+
+    let glbBuffer: Buffer | undefined;
+    try {
+      glbBuffer = encodeGlb({ positions, indices });
+    } catch (err) {
+      this.logger.warn(`STL → GLB encode failed: ${err}`);
+    }
+
     return {
       widthMm: maxX - minX,
       depthMm: maxY - minY,
       heightMm: maxZ - minZ,
       triangleCount,
       unit: 'mm',
+      glbBuffer,
     };
   }
 
