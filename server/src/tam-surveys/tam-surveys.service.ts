@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Order } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import {
@@ -20,6 +20,7 @@ import {
 import { TamSurvey } from './entities/tam-survey.entity';
 
 const REQUIRED_SURVEY_QUESTION_COUNT = 14;
+const POSTGRES_UNIQUE_VIOLATION = '23505';
 export const BETA_SURVEY_COMPLETE_HOLD_REASON = 'beta_survey_complete';
 
 export type AccountStateResponse = {
@@ -42,6 +43,7 @@ export class TamSurveysService {
     private readonly requirementsRepo: Repository<TamSurveyRequirement>,
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async createVoluntarySurvey(
@@ -86,7 +88,21 @@ export class TamSurveysService {
       requiredAt: new Date(),
       submittedAt: null,
     });
-    return this.requirementsRepo.save(requirement);
+    try {
+      return await this.requirementsRepo.save(requirement);
+    } catch (error) {
+      if (!this.isUniqueViolation(error)) throw error;
+
+      const racedRequirement = await this.requirementsRepo.findOne({
+        where: {
+          orderId: order.id,
+          reason: TamSurveyRequirementReason.POST_DELIVERY,
+        },
+      });
+      if (!racedRequirement) throw error;
+
+      return racedRequirement;
+    }
   }
 
   async getAccountState(userId: number): Promise<AccountStateResponse> {
@@ -123,41 +139,59 @@ export class TamSurveysService {
     requirementId: number,
     dto: SubmitSurveyRequirementDto,
   ): Promise<{ success: true; surveyId: number; logoutRequired: true }> {
-    const requirement = await this.requirementsRepo.findOne({
-      where: { id: requirementId },
+    return this.dataSource.transaction(async (manager) => {
+      const requirementsRepo = manager.getRepository(TamSurveyRequirement);
+      const tamSurveysRepo = manager.getRepository(TamSurvey);
+      const usersRepo = manager.getRepository(User);
+
+      const requirement = await requirementsRepo.findOne({
+        where: { id: requirementId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!requirement) {
+        throw new NotFoundException('Survey requirement not found');
+      }
+      if (requirement.userId !== userId) {
+        throw new ForbiddenException('You can only submit your own survey');
+      }
+      if (requirement.status !== TamSurveyRequirementStatus.PENDING) {
+        throw new BadRequestException('Survey requirement already submitted');
+      }
+
+      const surveyData = this.validateSurveyData(dto.surveyData, true);
+      const survey = tamSurveysRepo.create({
+        userId,
+        orderId: requirement.orderId,
+        requirementId: requirement.id,
+        surveyData,
+        openForumFeedback: JSON.stringify(dto.openForumFeedback ?? {}),
+      });
+      const savedSurvey = await tamSurveysRepo.save(survey);
+
+      requirement.status = TamSurveyRequirementStatus.SUBMITTED;
+      requirement.surveyId = savedSurvey.id;
+      requirement.submittedAt = new Date();
+      await requirementsRepo.save(requirement);
+
+      const holdAt = new Date();
+      await usersRepo.update(userId, {
+        isActive: false,
+        accountHoldReason: BETA_SURVEY_COMPLETE_HOLD_REASON,
+        accountHeldAt: holdAt,
+        betaCompletedAt: holdAt,
+      });
+
+      return { success: true, surveyId: savedSurvey.id, logoutRequired: true };
     });
-    if (!requirement) throw new NotFoundException('Survey requirement not found');
-    if (requirement.userId !== userId) {
-      throw new ForbiddenException('You can only submit your own survey');
-    }
-    if (requirement.status !== TamSurveyRequirementStatus.PENDING) {
-      throw new BadRequestException('Survey requirement already submitted');
-    }
+  }
 
-    const surveyData = this.validateSurveyData(dto.surveyData, true);
-    const survey = this.tamSurveysRepo.create({
-      userId,
-      orderId: requirement.orderId,
-      requirementId: requirement.id,
-      surveyData,
-      openForumFeedback: JSON.stringify(dto.openForumFeedback ?? {}),
-    });
-    const savedSurvey = await this.tamSurveysRepo.save(survey);
-
-    requirement.status = TamSurveyRequirementStatus.SUBMITTED;
-    requirement.surveyId = savedSurvey.id;
-    requirement.submittedAt = new Date();
-    await this.requirementsRepo.save(requirement);
-
-    const holdAt = new Date();
-    await this.usersRepo.update(userId, {
-      isActive: false,
-      accountHoldReason: BETA_SURVEY_COMPLETE_HOLD_REASON,
-      accountHeldAt: holdAt,
-      betaCompletedAt: holdAt,
-    });
-
-    return { success: true, surveyId: savedSurvey.id, logoutRequired: true };
+  private isUniqueViolation(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === POSTGRES_UNIQUE_VIOLATION
+    );
   }
 
   private validateSurveyData(

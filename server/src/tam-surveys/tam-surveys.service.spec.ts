@@ -6,7 +6,7 @@ import {
 import { MODULE_METADATA } from '@nestjs/common/constants';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';
-import { getMetadataArgsStorage, Repository } from 'typeorm';
+import { DataSource, getMetadataArgsStorage, Repository } from 'typeorm';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { TamSurveysService } from './tam-surveys.service';
@@ -93,6 +93,8 @@ describe('TamSurveysService', () => {
   let surveyRepo: jest.Mocked<Partial<Repository<TamSurvey>>>;
   let requirementRepo: jest.Mocked<Partial<Repository<TamSurveyRequirement>>>;
   let userRepo: any;
+  let transactionalManager: any;
+  let dataSource: any;
 
   const betaUser = {
     id: 10,
@@ -122,6 +124,17 @@ describe('TamSurveysService', () => {
       findOne: jest.fn(),
       update: jest.fn().mockResolvedValue(undefined),
     };
+    transactionalManager = {
+      getRepository: jest.fn((entity) => {
+        if (entity === TamSurvey) return surveyRepo;
+        if (entity === TamSurveyRequirement) return requirementRepo;
+        if (entity === User) return userRepo;
+        throw new Error(`Unexpected repository: ${entity.name}`);
+      }),
+    };
+    dataSource = {
+      transaction: jest.fn((callback) => callback(transactionalManager)),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -132,6 +145,7 @@ describe('TamSurveysService', () => {
           useValue: requirementRepo,
         },
         { provide: getRepositoryToken(User), useValue: userRepo },
+        { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
 
@@ -176,6 +190,25 @@ describe('TamSurveysService', () => {
 
     expect(result).toBe(existing);
     expect(requirementRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('returns the existing requirement when a concurrent create hits the unique constraint', async () => {
+    const existing = { id: 77, userId: 10, orderId: 55 } as TamSurveyRequirement;
+    userRepo.findOne.mockResolvedValue(betaUser);
+    requirementRepo.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(existing);
+    requirementRepo.save.mockRejectedValueOnce({ code: '23505' });
+
+    const result = await service.createPostDeliveryRequirementIfNeeded(order);
+
+    expect(result).toBe(existing);
+    expect(requirementRepo.findOne).toHaveBeenLastCalledWith({
+      where: {
+        orderId: 55,
+        reason: TamSurveyRequirementReason.POST_DELIVERY,
+      },
+    });
   });
 
   it('returns survey_required account state when a pending hold exists', async () => {
@@ -245,6 +278,31 @@ describe('TamSurveysService', () => {
       success: true,
       surveyId: 900,
       logoutRequired: true,
+    });
+  });
+
+  it('submits a requirement inside a transaction with a write lock', async () => {
+    requirementRepo.findOne.mockResolvedValue({
+      id: 123,
+      userId: 10,
+      orderId: 55,
+      status: TamSurveyRequirementStatus.PENDING,
+    } as TamSurveyRequirement);
+
+    await service.submitRequirement(10, 123, {
+      surveyData: fullSurveyData,
+      openForumFeedback: { feature: 'More slots', delivery: 'Good' },
+    });
+
+    expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+    expect(transactionalManager.getRepository).toHaveBeenCalledWith(TamSurvey);
+    expect(transactionalManager.getRepository).toHaveBeenCalledWith(
+      TamSurveyRequirement,
+    );
+    expect(transactionalManager.getRepository).toHaveBeenCalledWith(User);
+    expect(requirementRepo.findOne).toHaveBeenCalledWith({
+      where: { id: 123 },
+      lock: { mode: 'pessimistic_write' },
     });
   });
 
