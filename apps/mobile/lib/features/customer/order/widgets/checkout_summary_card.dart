@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
@@ -18,8 +17,7 @@ class CheckoutSummaryCard extends ConsumerWidget {
         : AppColors.light;
 
     return CheckoutSectionCard(
-      icon: HugeIcons.strokeRoundedReceiptDollar,
-      title: 'Summary',
+      title: 'Payment details',
       child: Column(
         children: [
           _row('Subtotal', fees.subtotal, colors),

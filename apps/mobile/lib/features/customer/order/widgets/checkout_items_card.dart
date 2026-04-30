@@ -24,23 +24,16 @@ class CheckoutItemsCard extends ConsumerWidget {
     final notifier = ref.read(checkoutProvider.notifier);
 
     return CheckoutSectionCard(
-      icon: HugeIcons.strokeRoundedShoppingBag03,
-      title: 'Your prints',
+      title: 'Order summary',
       trailing: GestureDetector(
         onTap: () => context.push('/customer/order/new?mode=add'),
-        child: Row(
-          children: [
-            HugeIcon(icon: HugeIcons.strokeRoundedAdd01, size: 14, color: colors.brand),
-            const SizedBox(width: 4),
-            Text(
-              'Add Items',
-              style: AppTypography.caption.copyWith(
-                color: colors.brand,
-                fontWeight: FontWeight.w800,
-                fontSize: 12,
-              ),
-            ),
-          ],
+        child: Text(
+          'Add Items',
+          style: AppTypography.body.copyWith(
+            color: colors.brand,
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+          ),
         ),
       ),
       child: Column(

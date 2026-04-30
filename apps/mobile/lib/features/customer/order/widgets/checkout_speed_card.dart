@@ -56,8 +56,7 @@ class CheckoutSpeedCard extends ConsumerWidget {
     ];
 
     return CheckoutSectionCard(
-      icon: HugeIcons.strokeRoundedDashboardSpeed02,
-      title: 'How fast?',
+      title: 'Delivery options',
       child: Column(
         children: [
           for (var i = 0; i < tiers.length; i++) ...[

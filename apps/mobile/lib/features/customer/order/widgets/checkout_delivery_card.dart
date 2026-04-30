@@ -23,7 +23,6 @@ class CheckoutDeliveryCard extends ConsumerWidget {
         : AppColors.light;
 
     return CheckoutSectionCard(
-      icon: HugeIcons.strokeRoundedTruckDelivery,
       title: 'Delivery',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

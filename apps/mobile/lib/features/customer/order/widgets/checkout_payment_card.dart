@@ -36,8 +36,7 @@ class CheckoutPaymentCard extends ConsumerWidget {
     final method = state.paymentMethod;
 
     return CheckoutSectionCard(
-      icon: HugeIcons.strokeRoundedCreditCard,
-      title: 'Payment',
+      title: 'Payment method',
       trailing: GestureDetector(
         onTap: () async {
           final result = await PaymentMethodSheet.show(context, current: method);
@@ -47,10 +46,10 @@ class CheckoutPaymentCard extends ConsumerWidget {
         },
         child: Text(
           'Change',
-          style: AppTypography.caption.copyWith(
+          style: AppTypography.body.copyWith(
             color: colors.brand,
-            fontWeight: FontWeight.w800,
-            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
           ),
         ),
       ),

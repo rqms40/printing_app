@@ -1,27 +1,26 @@
 import 'package:flutter/material.dart';
-import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
-import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 
-/// Shared card shell for Checkout sections.
-/// Header has an icon chip on the left, a title in the middle, and an optional
-/// trailing widget (link, badge, etc.) on the right.
+/// Borderless section. Big bold heading on the left, optional trailing action
+/// on the right. Content sits flush below the heading. Sections are separated
+/// from each other by the screen's background gap, not by a card border.
 class CheckoutSectionCard extends StatelessWidget {
   const CheckoutSectionCard({
     super.key,
-    required this.icon,
     required this.title,
     required this.child,
     this.trailing,
+    @Deprecated('icon is no longer rendered; kept for back-compat')
+    this.icon,
     this.padding,
   });
 
-  final List<List<dynamic>> icon;
   final String title;
   final Widget child;
   final Widget? trailing;
+  final List<List<dynamic>>? icon;
   final EdgeInsetsGeometry? padding;
 
   @override
@@ -31,42 +30,23 @@ class CheckoutSectionCard extends StatelessWidget {
         : AppColors.light;
 
     return Container(
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: AppRadius.borderXl,
-        border: Border.all(color: colors.outline.withValues(alpha: 0.25)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      padding: padding ?? const EdgeInsets.all(AppSpacing.lg),
+      padding: padding ?? const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.lg),
+      decoration: BoxDecoration(color: colors.surface),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: colors.brand.withValues(alpha: 0.12),
-                  borderRadius: AppRadius.borderSm,
-                ),
-                child: Center(
-                  child: HugeIcon(icon: icon, size: 16, color: colors.brand),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
                   title,
-                  style: AppTypography.bodyBold.copyWith(
+                  style: AppTypography.h2.copyWith(
                     color: colors.onBackground,
-                    letterSpacing: -0.2,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                    height: 1.1,
                   ),
                 ),
               ),

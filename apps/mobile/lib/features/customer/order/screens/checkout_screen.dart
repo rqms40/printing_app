@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
-import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_delivery_card.dart';
@@ -24,10 +23,18 @@ class CheckoutScreen extends ConsumerWidget {
         ? AppColors.dark
         : AppColors.light;
 
+    // Sections sit on `surface`. The thin gap between sections uses
+    // `background` (a darker shade), giving a Grab/FoodPanda-style
+    // segmented look without bordered cards.
+    final divider = Container(
+      height: 8,
+      color: colors.background,
+    );
+
     return Scaffold(
-      backgroundColor: colors.background,
+      backgroundColor: colors.surface,
       appBar: AppBar(
-        backgroundColor: colors.background,
+        backgroundColor: colors.surface,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
@@ -38,6 +45,7 @@ class CheckoutScreen extends ConsumerWidget {
           ),
           onPressed: () => context.pop(),
         ),
+        titleSpacing: 0,
         title: Text(
           'Checkout',
           style: AppTypography.h3.copyWith(
@@ -48,31 +56,39 @@ class CheckoutScreen extends ConsumerWidget {
         ),
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: AppSpacing.md),
-            child: _ItemCountPill(count: state.itemCount, colors: colors),
+            padding: const EdgeInsets.only(right: 18),
+            child: Center(
+              child: Text(
+                '${state.itemCount} ${state.itemCount == 1 ? 'item' : 'items'}',
+                style: AppTypography.caption.copyWith(
+                  color: colors.onSurfaceDim,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: colors.outline.withValues(alpha: 0.2)),
+        ),
       ),
       body: SafeArea(
         top: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.md,
-            AppSpacing.sm,
-            AppSpacing.md,
-            AppSpacing.lg,
-          ),
-          children: const [
-            CheckoutItemsCard(),
-            SizedBox(height: AppSpacing.md),
-            CheckoutDeliveryCard(),
-            SizedBox(height: AppSpacing.md),
-            CheckoutSpeedCard(),
-            SizedBox(height: AppSpacing.md),
-            CheckoutPaymentCard(),
-            SizedBox(height: AppSpacing.md),
-            CheckoutSummaryCard(),
-            SizedBox(height: AppSpacing.lg),
+          padding: EdgeInsets.zero,
+          children: [
+            const CheckoutItemsCard(),
+            divider,
+            const CheckoutDeliveryCard(),
+            divider,
+            const CheckoutSpeedCard(),
+            divider,
+            const CheckoutPaymentCard(),
+            divider,
+            const CheckoutSummaryCard(),
+            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -92,43 +108,5 @@ class CheckoutScreen extends ConsumerWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
-  }
-}
-
-class _ItemCountPill extends StatelessWidget {
-  const _ItemCountPill({required this.count, required this.colors});
-  final int count;
-  final AppColorSet colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: colors.brand.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(99),
-        border: Border.all(color: colors.brand.withValues(alpha: 0.4), width: 0.75),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          HugeIcon(
-            icon: HugeIcons.strokeRoundedShoppingBag03,
-            size: 13,
-            color: colors.brand,
-          ),
-          const SizedBox(width: 5),
-          Text(
-            '$count ${count == 1 ? 'job' : 'jobs'}',
-            style: AppTypography.caption.copyWith(
-              color: colors.brand,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.3,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
