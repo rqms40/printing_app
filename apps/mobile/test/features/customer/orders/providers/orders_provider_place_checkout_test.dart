@@ -85,6 +85,7 @@ void main() {
     expect(captured?['speedTier'], 'priority');
     expect(captured?['paymentMethod'], 'cod');
     expect(captured?['deliveryOption'], 'delivery');
-    expect(captured?['priority'], true);
+    // Server's whitelist DTO rejects `priority`, so the field must NOT be sent.
+    expect(captured?.containsKey('priority'), isFalse);
   });
 }

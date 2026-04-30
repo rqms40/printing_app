@@ -576,6 +576,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     required PaymentMethod paymentMethod,
     int? slotTemplateId,
     String? slotDate,
+    @Deprecated('Use speedTier instead. Server no longer accepts this field.')
     bool priority = false,
     DeliverySpeedTier speedTier = DeliverySpeedTier.standard,
     List<Map<String, dynamic>> destinations = const [],
@@ -599,7 +600,6 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       'paymentMethod': paymentMethod.name,
       'deliveryOption': deliveryOption,
       'deliveryAddressId': addressId,
-      'priority': priority,
       'speedTier': speedTier.toApi(),
       'slotTemplateId': ?slotTemplateId,
       'slotDate': ?slotDate,
