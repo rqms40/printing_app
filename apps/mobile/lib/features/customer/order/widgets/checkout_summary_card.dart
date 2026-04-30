@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
-import 'package:printing_app/config/theme/app_radius.dart';
-import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
+import 'package:printing_app/features/customer/order/widgets/checkout_section_card.dart';
 import 'package:printing_app/utils/formatters.dart';
 
 class CheckoutSummaryCard extends ConsumerWidget {
@@ -17,32 +17,45 @@ class CheckoutSummaryCard extends ConsumerWidget {
         ? AppColors.dark
         : AppColors.light;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: AppRadius.borderXl,
-        border: Border.all(color: colors.outline.withValues(alpha: 0.4)),
-      ),
-      padding: const EdgeInsets.all(AppSpacing.md),
+    return CheckoutSectionCard(
+      icon: HugeIcons.strokeRoundedReceiptDollar,
+      title: 'Summary',
       child: Column(
         children: [
-          _row('Subtotal', fees.subtotal),
-          _row('Delivery', fees.deliveryFee),
-          if (fees.priorityFee > 0) _row('Priority', fees.priorityFee),
-          if (fees.extraDropFee > 0) _row('Extra drop', fees.extraDropFee),
-          _row('Service fee', fees.serviceFee),
+          _row('Subtotal', fees.subtotal, colors),
+          _row('Delivery', fees.deliveryFee, colors),
+          if (fees.priorityFee > 0) _row('Priority', fees.priorityFee, colors),
+          if (fees.extraDropFee > 0) _row('Extra drop', fees.extraDropFee, colors),
+          _row('Service fee', fees.serviceFee, colors),
         ],
       ),
     );
   }
 
-  Widget _row(String label, double value) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Row(
-          children: [
-            Expanded(child: Text(label, style: AppTypography.body)),
-            Text(formatCurrency(value), style: AppTypography.bodyBold),
-          ],
-        ),
-      );
+  Widget _row(String label, double value, AppColorSet colors) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: AppTypography.body.copyWith(
+                color: colors.onSurfaceDim,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          Text(
+            formatCurrency(value),
+            style: AppTypography.bodyBold.copyWith(
+              color: colors.onBackground,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
+

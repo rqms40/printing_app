@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -26,21 +27,41 @@ class CheckoutScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: colors.background,
       appBar: AppBar(
-        title: const Text('Checkout'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(20),
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              '${state.itemCount} print job${state.itemCount == 1 ? '' : 's'}',
-              style: AppTypography.caption,
-            ),
+        backgroundColor: colors.background,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: HugeIcon(
+            icon: HugeIcons.strokeRoundedArrowLeft01,
+            color: colors.onBackground,
+            size: 22,
+          ),
+          onPressed: () => context.pop(),
+        ),
+        title: Text(
+          'Checkout',
+          style: AppTypography.h3.copyWith(
+            color: colors.onBackground,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.3,
           ),
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpacing.md),
+            child: _ItemCountPill(count: state.itemCount, colors: colors),
+          ),
+        ],
       ),
       body: SafeArea(
+        top: false,
         child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.md),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            AppSpacing.sm,
+            AppSpacing.md,
+            AppSpacing.lg,
+          ),
           children: const [
             CheckoutItemsCard(),
             SizedBox(height: AppSpacing.md),
@@ -71,5 +92,43 @@ class CheckoutScreen extends ConsumerWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
+  }
+}
+
+class _ItemCountPill extends StatelessWidget {
+  const _ItemCountPill({required this.count, required this.colors});
+  final int count;
+  final AppColorSet colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: colors.brand.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: colors.brand.withValues(alpha: 0.4), width: 0.75),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          HugeIcon(
+            icon: HugeIcons.strokeRoundedShoppingBag03,
+            size: 13,
+            color: colors.brand,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            '$count ${count == 1 ? 'job' : 'jobs'}',
+            style: AppTypography.caption.copyWith(
+              color: colors.brand,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

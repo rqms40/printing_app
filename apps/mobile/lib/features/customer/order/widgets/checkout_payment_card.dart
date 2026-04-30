@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
 import 'package:printing_app/features/customer/order/sheets/payment_method_sheet.dart';
+import 'package:printing_app/features/customer/order/widgets/checkout_section_card.dart';
+import 'package:printing_app/features/customer/order/widgets/payment_method_glyph.dart';
 import 'package:printing_app/shared/models/enums.dart';
 
 String _labelFor(PaymentMethod m) {
@@ -32,37 +35,112 @@ class CheckoutPaymentCard extends ConsumerWidget {
         : AppColors.light;
     final method = state.paymentMethod;
 
-    return InkWell(
-      onTap: () async {
-        final result = await PaymentMethodSheet.show(context, current: method);
-        if (result != null) {
-          ref.read(checkoutProvider.notifier).setPaymentMethod(result);
-        }
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: colors.surface,
-          borderRadius: AppRadius.borderXl,
-          border: Border.all(color: colors.outline.withValues(alpha: 0.4)),
+    return CheckoutSectionCard(
+      icon: HugeIcons.strokeRoundedCreditCard,
+      title: 'Payment',
+      trailing: GestureDetector(
+        onTap: () async {
+          final result = await PaymentMethodSheet.show(context, current: method);
+          if (result != null) {
+            ref.read(checkoutProvider.notifier).setPaymentMethod(result);
+          }
+        },
+        child: Text(
+          'Change',
+          style: AppTypography.caption.copyWith(
+            color: colors.brand,
+            fontWeight: FontWeight.w800,
+            fontSize: 12,
+          ),
         ),
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Row(
-          children: [
-            Text('Payment', style: AppTypography.bodyBold),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Text(
-                method == null ? 'Choose payment method' : _labelFor(method),
-                style: AppTypography.body,
-                textAlign: TextAlign.right,
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Text(
-              'Change',
-              style: AppTypography.bodyBold.copyWith(color: colors.brand),
-            ),
-          ],
+      ),
+      child: InkWell(
+        borderRadius: AppRadius.borderLg,
+        onTap: () async {
+          final result = await PaymentMethodSheet.show(context, current: method);
+          if (result != null) {
+            ref.read(checkoutProvider.notifier).setPaymentMethod(result);
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: colors.background,
+            borderRadius: AppRadius.borderLg,
+            border: Border.all(color: colors.outline.withValues(alpha: 0.4)),
+          ),
+          child: method == null
+              ? Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: colors.surface,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                            color: colors.outline.withValues(alpha: 0.4)),
+                      ),
+                      child: Center(
+                        child: HugeIcon(
+                          icon: HugeIcons.strokeRoundedAdd01,
+                          size: 16,
+                          color: colors.onSurfaceDim,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        'Choose payment method',
+                        style: AppTypography.bodyBold.copyWith(
+                          color: colors.onSurfaceDim,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    HugeIcon(
+                      icon: HugeIcons.strokeRoundedArrowRight01,
+                      size: 18,
+                      color: colors.onSurfaceDim,
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    PaymentMethodGlyph(method: method, size: 36),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _labelFor(method),
+                            style: AppTypography.bodyBold.copyWith(
+                              color: colors.onBackground,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            method == PaymentMethod.gridCredits
+                                ? 'Pay with your GRID balance'
+                                : 'Tap Change to pick another',
+                            style: AppTypography.caption.copyWith(
+                              color: colors.onSurfaceDim,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    HugeIcon(
+                      icon: HugeIcons.strokeRoundedTick02,
+                      size: 18,
+                      color: colors.brand,
+                    ),
+                  ],
+                ),
         ),
       ),
     );
