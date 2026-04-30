@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'config/routes/app_router.dart';
 import 'config/theme/app_theme.dart';
+import 'features/customer/beta/widgets/beta_indicator.dart';
 import 'shared/providers/theme_provider.dart';
 
 class App extends ConsumerWidget {
@@ -20,6 +21,8 @@ class App extends ConsumerWidget {
       themeMode: themeMode,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
+      builder: (context, child) =>
+          BetaIndicatorOverlay(child: child ?? const SizedBox.shrink()),
     );
   }
 }

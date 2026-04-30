@@ -169,7 +169,7 @@ function App() {
               {
                 name: 'printer-profile',
                 list: '/settings/printer',
-                meta: { label: 'Printer Profile', parent: 'delivery-slots', icon: <PrinterOutlined /> },
+                meta: { label: 'Printer Profile', icon: <PrinterOutlined /> },
               },
             ]}
             options={{

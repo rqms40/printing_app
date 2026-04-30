@@ -15,11 +15,12 @@ import 'package:printing_app/features/customer/orders/providers/orders_provider.
     show ordersProvider;
 import 'package:printing_app/features/customer/home/providers/tam_surveys_feed_provider.dart';
 import 'package:printing_app/features/customer/home/widgets/daily_grid_section.dart';
+import 'package:printing_app/features/customer/home/widgets/next_batch_dialog.dart';
+import 'package:printing_app/features/customer/order/providers/delivery_slot_provider.dart';
 import 'package:printing_app/features/customer/home/widgets/hero_banner.dart';
 import 'package:printing_app/features/customer/home/widgets/map_tracking_tile.dart';
 import 'package:printing_app/features/customer/home/widgets/recent_orders_section.dart';
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
-import 'package:printing_app/features/customer/beta/widgets/beta_indicator.dart';
 import 'package:printing_app/shared/services/draft_storage_service.dart';
 import 'package:printing_app/utils/formatters.dart';
 import 'package:printing_app/features/customer/chat/providers/chat_provider.dart';
@@ -35,11 +36,36 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _draftDismissed = false;
+  bool _nextBatchChecked = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     precacheImage(const AssetImage('assets/animations/bentobox.webp'), context);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final now = DateTime.now();
+      final today =
+          '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final tomorrow = now.add(const Duration(days: 1));
+      final tomStr =
+          '${tomorrow.year.toString().padLeft(4, '0')}-${tomorrow.month.toString().padLeft(2, '0')}-${tomorrow.day.toString().padLeft(2, '0')}';
+      ref.read(deliverySlotProvider(today).notifier).refresh();
+      ref.read(deliverySlotProvider(tomStr).notifier).refresh();
+    });
+  }
+
+  Future<void> _maybeShowNextBatchDialog() async {
+    if (_nextBatchChecked || !mounted) return;
+    final info = ref.read(nextBatchInfoProvider);
+    if (info == null) return;
+    _nextBatchChecked = true;
+    await NextBatchDialog.show(context, info);
   }
 
   AppColorSet _colors(BuildContext context) {
@@ -95,6 +121,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final credits = (double.tryParse(authState.user?.credits ?? '0') ?? 0.0)
         .toInt();
+
+    ref.listen<NextBatchInfo?>(nextBatchInfoProvider, (prev, next) {
+      if (next != null) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _maybeShowNextBatchDialog(),
+        );
+      }
+    });
+    final immediate = ref.watch(nextBatchInfoProvider);
+    if (immediate != null && !_nextBatchChecked) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _maybeShowNextBatchDialog(),
+      );
+    }
 
     return Stack(
       children: [
@@ -314,11 +354,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
         ),
-        ),
-        const Positioned(
-          top: 0,
-          right: AppSpacing.md,
-          child: SafeArea(child: BetaIndicator()),
         ),
         Positioned(
           right: AppSpacing.xl,
@@ -1677,68 +1712,84 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
                     key: ValueKey<int>(item.id),
                     onTap: () => _showFeedbackModal(context, item),
                     behavior: HitTestBehavior.opaque,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.sm,
-                        vertical: 4,
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Row(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final h = constraints.maxHeight;
+                        final w = constraints.maxWidth;
+                        final scale = (h / 122).clamp(0.85, 1.4);
+                        final starSize = (14 * scale).clamp(11.0, 18.0);
+                        final nameSize = (11 * scale).clamp(10.0, 14.0);
+                        final roleSize = (9 * scale).clamp(8.0, 12.0);
+                        final quoteSize = (9 * scale).clamp(8.0, 12.0);
+                        final gap = (4 * scale).clamp(2.0, 8.0);
+                        final hPad = (w * 0.06).clamp(6.0, 14.0);
+                        final hasFeedback =
+                            item.feedback != null && item.feedback!.isNotEmpty;
+
+                        return Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: hPad,
+                            vertical: gap,
+                          ),
+                          child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
-                            children: List.generate(5, (starIdx) {
-                              final isFilled = starIdx < item.rating.round();
-                              return Icon(
-                                Icons.star_rounded,
-                                color: isFilled
-                                    ? const Color(0xFFFFDE58)
-                                    : widget.colors.onSurfaceDim.withValues(
-                                        alpha: 0.4,
-                                      ),
-                                size: 14,
-                              );
-                            }),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            item.userName,
-                            style: AppTypography.bodyBold.copyWith(
-                              color: widget.colors.onBackground,
-                              fontSize: 11,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                          ),
-                          Text(
-                            'Student',
-                            style: AppTypography.caption.copyWith(
-                              color: widget.colors.onSurfaceDim,
-                              fontSize: 9,
-                              fontStyle: FontStyle.italic,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          if (item.feedback != null &&
-                              item.feedback!.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              '"${item.feedback!}"',
-                              style: AppTypography.body.copyWith(
-                                color: widget.colors.onBackground.withValues(
-                                  alpha: 0.9,
-                                ),
-                                fontSize: 9,
-                                height: 1.2,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: List.generate(5, (starIdx) {
+                                  final isFilled =
+                                      starIdx < item.rating.round();
+                                  return Icon(
+                                    Icons.star_rounded,
+                                    color: isFilled
+                                        ? const Color(0xFFFFDE58)
+                                        : widget.colors.onSurfaceDim
+                                              .withValues(alpha: 0.4),
+                                    size: starSize,
+                                  );
+                                }),
                               ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ],
-                      ),
+                              SizedBox(height: gap),
+                              Text(
+                                item.userName,
+                                style: AppTypography.bodyBold.copyWith(
+                                  color: widget.colors.onBackground,
+                                  fontSize: nameSize,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                              ),
+                              Text(
+                                'Student',
+                                style: AppTypography.caption.copyWith(
+                                  color: widget.colors.onSurfaceDim,
+                                  fontSize: roleSize,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              if (hasFeedback) ...[
+                                SizedBox(height: gap),
+                                Flexible(
+                                  child: Text(
+                                    '"${item.feedback!}"',
+                                    style: AppTypography.body.copyWith(
+                                      color: widget.colors.onBackground
+                                          .withValues(alpha: 0.9),
+                                      fontSize: quoteSize,
+                                      height: 1.2,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        );
+                      },
                     ),
                   ),
                 );
