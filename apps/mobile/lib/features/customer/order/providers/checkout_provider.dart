@@ -62,3 +62,51 @@ final checkoutProvider =
     StateNotifierProvider<CheckoutNotifier, CheckoutState>(
       (ref) => CheckoutNotifier(),
     );
+
+class CheckoutFees {
+  const CheckoutFees({
+    required this.subtotal,
+    required this.deliveryFee,
+    required this.priorityFee,
+    required this.extraDropFee,
+    required this.serviceFee,
+  });
+  final double subtotal;
+  final double deliveryFee;
+  final double priorityFee;
+  final double extraDropFee;
+  final double serviceFee;
+  double get total =>
+      subtotal + deliveryFee + priorityFee + extraDropFee + serviceFee;
+}
+
+const _kBaseDeliveryFee = 60.0;
+const _kSaverDeliveryFee = 35.0;
+const _kPriorityFee = 50.0;
+const _kExtraDropFee = 30.0;
+const _kServiceFee = 4.0;
+
+double _deliveryFeeForTier(DeliverySpeedTier tier) {
+  switch (tier) {
+    case DeliverySpeedTier.saver:
+      return _kSaverDeliveryFee;
+    case DeliverySpeedTier.priority:
+    case DeliverySpeedTier.standard:
+    case DeliverySpeedTier.scheduled:
+      return _kBaseDeliveryFee;
+  }
+}
+
+final checkoutFeesProvider = Provider<CheckoutFees>((ref) {
+  final state = ref.watch(checkoutProvider);
+  final extraDrops = state.drops.length > 1 ? state.drops.length - 1 : 0;
+  return CheckoutFees(
+    subtotal: state.subtotal,
+    deliveryFee: _deliveryFeeForTier(state.speedTier),
+    priorityFee: state.speedTier == DeliverySpeedTier.priority
+        ? _kPriorityFee
+        : 0,
+    extraDropFee: extraDrops * _kExtraDropFee,
+    serviceFee: _kServiceFee,
+  );
+});
