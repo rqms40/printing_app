@@ -65,6 +65,15 @@ export class AuthService {
     const isValid = await bcrypt.compare(password, user.passwordHash);
     if (!isValid) throw new UnauthorizedException('Invalid credentials');
 
+    if (user.isActive === false) {
+      if (user.accountHoldReason === 'beta_survey_complete') {
+        throw new UnauthorizedException(
+          'Beta testing completed. Your account will reopen at full release.',
+        );
+      }
+      throw new UnauthorizedException('Account is inactive');
+    }
+
     const { passwordHash: _ph2, ...result } = user;
     return {
       user: result,

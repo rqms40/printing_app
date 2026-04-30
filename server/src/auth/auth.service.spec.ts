@@ -183,5 +183,35 @@ describe('AuthService', () => {
         authService.login('nobody@example.com', 'password123'),
       ).rejects.toThrow(UnauthorizedException);
     });
+
+    it('rejects inactive users', async () => {
+      const hashedPassword = await bcrypt.hash('password123', 10);
+      (usersService.findByEmail as jest.Mock).mockResolvedValue({
+        ...mockUser,
+        passwordHash: hashedPassword,
+        isActive: false,
+        accountHoldReason: null,
+      });
+
+      await expect(
+        authService.login('test@example.com', 'password123'),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('uses beta completion message for beta survey hold', async () => {
+      const hashedPassword = await bcrypt.hash('password123', 10);
+      (usersService.findByEmail as jest.Mock).mockResolvedValue({
+        ...mockUser,
+        passwordHash: hashedPassword,
+        isActive: false,
+        accountHoldReason: 'beta_survey_complete',
+      });
+
+      await expect(
+        authService.login('test@example.com', 'password123'),
+      ).rejects.toThrow(
+        'Beta testing completed. Your account will reopen at full release.',
+      );
+    });
   });
 });
