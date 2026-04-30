@@ -4,6 +4,7 @@ import {
   App,
   Button,
   Card,
+  DatePicker,
   Empty,
   Progress,
   Spin,
@@ -11,11 +12,15 @@ import {
   Tag,
   Tooltip,
 } from "antd";
+import dayjs, { Dayjs } from "dayjs";
 import {
   ArrowUpOutlined,
   ThunderboltFilled,
   ThunderboltOutlined,
   ReloadOutlined,
+  LeftOutlined,
+  RightOutlined,
+  CalendarOutlined,
 } from "@ant-design/icons";
 import { apiClient } from "@/providers/api-client";
 import {
@@ -66,31 +71,38 @@ export function DeliverySlotsTodayPage() {
   });
   const [loading, setLoading] = useState(true);
   const [busyBooking, setBusyBooking] = useState<number | null>(null);
-  const today = new Date().toISOString().slice(0, 10);
+  const todayIso = dayjs().format("YYYY-MM-DD");
+  const [selectedDate, setSelectedDate] = useState<string>(todayIso);
+  const isToday = selectedDate === todayIso;
 
-  const refresh = async () => {
+  const refresh = async (date: string = selectedDate) => {
     try {
       const res = await apiClient.get<TodaySnapshot>(
-        `/admin/delivery-slots/today?date=${today}`,
+        `/admin/delivery-slots/today?date=${date}`,
       );
       setSnapshot(res.data ?? { templates: [], bookings: [] });
     } catch {
-      message.error("Failed to load today's bookings");
+      message.error(`Failed to load bookings for ${date}`);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    refresh();
-    const socket = connectDeliverySlotsWS(today);
-    socket.on("slot-updated", () => refresh());
+    setLoading(true);
+    refresh(selectedDate);
+    const socket = connectDeliverySlotsWS(selectedDate);
+    socket.on("slot-updated", () => refresh(selectedDate));
     return () => {
       socket.off("slot-updated");
       disconnectDeliverySlotsWS();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [selectedDate]);
+
+  const shiftDay = (delta: number) => {
+    setSelectedDate(dayjs(selectedDate).add(delta, "day").format("YYYY-MM-DD"));
+  };
 
   // Enrich bookings with raw user/batch info from getRawAndEntities response.
   const enriched = useMemo<EnrichedBooking[]>(() => {
@@ -184,11 +196,79 @@ export function DeliverySlotsTodayPage() {
     );
   }
 
+  const dayLabel = isToday
+    ? "Today's Slots"
+    : selectedDate === dayjs().add(1, "day").format("YYYY-MM-DD")
+      ? "Tomorrow's Slots"
+      : `Slots — ${dayjs(selectedDate).format("ddd, MMM D")}`;
+
+  const headerControls = (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <Button
+        icon={<LeftOutlined />}
+        onClick={() => shiftDay(-1)}
+        title="Previous day"
+      />
+      <DatePicker
+        value={dayjs(selectedDate)}
+        onChange={(d: Dayjs | null) => {
+          if (d) setSelectedDate(d.format("YYYY-MM-DD"));
+        }}
+        suffixIcon={<CalendarOutlined />}
+        allowClear={false}
+        style={{ width: 160 }}
+      />
+      <Button
+        icon={<RightOutlined />}
+        onClick={() => shiftDay(1)}
+        title="Next day"
+      />
+      {!isToday && (
+        <Button
+          type="primary"
+          ghost
+          onClick={() => setSelectedDate(todayIso)}
+          style={{ borderColor: BRAND, color: BRAND }}
+        >
+          Today
+        </Button>
+      )}
+      <Button
+        icon={<ReloadOutlined />}
+        onClick={() => {
+          setLoading(true);
+          refresh(selectedDate);
+        }}
+      >
+        Refresh
+      </Button>
+    </div>
+  );
+
   if (snapshot.templates.length === 0) {
     return (
       <div style={{ padding: 24 }}>
-        <h2>Today's Slots — {today}</h2>
-        <Empty description="No slot templates configured for today" />
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 20,
+            flexWrap: "wrap",
+            gap: 12,
+          }}
+        >
+          <div>
+            <h2 style={{ margin: 0 }}>{dayLabel}</h2>
+            <div style={{ color: "#999", fontSize: 13, marginTop: 4 }}>
+              {selectedDate}
+            </div>
+          </div>
+          {headerControls}
+        </div>
+        <Empty
+          description={`No slot templates configured for ${dayjs(selectedDate).format("dddd")}`}
+        />
       </div>
     );
   }
@@ -201,25 +281,19 @@ export function DeliverySlotsTodayPage() {
           alignItems: "center",
           justifyContent: "space-between",
           marginBottom: 20,
+          flexWrap: "wrap",
+          gap: 12,
         }}
       >
         <div>
-          <h2 style={{ margin: 0 }}>Today's Slots</h2>
+          <h2 style={{ margin: 0 }}>{dayLabel}</h2>
           <div style={{ color: "#999", fontSize: 13, marginTop: 4 }}>
-            {today} · {enriched.length} booking{enriched.length === 1 ? "" : "s"}{" "}
+            {selectedDate} · {enriched.length} booking{enriched.length === 1 ? "" : "s"}{" "}
             across {snapshot.templates.length} window
             {snapshot.templates.length === 1 ? "" : "s"}
           </div>
         </div>
-        <Button
-          icon={<ReloadOutlined />}
-          onClick={() => {
-            setLoading(true);
-            refresh();
-          }}
-        >
-          Refresh
-        </Button>
+        {headerControls}
       </div>
 
       <div
