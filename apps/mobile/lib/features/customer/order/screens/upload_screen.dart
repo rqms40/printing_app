@@ -19,6 +19,7 @@ import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/file_preview_sheet.dart';
 import 'package:printing_app/shared/widgets/file_type_icon.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
+import 'package:printing_app/utils/file_helpers.dart';
 import 'package:printing_app/utils/formatters.dart';
 
 /// Step 3/6 -- File upload with real Dio progress.
@@ -62,28 +63,6 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
     return state.category == 'paper'
         ? AppConstants.paperMaxSizeMB
         : AppConstants.threeDMaxSizeMB;
-  }
-
-  String _mimeFromExtension(String ext) {
-    switch (ext.toLowerCase()) {
-      case 'jpg':
-      case 'jpeg':
-        return 'image/jpeg';
-      case 'png':
-        return 'image/png';
-      case 'webp':
-        return 'image/webp';
-      case 'pdf':
-        return 'application/pdf';
-      case 'stl':
-        return 'model/stl';
-      case 'obj':
-        return 'model/obj';
-      case '3mf':
-        return 'model/3mf';
-      default:
-        return 'application/octet-stream';
-    }
   }
 
   Future<void> _pickFile() async {
@@ -151,7 +130,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
       _fileName = file.name;
       _filePath = kIsWeb ? null : file.path;
       _fileBytes = file.bytes;
-      _fileMimeType = _mimeFromExtension(extension);
+      _fileMimeType = mimeTypeForExtension(extension);
       _fileSize = sizeInBytes;
       _fileMetadataId = null;
       _isUploading = true;
@@ -193,15 +172,20 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
   Future<void> _uploadFile(PlatformFile file) async {
     try {
       final MultipartFile multipartFile;
+      final extension = file.extension?.toLowerCase() ?? '';
+      final uploadMimeType = mimeTypeForExtension(extension);
+      final uploadContentType = DioMediaType.parse(uploadMimeType);
       if (file.bytes != null) {
         multipartFile = MultipartFile.fromBytes(
           file.bytes!,
           filename: file.name,
+          contentType: uploadContentType,
         );
       } else if (!kIsWeb && file.path != null) {
         multipartFile = await MultipartFile.fromFile(
           file.path!,
           filename: file.name,
+          contentType: uploadContentType,
         );
       } else {
         setState(() {
@@ -231,13 +215,18 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
         });
 
         // Fetch inspection results after upload
-        final paperSizeName = ref.read(orderFlowProvider).paperSpecs?.paperSize.name;
+        final paperSizeName = ref
+            .read(orderFlowProvider)
+            .paperSpecs
+            ?.paperSize
+            .name;
         if (fileMetadataId != null && paperSizeName != null) {
           try {
             final res = await ApiClient.instance.get(
               '/files/$fileMetadataId/inspect?paperSize=$paperSizeName',
             );
-            if (mounted) setState(() => _inspection = res.data as Map<String, dynamic>);
+            if (mounted)
+              setState(() => _inspection = res.data as Map<String, dynamic>);
           } catch (_) {}
         }
       }
@@ -328,10 +317,11 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                           curve: Curves.easeOut,
                         )
                         .slideY(
-                            begin: 0.03,
-                            duration: 400.ms,
-                            delay: 60.ms,
-                            curve: Curves.easeOut),
+                          begin: 0.03,
+                          duration: 400.ms,
+                          delay: 60.ms,
+                          curve: Curves.easeOut,
+                        ),
                     if (_inspection != null) ...[
                       const SizedBox(height: AppSpacing.sm),
                       if (_inspection!['colorSpace'] == 'cmyk')
@@ -340,22 +330,27 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                           label: 'CMYK — print ready',
                           color: Colors.green,
                         ),
-                      if (_inspection!['colorSpace'] != null && _inspection!['colorSpace'] != 'cmyk')
+                      if (_inspection!['colorSpace'] != null &&
+                          _inspection!['colorSpace'] != 'cmyk')
                         _InspectionChip(
                           icon: Icons.palette_outlined,
                           label: 'RGB — colors may shift when printed',
                           color: Colors.orange,
                         ),
-                      if (_inspection!['sizeValidation']?['status'] == 'mismatch')
+                      if (_inspection!['sizeValidation']?['status'] ==
+                          'mismatch')
                         _InspectionChip(
                           icon: Icons.warning_amber_rounded,
-                          label: _inspection!['sizeValidation']['message'] as String,
+                          label:
+                              _inspection!['sizeValidation']['message']
+                                  as String,
                           color: Colors.red,
                         ),
                       if (_inspection!['sizeValidation']?['status'] == 'match')
                         _InspectionChip(
                           icon: Icons.check_circle_outline,
-                          label: 'Size matches ${ref.read(orderFlowProvider).paperSpecs?.paperSize.name.toUpperCase() ?? ""}',
+                          label:
+                              'Size matches ${ref.read(orderFlowProvider).paperSpecs?.paperSize.name.toUpperCase() ?? ""}',
                           color: Colors.green,
                         ),
                     ],
@@ -368,12 +363,16 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                           fileName: _fileName!,
                           mimeType: _fileMimeType ?? 'application/octet-stream',
                           fileSize: _fileSize,
-                          widthMm: (_inspection?['widthMm'] as num?)?.toDouble(),
-                          heightMm: (_inspection?['heightMm'] as num?)?.toDouble(),
+                          widthMm: (_inspection?['widthMm'] as num?)
+                              ?.toDouble(),
+                          heightMm: (_inspection?['heightMm'] as num?)
+                              ?.toDouble(),
                         ),
                         child: Text(
                           'Preview file',
-                          style: AppTypography.caption.copyWith(color: colors.accent),
+                          style: AppTypography.caption.copyWith(
+                            color: colors.accent,
+                          ),
                         ),
                       ),
                     ],
@@ -599,7 +598,11 @@ class _LocalUploadPreviewSheet extends StatelessWidget {
 }
 
 class _InspectionChip extends StatelessWidget {
-  const _InspectionChip({ required this.icon, required this.label, required this.color });
+  const _InspectionChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
   final IconData icon;
   final String label;
   final Color color;
@@ -607,7 +610,10 @@ class _InspectionChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xs,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(AppRadius.sm),

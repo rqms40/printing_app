@@ -15,8 +15,12 @@ import { StorageService } from '../storage/storage.service';
 import { FileAnalysisService } from './file-analysis.service';
 import {
   ALLOWED_MIME_TYPES,
-  ALLOWED_EXTENSIONS,
-  MAX_FILE_SIZE_BYTES,
+  MIME_ALLOWED_EXTENSIONS,
+  PAPER_MAX_FILE_SIZE_BYTES,
+  PAPER_MAX_FILE_SIZE_MB,
+  THREE_D_EXTENSIONS,
+  THREE_D_MAX_FILE_SIZE_BYTES,
+  THREE_D_MAX_FILE_SIZE_MB,
 } from '../storage/storage.config';
 
 @Injectable()
@@ -37,16 +41,23 @@ export class FilesService {
   ): Promise<FileMetadata> {
     const fileExt = extname(file.originalname).toLowerCase();
     const mimeOk = ALLOWED_MIME_TYPES.includes(file.mimetype);
-    const extOk = ALLOWED_EXTENSIONS.includes(fileExt);
-    // Accept the file when either the MIME is explicitly whitelisted OR the
-    // extension is allowed (covers browsers reporting `application/octet-stream`
-    // for .stl/.obj/.3mf). This still rejects arbitrary binaries because the
-    // extension whitelist is small and explicit.
-    if (!mimeOk && !extOk) {
+    const extOk =
+      MIME_ALLOWED_EXTENSIONS[file.mimetype]?.includes(fileExt) ?? false;
+    const fileTypeAllowed = mimeOk && extOk;
+    // Match MIME and filename extension. Generic browser fallbacks are still
+    // accepted through MIME_ALLOWED_EXTENSIONS, but only for known extensions.
+    if (!fileTypeAllowed) {
       throw new BadRequestException('File type not allowed');
     }
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      throw new BadRequestException('File exceeds 20 MB limit');
+    const isThreeDFile = THREE_D_EXTENSIONS.includes(fileExt);
+    const maxSizeBytes = isThreeDFile
+      ? THREE_D_MAX_FILE_SIZE_BYTES
+      : PAPER_MAX_FILE_SIZE_BYTES;
+    const maxSizeMb = isThreeDFile
+      ? THREE_D_MAX_FILE_SIZE_MB
+      : PAPER_MAX_FILE_SIZE_MB;
+    if (file.size > maxSizeBytes) {
+      throw new BadRequestException(`File exceeds ${maxSizeMb} MB limit`);
     }
 
     const now = new Date();

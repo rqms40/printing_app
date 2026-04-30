@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -538,6 +539,7 @@ class _ResumeQueueCta extends StatelessWidget {
 
 class _HeaderIconButton extends StatelessWidget {
   const _HeaderIconButton({
+    super.key,
     required this.onTap,
     required this.colors,
     required this.child,
@@ -897,7 +899,7 @@ class _NotificationWidget extends ConsumerStatefulWidget {
 
 class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
     with SingleTickerProviderStateMixin {
-  final LayerLink _layerLink = LayerLink();
+  final GlobalKey _bellKey = GlobalKey();
   OverlayEntry? _overlay;
   late final AnimationController _animCtrl;
   late final Animation<double> _scaleAnim;
@@ -948,75 +950,119 @@ class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
 
   OverlayEntry _buildOverlay(BuildContext stateCtx) {
     return OverlayEntry(
-      builder: (_) => GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: _close,
-        child: Stack(
-          children: [
-            const Positioned.fill(child: ColoredBox(color: Colors.transparent)),
-            CompositedTransformFollower(
-              link: _layerLink,
-              showWhenUnlinked: false,
-              targetAnchor: Alignment.bottomRight,
-              followerAnchor: Alignment.topRight,
-              offset: const Offset(0, 8),
-              child: Material(
-                color: Colors.transparent,
-                child: GestureDetector(
-                  onTap: () {},
-                  child: FadeTransition(
-                    opacity: _fadeAnim,
-                    child: ScaleTransition(
-                      scale: _scaleAnim,
-                      alignment: Alignment.topRight,
-                      child: _NotificationDropdown(
-                        colors: widget.colors,
-                        dismissedIds: _locallyDismissed,
-                        onClose: _close,
-                        onViewAll: () {
-                          _close();
-                          Future.delayed(const Duration(milliseconds: 180), () {
-                            if (stateCtx.mounted) {
-                              stateCtx.push('/customer/notifications');
-                            }
-                          });
-                        },
-                        onTapNotification: (id) {
-                          ref
-                              .read(notificationsProvider.notifier)
-                              .markAsRead(id);
-                          _close();
-                          Future.delayed(const Duration(milliseconds: 180), () {
-                            if (stateCtx.mounted) {
-                              stateCtx.push('/customer/notifications');
-                            }
-                          });
-                        },
-                        onMarkAllRead: () {
-                          ref
-                              .read(notificationsProvider.notifier)
-                              .markAllAsRead();
-                          _overlay?.markNeedsBuild();
-                        },
-                        onClear: () {
-                          // Dismiss from home view only — notifications screen
-                          // keeps the full history.
-                          final ids = ref
-                              .read(notificationsProvider)
-                              .map((n) => n.id)
-                              .toSet();
-                          setState(() => _locallyDismissed.addAll(ids));
-                          _close();
-                        },
+      builder: (overlayCtx) {
+        // Position the dropdown using the bell's *actual* screen coordinates,
+        // so it stays inside the viewport regardless of device width or where
+        // the bell sits in the layout. CompositedTransformFollower doesn't
+        // clamp to screen edges, which caused the dropdown to overflow off
+        // the left side on narrow screens.
+        final media = MediaQuery.of(overlayCtx);
+        final screenWidth = media.size.width;
+        final viewPadding = media.viewPadding;
+
+        const sideMargin = 12.0;
+        final maxWidth = math.min(
+          360.0,
+          screenWidth - sideMargin * 2,
+        );
+
+        // Look up the bell's actual screen rect via its GlobalKey. Falls back
+        // to a sensible top-right anchor (under the system status bar) so the
+        // overlay still renders inside the viewport if the lookup fails.
+        final bellCtx = _bellKey.currentContext;
+        final bellBox = bellCtx?.findRenderObject() as RenderBox?;
+        double topPos;
+        double rightInset;
+        if (bellBox != null && bellBox.hasSize && bellBox.attached) {
+          final bellPos = bellBox.localToGlobal(Offset.zero);
+          final bellSize = bellBox.size;
+          topPos = bellPos.dy + bellSize.height + 8;
+          final desiredRight = screenWidth - (bellPos.dx + bellSize.width);
+          rightInset = desiredRight.clamp(sideMargin, screenWidth - maxWidth - sideMargin);
+        } else {
+          topPos = viewPadding.top + 64;
+          rightInset = sideMargin;
+        }
+
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: _close,
+          child: Stack(
+            children: [
+              const Positioned.fill(
+                child: ColoredBox(color: Colors.transparent),
+              ),
+              Positioned(
+                top: topPos,
+                right: rightInset,
+                width: maxWidth,
+                child: Padding(
+                  // Honour the bottom safe area so the card never sits under
+                  // a system gesture bar on tall layouts.
+                  padding: EdgeInsets.only(bottom: viewPadding.bottom),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: GestureDetector(
+                      onTap: () {},
+                      child: FadeTransition(
+                        opacity: _fadeAnim,
+                        child: ScaleTransition(
+                          scale: _scaleAnim,
+                          alignment: Alignment.topRight,
+                          child: _NotificationDropdown(
+                            colors: widget.colors,
+                            dismissedIds: _locallyDismissed,
+                            onClose: _close,
+                            onViewAll: () {
+                              _close();
+                              Future.delayed(
+                                const Duration(milliseconds: 180),
+                                () {
+                                  if (stateCtx.mounted) {
+                                    stateCtx.push('/customer/notifications');
+                                  }
+                                },
+                              );
+                            },
+                            onTapNotification: (id) {
+                              ref
+                                  .read(notificationsProvider.notifier)
+                                  .markAsRead(id);
+                              _close();
+                              Future.delayed(
+                                const Duration(milliseconds: 180),
+                                () {
+                                  if (stateCtx.mounted) {
+                                    stateCtx.push('/customer/notifications');
+                                  }
+                                },
+                              );
+                            },
+                            onMarkAllRead: () {
+                              ref
+                                  .read(notificationsProvider.notifier)
+                                  .markAllAsRead();
+                              _overlay?.markNeedsBuild();
+                            },
+                            onClear: () {
+                              final ids = ref
+                                  .read(notificationsProvider)
+                                  .map((n) => n.id)
+                                  .toSet();
+                              setState(() => _locallyDismissed.addAll(ids));
+                              _close();
+                            },
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1025,44 +1071,42 @@ class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
     final colors = widget.colors;
     final unreadCount = widget.unreadCount;
 
-    return CompositedTransformTarget(
-      link: _layerLink,
-      child: _HeaderIconButton(
-        onTap: _toggle,
-        colors: colors,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            HugeIcon(
-              icon: HugeIcons.strokeRoundedNotification02,
-              size: 22,
-              color: colors.onBackground,
-            ),
-            if (unreadCount > 0)
-              Positioned(
-                top: -3,
-                right: -3,
-                child: Container(
-                  width: 16,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: colors.brand,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      unreadCount > 9 ? '9+' : '$unreadCount',
-                      style: AppTypography.overline.copyWith(
-                        color: colors.background,
-                        fontSize: 8,
-                        fontWeight: FontWeight.w700,
-                      ),
+    return _HeaderIconButton(
+      key: _bellKey,
+      onTap: _toggle,
+      colors: colors,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          HugeIcon(
+            icon: HugeIcons.strokeRoundedNotification02,
+            size: 22,
+            color: colors.onBackground,
+          ),
+          if (unreadCount > 0)
+            Positioned(
+              top: -3,
+              right: -3,
+              child: Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: colors.brand,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    unreadCount > 9 ? '9+' : '$unreadCount',
+                    style: AppTypography.overline.copyWith(
+                      color: colors.background,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
@@ -1107,7 +1151,7 @@ class _NotificationDropdown extends ConsumerWidget {
     final unreadCount = visible.where((n) => !n.isRead).length;
 
     return Container(
-      width: 320,
+      width: double.infinity,
       constraints: const BoxConstraints(maxHeight: 400),
       decoration: BoxDecoration(
         color: colors.surface,
