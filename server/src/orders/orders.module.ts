@@ -22,6 +22,7 @@ import { DeliveryAssignment } from '../drivers/entities/delivery-assignment.enti
 import { Address } from '../addresses/entities/address.entity';
 import { DeliverySlotsModule } from '../delivery-slots/delivery-slots.module';
 import { PrinterProfileModule } from '../printer-profile/printer-profile.module';
+import { TamSurveysModule } from '../tam-surveys/tam-surveys.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { PrinterProfileModule } from '../printer-profile/printer-profile.module'
     CreditsModule,
     NotificationsModule,
     FilesModule,
+    TamSurveysModule,
     DeliverySlotsModule,
     PrinterProfileModule,
   ],

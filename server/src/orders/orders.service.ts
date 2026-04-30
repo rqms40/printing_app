@@ -25,6 +25,7 @@ import { DeliverySlotsService } from '../delivery-slots/delivery-slots.service';
 import { DeliverySettingsService } from '../delivery-slots/delivery-settings.service';
 import { DeliverySlotsGateway } from '../delivery-slots/delivery-slots.gateway';
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
+import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 
 @Injectable()
 export class OrdersService {
@@ -50,6 +51,7 @@ export class OrdersService {
     private creditsService: CreditsService,
     private notificationsService: NotificationsService,
     private filesService: FilesService,
+    private tamSurveysService: TamSurveysService,
     private dataSource: DataSource,
     private slotsService: DeliverySlotsService,
     private settingsService: DeliverySettingsService,
@@ -612,6 +614,13 @@ export class OrdersService {
           owner.fileRetentionDays,
         );
       }
+    }
+
+    if (
+      orderStatus === OrderStatus.DELIVERED ||
+      orderStatus === OrderStatus.COMPLETED_PICKUP
+    ) {
+      await this.tamSurveysService.createPostDeliveryRequirementIfNeeded(order);
     }
 
     // Status → notification copy (shared by FCM push + in-app notification)

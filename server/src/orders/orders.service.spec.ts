@@ -25,6 +25,7 @@ import { CancellationClosedException } from '../delivery-slots/exceptions';
 import { BatchOrder } from './entities/batch-order.entity';
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
 import { FileMetadata } from '../files/entities/file-metadata.entity';
+import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 
 describe('OrdersService', () => {
   let service: OrdersService;
@@ -154,6 +155,10 @@ describe('OrdersService', () => {
         { provide: UsersService, useValue: usersService },
         { provide: CreditsService, useValue: creditsService },
         { provide: NotificationsService, useValue: notificationsService },
+        {
+          provide: TamSurveysService,
+          useValue: { createPostDeliveryRequirementIfNeeded: jest.fn() },
+        },
         { provide: FilesService, useValue: { stampExpiry: jest.fn() } },
         { provide: DataSource, useValue: dataSource },
         {
@@ -665,6 +670,9 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
     create: jest.fn(),
     createForAllAdmins: jest.fn(),
   };
+  const mockTamSurveysService = {
+    createPostDeliveryRequirementIfNeeded: jest.fn(),
+  };
 
   const makeOrder = (overrides: Partial<Order> = {}): Order =>
     ({
@@ -708,6 +716,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         { provide: UsersService, useValue: mockUsersService },
         { provide: CreditsService, useValue: mockCredits },
         { provide: NotificationsService, useValue: mockNotifications },
+        { provide: TamSurveysService, useValue: mockTamSurveysService },
         { provide: FilesService, useValue: mockFilesService },
         { provide: DataSource, useValue: { transaction: jest.fn() } },
         {
@@ -812,6 +821,50 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
     await service.updateStatus(1, 'delivered');
 
     expect(mockFilesService.stampExpiry).toHaveBeenCalledWith(5, 7);
+  });
+
+  it('creates a post-delivery survey requirement when delivered', async () => {
+    const order = makeOrder({ orderStatus: OrderStatus.DELIVERED });
+    ordersRepo.findOneOrFail.mockResolvedValue(order);
+    ordersRepo.update.mockResolvedValue({});
+    mockUsersService.findById.mockResolvedValue({ fileRetentionDays: null });
+    mockUsersService.getFcmToken.mockResolvedValue(null);
+    mockNotifications.create.mockResolvedValue({});
+
+    await service.updateStatus(1, 'delivered');
+
+    expect(
+      mockTamSurveysService.createPostDeliveryRequirementIfNeeded,
+    ).toHaveBeenCalledWith(order);
+  });
+
+  it('creates a post-delivery survey requirement when completed_pickup', async () => {
+    const order = makeOrder({ orderStatus: OrderStatus.COMPLETED_PICKUP });
+    ordersRepo.findOneOrFail.mockResolvedValue(order);
+    ordersRepo.update.mockResolvedValue({});
+    mockUsersService.findById.mockResolvedValue({ fileRetentionDays: null });
+    mockUsersService.getFcmToken.mockResolvedValue(null);
+    mockNotifications.create.mockResolvedValue({});
+
+    await service.updateStatus(1, 'completed_pickup');
+
+    expect(
+      mockTamSurveysService.createPostDeliveryRequirementIfNeeded,
+    ).toHaveBeenCalledWith(order);
+  });
+
+  it('does not create a survey requirement for non-completion statuses', async () => {
+    const order = makeOrder({ orderStatus: OrderStatus.FILE_VERIFIED });
+    ordersRepo.findOneOrFail.mockResolvedValue(order);
+    ordersRepo.update.mockResolvedValue({});
+    mockUsersService.getFcmToken.mockResolvedValue(null);
+    mockNotifications.create.mockResolvedValue({});
+
+    await service.updateStatus(1, 'file_verified');
+
+    expect(
+      mockTamSurveysService.createPostDeliveryRequirementIfNeeded,
+    ).not.toHaveBeenCalled();
   });
 });
 
@@ -975,6 +1028,10 @@ describe('createBatch with slot + destinations', () => {
         {
           provide: NotificationsService,
           useValue: { createForAllAdmins: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: TamSurveysService,
+          useValue: { createPostDeliveryRequirementIfNeeded: jest.fn() },
         },
         { provide: FilesService, useValue: { stampExpiry: jest.fn() } },
         { provide: DataSource, useValue: dataSource },
@@ -1140,6 +1197,10 @@ describe('cancelBatch', () => {
         { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null) } },
         { provide: CreditsService, useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() } },
         { provide: NotificationsService, useValue: { createForAllAdmins: jest.fn().mockResolvedValue(undefined) } },
+        {
+          provide: TamSurveysService,
+          useValue: { createPostDeliveryRequirementIfNeeded: jest.fn() },
+        },
         { provide: FilesService, useValue: { stampExpiry: jest.fn() } },
         { provide: DataSource, useValue: dataSource },
         { provide: DeliverySlotsService, useValue: slotsService },
@@ -1218,6 +1279,10 @@ describe('updateManualStatus', () => {
         { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null) } },
         { provide: CreditsService, useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() } },
         { provide: NotificationsService, useValue: notificationsService },
+        {
+          provide: TamSurveysService,
+          useValue: { createPostDeliveryRequirementIfNeeded: jest.fn() },
+        },
         { provide: FilesService, useValue: { stampExpiry: jest.fn() } },
         { provide: DataSource, useValue: { transaction: jest.fn() } },
         { provide: DeliverySlotsService, useValue: { bookSlot: jest.fn(), releaseSlot: jest.fn(), getAvailability: jest.fn().mockResolvedValue([]) } },
@@ -1297,6 +1362,10 @@ describe('createBatch — 3D bounds enforcement', () => {
         { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null) } },
         { provide: CreditsService, useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() } },
         { provide: NotificationsService, useValue: { createForAllAdmins: jest.fn().mockResolvedValue(undefined) } },
+        {
+          provide: TamSurveysService,
+          useValue: { createPostDeliveryRequirementIfNeeded: jest.fn() },
+        },
         { provide: FilesService, useValue: { stampExpiry: jest.fn() } },
         { provide: DataSource, useValue: { transaction: jest.fn() } },
         { provide: DeliverySlotsService, useValue: { bookSlot: jest.fn(), releaseSlot: jest.fn(), getAvailability: jest.fn().mockResolvedValue([]) } },
@@ -1370,6 +1439,10 @@ describe('listExternalDeliveries and updateExternalDeliveryStatus', () => {
         { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null) } },
         { provide: CreditsService, useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() } },
         { provide: NotificationsService, useValue: { createForAllAdmins: jest.fn().mockResolvedValue(undefined) } },
+        {
+          provide: TamSurveysService,
+          useValue: { createPostDeliveryRequirementIfNeeded: jest.fn() },
+        },
         { provide: FilesService, useValue: { stampExpiry: jest.fn() } },
         { provide: DataSource, useValue: { transaction: jest.fn() } },
         { provide: DeliverySlotsService, useValue: { bookSlot: jest.fn(), releaseSlot: jest.fn() } },
