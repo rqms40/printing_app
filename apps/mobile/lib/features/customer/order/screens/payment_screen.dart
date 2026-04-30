@@ -18,6 +18,8 @@ import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
 import 'package:printing_app/utils/formatters.dart';
+import 'package:printing_app/features/customer/beta/exceptions/beta_order_limit_exception.dart';
+import 'package:printing_app/features/customer/beta/widgets/beta_order_limit_sheet.dart';
 
 double paymentScreenOrderTotal({
   required OrderFlowState flowState,
@@ -440,6 +442,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         _isProcessing = false;
         _isSuccess = true;
       });
+    } on BetaOrderLimitException {
+      if (!mounted) return;
+      setState(() => _isProcessing = false);
+      if (!mounted) return;
+      await BetaOrderLimitSheet.show(context);
+      return;
     } catch (e) {
       if (!mounted) return;
       setState(() => _isProcessing = false);
