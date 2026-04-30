@@ -78,6 +78,7 @@ void main() {
 
   Map<String, dynamic>? lastSurveyPayload;
   String? lastSurveyPath;
+  var normalSurveyPostCalls = 0;
   Interceptor? apiInterceptor;
 
   setUpAll(() {
@@ -93,6 +94,13 @@ void main() {
         if (options.path == '/tam-surveys/requirements/123/submit') {
           lastSurveyPath = options.path;
           lastSurveyPayload = Map<String, dynamic>.from(options.data as Map);
+          handler.resolve(
+            Response(requestOptions: options, statusCode: 201, data: {}),
+          );
+          return;
+        }
+        if (options.path == '/tam-surveys') {
+          normalSurveyPostCalls += 1;
           handler.resolve(
             Response(requestOptions: options, statusCode: 201, data: {}),
           );
@@ -114,11 +122,13 @@ void main() {
   setUp(() {
     lastSurveyPath = null;
     lastSurveyPayload = null;
+    normalSurveyPostCalls = 0;
   });
 
   group('RequiredTamSurveyScreen', () {
     testWidgets('disables system pop', (tester) async {
       await tester.pumpWidget(_wrap());
+      await tester.pump(const Duration(seconds: 1));
 
       expect(
         find.byWidgetPredicate(
@@ -126,10 +136,26 @@ void main() {
         ),
         findsOneWidget,
       );
+
+      await tester.pumpWidget(const SizedBox.shrink());
     });
 
-    testWidgets('uses the TAM face slider question flow', (tester) async {
+    testWidgets('uses the shared TAM overview and face slider flow', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap());
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('Survey'), findsOneWidget);
+      expect(
+        find.text('Help us improve GRID by sharing your experience.'),
+        findsOneWidget,
+      );
+      expect(find.byType(Slider), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('tam-question-1')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 700));
 
       final slider = tester.widget<Slider>(find.byType(Slider));
       expect(slider.min, 0);
@@ -143,19 +169,28 @@ void main() {
 
       expect(find.text('STRONGLY\nAGREE'), findsOneWidget);
 
-      await tester.tap(find.widgetWithText(ElevatedButton, 'Next'));
-      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('tam-flow-next')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 700));
 
       expect(find.text('Question 2 of 14'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
     });
 
     testWidgets('submits required survey payload and logs out', (tester) async {
       final authNotifier = _TestAuthNotifier();
       await tester.pumpWidget(_wrapWithRouter(authNotifier));
+      await tester.pump(const Duration(seconds: 1));
+
+      await tester.tap(find.byKey(const ValueKey('tam-question-1')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 700));
 
       for (var i = 0; i < 14; i += 1) {
-        await tester.tap(find.widgetWithText(ElevatedButton, 'Next'));
-        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('tam-flow-next')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 700));
       }
 
       await tester.enterText(
@@ -166,10 +201,11 @@ void main() {
         find.byType(TextField).at(1),
         'Fast delivery and clear updates.',
       );
-      await tester.tap(find.text('Submit Feedback'));
+      await tester.tap(find.byKey(const ValueKey('tam-open-forum-submit')));
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(lastSurveyPath, '/tam-surveys/requirements/123/submit');
+      expect(normalSurveyPostCalls, 0);
       expect(lastSurveyPayload?['openForumFeedback'], {
         'feature': 'Add saved presets.',
         'delivery': 'Fast delivery and clear updates.',
@@ -180,10 +216,12 @@ void main() {
       expect(surveyData?.values, everyElement(2));
 
       await tester.pump(const Duration(milliseconds: 1400));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(authNotifier.logoutCalls, 1);
       expect(find.text('Login Screen'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
     });
   });
 }
