@@ -350,8 +350,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       // -----------------------------------------------------------------------
       GoRoute(
         path: '/customer/order/new',
-        pageBuilder: (_, state) =>
-            slideUpTransition(const CategoryScreen(), state),
+        pageBuilder: (_, state) => slideUpTransition(
+          CategoryScreen(addMode: state.uri.queryParameters['mode'] == 'add'),
+          state,
+        ),
       ),
       GoRoute(
         path: '/customer/order/paper-specs',

@@ -13,7 +13,9 @@ import 'package:printing_app/shared/widgets/step_indicator.dart';
 
 /// Step 1/6 -- Category selection (Paper Printing or 3D Printing).
 class CategoryScreen extends ConsumerStatefulWidget {
-  const CategoryScreen({super.key});
+  const CategoryScreen({super.key, this.addMode = false});
+
+  final bool addMode;
 
   static const routeName = '/order/category';
 
@@ -56,7 +58,7 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
         backgroundColor: colors.background,
         elevation: 0,
         title: Text(
-          'New Order',
+          widget.addMode ? 'Add to your order' : 'New Order',
           style: AppTypography.h3.copyWith(color: colors.onBackground),
         ),
         iconTheme: IconThemeData(color: colors.onBackground),
@@ -69,6 +71,20 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
             children: [
               const SizedBox(height: AppSpacing.md),
               const StepIndicator(totalSteps: 6, currentStep: 0),
+              if (widget.addMode) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () =>
+                        context.go('/customer/order/checkout'),
+                    child: Text(
+                      'Skip — review checkout',
+                      style: AppTypography.body.copyWith(color: colors.accent),
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: AppSpacing.xl),
               Text(
                 'What would you\nlike to print?',
