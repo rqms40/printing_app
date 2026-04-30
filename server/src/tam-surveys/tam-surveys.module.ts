@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TamSurvey } from './entities/tam-survey.entity';
 import { TamSurveyRequirement } from './entities/tam-survey-requirement.entity';
@@ -16,7 +16,7 @@ import { User } from '../users/entities/user.entity';
       TamSurveySettings,
       User,
     ]),
-    NotificationsModule,
+    forwardRef(() => NotificationsModule),
   ],
   controllers: [TamSurveysController],
   providers: [TamSurveysService],

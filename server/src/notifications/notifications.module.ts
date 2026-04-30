@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -18,7 +18,7 @@ import { UsersModule } from '../users/users.module';
         signOptions: { expiresIn: config.get('JWT_EXPIRATION', '7d') },
       }),
     }),
-    UsersModule,
+    forwardRef(() => UsersModule),
   ],
   controllers: [NotificationsController],
   providers: [NotificationsService, NotificationsGateway],
