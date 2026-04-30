@@ -97,6 +97,16 @@ export class DeliverySlotsController {
     return this.slotsService.getTodaySnapshot(today);
   }
 
+  /// Returns booking counts for a 7-day window starting at `weekStart`.
+  /// Used by the admin "Today's Slots" week-pill navigator so it can show
+  /// per-day totals in a single round trip instead of N parallel calls.
+  @Get('admin/delivery-slots/week-counts')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  async adminWeekCounts(@Query('weekStart') weekStart: string) {
+    return this.slotsService.getWeekBookingCounts(weekStart);
+  }
+
   @Patch('admin/slot-bookings/order')
   @UseGuards(RolesGuard)
   @Roles('admin')

@@ -110,23 +110,15 @@ export function DeliverySlotsTodayPage() {
     }
   };
 
-  // Fetch booking counts for the surrounding week (the day pill strip)
+  // Fetch booking counts for the surrounding week (the day pill strip).
+  // One round-trip — server returns counts for all 7 days in a single SQL.
   const refreshWeekCounts = async (anchor: string) => {
-    const days = Array.from({ length: 7 }, (_, i) =>
-      dayjs(anchor).startOf("week").add(i, "day").format("YYYY-MM-DD"),
-    );
+    const weekStart = dayjs(anchor).startOf("week").format("YYYY-MM-DD");
     try {
-      const results = await Promise.all(
-        days.map((d) =>
-          apiClient
-            .get<TodaySnapshot>(`/admin/delivery-slots/today?date=${d}`)
-            .then((r) => [d, r.data?.bookings?.length ?? 0] as const)
-            .catch(() => [d, 0] as const),
-        ),
+      const res = await apiClient.get<Record<string, number>>(
+        `/admin/delivery-slots/week-counts?weekStart=${weekStart}`,
       );
-      const map: Record<string, number> = {};
-      for (const [d, count] of results) map[d] = count;
-      setWeekCounts(map);
+      setWeekCounts(res.data ?? {});
     } catch {
       /* non-fatal */
     }

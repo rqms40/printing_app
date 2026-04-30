@@ -161,6 +161,41 @@ export class DeliverySlotsService {
     return { templates, bookings: result.entities, raw: result.raw };
   }
 
+  /// Aggregates active booking counts for each of 7 consecutive days starting
+  /// at `weekStart`. Returns an object keyed by ISO date — every requested day
+  /// appears in the result (zero-counts included), so the client can render
+  /// without further normalization.
+  async getWeekBookingCounts(weekStart: string): Promise<Record<string, number>> {
+    const start = new Date(weekStart + 'T00:00:00Z');
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 7);
+    const endIso = end.toISOString().slice(0, 10);
+
+    const rows = await this.bookingRepo
+      .createQueryBuilder('b')
+      .innerJoin('batch_orders', 'bo', 'bo.id = b.batch_order_id')
+      .innerJoin(
+        'orders',
+        'o',
+        'o.batch_order_id = bo.id AND o.order_status NOT IN (:...excluded)',
+        { excluded: ['cancelled', 'file_declined'] },
+      )
+      .where('b.date >= :start AND b.date < :end', { start: weekStart, end: endIso })
+      .select('b.date::text', 'date')
+      .addSelect('COUNT(DISTINCT b.id)', 'count')
+      .groupBy('b.date')
+      .getRawMany<{ date: string; count: string }>();
+
+    const result: Record<string, number> = {};
+    for (let i = 0; i < 7; i += 1) {
+      const d = new Date(start);
+      d.setUTCDate(d.getUTCDate() + i);
+      result[d.toISOString().slice(0, 10)] = 0;
+    }
+    for (const r of rows) result[r.date] = Number(r.count);
+    return result;
+  }
+
   async reorderBookings(orderedIds: number[]) {
     await this.dataSource.transaction(async (m) => {
       for (let i = 0; i < orderedIds.length; i++) {
