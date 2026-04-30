@@ -8,6 +8,7 @@ import {
 } from './entities/conversation.entity';
 import { ChatMessage, SenderRole } from './entities/chat-message.entity';
 import { OpenRouterService } from './openrouter.service';
+import { GRIDBOT_REFUSAL, GRIDBOT_SYSTEM_PROMPT } from './gridbot.prompt';
 
 const makeConvRepo = () => ({
   create: jest.fn(),
@@ -132,10 +133,18 @@ describe('ChatService', () => {
         }),
       );
       expect(openRouter.complete).toHaveBeenCalledWith([
-        expect.objectContaining({ role: 'system' }),
+        { role: 'system', content: GRIDBOT_SYSTEM_PROMPT },
         { role: 'user', content: 'What do you offer?' },
       ]);
       expect(result).toBe('We offer paper and 3D printing!');
+    });
+
+    it('uses the GridBot guardrail system prompt that scopes the bot to GRID/printing', () => {
+      expect(GRIDBOT_SYSTEM_PROMPT).toContain('GridBot');
+      expect(GRIDBOT_SYSTEM_PROMPT).toContain('GRID');
+      expect(GRIDBOT_SYSTEM_PROMPT).toContain('REFUSAL RULE');
+      expect(GRIDBOT_SYSTEM_PROMPT).toContain(GRIDBOT_REFUSAL);
+      expect(GRIDBOT_REFUSAL).toMatch(/only help with questions about GRID/i);
     });
 
     it('maps bot messages to assistant role and reverses DESC history to chronological order', async () => {

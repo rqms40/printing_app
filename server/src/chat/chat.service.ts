@@ -8,15 +8,12 @@ import {
 } from './entities/conversation.entity';
 import { ChatMessage, SenderRole } from './entities/chat-message.entity';
 import { OpenRouterService } from './openrouter.service';
+import { GRIDBOT_SYSTEM_PROMPT } from './gridbot.prompt';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 
 @Injectable()
 export class ChatService {
-  private readonly SYSTEM_PROMPT =
-    'You are GridBot, a helpful assistant for GRID printing services. ' +
-    'Help customers with questions about paper printing, 3D printing, ' +
-    'pricing, and delivery. For order-specific issues or account matters, ' +
-    'politely direct them to our admin support team.';
+  private readonly SYSTEM_PROMPT = GRIDBOT_SYSTEM_PROMPT;
 
   constructor(
     @InjectRepository(Conversation)
