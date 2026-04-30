@@ -115,6 +115,7 @@ async function seed() {
       tam_survey_settings, tam_surveys,
       daily_grid_cards,
       delivery_slot_bookings, delivery_slot_templates, delivery_settings,
+      printer_profiles,
       users
     RESTART IDENTITY CASCADE
   `);
@@ -941,6 +942,20 @@ async function seed() {
       [7.0731, 125.6128, 25, 50, 30],
     );
     console.log('✅ Delivery settings seeded');
+  }
+
+  // ─── Printer Profile (singleton row) ────────────────────────────────
+  const [profileCount] = await typedQuery<CountRow>(
+    ds,
+    'SELECT count(*) FROM printer_profiles WHERE id = 1',
+  );
+  if (parseInt(profileCount.count) === 0) {
+    await ds.query(
+      `INSERT INTO printer_profiles (name, build_volume_width_mm, build_volume_depth_mm, build_volume_height_mm, max_file_size_mb)
+       VALUES ($1, $2, $3, $4, $5)`,
+      ['Bambu A1 Mini', 180, 180, 180, 200],
+    );
+    console.log('✅ Printer profile seeded (Bambu A1 Mini)');
   }
 
   console.log('\n🎉 Seed complete!\n');

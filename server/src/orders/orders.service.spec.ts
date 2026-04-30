@@ -23,6 +23,8 @@ import { DeliverySettingsService } from '../delivery-slots/delivery-settings.ser
 import { DeliverySlotsGateway } from '../delivery-slots/delivery-slots.gateway';
 import { CancellationClosedException } from '../delivery-slots/exceptions';
 import { BatchOrder } from './entities/batch-order.entity';
+import { PrinterProfileService } from '../printer-profile/printer-profile.service';
+import { FileMetadata } from '../files/entities/file-metadata.entity';
 
 describe('OrdersService', () => {
   let service: OrdersService;
@@ -143,6 +145,10 @@ describe('OrdersService', () => {
           provide: getRepositoryToken(DeliveryDestination),
           useValue: { create: jest.fn((d) => d), save: jest.fn(async (d) => ({ id: 1, ...d })) },
         },
+        {
+          provide: getRepositoryToken(FileMetadata),
+          useValue: { findOneOrFail: jest.fn().mockResolvedValue({ model3dWidthMm: null }) },
+        },
         { provide: OrdersGateway, useValue: gateway },
         { provide: FirebaseService, useValue: firebaseService },
         { provide: UsersService, useValue: usersService },
@@ -170,6 +176,10 @@ describe('OrdersService', () => {
         {
           provide: DeliverySlotsGateway,
           useValue: { notifySlotUpdated: jest.fn() },
+        },
+        {
+          provide: PrinterProfileService,
+          useValue: { getProfile: jest.fn().mockResolvedValue({ buildVolumeWidthMm: 999, buildVolumeDepthMm: 999, buildVolumeHeightMm: 999, maxFileSizeMb: 999 }) },
         },
       ],
     }).compile();
@@ -705,6 +715,10 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
           useValue: { create: jest.fn(), save: jest.fn() },
         },
         {
+          provide: getRepositoryToken(FileMetadata),
+          useValue: { findOneOrFail: jest.fn() },
+        },
+        {
           provide: DeliverySlotsService,
           useValue: {
             bookSlot: jest.fn().mockResolvedValue({ id: 1 }),
@@ -724,6 +738,10 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         {
           provide: DeliverySlotsGateway,
           useValue: { notifySlotUpdated: jest.fn() },
+        },
+        {
+          provide: PrinterProfileService,
+          useValue: { getProfile: jest.fn().mockResolvedValue({ buildVolumeWidthMm: 999, buildVolumeDepthMm: 999, buildVolumeHeightMm: 999, maxFileSizeMb: 999 }) },
         },
       ],
     }).compile();
@@ -963,6 +981,14 @@ describe('createBatch with slot + destinations', () => {
         { provide: DeliverySlotsService, useValue: slotsService },
         { provide: DeliverySettingsService, useValue: settingsService },
         { provide: DeliverySlotsGateway, useValue: slotsGateway },
+        {
+          provide: getRepositoryToken(FileMetadata),
+          useValue: { findOneOrFail: jest.fn() },
+        },
+        {
+          provide: PrinterProfileService,
+          useValue: { getProfile: jest.fn().mockResolvedValue({ buildVolumeWidthMm: 999, buildVolumeDepthMm: 999, buildVolumeHeightMm: 999, maxFileSizeMb: 999 }) },
+        },
       ],
     }).compile();
 
@@ -1108,6 +1134,7 @@ describe('cancelBatch', () => {
         { provide: getRepositoryToken(DeliveryAssignment), useValue: { find: jest.fn().mockResolvedValue([]) } },
         { provide: getRepositoryToken(Address), useValue: { findOne: jest.fn() } },
         { provide: getRepositoryToken(DeliveryDestination), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: getRepositoryToken(FileMetadata), useValue: { findOneOrFail: jest.fn() } },
         { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
         { provide: FirebaseService, useValue: { sendToDevice: jest.fn(), isAvailable: false } },
         { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null) } },
@@ -1124,6 +1151,10 @@ describe('cancelBatch', () => {
           },
         },
         { provide: DeliverySlotsGateway, useValue: { notifySlotUpdated: jest.fn() } },
+        {
+          provide: PrinterProfileService,
+          useValue: { getProfile: jest.fn().mockResolvedValue({ buildVolumeWidthMm: 999, buildVolumeDepthMm: 999, buildVolumeHeightMm: 999, maxFileSizeMb: 999 }) },
+        },
       ],
     }).compile();
 
@@ -1181,6 +1212,7 @@ describe('updateManualStatus', () => {
         { provide: getRepositoryToken(DeliveryAssignment), useValue: { find: jest.fn().mockResolvedValue([]) } },
         { provide: getRepositoryToken(Address), useValue: { findOne: jest.fn() } },
         { provide: getRepositoryToken(DeliveryDestination), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: getRepositoryToken(FileMetadata), useValue: { findOneOrFail: jest.fn() } },
         { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
         { provide: FirebaseService, useValue: { sendToDevice: jest.fn(), isAvailable: false } },
         { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null) } },
@@ -1191,6 +1223,10 @@ describe('updateManualStatus', () => {
         { provide: DeliverySlotsService, useValue: { bookSlot: jest.fn(), releaseSlot: jest.fn(), getAvailability: jest.fn().mockResolvedValue([]) } },
         { provide: DeliverySettingsService, useValue: { isInsideServiceArea: jest.fn().mockResolvedValue(true), getSettings: jest.fn().mockResolvedValue({ priorityFeeAmount: 50, extraDestinationSurcharge: 30 }) } },
         { provide: DeliverySlotsGateway, useValue: { notifySlotUpdated: jest.fn() } },
+        {
+          provide: PrinterProfileService,
+          useValue: { getProfile: jest.fn().mockResolvedValue({ buildVolumeWidthMm: 999, buildVolumeDepthMm: 999, buildVolumeHeightMm: 999, maxFileSizeMb: 999 }) },
+        },
       ],
     }).compile();
 
@@ -1228,6 +1264,83 @@ describe('updateManualStatus', () => {
   });
 });
 
+describe('createBatch — 3D bounds enforcement', () => {
+  let service: OrdersService;
+  let printerProfileService: jest.Mocked<Pick<PrinterProfileService, 'getProfile'>>;
+  let fileMetadataRepo: jest.Mocked<Pick<Repository<FileMetadata>, 'findOneOrFail'>>;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    printerProfileService = {
+      getProfile: jest.fn(),
+    };
+
+    fileMetadataRepo = {
+      findOneOrFail: jest.fn(),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        OrdersService,
+        { provide: getRepositoryToken(Order), useValue: { find: jest.fn(), findOne: jest.fn(), findOneOrFail: jest.fn(), create: jest.fn(), save: jest.fn(), update: jest.fn(), count: jest.fn() } },
+        { provide: getRepositoryToken(OrderItem), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: getRepositoryToken(BatchOrder), useValue: {} },
+        { provide: getRepositoryToken(PaperSpec), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: getRepositoryToken(ThreeDSpec), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: getRepositoryToken(DeliveryAssignment), useValue: { find: jest.fn().mockResolvedValue([]) } },
+        { provide: getRepositoryToken(Address), useValue: { findOne: jest.fn().mockResolvedValue({ id: 9, userId: 99 }) } },
+        { provide: getRepositoryToken(DeliveryDestination), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: getRepositoryToken(FileMetadata), useValue: fileMetadataRepo },
+        { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
+        { provide: FirebaseService, useValue: { sendToDevice: jest.fn(), isAvailable: false } },
+        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null) } },
+        { provide: CreditsService, useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() } },
+        { provide: NotificationsService, useValue: { createForAllAdmins: jest.fn().mockResolvedValue(undefined) } },
+        { provide: FilesService, useValue: { stampExpiry: jest.fn() } },
+        { provide: DataSource, useValue: { transaction: jest.fn() } },
+        { provide: DeliverySlotsService, useValue: { bookSlot: jest.fn(), releaseSlot: jest.fn(), getAvailability: jest.fn().mockResolvedValue([]) } },
+        {
+          provide: DeliverySettingsService,
+          useValue: {
+            isInsideServiceArea: jest.fn().mockResolvedValue(true),
+            getSettings: jest.fn().mockResolvedValue({ priorityFeeAmount: 50, extraDestinationSurcharge: 30 }),
+          },
+        },
+        { provide: DeliverySlotsGateway, useValue: { notifySlotUpdated: jest.fn() } },
+        { provide: PrinterProfileService, useValue: printerProfileService },
+      ],
+    }).compile();
+
+    service = module.get(OrdersService);
+  });
+
+  it('rejects when any 3D item exceeds the printer profile', async () => {
+    printerProfileService.getProfile.mockResolvedValue({
+      buildVolumeWidthMm: 180, buildVolumeDepthMm: 180, buildVolumeHeightMm: 180,
+      name: 'X', maxFileSizeMb: 200,
+    } as any);
+    fileMetadataRepo.findOneOrFail.mockResolvedValue({
+      id: 1, model3dWidthMm: '200', model3dDepthMm: '50', model3dHeightMm: '50',
+    } as any);
+
+    await expect(
+      service.createBatch(99, {
+        items: [
+          {
+            category: '3d',
+            fileMetadataId: 1,
+            quantity: 1,
+            threeDSpecs: {} as any,
+          },
+        ],
+        paymentMethod: 'cash',
+        deliveryOption: 'delivery',
+      } as any),
+    ).rejects.toThrow(/build volume/);
+  });
+});
+
 describe('listExternalDeliveries and updateExternalDeliveryStatus', () => {
   let service: OrdersService;
   let batchOrdersRepo: jest.Mocked<Pick<Repository<any>, 'find' | 'update'>>;
@@ -1251,6 +1364,7 @@ describe('listExternalDeliveries and updateExternalDeliveryStatus', () => {
         { provide: getRepositoryToken(DeliveryAssignment), useValue: { find: jest.fn().mockResolvedValue([]) } },
         { provide: getRepositoryToken(Address), useValue: { findOne: jest.fn() } },
         { provide: getRepositoryToken(DeliveryDestination), useValue: { create: jest.fn(), save: jest.fn() } },
+        { provide: getRepositoryToken(FileMetadata), useValue: { findOneOrFail: jest.fn() } },
         { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
         { provide: FirebaseService, useValue: { sendToDevice: jest.fn(), isAvailable: false } },
         { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null) } },
@@ -1261,6 +1375,10 @@ describe('listExternalDeliveries and updateExternalDeliveryStatus', () => {
         { provide: DeliverySlotsService, useValue: { bookSlot: jest.fn(), releaseSlot: jest.fn() } },
         { provide: DeliverySettingsService, useValue: { isInsideServiceArea: jest.fn().mockResolvedValue(true), getSettings: jest.fn().mockResolvedValue({ priorityFeeAmount: 50, extraDestinationSurcharge: 30 }) } },
         { provide: DeliverySlotsGateway, useValue: { notifySlotUpdated: jest.fn() } },
+        {
+          provide: PrinterProfileService,
+          useValue: { getProfile: jest.fn().mockResolvedValue({ buildVolumeWidthMm: 999, buildVolumeDepthMm: 999, buildVolumeHeightMm: 999, maxFileSizeMb: 999 }) },
+        },
       ],
     }).compile();
 

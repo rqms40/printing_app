@@ -17,12 +17,14 @@ import { UsersService } from '../users/users.service';
 import { CreditsService } from '../credits/credits.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { FilesService } from '../files/files.service';
+import { FileMetadata } from '../files/entities/file-metadata.entity';
 import { CreateBatchOrderDto } from './dto/create-order.dto';
 import { UpdateManualStatusDto } from './dto/update-manual-status.dto';
 import { Address } from '../addresses/entities/address.entity';
 import { DeliverySlotsService } from '../delivery-slots/delivery-slots.service';
 import { DeliverySettingsService } from '../delivery-slots/delivery-settings.service';
 import { DeliverySlotsGateway } from '../delivery-slots/delivery-slots.gateway';
+import { PrinterProfileService } from '../printer-profile/printer-profile.service';
 
 @Injectable()
 export class OrdersService {
@@ -52,6 +54,9 @@ export class OrdersService {
     private slotsService: DeliverySlotsService,
     private settingsService: DeliverySettingsService,
     private slotsGateway: DeliverySlotsGateway,
+    private printerProfileService: PrinterProfileService,
+    @InjectRepository(FileMetadata)
+    private readonly fileMetadataRepo: Repository<FileMetadata>,
   ) {}
 
   async findByUser(userId: number): Promise<Order[]> {
@@ -234,6 +239,30 @@ export class OrdersService {
     const extraDestCount = Math.max(0, destinations.length - 1);
     const extraDestinationFee = extraDestCount * Number(settings.extraDestinationSurcharge);
     const totalPrice = subtotal + deliveryFee + priorityFee + extraDestinationFee;
+
+    // --- 3D bounds enforcement ---
+    const profile = await this.printerProfileService.getProfile();
+    for (const item of normalizedItems) {
+      if (item.category !== '3d') continue;
+      if (item.fileMetadataId == null) continue;
+      const meta = await this.fileMetadataRepo.findOneOrFail({
+        where: { id: item.fileMetadataId },
+      });
+      if (meta.model3dWidthMm == null) continue;
+      const w = Number(meta.model3dWidthMm);
+      const d = Number(meta.model3dDepthMm);
+      const h = Number(meta.model3dHeightMm);
+      if (
+        w > profile.buildVolumeWidthMm ||
+        d > profile.buildVolumeDepthMm ||
+        h > profile.buildVolumeHeightMm
+      ) {
+        throw new BadRequestException({
+          message: `Model exceeds printer build volume (${w}×${d}×${h}mm vs ${profile.buildVolumeWidthMm}×${profile.buildVolumeDepthMm}×${profile.buildVolumeHeightMm}mm)`,
+          code: 'model_exceeds_build_volume',
+        });
+      }
+    }
 
     const orders = await this.dataSource.transaction(async (manager) => {
       const batchOrdersRepo = manager.getRepository(BatchOrder);
