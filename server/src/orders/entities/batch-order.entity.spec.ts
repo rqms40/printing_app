@@ -30,3 +30,15 @@ describe('Order entity multi-destination', () => {
     expect(cols).toContain('destinationId');
   });
 });
+
+describe('Order manual-status columns', () => {
+  const cols = getMetadataArgsStorage()
+    .filterColumns(Order)
+    .map((c) => c.propertyName);
+
+  it('has admin-status columns', () => {
+    for (const name of ['adminStatusNote', 'estimatedCompletionAt', 'adminStatusSetAt']) {
+      expect(cols).toContain(name);
+    }
+  });
+});

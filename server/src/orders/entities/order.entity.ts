@@ -109,12 +109,18 @@ export class Order {
   @Column({ name: 'delivery_option', default: 'pickup' })
   deliveryOption: string;
 
+  @Column({ name: 'admin_status_note', type: 'varchar', length: 255, nullable: true })
+  adminStatusNote: string | null;
+
   @Column({
     name: 'estimated_completion_at',
     type: 'timestamp',
     nullable: true,
   })
-  estimatedCompletionAt: Date;
+  estimatedCompletionAt: Date | null;
+
+  @Column({ name: 'admin_status_set_at', type: 'timestamp', nullable: true })
+  adminStatusSetAt: Date | null;
 
   @Column({ name: 'decline_reason', nullable: true, type: 'text' })
   declineReason: string;
