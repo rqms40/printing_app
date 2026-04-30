@@ -25,6 +25,7 @@ import {
   enrollUser,
   getBetaUsers,
   getSettings,
+  resetOrderLimit,
   searchBetaMembers,
   setBetaSurveyExempt,
   unenrollUser,
@@ -231,6 +232,34 @@ export function BetaModePage() {
     }
   };
 
+  const handleResetOrderLimit = (row: BetaMemberRow) => {
+    modal.confirm({
+      title: 'Reset beta order limit?',
+      content: (
+        <span>
+          This re-enrolls <strong>{row.email}</strong> as a beta tester at the
+          current time. They&apos;ll be able to place one new order during the
+          beta program. Note: their beta rank will move to the latest rank as a
+          side effect.
+        </span>
+      ),
+      okText: 'Reset',
+      cancelText: 'Cancel',
+      onOk: async () => {
+        setBusyId(row.id);
+        try {
+          await resetOrderLimit(row.id);
+          await fetchPage();
+          void message.success(`Order limit reset for ${row.email}`);
+        } catch {
+          void message.error('Failed to reset order limit.');
+        } finally {
+          setBusyId(null);
+        }
+      },
+    });
+  };
+
   const openEnrollModal = async () => {
     setModalOpen(true);
     setModalSearch('');
@@ -397,6 +426,27 @@ export function BetaModePage() {
               row.isBetaSurveyExempt ? { background: BRAND } : undefined
             }
           />
+        ),
+      },
+      {
+        title: 'Order Limit',
+        key: 'orderLimit',
+        width: 120,
+        render: (_: unknown, row: BetaMemberRow) => (
+          <Button
+            size="small"
+            icon={<ReloadOutlined />}
+            loading={busyId === row.id}
+            onClick={() => handleResetOrderLimit(row)}
+            style={{
+              background: '#1A1A1A',
+              borderColor: '#3A3A1A',
+              color: '#F5C842',
+              fontSize: 12,
+            }}
+          >
+            Reset
+          </Button>
         ),
       },
       {
