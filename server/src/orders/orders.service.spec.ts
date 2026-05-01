@@ -777,7 +777,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
   };
   const mockFilesService = { stampExpiry: jest.fn() };
   const mockUsersService = { findById: jest.fn(), getFcmToken: jest.fn() };
-  const mockGateway = { notifyOrderUpdate: jest.fn() };
+  const mockGateway = { notifyOrderUpdate: jest.fn(), notifySurveyRequired: jest.fn() };
   const mockFirebase = { sendToDevice: jest.fn() };
   const mockCredits = {
     subtractCredits: jest.fn(),
@@ -1012,6 +1012,95 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
     expect(
       mockTamSurveysService.createPostDeliveryRequirementIfNeeded,
     ).not.toHaveBeenCalled();
+  });
+
+  describe('survey-required real-time notifications when delivered', () => {
+    const surveyReq = { id: 42, orderId: 1, userId: 99 };
+
+    beforeEach(() => {
+      mockTamSurveysService.createPostDeliveryRequirementIfNeeded.mockResolvedValue(
+        surveyReq as any,
+      );
+      mockNotifications.create.mockResolvedValue({});
+    });
+
+    it('emits survey-required WS event when delivered and requirement is created', async () => {
+      const order = makeOrder({ orderStatus: OrderStatus.DELIVERED });
+      ordersRepo.findOneOrFail.mockResolvedValue(order);
+      ordersRepo.update.mockResolvedValue({});
+      mockUsersService.findById.mockResolvedValue({ fileRetentionDays: null });
+      mockUsersService.getFcmToken.mockResolvedValue(null);
+
+      await service.updateStatus(1, 'delivered');
+
+      expect(mockGateway.notifySurveyRequired).toHaveBeenCalledWith(
+        order.userId,
+        expect.objectContaining({
+          requirementId: surveyReq.id,
+          orderId: order.id,
+          orderRef: order.orderId,
+        }),
+      );
+    });
+
+    it('creates a survey_required in-app notification when delivered', async () => {
+      const order = makeOrder({ orderStatus: OrderStatus.DELIVERED });
+      ordersRepo.findOneOrFail.mockResolvedValue(order);
+      ordersRepo.update.mockResolvedValue({});
+      mockUsersService.findById.mockResolvedValue({ fileRetentionDays: null });
+      mockUsersService.getFcmToken.mockResolvedValue(null);
+
+      await service.updateStatus(1, 'delivered');
+
+      expect(mockNotifications.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: order.userId,
+          type: 'survey_required',
+          orderRef: order.orderId,
+          metadata: expect.objectContaining({
+            orderId: order.id,
+            requirementId: surveyReq.id,
+          }),
+        }),
+      );
+    });
+
+    it('sends FCM push with survey_required type when user has a token', async () => {
+      const order = makeOrder({ orderStatus: OrderStatus.DELIVERED });
+      ordersRepo.findOneOrFail.mockResolvedValue(order);
+      ordersRepo.update.mockResolvedValue({});
+      mockUsersService.findById.mockResolvedValue({ fileRetentionDays: null });
+      // getFcmToken is called for both the status push and the survey push
+      mockUsersService.getFcmToken.mockResolvedValue('fcm-xyz');
+
+      await service.updateStatus(1, 'delivered');
+
+      // Verify at least one call was made with the survey_required metadata
+      const surveyCalls = (mockFirebase.sendToDevice as jest.Mock).mock.calls.filter(
+        (call: any[]) => call[3]?.type === 'survey_required',
+      );
+      expect(surveyCalls).toHaveLength(1);
+      expect(surveyCalls[0][0]).toBe('fcm-xyz');
+    });
+
+    it('skips WS/notification when survey requirement returns null (non-beta user)', async () => {
+      mockTamSurveysService.createPostDeliveryRequirementIfNeeded.mockResolvedValue(
+        null,
+      );
+      const order = makeOrder({ orderStatus: OrderStatus.DELIVERED });
+      ordersRepo.findOneOrFail.mockResolvedValue(order);
+      ordersRepo.update.mockResolvedValue({});
+      mockUsersService.findById.mockResolvedValue({ fileRetentionDays: null });
+      mockUsersService.getFcmToken.mockResolvedValue(null);
+
+      await service.updateStatus(1, 'delivered');
+
+      expect(mockGateway.notifySurveyRequired).not.toHaveBeenCalled();
+      const surveyCalls = (mockNotifications.create as jest.Mock).mock.calls.filter(
+        (call: any[]) => call[0]?.type === 'survey_required',
+      );
+      expect(surveyCalls).toHaveLength(0);
+    });
   });
 });
 

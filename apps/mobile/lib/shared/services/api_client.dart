@@ -71,8 +71,18 @@ class ApiClient {
   Future<Response<T>> get<T>(String path, {Map<String, dynamic>? queryParameters, Options? options}) =>
       dio.get<T>(path, queryParameters: queryParameters, options: options);
 
-  Future<Response<T>> post<T>(String path, {dynamic data, Options? options}) =>
-      dio.post<T>(path, data: data, options: options);
+  Future<Response<T>> post<T>(
+    String path, {
+    dynamic data,
+    Options? options,
+    void Function(int, int)? onSendProgress,
+  }) =>
+      dio.post<T>(
+        path,
+        data: data,
+        options: options,
+        onSendProgress: onSendProgress,
+      );
 
   Future<Response<T>> put<T>(String path, {dynamic data, Options? options}) =>
       dio.put<T>(path, data: data, options: options);

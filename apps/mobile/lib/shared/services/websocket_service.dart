@@ -53,6 +53,9 @@ class WebSocketService {
   // reconnects and token refreshes do not lose UI listeners.
   final List<Function(Map<String, dynamic>)> _notificationListeners = [];
 
+  // Callbacks registered for survey-required events
+  final List<Function(Map<String, dynamic>)> _surveyRequiredListeners = [];
+
   // Callbacks registered for order updates
   final List<Function(dynamic)> _orderListeners = [];
 
@@ -184,6 +187,7 @@ class WebSocketService {
       if (d is Map<String, dynamic>) onCreditsUpdate(d);
     });
     _notificationsSocket!.on('newNotification', _dispatchNotification);
+    _notificationsSocket!.on('survey-required', _dispatchSurveyRequired);
     _notificationsSocket!.on(
       'connect',
       (_) => debugPrint('WS Notifications connected'),
@@ -213,6 +217,27 @@ class WebSocketService {
         debugPrint('WS newNotification handler error: $e');
       }
     }
+  }
+
+  void _dispatchSurveyRequired(dynamic data) {
+    final d = _normalize(data);
+    if (d is! Map<String, dynamic>) return;
+    for (final cb in List.of(_surveyRequiredListeners)) {
+      try {
+        cb(d);
+      } catch (e) {
+        debugPrint('WS survey-required handler error: $e');
+      }
+    }
+  }
+
+  /// Register a callback for incoming `survey-required` events.
+  /// Returns a removal handle — call it to unregister the callback.
+  VoidCallback listenForSurveyRequired(Function(Map<String, dynamic>) callback) {
+    if (!_surveyRequiredListeners.contains(callback)) {
+      _surveyRequiredListeners.add(callback);
+    }
+    return () => _surveyRequiredListeners.remove(callback);
   }
 
   /// Connects to the /ws/daily-grid namespace and listens for [dailyGridUpdated] events.
@@ -491,5 +516,6 @@ class WebSocketService {
     _messagesReadListeners.clear();
     _slotUpdatedListeners.clear();
     _orderListeners.clear();
+    _surveyRequiredListeners.clear();
   }
 }

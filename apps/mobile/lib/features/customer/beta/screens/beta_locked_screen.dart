@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -29,16 +30,47 @@ class BetaLockedScreen extends ConsumerStatefulWidget {
 }
 
 class _BetaLockedScreenState extends ConsumerState<BetaLockedScreen> {
+  // Native path (non-web)
   File? _photoFile;
+  // Web bytes + filename
+  Uint8List? _photoBytes;
+  String? _photoFileName;
+
   bool _sharedOnSocial = false;
-  bool _submitting = false;
-  bool _photoSubmitted = false;
 
   Future<void> _pickPhoto() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery);
-    if (picked != null) {
-      setState(() => _photoFile = File(picked.path));
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 1920,
+      );
+      if (picked == null) return; // user cancelled
+
+      if (kIsWeb) {
+        final bytes = await picked.readAsBytes();
+        setState(() {
+          _photoBytes = bytes;
+          _photoFileName = picked.name;
+          _photoFile = null;
+        });
+      } else {
+        setState(() {
+          _photoFile = File(picked.path);
+          _photoBytes = null;
+          _photoFileName = null;
+        });
+      }
+      ref.read(betaTestimonialProvider.notifier).clearError();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Could not open the photo library. Please check permissions.')),
+        );
+      }
     }
   }
 
@@ -50,9 +82,8 @@ class _BetaLockedScreenState extends ConsumerState<BetaLockedScreen> {
   Future<void> _handleCopyLink() async {
     await Clipboard.setData(const ClipboardData(text: _kBetaShareUrl));
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Link copied')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Link copied')));
     }
     setState(() => _sharedOnSocial = true);
   }
@@ -66,28 +97,25 @@ class _BetaLockedScreenState extends ConsumerState<BetaLockedScreen> {
   }
 
   Future<void> _submit() async {
-    if (_photoFile == null) return;
-    setState(() => _submitting = true);
+    final notifier = ref.read(betaTestimonialProvider.notifier);
     try {
-      await ref.read(betaTestimonialProvider.notifier).submit(
-            photo: _photoFile!,
-            sharedOnSocial: _sharedOnSocial,
-          );
-      setState(() {
-        _submitting = false;
-        _photoSubmitted = true;
-      });
+      await notifier.submit(
+        photo: kIsWeb ? null : _photoFile,
+        photoBytes: kIsWeb ? _photoBytes : null,
+        photoFileName: kIsWeb ? _photoFileName : null,
+        sharedOnSocial: _sharedOnSocial,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Thanks! See you at launch.')),
         );
       }
-    } catch (e) {
-      setState(() => _submitting = false);
+    } catch (_) {
+      final errMsg =
+          ref.read(betaTestimonialProvider).error ?? 'Upload failed';
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: $e')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(errMsg)));
       }
     }
   }
@@ -97,14 +125,23 @@ class _BetaLockedScreenState extends ConsumerState<BetaLockedScreen> {
     if (mounted) context.go('/auth/login');
   }
 
+  bool get _hasPhoto =>
+      (kIsWeb ? _photoBytes != null : _photoFile != null) ||
+      _photoBytes != null ||
+      _photoFile != null;
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = isDark ? AppColors.dark : AppColors.light;
     final betaLocked = ref.watch(authProvider).betaLocked;
     final fullName = betaLocked?.fullName ?? 'Beta Tester';
+
+    final uploadState = ref.watch(betaTestimonialProvider);
+    final isUploading = uploadState.isUploading;
+    // Photo was already uploaded if: server flag OR provider just succeeded
     final photoAlreadyUploaded =
-        _photoSubmitted || (betaLocked?.betaPhotoUploaded ?? false);
+        uploadState.submitted || (betaLocked?.betaPhotoUploaded ?? false);
 
     return PopScope(
       canPop: false,
@@ -117,7 +154,6 @@ class _BetaLockedScreenState extends ConsumerState<BetaLockedScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Hero block
                     const BetaHeroIllustration(),
 
                     Padding(
@@ -128,41 +164,42 @@ class _BetaLockedScreenState extends ConsumerState<BetaLockedScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // Greeting
                           Text(
                             'Hi $fullName, thanks for testing.',
-                            style: AppTypography.h2.copyWith(
-                              color: colors.onBackground,
-                            ),
+                            style: AppTypography.h2
+                                .copyWith(color: colors.onBackground),
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: AppSpacing.sm),
                           Text(
                             'Your full-release access opens at launch.',
-                            style: AppTypography.body.copyWith(
-                              color: colors.onSurfaceDim,
-                            ),
+                            style: AppTypography.body
+                                .copyWith(color: colors.onSurfaceDim),
                             textAlign: TextAlign.center,
                           ),
 
                           const SizedBox(height: AppSpacing.lg),
 
-                          // Conditional: photo card or success badge
                           if (photoAlreadyUploaded) ...[
                             _PhotoReceivedBadge(colors: colors),
                           ] else ...[
                             BetaPhotoUploadCard(
                               photoFile: _photoFile,
+                              photoBytes: _photoBytes,
+                              uploadProgress: uploadState.uploadProgress,
+                              uploadError: uploadState.error,
+                              uploadDone: uploadState.submitted,
                               onPick: _pickPhoto,
                               onReplace: _pickPhoto,
+                              onRetry: _submit,
                             ),
-                            if (_photoFile != null) ...[
+                            if (_hasPhoto) ...[
                               const SizedBox(height: AppSpacing.md),
                               SizedBox(
                                 height: 52,
                                 child: ElevatedButton(
                                   onPressed:
-                                      _submitting ? null : _submit,
+                                      isUploading ? null : _submit,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: colors.accent,
                                     disabledBackgroundColor: colors.disabled,
@@ -170,7 +207,7 @@ class _BetaLockedScreenState extends ConsumerState<BetaLockedScreen> {
                                       borderRadius: BorderRadius.circular(14),
                                     ),
                                   ),
-                                  child: _submitting
+                                  child: isUploading
                                       ? SizedBox(
                                           width: 20,
                                           height: 20,
@@ -192,14 +229,12 @@ class _BetaLockedScreenState extends ConsumerState<BetaLockedScreen> {
 
                           const SizedBox(height: AppSpacing.md),
 
-                          // Share row (always shown)
                           BetaShareRow(
                             onShare: _handleShare,
                             onCopyLink: _handleCopyLink,
                             onOpenChannel: _handleOpenChannel,
                           ),
 
-                          // Extra bottom padding for sign-out link
                           const SizedBox(height: AppSpacing.xxl),
                         ],
                       ),

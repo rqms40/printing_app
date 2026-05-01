@@ -48,4 +48,14 @@ export class OrdersGateway implements OnGatewayConnection {
     this.server.to(`order_${orderId}`).emit('orderUpdate', order);
     this.server.to('admin_orders').emit('orderUpdate', order);
   }
+
+  // Called by TamSurveysService after a post-delivery requirement is created
+  notifySurveyRequired(
+    userId: number,
+    payload: { requirementId: number; orderId: number; orderRef: string },
+  ) {
+    this.server
+      .to(`user_${userId}`)
+      .emit('survey-required', payload);
+  }
 }

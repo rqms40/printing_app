@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -29,16 +30,50 @@ class BetaSuccessWallScreen extends ConsumerStatefulWidget {
       _BetaSuccessWallScreenState();
 }
 
-class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen> {
+class _BetaSuccessWallScreenState
+    extends ConsumerState<BetaSuccessWallScreen> {
+  // Native path (non-web)
   File? _photoFile;
+  // Web bytes + filename
+  Uint8List? _photoBytes;
+  String? _photoFileName;
+
   bool _sharedOnSocial = false;
-  bool _submitting = false;
 
   Future<void> _pickPhoto() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery);
-    if (picked != null) {
-      setState(() => _photoFile = File(picked.path));
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 1920,
+      );
+      if (picked == null) return; // user cancelled — do nothing
+
+      if (kIsWeb) {
+        final bytes = await picked.readAsBytes();
+        setState(() {
+          _photoBytes = bytes;
+          _photoFileName = picked.name;
+          _photoFile = null;
+        });
+      } else {
+        setState(() {
+          _photoFile = File(picked.path);
+          _photoBytes = null;
+          _photoFileName = null;
+        });
+      }
+      // Clear any previous upload error so the card resets
+      ref.read(betaTestimonialProvider.notifier).clearError();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Could not open the photo library. Please check permissions.')),
+        );
+      }
     }
   }
 
@@ -50,9 +85,8 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen> {
   Future<void> _handleCopyLink() async {
     await Clipboard.setData(const ClipboardData(text: _kBetaShareUrl));
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Link copied')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Link copied')));
     }
     setState(() => _sharedOnSocial = true);
   }
@@ -66,21 +100,25 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen> {
   }
 
   Future<void> _submit() async {
-    if (_photoFile == null) return;
-    setState(() => _submitting = true);
+    final notifier = ref.read(betaTestimonialProvider.notifier);
     try {
-      await ref.read(betaTestimonialProvider.notifier).submit(
-            photo: _photoFile!,
-            sharedOnSocial: _sharedOnSocial,
-          );
+      await notifier.submit(
+        photo: kIsWeb ? null : _photoFile,
+        photoBytes: kIsWeb ? _photoBytes : null,
+        photoFileName: kIsWeb ? _photoFileName : null,
+        sharedOnSocial: _sharedOnSocial,
+      );
+      // On success the provider state has submitted=true; now sign out
       await ref.read(authProvider.notifier).logout();
       if (mounted) context.go('/auth/login');
-    } catch (e) {
-      setState(() => _submitting = false);
+    } catch (_) {
+      // Error is stored in provider state; card shows the retry button.
+      // The snackbar is a belt-and-suspenders fallback.
+      final errMsg =
+          ref.read(betaTestimonialProvider).error ?? 'Upload failed';
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: $e')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(errMsg)));
       }
     }
   }
@@ -90,11 +128,19 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen> {
     if (mounted) context.go('/auth/login');
   }
 
+  bool get _hasPhoto =>
+      (kIsWeb ? _photoBytes != null : _photoFile != null) ||
+      _photoBytes != null ||
+      _photoFile != null;
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = isDark ? AppColors.dark : AppColors.light;
-    final canSubmit = _photoFile != null && !_submitting;
+
+    final uploadState = ref.watch(betaTestimonialProvider);
+    final isUploading = uploadState.isUploading;
+    final canSubmit = _hasPhoto && !isUploading && !uploadState.submitted;
 
     return PopScope(
       canPop: false,
@@ -105,7 +151,6 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Hero block
                 const BetaHeroIllustration(),
 
                 Padding(
@@ -116,35 +161,35 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Title + subtitle
                       Text(
                         'You made GRID better.',
-                        style: AppTypography.h1.copyWith(
-                          color: colors.onBackground,
-                        ),
+                        style: AppTypography.h1
+                            .copyWith(color: colors.onBackground),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: AppSpacing.sm),
                       Text(
                         'Thanks for testing — your account reopens at full release.',
-                        style: AppTypography.body.copyWith(
-                          color: colors.onSurfaceDim,
-                        ),
+                        style: AppTypography.body
+                            .copyWith(color: colors.onSurfaceDim),
                         textAlign: TextAlign.center,
                       ),
 
                       const SizedBox(height: AppSpacing.lg),
 
-                      // Photo upload card
                       BetaPhotoUploadCard(
                         photoFile: _photoFile,
+                        photoBytes: _photoBytes,
+                        uploadProgress: uploadState.uploadProgress,
+                        uploadError: uploadState.error,
+                        uploadDone: uploadState.submitted,
                         onPick: _pickPhoto,
                         onReplace: _pickPhoto,
+                        onRetry: _submit,
                       ),
 
                       const SizedBox(height: AppSpacing.md),
 
-                      // Share row
                       BetaShareRow(
                         onShare: _handleShare,
                         onCopyLink: _handleCopyLink,
@@ -153,7 +198,6 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen> {
 
                       const SizedBox(height: AppSpacing.lg),
 
-                      // CTA
                       SizedBox(
                         height: 52,
                         child: ElevatedButton(
@@ -165,7 +209,7 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen> {
                               borderRadius: BorderRadius.circular(14),
                             ),
                           ),
-                          child: _submitting
+                          child: isUploading
                               ? SizedBox(
                                   width: 20,
                                   height: 20,
@@ -185,10 +229,9 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen> {
 
                       const SizedBox(height: AppSpacing.sm),
 
-                      // Skip
                       Center(
                         child: TextButton(
-                          onPressed: _submitting ? null : _skip,
+                          onPressed: isUploading ? null : _skip,
                           child: Text(
                             'Skip for now',
                             style: AppTypography.body.copyWith(

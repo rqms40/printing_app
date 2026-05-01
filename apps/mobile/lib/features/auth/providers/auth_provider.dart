@@ -442,6 +442,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         }
       },
     );
+    // Listen for real-time survey-required events so the survey gate activates
+    // without the user needing to refresh or re-login.
+    WebSocketService.instance.listenForSurveyRequired((_) {
+      _ref?.read(accountStateProvider.notifier).refresh();
+    });
   }
 
   /// Send the current FCM token to the server for targeted push notifications.

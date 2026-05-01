@@ -710,9 +710,65 @@ export class OrdersService {
       orderStatus === OrderStatus.COMPLETED_PICKUP
     ) {
       try {
-        await this.tamSurveysService.createPostDeliveryRequirementIfNeeded(
-          order,
-        );
+        const surveyReq =
+          await this.tamSurveysService.createPostDeliveryRequirementIfNeeded(
+            order,
+          );
+        if (surveyReq) {
+          // Real-time WebSocket push — client refreshes accountState instantly
+          try {
+            this.ordersGateway.notifySurveyRequired(order.userId, {
+              requirementId: surveyReq.id,
+              orderId: order.id,
+              orderRef: order.orderId,
+            });
+          } catch (wsErr) {
+            this.logger.warn(
+              `survey-required WS emit failed for user ${order.userId}: ${wsErr}`,
+            );
+          }
+
+          // In-app notification (best-effort)
+          try {
+            await this.notificationsService.create({
+              userId: order.userId,
+              title: 'Order delivered — share your feedback',
+              message:
+                'Your order has been delivered. Please complete a quick survey to continue.',
+              type: 'survey_required',
+              orderRef: order.orderId,
+              metadata: {
+                orderId: order.id,
+                requirementId: surveyReq.id,
+              },
+            });
+          } catch (notifErr) {
+            this.logger.warn(
+              `survey_required in-app notification failed for order ${order.orderId}: ${notifErr}`,
+            );
+          }
+
+          // FCM push (best-effort — no token = skip)
+          try {
+            const fcmToken = await this.usersService.getFcmToken(order.userId);
+            if (fcmToken) {
+              await this.firebaseService.sendToDevice(
+                fcmToken,
+                'Order delivered — share your feedback',
+                'Your order has been delivered. Please complete a quick survey to continue.',
+                {
+                  type: 'survey_required',
+                  orderId: String(order.id),
+                  requirementId: String(surveyReq.id),
+                },
+              );
+            }
+          } catch (fcmErr) {
+            this.logger.warn(
+              `survey_required FCM push failed for order ${order.orderId}: ${fcmErr}`,
+            );
+          }
+        }
       } catch (err) {
         this.logger.warn(
           `Post-delivery survey requirement failed for order ${order.orderId}: ${err}`,
