@@ -60,9 +60,18 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
   double _uploadProgress = 0;
   Map<String, dynamic>? _inspection;
 
+  PipelineTutorialNotifier? _pipelineNotifier;
+  PipelineState _pipelineState = const PipelineState();
+
   @override
   void initState() {
     super.initState();
+    _pipelineNotifier = ref.read(pipelineTutorialProvider.notifier);
+    ref.listenManual<PipelineState>(
+      pipelineTutorialProvider,
+      (_, next) => _pipelineState = next,
+      fireImmediately: true,
+    );
     // Delay long enough for the entry animations (400ms + 60ms delay) to
     // settle so the coach-mark spotlight captures the final widget positions.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -72,16 +81,10 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
 
   @override
   void dispose() {
-    final state = ref.read(pipelineTutorialProvider);
-    if (state.active &&
-        state.step == PipelineStep.uploadCard &&
+    if (_pipelineState.active &&
+        _pipelineState.step == PipelineStep.uploadCard &&
         !_advancedThisFrame) {
-      ref.read(pipelineTutorialProvider.notifier).abandon();
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(
-          content: Text('Tutorial dismissed — replay anytime in Profile → Reset Tutorials.'),
-        ),
-      );
+      _pipelineNotifier?.abandon();
     }
     super.dispose();
   }

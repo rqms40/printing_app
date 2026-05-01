@@ -9,13 +9,25 @@ import { TamSurvey } from '../tam-surveys/entities/tam-survey.entity';
 import { TamSurveyRequirement } from '../tam-surveys/entities/tam-survey-requirement.entity';
 import { TamSurveySettings } from '../tam-surveys/entities/tam-survey-settings.entity';
 import { Notification } from '../notifications/entities/notification.entity';
+import { MarketingNotification } from '../notifications/entities/marketing-notification.entity';
+import { FirebaseService } from '../firebase/firebase.service';
+import { BetaModeSettings } from '../beta-mode/entities/beta-mode-settings.entity';
 
 const mockDataSource = { transaction: jest.fn() };
 
+const mockFirebaseService = {
+  sendToMultiple: jest.fn(),
+  sendToToken: jest.fn(),
+  isInitialized: () => false,
+};
+
 @Global()
 @Module({
-  providers: [{ provide: DataSource, useValue: mockDataSource }],
-  exports: [DataSource],
+  providers: [
+    { provide: DataSource, useValue: mockDataSource },
+    { provide: FirebaseService, useValue: mockFirebaseService },
+  ],
+  exports: [DataSource, FirebaseService],
 })
 class TestTypeOrmSupportModule {}
 
@@ -50,6 +62,10 @@ describe('UsersModule wiring', () => {
       .overrideProvider(getRepositoryToken(TamSurveySettings))
       .useValue(mockRepository)
       .overrideProvider(getRepositoryToken(Notification))
+      .useValue(mockRepository)
+      .overrideProvider(getRepositoryToken(MarketingNotification))
+      .useValue(mockRepository)
+      .overrideProvider(getRepositoryToken(BetaModeSettings))
       .useValue(mockRepository)
       .compile();
 

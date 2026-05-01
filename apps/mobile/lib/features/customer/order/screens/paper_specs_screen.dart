@@ -40,6 +40,8 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
   final _specsFormKey = GlobalKey();
   final _specsContinueKey = GlobalKey();
   bool _advancedThisFrame = false;
+  PipelineTutorialNotifier? _pipelineNotifier;
+  PipelineState _pipelineState = const PipelineState();
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -50,6 +52,12 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
   @override
   void initState() {
     super.initState();
+    _pipelineNotifier = ref.read(pipelineTutorialProvider.notifier);
+    ref.listenManual<PipelineState>(
+      pipelineTutorialProvider,
+      (_, next) => _pipelineState = next,
+      fireImmediately: true,
+    );
     // Delay long enough for the entry animations (400ms + 60ms delay) to
     // settle so the coach-mark spotlight captures the final widget positions.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -59,17 +67,11 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
 
   @override
   void dispose() {
-    final state = ref.read(pipelineTutorialProvider);
-    if (state.active &&
-        (state.step == PipelineStep.paperSpecsForm ||
-         state.step == PipelineStep.paperSpecsContinue) &&
+    if (_pipelineState.active &&
+        (_pipelineState.step == PipelineStep.paperSpecsForm ||
+         _pipelineState.step == PipelineStep.paperSpecsContinue) &&
         !_advancedThisFrame) {
-      ref.read(pipelineTutorialProvider.notifier).abandon();
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(
-          content: Text('Tutorial dismissed — replay anytime in Profile → Reset Tutorials.'),
-        ),
-      );
+      _pipelineNotifier?.abandon();
     }
     _quantityController.dispose();
     _pageCountController.dispose();

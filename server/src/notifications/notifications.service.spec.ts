@@ -5,6 +5,7 @@ import { NotFoundException } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { NotificationsGateway } from './notifications.gateway';
 import { Notification } from './entities/notification.entity';
+import { MarketingNotification } from './entities/marketing-notification.entity';
 import { UsersService } from '../users/users.service';
 import { User } from '../users/entities/user.entity';
 
@@ -39,10 +40,20 @@ describe('NotificationsService', () => {
     usersService = { findAllByRole: jest.fn() };
     gateway = { broadcastToAdmins: jest.fn() };
 
+    const marketingRepo = {
+      find: jest.fn(),
+      findOne: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+    };
+
     const module = await Test.createTestingModule({
       providers: [
         NotificationsService,
         { provide: getRepositoryToken(Notification), useValue: repo },
+        { provide: getRepositoryToken(MarketingNotification), useValue: marketingRepo },
         { provide: UsersService, useValue: usersService },
         { provide: NotificationsGateway, useValue: gateway },
       ],

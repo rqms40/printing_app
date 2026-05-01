@@ -1,17 +1,47 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:mockito/mockito.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
 import 'package:printing_app/features/customer/order/models/checkout_state.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
+import 'package:printing_app/features/customer/order/providers/delivery_slot_provider.dart';
 import 'package:printing_app/features/customer/home/providers/tam_surveys_feed_provider.dart';
 import 'package:printing_app/features/customer/home/screens/home_screen.dart';
+import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
+import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
+import 'package:printing_app/features/tutorial/repository/tutorial_repository.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/paper_specs.dart';
+import 'package:printing_app/shared/providers/dio_provider.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
+
+class _MockDio extends Mock implements Dio {}
+
+class _MockWebSocketService extends Mock implements WebSocketService {}
+
+/// Pre-seeds tutorial state as fully seen so coach marks/welcome sheets don't
+/// intercept tap gestures during widget tests.
+class _PreSeenTutorialNotifier extends TutorialNotifier {
+  _PreSeenTutorialNotifier() : super(TutorialRepository()) {
+    state = TutorialKey.values.toSet();
+  }
+}
+
+List<Override> _baseTestOverrides() => [
+  authProvider.overrideWith((_) {
+    final notifier = AuthNotifier();
+    notifier.devBypass('customer');
+    return notifier;
+  }),
+  tutorialProvider.overrideWith((_) => _PreSeenTutorialNotifier()),
+  dioProvider.overrideWithValue(_MockDio()),
+  webSocketServiceProvider.overrideWithValue(_MockWebSocketService()),
+];
 
 /// Wraps a widget in a minimal MaterialApp with ProviderScope for testing.
 /// Pre-seeds authProvider with a mock customer so greeting displays a name.
@@ -22,11 +52,7 @@ Widget _wrap(
 }) {
   return ProviderScope(
     overrides: [
-      authProvider.overrideWith((_) {
-        final notifier = AuthNotifier();
-        notifier.devBypass('customer'); // sets fullName to 'Maria Santos'
-        return notifier;
-      }),
+      ..._baseTestOverrides(),
       ...overrides,
     ],
     child: MaterialApp(
@@ -56,11 +82,7 @@ Widget _wrapRouter(List<Override> overrides) {
 
   return ProviderScope(
     overrides: [
-      authProvider.overrideWith((_) {
-        final notifier = AuthNotifier();
-        notifier.devBypass('customer');
-        return notifier;
-      }),
+      ..._baseTestOverrides(),
       ...overrides,
     ],
     child: MaterialApp.router(

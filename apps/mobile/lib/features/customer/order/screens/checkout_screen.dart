@@ -32,31 +32,33 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final _itemsKey = GlobalKey();
   final _placeOrderKey = GlobalKey();
   bool _advancedThisFrame = false;
+  PipelineTutorialNotifier? _pipelineNotifier;
+  PipelineState _pipelineState = const PipelineState();
 
   @override
   void initState() {
     super.initState();
+    _pipelineNotifier = ref.read(pipelineTutorialProvider.notifier);
+    ref.listenManual<PipelineState>(
+      pipelineTutorialProvider,
+      (_, next) => _pipelineState = next,
+      fireImmediately: true,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowCheckoutTutorial());
   }
 
   @override
   void dispose() {
-    final state = ref.read(pipelineTutorialProvider);
     const pipelineSteps = {
       PipelineStep.checkoutItems,
       PipelineStep.checkoutDelivery,
       PipelineStep.checkoutPayment,
       PipelineStep.placeOrderButton,
     };
-    if (state.active &&
-        pipelineSteps.contains(state.step) &&
+    if (_pipelineState.active &&
+        pipelineSteps.contains(_pipelineState.step) &&
         !_advancedThisFrame) {
-      ref.read(pipelineTutorialProvider.notifier).abandon();
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(
-          content: Text('Tutorial dismissed — replay anytime in Profile → Reset Tutorials.'),
-        ),
-      );
+      _pipelineNotifier?.abandon();
     }
     super.dispose();
   }

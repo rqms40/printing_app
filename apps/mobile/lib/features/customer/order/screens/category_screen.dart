@@ -29,6 +29,8 @@ class CategoryScreen extends ConsumerStatefulWidget {
 class _CategoryScreenState extends ConsumerState<CategoryScreen> {
   final _paperCategoryKey = GlobalKey();
   bool _advancedThisFrame = false;
+  PipelineTutorialNotifier? _pipelineNotifier;
+  PipelineState _pipelineState = const PipelineState();
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -39,6 +41,12 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
   @override
   void initState() {
     super.initState();
+    _pipelineNotifier = ref.read(pipelineTutorialProvider.notifier);
+    ref.listenManual<PipelineState>(
+      pipelineTutorialProvider,
+      (_, next) => _pipelineState = next,
+      fireImmediately: true,
+    );
     _loadDefaultPrintMode();
     // Delay long enough for the card's entry animation (400ms + 60ms delay) to
     // settle so the coach-mark spotlight captures the final card position.
@@ -49,16 +57,10 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
 
   @override
   void dispose() {
-    final state = ref.read(pipelineTutorialProvider);
-    if (state.active &&
-        state.step == PipelineStep.paperCategoryCard &&
+    if (_pipelineState.active &&
+        _pipelineState.step == PipelineStep.paperCategoryCard &&
         !_advancedThisFrame) {
-      ref.read(pipelineTutorialProvider.notifier).abandon();
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(
-          content: Text('Tutorial dismissed — replay anytime in Profile → Reset Tutorials.'),
-        ),
-      );
+      _pipelineNotifier?.abandon();
     }
     super.dispose();
   }
