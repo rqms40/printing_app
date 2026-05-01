@@ -2941,3 +2941,178 @@ enum DeliveryStatus {
 | Status is `printingInProgress` or later | No | Cancellation not allowed -- materials already consumed |
 
 Cancellation is initiated by the customer and processed immediately. For GCash/Maya payments, the refund is initiated via the `PaymentEndpoint.initiateRefund` method. The `cancellationReason` is stored on the order record, and the status change is logged in `order_status_history`.
+
+---
+
+## 20. Implementation Status & Post-MVP Features Shipped
+
+The original PRD scoped a single-item-per-order MVP with three roles. The current branch (`feat/2026-05-01-file-preview-batch-merge`) extends well beyond v3. This section is the source of truth for what is **actually implemented and on the codebase today**, in addition to everything in sections 4–7 above. Sections marked ✅ are reflected in CI-verified code. Sections marked 🟡 are spec'd and partially built; ❌ are deferred.
+
+### 20.1 Backend Modules (NestJS)
+
+23 modules currently registered in `server/src/app.module.ts`:
+
+| Module | Status | Notes |
+|--------|--------|-------|
+| `admin` | ✅ | KPIs, queue, drivers, orders, users analytics endpoints |
+| `auth` | ✅ | JWT + Passport, staged registration, profile setup |
+| `users` | ✅ | Profile, storage settings (file retention), `tutorial_seen_keys text[]`, FCM token |
+| `orders` | ✅ | Single + **batch orders** (multiple items, one transaction), order items, delivery destinations, manual status note, speed tier (express/standard/economy), beta-order-limit error, external-deliveries controller |
+| `addresses` | ✅ | Saved addresses with landmark + map coords |
+| `drivers` | ✅ | Availability, GPS streaming, assignments |
+| `delivery-slots` | ✅ | **Slot templates** (recurring time windows × capacity), **bookings** (per-day count tracked at template level with row-lock), **delivery settings** (default radius, geo-radius validation), Today's Slots WS broadcast |
+| `credits` | ✅ | **GRID Credits ledger**, top-up via PayMongo, balance check, "Pay with Credits" payment method |
+| `chat` | ✅ | **Live chat** module — conversations, chat-messages, GridBot system prompt (OpenRouter integration), chat WebSocket gateway, chat-entity-metadata for typing indicators |
+| `beta-mode` | ✅ | **Beta enrollment** settings, per-user 1-order limit while in beta, post-delivery TAM survey lockout enforcement |
+| `daily-grid` | ✅ | **Curated catalog cards** the customer sees on home, real-time WS updates when admin changes them |
+| `printer-profile` | ✅ | Per-printer build volume limits (Bambu A1 / A1 Mini), customer-facing dimension warning |
+| `tam-surveys` | ✅ | TAM questionnaire submissions, settings, requirements (per-survey trigger conditions), service spec |
+| `files` | ✅ | S3 upload, presigned URL, **file analysis service** (CMYK/RGB detection, dimension match), **paper-size validator**, **3D model analysis** (STL/OBJ vertex/triangle count, build volume check), **GLB encoder**, retention purge cron, file inspection DTO |
+| `payments` | ✅ | PayMongo GCash + Card |
+| `notifications` | ✅ | In-app inbox, FCM push, **marketing-scheduler service** (broadcast to all users with frequency 6h/daily/monthly + active toggle), order-status auto-notifications |
+| `firebase` | ✅ | Admin SDK |
+| `storage` | ✅ | S3/MinIO client config |
+| `health` | ✅ | DB probe |
+| `common` | ✅ | Guards, role-based decorators, exception filter (logs stack traces, forwards structured errors) |
+| `seed` | ✅ | Demo data seeder |
+| `app.module` | ✅ | Wires it all up |
+
+### 20.2 Database Migrations
+
+TypeORM migrations applied:
+
+1. **`1714435200000-add-speed-tier-and-payment-default`** — adds `speed_tier` enum + `default_payment_method` on users.
+2. **`1715040000000-drop-priority-boolean`** — removes legacy `priority` boolean (replaced by `speedTier`).
+3. **`1777507200000-add-tutorial-seen-keys`** — adds `tutorial_seen_keys text[] NOT NULL DEFAULT '{}'` on users for the in-app tutorial system.
+
+Entity columns added beyond v3:
+- `users.tutorialSeenKeys: string[]`, `defaultPaymentMethod`, `fileRetentionDays`, `fcmToken`, `isBetaUser`
+- `orders.speedTier`, `orders.statusNote` (3D manual status), `orders.deliveryDestinations` relation, `batch_order` entity for grouped placements
+- `file_metadata.expiresAt` (retention) + `inspectionData` (analysis cache)
+- `printer_profile`, `delivery_settings`, `delivery_slot_template`, `delivery_slot_booking`, `tam_survey_settings`, `tam_survey_requirement`, `beta_mode_settings`, `chat_message`, `conversation`, `marketing_notification`, `daily_grid_card`
+
+### 20.3 Mobile (Flutter) Features Beyond v3
+
+**Onboarding & tutorial layer**
+- ✅ **First-login role-picker onboarding** — visual cards for customer / driver / admin (`features/onboarding/`).
+- ✅ **In-app tutorial system** (`features/tutorial/`):
+  - `TutorialKey` enum: `onboarding`, `pipeline`, `homeFeatures`, `checkoutFeatures`, `tracking`
+  - Server-synced "seen" set via `PATCH /users/me/tutorials`, locally cached in SharedPreferences
+  - Multi-screen **pipeline walkthrough** for first-time printing: welcome bottom sheet → "Start Printing" tile coach mark → Paper Printing card → spec form + Continue button → Upload card + Continue → Checkout (Items, Delivery section, Payment section, Place Order)
+  - Auto-positioning bubbles (target Y position decides above/below), pulse-disabled, single-tap advance via `onClickTarget`
+  - Post-pipeline **feature discovery** pass: Credits chip + GridBot FAB on home → Multi-drop tab + GRID Credits row on next checkout → live-map coach mark on first tracking visit
+  - Back-navigation abandons silently and marks `pipeline` seen
+  - "Reset Tutorials" row in Profile → Preferences
+
+**Home & catalog**
+- ✅ **Bento home grid** with hero, Resume-your-Queue card, Daily Grid section (real-time WS), Recent Orders, GridBot FAB, GRID Credits chip in header.
+- ✅ **Daily Grid section** — admin-curated catalog cards visible on customer home, with **real-time updates via `daily_grid` WS gateway** so admin edits propagate without refresh. Mobile widget: `daily_grid_section.dart` + `daily_grid_section_ws_test.dart`.
+- ✅ **Next Batch dialog** — fires at first login on home if a batch session is open, prompting the user to resume.
+
+**Order flow**
+- ✅ **Cart-style batch checkout** — replaces v3's single-item flow. Multiple items in one transaction:
+  - `CheckoutItemsCard` with swipe-to-remove + edit-all-specs sheet
+  - `CheckoutDeliveryCard` with single / pickup / **multi-drop** segmented selector (per-copy assignment via `assign_drop_sheet`)
+  - `CheckoutSpeedCard` with Express / Standard / Economy speed tiers
+  - `CheckoutPaymentCard` with payment method sheet (GCash / GRID Credits / COD)
+  - `CheckoutSummaryCard` (subtotal, delivery, total)
+  - `CheckoutFooter` (sticky Place Order button)
+  - `CheckoutSegmented` (rounded pill selector for delivery type)
+- ✅ **Delivery slot picker** — sheet shows today's available slots filtered by geo-radius around the destination. Bookings update in real time via slot WS.
+- ✅ **Multi-drop assignment** — per-copy mapping of cart items to up to 5 delivery addresses, each with its own fee. `multidrop_groups` widget renders the grouping.
+- ✅ **Address picker sheet** — pin-on-map input, landmark field, saved addresses, selection callback.
+- ✅ **3D Model preview** — `model_3d_preview.dart` renders STL/OBJ in app before upload via `glb-encoder` server pipeline.
+- ✅ **Printer limits card** — manual W×H×D entry, real-time check vs the chosen printer's build volume, oversized-warning sheet with chat link.
+- ✅ **Ruler overlay** — draggable, rotatable, scale-togglable triangular scale ruler on file preview.
+- ✅ **Order success screen** with batch summary, "Track this order" CTA, and pipeline-tutorial finish hook.
+
+**Wallet & payments**
+- ✅ **GRID Credits**: top-up custom amount via PayMongo GCash, ledger view in profile, "Pay with GRID Credits" payment row when balance ≥ order total. Beta users get bonus credits.
+
+**Live chat**
+- ✅ **Chat tab** in customer bottom navigation. Two backends:
+  - **GridBot AI** (OpenRouter, system prompt at `server/src/chat/gridbot.prompt.ts`) — 24/7 support, conversation history persisted.
+  - **Human admin/rider chat** — WebSocket-backed real-time messages, typing indicator, message bubbles, chat avatar.
+- ✅ **Floating chat button** on home screen with unread count badge and circle-shape spotlight in tutorial.
+
+**Beta mode**
+- ✅ **Beta enrollment** badge on profile, `BetaIndicator` widget, `BetaOrderLimitException` enforced server-side, `BetaOrderLimitSheet` informational UI.
+- ✅ **Required TAM survey lockout** — beta users prompted with required post-delivery survey before placing the next order.
+
+**Privacy & file management**
+- ✅ **My Uploads** screen — view all previously uploaded files with size + expiry badge, delete-now action.
+- ✅ **Storage settings** — per-user file retention (3 / 7 / 30 days / custom), persisted on user record, `PurgeService` daily cron sweep.
+- ✅ **Storage settings screen test** — covers the full retention preference UI.
+
+**Tracking**
+- ✅ **Live driver map** — flutter_map + OSRM driving route, ETA badge, multi-drop sequential destinations, swipeable cards.
+
+**Profile**
+- ✅ **Account state provider** — required-survey gating, profile completion check, beta status.
+- ✅ **TAM survey screen** — Likert scale animated face slider, dynamic-price prefill from last order, open forum free-text questions (price, feature, upload, delivery), audio feedback (`assets/audio/` likert sounds), supports both required (cannot dismiss) and optional flows.
+- ✅ **Required TAM survey screen** — disables system pop, submits + logs out on completion.
+- ✅ **Request a Feature** card.
+- ✅ **Profile menu rows** — addresses, payment methods, GRID Credits, storage settings, notification preferences, tutorial reset, dark mode, sign out.
+
+**Admin (mobile)**
+- ✅ Mobile admin queue + dashboard (legacy from earlier phases) coexists with the React admin.
+
+### 20.4 Admin Dashboard (Refine + React) Pages
+
+| Page | Status | Notes |
+|------|--------|-------|
+| Dashboard (KPIs + charts) | ✅ | + Users analytics tab |
+| Orders list / show | ✅ | Status dropdown, manual status (3D), decline-with-reason, audit timeline, driver assignment, **per-row file preview**, **top-level Inspect File button** |
+| Drivers | ✅ | Availability, GPS, assignment count |
+| Users | ✅ | Detail with metrics, recent orders, profile fields |
+| **Delivery Slots → Templates** | ✅ | CRUD for slot templates with capacity + time + geo-radius |
+| **Delivery Slots → Today's Slots** | ✅ | Live booked count via WS, date navigator, week pills |
+| **Beta Mode** | ✅ | Enrollment management, enable/disable per-user |
+| **Chat** | ✅ | Conversation list + thread, real-time WS, reply form, typing indicator, message bubble |
+| **TAM Surveys** | ✅ | Submission viewer + per-survey settings |
+| Notifications → Marketing Settings | ✅ | Composer with iOS-style live preview, frequency picker, active toggle |
+| **Credit Requests** | ✅ | Review + approve/decline customer top-up requests |
+| **Admin Settings → Delivery** | ✅ | Default delivery radius, default fee schedule |
+| **Admin Settings → Printer** | ✅ | Bambu A1 / A1 Mini build volume limits, oversized warning copy |
+| **External Deliveries** | ✅ | Maxim / Grab Express handoff for out-of-zone destinations |
+| **File Inspector Modal** | ✅ | PDF page-count extraction (pdf-lib), STL/OBJ/GLB CAD viewer (three.js + @react-three/fiber + @react-three/drei), validation toggle |
+| **File Preview Modal** | ✅ | Per-row preview with inspection data + presigned URL |
+
+### 20.5 Real-Time WebSocket Gateways
+
+The server runs **4 Socket.IO gateways**:
+
+| Gateway | Channel | Used by |
+|---------|---------|---------|
+| Orders | `orders:user:{userId}` + `orders:admins` | Customer order tracking + admin queue refresh |
+| Chat | `chat:conversation:{id}` | Customer ↔ admin live chat + typing indicator |
+| Delivery Slots | `slots:{date}` | Today's Slots admin view + slot picker capacity |
+| Daily Grid | `daily-grid` | Admin-edited catalog cards propagating to home |
+
+### 20.6 New Test Surface
+
+| Suite | Tests | Highlights |
+|-------|-------|------------|
+| Mobile (Flutter) | 300+ | Tutorial, checkout (5 cards + footer), checkout fees, multi-drop, payment-method sheet, slot picker, beta enrollment, chat provider, conversation provider, file upload card, address picker, ruler overlay, file helpers, daily grid WS, account state, required TAM, storage settings, order card |
+| Server (Jest) | 350+ | Beta-mode service, chat service, chat gateway, chat entity metadata, OpenRouter service, daily-grid gateway + service, delivery-slots controller + gateway + service + settings, geo-radius, delivery-slot-template entity, file analysis, paper-size validator, 3D model analysis, GLB encoder, files service & controller, printer-profile, TAM surveys service, beta-order-limit error, batch-order entity, delivery-destination entity, JWT strategy, seed |
+| Admin (Vitest) | 80+ | Auth provider, useChat hook, console-warning regressions, file-preview modal, orders preview, sider-render, theme, dashboard analytics + users-tab, credit-requests, betaModeApi, grid-sider, users list/show, orders list |
+
+### 20.7 Operational Notes
+
+- **CI**: 3 GitHub Actions workflows (`ci-mobile.yml`, `ci-server.yml`, `ci-admin.yml`) run lint + test + build per app on every push to a feature branch.
+- **Release**: tag-based APK release workflow; production server runs in Docker Compose alongside PostgreSQL and Redis.
+- **DB hygiene**: dev container restarts can drop the `grid_print` database — recreate with `docker exec server-postgres-1 psql -U postgres -c "CREATE DATABASE grid_print;"`.
+- **Branches**: feature work flows through dated branches (`feat/YYYY-MM-DD-<scope>`); `main` is the integration target.
+
+### 20.8 Known Gaps (Tracked, Not Yet Shipped)
+
+- ❌ **Production deployment** of the API server (currently dev / staging Docker only)
+- ❌ **PayMongo live keys** (sandbox in use)
+- ❌ **S3 in production** (MinIO used in dev)
+- 🟡 **Funnel drop-off analytics** for the order flow (server logging in place, admin viewer pending)
+- 🟡 **Multi-drop route optimization** (sequential is supported; auto-ordering for shortest route is post-MVP)
+- ❌ **Auto-assignment of drivers by proximity** (admin still picks manually)
+- ❌ **i18n / multi-language**
+
+For day-to-day implementation specs and plans for individual features, see `docs/superpowers/specs/` and `docs/superpowers/plans/` — every shipped feature in section 20 has a dated design + plan there.
+
