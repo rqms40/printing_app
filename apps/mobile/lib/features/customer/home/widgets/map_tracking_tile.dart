@@ -152,6 +152,7 @@ class _ActiveTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final eta = _etaMinutes(driverPoint, state.routePoints);
+    final colors = brightness == Brightness.dark ? AppColors.dark : AppColors.light;
 
     return Stack(
       fit: StackFit.expand,
@@ -188,7 +189,7 @@ class _ActiveTile extends StatelessWidget {
               vertical: 3,
             ),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFDE58),
+              color: colors.brand,
               borderRadius: AppRadius.borderFull,
             ),
             child: Row(

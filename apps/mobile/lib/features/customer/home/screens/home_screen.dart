@@ -564,8 +564,6 @@ class _CreditsWidgetState extends State<_CreditsWidget>
   late final Animation<double> _fadeAnim;
   bool _isOpen = false;
 
-  static const Color _kBrand = Color(0xFFFFDE58);
-
   @override
   void initState() {
     super.initState();
@@ -663,12 +661,12 @@ class _CreditsWidgetState extends State<_CreditsWidget>
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
             color: _isOpen
-                ? _kBrand.withValues(alpha: 0.14)
+                ? widget.colors.brand.withValues(alpha: 0.14)
                 : widget.colors.surfaceVariant,
             borderRadius: AppRadius.borderMd,
             border: Border.all(
               color: _isOpen
-                  ? _kBrand.withValues(alpha: 0.55)
+                  ? widget.colors.brand.withValues(alpha: 0.55)
                   : widget.colors.outline.withValues(alpha: 0.3),
               width: 0.75,
             ),
@@ -676,16 +674,16 @@ class _CreditsWidgetState extends State<_CreditsWidget>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
+              Icon(
                 Icons.monetization_on_rounded,
                 size: 15,
-                color: _kBrand,
+                color: widget.colors.brand,
               ),
               const SizedBox(width: 5),
               Text(
                 _formatCredits(widget.credits),
                 style: AppTypography.bodyBold.copyWith(
-                  color: _kBrand,
+                  color: widget.colors.brand,
                   fontSize: 12,
                   height: 1.0,
                 ),
@@ -709,11 +707,10 @@ class _CreditsDropdown extends StatelessWidget {
   final int credits;
   final VoidCallback onTopUp;
 
-  static const Color _kBrand = Color(0xFFFFDE58);
-
   @override
   Widget build(BuildContext context) {
     final pesoEquiv = _formatCredits(credits);
+    final brand = colors.brand;
 
     return Container(
       width: 210,
@@ -721,7 +718,7 @@ class _CreditsDropdown extends StatelessWidget {
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: AppRadius.borderXl,
-        border: Border.all(color: _kBrand.withValues(alpha: 0.18), width: 0.75),
+        border: Border.all(color: brand.withValues(alpha: 0.18), width: 0.75),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.45),
@@ -729,7 +726,7 @@ class _CreditsDropdown extends StatelessWidget {
             offset: const Offset(0, 10),
           ),
           BoxShadow(
-            color: _kBrand.withValues(alpha: 0.06),
+            color: brand.withValues(alpha: 0.06),
             blurRadius: 32,
             spreadRadius: -4,
             offset: const Offset(0, 4),
@@ -747,18 +744,18 @@ class _CreditsDropdown extends StatelessWidget {
                 width: 30,
                 height: 30,
                 decoration: BoxDecoration(
-                  color: _kBrand.withValues(alpha: 0.12),
+                  color: brand.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: _kBrand.withValues(alpha: 0.25),
+                    color: brand.withValues(alpha: 0.25),
                     width: 0.75,
                   ),
                 ),
-                child: const Center(
+                child: Center(
                   child: Icon(
                     Icons.monetization_on_rounded,
                     size: 15,
-                    color: _kBrand,
+                    color: brand,
                   ),
                 ),
               ),
@@ -780,7 +777,7 @@ class _CreditsDropdown extends StatelessWidget {
           Text(
             _formatCredits(credits),
             style: AppTypography.display.copyWith(
-              color: _kBrand,
+              color: brand,
               fontSize: 36,
               height: 1.0,
               letterSpacing: -0.5,
@@ -812,7 +809,7 @@ class _CreditsDropdown extends StatelessWidget {
                   width: 30,
                   height: 30,
                   decoration: BoxDecoration(
-                    color: _kBrand,
+                    color: brand,
                     borderRadius: AppRadius.borderMd,
                   ),
                   child: const Center(
@@ -1354,8 +1351,6 @@ class _YellowBorderTile extends StatefulWidget {
 class _YellowBorderTileState extends State<_YellowBorderTile> {
   bool _pressed = false;
 
-  static const _kBrand = Color(0xFFFFDE58);
-
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -1392,7 +1387,7 @@ class _YellowBorderTileState extends State<_YellowBorderTile> {
                     child: HugeIcon(
                       icon: widget.icon,
                       size: 26,
-                      color: _kBrand,
+                      color: widget.colors.brand,
                     ),
                   ),
                 ),
@@ -1526,9 +1521,9 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
           shape: RoundedRectangleBorder(borderRadius: AppRadius.borderXl),
           title: Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.star_rounded,
-                color: Color(0xFFFFDE58),
+                color: widget.colors.brand,
                 size: 20,
               ),
               const SizedBox(width: 8),
@@ -1614,7 +1609,7 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
               child: Text(
                 'Community feedback.',
                 style: AppTypography.caption.copyWith(
-                  color: const Color(0xFFFFDE58),
+                  color: widget.colors.brand,
                   fontSize: 10,
                 ),
                 softWrap: true,
@@ -1629,7 +1624,7 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
               color: Colors.transparent,
               borderRadius: AppRadius.borderMd,
               border: Border.all(
-                color: const Color(0xFFFFDE58).withValues(alpha: 0.8),
+                color: widget.colors.brand.withValues(alpha: 0.8),
                 width: 0.75,
               ),
             ),
@@ -1693,7 +1688,7 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
                                   return Icon(
                                     Icons.star_rounded,
                                     color: isFilled
-                                        ? const Color(0xFFFFDE58)
+                                        ? widget.colors.brand
                                         : widget.colors.onSurfaceDim
                                               .withValues(alpha: 0.4),
                                     size: starSize,
@@ -1744,12 +1739,12 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
                   ),
                 );
               },
-              loading: () => const Center(
+              loading: () => Center(
                 child: SizedBox(
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(
-                    color: Color(0xFFFFDE58),
+                    color: widget.colors.brand,
                     strokeWidth: 2.0,
                   ),
                 ),

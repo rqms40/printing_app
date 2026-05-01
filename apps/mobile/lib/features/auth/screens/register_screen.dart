@@ -246,8 +246,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       shape: BoxShape.circle,
                       gradient: RadialGradient(
                         colors: [
-                          const Color(0xFFFFDE58).withValues(alpha: 0.50),
-                          const Color(0xFFFFDE58).withValues(alpha: 0.0),
+                          colors.brand.withValues(alpha: 0.50),
+                          colors.brand.withValues(alpha: 0.0),
                         ],
                       ),
                     ),

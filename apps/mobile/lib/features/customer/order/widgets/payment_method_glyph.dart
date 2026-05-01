@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hugeicons/hugeicons.dart';
+import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/shared/models/enums.dart';
 
 /// Branded round glyph for each PaymentMethod.
@@ -12,6 +13,9 @@ class PaymentMethodGlyph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
     switch (method) {
       case PaymentMethod.gcash:
         return _Glyph.letter(size: size, bg: const Color(0xFF007DFE), letter: 'G');
@@ -27,7 +31,7 @@ class PaymentMethodGlyph extends StatelessWidget {
       case PaymentMethod.gridCredits:
         return _Glyph.icon(
           size: size,
-          bg: const Color(0xFFFFDE58),
+          bg: colors.brand,
           icon: HugeIcons.strokeRoundedCoins01,
           iconColor: Colors.black,
         );

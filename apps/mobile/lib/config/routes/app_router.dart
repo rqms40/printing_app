@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/routes/page_transitions.dart';
+import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/auth/models/registration_draft.dart';
 import 'package:printing_app/features/customer/profile/models/account_state.dart';
@@ -261,7 +262,9 @@ final routerProvider = Provider<GoRouter>((ref) {
                         ),
                       ],
                     ),
-                    backgroundColor: const Color(0xFFFFDE58),
+                    backgroundColor: (Theme.of(context).brightness == Brightness.dark
+                        ? AppColors.dark
+                        : AppColors.light).brand,
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),

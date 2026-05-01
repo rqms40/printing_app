@@ -440,7 +440,7 @@ class _PaperSizeDemandChartCard extends StatelessWidget {
                     barRods: [
                       BarChartRodData(
                         toY: e.value.value.toDouble(),
-                        color: const Color(0xFFFFDE58),
+                        color: colors.brand,
                         width: 14,
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
                       ),

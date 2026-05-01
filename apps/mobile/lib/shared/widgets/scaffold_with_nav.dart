@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/shared/providers/api_status_provider.dart';
 import 'package:printing_app/shared/providers/connectivity_provider.dart';
 import 'package:printing_app/shared/widgets/offline_banner.dart';
@@ -128,6 +129,9 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
   Widget build(BuildContext context) {
     final isOnline = ref.watch(connectivityProvider);
     final isApiUp = ref.watch(apiStatusProvider);
+    final colors = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
 
     final bottomInset = MediaQuery.of(context).viewPadding.bottom;
 
@@ -253,11 +257,11 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
                         width: _openFabSize,
                         height: _openFabSize,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFFDE58),
+                          color: colors.brand,
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFFFFDE58)
+                              color: colors.brand
                                   .withValues(alpha: 0.55),
                               blurRadius: 18,
                               spreadRadius: 0,

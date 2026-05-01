@@ -439,7 +439,7 @@ class _CirclePhoto extends StatelessWidget {
           height: 16,
           child: CircularProgressIndicator(
             strokeWidth: 1.5,
-            color: Color(0xFFFFDE58),
+            color: AppColors.brandLogo,
           ),
         ),
       ),

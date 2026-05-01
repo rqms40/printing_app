@@ -261,7 +261,7 @@ class _BetaBadge extends ConsumerWidget {
               .animate(onPlay: (c) => c.repeat())
               .shimmer(
                 duration: const Duration(seconds: 3),
-                color: const Color(0xFFFFDE58).withValues(alpha: 0.2),
+                color: brandColor.withValues(alpha: 0.2),
               ),
         );
       },

@@ -314,14 +314,17 @@ class _PanelBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFDE58),
+        color: colors.brand,
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFFDE58).withValues(alpha: 0.5),
+            color: colors.brand.withValues(alpha: 0.5),
             blurRadius: 28,
             spreadRadius: 2,
             offset: const Offset(0, -6),
@@ -397,6 +400,9 @@ class _ActionItemState extends State<_ActionItem> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) => setState(() => _pressed = false),
@@ -431,7 +437,7 @@ class _ActionItemState extends State<_ActionItem> {
                     icon: widget.qa.icon,
                     size: 22,
                     color: widget.qa.isPrimary
-                        ? const Color(0xFFFFDE58)
+                        ? colors.brand
                         : Colors.black,
                   ),
                 ),
