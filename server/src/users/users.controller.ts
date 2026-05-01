@@ -13,6 +13,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateStorageSettingsDto } from './dto/update-storage-settings.dto';
+import { UpdateTutorialKeysDto } from './dto/update-tutorial-keys.dto';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
 import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 
@@ -83,6 +84,15 @@ export class UsersController {
     @Body() body: { method: 'gcash' | 'maya' | 'cod' | 'credits' },
   ) {
     await this.usersService.setDefaultPaymentMethod(req.user.sub, body.method);
+    return { ok: true };
+  }
+
+  @Patch('me/tutorials')
+  async updateTutorialSeenKeys(
+    @Request() req: RequestWithUser,
+    @Body() dto: UpdateTutorialKeysDto,
+  ) {
+    await this.usersService.updateTutorialSeenKeys(req.user.sub, dto.keys);
     return { ok: true };
   }
 }

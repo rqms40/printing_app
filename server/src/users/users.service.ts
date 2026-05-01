@@ -121,6 +121,10 @@ export class UsersService {
     await this.usersRepo.update(userId, { defaultPaymentMethod: method });
   }
 
+  async updateTutorialSeenKeys(userId: number, keys: string[]): Promise<void> {
+    await this.usersRepo.update(userId, { tutorialSeenKeys: keys });
+  }
+
   private normalizeProfilingData(data: Partial<UserProfilingInput | User>) {
     const normalized: Partial<User> = {};
 

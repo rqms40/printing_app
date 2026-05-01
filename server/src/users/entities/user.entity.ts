@@ -120,6 +120,14 @@ export class User {
   @Column({ name: 'default_payment_method', type: 'varchar', length: 20, nullable: true })
   defaultPaymentMethod: 'gcash' | 'maya' | 'cod' | 'credits' | null;
 
+  @Column({
+    name: 'tutorial_seen_keys',
+    type: 'text',
+    array: true,
+    default: [],
+  })
+  tutorialSeenKeys: string[];
+
   @Column({ name: 'is_beta_user', default: false })
   isBetaUser: boolean;
 
