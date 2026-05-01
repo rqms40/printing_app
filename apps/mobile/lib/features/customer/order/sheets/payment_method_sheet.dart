@@ -8,9 +8,14 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/payment_method_glyph.dart';
+import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
+import 'package:printing_app/features/tutorial/providers/checkout_tutorial_session_provider.dart';
+import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
+import 'package:printing_app/features/tutorial/widgets/coach_mark_sequence.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/utils/formatters.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
 class PaymentMethodSheet {
   static Future<PaymentMethod?> show(
@@ -37,10 +42,57 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
   PaymentMethod? _chosen;
   bool _setDefault = false;
 
+  /// Key used to spotlight the GRID Credits row for the Step B tutorial.
+  final _creditsCoachKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
     _chosen = widget.initial;
+
+    // Step B: fire the GRID Credits coach mark when:
+    //   • pipeline has been seen (post-pipeline user)
+    //   • checkoutFeatures not yet seen (haven't completed the two-step tutorial)
+    //   • multidrop Step A was completed this session
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 400), () {
+        if (!mounted) return;
+        final pipelineSeen =
+            ref.read(tutorialSeenProvider(TutorialKey.pipeline));
+        final checkoutSeen =
+            ref.read(tutorialSeenProvider(TutorialKey.checkoutFeatures));
+        final multidropDone = ref.read(checkoutMultidropSeenInSessionProvider);
+        if (pipelineSeen && !checkoutSeen && multidropDone) {
+          _fireCreditsCoachMark();
+        }
+      });
+    });
+  }
+
+  void _fireCreditsCoachMark() {
+    // Guard: ensure the key is attached to a live render object.
+    if (_creditsCoachKey.currentContext?.findRenderObject() == null) return;
+    showCoachMark(
+      context,
+      [
+        TutorialStep(
+          targetKey: _creditsCoachKey,
+          icon: HugeIcons.strokeRoundedCoins01,
+          title: 'Pay with GRID Credits',
+          body: 'Top up once and pay instantly — no GCash OTP, no app-switching.',
+          align: ContentAlign.top,
+          advanceOnSpotlightTap: false,
+        ),
+      ],
+      () {
+        // Step B complete — mark the whole checkoutFeatures tutorial as seen.
+        ref
+            .read(tutorialProvider.notifier)
+            .markSeen(TutorialKey.checkoutFeatures);
+        // Reset the session flag so it doesn't linger if the user resets.
+        ref.read(checkoutMultidropSeenInSessionProvider.notifier).state = false;
+      },
+    );
   }
 
   String _wireValue(PaymentMethod m) {
@@ -108,17 +160,29 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
             const SizedBox(height: AppSpacing.md),
             for (var i = 0; i < PaymentMethod.values.length; i++) ...[
               if (i > 0) const SizedBox(height: 8),
-              _MethodRow(
-                method: PaymentMethod.values[i],
-                selected: _chosen == PaymentMethod.values[i],
-                colors: colors,
-                creditsBalance: creditsBalance,
-                onTap: PaymentMethod.values[i] == PaymentMethod.gridCredits &&
-                        creditsBalance == 0
-                    ? null
-                    : () =>
-                        setState(() => _chosen = PaymentMethod.values[i]),
-              ),
+              if (PaymentMethod.values[i] == PaymentMethod.gridCredits)
+                KeyedSubtree(
+                  key: _creditsCoachKey,
+                  child: _MethodRow(
+                    method: PaymentMethod.gridCredits,
+                    selected: _chosen == PaymentMethod.gridCredits,
+                    colors: colors,
+                    creditsBalance: creditsBalance,
+                    onTap: creditsBalance == 0
+                        ? null
+                        : () => setState(
+                            () => _chosen = PaymentMethod.gridCredits),
+                  ),
+                )
+              else
+                _MethodRow(
+                  method: PaymentMethod.values[i],
+                  selected: _chosen == PaymentMethod.values[i],
+                  colors: colors,
+                  creditsBalance: creditsBalance,
+                  onTap: () =>
+                      setState(() => _chosen = PaymentMethod.values[i]),
+                ),
             ],
             const SizedBox(height: AppSpacing.md),
             InkWell(

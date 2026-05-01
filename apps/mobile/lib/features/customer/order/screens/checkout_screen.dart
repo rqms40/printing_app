@@ -16,6 +16,7 @@ import 'package:printing_app/features/customer/order/widgets/checkout_summary_ca
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
 import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
+import 'package:printing_app/features/tutorial/providers/checkout_tutorial_session_provider.dart';
 import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
 import 'package:printing_app/features/tutorial/widgets/coach_mark_sequence.dart';
 import 'package:printing_app/features/tutorial/widgets/feature_overlay_card.dart';
@@ -30,7 +31,6 @@ class CheckoutScreen extends ConsumerStatefulWidget {
 
 class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final _multiDropKey = GlobalKey();
-  final _paymentKey = GlobalKey();
   final _paymentMethodKey = GlobalKey();
   final _itemsKey = GlobalKey();
   final _placeOrderKey = GlobalKey();
@@ -92,9 +92,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       return;
     }
 
-    // Post-pipeline standalone visit: checkoutFeatures
+    // Post-pipeline standalone visit: checkoutFeatures (Step A — multidrop only).
+    // Only fires when multidrop hasn't been seen in this session yet.
+    // If multidropSeenInSession is already true, the payment sheet handles Step B.
+    final multidropDone = ref.read(checkoutMultidropSeenInSessionProvider);
     if (ref.read(tutorialSeenProvider(TutorialKey.pipeline)) &&
-        !ref.read(tutorialSeenProvider(TutorialKey.checkoutFeatures))) {
+        !ref.read(tutorialSeenProvider(TutorialKey.checkoutFeatures)) &&
+        !multidropDone) {
       _startCheckoutFeaturesCoachMarks();
     }
   }
@@ -251,15 +255,21 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           body: 'Send prints to different addresses in one order. One rider, all the stops.',
           advanceOnSpotlightTap: false,
         ),
-        TutorialStep(
-          targetKey: _paymentKey,
-          icon: HugeIcons.strokeRoundedCoins01,
-          title: 'Pay with GRID Credits',
-          body: 'No OTP, no app-switching. Top up anytime in Profile → Wallet.',
-          advanceOnSpotlightTap: false,
-        ),
       ],
-      () => ref.read(tutorialProvider.notifier).markSeen(TutorialKey.checkoutFeatures),
+      () {
+        // Mark Step A done for this session so the sheet knows to fire Step B.
+        ref.read(checkoutMultidropSeenInSessionProvider.notifier).state = true;
+        // Hint the user to open the payment sheet for the next coach mark.
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("One more thing — tap 'Choose payment method' to see GRID Credits."),
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+        // Do NOT mark checkoutFeatures seen here — Step B (in the sheet) does that.
+      },
     );
   }
 
@@ -328,7 +338,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   divider,
                   const CheckoutSpeedCard(),
                   divider,
-                  CheckoutPaymentCard(tutorialKey: _paymentKey, methodPickerKey: _paymentMethodKey),
+                  CheckoutPaymentCard(methodPickerKey: _paymentMethodKey),
                   divider,
                   const CheckoutSummaryCard(),
                   const SizedBox(height: 8),
