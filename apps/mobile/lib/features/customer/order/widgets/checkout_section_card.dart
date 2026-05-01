@@ -12,6 +12,7 @@ class CheckoutSectionCard extends StatelessWidget {
     required this.title,
     required this.child,
     this.trailing,
+    this.titleKey,
     @Deprecated('icon is no longer rendered; kept for back-compat')
     this.icon,
     this.padding,
@@ -20,6 +21,10 @@ class CheckoutSectionCard extends StatelessWidget {
   final String title;
   final Widget child;
   final Widget? trailing;
+
+  /// Optional key applied to the title row widget. Pass a [GlobalKey] here
+  /// to use it as a small, top-anchored tutorial spotlight target.
+  final GlobalKey? titleKey;
   final List<List<dynamic>>? icon;
   final EdgeInsetsGeometry? padding;
 
@@ -35,23 +40,26 @@ class CheckoutSectionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: AppTypography.h2.copyWith(
-                    color: colors.onBackground,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.5,
-                    height: 1.1,
+          KeyedSubtree(
+            key: titleKey,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: AppTypography.h2.copyWith(
+                      color: colors.onBackground,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5,
+                      height: 1.1,
+                    ),
                   ),
                 ),
-              ),
-              if (trailing != null) trailing!,
-            ],
+                ?trailing,
+              ],
+            ),
           ),
           const SizedBox(height: AppSpacing.md),
           child,

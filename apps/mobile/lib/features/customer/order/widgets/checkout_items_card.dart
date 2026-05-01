@@ -25,9 +25,8 @@ class CheckoutItemsCard extends ConsumerWidget {
         : AppColors.light;
     final notifier = ref.read(checkoutProvider.notifier);
 
-    return KeyedSubtree(
-      key: tutorialKey,
-      child: CheckoutSectionCard(
+    return CheckoutSectionCard(
+      titleKey: tutorialKey,
       title: 'Order summary',
       trailing: GestureDetector(
         onTap: () => context.push('/customer/order/new?mode=add'),
@@ -75,7 +74,6 @@ class CheckoutItemsCard extends ConsumerWidget {
             ),
           ],
         ],
-      ),
       ),
     );
   }
