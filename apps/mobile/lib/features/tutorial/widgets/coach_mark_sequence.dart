@@ -37,9 +37,22 @@ class TutorialStep {
 ContentAlign _resolveAlign(GlobalKey key, BuildContext ctx) {
   final box = key.currentContext?.findRenderObject() as RenderBox?;
   if (box == null) return ContentAlign.bottom;
-  final centerY = box.localToGlobal(Offset.zero).dy + box.size.height / 2;
+  final topY = box.localToGlobal(Offset.zero).dy;
+  final bottomY = topY + box.size.height;
   final screenH = MediaQuery.of(ctx).size.height;
-  return centerY > screenH * 0.5 ? ContentAlign.top : ContentAlign.bottom;
+  // Generous bubble-height estimate so we never anchor on a side that
+  // can't fit the bubble within the visible viewport.
+  const bubbleHeight = 220.0;
+  final canFitAbove = topY > bubbleHeight;
+  final canFitBelow = (screenH - bottomY) > bubbleHeight;
+  final centerY = (topY + bottomY) / 2;
+  final preferTop = centerY > screenH * 0.5;
+  if (preferTop && canFitAbove) return ContentAlign.top;
+  if (!preferTop && canFitBelow) return ContentAlign.bottom;
+  // Preferred side has no room — use the other side.
+  if (canFitBelow) return ContentAlign.bottom;
+  if (canFitAbove) return ContentAlign.top;
+  return ContentAlign.bottom;
 }
 
 void showCoachMark(

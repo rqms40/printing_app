@@ -167,69 +167,69 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
             ),
             const SizedBox(height: AppSpacing.md),
             Expanded(
-              child: KeyedSubtree(
-                key: _specsFormKey,
-                child: ListView(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-                  children: [
-                    const SizedBox(height: AppSpacing.sm),
-                    SpecSelector<PaperSize>(
+              child: ListView(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                children: [
+                  const SizedBox(height: AppSpacing.sm),
+                  KeyedSubtree(
+                    key: _specsFormKey,
+                    child: SpecSelector<PaperSize>(
                       label: 'PAPER SIZE',
                       options: PaperSize.values,
                       selected: _paperSize,
                       onChanged: (v) => setState(() => _paperSize = v),
                       displayName: (v) => v.displayName,
                     ),
-                    const SizedBox(height: AppSpacing.lg),
-                    SpecSelector<ColorMode>(
-                      label: 'COLOR MODE',
-                      options: ColorMode.values,
-                      selected: _colorMode,
-                      onChanged: (v) => setState(() => _colorMode = v),
-                      displayName: (v) => v.displayName,
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                    SpecSelector<MediaType>(
-                      label: 'MEDIA TYPE',
-                      options: MediaType.values,
-                      selected: _mediaType,
-                      onChanged: (v) => setState(() => _mediaType = v),
-                      displayName: (v) => v.displayName,
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                    SpecSelector<PrintSides>(
-                      label: 'PRINT SIDES',
-                      options: PrintSides.values,
-                      selected: _printSides,
-                      onChanged: (v) => setState(() => _printSides = v),
-                      displayName: (v) => v.displayName,
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                    SpecSelector<Binding>(
-                      label: 'BINDING',
-                      options: Binding.values,
-                      selected: _binding,
-                      onChanged: (v) => setState(() => _binding = v),
-                      displayName: (v) => v.displayName,
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                    AppTextField(
-                      label: 'Quantity',
-                      controller: _quantityController,
-                      keyboardType: TextInputType.number,
-                      hintText: 'Enter quantity',
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                    AppTextField(
-                      label: 'Page Count',
-                      controller: _pageCountController,
-                      keyboardType: TextInputType.number,
-                      hintText: 'Number of pages',
-                    ),
-                    const SizedBox(height: AppSpacing.xxl),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  SpecSelector<ColorMode>(
+                    label: 'COLOR MODE',
+                    options: ColorMode.values,
+                    selected: _colorMode,
+                    onChanged: (v) => setState(() => _colorMode = v),
+                    displayName: (v) => v.displayName,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  SpecSelector<MediaType>(
+                    label: 'MEDIA TYPE',
+                    options: MediaType.values,
+                    selected: _mediaType,
+                    onChanged: (v) => setState(() => _mediaType = v),
+                    displayName: (v) => v.displayName,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  SpecSelector<PrintSides>(
+                    label: 'PRINT SIDES',
+                    options: PrintSides.values,
+                    selected: _printSides,
+                    onChanged: (v) => setState(() => _printSides = v),
+                    displayName: (v) => v.displayName,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  SpecSelector<Binding>(
+                    label: 'BINDING',
+                    options: Binding.values,
+                    selected: _binding,
+                    onChanged: (v) => setState(() => _binding = v),
+                    displayName: (v) => v.displayName,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  AppTextField(
+                    label: 'Quantity',
+                    controller: _quantityController,
+                    keyboardType: TextInputType.number,
+                    hintText: 'Enter quantity',
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  AppTextField(
+                    label: 'Page Count',
+                    controller: _pageCountController,
+                    keyboardType: TextInputType.number,
+                    hintText: 'Number of pages',
+                  ),
+                  const SizedBox(height: AppSpacing.xxl),
+                ],
               ),
             ).animate()
               .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
