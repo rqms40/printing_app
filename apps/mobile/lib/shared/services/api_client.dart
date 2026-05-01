@@ -11,9 +11,11 @@ class ApiClient {
 
   static final ApiClient instance = ApiClient._();
 
-  static const String _defaultBaseUrl = 'http://10.0.2.2:3000/api'; // Android emulator
-  // For web/desktop: 'http://localhost:3000/api'
-  // For iOS simulator: 'http://localhost:3000/api'
+  // LAN-reachable default so phones on the same Wi-Fi can hit the dev server
+  // without a per-device build. Overridden by main.dart via init(baseUrl:)
+  // using the kServerUrl from api_config.dart, which respects the
+  // --dart-define=SERVER_URL build flag.
+  static const String _defaultBaseUrl = 'http://192.168.40.201:3000/api';
 
   late final Dio _dio;
   bool _initialized = false;
