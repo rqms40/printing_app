@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing_app/features/customer/beta/models/beta_locked_info.dart';
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/services/notification_service.dart';
@@ -108,6 +109,7 @@ class AuthState {
     this.user,
     this.isLoading = false,
     this.errorMessage,
+    this.betaLocked,
   });
 
   factory AuthState.unauthenticated() => const AuthState();
@@ -116,18 +118,22 @@ class AuthState {
   final AuthUser? user;
   final bool isLoading;
   final String? errorMessage;
+  final BetaLockedInfo? betaLocked;
 
   AuthState copyWith({
     AuthStatus? status,
     AuthUser? user,
     bool? isLoading,
     String? errorMessage,
+    BetaLockedInfo? betaLocked,
+    bool clearBetaLocked = false,
   }) {
     return AuthState(
       status: status ?? this.status,
       user: user ?? this.user,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: errorMessage,
+      betaLocked: clearBetaLocked ? null : (betaLocked ?? this.betaLocked),
     );
   }
 }
@@ -187,6 +193,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _ref?.read(accountStateProvider.notifier).refresh();
       _connectNotificationsWs();
     } on DioException catch (e) {
+      // Handle beta-completed users: 403 with code='beta_held'
+      if (e.response?.statusCode == 403 &&
+          e.response?.data is Map &&
+          (e.response!.data as Map)['code'] == 'beta_held') {
+        final info =
+            BetaLockedInfo.fromJson(e.response!.data as Map<String, dynamic>);
+        state = state.copyWith(
+          isLoading: false,
+          betaLocked: info,
+          errorMessage: null,
+        );
+        return;
+      }
       final message = e.response?.data is Map
           ? (e.response!.data as Map)['message']?.toString() ?? 'Login failed'
           : 'Login failed';
@@ -369,6 +388,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _ref?.read(tutorialProvider.notifier).resetStateOnly();
     // Reset session-scoped UI flags so they fire again on next login.
     _ref?.read(nextBatchShownThisSessionProvider.notifier).state = false;
+    // AuthState() clears everything including betaLocked.
     state = AuthState.unauthenticated();
   }
 

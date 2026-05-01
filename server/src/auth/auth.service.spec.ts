@@ -2,7 +2,7 @@ import { Test } from '@nestjs/testing';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
-import { UnauthorizedException, ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { NotificationsService } from '../notifications/notifications.service';
 import { BetaModeService } from '../beta-mode/beta-mode.service';
@@ -205,20 +205,60 @@ describe('AuthService', () => {
       ).rejects.toThrow(UnauthorizedException);
     });
 
-    it('uses beta completion message for beta survey hold', async () => {
+    it('throws ForbiddenException with code beta_held for beta survey hold', async () => {
+      const hashedPassword = await bcrypt.hash('password123', 10);
+      const betaCompletedAt = new Date('2026-04-01T10:00:00Z');
+      (usersService.findByEmail as jest.Mock).mockResolvedValue({
+        ...mockUser,
+        passwordHash: hashedPassword,
+        isActive: false,
+        accountHoldReason: 'beta_survey_complete',
+        fullName: 'Test User',
+        betaPhotoUploadedAt: null,
+        betaSharedOnSocial: false,
+        betaCompletedAt,
+      });
+
+      let thrown: unknown;
+      try {
+        await authService.login('test@example.com', 'password123');
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(thrown).toBeInstanceOf(ForbiddenException);
+      const body = (thrown as ForbiddenException).getResponse() as Record<string, unknown>;
+      expect(body.code).toBe('beta_held');
+      expect(body.betaPhotoUploaded).toBe(false);
+      expect(body.betaSharedOnSocial).toBe(false);
+      expect(body.betaCompletedAt).toBe(betaCompletedAt.toISOString());
+      expect((body.user as Record<string, unknown>).email).toBe('test@example.com');
+    });
+
+    it('betaPhotoUploaded is true when betaPhotoUploadedAt is set', async () => {
       const hashedPassword = await bcrypt.hash('password123', 10);
       (usersService.findByEmail as jest.Mock).mockResolvedValue({
         ...mockUser,
         passwordHash: hashedPassword,
         isActive: false,
         accountHoldReason: 'beta_survey_complete',
+        fullName: 'Test User',
+        betaPhotoUploadedAt: new Date(),
+        betaSharedOnSocial: true,
+        betaCompletedAt: null,
       });
 
-      await expect(
-        authService.login('test@example.com', 'password123'),
-      ).rejects.toThrow(
-        'Beta testing completed. Your account will reopen at full release.',
-      );
+      let thrown: unknown;
+      try {
+        await authService.login('test@example.com', 'password123');
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(thrown).toBeInstanceOf(ForbiddenException);
+      const body = (thrown as ForbiddenException).getResponse() as Record<string, unknown>;
+      expect(body.betaPhotoUploaded).toBe(true);
+      expect(body.betaSharedOnSocial).toBe(true);
     });
 
     it('reopens beta survey held users when beta mode is disabled', async () => {

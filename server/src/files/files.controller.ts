@@ -12,6 +12,7 @@ import {
   Request,
   ForbiddenException,
   HttpCode,
+  Body,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -49,8 +50,9 @@ export class FilesController {
   uploadFile(
     @UploadedFile() file: Express.Multer.File,
     @Request() req: RequestWithUser,
+    @Body('purpose') purpose?: string,
   ) {
-    return this.filesService.storeMetadata(file, req.user?.sub);
+    return this.filesService.storeMetadata(file, req.user?.sub, purpose);
   }
 
   // NOTE: 'my-uploads' must be declared before ':id' so the literal string

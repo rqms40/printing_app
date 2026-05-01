@@ -146,6 +146,15 @@ export class User {
   @Column({ name: 'is_beta_survey_exempt', default: false })
   isBetaSurveyExempt: boolean;
 
+  @Column({ name: 'beta_photo_file_id', type: 'int', nullable: true })
+  betaPhotoFileId: number | null;
+
+  @Column({ name: 'beta_photo_uploaded_at', type: 'timestamptz', nullable: true })
+  betaPhotoUploadedAt: Date | null;
+
+  @Column({ name: 'beta_shared_on_social', type: 'boolean', default: false })
+  betaSharedOnSocial: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

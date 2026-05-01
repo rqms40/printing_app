@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository, LessThanOrEqual } from 'typeorm';
 import { BetaModeSettings } from './entities/beta-mode-settings.entity';
 import { User } from '../users/entities/user.entity';
+import { FileMetadata } from '../files/entities/file-metadata.entity';
 
 export interface BetaMemberRow {
   id: number;
@@ -30,6 +31,8 @@ export class BetaModeService {
     private settingsRepo: Repository<BetaModeSettings>,
     @InjectRepository(User)
     private userRepo: Repository<User>,
+    @InjectRepository(FileMetadata)
+    private fileMetadataRepo: Repository<FileMetadata>,
   ) {}
 
   async getSettings(): Promise<BetaModeSettings> {
@@ -236,5 +239,26 @@ export class BetaModeService {
     });
 
     return { globallyEnabled: settings.isEnabled, isBetaUser: true, rank };
+  }
+
+  async submitTestimonial(
+    userId: number,
+    input: { fileId: number; sharedOnSocial?: boolean },
+  ): Promise<{ ok: true }> {
+    const file = await this.fileMetadataRepo.findOne({
+      where: { id: input.fileId },
+    });
+    if (!file) {
+      throw new NotFoundException(`File ${input.fileId} not found`);
+    }
+    if (file.uploadedBy !== userId) {
+      throw new ForbiddenException('File does not belong to this user');
+    }
+    await this.userRepo.update(userId, {
+      betaPhotoFileId: input.fileId,
+      betaPhotoUploadedAt: new Date(),
+      betaSharedOnSocial: input.sharedOnSocial ?? false,
+    });
+    return { ok: true };
   }
 }

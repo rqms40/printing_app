@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -84,9 +84,17 @@ export class AuthService {
             access_token: this.generateToken(reopenedUser),
           };
         }
-        throw new UnauthorizedException(
-          'Beta testing completed. Your account will reopen at full release.',
-        );
+        throw new ForbiddenException({
+          code: 'beta_held',
+          message: 'Beta testing completed. Your account will reopen at full release.',
+          user: {
+            fullName: user.fullName,
+            email: user.email,
+          },
+          betaPhotoUploaded: user.betaPhotoUploadedAt != null,
+          betaSharedOnSocial: user.betaSharedOnSocial,
+          betaCompletedAt: user.betaCompletedAt?.toISOString() ?? null,
+        });
       }
       throw new UnauthorizedException('Account is inactive');
     }

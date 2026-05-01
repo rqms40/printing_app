@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
-import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 import 'package:printing_app/shared/providers/theme_provider.dart';
 import 'package:printing_app/shared/services/api_client.dart';
@@ -290,8 +289,7 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
         HapticFeedback.mediumImpact();
 
         await Future.delayed(const Duration(milliseconds: 1300));
-        await ref.read(authProvider.notifier).logout();
-        if (mounted) context.go('/auth/login');
+        if (mounted) context.go('/customer/beta/success-wall');
         return;
       }
 

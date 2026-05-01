@@ -1,9 +1,10 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { BetaModeService } from './beta-mode.service';
 import { BetaModeSettings } from './entities/beta-mode-settings.entity';
 import { User } from '../users/entities/user.entity';
+import { FileMetadata } from '../files/entities/file-metadata.entity';
 
 const makeUser = (overrides: Partial<User> = {}): User =>
   ({
@@ -27,6 +28,7 @@ describe('BetaModeService', () => {
     update: jest.Mock;
     createQueryBuilder: jest.Mock;
   };
+  let fileMetadataRepo: { findOne: jest.Mock };
   let mockQB: {
     update: jest.Mock;
     set: jest.Mock;
@@ -53,6 +55,9 @@ describe('BetaModeService', () => {
       update: jest.fn().mockResolvedValue(undefined),
       createQueryBuilder: jest.fn().mockReturnValue(mockQB),
     };
+    fileMetadataRepo = {
+      findOne: jest.fn(),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -62,6 +67,7 @@ describe('BetaModeService', () => {
           useValue: settingsRepo,
         },
         { provide: getRepositoryToken(User), useValue: userRepo },
+        { provide: getRepositoryToken(FileMetadata), useValue: fileMetadataRepo },
       ],
     }).compile();
 
@@ -223,6 +229,53 @@ describe('BetaModeService', () => {
     expect(result[0].rank).toBe(1);
     expect(result[1].rank).toBe(2);
     expect(result[0].betaEnrolledAt).toBe(t1);
+  });
+
+  // ── submitTestimonial ──────────────────────────────────────────────────────
+
+  describe('submitTestimonial', () => {
+    it('happy path: updates user row and returns { ok: true }', async () => {
+      fileMetadataRepo.findOne.mockResolvedValue({ id: 42, uploadedBy: 1 });
+
+      const result = await service.submitTestimonial(1, { fileId: 42, sharedOnSocial: true });
+
+      expect(result).toEqual({ ok: true });
+      expect(userRepo.update).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          betaPhotoFileId: 42,
+          betaPhotoUploadedAt: expect.any(Date),
+          betaSharedOnSocial: true,
+        }),
+      );
+    });
+
+    it('defaults sharedOnSocial to false when omitted', async () => {
+      fileMetadataRepo.findOne.mockResolvedValue({ id: 42, uploadedBy: 1 });
+
+      await service.submitTestimonial(1, { fileId: 42 });
+
+      expect(userRepo.update).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ betaSharedOnSocial: false }),
+      );
+    });
+
+    it('throws NotFoundException when file does not exist', async () => {
+      fileMetadataRepo.findOne.mockResolvedValue(null);
+
+      await expect(service.submitTestimonial(1, { fileId: 999 })).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('throws ForbiddenException when file belongs to a different user', async () => {
+      fileMetadataRepo.findOne.mockResolvedValue({ id: 42, uploadedBy: 99 });
+
+      await expect(service.submitTestimonial(1, { fileId: 42 })).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
   });
 
   describe('resetOrderLimit', () => {

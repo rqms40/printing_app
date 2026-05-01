@@ -75,6 +75,12 @@ import 'package:printing_app/features/admin/driver_management/screens/driver_ass
 import 'package:printing_app/features/admin/profile/screens/admin_profile_screen.dart';
 
 // ---------------------------------------------------------------------------
+// Beta screens
+// ---------------------------------------------------------------------------
+import 'package:printing_app/features/customer/beta/screens/beta_success_wall_screen.dart';
+import 'package:printing_app/features/customer/beta/screens/beta_locked_screen.dart';
+
+// ---------------------------------------------------------------------------
 // Onboarding screen
 // ---------------------------------------------------------------------------
 import 'package:printing_app/features/onboarding/screens/onboarding_screen.dart';
@@ -120,6 +126,16 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // Let the splash screen and onboarding through without redirect
       if (isOnSplash) return null;
+
+      // Beta-locked: redirect to locked screen when on any auth route
+      final isBetaLocked = authState.betaLocked != null;
+      final isOnBetaLocked = state.matchedLocation == '/customer/beta/locked';
+      final isOnBetaSuccess = state.matchedLocation == '/customer/beta/success-wall';
+      if (isBetaLocked && isOnAuth && !isOnBetaLocked) {
+        return '/customer/beta/locked';
+      }
+      // Allow beta screens to pass through
+      if (isOnBetaLocked || isOnBetaSuccess) return null;
 
       final accountState = ref.read(accountStateProvider);
       final isForcedSurvey =
@@ -642,6 +658,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/admin/drivers',
         pageBuilder: (_, state) =>
             scaleTransition(const DriverAssignmentScreen(), state),
+      ),
+
+      // -----------------------------------------------------------------------
+      // Beta completion screens
+      // -----------------------------------------------------------------------
+      GoRoute(
+        path: '/customer/beta/success-wall',
+        pageBuilder: (_, state) =>
+            fadeTransition(const BetaSuccessWallScreen(), state),
+      ),
+      GoRoute(
+        path: '/customer/beta/locked',
+        pageBuilder: (_, state) =>
+            fadeTransition(const BetaLockedScreen(), state),
       ),
     ],
   );

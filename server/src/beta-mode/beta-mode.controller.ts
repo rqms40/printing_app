@@ -17,6 +17,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles, RolesGuard } from '../auth/guards/roles.guard';
 import { BetaModeService } from './beta-mode.service';
 import { UpdateBetaModeSettingsDto } from './dto/beta-mode.dto';
+import { SubmitBetaTestimonialDto } from './dto/submit-beta-testimonial.dto';
+import type { RequestWithUser } from '../common/interfaces/request-with-user';
 
 @ApiTags('beta-mode')
 @ApiBearerAuth()
@@ -97,5 +99,14 @@ export class BetaModeController {
   @Get('me')
   getBetaStatus(@Req() req: { user: { sub: number } }) {
     return this.service.getBetaStatus(req.user.sub);
+  }
+
+  @Post('testimonial')
+  @UseGuards(JwtAuthGuard)
+  async submitTestimonial(
+    @Req() req: RequestWithUser,
+    @Body() dto: SubmitBetaTestimonialDto,
+  ) {
+    return this.service.submitTestimonial(req.user.sub, dto);
   }
 }
