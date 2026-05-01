@@ -12,6 +12,7 @@ class TutorialStep {
     this.align,
     this.advanceOnSpotlightTap = true,
     this.onSpotlightTap,
+    this.paddingFocus,
   });
 
   final GlobalKey targetKey;
@@ -32,6 +33,12 @@ class TutorialStep {
   /// the underlying widget's action (navigate / select) AND advance the
   /// pipeline state in one step — avoids the "double tap required" bug.
   final VoidCallback? onSpotlightTap;
+
+  /// Override the default paddingFocus (8) for this step's spotlight.
+  /// Use a smaller value (e.g. 4) to tighten the spotlight around a
+  /// widget that is smaller than its Expanded/Row share, or a larger
+  /// value to give extra breathing room.
+  final double? paddingFocus;
 }
 
 ContentAlign _resolveAlign(GlobalKey key, BuildContext ctx) {
@@ -74,7 +81,7 @@ void showCoachMark(
       keyTarget: step.targetKey,
       shape: step.shape,
       radius: 8,
-      paddingFocus: 8,
+      paddingFocus: step.paddingFocus ?? 8,
       enableOverlayTab: false,
       contents: [
         TargetContent(

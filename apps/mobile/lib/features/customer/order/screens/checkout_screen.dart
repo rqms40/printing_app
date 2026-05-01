@@ -259,6 +259,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           body: 'Tap Multi-drop to send prints to different addresses in one order — one rider handles all the stops.',
           align: ContentAlign.top,
           advanceOnSpotlightTap: false,
+          // Tighten the spotlight: the GestureDetector spans a full
+          // one-third of the segmented row. paddingFocus: 4 keeps the
+          // oval close to the tab pill rather than the default 8 px halo.
+          paddingFocus: 4,
         ),
       ],
       () {

@@ -33,11 +33,11 @@ class CheckoutSegmented<T> extends StatelessWidget {
   /// provided, the tile whose [SegmentedItem.value] equals this gets keyed.
   final T? multiDropValue;
 
-  Widget _maybKeyedTab({
+  Widget _buildTab({
     required SegmentedItem<T> item,
     required AppColorSet colors,
   }) {
-    final tile = AnimatedContainer(
+    return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -69,13 +69,6 @@ class CheckoutSegmented<T> extends StatelessWidget {
         ],
       ),
     );
-
-    if (multiDropTabKey != null &&
-        multiDropValue != null &&
-        item.value == multiDropValue) {
-      return KeyedSubtree(key: multiDropTabKey, child: tile);
-    }
-    return tile;
   }
 
   @override
@@ -87,28 +80,36 @@ class CheckoutSegmented<T> extends StatelessWidget {
     return KeyedSubtree(
       key: tutorialKey,
       child: Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: colors.background,
-        borderRadius: AppRadius.borderLg,
-        border: Border.all(color: colors.outline.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        children: [
-          for (final item in items)
-            Expanded(
-              child: GestureDetector(
-                onTap: () => onChanged(item.value),
-                behavior: HitTestBehavior.opaque,
-                child: _maybKeyedTab(
-                  item: item,
-                  colors: colors,
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: colors.background,
+          borderRadius: AppRadius.borderLg,
+          border: Border.all(color: colors.outline.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            for (final item in items)
+              Expanded(
+                child: GestureDetector(
+                  // Key the GestureDetector for the matching tab so
+                  // tutorial_coach_mark measures the full tappable area
+                  // (one-third of the strip). Keying the inner
+                  // AnimatedContainer was wrong: its RenderBox has the
+                  // same width but transparent background when unselected,
+                  // so the spotlight bounds appeared misaligned.
+                  key: (multiDropTabKey != null &&
+                          multiDropValue != null &&
+                          item.value == multiDropValue)
+                      ? multiDropTabKey
+                      : null,
+                  onTap: () => onChanged(item.value),
+                  behavior: HitTestBehavior.opaque,
+                  child: _buildTab(item: item, colors: colors),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
-    ),
     );
   }
 }
