@@ -24,6 +24,12 @@ import 'package:printing_app/features/customer/notifications/providers/notificat
 import 'package:printing_app/utils/formatters.dart';
 import 'package:printing_app/features/customer/chat/providers/chat_provider.dart';
 import 'package:printing_app/features/customer/chat/widgets/floating_chat_button.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
+import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
+import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
+import 'package:printing_app/features/tutorial/widgets/feature_overlay_card.dart';
+import 'package:printing_app/features/tutorial/widgets/coach_mark_sequence.dart';
 
 /// Customer home screen — editorial redesign.
 class HomeScreen extends ConsumerStatefulWidget {
@@ -34,6 +40,10 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  final _creditsTutorialKey = GlobalKey();
+  final _chatFabTutorialKey = GlobalKey();
+  final _startPrintingTutorialKey = GlobalKey();
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -53,6 +63,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           '${tomorrow.year.toString().padLeft(4, '0')}-${tomorrow.month.toString().padLeft(2, '0')}-${tomorrow.day.toString().padLeft(2, '0')}';
       ref.read(deliverySlotProvider(today).notifier).refresh();
       ref.read(deliverySlotProvider(tomStr).notifier).refresh();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeShowHomeTutorial();
     });
   }
 
@@ -95,6 +108,102 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       'DECEMBER',
     ];
     return '${days[now.weekday - 1]}, ${months[now.month - 1]} ${now.day}';
+  }
+
+  void _maybeShowHomeTutorial() {
+    if (!mounted) return;
+
+    // First-time pipeline: show welcome card → user taps "Show me how →" to start
+    if (!ref.read(tutorialSeenProvider(TutorialKey.pipeline))) {
+      _showPipelineWelcomeCard();
+      return;
+    }
+
+    // Post-pipeline: home features (Credits + GridBot)
+    if (!ref.read(tutorialSeenProvider(TutorialKey.homeFeatures))) {
+      _startHomeFeaturesCoachMarks();
+      return;
+    }
+  }
+
+  void _showPipelineWelcomeCard() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        final media = MediaQuery.of(sheetCtx);
+        // viewInsets covers keyboard; viewPadding covers system gestures/nav bar.
+        final extraBottom = media.viewInsets.bottom > 0
+            ? media.viewInsets.bottom
+            : media.viewPadding.bottom;
+        return Padding(
+          padding: EdgeInsets.only(bottom: extraBottom),
+          child: FeatureOverlayCard(
+            heroIcon: HugeIcons.strokeRoundedPrinter,
+            title: "Let's print something.",
+            body: "We'll walk you through your first order.",
+            iconTiles: const [],
+            ctaLabel: 'Show me how →',
+            showSkip: false,
+            onCta: () {
+              Navigator.of(sheetCtx).pop();
+              ref.read(pipelineTutorialProvider.notifier).start();
+              _showPipelineStartCoachMark();
+            },
+            onSkip: () {},
+          ),
+        );
+      },
+    );
+  }
+
+  void _showPipelineStartCoachMark() {
+    if (!mounted) return;
+    showCoachMark(
+      context,
+      [
+        TutorialStep(
+          targetKey: _startPrintingTutorialKey,
+          icon: HugeIcons.strokeRoundedPrinter,
+          title: 'Start Printing',
+          body: 'Tap here to start your first print order.',
+          shape: ShapeLightFocus.RRect,
+          advanceOnSpotlightTap: true,
+          onSpotlightTap: () {
+            ref.read(pipelineTutorialProvider.notifier).advance();
+            if (mounted) context.push('/customer/order/new');
+          },
+        ),
+      ],
+      () {},
+      onSkip: () => ref.read(pipelineTutorialProvider.notifier).abandon(),
+    );
+  }
+
+  void _startHomeFeaturesCoachMarks() {
+    showCoachMark(
+      context,
+      [
+        TutorialStep(
+          targetKey: _creditsTutorialKey,
+          icon: HugeIcons.strokeRoundedCoins01,
+          title: 'GRID Credits',
+          body: 'Top up GRID Credits and pay at checkout — no GCash OTP, no app-switching.',
+          advanceOnSpotlightTap: false,
+        ),
+        TutorialStep(
+          targetKey: _chatFabTutorialKey,
+          icon: HugeIcons.strokeRoundedMessage01,
+          title: 'Meet GridBot',
+          body: 'Need help? GridBot answers anything — order specs, pricing, delivery status. 24/7.',
+          shape: ShapeLightFocus.Circle,
+          advanceOnSpotlightTap: false,
+        ),
+      ],
+      () => ref.read(tutorialProvider.notifier).markSeen(TutorialKey.homeFeatures),
+    );
   }
 
   @override
@@ -178,7 +287,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         const SizedBox(width: AppSpacing.xs),
 
                         // Credits chip
-                        _CreditsWidget(colors: colors, credits: credits),
+                        KeyedSubtree(
+                          key: _creditsTutorialKey,
+                          child: _CreditsWidget(colors: colors, credits: credits),
+                        ),
                       ],
                     )
                     .animate()
@@ -227,8 +339,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               flex: 2,
                               child: _StartPrintingTile(
                                 colors: colors,
-                                onTap: () =>
-                                    context.push('/customer/order/new'),
+                                tutorialKey: _startPrintingTutorialKey,
+                                onTap: () => context.push('/customer/order/new'),
                               ),
                             ),
                             const SizedBox(height: AppSpacing.xs + 2),
@@ -283,7 +395,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             builder: (_, ref, _) {
               final unread =
                   ref.watch(chatUnreadCountProvider).asData?.value ?? 0;
-              return FloatingChatButton(unreadCount: unread);
+              return FloatingChatButton(unreadCount: unread, tutorialKey: _chatFabTutorialKey);
             },
           ),
         ),
@@ -1225,6 +1337,7 @@ class _YellowBorderTile extends StatefulWidget {
     required this.title,
     this.subtitle,
     this.onTap,
+    this.tutorialKey,
   });
 
   final AppColorSet colors;
@@ -1232,6 +1345,7 @@ class _YellowBorderTile extends StatefulWidget {
   final String title;
   final String? subtitle;
   final VoidCallback? onTap;
+  final GlobalKey? tutorialKey;
 
   @override
   State<_YellowBorderTile> createState() => _YellowBorderTileState();
@@ -1256,6 +1370,7 @@ class _YellowBorderTileState extends State<_YellowBorderTile> {
         duration: const Duration(milliseconds: 100),
         curve: Curves.easeOut,
         child: Container(
+          key: widget.tutorialKey,
           width: double.infinity,
           decoration: BoxDecoration(
             color: widget.colors.surface,
@@ -1339,9 +1454,14 @@ class _YellowBorderTileState extends State<_YellowBorderTile> {
 // ── Convenience wrappers ─────────────────────────────────────────────────────
 
 class _StartPrintingTile extends StatelessWidget {
-  const _StartPrintingTile({required this.colors, required this.onTap});
+  const _StartPrintingTile({
+    required this.colors,
+    required this.onTap,
+    this.tutorialKey,
+  });
   final AppColorSet colors;
   final VoidCallback onTap;
+  final GlobalKey? tutorialKey;
 
   @override
   Widget build(BuildContext context) => _YellowBorderTile(
@@ -1350,6 +1470,7 @@ class _StartPrintingTile extends StatelessWidget {
     title: 'Start Printing',
     subtitle: 'New order',
     onTap: onTap,
+    tutorialKey: tutorialKey,
   );
 }
 

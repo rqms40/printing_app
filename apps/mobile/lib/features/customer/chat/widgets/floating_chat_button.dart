@@ -6,9 +6,10 @@ import 'package:printing_app/config/theme/app_colors.dart';
 /// Floating circular chat button. Shows an unread badge when [unreadCount] > 0.
 /// Pure icon — no "Chat" label.
 class FloatingChatButton extends StatelessWidget {
-  const FloatingChatButton({super.key, this.unreadCount = 0, this.orderId});
+  const FloatingChatButton({super.key, this.unreadCount = 0, this.orderId, this.tutorialKey});
   final int unreadCount;
   final int? orderId;
+  final GlobalKey? tutorialKey;
 
   void _onTap(BuildContext context) {
     if (orderId != null) {
@@ -25,6 +26,7 @@ class FloatingChatButton extends StatelessWidget {
         : AppColors.light;
 
     final button = Material(
+      key: tutorialKey,
       color: colors.accent,
       elevation: 6,
       shadowColor: colors.onBackground.withValues(alpha: 0.22),

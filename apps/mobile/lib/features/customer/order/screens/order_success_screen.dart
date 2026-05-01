@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
 
 /// Full-screen confirmation shown after a successful checkout.
 /// Receives the placed order references via GoRouter `extra`.
-class OrderSuccessScreen extends StatelessWidget {
+class OrderSuccessScreen extends ConsumerStatefulWidget {
   const OrderSuccessScreen({
     super.key,
     required this.orderRefs,
@@ -23,11 +25,29 @@ class OrderSuccessScreen extends StatelessWidget {
   final int? firstOrderId;
 
   @override
+  ConsumerState<OrderSuccessScreen> createState() => _OrderSuccessScreenState();
+}
+
+class _OrderSuccessScreenState extends ConsumerState<OrderSuccessScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final pipeline = ref.read(pipelineTutorialProvider);
+      if (pipeline.active &&
+          pipeline.step == PipelineStep.placeOrderButton) {
+        ref.read(pipelineTutorialProvider.notifier).finish();
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
-    final isMulti = orderRefs.length > 1;
+    final isMulti = widget.orderRefs.length > 1;
 
     return Scaffold(
       backgroundColor: colors.surface,
@@ -54,7 +74,7 @@ class OrderSuccessScreen extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 isMulti
-                    ? "We've queued ${orderRefs.length} print jobs."
+                    ? "We've queued ${widget.orderRefs.length} print jobs."
                     : "We're on it. We'll notify you when the file is verified.",
                 textAlign: TextAlign.center,
                 style: AppTypography.body.copyWith(
@@ -63,11 +83,11 @@ class OrderSuccessScreen extends StatelessWidget {
                 ),
               ).animate().fadeIn(duration: 400.ms, delay: 320.ms),
               const SizedBox(height: AppSpacing.xl),
-              _ReferenceChips(refs: orderRefs, colors: colors)
+              _ReferenceChips(refs: widget.orderRefs, colors: colors)
                   .animate()
                   .fadeIn(duration: 400.ms, delay: 420.ms),
               const Spacer(flex: 3),
-              if (firstOrderId != null) ...[
+              if (widget.firstOrderId != null) ...[
                 _PrimaryButton(
                   label: isMulti ? 'View orders' : 'Track order',
                   icon: HugeIcons.strokeRoundedLocation01,
@@ -81,7 +101,8 @@ class OrderSuccessScreen extends StatelessWidget {
                     context.go('/customer/orders');
                     if (!isMulti) {
                       Future.microtask(
-                        () => context.push('/customer/orders/$firstOrderId'),
+                        // ignore: use_build_context_synchronously
+                        () => context.push('/customer/orders/${widget.firstOrderId}'),
                       );
                     }
                   },

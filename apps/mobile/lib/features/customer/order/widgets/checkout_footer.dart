@@ -11,8 +11,13 @@ import 'package:printing_app/features/customer/order/providers/checkout_provider
 import 'package:printing_app/utils/formatters.dart';
 
 class CheckoutFooter extends ConsumerWidget {
-  const CheckoutFooter({super.key, required this.onPlaceOrder});
+  const CheckoutFooter({
+    super.key,
+    required this.onPlaceOrder,
+    this.placeOrderKey,
+  });
   final VoidCallback onPlaceOrder;
+  final GlobalKey? placeOrderKey;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -108,10 +113,13 @@ class CheckoutFooter extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-          _PlaceOrderButton(
-            enabled: canPlace,
-            onTap: canPlace ? onPlaceOrder : null,
-            colors: colors,
+          KeyedSubtree(
+            key: placeOrderKey,
+            child: _PlaceOrderButton(
+              enabled: canPlace,
+              onTap: canPlace ? onPlaceOrder : null,
+              colors: colors,
+            ),
           ),
         ],
       ),

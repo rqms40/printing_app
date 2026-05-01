@@ -13,12 +13,186 @@ import 'package:printing_app/features/customer/order/widgets/checkout_payment_ca
 import 'package:printing_app/features/customer/order/widgets/checkout_speed_card.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_summary_card.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
+import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
+import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
+import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
+import 'package:printing_app/features/tutorial/widgets/coach_mark_sequence.dart';
 
-class CheckoutScreen extends ConsumerWidget {
+class CheckoutScreen extends ConsumerStatefulWidget {
   const CheckoutScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CheckoutScreen> createState() => _CheckoutScreenState();
+}
+
+class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
+  final _multiDropKey = GlobalKey();
+  final _paymentKey = GlobalKey();
+  final _paymentSectionKey = GlobalKey();
+  final _itemsKey = GlobalKey();
+  final _placeOrderKey = GlobalKey();
+  bool _advancedThisFrame = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowCheckoutTutorial());
+  }
+
+  @override
+  void dispose() {
+    final state = ref.read(pipelineTutorialProvider);
+    const pipelineSteps = {
+      PipelineStep.checkoutItems,
+      PipelineStep.checkoutDelivery,
+      PipelineStep.checkoutPayment,
+      PipelineStep.placeOrderButton,
+    };
+    if (state.active &&
+        pipelineSteps.contains(state.step) &&
+        !_advancedThisFrame) {
+      ref.read(pipelineTutorialProvider.notifier).abandon();
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text('Tutorial dismissed — replay anytime in Profile → Reset Tutorials.'),
+        ),
+      );
+    }
+    super.dispose();
+  }
+
+  void _maybeShowCheckoutTutorial() {
+    if (!mounted) return;
+
+    final pipeline = ref.read(pipelineTutorialProvider);
+    if (pipeline.active && pipeline.step == PipelineStep.checkoutItems) {
+      _firePipelineItems();
+      return;
+    }
+
+    // Post-pipeline standalone visit: checkoutFeatures
+    if (ref.read(tutorialSeenProvider(TutorialKey.pipeline)) &&
+        !ref.read(tutorialSeenProvider(TutorialKey.checkoutFeatures))) {
+      _startCheckoutFeaturesCoachMarks();
+    }
+  }
+
+  void _firePipelineItems() {
+    showCoachMark(
+      context,
+      [
+        TutorialStep(
+          targetKey: _itemsKey,
+          icon: HugeIcons.strokeRoundedFile02,
+          title: 'Items',
+          body: "Quick review of what you're printing.",
+          advanceOnSpotlightTap: false,
+        ),
+      ],
+      () {
+        ref.read(pipelineTutorialProvider.notifier).advance();
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) _firePipelineDelivery();
+        });
+      },
+      onSkip: () => ref.read(pipelineTutorialProvider.notifier).abandon(),
+    );
+  }
+
+  void _firePipelineDelivery() {
+    if (!mounted) return;
+    showCoachMark(
+      context,
+      [
+        TutorialStep(
+          targetKey: _multiDropKey,
+          icon: HugeIcons.strokeRoundedLocation01,
+          title: 'Pick a delivery option',
+          body: "Choose Delivery, Pickup, or Multi-drop. Tap 'Got it' to continue.",
+          advanceOnSpotlightTap: false,
+        ),
+      ],
+      () {
+        ref.read(pipelineTutorialProvider.notifier).advance();
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) _firePipelinePayment();
+        });
+      },
+      onSkip: () => ref.read(pipelineTutorialProvider.notifier).abandon(),
+    );
+  }
+
+  void _firePipelinePayment() {
+    if (!mounted) return;
+    showCoachMark(
+      context,
+      [
+        TutorialStep(
+          targetKey: _paymentSectionKey,
+          icon: HugeIcons.strokeRoundedWallet01,
+          title: 'Payment method',
+          body: 'Choose how you want to pay — GRID Credits or GCash. Tap "Got it" when you\'ve picked one.',
+          advanceOnSpotlightTap: false,
+        ),
+      ],
+      () {
+        ref.read(pipelineTutorialProvider.notifier).advance();
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) _firePipelinePlaceOrder();
+        });
+      },
+      onSkip: () => ref.read(pipelineTutorialProvider.notifier).abandon(),
+    );
+  }
+
+  void _firePipelinePlaceOrder() {
+    if (!mounted) return;
+    showCoachMark(
+      context,
+      [
+        TutorialStep(
+          targetKey: _placeOrderKey,
+          icon: HugeIcons.strokeRoundedCheckmarkCircle02,
+          title: 'Place Order',
+          body: 'All set — tap Place Order to send it.',
+          advanceOnSpotlightTap: true,
+          onSpotlightTap: () {
+            _advancedThisFrame = true;
+            ref.read(pipelineTutorialProvider.notifier).advance();
+            _placeOrder(context);
+          },
+        ),
+      ],
+      () {},
+      onSkip: () => ref.read(pipelineTutorialProvider.notifier).abandon(),
+    );
+  }
+
+  void _startCheckoutFeaturesCoachMarks() {
+    showCoachMark(
+      context,
+      [
+        TutorialStep(
+          targetKey: _multiDropKey,
+          icon: HugeIcons.strokeRoundedRoute01,
+          title: 'Multi-drop Delivery',
+          body: 'Send prints to different addresses in one order. One rider, all the stops.',
+          advanceOnSpotlightTap: false,
+        ),
+        TutorialStep(
+          targetKey: _paymentKey,
+          icon: HugeIcons.strokeRoundedCoins01,
+          title: 'Pay with GRID Credits',
+          body: 'No OTP, no app-switching. Top up anytime in Profile → Wallet.',
+          advanceOnSpotlightTap: false,
+        ),
+      ],
+      () => ref.read(tutorialProvider.notifier).markSeen(TutorialKey.checkoutFeatures),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(checkoutProvider);
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
@@ -76,13 +250,13 @@ class CheckoutScreen extends ConsumerWidget {
             : ListView(
                 padding: EdgeInsets.zero,
                 children: [
-                  const CheckoutItemsCard(),
+                  CheckoutItemsCard(tutorialKey: _itemsKey),
                   divider,
-                  const CheckoutDeliveryCard(),
+                  CheckoutDeliveryCard(segmentedKey: _multiDropKey),
                   divider,
                   const CheckoutSpeedCard(),
                   divider,
-                  const CheckoutPaymentCard(),
+                  CheckoutPaymentCard(tutorialKey: _paymentKey, sectionKey: _paymentSectionKey),
                   divider,
                   const CheckoutSummaryCard(),
                   const SizedBox(height: 8),
@@ -92,12 +266,19 @@ class CheckoutScreen extends ConsumerWidget {
       bottomNavigationBar: isEmpty
           ? null
           : CheckoutFooter(
-              onPlaceOrder: () => _placeOrder(context, ref),
+              onPlaceOrder: () => _placeOrder(context),
+              placeOrderKey: _placeOrderKey,
             ),
     );
   }
 
-  Future<void> _placeOrder(BuildContext context, WidgetRef ref) async {
+  Future<void> _placeOrder(BuildContext context) async {
+    final pipeline = ref.read(pipelineTutorialProvider);
+    if (pipeline.active && pipeline.step == PipelineStep.placeOrderButton) {
+      _advancedThisFrame = true;
+      ref.read(pipelineTutorialProvider.notifier).advance();
+    }
+
     final notifier = ref.read(ordersProvider.notifier);
     try {
       final placed = await notifier.placeCheckout(ref.read(checkoutProvider));

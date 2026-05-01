@@ -13,7 +13,9 @@ import 'package:printing_app/features/customer/order/widgets/checkout_segmented.
 import 'package:printing_app/features/customer/order/widgets/multidrop_groups.dart';
 
 class CheckoutDeliveryCard extends ConsumerWidget {
-  const CheckoutDeliveryCard({super.key});
+  const CheckoutDeliveryCard({super.key, this.segmentedKey});
+
+  final GlobalKey? segmentedKey;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -28,6 +30,7 @@ class CheckoutDeliveryCard extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           CheckoutSegmented<DeliveryMode>(
+            tutorialKey: segmentedKey,
             selected: state.mode,
             onChanged: (m) => ref.read(checkoutProvider.notifier).setMode(m),
             items: const [

@@ -25,7 +25,13 @@ String _labelFor(PaymentMethod m) {
 }
 
 class CheckoutPaymentCard extends ConsumerWidget {
-  const CheckoutPaymentCard({super.key});
+  const CheckoutPaymentCard({super.key, this.tutorialKey, this.sectionKey});
+
+  /// Spotlights the whole payment section (pipeline tutorial step 7).
+  final GlobalKey? sectionKey;
+
+  /// Spotlights just the GRID Credits row (post-pipeline checkoutFeatures tutorial).
+  final GlobalKey? tutorialKey;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -35,7 +41,11 @@ class CheckoutPaymentCard extends ConsumerWidget {
         : AppColors.light;
     final method = state.paymentMethod;
 
-    return CheckoutSectionCard(
+    return KeyedSubtree(
+      key: sectionKey,
+      child: KeyedSubtree(
+      key: tutorialKey,
+      child: CheckoutSectionCard(
       title: 'Payment method',
       trailing: GestureDetector(
         onTap: () async {
@@ -142,6 +152,8 @@ class CheckoutPaymentCard extends ConsumerWidget {
                 ),
         ),
       ),
+    ),
+    ),
     );
   }
 }

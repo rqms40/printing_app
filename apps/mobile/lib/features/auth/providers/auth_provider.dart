@@ -8,6 +8,8 @@ import 'package:printing_app/shared/services/notification_service.dart';
 import 'package:printing_app/shared/services/token_storage.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
 import 'package:printing_app/features/customer/home/widgets/next_batch_session_trigger.dart';
+import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
+import 'package:printing_app/features/tutorial/repository/tutorial_repository.dart';
 
 // ---------------------------------------------------------------------------
 // Auth status
@@ -35,6 +37,7 @@ class AuthUser {
     this.course,
     this.organization,
     this.printingPreferences = const [],
+    this.tutorialSeenKeys = const [],
   });
 
   final String id;
@@ -53,6 +56,7 @@ class AuthUser {
   final String? course;
   final String? organization;
   final List<String> printingPreferences;
+  final List<String> tutorialSeenKeys;
 
   AuthUser copyWith({
     String? id,
@@ -71,6 +75,7 @@ class AuthUser {
     String? course,
     String? organization,
     List<String>? printingPreferences,
+    List<String>? tutorialSeenKeys,
   }) {
     return AuthUser(
       id: id ?? this.id,
@@ -89,6 +94,7 @@ class AuthUser {
       course: course ?? this.course,
       organization: organization ?? this.organization,
       printingPreferences: printingPreferences ?? this.printingPreferences,
+      tutorialSeenKeys: tutorialSeenKeys ?? this.tutorialSeenKeys,
     );
   }
 }
@@ -176,6 +182,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
             : AuthStatus.profileIncomplete,
         user: user,
       );
+      await TutorialRepository().syncFromServer(user.tutorialSeenKeys);
+      await _ref?.read(tutorialProvider.notifier).loadFromPrefs();
       await _ref?.read(accountStateProvider.notifier).refresh();
       _connectNotificationsWs();
     } on DioException catch (e) {
@@ -238,6 +246,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
             : AuthStatus.profileIncomplete,
         user: user,
       );
+      await TutorialRepository().syncFromServer(user.tutorialSeenKeys);
+      await _ref?.read(tutorialProvider.notifier).loadFromPrefs();
       await _ref?.read(accountStateProvider.notifier).refresh();
     } on DioException catch (e) {
       final message = e.response?.data is Map
@@ -356,6 +366,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await TokenStorage.clearToken();
     WebSocketService.instance.disconnect();
     _ref?.read(accountStateProvider.notifier).clear();
+    _ref?.read(tutorialProvider.notifier).resetStateOnly();
     // Reset session-scoped UI flags so they fire again on next login.
     _ref?.read(nextBatchShownThisSessionProvider.notifier).state = false;
     state = AuthState.unauthenticated();
@@ -374,6 +385,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
             : AuthStatus.profileIncomplete,
         user: user,
       );
+      await TutorialRepository().syncFromServer(user.tutorialSeenKeys);
+      await _ref?.read(tutorialProvider.notifier).loadFromPrefs();
       await _ref?.read(accountStateProvider.notifier).refresh();
       _connectNotificationsWs();
     } catch (_) {
@@ -446,6 +459,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       printingPreferences: _parseStringList(
         json['printingPreferences'] ?? json['printing_preferences'],
       ),
+      tutorialSeenKeys: _parseStringList(json['tutorialSeenKeys']),
       dateOfBirth: json['dateOfBirth'] != null
           ? DateTime.tryParse(json['dateOfBirth'] as String)
           : null,

@@ -9,6 +9,8 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/onboarding/models/onboarding_page_data.dart';
 import 'package:printing_app/features/onboarding/widgets/onboarding_illustrations.dart';
+import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
+import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
 
 /// Role-specific onboarding screen shown every login.
 ///
@@ -40,6 +42,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   /// Navigate to the role-specific home screen.
   void _goToHome() {
+    ref.read(tutorialProvider.notifier).markSeen(TutorialKey.onboarding);
     final role = ref.read(authProvider).user?.role ?? 'customer';
     switch (role) {
       case 'driver':

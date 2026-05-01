@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/spec_selector.dart';
+import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
+import 'package:printing_app/features/tutorial/widgets/coach_mark_sequence.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/paper_specs.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_text_field.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
 /// Step 2/6 -- Paper specification selection.
 class PaperSpecsScreen extends ConsumerStatefulWidget {
@@ -33,6 +37,10 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
   final _quantityController = TextEditingController(text: '1');
   final _pageCountController = TextEditingController(text: '1');
 
+  final _specsFormKey = GlobalKey();
+  final _specsContinueKey = GlobalKey();
+  bool _advancedThisFrame = false;
+
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
@@ -40,10 +48,82 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    // Delay long enough for the entry animations (400ms + 60ms delay) to
+    // settle so the coach-mark spotlight captures the final widget positions.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 500), _maybePipelineCoachMark);
+    });
+  }
+
+  @override
   void dispose() {
+    final state = ref.read(pipelineTutorialProvider);
+    if (state.active &&
+        (state.step == PipelineStep.paperSpecsForm ||
+         state.step == PipelineStep.paperSpecsContinue) &&
+        !_advancedThisFrame) {
+      ref.read(pipelineTutorialProvider.notifier).abandon();
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text('Tutorial dismissed — replay anytime in Profile → Reset Tutorials.'),
+        ),
+      );
+    }
     _quantityController.dispose();
     _pageCountController.dispose();
     super.dispose();
+  }
+
+  void _maybePipelineCoachMark() {
+    if (!mounted) return;
+    final state = ref.read(pipelineTutorialProvider);
+    if (!state.active) return;
+
+    if (state.step == PipelineStep.paperSpecsForm) {
+      showCoachMark(
+        context,
+        [
+          TutorialStep(
+            targetKey: _specsFormKey,
+            icon: HugeIcons.strokeRoundedSettings01,
+            title: 'Set your specs',
+            body: 'Set your paper size, color mode, and copies. Defaults work for most prints.',
+            shape: ShapeLightFocus.RRect,
+            advanceOnSpotlightTap: false,
+          ),
+        ],
+        () {
+          ref.read(pipelineTutorialProvider.notifier).advance();
+          // Wait for previous coach mark to fully dismiss before showing next
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (mounted) _maybePipelineCoachMark();
+          });
+        },
+        onSkip: () => ref.read(pipelineTutorialProvider.notifier).abandon(),
+      );
+    } else if (state.step == PipelineStep.paperSpecsContinue) {
+      showCoachMark(
+        context,
+        [
+          TutorialStep(
+            targetKey: _specsContinueKey,
+            icon: HugeIcons.strokeRoundedArrowRight01,
+            title: 'Continue',
+            body: 'Tap Continue when your specs look right.',
+            advanceOnSpotlightTap: true,
+            onSpotlightTap: () {
+              _advancedThisFrame = true;
+              ref.read(pipelineTutorialProvider.notifier).advance();
+              _onContinue();
+            },
+          ),
+        ],
+        () {},
+        onSkip: () => ref.read(pipelineTutorialProvider.notifier).abandon(),
+      );
+    }
   }
 
   @override
@@ -85,66 +165,69 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
             ),
             const SizedBox(height: AppSpacing.md),
             Expanded(
-              child: ListView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-                children: [
-                  const SizedBox(height: AppSpacing.sm),
-                  SpecSelector<PaperSize>(
-                    label: 'PAPER SIZE',
-                    options: PaperSize.values,
-                    selected: _paperSize,
-                    onChanged: (v) => setState(() => _paperSize = v),
-                    displayName: (v) => v.displayName,
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  SpecSelector<ColorMode>(
-                    label: 'COLOR MODE',
-                    options: ColorMode.values,
-                    selected: _colorMode,
-                    onChanged: (v) => setState(() => _colorMode = v),
-                    displayName: (v) => v.displayName,
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  SpecSelector<MediaType>(
-                    label: 'MEDIA TYPE',
-                    options: MediaType.values,
-                    selected: _mediaType,
-                    onChanged: (v) => setState(() => _mediaType = v),
-                    displayName: (v) => v.displayName,
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  SpecSelector<PrintSides>(
-                    label: 'PRINT SIDES',
-                    options: PrintSides.values,
-                    selected: _printSides,
-                    onChanged: (v) => setState(() => _printSides = v),
-                    displayName: (v) => v.displayName,
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  SpecSelector<Binding>(
-                    label: 'BINDING',
-                    options: Binding.values,
-                    selected: _binding,
-                    onChanged: (v) => setState(() => _binding = v),
-                    displayName: (v) => v.displayName,
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  AppTextField(
-                    label: 'Quantity',
-                    controller: _quantityController,
-                    keyboardType: TextInputType.number,
-                    hintText: 'Enter quantity',
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  AppTextField(
-                    label: 'Page Count',
-                    controller: _pageCountController,
-                    keyboardType: TextInputType.number,
-                    hintText: 'Number of pages',
-                  ),
-                  const SizedBox(height: AppSpacing.xxl),
-                ],
+              child: KeyedSubtree(
+                key: _specsFormKey,
+                child: ListView(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                  children: [
+                    const SizedBox(height: AppSpacing.sm),
+                    SpecSelector<PaperSize>(
+                      label: 'PAPER SIZE',
+                      options: PaperSize.values,
+                      selected: _paperSize,
+                      onChanged: (v) => setState(() => _paperSize = v),
+                      displayName: (v) => v.displayName,
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    SpecSelector<ColorMode>(
+                      label: 'COLOR MODE',
+                      options: ColorMode.values,
+                      selected: _colorMode,
+                      onChanged: (v) => setState(() => _colorMode = v),
+                      displayName: (v) => v.displayName,
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    SpecSelector<MediaType>(
+                      label: 'MEDIA TYPE',
+                      options: MediaType.values,
+                      selected: _mediaType,
+                      onChanged: (v) => setState(() => _mediaType = v),
+                      displayName: (v) => v.displayName,
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    SpecSelector<PrintSides>(
+                      label: 'PRINT SIDES',
+                      options: PrintSides.values,
+                      selected: _printSides,
+                      onChanged: (v) => setState(() => _printSides = v),
+                      displayName: (v) => v.displayName,
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    SpecSelector<Binding>(
+                      label: 'BINDING',
+                      options: Binding.values,
+                      selected: _binding,
+                      onChanged: (v) => setState(() => _binding = v),
+                      displayName: (v) => v.displayName,
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    AppTextField(
+                      label: 'Quantity',
+                      controller: _quantityController,
+                      keyboardType: TextInputType.number,
+                      hintText: 'Enter quantity',
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    AppTextField(
+                      label: 'Page Count',
+                      controller: _pageCountController,
+                      keyboardType: TextInputType.number,
+                      hintText: 'Number of pages',
+                    ),
+                    const SizedBox(height: AppSpacing.xxl),
+                  ],
+                ),
               ),
             ).animate()
               .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
@@ -158,10 +241,20 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
                   top: BorderSide(color: colors.outline, width: 0.5),
                 ),
               ),
-              child: AppButton(
-                label: 'Continue',
-                isFullWidth: true,
-                onTap: _onContinue,
+              child: KeyedSubtree(
+                key: _specsContinueKey,
+                child: AppButton(
+                  label: 'Continue',
+                  isFullWidth: true,
+                  onTap: () {
+                    final pipeline = ref.read(pipelineTutorialProvider);
+                    if (pipeline.active && pipeline.step == PipelineStep.paperSpecsContinue) {
+                      _advancedThisFrame = true;
+                      ref.read(pipelineTutorialProvider.notifier).advance();
+                    }
+                    _onContinue();
+                  },
+                ),
               ),
             ).animate()
               .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)

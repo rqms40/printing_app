@@ -17,11 +17,13 @@ class CheckoutSegmented<T> extends StatelessWidget {
     required this.items,
     required this.selected,
     required this.onChanged,
+    this.tutorialKey,
   });
 
   final List<SegmentedItem<T>> items;
   final T selected;
   final ValueChanged<T> onChanged;
+  final GlobalKey? tutorialKey;
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +31,9 @@ class CheckoutSegmented<T> extends StatelessWidget {
         ? AppColors.dark
         : AppColors.light;
 
-    return Container(
+    return KeyedSubtree(
+      key: tutorialKey,
+      child: Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: colors.background,
@@ -79,6 +83,7 @@ class CheckoutSegmented<T> extends StatelessWidget {
             ),
         ],
       ),
+    ),
     );
   }
 }

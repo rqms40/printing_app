@@ -77,6 +77,8 @@ import 'package:printing_app/features/admin/profile/screens/admin_profile_screen
 // Onboarding screen
 // ---------------------------------------------------------------------------
 import 'package:printing_app/features/onboarding/screens/onboarding_screen.dart';
+import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
+import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
 
 // ---------------------------------------------------------------------------
 // Navigation keys (keep shell state across navigations)
@@ -146,8 +148,17 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/auth/profile-setup';
       }
 
-      // Authenticated users on auth pages go through onboarding first
+      // Authenticated users on auth pages go through onboarding first (first login only)
       if (isAuth && isOnAuth) {
+        final seenOnboarding = ref.read(tutorialSeenProvider(TutorialKey.onboarding));
+        if (seenOnboarding) {
+          final role = ref.read(authProvider).user?.role ?? 'customer';
+          return switch (role) {
+            'driver' => '/driver/deliveries',
+            'admin' => '/admin/dashboard',
+            _ => '/customer/home',
+          };
+        }
         return '/onboarding';
       }
 

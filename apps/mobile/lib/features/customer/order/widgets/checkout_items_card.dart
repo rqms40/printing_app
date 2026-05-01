@@ -13,7 +13,9 @@ import 'package:printing_app/features/customer/order/widgets/checkout_section_ca
 import 'package:printing_app/utils/formatters.dart';
 
 class CheckoutItemsCard extends ConsumerWidget {
-  const CheckoutItemsCard({super.key});
+  const CheckoutItemsCard({super.key, this.tutorialKey});
+
+  final GlobalKey? tutorialKey;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -23,7 +25,9 @@ class CheckoutItemsCard extends ConsumerWidget {
         : AppColors.light;
     final notifier = ref.read(checkoutProvider.notifier);
 
-    return CheckoutSectionCard(
+    return KeyedSubtree(
+      key: tutorialKey,
+      child: CheckoutSectionCard(
       title: 'Order summary',
       trailing: GestureDetector(
         onTap: () => context.push('/customer/order/new?mode=add'),
@@ -71,6 +75,7 @@ class CheckoutItemsCard extends ConsumerWidget {
             ),
           ],
         ],
+      ),
       ),
     );
   }

@@ -72,6 +72,9 @@ dependencies:
   # Markdown rendering (for bot messages)
   flutter_markdown: ^0.7.5
 
+  # Tutorial system
+  tutorial_coach_mark: ^1.2.11
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

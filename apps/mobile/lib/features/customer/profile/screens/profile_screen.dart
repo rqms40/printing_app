@@ -12,6 +12,8 @@ import 'package:printing_app/shared/services/api_client.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/confirmation_dialog.dart';
 import 'package:printing_app/features/customer/profile/screens/storage_settings_screen.dart';
+import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
+import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
 
 final surveyVisibilityProvider = FutureProvider.autoDispose<bool>((ref) async {
   try {
@@ -228,6 +230,13 @@ class _ProfileTab extends ConsumerWidget {
           ),
           _Divider(colors: colors),
           _PrintModeRow(colors: colors),
+          _Divider(colors: colors),
+          _MenuRow(
+            icon: HugeIcons.strokeRoundedRepeat,
+            title: 'Reset Tutorials',
+            onTap: () => _confirmResetTutorials(context, ref),
+            colors: colors,
+          ),
 
           const SizedBox(height: AppSpacing.lg),
 
@@ -300,6 +309,45 @@ class _ProfileTab extends ConsumerWidget {
       ),
     );
   }
+}
+
+void _confirmResetTutorials(BuildContext context, WidgetRef ref) {
+  showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Reset Tutorials'),
+      content: const Text(
+        'Feature guides will reappear next time you visit each screen.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.of(ctx).pop();
+            ref.read(tutorialProvider.notifier).resetAll();
+            ref.read(pipelineTutorialProvider.notifier).reset();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Tutorials reset — they'll show again on your next visit."),
+              ),
+            );
+          },
+          child: Text(
+            'Reset',
+            style: TextStyle(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? AppColors.dark.brand
+                  : AppColors.light.brand,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 /// Overline section header.

@@ -13,7 +13,9 @@ import 'package:printing_app/shared/services/websocket_service.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
 class DeliveryMap extends ConsumerStatefulWidget {
-  const DeliveryMap({super.key});
+  const DeliveryMap({super.key, this.tutorialKey});
+
+  final GlobalKey? tutorialKey;
 
   @override
   ConsumerState<DeliveryMap> createState() => _DeliveryMapState();
@@ -124,6 +126,7 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
 
   Widget _loadingView(AppColorSet colors) {
     return ClipRRect(
+      key: widget.tutorialKey,
       borderRadius: AppRadius.borderLg,
       child: Container(
         height: 300,
@@ -142,6 +145,7 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
     final eta = state.etaMinutes;
 
     return ClipRRect(
+      key: widget.tutorialKey,
       borderRadius: AppRadius.borderLg,
       child: Container(
         width: double.infinity,
