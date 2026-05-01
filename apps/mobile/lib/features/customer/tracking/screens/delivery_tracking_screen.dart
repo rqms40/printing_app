@@ -1,13 +1,56 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/tracking/widgets/delivery_map.dart';
 import 'package:printing_app/features/customer/tracking/widgets/driver_info_card.dart';
+import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
+import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
+import 'package:printing_app/features/tutorial/widgets/coach_mark_sequence.dart';
 
-class DeliveryTrackingScreen extends StatelessWidget {
+class DeliveryTrackingScreen extends ConsumerStatefulWidget {
   const DeliveryTrackingScreen({super.key});
+
+  @override
+  ConsumerState<DeliveryTrackingScreen> createState() =>
+      _DeliveryTrackingScreenState();
+}
+
+class _DeliveryTrackingScreenState
+    extends ConsumerState<DeliveryTrackingScreen> {
+  final _mapKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _maybeShowTrackingTutorial());
+  }
+
+  void _maybeShowTrackingTutorial() {
+    if (!mounted) return;
+    final pipelineSeen = ref.read(tutorialSeenProvider(TutorialKey.pipeline));
+    if (!pipelineSeen) return;
+    final seen = ref.read(tutorialSeenProvider(TutorialKey.tracking));
+    if (seen) return;
+
+    showCoachMark(
+      context,
+      [
+        TutorialStep(
+          targetKey: _mapKey,
+          icon: HugeIcons.strokeRoundedLocation01,
+          title: 'Live Driver Tracking',
+          body:
+              "Your rider's GPS updates in real time. The ETA badge top-right refreshes live.",
+        ),
+      ],
+      () => ref.read(tutorialProvider.notifier).markSeen(TutorialKey.tracking),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,14 +72,15 @@ class DeliveryTrackingScreen extends StatelessWidget {
       body: Column(
         children: [
           // Map placeholder
-          const Expanded(
+          Expanded(
             child: Padding(
-              padding: EdgeInsets.all(AppSpacing.md),
-              child: DeliveryMap(),
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: DeliveryMap(tutorialKey: _mapKey),
             ),
-          ).animate()
-            .fadeIn(duration: 400.ms, curve: Curves.easeOut)
-            .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
+          )
+              .animate()
+              .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+              .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
           // Driver info card at bottom
           const Padding(
             padding: EdgeInsets.fromLTRB(
@@ -46,9 +90,15 @@ class DeliveryTrackingScreen extends StatelessWidget {
               AppSpacing.md,
             ),
             child: DriverInfoCard(),
-          ).animate()
-            .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
-            .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
+          )
+              .animate()
+              .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
+              .slideY(
+                begin: 0.03,
+                duration: 400.ms,
+                delay: 60.ms,
+                curve: Curves.easeOut,
+              ),
         ],
       ),
     );

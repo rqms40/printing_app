@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart'
     show ordersProvider, cancellableStatuses;
 import 'package:printing_app/features/customer/orders/widgets/order_status_timeline.dart';
@@ -18,14 +19,12 @@ import 'package:printing_app/shared/widgets/confirmation_dialog.dart';
 import 'package:printing_app/shared/widgets/status_badge.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/file_preview_sheet.dart';
+import 'package:printing_app/features/customer/orders/widgets/admin_status_banner.dart';
 import 'package:printing_app/utils/formatters.dart';
 
 /// Detailed view of a single order.
 class OrderDetailScreen extends ConsumerWidget {
-  const OrderDetailScreen({
-    super.key,
-    required this.orderId,
-  });
+  const OrderDetailScreen({super.key, required this.orderId});
 
   /// The internal order id (e.g. 'ord_001').
   final String orderId;
@@ -42,10 +41,9 @@ class OrderDetailScreen extends ConsumerWidget {
       orElse: () => orders.first,
     );
 
-    final statusHistory = MockData.orderStatusHistory
-        .where((h) => h.orderId == order.id)
-        .toList()
-      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    final statusHistory =
+        MockData.orderStatusHistory.where((h) => h.orderId == order.id).toList()
+          ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
     final isCancellable = cancellableStatuses.contains(order.orderStatus);
 
@@ -54,8 +52,9 @@ class OrderDetailScreen extends ConsumerWidget {
     // Find the delivery address if applicable.
     Address? address;
     if (order.deliveryAddressId != null) {
-      final matches = MockData.addresses
-          .where((a) => a.id == order.deliveryAddressId);
+      final matches = MockData.addresses.where(
+        (a) => a.id == order.deliveryAddressId,
+      );
       if (matches.isNotEmpty) address = matches.first;
     }
 
@@ -78,13 +77,22 @@ class OrderDetailScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // --- Admin Status Banner ---
+            if (order.adminStatusNote != null) ...[
+              AdminStatusBanner(
+                note: order.adminStatusNote!,
+                estimatedCompletionAt: order.estimatedCompletionAt,
+              ),
+              const SizedBox(height: 16),
+            ],
+
             // --- Status Timeline ---
             AppCard(
-              child: OrderStatusTimeline(
-                order: order,
-                statusHistory: statusHistory,
-              ),
-            )
+                  child: OrderStatusTimeline(
+                    order: order,
+                    statusHistory: statusHistory,
+                  ),
+                )
                 .animate()
                 .fadeIn(duration: 400.ms, curve: Curves.easeOut)
                 .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
@@ -93,62 +101,82 @@ class OrderDetailScreen extends ConsumerWidget {
             // --- Estimated Completion ---
             if (order.estimatedCompletionAt != null) ...[
               AppCard(
-                child: Row(
-                  children: [
-                    HugeIcon(icon: HugeIcons.strokeRoundedClock01, size: 20, color: colors.info),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        'Estimated ready by ${formatDate(order.estimatedCompletionAt!)}',
-                        style: AppTypography.body.copyWith(
-                          color: colors.onSurface,
+                    child: Row(
+                      children: [
+                        HugeIcon(
+                          icon: HugeIcons.strokeRoundedClock01,
+                          size: 20,
+                          color: colors.info,
                         ),
-                      ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            'Estimated ready by ${formatDate(order.estimatedCompletionAt!)}',
+                            style: AppTypography.body.copyWith(
+                              color: colors.onSurface,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              )
+                  )
                   .animate()
                   .fadeIn(duration: 400.ms, delay: 80.ms, curve: Curves.easeOut)
-                  .slideY(begin: 0.03, duration: 400.ms, delay: 80.ms, curve: Curves.easeOut),
+                  .slideY(
+                    begin: 0.03,
+                    duration: 400.ms,
+                    delay: 80.ms,
+                    curve: Curves.easeOut,
+                  ),
               const SizedBox(height: AppSpacing.md),
             ],
 
-            // --- Specs Section ---
-            _buildSpecsSection(order, colors)
+            // --- Order Items ---
+            _buildItemsSection(context, order, colors)
                 .animate()
                 .fadeIn(duration: 400.ms, delay: 160.ms, curve: Curves.easeOut)
-                .slideY(begin: 0.03, duration: 400.ms, delay: 160.ms, curve: Curves.easeOut),
+                .slideY(
+                  begin: 0.03,
+                  duration: 400.ms,
+                  delay: 160.ms,
+                  curve: Curves.easeOut,
+                ),
             const SizedBox(height: AppSpacing.md),
-
-            // --- File Info ---
-            if (order.fileName != null) ...[
-              _buildFileSection(context, order, colors)
-                  .animate()
-                  .fadeIn(duration: 400.ms, delay: 240.ms, curve: Curves.easeOut)
-                  .slideY(begin: 0.03, duration: 400.ms, delay: 240.ms, curve: Curves.easeOut),
-              const SizedBox(height: AppSpacing.md),
-            ],
 
             // --- Price Breakdown ---
             _buildPriceSection(order, colors)
                 .animate()
                 .fadeIn(duration: 400.ms, delay: 320.ms, curve: Curves.easeOut)
-                .slideY(begin: 0.03, duration: 400.ms, delay: 320.ms, curve: Curves.easeOut),
+                .slideY(
+                  begin: 0.03,
+                  duration: 400.ms,
+                  delay: 320.ms,
+                  curve: Curves.easeOut,
+                ),
             const SizedBox(height: AppSpacing.md),
 
             // --- Payment Info ---
             _buildPaymentSection(order, colors)
                 .animate()
                 .fadeIn(duration: 400.ms, delay: 400.ms, curve: Curves.easeOut)
-                .slideY(begin: 0.03, duration: 400.ms, delay: 400.ms, curve: Curves.easeOut),
+                .slideY(
+                  begin: 0.03,
+                  duration: 400.ms,
+                  delay: 400.ms,
+                  curve: Curves.easeOut,
+                ),
             const SizedBox(height: AppSpacing.md),
 
             // --- Delivery Info ---
             _buildDeliverySection(order, address, colors)
                 .animate()
                 .fadeIn(duration: 400.ms, delay: 480.ms, curve: Curves.easeOut)
-                .slideY(begin: 0.03, duration: 400.ms, delay: 480.ms, curve: Curves.easeOut),
+                .slideY(
+                  begin: 0.03,
+                  duration: 400.ms,
+                  delay: 480.ms,
+                  curve: Curves.easeOut,
+                ),
             const SizedBox(height: AppSpacing.lg),
 
             // --- Action Buttons ---
@@ -173,8 +201,12 @@ class OrderDetailScreen extends ConsumerWidget {
                         'Are you sure you want to cancel order ${order.orderId}? This action cannot be undone.',
                     confirmLabel: 'Cancel Order',
                     cancelLabel: 'Keep Order',
-                    onConfirm: () {
-                      ref.read(ordersProvider.notifier).cancelOrder(order.id);
+                    onConfirm: () async {
+                      await ref
+                          .read(ordersProvider.notifier)
+                          .cancelOrder(order.id);
+                      await ref.read(authProvider.notifier).refreshProfile();
+                      if (!context.mounted) return;
                       Navigator.of(context).pop(); // close dialog
                     },
                     onCancel: () => Navigator.of(context).pop(),
@@ -189,37 +221,97 @@ class OrderDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSpecsSection(Order order, AppColorSet colors) {
+  Widget _buildItemsSection(
+    BuildContext context,
+    Order order,
+    AppColorSet colors,
+  ) {
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Specifications',
+            '${order.orderTypeLabel} · ${order.itemCount} ${order.itemCount == 1 ? 'item' : 'items'}',
             style: AppTypography.bodyBold.copyWith(color: colors.onBackground),
           ),
           const SizedBox(height: AppSpacing.sm),
-          if (order.paperSpecs != null) ...[
-            _specRow('Paper Size', order.paperSpecs!.paperSize.displayName, colors),
-            _specRow('Color Mode', order.paperSpecs!.colorMode.displayName, colors),
-            _specRow('Media Type', order.paperSpecs!.mediaType.displayName, colors),
-            _specRow('Print Sides', order.paperSpecs!.printSides.displayName, colors),
-            _specRow('Binding', order.paperSpecs!.binding.displayName, colors),
-          ],
-          if (order.threeDSpecs != null) ...[
-            _specRow('File Format', order.threeDSpecs!.fileFormat.displayName, colors),
-            _specRow('Material', order.threeDSpecs!.material.displayName, colors),
-            _specRow('Color', order.threeDSpecs!.color, colors),
-            _specRow('Infill', '${order.threeDSpecs!.infillPercentage}%', colors),
-            _specRow('Layer Height', '${order.threeDSpecs!.layerHeight}mm', colors),
-            _specRow('Supports', order.threeDSpecs!.supports ? 'Yes' : 'No', colors),
-            if (order.threeDSpecs!.notes != null)
-              _specRow('Notes', order.threeDSpecs!.notes!, colors),
-          ],
-          _specRow('Quantity', '${order.quantity}', colors),
-          _specRow('Category', order.category, colors),
+          ...order.lineItems.asMap().entries.map((entry) {
+            final index = entry.key + 1;
+            final item = entry.value;
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: index == order.itemCount ? 0 : AppSpacing.md,
+              ),
+              child: _buildOrderItem(context, item, index, colors),
+            );
+          }),
         ],
       ),
+    );
+  }
+
+  Widget _buildOrderItem(
+    BuildContext context,
+    OrderLineItem item,
+    int index,
+    AppColorSet colors,
+  ) {
+    final fileName = item.fileName;
+    final extension = fileName?.split('.').last.toUpperCase();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            HugeIcon(
+              icon: item.category == '3d'
+                  ? HugeIcons.strokeRoundedCube
+                  : HugeIcons.strokeRoundedFile02,
+              size: 20,
+              color: colors.onSurfaceDim,
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(
+                fileName ?? 'Print job $index',
+                style: AppTypography.bodyBold.copyWith(color: colors.onSurface),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (extension != null)
+              StatusBadge(
+                label: extension,
+                variant: StatusBadgeVariant.neutral,
+              ),
+            if (item.fileMetadataId != null && fileName != null)
+              TextButton.icon(
+                onPressed: () => FilePreviewSheet.show(
+                  context,
+                  fileId: item.fileMetadataId!,
+                  fileName: fileName,
+                  mimeType: _mimeFromExtension(
+                    fileName.split('.').last.toLowerCase(),
+                  ),
+                ),
+                icon: Icon(
+                  Icons.visibility_outlined,
+                  size: 16,
+                  color: colors.accent,
+                ),
+                label: Text(
+                  'Preview',
+                  style: AppTypography.caption.copyWith(color: colors.accent),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        _specRow('Type', _itemCategoryLabel(item.category), colors),
+        _specRow('Quantity', '${item.quantity}', colors),
+        ..._itemSpecRows(item, colors),
+        _specRow('Item Subtotal', formatCurrency(item.totalPrice), colors),
+      ],
     );
   }
 
@@ -242,55 +334,39 @@ class OrderDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildFileSection(BuildContext context, Order order, AppColorSet colors) {
-    final extension = order.fileName!.split('.').last.toUpperCase();
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'File',
-            style: AppTypography.bodyBold.copyWith(color: colors.onBackground),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            children: [
-              HugeIcon(icon: HugeIcons.strokeRoundedFile01,
-                  size: 20, color: colors.onSurfaceDim),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(
-                  order.fileName!,
-                  style: AppTypography.body.copyWith(color: colors.onSurface),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              StatusBadge(
-                label: extension,
-                variant: StatusBadgeVariant.neutral,
-              ),
-              if (order.fileMetadataId != null)
-                TextButton.icon(
-                  onPressed: () => FilePreviewSheet.show(
-                    context,
-                    fileId: order.fileMetadataId!,
-                    fileName: order.fileName!,
-                    mimeType: _mimeFromExtension(
-                        order.fileName!.split('.').last.toLowerCase()),
-                  ),
-                  icon: Icon(Icons.visibility_outlined,
-                      size: 16, color: colors.accent),
-                  label: Text(
-                    'Preview',
-                    style: AppTypography.caption
-                        .copyWith(color: colors.accent),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
+  List<Widget> _itemSpecRows(OrderLineItem item, AppColorSet colors) {
+    final paperSpecs = item.paperSpecs;
+    if (paperSpecs != null) {
+      return [
+        _specRow('Paper Size', paperSpecs.paperSize.displayName, colors),
+        _specRow('Color Mode', paperSpecs.colorMode.displayName, colors),
+        _specRow('Media Type', paperSpecs.mediaType.displayName, colors),
+        _specRow('Print Sides', paperSpecs.printSides.displayName, colors),
+        _specRow('Binding', paperSpecs.binding.displayName, colors),
+      ];
+    }
+
+    final threeDSpecs = item.threeDSpecs;
+    if (threeDSpecs != null) {
+      return [
+        _specRow('File Format', threeDSpecs.fileFormat.displayName, colors),
+        _specRow('Material', threeDSpecs.material.displayName, colors),
+        _specRow('Color', threeDSpecs.color, colors),
+        _specRow('Infill', '${threeDSpecs.infillPercentage}%', colors),
+        _specRow('Layer Height', '${threeDSpecs.layerHeight}mm', colors),
+        _specRow('Supports', threeDSpecs.supports ? 'Yes' : 'No', colors),
+        if (threeDSpecs.notes != null)
+          _specRow('Notes', threeDSpecs.notes!, colors),
+      ];
+    }
+
+    return const [];
+  }
+
+  String _itemCategoryLabel(String category) {
+    if (category == '3d') return '3D Print';
+    if (category == 'paper') return 'Paper Print';
+    return category;
   }
 
   String _mimeFromExtension(String ext) {
@@ -316,7 +392,8 @@ class OrderDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildPriceSection(Order order, AppColorSet colors) {
-    final printingCost = order.totalPrice - order.deliveryFee;
+    final printingCost = order.totalPrice;
+    final total = order.totalPrice + order.deliveryFee;
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -336,13 +413,15 @@ class OrderDetailScreen extends ConsumerWidget {
               children: [
                 Text(
                   'Total',
-                  style: AppTypography.bodyBold
-                      .copyWith(color: colors.onBackground),
+                  style: AppTypography.bodyBold.copyWith(
+                    color: colors.onBackground,
+                  ),
                 ),
                 Text(
-                  formatCurrency(order.totalPrice),
-                  style: AppTypography.bodyBold
-                      .copyWith(color: colors.onBackground),
+                  formatCurrency(total),
+                  style: AppTypography.bodyBold.copyWith(
+                    color: colors.onBackground,
+                  ),
                 ),
               ],
             ),
@@ -394,7 +473,10 @@ class OrderDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildDeliverySection(
-      Order order, Address? address, AppColorSet colors) {
+    Order order,
+    Address? address,
+    AppColorSet colors,
+  ) {
     final isPickup = order.deliveryOption == 'pickup';
 
     return AppCard(
@@ -409,7 +491,11 @@ class OrderDetailScreen extends ConsumerWidget {
           if (isPickup)
             Row(
               children: [
-                HugeIcon(icon: HugeIcons.strokeRoundedStore01, size: 20, color: colors.onSurfaceDim),
+                HugeIcon(
+                  icon: HugeIcons.strokeRoundedStore01,
+                  size: 20,
+                  color: colors.onSurfaceDim,
+                ),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
@@ -423,8 +509,11 @@ class OrderDetailScreen extends ConsumerWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                HugeIcon(icon: HugeIcons.strokeRoundedLocation01,
-                    size: 20, color: colors.onSurfaceDim),
+                HugeIcon(
+                  icon: HugeIcons.strokeRoundedLocation01,
+                  size: 20,
+                  color: colors.onSurfaceDim,
+                ),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Column(
@@ -432,15 +521,17 @@ class OrderDetailScreen extends ConsumerWidget {
                     children: [
                       Text(
                         address.fullAddress,
-                        style: AppTypography.body
-                            .copyWith(color: colors.onSurface),
+                        style: AppTypography.body.copyWith(
+                          color: colors.onSurface,
+                        ),
                       ),
                       if (address.landmark != null) ...[
                         const SizedBox(height: AppSpacing.xs),
                         Text(
                           'Landmark: ${address.landmark}',
-                          style: AppTypography.caption
-                              .copyWith(color: colors.onSurfaceDim),
+                          style: AppTypography.caption.copyWith(
+                            color: colors.onSurfaceDim,
+                          ),
                         ),
                       ],
                     ],

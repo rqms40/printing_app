@@ -16,12 +16,16 @@ import {
   ShoppingCartOutlined,
   DashboardOutlined,
   CarOutlined,
+  TruckOutlined,
   TeamOutlined,
   ShoppingOutlined,
   WalletOutlined,
   BellOutlined,
   FormOutlined,
   AppstoreOutlined,
+  RocketOutlined,
+  MessageOutlined,
+  PrinterOutlined,
 } from "@ant-design/icons";
 
 import { gridTheme } from "@/config/theme";
@@ -47,10 +51,22 @@ import { NotificationsPage } from "@/pages/notifications";
 import { TamSurveyList } from "@/pages/tam-surveys/list";
 import { TamSurveyShow } from "@/pages/tam-surveys/show";
 import { DailyGridList } from "@/pages/daily-grid/list";
+import { BetaModePage } from '@/pages/beta-mode';
+import { ChatInboxPage } from "@/pages/chat";
+import { DeliverySlotsTodayPage } from '@/pages/delivery-slots/today';
+import { DeliverySlotTemplatesPage } from '@/pages/delivery-slots/templates';
+import { ExternalDeliveriesPage } from '@/pages/external-deliveries';
+import { DeliverySettingsPage } from '@/pages/admin-settings/delivery';
+import { PrinterProfilePage } from '@/pages/admin-settings/printer';
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true,
+      }}
+    >
       <ConfigProvider theme={gridTheme}>
         <AntdApp>
           <Refine
@@ -74,6 +90,30 @@ function App() {
                 name: "drivers",
                 list: "/drivers",
                 meta: { label: "Drivers", icon: <CarOutlined /> },
+              },
+              {
+                name: 'delivery-slots',
+                meta: { label: 'Delivery', icon: <TruckOutlined /> },
+              },
+              {
+                name: 'delivery-slots-today',
+                list: '/delivery-slots/today',
+                meta: { label: "Today's Slots", parent: 'delivery-slots' },
+              },
+              {
+                name: 'delivery-slots-templates',
+                list: '/delivery-slots/templates',
+                meta: { label: 'Slot Templates', parent: 'delivery-slots' },
+              },
+              {
+                name: 'external-deliveries',
+                list: '/external-deliveries',
+                meta: { label: 'External Deliveries', parent: 'delivery-slots' },
+              },
+              {
+                name: 'delivery-settings',
+                list: '/settings/delivery',
+                meta: { label: 'Delivery Settings', parent: 'delivery-slots' },
               },
               {
                 name: "users",
@@ -115,6 +155,21 @@ function App() {
                 name: "daily-grid",
                 list: "/daily-grid",
                 meta: { label: "Daily Grid", icon: <AppstoreOutlined /> },
+              },
+              {
+                name: 'beta-mode',
+                list: '/beta-mode',
+                meta: { label: 'Beta Mode', icon: <RocketOutlined /> },
+              },
+              {
+                name: "chat",
+                list: "/chat",
+                meta: { label: "Support Chat", icon: <MessageOutlined /> },
+              },
+              {
+                name: 'printer-profile',
+                list: '/settings/printer',
+                meta: { label: 'Printer Profile', icon: <PrinterOutlined /> },
               },
             ]}
             options={{
@@ -166,6 +221,13 @@ function App() {
                   <Route path="show/:id" element={<TamSurveyShow />} />
                 </Route>
                 <Route path="/daily-grid" element={<DailyGridList />} />
+                <Route path="/beta-mode" element={<BetaModePage />} />
+                <Route path="/chat" element={<ChatInboxPage />} />
+                <Route path="/delivery-slots/today" element={<DeliverySlotsTodayPage />} />
+                <Route path="/delivery-slots/templates" element={<DeliverySlotTemplatesPage />} />
+                <Route path="/external-deliveries" element={<ExternalDeliveriesPage />} />
+                <Route path="/settings/delivery" element={<DeliverySettingsPage />} />
+                <Route path="/settings/printer" element={<PrinterProfilePage />} />
               </Route>
 
               <Route

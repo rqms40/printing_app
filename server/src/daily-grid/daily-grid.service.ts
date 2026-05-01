@@ -2,12 +2,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DailyGridCard } from './entities/daily-grid-card.entity';
+import { DailyGridGateway } from './daily-grid.gateway';
 
 @Injectable()
 export class DailyGridService {
   constructor(
     @InjectRepository(DailyGridCard)
     private readonly repo: Repository<DailyGridCard>,
+    private readonly gateway: DailyGridGateway,
   ) {}
 
   findActive(): Promise<DailyGridCard[]> {
@@ -27,9 +29,11 @@ export class DailyGridService {
     return card;
   }
 
-  create(dto: Partial<DailyGridCard>): Promise<DailyGridCard> {
+  async create(dto: Partial<DailyGridCard>): Promise<DailyGridCard> {
     const card = this.repo.create(dto);
-    return this.repo.save(card);
+    const saved = await this.repo.save(card);
+    this.gateway.notifyUpdated();
+    return saved;
   }
 
   async update(
@@ -38,17 +42,22 @@ export class DailyGridService {
   ): Promise<DailyGridCard> {
     await this.findOne(id);
     await this.repo.update(id, dto);
-    return this.findOne(id);
+    const updated = await this.findOne(id);
+    this.gateway.notifyUpdated();
+    return updated;
   }
 
   async remove(id: number): Promise<void> {
     await this.findOne(id);
     await this.repo.delete(id);
+    this.gateway.notifyUpdated();
   }
 
   async reorder(ids: number[]): Promise<void> {
+    if (ids.length === 0) return;
     await Promise.all(
       ids.map((id, index) => this.repo.update(id, { sortOrder: index })),
     );
+    this.gateway.notifyUpdated();
   }
 }

@@ -2,10 +2,14 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/services/notification_service.dart';
 import 'package:printing_app/shared/services/token_storage.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
+import 'package:printing_app/features/customer/home/widgets/next_batch_session_trigger.dart';
+import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
+import 'package:printing_app/features/tutorial/repository/tutorial_repository.dart';
 
 // ---------------------------------------------------------------------------
 // Auth status
@@ -33,6 +37,7 @@ class AuthUser {
     this.course,
     this.organization,
     this.printingPreferences = const [],
+    this.tutorialSeenKeys = const [],
   });
 
   final String id;
@@ -51,6 +56,7 @@ class AuthUser {
   final String? course;
   final String? organization;
   final List<String> printingPreferences;
+  final List<String> tutorialSeenKeys;
 
   AuthUser copyWith({
     String? id,
@@ -69,6 +75,7 @@ class AuthUser {
     String? course,
     String? organization,
     List<String>? printingPreferences,
+    List<String>? tutorialSeenKeys,
   }) {
     return AuthUser(
       id: id ?? this.id,
@@ -87,6 +94,7 @@ class AuthUser {
       course: course ?? this.course,
       organization: organization ?? this.organization,
       printingPreferences: printingPreferences ?? this.printingPreferences,
+      tutorialSeenKeys: tutorialSeenKeys ?? this.tutorialSeenKeys,
     );
   }
 }
@@ -127,11 +135,16 @@ class AuthState {
 // ---------------------------------------------------------------------------
 // Auth notifier
 // ---------------------------------------------------------------------------
+// Imported here so logout() can clear the session-scoped flag. Lives in
+// the home/widgets layer because that's where it's read.
+// (Avoids creating a yet-another barrel just for this constant.)
+
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier() : super(AuthState.unauthenticated()) {
+  AuthNotifier([this._ref]) : super(AuthState.unauthenticated()) {
     _listenToFcmMessages();
   }
 
+  final Ref? _ref;
   StreamSubscription<Map<String, dynamic>>? _fcmSub;
 
   void _listenToFcmMessages() {
@@ -169,6 +182,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
             : AuthStatus.profileIncomplete,
         user: user,
       );
+      await TutorialRepository().syncFromServer(user.tutorialSeenKeys);
+      await _ref?.read(tutorialProvider.notifier).loadFromPrefs();
+      await _ref?.read(accountStateProvider.notifier).refresh();
       _connectNotificationsWs();
     } on DioException catch (e) {
       final message = e.response?.data is Map
@@ -230,6 +246,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
             : AuthStatus.profileIncomplete,
         user: user,
       );
+      await TutorialRepository().syncFromServer(user.tutorialSeenKeys);
+      await _ref?.read(tutorialProvider.notifier).loadFromPrefs();
+      await _ref?.read(accountStateProvider.notifier).refresh();
     } on DioException catch (e) {
       final message = e.response?.data is Map
           ? (e.response!.data as Map)['message']?.toString() ??
@@ -287,6 +306,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       ),
     };
     state = AuthState(status: AuthStatus.authenticated, user: users[role]!);
+    _ref?.read(accountStateProvider.notifier).clear();
   }
 
   Future<bool> completeProfile({
@@ -345,6 +365,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> logout() async {
     await TokenStorage.clearToken();
     WebSocketService.instance.disconnect();
+    _ref?.read(accountStateProvider.notifier).clear();
+    _ref?.read(tutorialProvider.notifier).resetStateOnly();
+    // Reset session-scoped UI flags so they fire again on next login.
+    _ref?.read(nextBatchShownThisSessionProvider.notifier).state = false;
     state = AuthState.unauthenticated();
   }
 
@@ -361,10 +385,31 @@ class AuthNotifier extends StateNotifier<AuthState> {
             : AuthStatus.profileIncomplete,
         user: user,
       );
+      await TutorialRepository().syncFromServer(user.tutorialSeenKeys);
+      await _ref?.read(tutorialProvider.notifier).loadFromPrefs();
+      await _ref?.read(accountStateProvider.notifier).refresh();
       _connectNotificationsWs();
     } catch (_) {
       await TokenStorage.clearToken();
+      _ref?.read(accountStateProvider.notifier).clear();
       // Token expired or invalid — stay unauthenticated
+    }
+  }
+
+  Future<void> refreshProfile() async {
+    if (state.status == AuthStatus.unauthenticated) return;
+
+    try {
+      final response = await ApiClient.instance.get('/users/profile');
+      final user = _parseUser(response.data as Map<String, dynamic>);
+      state = AuthState(
+        status: user.isProfileComplete
+            ? AuthStatus.authenticated
+            : AuthStatus.profileIncomplete,
+        user: user,
+      );
+    } catch (_) {
+      // Profile refresh is best-effort; cancellation should still complete.
     }
   }
 
@@ -414,6 +459,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       printingPreferences: _parseStringList(
         json['printingPreferences'] ?? json['printing_preferences'],
       ),
+      tutorialSeenKeys: _parseStringList(json['tutorialSeenKeys']),
       dateOfBirth: json['dateOfBirth'] != null
           ? DateTime.tryParse(json['dateOfBirth'] as String)
           : null,
@@ -441,5 +487,5 @@ class AuthNotifier extends StateNotifier<AuthState> {
 // Provider
 // ---------------------------------------------------------------------------
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>(
-  (ref) => AuthNotifier(),
+  (ref) => AuthNotifier(ref),
 );

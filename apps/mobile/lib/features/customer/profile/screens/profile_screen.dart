@@ -12,6 +12,8 @@ import 'package:printing_app/shared/services/api_client.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/confirmation_dialog.dart';
 import 'package:printing_app/features/customer/profile/screens/storage_settings_screen.dart';
+import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
+import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
 
 final surveyVisibilityProvider = FutureProvider.autoDispose<bool>((ref) async {
   try {
@@ -226,6 +228,15 @@ class _ProfileTab extends ConsumerWidget {
             },
             colors: colors,
           ),
+          _Divider(colors: colors),
+          _PrintModeRow(colors: colors),
+          _Divider(colors: colors),
+          _MenuRow(
+            icon: HugeIcons.strokeRoundedRepeat,
+            title: 'Reset Tutorials',
+            onTap: () => _confirmResetTutorials(context, ref),
+            colors: colors,
+          ),
 
           const SizedBox(height: AppSpacing.lg),
 
@@ -298,6 +309,45 @@ class _ProfileTab extends ConsumerWidget {
       ),
     );
   }
+}
+
+void _confirmResetTutorials(BuildContext context, WidgetRef ref) {
+  showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Reset Tutorials'),
+      content: const Text(
+        'Feature guides will reappear next time you visit each screen.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.of(ctx).pop();
+            ref.read(tutorialProvider.notifier).resetAll();
+            ref.read(pipelineTutorialProvider.notifier).reset();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Tutorials reset — they'll show again on your next visit."),
+              ),
+            );
+          },
+          child: Text(
+            'Reset',
+            style: TextStyle(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? AppColors.dark.brand
+                  : AppColors.light.brand,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 /// Overline section header.
@@ -415,6 +465,96 @@ class _MenuToggleRow extends StatelessWidget {
             value: value,
             onChanged: onChanged,
             activeThumbColor: colors.accent,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Stateful row that controls the Default Print Mode preference.
+class _PrintModeRow extends StatefulWidget {
+  const _PrintModeRow({required this.colors});
+
+  final AppColorSet colors;
+
+  @override
+  State<_PrintModeRow> createState() => _PrintModeRowState();
+}
+
+class _PrintModeRowState extends State<_PrintModeRow> {
+  String _printMode = 'fitToPage';
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrintMode();
+  }
+
+  Future<void> _loadPrintMode() async {
+    try {
+      final response = await ApiClient.instance.get('/users/profile');
+      final data = response.data as Map<String, dynamic>;
+      final mode = (data['defaultPrintMode'] as String?) ?? 'fitToPage';
+      if (mounted) setState(() { _printMode = mode; _loaded = true; });
+    } catch (_) {
+      if (mounted) setState(() => _loaded = true);
+    }
+  }
+
+  Future<void> _updatePrintMode(String mode) async {
+    final previous = _printMode;
+    setState(() => _printMode = mode);
+    try {
+      await ApiClient.instance.put('/users/profile', data: {'defaultPrintMode': mode});
+    } catch (_) {
+      if (mounted) {
+        setState(() => _printMode = previous);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to save print mode preference')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xl,
+        vertical: AppSpacing.md,
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.fit_screen_outlined, size: 20, color: widget.colors.onSurface),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Default Print Mode',
+                  style: AppTypography.body.copyWith(color: widget.colors.onSurface),
+                ),
+                Text(
+                  _printMode == 'fitToPage' ? 'Fit to paper' : 'Actual size',
+                  style: AppTypography.caption.copyWith(color: widget.colors.onSurfaceDim),
+                ),
+              ],
+            ),
+          ),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'fitToPage', label: Text('Fit')),
+              ButtonSegment(value: 'actualSize', label: Text('Actual')),
+            ],
+            selected: {_printMode},
+            onSelectionChanged: (val) => _updatePrintMode(val.first),
+            style: ButtonStyle(
+              visualDensity: VisualDensity.compact,
+            ),
           ),
         ],
       ),

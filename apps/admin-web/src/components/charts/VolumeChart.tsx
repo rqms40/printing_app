@@ -1,6 +1,11 @@
 import React, { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
+const THIRTY_DAY_VOLUME = Array.from({ length: 30 }, (_, i) => ({
+  name: `D${i + 1}`,
+  count: 60 + ((i * 37) % 190),
+}));
+
 interface VolumeChartProps {
   period: '7D' | '30D' | '6M';
 }
@@ -19,10 +24,7 @@ export const VolumeChart: React.FC<VolumeChartProps> = ({ period }) => {
           { name: 'Sun', count: 190 },
         ];
       case '30D':
-        return Array.from({ length: 30 }, (_, i) => ({
-          name: `D${i + 1}`,
-          count: Math.floor(Math.random() * 200) + 50,
-        }));
+        return THIRTY_DAY_VOLUME;
       case '6M':
         return [
           { name: 'Jan', count: 800 },

@@ -41,5 +41,29 @@ void main() {
       final file = UploadedFile.fromJson(json);
       expect(file.expiresAt, isNull);
     });
+
+    test('fromJson parses analysis fields', () {
+      final json = {
+        'id': 1, 'originalName': 'test.pdf', 'mimeType': 'application/pdf',
+        'size': 1024, 'createdAt': '2026-01-01T00:00:00.000Z',
+        'widthMm': 210.0, 'heightMm': 297.0, 'colorSpace': 'rgb', 'pageCount': 3,
+      };
+      final file = UploadedFile.fromJson(json);
+      expect(file.widthMm, 210.0);
+      expect(file.heightMm, 297.0);
+      expect(file.colorSpace, 'rgb');
+      expect(file.pageCount, 3);
+    });
+
+    test('fromJson coerces int widthMm/heightMm to double', () {
+      final json = {
+        'id': 1, 'originalName': 'test.pdf', 'mimeType': 'application/pdf',
+        'size': 1024, 'createdAt': '2026-01-01T00:00:00.000Z',
+        'widthMm': 210, 'heightMm': 297,  // integers, not doubles
+      };
+      final file = UploadedFile.fromJson(json);
+      expect(file.widthMm, 210.0);
+      expect(file.heightMm, 297.0);
+    });
   });
 }

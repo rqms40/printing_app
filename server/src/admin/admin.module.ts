@@ -6,6 +6,7 @@ import { User } from '../users/entities/user.entity';
 import { PaperSpec } from '../orders/entities/paper-specs.entity';
 import { ThreeDSpec } from '../orders/entities/three-d-specs.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
+import { OrderItem } from '../orders/entities/order-item.entity';
 import { OrdersModule } from '../orders/orders.module';
 import { DriversModule } from '../drivers/drivers.module';
 import { CreditsModule } from '../credits/credits.module';
@@ -22,6 +23,7 @@ import { DeliveryAssignment } from '../drivers/entities/delivery-assignment.enti
       PaperSpec,
       ThreeDSpec,
       OrderStatusHistory,
+      OrderItem,
       TamSurvey,
       TamSurveySettings,
       DriverProfile,

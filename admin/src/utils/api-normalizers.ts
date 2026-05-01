@@ -7,6 +7,7 @@ import type {
 } from "@/types/enums";
 import type {
   Order,
+  OrderItem,
   OrderStatusHistory,
   PaperSpecs,
   ThreeDSpecs,
@@ -53,7 +54,7 @@ export interface AdminUserMetricsRecord {
 export interface AdminUserRecentOrderRecord {
   id: number;
   order_id: string;
-  category: "paper" | "3d";
+  category: "paper" | "3d" | "batch";
   order_status: OrderStatus;
   payment_status: PaymentStatus;
   total_price: number;
@@ -114,7 +115,9 @@ const ADMIN_USER_DETAIL_PAYMENT_STATUSES = new Set<PaymentStatus>([
 ]);
 
 function asRecord(value: unknown): ApiRecord {
-  return value !== null && typeof value === "object" ? (value as ApiRecord) : {};
+  return value !== null && typeof value === "object"
+    ? (value as ApiRecord)
+    : {};
 }
 
 function read(record: ApiRecord, ...keys: string[]) {
@@ -332,7 +335,9 @@ function normalizeThreeDSpecs(value: unknown): ThreeDSpecs | undefined {
   };
 }
 
-function normalizeStatusHistory(value: unknown): OrderStatusHistory[] | undefined {
+function normalizeStatusHistory(
+  value: unknown,
+): OrderStatusHistory[] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
   }
@@ -361,7 +366,43 @@ function normalizeStatusHistory(value: unknown): OrderStatusHistory[] | undefine
         "changedByUserId",
       ),
       notes: toOptionalString(record, "notes"),
-      created_at: toRequiredString(record, EMPTY_DATE, "created_at", "createdAt"),
+      created_at: toRequiredString(
+        record,
+        EMPTY_DATE,
+        "created_at",
+        "createdAt",
+      ),
+    };
+  });
+}
+
+function normalizeOrderItems(value: unknown): OrderItem[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  return value.map((item) => {
+    const record = asRecord(item);
+    const category = toRequiredString(record, "paper", "category");
+
+    return {
+      id: toRequiredString(record, "", "id"),
+      order_id: toOptionalString(record, "order_id", "orderId"),
+      category: category === "3d" ? "3d" : "paper",
+      file_url: toOptionalString(record, "file_url", "fileUrl"),
+      file_name: toOptionalString(record, "file_name", "fileName"),
+      file_metadata_id:
+        read(record, "file_metadata_id", "fileMetadataId") !== undefined
+          ? toNumberValue(record, 0, "file_metadata_id", "fileMetadataId")
+          : undefined,
+      paper_specs: normalizePaperSpecs(
+        read(record, "paper_specs", "paperSpec"),
+      ),
+      three_d_specs: normalizeThreeDSpecs(
+        read(record, "three_d_specs", "threeDSpec"),
+      ),
+      quantity: toNumberValue(record, 1, "quantity"),
+      total_price: toNumberValue(record, 0, "total_price", "totalPrice"),
     };
   });
 }
@@ -390,8 +431,12 @@ export function normalizeOrder(input: unknown): Order & {
     id: toRequiredString(record, "", "id"),
     order_id: toRequiredString(record, "", "order_id", "orderId"),
     user_id: toRequiredString(record, "", "user_id", "userId"),
-    category:
-      toRequiredString(record, "paper", "category") === "3d" ? "3d" : "paper",
+    category: (() => {
+      const category = toRequiredString(record, "paper", "category");
+      if (category === "3d") return "3d";
+      if (category === "batch") return "batch";
+      return "paper";
+    })(),
     file_url: toOptionalString(record, "file_url", "fileUrl"),
     file_name: toOptionalString(record, "file_name", "fileName"),
     file_metadata_id: read(record, "file_metadata_id", "fileMetadataId") != null
@@ -422,11 +467,7 @@ export function normalizeOrder(input: unknown): Order & {
       "order_status",
       "orderStatus",
     ) as OrderStatus,
-    decline_reason: toOptionalString(
-      record,
-      "decline_reason",
-      "declineReason",
-    ),
+    decline_reason: toOptionalString(record, "decline_reason", "declineReason"),
     cancellation_reason: toOptionalString(
       record,
       "cancellation_reason",
@@ -458,14 +499,24 @@ export function normalizeOrder(input: unknown): Order & {
     tracking_link: toOptionalString(record, "tracking_link", "trackingLink"),
     created_at: toRequiredString(record, EMPTY_DATE, "created_at", "createdAt"),
     updated_at: toRequiredString(record, EMPTY_DATE, "updated_at", "updatedAt"),
+    items: normalizeOrderItems(read(record, "items")),
     status_history: normalizeStatusHistory(
       read(record, "status_history", "statusHistory"),
     ),
-    customer_id: read(record, "customer_id", "customerId") !== undefined
-      ? toNumberValue(record, 0, "customer_id", "customerId")
-      : undefined,
-    customer_name: toOptionalString(record, "customer_name", "customerName") ?? null,
-    customer_email: toOptionalString(record, "customer_email", "customerEmail") ?? null,
+    customer_id:
+      read(record, "customer_id", "customerId") !== undefined
+        ? toNumberValue(record, 0, "customer_id", "customerId")
+        : undefined,
+    customer_name:
+      toOptionalString(record, "customer_name", "customerName") ?? null,
+    customer_email:
+      toOptionalString(record, "customer_email", "customerEmail") ?? null,
+    adminStatusNote:
+      toOptionalString(record, "adminStatusNote") ?? null,
+    estimatedCompletionAt:
+      toOptionalString(record, "estimatedCompletionAt") ?? null,
+    adminStatusSetAt:
+      toOptionalString(record, "adminStatusSetAt") ?? null,
   };
 }
 
@@ -480,7 +531,8 @@ export function normalizeAdminUser(input: unknown): AdminUserRecord {
     id: toNumberValue(record, 0, "id"),
     full_name: toOptionalString(record, "full_name", "fullName") ?? null,
     email: toRequiredString(record, "", "email"),
-    phone_number: toOptionalString(record, "phone_number", "phoneNumber") ?? null,
+    phone_number:
+      toOptionalString(record, "phone_number", "phoneNumber") ?? null,
     role: toRequiredString(record, "customer", "role") as UserRole,
     is_active: toBooleanValue(record, true, "is_active", "isActive"),
     is_profile_complete: toBooleanValue(
@@ -515,11 +567,8 @@ export function normalizeAdminUserDetailRecord(
   return {
     ...normalizeAdminUser(record),
     gender: toOptionalString(record, "gender") ?? null,
-    date_of_birth: toOptionalString(
-      record,
-      "date_of_birth",
-      "dateOfBirth",
-    ) ?? null,
+    date_of_birth:
+      toOptionalString(record, "date_of_birth", "dateOfBirth") ?? null,
   };
 }
 
@@ -538,13 +587,10 @@ export function normalizeAdminUserMetrics(
       "average_order_value",
       "averageOrderValue",
     ),
-    last_order_at: toOptionalString(record, "last_order_at", "lastOrderAt") ?? null,
+    last_order_at:
+      toOptionalString(record, "last_order_at", "lastOrderAt") ?? null,
     last_paid_order_at:
-      toOptionalString(
-        record,
-        "last_paid_order_at",
-        "lastPaidOrderAt",
-      ) ?? null,
+      toOptionalString(record, "last_paid_order_at", "lastPaidOrderAt") ?? null,
   };
 }
 
@@ -556,8 +602,12 @@ export function normalizeAdminUserRecentOrder(
   return {
     id: toNumberValue(record, 0, "id"),
     order_id: toRequiredString(record, "", "order_id", "orderId"),
-    category:
-      toRequiredString(record, "paper", "category") === "3d" ? "3d" : "paper",
+    category: (() => {
+      const category = toRequiredString(record, "paper", "category");
+      if (category === "3d") return "3d";
+      if (category === "batch") return "batch";
+      return "paper";
+    })(),
     order_status: toRequiredString(
       record,
       "order_placed",
@@ -606,9 +656,10 @@ export function normalizeAdminDriver(input: unknown): AdminDriverRecord {
 
   return {
     id: toNumberValue(record, 0, "id"),
-    user_id: read(record, "user_id", "userId") === undefined
-      ? null
-      : toNumberValue(record, 0, "user_id", "userId"),
+    user_id:
+      read(record, "user_id", "userId") === undefined
+        ? null
+        : toNumberValue(record, 0, "user_id", "userId"),
     full_name:
       toOptionalString(record, "full_name", "fullName") ??
       toOptionalString(user, "full_name", "fullName") ??
@@ -623,7 +674,8 @@ export function normalizeAdminDriver(input: unknown): AdminDriverRecord {
       "vehicle_type",
       "vehicleType",
     ),
-    plate_number: toOptionalString(record, "plate_number", "plateNumber") ?? null,
+    plate_number:
+      toOptionalString(record, "plate_number", "plateNumber") ?? null,
     is_available: toBooleanValue(record, false, "is_available", "isAvailable"),
     last_latitude:
       read(record, "last_latitude", "lastLatitude") === undefined
@@ -634,11 +686,8 @@ export function normalizeAdminDriver(input: unknown): AdminDriverRecord {
         ? null
         : toNumberValue(record, 0, "last_longitude", "lastLongitude"),
     last_location_update:
-      toOptionalString(
-        record,
-        "last_location_update",
-        "lastLocationUpdate",
-      ) ?? null,
+      toOptionalString(record, "last_location_update", "lastLocationUpdate") ??
+      null,
     created_at: toRequiredString(record, EMPTY_DATE, "created_at", "createdAt"),
     updated_at: toRequiredString(record, EMPTY_DATE, "updated_at", "updatedAt"),
   };
@@ -674,7 +723,9 @@ export function normalizeServiceCategory(input: unknown): ServiceCategory {
   };
 }
 
-export function normalizeServiceCategories(payload: unknown): ServiceCategory[] {
+export function normalizeServiceCategories(
+  payload: unknown,
+): ServiceCategory[] {
   return Array.isArray(payload) ? payload.map(normalizeServiceCategory) : [];
 }
 
@@ -684,12 +735,7 @@ export function normalizeSpecOption(input: unknown): SpecOption {
   return {
     id: toRequiredString(record, "", "id"),
     category_id: toRequiredString(record, "", "category_id", "categoryId"),
-    option_group: toRequiredString(
-      record,
-      "",
-      "option_group",
-      "optionGroup",
-    ),
+    option_group: toRequiredString(record, "", "option_group", "optionGroup"),
     label: toRequiredString(record, "", "label"),
     value: toRequiredString(record, "", "value"),
     multiplier: toNumberValue(record, 1, "multiplier"),

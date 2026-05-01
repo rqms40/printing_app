@@ -8,8 +8,8 @@ import 'package:printing_app/features/customer/home/widgets/map_tracking_tile.da
 import 'package:printing_app/shared/models/enums.dart';
 
 GoRouter _router() => GoRouter(routes: [
-      GoRoute(path: '/', builder: (_, __) => const MapTrackingTile()),
-      GoRoute(path: '/customer/tracking', builder: (_, __) => const Scaffold()),
+      GoRoute(path: '/', builder: (_, _) => const MapTrackingTile()),
+      GoRoute(path: '/customer/tracking', builder: (_, _) => const Scaffold()),
     ]);
 
 Widget _wrap(LiveDeliveryMapState state) => ProviderScope(

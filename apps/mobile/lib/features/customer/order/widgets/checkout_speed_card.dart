@@ -1,0 +1,271 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hugeicons/hugeicons.dart';
+import 'package:printing_app/config/theme/app_colors.dart';
+import 'package:printing_app/config/theme/app_radius.dart';
+import 'package:printing_app/config/theme/app_spacing.dart';
+import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/customer/order/models/delivery_speed_tier.dart';
+import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
+import 'package:printing_app/features/customer/order/providers/delivery_slot_provider.dart';
+import 'package:printing_app/features/customer/order/sheets/slot_picker_sheet.dart';
+import 'package:printing_app/features/customer/order/widgets/checkout_section_card.dart';
+import 'package:printing_app/utils/formatters.dart';
+
+class CheckoutSpeedCard extends ConsumerWidget {
+  const CheckoutSpeedCard({super.key});
+
+  /// True if any of today's slots is **live right now** — start time has
+  /// passed, end time hasn't, and capacity isn't exhausted. Standard /
+  /// Express delivery only makes sense during a live slot. Mirrors the
+  /// server-side check in OrdersService.createBatch.
+  bool _hasBookableTodaySlot(WidgetRef ref) {
+    final now = DateTime.now();
+    final today =
+        '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final slots = ref.watch(deliverySlotProvider(today)).slots;
+    if (slots.isEmpty) return false;
+    return slots.any((s) {
+      if (s.isFull) return false;
+      final eParts = s.endTime.split(':').map(int.parse).toList();
+      final sParts = s.startTime.split(':').map(int.parse).toList();
+      final end = DateTime(now.year, now.month, now.day, eParts[0], eParts[1]);
+      final start = DateTime(now.year, now.month, now.day, sParts[0], sParts[1]);
+      return !start.isAfter(now) && end.isAfter(now);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(checkoutProvider);
+    final fees = ref.watch(checkoutFeesProvider);
+    final colors = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
+
+    final hasBookable = _hasBookableTodaySlot(ref);
+
+    // Express tier preview shows the express fee directly so users see the
+    // real number without selecting it. Standard + Scheduled use the current
+    // computed delivery fee (which depends on the active tier).
+    const expressFeePreview = 45.0;
+    const standardFeePreview = 25.0;
+
+    final tiers = <_TierSpec>[
+      _TierSpec(
+        DeliverySpeedTier.priority,
+        'Express',
+        '~15 min · arrives first',
+        state.speedTier == DeliverySpeedTier.priority
+            ? fees.deliveryFee
+            : expressFeePreview,
+        HugeIcons.strokeRoundedFlash,
+        disabled: !hasBookable,
+      ),
+      _TierSpec(
+        DeliverySpeedTier.standard,
+        'Standard',
+        '~30 min · most popular',
+        state.speedTier == DeliverySpeedTier.standard
+            ? fees.deliveryFee
+            : standardFeePreview,
+        HugeIcons.strokeRoundedClock01,
+        disabled: !hasBookable,
+      ),
+      _TierSpec(
+        DeliverySpeedTier.scheduled,
+        'Scheduled',
+        state.scheduledSlot == null
+            ? 'Pick a time slot'
+            : '${state.scheduledSlot!.date} · ${state.scheduledSlot!.startTime.substring(0, 5)}',
+        state.speedTier == DeliverySpeedTier.scheduled
+            ? fees.deliveryFee
+            : standardFeePreview,
+        HugeIcons.strokeRoundedCalendar03,
+      ),
+    ];
+
+    return CheckoutSectionCard(
+      title: 'Delivery options',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!hasBookable) ...[
+            _NoSlotBanner(colors: colors),
+            const SizedBox(height: 10),
+          ],
+          for (var i = 0; i < tiers.length; i++) ...[
+            if (i > 0) const SizedBox(height: 8),
+            _TierRow(
+              spec: tiers[i],
+              selected: state.speedTier == tiers[i].tier,
+              colors: colors,
+              onTap: tiers[i].disabled
+                  ? null
+                  : () async {
+                      if (tiers[i].tier == DeliverySpeedTier.scheduled) {
+                        final slot = await SlotPickerSheet.show(context);
+                        if (slot != null) {
+                          ref.read(checkoutProvider.notifier).setScheduledSlot(slot);
+                        }
+                        return;
+                      }
+                      ref.read(checkoutProvider.notifier).setSpeedTier(tiers[i].tier);
+                    },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _TierSpec {
+  const _TierSpec(
+    this.tier,
+    this.label,
+    this.subtitle,
+    this.fee,
+    this.icon, {
+    this.disabled = false,
+  });
+  final DeliverySpeedTier tier;
+  final String label;
+  final String subtitle;
+  final double fee;
+  final List<List<dynamic>> icon;
+  final bool disabled;
+}
+
+class _NoSlotBanner extends StatelessWidget {
+  const _NoSlotBanner({required this.colors});
+  final AppColorSet colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: 10,
+      ),
+      decoration: BoxDecoration(
+        color: colors.brand.withValues(alpha: 0.10),
+        borderRadius: AppRadius.borderMd,
+      ),
+      child: Row(
+        children: [
+          HugeIcon(
+            icon: HugeIcons.strokeRoundedAlert02,
+            size: 16,
+            color: colors.brand,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'No slot is open right now. Choose Pickup or Schedule a future drop.',
+              style: AppTypography.caption.copyWith(
+                color: colors.onBackground,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TierRow extends StatelessWidget {
+  const _TierRow({
+    required this.spec,
+    required this.selected,
+    required this.colors,
+    required this.onTap,
+  });
+
+  final _TierSpec spec;
+  final bool selected;
+  final AppColorSet colors;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final disabled = spec.disabled;
+    return InkWell(
+      borderRadius: AppRadius.borderLg,
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm + 2,
+        ),
+        decoration: BoxDecoration(
+          color: selected
+              ? colors.brand.withValues(alpha: 0.10)
+              : colors.background.withValues(alpha: disabled ? 0.5 : 1.0),
+          borderRadius: AppRadius.borderLg,
+          border: Border.all(
+            color: selected
+                ? colors.brand.withValues(alpha: 0.6)
+                : colors.outline.withValues(alpha: 0.35),
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Opacity(
+          opacity: disabled ? 0.45 : 1.0,
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: selected ? colors.brand : colors.surface,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: HugeIcon(
+                    icon: spec.icon,
+                    size: 16,
+                    color: selected ? colors.background : colors.onSurfaceDim,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      spec.label,
+                      style: AppTypography.bodyBold.copyWith(
+                        color: colors.onBackground,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      disabled ? 'Unavailable right now' : spec.subtitle,
+                      style: AppTypography.caption.copyWith(
+                        color: colors.onSurfaceDim,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                formatCurrency(spec.fee),
+                style: AppTypography.bodyBold.copyWith(
+                  color: selected ? colors.brand : colors.onBackground,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

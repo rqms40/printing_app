@@ -5,6 +5,8 @@ import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/routes/page_transitions.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/auth/models/registration_draft.dart';
+import 'package:printing_app/features/customer/profile/models/account_state.dart';
+import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 import 'package:printing_app/shared/widgets/app_bottom_nav.dart';
 import 'package:printing_app/shared/widgets/scaffold_with_nav.dart';
 
@@ -24,6 +26,7 @@ import 'package:printing_app/features/auth/screens/profile_setup_screen.dart';
 // Customer screens
 // ---------------------------------------------------------------------------
 import 'package:printing_app/features/customer/home/screens/home_screen.dart';
+import 'package:printing_app/features/customer/home/widgets/next_batch_session_trigger.dart';
 import 'package:printing_app/features/customer/orders/screens/orders_screen.dart';
 import 'package:printing_app/features/customer/orders/screens/order_detail_screen.dart';
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
@@ -33,9 +36,8 @@ import 'package:printing_app/features/customer/order/screens/category_screen.dar
 import 'package:printing_app/features/customer/order/screens/paper_specs_screen.dart';
 import 'package:printing_app/features/customer/order/screens/three_d_specs_screen.dart';
 import 'package:printing_app/features/customer/order/screens/upload_screen.dart';
-import 'package:printing_app/features/customer/order/screens/summary_screen.dart';
-import 'package:printing_app/features/customer/order/screens/delivery_details_screen.dart';
-import 'package:printing_app/features/customer/order/screens/payment_screen.dart';
+import 'package:printing_app/features/customer/order/screens/checkout_screen.dart';
+import 'package:printing_app/features/customer/order/screens/order_success_screen.dart';
 import 'package:printing_app/features/customer/tracking/screens/delivery_tracking_screen.dart';
 import 'package:printing_app/features/customer/address/screens/address_list_screen.dart';
 import 'package:printing_app/features/customer/address/screens/address_picker_screen.dart';
@@ -45,8 +47,13 @@ import 'package:printing_app/features/customer/profile/screens/terms_screen.dart
 import 'package:printing_app/features/customer/profile/screens/privacy_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/top_up_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/tam_survey_screen.dart';
+import 'package:printing_app/features/customer/profile/screens/required_tam_survey_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/storage_settings_screen.dart';
 import 'package:printing_app/features/customer/uploads/screens/my_uploads_screen.dart';
+import 'package:printing_app/features/customer/chat/models/conversation.dart';
+import 'package:printing_app/features/customer/chat/screens/chat_list_screen.dart';
+import 'package:printing_app/features/customer/chat/screens/chat_select_screen.dart';
+import 'package:printing_app/features/customer/chat/screens/conversation_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Driver screens
@@ -70,6 +77,8 @@ import 'package:printing_app/features/admin/profile/screens/admin_profile_screen
 // Onboarding screen
 // ---------------------------------------------------------------------------
 import 'package:printing_app/features/onboarding/screens/onboarding_screen.dart';
+import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
+import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
 
 // ---------------------------------------------------------------------------
 // Navigation keys (keep shell state across navigations)
@@ -82,6 +91,7 @@ final _rootNavigatorKey = GlobalKey<NavigatorState>();
 class _AuthChangeNotifier extends ChangeNotifier {
   _AuthChangeNotifier(this._ref) {
     _ref.listen(authProvider, (_, _) => notifyListeners());
+    _ref.listen(accountStateProvider, (_, _) => notifyListeners());
   }
   final Ref _ref;
 }
@@ -109,6 +119,22 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // Let the splash screen and onboarding through without redirect
       if (isOnSplash) return null;
+
+      final accountState = ref.read(accountStateProvider);
+      final isForcedSurvey =
+          state.matchedLocation == '/customer/survey/required';
+      if (isForcedSurvey && !isAuth) {
+        return '/auth/login';
+      }
+      if (isAuth && accountState.status == AccountGateStatus.surveyRequired) {
+        return isForcedSurvey ? null : '/customer/survey/required';
+      }
+      if (isForcedSurvey &&
+          isAuth &&
+          accountState.status != AccountGateStatus.surveyRequired) {
+        return '/customer/home';
+      }
+
       if (isOnOnboarding && isAuth) return null;
 
       // Unauthenticated users must go to login
@@ -122,8 +148,17 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/auth/profile-setup';
       }
 
-      // Authenticated users on auth pages go through onboarding first
+      // Authenticated users on auth pages go through onboarding first (first login only)
       if (isAuth && isOnAuth) {
+        final seenOnboarding = ref.read(tutorialSeenProvider(TutorialKey.onboarding));
+        if (seenOnboarding) {
+          final role = ref.read(authProvider).user?.role ?? 'customer';
+          return switch (role) {
+            'driver' => '/driver/deliveries',
+            'admin' => '/admin/dashboard',
+            _ => '/customer/home',
+          };
+        }
         return '/onboarding';
       }
 
@@ -135,8 +170,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // -----------------------------------------------------------------------
       GoRoute(
         path: '/splash',
-        pageBuilder: (_, state) =>
-            fadeTransition(const SplashScreen(), state),
+        pageBuilder: (_, state) => fadeTransition(const SplashScreen(), state),
       ),
 
       // -----------------------------------------------------------------------
@@ -144,8 +178,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // -----------------------------------------------------------------------
       GoRoute(
         path: '/auth/login',
-        pageBuilder: (_, state) =>
-            fadeTransition(const LoginScreen(), state),
+        pageBuilder: (_, state) => fadeTransition(const LoginScreen(), state),
       ),
       GoRoute(
         path: '/auth/register',
@@ -192,8 +225,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                   SnackBar(
                     content: Row(
                       children: [
-                        const Icon(Icons.notifications_rounded,
-                            color: Colors.black, size: 16),
+                        const Icon(
+                          Icons.notifications_rounded,
+                          color: Colors.black,
+                          size: 16,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Column(
@@ -228,14 +264,16 @@ final routerProvider = Provider<GoRouter>((ref) {
                     backgroundColor: const Color(0xFFFFDE58),
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                     margin: const EdgeInsets.fromLTRB(16, 0, 16, 80),
                     duration: const Duration(seconds: 4),
                   ),
                 );
             });
 
-            return ScaffoldWithNav(
+            return NextBatchSessionTrigger(
+              child: ScaffoldWithNav(
               currentIndex: navigationShell.currentIndex,
               showFab: true,
               onTap: (i) => navigationShell.goBranch(
@@ -266,6 +304,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 ),
               ],
               child: navigationShell,
+            ),
             );
           },
         ),
@@ -287,9 +326,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: ':id',
                     pageBuilder: (_, state) => slideTransition(
-                      OrderDetailScreen(
-                        orderId: state.pathParameters['id']!,
-                      ),
+                      OrderDetailScreen(orderId: state.pathParameters['id']!),
                       state,
                     ),
                   ),
@@ -321,8 +358,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       // -----------------------------------------------------------------------
       GoRoute(
         path: '/customer/order/new',
-        pageBuilder: (_, state) =>
-            slideUpTransition(const CategoryScreen(), state),
+        pageBuilder: (_, state) => slideUpTransition(
+          CategoryScreen(addMode: state.uri.queryParameters['mode'] == 'add'),
+          state,
+        ),
       ),
       GoRoute(
         path: '/customer/order/paper-specs',
@@ -340,19 +379,22 @@ final routerProvider = Provider<GoRouter>((ref) {
             slideUpTransition(const UploadScreen(), state),
       ),
       GoRoute(
-        path: '/customer/order/summary',
+        path: '/customer/order/checkout',
         pageBuilder: (_, state) =>
-            slideUpTransition(const SummaryScreen(), state),
+            slideUpTransition(const CheckoutScreen(), state),
       ),
       GoRoute(
-        path: '/customer/order/delivery',
-        pageBuilder: (_, state) =>
-            slideUpTransition(const DeliveryDetailsScreen(), state),
-      ),
-      GoRoute(
-        path: '/customer/order/payment',
-        pageBuilder: (_, state) =>
-            slideUpTransition(const PaymentScreen(), state),
+        path: '/customer/order/success',
+        pageBuilder: (_, state) {
+          final extra = (state.extra as Map?) ?? const {};
+          final refs = (extra['orderRefs'] as List?)?.cast<String>() ??
+              const <String>[];
+          final firstId = extra['firstOrderId'] as int?;
+          return slideUpTransition(
+            OrderSuccessScreen(orderRefs: refs, firstOrderId: firstId),
+            state,
+          );
+        },
       ),
       GoRoute(
         path: '/customer/orders/:id/track',
@@ -386,8 +428,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/customer/profile/terms',
-        pageBuilder: (_, state) =>
-            slideTransition(const TermsScreen(), state),
+        pageBuilder: (_, state) => slideTransition(const TermsScreen(), state),
       ),
       GoRoute(
         path: '/customer/profile/privacy',
@@ -396,13 +437,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/customer/profile/top-up',
-        pageBuilder: (_, state) =>
-            slideTransition(const TopUpScreen(), state),
+        pageBuilder: (_, state) => slideTransition(const TopUpScreen(), state),
       ),
       GoRoute(
         path: '/customer/profile/survey',
         pageBuilder: (_, state) =>
             slideTransition(const TamSurveyScreen(), state),
+      ),
+      GoRoute(
+        path: '/customer/survey/required',
+        pageBuilder: (_, state) =>
+            fadeTransition(const RequiredTamSurveyScreen(), state),
       ),
       GoRoute(
         path: StorageSettingsScreen.routeName,
@@ -414,7 +459,40 @@ final routerProvider = Provider<GoRouter>((ref) {
         pageBuilder: (_, state) =>
             slideTransition(const MyUploadsScreen(), state),
       ),
-
+      GoRoute(
+        path: '/customer/chat',
+        pageBuilder: (_, state) =>
+            slideTransition(const ChatListScreen(), state),
+      ),
+      GoRoute(
+        path: '/customer/chat/new',
+        pageBuilder: (_, state) {
+          final orderIdStr = state.uri.queryParameters['orderId'];
+          final orderId = orderIdStr != null ? int.tryParse(orderIdStr) : null;
+          return slideUpTransition(
+            ChatSelectScreen(
+              orderId: orderId,
+              draftMessage: state.uri.queryParameters['draft'],
+            ),
+            state,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/customer/chat/:id',
+        pageBuilder: (_, state) {
+          final id = int.parse(state.pathParameters['id']!);
+          final typeStr = state.uri.queryParameters['type'] ?? 'admin';
+          final type = ConversationType.values.firstWhere(
+            (t) => t.name == typeStr,
+            orElse: () => ConversationType.admin,
+          );
+          return slideTransition(
+            ConversationScreen(conversationId: id, conversationType: type),
+            state,
+          );
+        },
+      ),
       // -----------------------------------------------------------------------
       // Driver shell (3 tabs: Deliveries, History, Profile)
       // -----------------------------------------------------------------------
@@ -479,9 +557,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/driver/deliveries/:id',
         pageBuilder: (_, state) => slideTransition(
-          DeliveryDetailScreen(
-            assignmentId: state.pathParameters['id']!,
-          ),
+          DeliveryDetailScreen(assignmentId: state.pathParameters['id']!),
           state,
         ),
       ),
@@ -555,9 +631,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/admin/queue/:id',
         pageBuilder: (_, state) => scaleTransition(
-          AdminOrderDetailScreen(
-            orderId: state.pathParameters['id']!,
-          ),
+          AdminOrderDetailScreen(orderId: state.pathParameters['id']!),
           state,
         ),
       ),

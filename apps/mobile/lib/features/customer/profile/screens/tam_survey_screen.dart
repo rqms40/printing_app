@@ -3,11 +3,15 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:go_router/go_router.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/auth/providers/auth_provider.dart';
+import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 import 'package:printing_app/shared/providers/theme_provider.dart';
 import 'package:printing_app/shared/services/api_client.dart';
+import 'package:printing_app/shared/widgets/grid_logo.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/utils/formatters.dart';
@@ -18,13 +22,7 @@ import 'package:flutter/foundation.dart';
 // TAM Questionnaire Data
 // ---------------------------------------------------------------------------
 
-enum LikertScale {
-  stronglyDisagree,
-  disagree,
-  neutral,
-  agree,
-  stronglyAgree,
-}
+enum LikertScale { stronglyDisagree, disagree, neutral, agree, stronglyAgree }
 
 extension LikertScaleExt on LikertScale {
   String get label {
@@ -155,7 +153,8 @@ final _tamQuestions = [
   ),
   TamQuestion(
     category: 'LOGISTICS & SERVICE',
-    question: 'Clarity of the status updates (Order Received, Printing... delivery).',
+    question:
+        'Clarity of the status updates (Order Received, Printing... delivery).',
   ),
   TamQuestion(
     category: 'LOGISTICS & SERVICE',
@@ -181,7 +180,9 @@ final _tamQuestions = [
 // ---------------------------------------------------------------------------
 
 class TamSurveyScreen extends ConsumerStatefulWidget {
-  const TamSurveyScreen({super.key});
+  const TamSurveyScreen({super.key, this.isRequired = false});
+
+  final bool isRequired;
 
   @override
   ConsumerState<TamSurveyScreen> createState() => _TamSurveyScreenState();
@@ -192,6 +193,7 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
   final Map<int, LikertScale> _answers = {};
   String? _comment;
   bool _submitted = false;
+  bool _autoLaunched = false;
 
   late AnimationController _checkController;
 
@@ -202,6 +204,16 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
       vsync: this,
       duration: const Duration(milliseconds: 800),
     );
+    if (widget.isRequired) {
+      // Required mode skips the overview and drops the user straight into
+      // the face-slider PageView, matching the original "slide → face" UX.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_submitted && !_autoLaunched) {
+          _autoLaunched = true;
+          _openQuestion(0);
+        }
+      });
+    }
   }
 
   @override
@@ -213,15 +225,21 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
   void _openQuestion(int index) {
     final recentOrders = ref.read(recentOrdersProvider);
     final lastOrder = recentOrders.isNotEmpty ? recentOrders.first : null;
-    final dynamicPrice = lastOrder != null ? formatCurrency(lastOrder.totalPrice) : 'your typical order amount';
+    final dynamicPrice = lastOrder != null
+        ? formatCurrency(lastOrder.totalPrice)
+        : 'your typical order amount';
 
+    final startIndex = widget.isRequired
+        ? _firstRequiredFlowIndex(requestedIndex: index)
+        : index;
     Navigator.of(context).push(
       _SurveyFlowRoute(
-        startIndex: index,
+        startIndex: startIndex,
         questions: _tamQuestions,
         dynamicPrice: dynamicPrice,
         answers: _answers,
         initialComment: _comment,
+        canClose: !widget.isRequired,
         onAnswer: (idx, scale) {
           setState(() => _answers[idx] = scale);
         },
@@ -233,12 +251,49 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
     );
   }
 
+  int _firstRequiredFlowIndex({required int requestedIndex}) {
+    if (_answers.length < _tamQuestions.length) {
+      for (var i = 0; i < _tamQuestions.length; i += 1) {
+        if (!_answers.containsKey(i)) return i;
+      }
+    }
+    return requestedIndex;
+  }
+
   Future<void> _submit() async {
     try {
       final formattedAnswers = {};
       _answers.forEach((key, value) {
         formattedAnswers[key.toString()] = value.index;
       });
+
+      if (widget.isRequired) {
+        if (_answers.length != _tamQuestions.length) {
+          _openQuestion(_firstRequiredFlowIndex(requestedIndex: 0));
+          return;
+        }
+
+        final hold = ref.read(accountStateProvider).requiredSurveyHold;
+        if (hold == null) return;
+
+        await ApiClient.instance.post(
+          '/tam-surveys/requirements/${hold.requirementId}/submit',
+          data: {
+            'surveyData': formattedAnswers,
+            'openForumFeedback': _decodeOpenForumFeedback(_comment),
+          },
+        );
+
+        if (!mounted) return;
+        setState(() => _submitted = true);
+        _checkController.forward();
+        HapticFeedback.mediumImpact();
+
+        await Future.delayed(const Duration(milliseconds: 1300));
+        await ref.read(authProvider.notifier).logout();
+        if (mounted) context.go('/auth/login');
+        return;
+      }
 
       await ApiClient.instance.post(
         '/tam-surveys',
@@ -254,12 +309,34 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to submit survey. Please try again.')),
+          const SnackBar(
+            content: Text('Failed to submit survey. Please try again.'),
+          ),
         );
       }
     } finally {
       // submit complete
     }
+  }
+
+  Map<String, String> _decodeOpenForumFeedback(String? comment) {
+    if (comment == null || comment.isEmpty) {
+      return {'feature': '', 'delivery': ''};
+    }
+
+    try {
+      final decoded = jsonDecode(comment);
+      if (decoded is Map) {
+        return {
+          'feature': decoded['feature']?.toString() ?? '',
+          'delivery': decoded['delivery']?.toString() ?? '',
+        };
+      }
+    } catch (_) {
+      // Fall through to the legacy single-comment format.
+    }
+
+    return {'feature': comment, 'delivery': ''};
   }
 
   @override
@@ -272,232 +349,381 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
     final total = _tamQuestions.length;
     final progress = total == 0 ? 0.0 : answered / total;
     if (_submitted) {
-      return Scaffold(
+      return PopScope(
+        canPop: !widget.isRequired,
+        child: Scaffold(
+          backgroundColor: colors.background,
+          appBar: AppBar(
+            backgroundColor: colors.background,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            automaticallyImplyLeading: !widget.isRequired,
+            leading: widget.isRequired
+                ? null
+                : IconButton(
+                    icon: Icon(
+                      Icons.arrow_back_rounded,
+                      color: colors.onBackground,
+                    ),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+          ),
+          body: _SubmittedView(
+            colors: colors,
+            onReset: widget.isRequired
+                ? null
+                : () {
+                    setState(() {
+                      _answers.clear();
+                      _comment = null;
+                      _submitted = false;
+                      _checkController.reset();
+                    });
+                  },
+          ),
+        ),
+      );
+    }
+
+    if (widget.isRequired) {
+      // Auto-launched flow covers this screen; if it ever pops back without
+      // submission (e.g. network failure on submit), show a retry path
+      // instead of the overview list.
+      final allAnswered = _answers.length == _tamQuestions.length;
+      return PopScope(
+        canPop: false,
+        child: Scaffold(
+          backgroundColor: colors.background,
+          body: SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.xl,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: colors.brand,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Text(
+                      allAnswered
+                          ? 'Submitting your beta feedback…'
+                          : 'Opening your beta feedback survey…',
+                      textAlign: TextAlign.center,
+                      style: AppTypography.body
+                          .copyWith(color: colors.onSurface),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      'You will land back on the login screen once submitted.',
+                      textAlign: TextAlign.center,
+                      style: AppTypography.caption
+                          .copyWith(color: colors.onSurfaceDim),
+                    ),
+                    const SizedBox(height: AppSpacing.xxl),
+                    TextButton.icon(
+                      onPressed: () {
+                        if (allAnswered) {
+                          _submit();
+                        } else {
+                          _openQuestion(0);
+                        }
+                      },
+                      icon: Icon(
+                        allAnswered
+                            ? Icons.refresh_rounded
+                            : Icons.poll_rounded,
+                        color: colors.onSurface,
+                        size: 18,
+                      ),
+                      label: Text(
+                        allAnswered ? 'Retry submission' : 'Open survey',
+                        style: AppTypography.button
+                            .copyWith(color: colors.onSurface),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return PopScope(
+      canPop: !widget.isRequired,
+      child: Scaffold(
         backgroundColor: colors.background,
         appBar: AppBar(
           backgroundColor: colors.background,
           elevation: 0,
           scrolledUnderElevation: 0,
-          leading: IconButton(
-            icon: Icon(Icons.arrow_back_rounded, color: colors.onBackground),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ),
-        body: _SubmittedView(
-          colors: colors,
-          onReset: () {
-            setState(() {
-              _answers.clear();
-              _comment = null;
-              _submitted = false;
-              _checkController.reset();
-            });
-          },
-        ),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: colors.background,
-      appBar: AppBar(
-        backgroundColor: colors.background,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_rounded, color: colors.onBackground),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(
-          'Survey',
-          style: AppTypography.h3.copyWith(color: colors.onBackground),
-        ),
-        centerTitle: false,
-      ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header + progress
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.xl,
-              AppSpacing.sm,
-              AppSpacing.xl,
-              AppSpacing.md,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Help us improve GRID by sharing your experience.',
-                  style:
-                      AppTypography.body.copyWith(color: colors.onSurfaceDim),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0, end: progress),
-                    duration: const Duration(milliseconds: 500),
-                    curve: Curves.easeOut,
-                    builder: (context, value, _) {
-                      return LinearProgressIndicator(
-                        value: value,
-                        minHeight: 6,
-                        backgroundColor: colors.outlineVariant,
-                        valueColor: AlwaysStoppedAnimation<Color>(colors.accent),
-                      );
-                    },
+          automaticallyImplyLeading: !widget.isRequired,
+          leading: widget.isRequired
+              ? null
+              : IconButton(
+                  icon: Icon(
+                    Icons.arrow_back_rounded,
+                    color: colors.onBackground,
                   ),
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  '$answered / $total answered',
-                  style: AppTypography.caption
-                      .copyWith(color: colors.onSurfaceDim),
-                ),
-              ],
-            ),
-          ).animate().fadeIn(duration: 350.ms).slideY(begin: 0.02, duration: 350.ms),
-
-          // Question list
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.xl,
-                vertical: AppSpacing.sm,
-              ),
-              itemCount: _tamQuestions.length + 2,
-              itemBuilder: (context, i) {
-                if (i == _tamQuestions.length + 1) {
-                  return const SizedBox.shrink(); // Automatically handled by modal now
-                }
-
-                if (i == _tamQuestions.length) {
-                  final hasComment = _comment != null && _comment!.trim().isNotEmpty;
-                  const faceColor = Color(0xFF4CC9F0);
-                  return Column(
+          title: Text(
+            'Survey',
+            style: AppTypography.h3.copyWith(color: colors.onBackground),
+          ),
+          centerTitle: false,
+        ),
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header + progress
+            Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.xl,
+                    AppSpacing.sm,
+                    AppSpacing.xl,
+                    AppSpacing.md,
+                  ),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: AppSpacing.lg),
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                        child: Text(
-                          'OPEN FORUM',
-                          style: AppTypography.overline.copyWith(
-                            color: colors.onSurfaceDim,
-                            letterSpacing: 1.5,
-                          ),
+                      Text(
+                        'Help us improve GRID by sharing your experience.',
+                        style: AppTypography.body.copyWith(
+                          color: colors.onSurfaceDim,
                         ),
                       ),
-                      GestureDetector(
-                        onTap: () => _openQuestion(i),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
+                      const SizedBox(height: AppSpacing.md),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0, end: progress),
+                          duration: const Duration(milliseconds: 500),
                           curve: Curves.easeOut,
-                          decoration: BoxDecoration(
-                            color: hasComment ? faceColor.withValues(alpha: 0.1) : colors.surface,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: hasComment ? faceColor.withValues(alpha: 0.4) : colors.outline,
-                              width: hasComment ? 1.5 : 1,
-                            ),
-                          ),
-                          padding: const EdgeInsets.all(AppSpacing.md),
-                          child: Row(
-                            children: [
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 300),
-                                width: 32,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  color: hasComment ? faceColor : colors.surfaceVariant,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Center(
-                                  child: hasComment
-                                      ? const Icon(Icons.check, size: 16, color: Colors.white)
-                                      : Icon(Icons.comment_rounded, size: 16, color: colors.onSurfaceDim),
-                                ),
+                          builder: (context, value, _) {
+                            return LinearProgressIndicator(
+                              value: value,
+                              minHeight: 6,
+                              backgroundColor: colors.outlineVariant,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                colors.accent,
                               ),
-                              const SizedBox(width: AppSpacing.md),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Additional Feedback',
-                                      style: AppTypography.body.copyWith(color: colors.onBackground),
-                                    ),
-                                    if (hasComment) ...[
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        _comment!.length > 40 ? '${_comment!.substring(0, 40).replaceAll('\n', ' ')}...' : _comment!.replaceAll('\n', ' '),
-                                        style: AppTypography.caption.copyWith(
-                                          color: faceColor,
-                                          fontWeight: FontWeight.w700,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        '$answered / $total answered',
+                        style: AppTypography.caption.copyWith(
+                          color: colors.onSurfaceDim,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+                .animate()
+                .fadeIn(duration: 350.ms)
+                .slideY(begin: 0.02, duration: 350.ms),
+
+            // Question list
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.xl,
+                  vertical: AppSpacing.sm,
+                ),
+                itemCount: _tamQuestions.length + 2,
+                itemBuilder: (context, i) {
+                  if (i == _tamQuestions.length + 1) {
+                    return const SizedBox.shrink(); // Automatically handled by modal now
+                  }
+
+                  if (i == _tamQuestions.length) {
+                    final hasComment =
+                        _comment != null && _comment!.trim().isNotEmpty;
+                    const faceColor = Color(0xFF4CC9F0);
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: AppSpacing.lg),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              GridLogo(
+                                size: 18,
+                                foregroundColor: colors.onSurfaceDim,
+                                secondaryColor:
+                                    colors.onSurfaceDim.withValues(alpha: 0.5),
                               ),
                               const SizedBox(width: AppSpacing.sm),
-                              Icon(
-                                hasComment ? Icons.edit_rounded : Icons.chevron_right_rounded,
-                                size: 20,
-                                color: hasComment ? faceColor : colors.onSurfaceDim,
+                              Text(
+                                'OPEN FORUM',
+                                style: AppTypography.overline.copyWith(
+                                  color: colors.onSurfaceDim,
+                                  letterSpacing: 1.5,
+                                ),
                               ),
                             ],
                           ),
                         ),
-                      ).animate().fadeIn(delay: Duration(milliseconds: 40 * i), duration: 350.ms).slideX(begin: 0.04, duration: 350.ms),
+                        GestureDetector(
+                              onTap: () => _openQuestion(i),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOut,
+                                decoration: BoxDecoration(
+                                  color: hasComment
+                                      ? faceColor.withValues(alpha: 0.1)
+                                      : colors.surface,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: hasComment
+                                        ? faceColor.withValues(alpha: 0.4)
+                                        : colors.outline,
+                                    width: hasComment ? 1.5 : 1,
+                                  ),
+                                ),
+                                padding: const EdgeInsets.all(AppSpacing.md),
+                                child: Row(
+                                  children: [
+                                    AnimatedContainer(
+                                      duration: const Duration(
+                                        milliseconds: 300,
+                                      ),
+                                      width: 32,
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        color: hasComment
+                                            ? faceColor
+                                            : colors.surfaceVariant,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Center(
+                                        child: hasComment
+                                            ? const Icon(
+                                                Icons.check,
+                                                size: 16,
+                                                color: Colors.white,
+                                              )
+                                            : Icon(
+                                                Icons.comment_rounded,
+                                                size: 16,
+                                                color: colors.onSurfaceDim,
+                                              ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: AppSpacing.md),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Additional Feedback',
+                                            style: AppTypography.body.copyWith(
+                                              color: colors.onBackground,
+                                            ),
+                                          ),
+                                          if (hasComment) ...[
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              _comment!.length > 40
+                                                  ? '${_comment!.substring(0, 40).replaceAll('\n', ' ')}...'
+                                                  : _comment!.replaceAll(
+                                                      '\n',
+                                                      ' ',
+                                                    ),
+                                              style: AppTypography.caption
+                                                  .copyWith(
+                                                    color: faceColor,
+                                                    fontWeight: FontWeight.w700,
+                                                    letterSpacing: 0.5,
+                                                  ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: AppSpacing.sm),
+                                    Icon(
+                                      hasComment
+                                          ? Icons.edit_rounded
+                                          : Icons.chevron_right_rounded,
+                                      size: 20,
+                                      color: hasComment
+                                          ? faceColor
+                                          : colors.onSurfaceDim,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                            .animate()
+                            .fadeIn(
+                              delay: Duration(milliseconds: 40 * i),
+                              duration: 350.ms,
+                            )
+                            .slideX(begin: 0.04, duration: 350.ms),
+                        const SizedBox(height: AppSpacing.sm),
+                      ],
+                    );
+                  }
+
+                  final question = _tamQuestions[i];
+                  final answer = _answers[i];
+                  final showCategory =
+                      i == 0 ||
+                      _tamQuestions[i - 1].category != question.category;
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (showCategory) ...[
+                        if (i != 0) const SizedBox(height: AppSpacing.lg),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                          child: Text(
+                            question.category.toUpperCase(),
+                            style: AppTypography.overline.copyWith(
+                              color: colors.onSurfaceDim,
+                              letterSpacing: 1.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                      _QuestionCard(
+                            number: i + 1,
+                            question: question.question,
+                            answer: answer,
+                            colors: colors,
+                            onTap: () => _openQuestion(i),
+                          )
+                          .animate()
+                          .fadeIn(
+                            delay: Duration(milliseconds: 40 * i),
+                            duration: 350.ms,
+                          )
+                          .slideX(begin: 0.04, duration: 350.ms),
                       const SizedBox(height: AppSpacing.sm),
                     ],
                   );
-                }
-
-                final question = _tamQuestions[i];
-                final answer = _answers[i];
-                final showCategory = i == 0 ||
-                    _tamQuestions[i - 1].category != question.category;
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (showCategory) ...[
-                      if (i != 0) const SizedBox(height: AppSpacing.lg),
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                        child: Text(
-                          question.category.toUpperCase(),
-                          style: AppTypography.overline.copyWith(
-                            color: colors.onSurfaceDim,
-                            letterSpacing: 1.5,
-                          ),
-                        ),
-                      ),
-                    ],
-                    _QuestionCard(
-                      number: i + 1,
-                      question: question.question,
-                      answer: answer,
-                      colors: colors,
-                      onTap: () => _openQuestion(i),
-                    )
-                        .animate()
-                        .fadeIn(
-                          delay: Duration(milliseconds: 40 * i),
-                          duration: 350.ms,
-                        )
-                        .slideX(begin: 0.04, duration: 350.ms),
-                    const SizedBox(height: AppSpacing.sm),
-                  ],
-                );
-              },
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -527,6 +753,8 @@ class _QuestionCard extends StatelessWidget {
     final hasAnswer = answer != null;
 
     return GestureDetector(
+      key: ValueKey('tam-question-$number'),
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
@@ -573,8 +801,9 @@ class _QuestionCard extends StatelessWidget {
                 children: [
                   Text(
                     question,
-                    style: AppTypography.body
-                        .copyWith(color: colors.onBackground),
+                    style: AppTypography.body.copyWith(
+                      color: colors.onBackground,
+                    ),
                   ),
                   if (hasAnswer) ...[
                     const SizedBox(height: 4),
@@ -613,7 +842,7 @@ class _SubmittedView extends StatelessWidget {
   const _SubmittedView({required this.colors, required this.onReset});
 
   final AppColorSet colors;
-  final VoidCallback onReset;
+  final VoidCallback? onReset;
 
   @override
   Widget build(BuildContext context) {
@@ -652,28 +881,30 @@ class _SubmittedView extends StatelessWidget {
             Text(
               'Your feedback helps us improve GRID for everyone.',
               textAlign: TextAlign.center,
-              style:
-                  AppTypography.body.copyWith(color: colors.onSurfaceDim),
+              style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
             ).animate().fadeIn(delay: 450.ms, duration: 400.ms),
-            const SizedBox(height: AppSpacing.xxl),
-            GestureDetector(
-              onTap: onReset,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.lg,
-                  vertical: AppSpacing.md,
+            if (onReset != null) ...[
+              const SizedBox(height: AppSpacing.xxl),
+              GestureDetector(
+                onTap: onReset,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.lg,
+                    vertical: AppSpacing.md,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: colors.outline),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Retake Survey',
+                    style: AppTypography.button.copyWith(
+                      color: colors.onSurface,
+                    ),
+                  ),
                 ),
-                decoration: BoxDecoration(
-                  border: Border.all(color: colors.outline),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  'Retake Survey',
-                  style: AppTypography.button
-                      .copyWith(color: colors.onSurface),
-                ),
-              ),
-            ).animate().fadeIn(delay: 600.ms, duration: 400.ms),
+              ).animate().fadeIn(delay: 600.ms, duration: 400.ms),
+            ],
           ],
         ),
       ),
@@ -692,6 +923,7 @@ class _SurveyFlowRoute extends PageRoute<void> {
     required this.answers,
     required this.dynamicPrice,
     required this.initialComment,
+    required this.canClose,
     required this.onAnswer,
     required this.onComment,
   }) : super(fullscreenDialog: true);
@@ -701,6 +933,7 @@ class _SurveyFlowRoute extends PageRoute<void> {
   final Map<int, LikertScale> answers;
   final String dynamicPrice;
   final String? initialComment;
+  final bool canClose;
   final void Function(int, LikertScale) onAnswer;
   final void Function(String) onComment;
 
@@ -731,15 +964,14 @@ class _SurveyFlowRoute extends PageRoute<void> {
         position: Tween<Offset>(
           begin: const Offset(0, 0.08),
           end: Offset.zero,
-        ).animate(
-          CurvedAnimation(parent: animation, curve: Curves.easeOut),
-        ),
+        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
         child: _SurveyFlowScreen(
           startIndex: startIndex,
           questions: questions,
           answers: answers,
           dynamicPrice: dynamicPrice,
           initialComment: initialComment,
+          canClose: canClose,
           onAnswer: onAnswer,
           onComment: onComment,
         ),
@@ -765,6 +997,7 @@ class _SurveyFlowScreen extends StatefulWidget {
     required this.answers,
     required this.dynamicPrice,
     required this.initialComment,
+    required this.canClose,
     required this.onAnswer,
     required this.onComment,
   });
@@ -774,6 +1007,7 @@ class _SurveyFlowScreen extends StatefulWidget {
   final Map<int, LikertScale> answers;
   final String dynamicPrice;
   final String? initialComment;
+  final bool canClose;
   final void Function(int, LikertScale) onAnswer;
   final void Function(String) onComment;
 
@@ -809,35 +1043,40 @@ class _SurveyFlowScreenState extends State<_SurveyFlowScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return PageView.builder(
-      controller: _pageController,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: widget.questions.length + 1,
-      itemBuilder: (context, index) {
-        if (index < widget.questions.length) {
-          return _SurveyQuestionPage(
-            question: widget.questions[index],
-            questionNumber: index + 1,
-            totalQuestions: widget.questions.length,
-            initialValue: widget.answers[index],
-            onConfirm: (scale) {
-              widget.onAnswer(index, scale);
-              _nextPage();
-            },
-            onClose: () => Navigator.of(context).pop(),
-          );
-        } else {
-          return _OpenForumPage(
-            dynamicPrice: widget.dynamicPrice,
-            initialText: widget.initialComment,
-            onConfirm: (text) {
-              widget.onComment(text);
-              Navigator.of(context).pop();
-            },
-            onClose: () => Navigator.of(context).pop(),
-          );
-        }
-      },
+    return PopScope(
+      canPop: widget.canClose,
+      child: PageView.builder(
+        controller: _pageController,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: widget.questions.length + 1,
+        itemBuilder: (context, index) {
+          if (index < widget.questions.length) {
+            return _SurveyQuestionPage(
+              question: widget.questions[index],
+              questionNumber: index + 1,
+              totalQuestions: widget.questions.length,
+              initialValue: widget.answers[index],
+              canClose: widget.canClose,
+              onConfirm: (scale) {
+                widget.onAnswer(index, scale);
+                _nextPage();
+              },
+              onClose: () => Navigator.of(context).pop(),
+            );
+          } else {
+            return _OpenForumPage(
+              dynamicPrice: widget.dynamicPrice,
+              initialText: widget.initialComment,
+              canClose: widget.canClose,
+              onConfirm: (text) {
+                widget.onComment(text);
+                Navigator.of(context).pop();
+              },
+              onClose: () => Navigator.of(context).pop(),
+            );
+          }
+        },
+      ),
     );
   }
 }
@@ -852,6 +1091,7 @@ class _SurveyQuestionPage extends StatefulWidget {
     required this.questionNumber,
     required this.totalQuestions,
     this.initialValue,
+    required this.canClose,
     required this.onConfirm,
     required this.onClose,
   });
@@ -860,6 +1100,7 @@ class _SurveyQuestionPage extends StatefulWidget {
   final int questionNumber;
   final int totalQuestions;
   final LikertScale? initialValue;
+  final bool canClose;
   final void Function(LikertScale) onConfirm;
   final VoidCallback onClose;
 
@@ -904,9 +1145,10 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
     _faceScale = Tween<double>(begin: 0.82, end: 1.0).animate(
       CurvedAnimation(parent: _faceController, curve: Curves.elasticOut),
     );
-    _labelFade = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _labelController, curve: Curves.easeOut),
-    );
+    _labelFade = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _labelController, curve: Curves.easeOut));
     _pulse = Tween<double>(begin: 0.97, end: 1.04).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
@@ -961,8 +1203,7 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
   @override
   Widget build(BuildContext context) {
     final bg = _currentScale.faceColor;
-    final isDark =
-        ThemeData.estimateBrightnessForColor(bg) == Brightness.dark;
+    final isDark = ThemeData.estimateBrightnessForColor(bg) == Brightness.dark;
     final textColor = isDark ? Colors.white : Colors.black87;
     final dimColor = textColor.withValues(alpha: 0.55);
 
@@ -979,22 +1220,25 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
               ),
               child: Row(
                 children: [
-                  GestureDetector(
-                    onTap: widget.onClose,
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: textColor.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
+                  if (widget.canClose)
+                    GestureDetector(
+                      onTap: widget.onClose,
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: textColor.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.close_rounded,
+                          color: textColor,
+                          size: 20,
+                        ),
                       ),
-                      child: Icon(
-                        Icons.close_rounded,
-                        color: textColor,
-                        size: 20,
-                      ),
-                    ),
-                  ),
+                    )
+                  else
+                    const SizedBox(width: 40, height: 40),
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: Column(
@@ -1009,8 +1253,9 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
                         ),
                         Text(
                           'Question ${widget.questionNumber} of ${widget.totalQuestions}',
-                          style: AppTypography.caption
-                              .copyWith(color: dimColor),
+                          style: AppTypography.caption.copyWith(
+                            color: dimColor,
+                          ),
                         ),
                       ],
                     ),
@@ -1023,8 +1268,7 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
 
             // ── Question text ──────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.xxl),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
               child: Text(
                 widget.question.question,
                 textAlign: TextAlign.center,
@@ -1040,8 +1284,7 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
 
             // ── Animated face ──────────────────────────────────────────
             AnimatedBuilder(
-              animation: Listenable.merge(
-                  [_faceController, _pulseController]),
+              animation: Listenable.merge([_faceController, _pulseController]),
               builder: (_, _) => Transform.scale(
                 scale: _faceScale.value * _pulse.value,
                 child: _AnimatedFace(
@@ -1076,8 +1319,7 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
 
             // ── Slider controls ────────────────────────────────────────
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: Column(
                 children: [
                   // Dot indicators
@@ -1112,8 +1354,9 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
                       activeTrackColor: textColor,
                       inactiveTrackColor: textColor.withValues(alpha: 0.22),
                       overlayColor: textColor.withValues(alpha: 0.14),
-                      overlayShape:
-                          const RoundSliderOverlayShape(overlayRadius: 22),
+                      overlayShape: const RoundSliderOverlayShape(
+                        overlayRadius: 22,
+                      ),
                     ),
                     child: Slider(
                       min: 0,
@@ -1130,14 +1373,12 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
                     children: [
                       Text(
                         'Strongly\nDisagree',
-                        style: AppTypography.caption
-                            .copyWith(color: dimColor),
+                        style: AppTypography.caption.copyWith(color: dimColor),
                         textAlign: TextAlign.left,
                       ),
                       Text(
                         'Strongly\nAgree',
-                        style: AppTypography.caption
-                            .copyWith(color: dimColor),
+                        style: AppTypography.caption.copyWith(color: dimColor),
                         textAlign: TextAlign.right,
                       ),
                     ],
@@ -1150,9 +1391,9 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
 
             // ── Confirm button ─────────────────────────────────────────
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: _ConfirmButton(
+                key: const ValueKey('tam-flow-next'),
                 onTap: _confirm,
                 textColor: textColor,
                 bgColor: textColor.withValues(alpha: 0.14),
@@ -1160,7 +1401,7 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
               ),
             ),
 
-            const SizedBox(height: AppSpacing.xxl),
+            const SizedBox(height: AppSpacing.xl),
           ],
         ),
       ),
@@ -1178,8 +1419,7 @@ class _CustomThumbShape extends SliderComponentShape {
   final Color color;
 
   @override
-  Size getPreferredSize(bool isEnabled, bool isDiscrete) =>
-      const Size(28, 28);
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) => const Size(28, 28);
 
   @override
   void paint(
@@ -1215,9 +1455,7 @@ class _CustomThumbShape extends SliderComponentShape {
       center,
       5,
       Paint()
-        ..color = (color == Colors.white
-                ? Colors.black
-                : Colors.white)
+        ..color = (color == Colors.white ? Colors.black : Colors.white)
             .withValues(alpha: 0.35),
     );
   }
@@ -1276,9 +1514,23 @@ class _FacePainter extends CustomPainter {
       case _FaceExpression.bad:
         // Sleepy pill rectangles
         _drawRoundRect(
-            canvas, paint, cx - size.width * 0.23 - 21, eyeCy - 7, 42, 15, 7);
+          canvas,
+          paint,
+          cx - size.width * 0.23 - 21,
+          eyeCy - 7,
+          42,
+          15,
+          7,
+        );
         _drawRoundRect(
-            canvas, paint, cx + size.width * 0.23 - 21, eyeCy - 7, 42, 15, 7);
+          canvas,
+          paint,
+          cx + size.width * 0.23 - 21,
+          eyeCy - 7,
+          42,
+          15,
+          7,
+        );
         break;
       case _FaceExpression.neutral:
         // Medium circles
@@ -1298,9 +1550,19 @@ class _FacePainter extends CustomPainter {
           ..color = color.withValues(alpha: 0.32)
           ..style = PaintingStyle.fill;
         _drawCircle(
-            canvas, shinePaint, cx - size.width * 0.23 + 9, eyeCy - 10, 8);
+          canvas,
+          shinePaint,
+          cx - size.width * 0.23 + 9,
+          eyeCy - 10,
+          8,
+        );
         _drawCircle(
-            canvas, shinePaint, cx + size.width * 0.23 + 9, eyeCy - 10, 8);
+          canvas,
+          shinePaint,
+          cx + size.width * 0.23 + 9,
+          eyeCy - 10,
+          8,
+        );
         break;
     }
 
@@ -1361,20 +1623,29 @@ class _FacePainter extends CustomPainter {
       c.drawCircle(Offset(x, y), r, p);
 
   void _drawEllipse(
-      Canvas c, Paint p, double cx, double cy, double rx, double ry) =>
-      c.drawOval(
-        Rect.fromCenter(
-            center: Offset(cx, cy), width: rx * 2, height: ry * 2),
-        p,
-      );
+    Canvas c,
+    Paint p,
+    double cx,
+    double cy,
+    double rx,
+    double ry,
+  ) => c.drawOval(
+    Rect.fromCenter(center: Offset(cx, cy), width: rx * 2, height: ry * 2),
+    p,
+  );
 
-  void _drawRoundRect(Canvas c, Paint p, double x, double y, double w,
-      double h, double r) =>
-      c.drawRRect(
-        RRect.fromRectAndRadius(
-            Rect.fromLTWH(x, y, w, h), Radius.circular(r)),
-        p,
-      );
+  void _drawRoundRect(
+    Canvas c,
+    Paint p,
+    double x,
+    double y,
+    double w,
+    double h,
+    double r,
+  ) => c.drawRRect(
+    RRect.fromRectAndRadius(Rect.fromLTWH(x, y, w, h), Radius.circular(r)),
+    p,
+  );
 
   @override
   bool shouldRepaint(covariant _FacePainter old) =>
@@ -1387,6 +1658,7 @@ class _FacePainter extends CustomPainter {
 
 class _ConfirmButton extends StatefulWidget {
   const _ConfirmButton({
+    super.key,
     required this.onTap,
     required this.textColor,
     required this.bgColor,
@@ -1440,11 +1712,7 @@ class _ConfirmButtonState extends State<_ConfirmButton> {
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              Icon(
-                widget.icon,
-                color: widget.textColor,
-                size: 18,
-              ),
+              Icon(widget.icon, color: widget.textColor, size: 18),
             ],
           ),
         ),
@@ -1461,12 +1729,14 @@ class _OpenForumPage extends StatefulWidget {
   const _OpenForumPage({
     required this.dynamicPrice,
     this.initialText,
+    required this.canClose,
     required this.onConfirm,
     required this.onClose,
   });
 
   final String dynamicPrice;
   final String? initialText;
+  final bool canClose;
   final void Function(String) onConfirm;
   final VoidCallback onClose;
 
@@ -1544,22 +1814,25 @@ class _OpenForumPageState extends State<_OpenForumPage> {
               ),
               child: Row(
                 children: [
-                  GestureDetector(
-                    onTap: widget.onClose,
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: textColor.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
+                  if (widget.canClose)
+                    GestureDetector(
+                      onTap: widget.onClose,
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: textColor.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.close_rounded,
+                          color: textColor,
+                          size: 20,
+                        ),
                       ),
-                      child: Icon(
-                        Icons.close_rounded,
-                        color: textColor,
-                        size: 20,
-                      ),
-                    ),
-                  ),
+                    )
+                  else
+                    const SizedBox(width: 40, height: 40),
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: Column(
@@ -1574,7 +1847,9 @@ class _OpenForumPageState extends State<_OpenForumPage> {
                         ),
                         Text(
                           'Additional Feedback',
-                          style: AppTypography.caption.copyWith(color: dimColor),
+                          style: AppTypography.caption.copyWith(
+                            color: dimColor,
+                          ),
                         ),
                       ],
                     ),
@@ -1722,6 +1997,7 @@ class _OpenForumPageState extends State<_OpenForumPage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: _ConfirmButton(
+                key: const ValueKey('tam-open-forum-submit'),
                 onTap: _confirm,
                 textColor: textColor,
                 bgColor: textColor.withValues(alpha: 0.14),

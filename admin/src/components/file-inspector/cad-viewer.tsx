@@ -1,8 +1,8 @@
-import React, { Suspense, useMemo } from "react";
+import { Suspense, useMemo } from "react";
 import { Canvas, useLoader } from "@react-three/fiber";
 import { OrbitControls, Stage, useGLTF } from "@react-three/drei";
-import { STLLoader } from "three/examples/jsm/loaders/STLLoader";
-import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader";
+import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
+import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { Spin } from "antd";
 
 interface CADViewerProps {

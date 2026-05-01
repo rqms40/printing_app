@@ -11,6 +11,7 @@ import {
   ProfileCategory,
   ProfileField,
 } from '../profile.constants';
+import { PrintMode } from '../../orders/print-mode.enum';
 
 export enum UserRole {
   CUSTOMER = 'customer',
@@ -93,6 +94,15 @@ export class User {
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 
+  @Column({ name: 'account_hold_reason', type: 'varchar', length: 50, nullable: true })
+  accountHoldReason: string | null;
+
+  @Column({ name: 'account_held_at', type: 'timestamp', nullable: true })
+  accountHeldAt: Date | null;
+
+  @Column({ name: 'beta_completed_at', type: 'timestamp', nullable: true })
+  betaCompletedAt: Date | null;
+
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   credits: number;
 
@@ -103,6 +113,38 @@ export class User {
     default: null,
   })
   fileRetentionDays: number | null;
+
+  @Column({ name: 'default_print_mode', type: 'varchar', length: 20, nullable: true, default: 'fitToPage' })
+  defaultPrintMode: PrintMode | null;
+
+  @Column({ name: 'default_payment_method', type: 'varchar', length: 20, nullable: true })
+  defaultPaymentMethod: 'gcash' | 'maya' | 'cod' | 'credits' | null;
+
+  @Column({
+    name: 'tutorial_seen_keys',
+    type: 'text',
+    array: true,
+    default: [],
+  })
+  tutorialSeenKeys: string[];
+
+  @Column({ name: 'is_beta_user', default: false })
+  isBetaUser: boolean;
+
+  @Column({ name: 'beta_enrolled_at', type: 'timestamp', nullable: true })
+  betaEnrolledAt: Date | null;
+
+  @Column({ name: 'beta_credits_granted', default: false })
+  betaCreditsGranted: boolean;
+
+  /**
+   * When true, this user is exempt from the post-delivery TAM survey
+   * lockout — they can keep logging in and using the app even when beta
+   * mode is on and they have a pending requirement. Set by admin from
+   * the Beta Members admin page.
+   */
+  @Column({ name: 'is_beta_survey_exempt', default: false })
+  isBetaSurveyExempt: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

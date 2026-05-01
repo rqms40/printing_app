@@ -63,6 +63,14 @@ GoogleService-Info.plist
 # === Project specific ===
 screenshots-for-agents/
 .worktrees/
+.superpowers/
+debug-output.txt
+debug-page.js
+drivers_debug.png
+compile_errors*.txt
+error.txt
+out.txt
+status.txt
 
 # === Misc ===
 *.class

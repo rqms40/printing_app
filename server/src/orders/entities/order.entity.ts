@@ -15,6 +15,8 @@ import { Address } from '../../addresses/entities/address.entity';
 import { PaperSpec } from './paper-specs.entity';
 import { ThreeDSpec } from './three-d-specs.entity';
 import { OrderStatusHistory } from './order-status-history.entity';
+import { BatchOrder } from './batch-order.entity';
+import { OrderItem } from './order-item.entity';
 
 export enum OrderStatus {
   ORDER_PLACED = 'order_placed',
@@ -49,6 +51,19 @@ export class Order {
   @ManyToOne(() => User)
   @JoinColumn({ name: 'user_id' })
   user: User;
+
+  @Column({ name: 'batch_order_id', nullable: true })
+  batchOrderId: number;
+
+  @Column({ name: 'destination_id', type: 'int', nullable: true })
+  destinationId: number | null;
+
+  @ManyToOne(() => BatchOrder, (batchOrder) => batchOrder.orders, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'batch_order_id' })
+  batchOrder: BatchOrder;
 
   @Column()
   category: string;
@@ -94,12 +109,18 @@ export class Order {
   @Column({ name: 'delivery_option', default: 'pickup' })
   deliveryOption: string;
 
+  @Column({ name: 'admin_status_note', type: 'varchar', length: 255, nullable: true })
+  adminStatusNote: string | null;
+
   @Column({
     name: 'estimated_completion_at',
     type: 'timestamp',
     nullable: true,
   })
-  estimatedCompletionAt: Date;
+  estimatedCompletionAt: Date | null;
+
+  @Column({ name: 'admin_status_set_at', type: 'timestamp', nullable: true })
+  adminStatusSetAt: Date | null;
 
   @Column({ name: 'decline_reason', nullable: true, type: 'text' })
   declineReason: string;
@@ -150,4 +171,7 @@ export class Order {
 
   @OneToMany(() => OrderStatusHistory, (h) => h.order)
   statusHistory: OrderStatusHistory[];
+
+  @OneToMany(() => OrderItem, (item) => item.order)
+  items: OrderItem[];
 }

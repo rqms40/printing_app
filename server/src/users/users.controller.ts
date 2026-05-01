@@ -13,14 +13,19 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdateStorageSettingsDto } from './dto/update-storage-settings.dto';
+import { UpdateTutorialKeysDto } from './dto/update-tutorial-keys.dto';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
+import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 
 @ApiTags('users')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UsersController {
-  constructor(private usersService: UsersService) {}
+  constructor(
+    private usersService: UsersService,
+    private tamSurveysService: TamSurveysService,
+  ) {}
 
   @Get('profile')
   async getProfile(@Request() req: RequestWithUser) {
@@ -57,6 +62,11 @@ export class UsersController {
     return this.usersService.getStorageSettings(req.user.sub);
   }
 
+  @Get('me/account-state')
+  async getAccountState(@Request() req: RequestWithUser) {
+    return this.tamSurveysService.getAccountState(req.user.sub);
+  }
+
   @Patch('me/storage-settings')
   async updateStorageSettings(
     @Request() req: RequestWithUser,
@@ -66,5 +76,23 @@ export class UsersController {
       req.user.sub,
       dto.fileRetentionDays,
     );
+  }
+
+  @Patch('me/default-payment-method')
+  async setDefaultPaymentMethod(
+    @Request() req: RequestWithUser,
+    @Body() body: { method: 'gcash' | 'maya' | 'cod' | 'credits' },
+  ) {
+    await this.usersService.setDefaultPaymentMethod(req.user.sub, body.method);
+    return { ok: true };
+  }
+
+  @Patch('me/tutorials')
+  async updateTutorialSeenKeys(
+    @Request() req: RequestWithUser,
+    @Body() dto: UpdateTutorialKeysDto,
+  ) {
+    await this.usersService.updateTutorialSeenKeys(req.user.sub, dto.keys);
+    return { ok: true };
   }
 }

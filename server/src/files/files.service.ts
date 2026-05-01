@@ -12,9 +12,15 @@ import { extname } from 'path';
 import { randomUUID } from 'crypto';
 import { FileMetadata } from './entities/file-metadata.entity';
 import { StorageService } from '../storage/storage.service';
+import { FileAnalysisService } from './file-analysis.service';
 import {
   ALLOWED_MIME_TYPES,
-  MAX_FILE_SIZE_BYTES,
+  MIME_ALLOWED_EXTENSIONS,
+  PAPER_MAX_FILE_SIZE_BYTES,
+  PAPER_MAX_FILE_SIZE_MB,
+  THREE_D_EXTENSIONS,
+  THREE_D_MAX_FILE_SIZE_BYTES,
+  THREE_D_MAX_FILE_SIZE_MB,
 } from '../storage/storage.config';
 
 @Injectable()
@@ -25,6 +31,7 @@ export class FilesService {
     @InjectRepository(FileMetadata)
     private readonly fileRepo: Repository<FileMetadata>,
     private readonly storageService: StorageService,
+    private readonly analysisService: FileAnalysisService,
   ) {}
 
   async storeMetadata(
@@ -32,28 +39,66 @@ export class FilesService {
     uploadedBy?: number,
     purpose = 'general',
   ): Promise<FileMetadata> {
-    if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+    const fileExt = extname(file.originalname).toLowerCase();
+    const mimeOk = ALLOWED_MIME_TYPES.includes(file.mimetype);
+    const extOk =
+      MIME_ALLOWED_EXTENSIONS[file.mimetype]?.includes(fileExt) ?? false;
+    const fileTypeAllowed = mimeOk && extOk;
+    // Match MIME and filename extension. Generic browser fallbacks are still
+    // accepted through MIME_ALLOWED_EXTENSIONS, but only for known extensions.
+    if (!fileTypeAllowed) {
       throw new BadRequestException('File type not allowed');
     }
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      throw new BadRequestException('File exceeds 20 MB limit');
+    const isThreeDFile = THREE_D_EXTENSIONS.includes(fileExt);
+    const maxSizeBytes = isThreeDFile
+      ? THREE_D_MAX_FILE_SIZE_BYTES
+      : PAPER_MAX_FILE_SIZE_BYTES;
+    const maxSizeMb = isThreeDFile
+      ? THREE_D_MAX_FILE_SIZE_MB
+      : PAPER_MAX_FILE_SIZE_MB;
+    if (file.size > maxSizeBytes) {
+      throw new BadRequestException(`File exceeds ${maxSizeMb} MB limit`);
     }
 
-    const ext = extname(file.originalname).toLowerCase();
     const now = new Date();
     const datePath = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
-    const objectKey = `uploads/${purpose}/${datePath}/${randomUUID()}${ext}`;
+    const objectKey = `uploads/${purpose}/${datePath}/${randomUUID()}${fileExt}`;
 
-    let url: string;
-    try {
-      url = await this.storageService.upload(
-        file.buffer,
-        objectKey,
-        file.mimetype,
-      );
-    } catch (err) {
-      this.logger.error('MinIO upload failed', err);
-      throw new InternalServerErrorException('File upload failed');
+    // Run the original-file upload concurrently with content analysis.
+    // Analysis only needs the in-memory buffer, not the upload result, so
+    // there's no dependency between them. This roughly halves end-to-end
+    // latency for 3D files where parsing + GLB encoding takes >100 ms.
+    const uploadPromise = this.storageService
+      .upload(file.buffer, objectKey, file.mimetype)
+      .catch((err: unknown) => {
+        this.logger.error('MinIO upload failed', err);
+        throw new InternalServerErrorException('File upload failed');
+      });
+
+    const analysisPromise = this.analysisService
+      .analyze(file.buffer, file.mimetype, file.originalname)
+      .catch((err: unknown) => {
+        this.logger.warn(`File analysis failed (non-fatal): ${String(err)}`);
+        return null;
+      });
+
+    const [url, analysis] = await Promise.all([uploadPromise, analysisPromise]);
+
+    // For 3D models that produced a GLB preview, kick off the sibling upload
+    // immediately. Failure is non-fatal — the original file is still saved.
+    let previewGlbObjectKey: string | null = null;
+    if (analysis?.glbBuffer && analysis.glbBuffer.length > 0) {
+      const previewKey = `${objectKey}.preview.glb`;
+      try {
+        await this.storageService.upload(
+          analysis.glbBuffer,
+          previewKey,
+          'model/gltf-binary',
+        );
+        previewGlbObjectKey = previewKey;
+      } catch (err) {
+        this.logger.warn(`Preview GLB upload failed for ${objectKey}: ${err}`);
+      }
     }
 
     const meta = this.fileRepo.create({
@@ -63,6 +108,18 @@ export class FilesService {
       url,
       objectKey,
       uploadedBy,
+      widthPt: analysis?.widthPt ?? null,
+      heightPt: analysis?.heightPt ?? null,
+      widthPx: analysis?.widthPx ?? null,
+      heightPx: analysis?.heightPx ?? null,
+      colorSpace: analysis?.colorSpace ?? null,
+      pageCount: analysis?.pageCount ?? null,
+      dpi: analysis?.dpi ?? null,
+      model3dWidthMm: analysis?.model3dWidthMm ?? null,
+      model3dDepthMm: analysis?.model3dDepthMm ?? null,
+      model3dHeightMm: analysis?.model3dHeightMm ?? null,
+      model3dTriangleCount: analysis?.model3dTriangleCount ?? null,
+      previewGlbObjectKey,
     });
     return this.fileRepo.save(meta);
   }
@@ -95,6 +152,53 @@ export class FilesService {
         'Could not generate download link',
       );
     }
+  }
+
+  async getPresignedUrlForKey(objectKey: string, ttl: number): Promise<string> {
+    return this.storageService.getPresignedUrl(objectKey, ttl);
+  }
+
+  /**
+   * Permanently deletes a file the user owns: removes the original from
+   * MinIO, the preview-GLB sibling (if any), and the DB row. Throws if the
+   * caller doesn't own the file (admins bypass via `isAdmin`).
+   */
+  async deleteOwnedFile(
+    fileId: number,
+    requestingUserId: number,
+    isAdmin: boolean,
+  ): Promise<void> {
+    const file = await this.fileRepo.findOne({ where: { id: fileId } });
+    if (!file) throw new NotFoundException('File not found');
+    if (
+      !isAdmin &&
+      (file.uploadedBy == null || file.uploadedBy !== requestingUserId)
+    ) {
+      throw new ForbiddenException();
+    }
+
+    // Delete MinIO objects first; tolerate "not found" so a partial state
+    // (object already gone) still cleans up the DB row. Hard errors on the
+    // primary object propagate so the caller knows storage is broken.
+    if (file.objectKey) {
+      try {
+        await this.storageService.delete(file.objectKey);
+      } catch (err) {
+        this.logger.warn(
+          `Primary object delete failed for ${file.objectKey}: ${err}`,
+        );
+      }
+    }
+    if (file.previewGlbObjectKey) {
+      try {
+        await this.storageService.delete(file.previewGlbObjectKey);
+      } catch (err) {
+        this.logger.warn(
+          `Preview GLB delete failed for ${file.previewGlbObjectKey}: ${err}`,
+        );
+      }
+    }
+    await this.fileRepo.delete(fileId);
   }
 
   async getMyUploads(userId: number): Promise<FileMetadata[]> {

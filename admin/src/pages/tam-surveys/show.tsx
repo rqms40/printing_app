@@ -1,7 +1,7 @@
-import { Show } from "@refinedev/antd";
 import { Typography, Card, Space, Divider, Tag, Spin, theme } from "antd";
 import { useParams } from "react-router-dom";
 import { useState, useEffect } from "react";
+import { ShowPage } from "@/components/show-page";
 import { apiClient } from "@/providers/api-client";
 import { formatDate } from "@/utils/format";
 
@@ -76,14 +76,27 @@ export function TamSurveyShow() {
   if (numScore >= 4) avgColor = "green";
 
   return (
-    <Show title={`Survey - SURV-${data.id}`}>
-      <Card bordered={false}>
+    <ShowPage title={`Survey - SURV-${data.id}`} backTo="/tam-surveys" contentCard={false}>
+      <Card variant="borderless">
         <Title level={4}>Customer Details</Title>
         <Space direction="vertical" size="small" style={{ marginBottom: 24 }}>
           <Text type="secondary">Customer Name</Text>
           <Text strong style={{ fontSize: 16 }}>{data.user_name}</Text>
           <Text type="secondary" style={{ marginTop: 8 }}>Submitted On</Text>
           <Text>{formatDate(data.created_at)}</Text>
+          {data.order_ref && (
+            <>
+              <Text type="secondary" style={{ marginTop: 8 }}>Linked Order</Text>
+              <Space size="small">
+                <Tag color="blue" style={{ width: "fit-content", fontFamily: "monospace" }}>
+                  {data.order_ref}
+                </Tag>
+                {data.requirement_id && (
+                  <Text type="secondary">Requirement #{data.requirement_id}</Text>
+                )}
+              </Space>
+            </>
+          )}
           <Text type="secondary" style={{ marginTop: 8 }}>Overall Score</Text>
           <Tag color={avgColor} style={{ fontSize: 16, padding: '4px 12px' }}>{avgScore} / 5.0</Tag>
         </Space>
@@ -154,6 +167,6 @@ export function TamSurveyShow() {
           );
         })()}
       </Card>
-    </Show>
+    </ShowPage>
   );
 }

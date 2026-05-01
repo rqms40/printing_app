@@ -9,6 +9,7 @@ import {
 import { FilesService } from './files.service';
 import { FileMetadata } from './entities/file-metadata.entity';
 import { StorageService } from '../storage/storage.service';
+import { FileAnalysisService } from './file-analysis.service';
 
 const mockFileRepo = {
   create: jest.fn(),
@@ -24,6 +25,10 @@ const mockStorageService = {
   upload: jest.fn(),
   getPresignedUrl: jest.fn(),
   delete: jest.fn(),
+};
+
+const mockAnalysisService = {
+  analyze: jest.fn(),
 };
 
 const makeFile = (
@@ -42,29 +47,39 @@ const makeFile = (
   ...overrides,
 });
 
-const makeFileMeta = (overrides: Partial<FileMetadata> = {}) => ({
-  id: 1,
-  originalName: 'photo.jpg',
-  mimeType: 'image/jpeg',
-  size: 1024,
-  url: 'http://localhost:9000/grid-print/uploads/general/2026/04/21/uuid.jpg',
-  objectKey: 'uploads/general/2026/04/21/uuid.jpg',
-  uploadedBy: 42,
-  expiresAt: null,
-  createdAt: new Date(),
-  ...overrides,
-});
+const makeFileMeta = (overrides: Partial<FileMetadata> = {}): FileMetadata =>
+  ({
+    id: 1,
+    originalName: 'photo.jpg',
+    mimeType: 'image/jpeg',
+    size: 1024,
+    url: 'http://localhost:9000/grid-print/uploads/general/2026/04/21/uuid.jpg',
+    objectKey: 'uploads/general/2026/04/21/uuid.jpg',
+    uploadedBy: 42,
+    expiresAt: null,
+    createdAt: new Date(),
+    widthPt: null,
+    heightPt: null,
+    widthPx: null,
+    heightPx: null,
+    colorSpace: null,
+    pageCount: null,
+    dpi: null,
+    ...overrides,
+  }) as FileMetadata;
 
 describe('FilesService', () => {
   let service: FilesService;
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockAnalysisService.analyze.mockResolvedValue(null);
     const module = await Test.createTestingModule({
       providers: [
         FilesService,
         { provide: getRepositoryToken(FileMetadata), useValue: mockFileRepo },
         { provide: StorageService, useValue: mockStorageService },
+        { provide: FileAnalysisService, useValue: mockAnalysisService },
       ],
     }).compile();
     service = module.get<FilesService>(FilesService);
@@ -102,20 +117,113 @@ describe('FilesService', () => {
         }),
       );
       expect(result).toEqual(savedMeta);
+      expect(mockAnalysisService.analyze).toHaveBeenCalledWith(
+        file.buffer,
+        file.mimetype,
+        file.originalname,
+      );
     });
 
     it('throws BadRequestException for disallowed MIME type without calling StorageService', async () => {
-      const file = makeFile({ mimetype: 'video/mp4' });
+      // Both MIME and extension must be unrecognized — extension whitelist
+      // accepts .stl/.obj/.3mf/etc even when MIME is generic, so the bad-input
+      // fixture has to use a non-whitelisted extension as well.
+      const file = makeFile({
+        mimetype: 'video/mp4',
+        originalname: 'clip.mp4',
+      });
       await expect(service.storeMetadata(file, 1)).rejects.toThrow(
         new BadRequestException('File type not allowed'),
       );
       expect(mockStorageService.upload).not.toHaveBeenCalled();
     });
 
-    it('throws BadRequestException for file over 20 MB without calling StorageService', async () => {
-      const file = makeFile({ size: 21 * 1024 * 1024 });
+    it('accepts a 3MF upload with octet-stream MIME (3D-print case)', async () => {
+      const file = makeFile({
+        mimetype: 'application/octet-stream',
+        originalname: 'model.3mf',
+      });
+      mockFileRepo.create.mockReturnValue({ id: 99 });
+      mockFileRepo.save.mockResolvedValue({ id: 99 });
+      mockStorageService.upload.mockResolvedValue('http://x/y');
+      mockAnalysisService.analyze.mockResolvedValue(null);
+      await service.storeMetadata(file, 1);
+      expect(mockStorageService.upload).toHaveBeenCalled();
+    });
+
+    it('accepts a 3MF upload with zip MIME and a spaced filename', async () => {
+      const file = makeFile({
+        mimetype: 'application/zip',
+        originalname: 'Hook and loop fastener.3mf',
+      });
+      mockFileRepo.create.mockReturnValue({ id: 100 });
+      mockFileRepo.save.mockResolvedValue({ id: 100 });
+      mockStorageService.upload.mockResolvedValue('http://x/y');
+
+      await service.storeMetadata(file, 1);
+
+      expect(mockStorageService.upload).toHaveBeenCalledWith(
+        file.buffer,
+        expect.stringMatching(/\/.+\.3mf$/),
+        'application/zip',
+      );
+    });
+
+    it('rejects generic binary MIME when the extension is not allowed', async () => {
+      const file = makeFile({
+        mimetype: 'application/octet-stream',
+        originalname: 'malware.exe',
+      });
+
       await expect(service.storeMetadata(file, 1)).rejects.toThrow(
-        new BadRequestException('File exceeds 20 MB limit'),
+        new BadRequestException('File type not allowed'),
+      );
+      expect(mockStorageService.upload).not.toHaveBeenCalled();
+    });
+
+    it('rejects a specific MIME when the extension does not match', async () => {
+      const file = makeFile({
+        mimetype: 'application/pdf',
+        originalname: 'model.3mf',
+      });
+
+      await expect(service.storeMetadata(file, 1)).rejects.toThrow(
+        new BadRequestException('File type not allowed'),
+      );
+      expect(mockStorageService.upload).not.toHaveBeenCalled();
+    });
+
+    it('accepts a 3D model upload over the old 20 MB cap', async () => {
+      const file = makeFile({
+        mimetype: 'model/3mf',
+        originalname: 'large-model.3mf',
+        size: 21 * 1024 * 1024,
+      });
+      mockFileRepo.create.mockReturnValue({ id: 101 });
+      mockFileRepo.save.mockResolvedValue({ id: 101 });
+      mockStorageService.upload.mockResolvedValue('http://x/y');
+
+      await service.storeMetadata(file, 1);
+
+      expect(mockStorageService.upload).toHaveBeenCalled();
+    });
+
+    it('throws BadRequestException for paper files over 50 MB without calling StorageService', async () => {
+      const file = makeFile({ size: 51 * 1024 * 1024 });
+      await expect(service.storeMetadata(file, 1)).rejects.toThrow(
+        new BadRequestException('File exceeds 50 MB limit'),
+      );
+      expect(mockStorageService.upload).not.toHaveBeenCalled();
+    });
+
+    it('throws BadRequestException for 3D files over 200 MB without calling StorageService', async () => {
+      const file = makeFile({
+        mimetype: 'model/3mf',
+        originalname: 'huge-model.3mf',
+        size: 201 * 1024 * 1024,
+      });
+      await expect(service.storeMetadata(file, 1)).rejects.toThrow(
+        new BadRequestException('File exceeds 200 MB limit'),
       );
       expect(mockStorageService.upload).not.toHaveBeenCalled();
     });
@@ -129,6 +237,69 @@ describe('FilesService', () => {
         InternalServerErrorException,
       );
       expect(mockFileRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('persists analysis fields when analysis succeeds', async () => {
+      const file = makeFile();
+      const fakeUrl = 'http://localhost:9000/test.jpg';
+      const analysisResult = {
+        widthPt: null,
+        heightPt: null,
+        widthPx: 1920,
+        heightPx: 1080,
+        colorSpace: 'srgb',
+        pageCount: null,
+        dpi: 96,
+      };
+      mockStorageService.upload.mockResolvedValue(fakeUrl);
+      mockAnalysisService.analyze.mockResolvedValue(analysisResult);
+      const savedMeta = makeFileMeta({
+        url: fakeUrl,
+        widthPx: 1920,
+        heightPx: 1080,
+        colorSpace: 'srgb',
+        dpi: 96,
+      });
+      mockFileRepo.create.mockReturnValue(savedMeta);
+      mockFileRepo.save.mockResolvedValue(savedMeta);
+
+      await service.storeMetadata(file, 42);
+
+      expect(mockFileRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          widthPx: 1920,
+          heightPx: 1080,
+          colorSpace: 'srgb',
+          dpi: 96,
+        }),
+      );
+    });
+
+    it('persists 3D bounds when analyzer returns model3d result', async () => {
+      const file = makeFile({
+        mimetype: 'application/octet-stream',
+        originalname: 'thing.stl',
+      });
+      mockStorageService.upload.mockResolvedValue('http://x/y');
+      mockAnalysisService.analyze.mockResolvedValue({
+        widthPt: null, heightPt: null, widthPx: null, heightPx: null,
+        colorSpace: null, pageCount: null, dpi: null,
+        model3dWidthMm: 50, model3dDepthMm: 60, model3dHeightMm: 70,
+        model3dTriangleCount: 12,
+      });
+      mockFileRepo.create.mockReturnValue({ id: 1 });
+      mockFileRepo.save.mockResolvedValue({ id: 1 });
+
+      await service.storeMetadata(file, 1);
+
+      expect(mockFileRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model3dWidthMm: 50,
+          model3dDepthMm: 60,
+          model3dHeightMm: 70,
+          model3dTriangleCount: 12,
+        }),
+      );
     });
   });
 

@@ -6,18 +6,30 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Order } from './order.entity';
+import { OrderItem } from './order-item.entity';
+import { PrintMode } from '../print-mode.enum';
 
 @Entity('paper_specs')
 export class PaperSpec {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ name: 'order_id', unique: true })
-  orderId: number;
+  @Column({ name: 'order_id', nullable: true })
+  orderId: number | null;
 
   @OneToOne(() => Order, (o) => o.paperSpec)
   @JoinColumn({ name: 'order_id' })
   order: Order;
+
+  @Column({ name: 'order_item_id', nullable: true })
+  orderItemId: number | null;
+
+  @OneToOne(() => OrderItem, (item) => item.paperSpec, {
+    nullable: true,
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'order_item_id' })
+  orderItem: OrderItem | null;
 
   @Column({ name: 'paper_size', length: 20 })
   paperSize: string;
@@ -33,4 +45,7 @@ export class PaperSpec {
 
   @Column({ length: 30, default: 'none' })
   binding: string;
+
+  @Column({ name: 'print_mode', type: 'varchar', length: 20, nullable: true, default: 'fitToPage' })
+  printMode: PrintMode | null;
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Form,
   Input,
@@ -46,7 +46,7 @@ export function MarketingSettings() {
 
   const notifications = data?.data || [];
 
-  const handleValuesChange = (changedValues: any, allValues: any) => {
+  const handleValuesChange = (_changedValues: any, allValues: any) => {
     if (allValues.header !== undefined) setPreviewHeader(allValues.header);
     if (allValues.body !== undefined) setPreviewBody(allValues.body);
   };

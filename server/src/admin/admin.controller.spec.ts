@@ -184,7 +184,7 @@ describe('AdminController analytics', () => {
     });
 
     expect(ordersRepo.find).toHaveBeenCalledWith({
-      relations: ['paperSpec'],
+      relations: ['paperSpec', 'items', 'items.paperSpec'],
     });
     expect(analytics.sales).toEqual(expectedSales);
     expect(analytics.volume).toEqual(expectedVolume);

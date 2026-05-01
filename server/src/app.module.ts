@@ -19,7 +19,11 @@ import { ProductsModule } from './products/products.module';
 import { CreditsModule } from './credits/credits.module';
 import { TamSurveysModule } from './tam-surveys/tam-surveys.module';
 import { DailyGridModule } from './daily-grid/daily-grid.module';
+import { BetaModeModule } from './beta-mode/beta-mode.module';
+import { ChatModule } from './chat/chat.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { DeliverySlotsModule } from './delivery-slots/delivery-slots.module';
+import { PrinterProfileModule } from './printer-profile/printer-profile.module';
 
 @Module({
   imports: [
@@ -73,6 +77,10 @@ import { ScheduleModule } from '@nestjs/schedule';
     CreditsModule,
     TamSurveysModule,
     DailyGridModule,
+    BetaModeModule,
+    ChatModule,
+    DeliverySlotsModule,
+    PrinterProfileModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

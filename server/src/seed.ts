@@ -110,15 +110,22 @@ async function seed() {
       spec_options, service_addons, service_categories,
       notifications, payment_transactions, credit_transactions, credit_settings,
       delivery_assignments, order_status_history,
-      paper_specs, three_d_specs, orders,
+      paper_specs, three_d_specs, order_items, orders, batch_orders,
       addresses, driver_profiles, file_metadata,
-      tam_survey_settings, tam_surveys,
+      beta_mode_settings,
+      tam_survey_settings, tam_surveys, tam_survey_requirements,
       daily_grid_cards,
+      delivery_slot_bookings, delivery_slot_templates, delivery_settings,
+      printer_profiles,
       users
     RESTART IDENTITY CASCADE
   `);
 
   // Sequences were already reset by TRUNCATE ... RESTART IDENTITY above
+  await ds.query('INSERT INTO beta_mode_settings (is_enabled) VALUES ($1)', [
+    false,
+  ]);
+  console.log('✅ Beta mode reset to disabled');
 
   for (const u of users) {
     await ds.query(
@@ -174,14 +181,14 @@ async function seed() {
     {
       user_id: mariaId,
       label: 'Home',
-      full_address: '123 Ayala Ave, Brgy. Bel-Air, Makati City',
-      barangay: 'Bel-Air',
-      city: 'Makati City',
-      province: 'Metro Manila',
-      zip_code: '1209',
-      landmark: 'Near Greenbelt 5',
-      latitude: 14.5547,
-      longitude: 121.0244,
+      full_address: '88 Quimpo Blvd, Brgy. Ecoland, Davao City',
+      barangay: 'Ecoland',
+      city: 'Davao City',
+      province: 'Davao del Sur',
+      zip_code: '8000',
+      landmark: 'Near SM City Davao',
+      latitude: 7.0731,
+      longitude: 125.6128,
       is_default: true,
     },
     {
@@ -325,15 +332,43 @@ async function seed() {
     'SELECT id, order_id FROM orders ORDER BY id',
   );
 
+  const orderItemByOrderId = new Map<string, number>();
+  for (const row of orderRows) {
+    const source = orders.find((order) => order.order_id === row.order_id)!;
+    const [item] = await typedQuery<IdRow>(
+      ds,
+      `INSERT INTO order_items (order_id, category, quantity, total_price, file_name)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id`,
+      [
+        row.id,
+        source.category,
+        source.quantity,
+        source.total_price,
+        `${source.category === 'paper' ? 'document' : 'model'}_${source.order_id.slice(-3)}.${source.category === 'paper' ? 'pdf' : 'stl'}`,
+      ],
+    );
+    orderItemByOrderId.set(row.order_id, item.id);
+  }
+  console.log('✅ Order items added to 6 orders');
+
   // ─── Paper Specs ────────────────────────────────────────────────────
   const paperOrderIds: OrderRow[] = orderRows.filter((r: OrderRow) =>
     ['ORD-10001', 'ORD-10002', 'ORD-10004', 'ORD-10005'].includes(r.order_id),
   );
   for (const o of paperOrderIds) {
     await ds.query(
-      `INSERT INTO paper_specs (order_id, paper_size, color_mode, media_type, print_sides, binding)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [o.id, 'a4', 'fullColor', 'glossy', 'frontOnly', 'none'],
+      `INSERT INTO paper_specs (order_id, order_item_id, paper_size, color_mode, media_type, print_sides, binding)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        o.id,
+        orderItemByOrderId.get(o.order_id),
+        'a4',
+        'fullColor',
+        'glossy',
+        'frontOnly',
+        'none',
+      ],
     );
   }
   console.log('✅ Paper specs added to 4 orders');
@@ -344,9 +379,18 @@ async function seed() {
   );
   for (const o of threeDOrderIds) {
     await ds.query(
-      `INSERT INTO three_d_specs (order_id, file_format, material, color, infill_percentage, layer_height, supports)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [o.id, 'stl', 'pla', 'White', 20, 0.2, false],
+      `INSERT INTO three_d_specs (order_id, order_item_id, file_format, material, color, infill_percentage, layer_height, supports)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        o.id,
+        orderItemByOrderId.get(o.order_id),
+        'stl',
+        'pla',
+        'White',
+        20,
+        0.2,
+        false,
+      ],
     );
   }
   console.log('✅ 3D specs added to 2 orders');
@@ -868,6 +912,56 @@ async function seed() {
     );
   }
   console.log('✅ 5 Daily Grid cards seeded');
+
+  // ─── Delivery Slot Templates (Mon–Fri) ──────────────────────────────
+  const [slotCount] = await typedQuery<CountRow>(
+    ds,
+    'SELECT count(*) FROM delivery_slot_templates',
+  );
+  if (parseInt(slotCount.count) === 0) {
+    for (let day = 1; day <= 5; day++) {
+      for (const [start, end] of [
+        ['09:30:00', '11:30:00'],
+        ['14:00:00', '16:00:00'],
+        ['21:00:00', '23:00:00'],
+      ]) {
+        await ds.query(
+          `INSERT INTO delivery_slot_templates (day_of_week, start_time, end_time, capacity)
+           VALUES ($1, $2, $3, $4)`,
+          [day, start, end, 10],
+        );
+      }
+    }
+    console.log('✅ 15 delivery slot templates seeded');
+  }
+
+  // ─── Delivery Settings (singleton row) ──────────────────────────────
+  const [settingsCount] = await typedQuery<CountRow>(
+    ds,
+    'SELECT count(*) FROM delivery_settings WHERE id = 1',
+  );
+  if (parseInt(settingsCount.count) === 0) {
+    await ds.query(
+      `INSERT INTO delivery_settings (service_center_lat, service_center_lng, service_radius_km, priority_fee_amount, extra_destination_surcharge)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [7.0731, 125.6128, 25, 50, 30],
+    );
+    console.log('✅ Delivery settings seeded');
+  }
+
+  // ─── Printer Profile (singleton row) ────────────────────────────────
+  const [profileCount] = await typedQuery<CountRow>(
+    ds,
+    'SELECT count(*) FROM printer_profiles WHERE id = 1',
+  );
+  if (parseInt(profileCount.count) === 0) {
+    await ds.query(
+      `INSERT INTO printer_profiles (name, build_volume_width_mm, build_volume_depth_mm, build_volume_height_mm, max_file_size_mb)
+       VALUES ($1, $2, $3, $4, $5)`,
+      ['Bambu A1 Mini', 180, 180, 180, 200],
+    );
+    console.log('✅ Printer profile seeded (Bambu A1 Mini)');
+  }
 
   console.log('\n🎉 Seed complete!\n');
   console.log('Login credentials (all use password: password123):');

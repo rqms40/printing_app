@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,15 +10,26 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
+import 'package:printing_app/features/customer/order/models/checkout_state.dart';
+import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart'
     show ordersProvider;
 import 'package:printing_app/features/customer/home/providers/tam_surveys_feed_provider.dart';
 import 'package:printing_app/features/customer/home/widgets/daily_grid_section.dart';
+import 'package:printing_app/features/customer/order/providers/delivery_slot_provider.dart';
 import 'package:printing_app/features/customer/home/widgets/hero_banner.dart';
 import 'package:printing_app/features/customer/home/widgets/map_tracking_tile.dart';
 import 'package:printing_app/features/customer/home/widgets/recent_orders_section.dart';
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
-import 'package:printing_app/shared/services/draft_storage_service.dart';
+import 'package:printing_app/utils/formatters.dart';
+import 'package:printing_app/features/customer/chat/providers/chat_provider.dart';
+import 'package:printing_app/features/customer/chat/widgets/floating_chat_button.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
+import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
+import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
+import 'package:printing_app/features/tutorial/widgets/feature_overlay_card.dart';
+import 'package:printing_app/features/tutorial/widgets/coach_mark_sequence.dart';
 
 /// Customer home screen — editorial redesign.
 class HomeScreen extends ConsumerStatefulWidget {
@@ -28,15 +40,33 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  bool _draftDismissed = false;
+  final _creditsTutorialKey = GlobalKey();
+  final _chatFabTutorialKey = GlobalKey();
+  final _startPrintingTutorialKey = GlobalKey();
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    precacheImage(
-      const AssetImage('assets/animations/bentobox.webp'),
-      context,
-    );
+    precacheImage(const AssetImage('assets/animations/bentobox.webp'), context);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final now = DateTime.now();
+      final today =
+          '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final tomorrow = now.add(const Duration(days: 1));
+      final tomStr =
+          '${tomorrow.year.toString().padLeft(4, '0')}-${tomorrow.month.toString().padLeft(2, '0')}-${tomorrow.day.toString().padLeft(2, '0')}';
+      ref.read(deliverySlotProvider(today).notifier).refresh();
+      ref.read(deliverySlotProvider(tomStr).notifier).refresh();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeShowHomeTutorial();
+    });
   }
 
   AppColorSet _colors(BuildContext context) {
@@ -61,7 +91,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       'THURSDAY',
       'FRIDAY',
       'SATURDAY',
-      'SUNDAY'
+      'SUNDAY',
     ];
     const months = [
       'JANUARY',
@@ -75,9 +105,105 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       'SEPTEMBER',
       'OCTOBER',
       'NOVEMBER',
-      'DECEMBER'
+      'DECEMBER',
     ];
     return '${days[now.weekday - 1]}, ${months[now.month - 1]} ${now.day}';
+  }
+
+  void _maybeShowHomeTutorial() {
+    if (!mounted) return;
+
+    // First-time pipeline: show welcome card → user taps "Show me how →" to start
+    if (!ref.read(tutorialSeenProvider(TutorialKey.pipeline))) {
+      _showPipelineWelcomeCard();
+      return;
+    }
+
+    // Post-pipeline: home features (Credits + GridBot)
+    if (!ref.read(tutorialSeenProvider(TutorialKey.homeFeatures))) {
+      _startHomeFeaturesCoachMarks();
+      return;
+    }
+  }
+
+  void _showPipelineWelcomeCard() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        final media = MediaQuery.of(sheetCtx);
+        // viewInsets covers keyboard; viewPadding covers system gestures/nav bar.
+        final extraBottom = media.viewInsets.bottom > 0
+            ? media.viewInsets.bottom
+            : media.viewPadding.bottom;
+        return Padding(
+          padding: EdgeInsets.only(bottom: extraBottom),
+          child: FeatureOverlayCard(
+            heroIcon: HugeIcons.strokeRoundedPrinter,
+            title: "Let's print something.",
+            body: "We'll walk you through your first order.",
+            iconTiles: const [],
+            ctaLabel: 'Show me how →',
+            showSkip: false,
+            onCta: () {
+              Navigator.of(sheetCtx).pop();
+              ref.read(pipelineTutorialProvider.notifier).start();
+              _showPipelineStartCoachMark();
+            },
+            onSkip: () {},
+          ),
+        );
+      },
+    );
+  }
+
+  void _showPipelineStartCoachMark() {
+    if (!mounted) return;
+    showCoachMark(
+      context,
+      [
+        TutorialStep(
+          targetKey: _startPrintingTutorialKey,
+          icon: HugeIcons.strokeRoundedPrinter,
+          title: 'Start Printing',
+          body: 'Tap here to start your first print order.',
+          shape: ShapeLightFocus.RRect,
+          advanceOnSpotlightTap: true,
+          onSpotlightTap: () {
+            ref.read(pipelineTutorialProvider.notifier).advance();
+            if (mounted) context.push('/customer/order/new');
+          },
+        ),
+      ],
+      () {},
+      onSkip: () => ref.read(pipelineTutorialProvider.notifier).abandon(),
+    );
+  }
+
+  void _startHomeFeaturesCoachMarks() {
+    showCoachMark(
+      context,
+      [
+        TutorialStep(
+          targetKey: _creditsTutorialKey,
+          icon: HugeIcons.strokeRoundedCoins01,
+          title: 'GRID Credits',
+          body: 'Top up GRID Credits and pay at checkout — no GCash OTP, no app-switching.',
+          advanceOnSpotlightTap: false,
+        ),
+        TutorialStep(
+          targetKey: _chatFabTutorialKey,
+          icon: HugeIcons.strokeRoundedMessage01,
+          title: 'Meet GridBot',
+          body: 'Need help? GridBot answers anything — order specs, pricing, delivery status. 24/7.',
+          shape: ShapeLightFocus.Circle,
+          advanceOnSpotlightTap: false,
+        ),
+      ],
+      () => ref.read(tutorialProvider.notifier).markSeen(TutorialKey.homeFeatures),
+    );
   }
 
   @override
@@ -85,25 +211,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final colors = _colors(context);
     final authState = ref.watch(authProvider);
     final firstName = (authState.user?.fullName ?? 'there').split(' ').first;
-    final hasDraft = !_draftDismissed && DraftStorageService.hasDraft;
+    final cart = ref.watch(checkoutProvider);
 
     final unreadCount = ref.watch(unreadNotificationsCountProvider);
 
-    final credits =
-        (double.tryParse(authState.user?.credits ?? '0') ?? 0.0).toInt();
+    final credits = (double.tryParse(authState.user?.credits ?? '0') ?? 0.0)
+        .toInt();
 
-    return ColoredBox(
-      color: colors.background,
-      child: SafeArea(
-        child: RefreshIndicator(
+    // NextBatchDialog is now triggered at the customer-shell level via
+    // NextBatchSessionTrigger so it fires reliably on first login regardless
+    // of which tab the user lands on.
+
+    return Stack(
+      children: [
+        ColoredBox(
+          color: colors.background,
+          child: SafeArea(
+            child: RefreshIndicator(
           color: colors.brand,
           backgroundColor: colors.surface,
           onRefresh: ref.read(ordersProvider.notifier).refreshOrders,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            clipBehavior: Clip.none, // allows Daily Grid carousel to bleed to screen edge
-            padding:
-                const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+            clipBehavior:
+                Clip.none, // allows Daily Grid carousel to bleed to screen edge
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -111,53 +243,56 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                 // ── Header ─────────────────────────────────────────────
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _formattedDate(),
-                            style: AppTypography.overline.copyWith(
-                              color: colors.onSurfaceDim,
-                              fontSize: 10,
-                              letterSpacing: 1.5,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          RichText(
-                            text: TextSpan(
-                              style: AppTypography.h2.copyWith(
-                                color: colors.onBackground,
-                              ),
-                              children: [
-                                TextSpan(text: '${_greeting()} '),
-                                TextSpan(
-                                  text: firstName,
-                                  style: AppTypography.h2.copyWith(
-                                    color: colors.brand,
-                                  ),
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _formattedDate(),
+                                style: AppTypography.overline.copyWith(
+                                  color: colors.onSurfaceDim,
+                                  fontSize: 10,
+                                  letterSpacing: 1.5,
                                 ),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(height: 2),
+                              RichText(
+                                text: TextSpan(
+                                  style: AppTypography.h2.copyWith(
+                                    color: colors.onBackground,
+                                  ),
+                                  children: [
+                                    TextSpan(text: '${_greeting()} '),
+                                    TextSpan(
+                                      text: firstName,
+                                      style: AppTypography.h2.copyWith(
+                                        color: colors.brand,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
+                        ),
 
-                    // Notification bell
-                    _NotificationWidget(
-                      colors: colors,
-                      unreadCount: unreadCount,
-                    ),
+                        // Notification bell
+                        _NotificationWidget(
+                          colors: colors,
+                          unreadCount: unreadCount,
+                        ),
 
-                    const SizedBox(width: AppSpacing.xs),
+                        const SizedBox(width: AppSpacing.xs),
 
-                    // Credits chip
-                    _CreditsWidget(colors: colors, credits: credits),
-                  ],
-                )
+                        // Credits chip
+                        KeyedSubtree(
+                          key: _creditsTutorialKey,
+                          child: _CreditsWidget(colors: colors, credits: credits),
+                        ),
+                      ],
+                    )
                     .animate()
                     .fadeIn(duration: 400.ms, curve: Curves.easeOut)
                     .slideY(
@@ -168,49 +303,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                 const SizedBox(height: AppSpacing.lg),
 
-                // ── Draft banner ───────────────────────────────────────
-                if (hasDraft) ...[
-                  Container(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    decoration: BoxDecoration(
-                      color: colors.surface,
-                      borderRadius: AppRadius.borderMd,
-                      border: Border.all(color: colors.brand),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.edit_note_rounded,
-                            color: colors.brand),
-                        const SizedBox(width: AppSpacing.sm),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Continue your order',
-                                  style: AppTypography.bodyBold),
-                              Text('You have an unfinished order',
-                                  style: AppTypography.caption),
-                            ],
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () =>
-                              context.push('/customer/order/new'),
-                          child: Text(
-                            'Resume',
-                            style: TextStyle(color: colors.brand),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close, size: 18),
-                          onPressed: () {
-                            DraftStorageService.clearDraft();
-                            setState(() => _draftDismissed = true);
-                          },
-                        ),
-                      ],
-                    ),
-                  )
+                if (cart.items.isNotEmpty) ...[
+                  _ResumeQueueCard(colors: colors, cart: cart)
                       .animate()
                       .fadeIn(duration: 300.ms, curve: Curves.easeOut)
                       .slideY(
@@ -233,9 +327,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       // Left: map tile (50%)
-                      const Expanded(
-                        child: MapTrackingTile(),
-                      ),
+                      const Expanded(child: MapTrackingTile()),
                       const SizedBox(width: AppSpacing.sm),
                       // Right: 3 stacked tiles (50%)
                       Expanded(
@@ -247,8 +339,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               flex: 2,
                               child: _StartPrintingTile(
                                 colors: colors,
-                                onTap: () => context
-                                    .push('/customer/order/new'),
+                                tutorialKey: _startPrintingTutorialKey,
+                                onTap: () => context.push('/customer/order/new'),
                               ),
                             ),
                             const SizedBox(height: AppSpacing.xs + 2),
@@ -259,47 +351,155 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ),
                             const SizedBox(height: AppSpacing.xs + 2),
                             // 3: The Feed (flex 3)
-                            Expanded(
-                              flex: 3,
-                              child: _FeedTile(colors: colors),
-                            ),
+                            Expanded(flex: 3, child: _FeedTile(colors: colors)),
                           ],
                         ),
                       ),
                     ],
                   ),
-                )
-                    .animate()
-                    .fadeIn(
-                      duration: 400.ms,
-                      delay: 100.ms,
-                      curve: Curves.easeOut,
-                    ),
+                ).animate().fadeIn(
+                  duration: 400.ms,
+                  delay: 100.ms,
+                  curve: Curves.easeOut,
+                ),
 
                 const SizedBox(height: AppSpacing.lg),
 
                 // ── Daily Grid ─────────────────────────────────────────
-                const DailyGridSection()
-                    .animate()
-                    .fadeIn(
-                      duration: 400.ms,
-                      delay: 200.ms,
-                      curve: Curves.easeOut,
-                    ),
+                const DailyGridSection().animate().fadeIn(
+                  duration: 400.ms,
+                  delay: 200.ms,
+                  curve: Curves.easeOut,
+                ),
 
                 const SizedBox(height: AppSpacing.lg),
 
                 // ── Recent Orders ──────────────────────────────────────
-                const RecentOrdersSection()
-                    .animate()
-                    .fadeIn(
-                      duration: 400.ms,
-                      delay: 300.ms,
-                      curve: Curves.easeOut,
-                    ),
+                const RecentOrdersSection().animate().fadeIn(
+                  duration: 400.ms,
+                  delay: 300.ms,
+                  curve: Curves.easeOut,
+                ),
 
                 const SizedBox(height: AppSpacing.xxl),
               ],
+            ),
+          ),
+        ),
+        ),
+        ),
+        Positioned(
+          right: AppSpacing.xl,
+          bottom: 90,
+          child: Consumer(
+            builder: (_, ref, _) {
+              final unread =
+                  ref.watch(chatUnreadCountProvider).asData?.value ?? 0;
+              return FloatingChatButton(unreadCount: unread, tutorialKey: _chatFabTutorialKey);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ResumeQueueCard extends StatelessWidget {
+  const _ResumeQueueCard({required this.colors, required this.cart});
+
+  final AppColorSet colors;
+  final CheckoutState cart;
+
+  @override
+  Widget build(BuildContext context) {
+    final count = cart.itemCount;
+    final plural = count == 1 ? 'item' : 'items';
+    final formattedSubtotal = formatCurrency(cart.subtotal);
+    final semanticsLabel =
+        'You left $count $plural in your queue, $formattedSubtotal, tap to resume';
+
+    void openQueue() => context.push('/customer/order/checkout');
+
+    return Semantics(
+      button: true,
+      label: semanticsLabel,
+      onTap: openQueue,
+      child: ExcludeSemantics(
+        child: Material(
+          color: colors.surface,
+          borderRadius: AppRadius.borderLg,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: openQueue,
+            borderRadius: AppRadius.borderLg,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: AppRadius.borderLg,
+                border: Border.all(color: colors.outline, width: 1),
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: colors.brand,
+                      borderRadius: AppRadius.borderMd,
+                    ),
+                    alignment: Alignment.center,
+                    child: const HugeIcon(
+                      icon: HugeIcons.strokeRoundedShoppingBasket01,
+                      size: 18,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'You left $count $plural in your queue',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.bodyBold.copyWith(
+                            color: colors.onBackground,
+                            fontSize: 13.5,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '$formattedSubtotal · tap to finish',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.caption.copyWith(
+                            color: colors.onSurfaceDim,
+                            fontSize: 11.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  HugeIcon(
+                    icon: HugeIcons.strokeRoundedArrowRight01,
+                    size: 18,
+                    color: colors.onSurfaceDim,
+                  )
+                      .animate(onPlay: (c) => c.repeat(reverse: true))
+                      .moveX(
+                        begin: -2,
+                        end: 2,
+                        duration: 1100.ms,
+                        curve: Curves.easeInOut,
+                      ),
+                ],
+              ),
             ),
           ),
         ),
@@ -310,6 +510,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
 class _HeaderIconButton extends StatelessWidget {
   const _HeaderIconButton({
+    super.key,
     required this.onTap,
     required this.colors,
     required this.child,
@@ -520,10 +721,7 @@ class _CreditsDropdown extends StatelessWidget {
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: AppRadius.borderXl,
-        border: Border.all(
-          color: _kBrand.withValues(alpha: 0.18),
-          width: 0.75,
-        ),
+        border: Border.all(color: _kBrand.withValues(alpha: 0.18), width: 0.75),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.45),
@@ -618,7 +816,11 @@ class _CreditsDropdown extends StatelessWidget {
                     borderRadius: AppRadius.borderMd,
                   ),
                   child: const Center(
-                    child: Icon(Icons.add_rounded, size: 18, color: Colors.black),
+                    child: Icon(
+                      Icons.add_rounded,
+                      size: 18,
+                      color: Colors.black,
+                    ),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
@@ -656,10 +858,7 @@ String _relativeTime(DateTime dt) {
 }
 
 class _NotificationWidget extends ConsumerStatefulWidget {
-  const _NotificationWidget({
-    required this.colors,
-    required this.unreadCount,
-  });
+  const _NotificationWidget({required this.colors, required this.unreadCount});
 
   final AppColorSet colors;
   final int unreadCount;
@@ -671,7 +870,7 @@ class _NotificationWidget extends ConsumerStatefulWidget {
 
 class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
     with SingleTickerProviderStateMixin {
-  final LayerLink _layerLink = LayerLink();
+  final GlobalKey _bellKey = GlobalKey();
   OverlayEntry? _overlay;
   late final AnimationController _animCtrl;
   late final Animation<double> _scaleAnim;
@@ -689,8 +888,7 @@ class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
       vsync: this,
       duration: const Duration(milliseconds: 230),
     );
-    _scaleAnim =
-        CurvedAnimation(parent: _animCtrl, curve: Curves.easeOutBack);
+    _scaleAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOutBack);
     _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
   }
 
@@ -723,78 +921,124 @@ class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
 
   OverlayEntry _buildOverlay(BuildContext stateCtx) {
     return OverlayEntry(
-      builder: (_) => GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: _close,
-        child: Stack(
-          children: [
-            const Positioned.fill(
-                child: ColoredBox(color: Colors.transparent)),
-            CompositedTransformFollower(
-              link: _layerLink,
-              showWhenUnlinked: false,
-              targetAnchor: Alignment.bottomRight,
-              followerAnchor: Alignment.topRight,
-              offset: const Offset(0, 8),
-              child: Material(
-                color: Colors.transparent,
-                child: GestureDetector(
-                  onTap: () {},
-                  child: FadeTransition(
-                    opacity: _fadeAnim,
-                    child: ScaleTransition(
-                      scale: _scaleAnim,
-                      alignment: Alignment.topRight,
-                      child: _NotificationDropdown(
-                        colors: widget.colors,
-                        dismissedIds: _locallyDismissed,
-                        onClose: _close,
-                        onViewAll: () {
-                          _close();
-                          Future.delayed(
-                              const Duration(milliseconds: 180), () {
-                            if (stateCtx.mounted) {
-                              stateCtx.push('/customer/notifications');
-                            }
-                          });
-                        },
-                        onTapNotification: (id) {
-                          ref
-                              .read(notificationsProvider.notifier)
-                              .markAsRead(id);
-                          _close();
-                          Future.delayed(
-                              const Duration(milliseconds: 180), () {
-                            if (stateCtx.mounted) {
-                              stateCtx.push('/customer/notifications');
-                            }
-                          });
-                        },
-                        onMarkAllRead: () {
-                          ref
-                              .read(notificationsProvider.notifier)
-                              .markAllAsRead();
-                          _overlay?.markNeedsBuild();
-                        },
-                        onClear: () {
-                          // Dismiss from home view only — notifications screen
-                          // keeps the full history.
-                          final ids = ref
-                              .read(notificationsProvider)
-                              .map((n) => n.id)
-                              .toSet();
-                          setState(() => _locallyDismissed.addAll(ids));
-                          _close();
-                        },
+      builder: (overlayCtx) {
+        // Position the dropdown using the bell's *actual* screen coordinates,
+        // so it stays inside the viewport regardless of device width or where
+        // the bell sits in the layout. CompositedTransformFollower doesn't
+        // clamp to screen edges, which caused the dropdown to overflow off
+        // the left side on narrow screens.
+        final media = MediaQuery.of(overlayCtx);
+        final screenWidth = media.size.width;
+        final viewPadding = media.viewPadding;
+
+        const sideMargin = 12.0;
+        final maxWidth = math.min(
+          360.0,
+          screenWidth - sideMargin * 2,
+        );
+
+        // Look up the bell's actual screen rect via its GlobalKey. Falls back
+        // to a sensible top-right anchor (under the system status bar) so the
+        // overlay still renders inside the viewport if the lookup fails.
+        final bellCtx = _bellKey.currentContext;
+        final bellBox = bellCtx?.findRenderObject() as RenderBox?;
+        double topPos;
+        double rightInset;
+        if (bellBox != null && bellBox.hasSize && bellBox.attached) {
+          final bellPos = bellBox.localToGlobal(Offset.zero);
+          final bellSize = bellBox.size;
+          topPos = bellPos.dy + bellSize.height + 8;
+          final desiredRight = screenWidth - (bellPos.dx + bellSize.width);
+          rightInset = desiredRight.clamp(sideMargin, screenWidth - maxWidth - sideMargin);
+        } else {
+          topPos = viewPadding.top + 64;
+          rightInset = sideMargin;
+        }
+
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: _close,
+          child: Stack(
+            children: [
+              const Positioned.fill(
+                child: ColoredBox(color: Colors.transparent),
+              ),
+              Positioned(
+                top: topPos,
+                right: rightInset,
+                width: maxWidth,
+                child: Padding(
+                  // Honour the bottom safe area so the card never sits under
+                  // a system gesture bar on tall layouts.
+                  padding: EdgeInsets.only(bottom: viewPadding.bottom),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: GestureDetector(
+                      onTap: () {},
+                      child: FadeTransition(
+                        opacity: _fadeAnim,
+                        child: ScaleTransition(
+                          scale: _scaleAnim,
+                          alignment: Alignment.topRight,
+                          child: _NotificationDropdown(
+                            colors: widget.colors,
+                            dismissedIds: _locallyDismissed,
+                            onClose: _close,
+                            onViewAll: () {
+                              _close();
+                              Future.delayed(
+                                const Duration(milliseconds: 180),
+                                () {
+                                  if (stateCtx.mounted) {
+                                    // go() switches the StatefulShellRoute
+                                    // branch so the bottom-nav "Notifications"
+                                    // tab activates. push() would have
+                                    // stacked over the current tab and left
+                                    // the wrong nav item highlighted.
+                                    stateCtx.go('/customer/notifications');
+                                  }
+                                },
+                              );
+                            },
+                            onTapNotification: (id) {
+                              ref
+                                  .read(notificationsProvider.notifier)
+                                  .markAsRead(id);
+                              _close();
+                              Future.delayed(
+                                const Duration(milliseconds: 180),
+                                () {
+                                  if (stateCtx.mounted) {
+                                    stateCtx.go('/customer/notifications');
+                                  }
+                                },
+                              );
+                            },
+                            onMarkAllRead: () {
+                              ref
+                                  .read(notificationsProvider.notifier)
+                                  .markAllAsRead();
+                              _overlay?.markNeedsBuild();
+                            },
+                            onClear: () {
+                              final ids = ref
+                                  .read(notificationsProvider)
+                                  .map((n) => n.id)
+                                  .toSet();
+                              setState(() => _locallyDismissed.addAll(ids));
+                              _close();
+                            },
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -803,44 +1047,42 @@ class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
     final colors = widget.colors;
     final unreadCount = widget.unreadCount;
 
-    return CompositedTransformTarget(
-      link: _layerLink,
-      child: _HeaderIconButton(
-        onTap: _toggle,
-        colors: colors,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            HugeIcon(
-              icon: HugeIcons.strokeRoundedNotification02,
-              size: 22,
-              color: colors.onBackground,
-            ),
-            if (unreadCount > 0)
-              Positioned(
-                top: -3,
-                right: -3,
-                child: Container(
-                  width: 16,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: colors.brand,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      unreadCount > 9 ? '9+' : '$unreadCount',
-                      style: AppTypography.overline.copyWith(
-                        color: colors.background,
-                        fontSize: 8,
-                        fontWeight: FontWeight.w700,
-                      ),
+    return _HeaderIconButton(
+      key: _bellKey,
+      onTap: _toggle,
+      colors: colors,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          HugeIcon(
+            icon: HugeIcons.strokeRoundedNotification02,
+            size: 22,
+            color: colors.onBackground,
+          ),
+          if (unreadCount > 0)
+            Positioned(
+              top: -3,
+              right: -3,
+              child: Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: colors.brand,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    unreadCount > 9 ? '9+' : '$unreadCount',
+                    style: AppTypography.overline.copyWith(
+                      color: colors.background,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
@@ -863,6 +1105,7 @@ class _NotificationDropdown extends ConsumerWidget {
   final void Function(String id) onTapNotification;
   final VoidCallback onMarkAllRead;
   final VoidCallback onClear;
+
   /// IDs locally dismissed from the home dropdown — not cleared from DB.
   final Set<String> dismissedIds;
 
@@ -884,7 +1127,7 @@ class _NotificationDropdown extends ConsumerWidget {
     final unreadCount = visible.where((n) => !n.isRead).length;
 
     return Container(
-      width: 320,
+      width: double.infinity,
       constraints: const BoxConstraints(maxHeight: 400),
       decoration: BoxDecoration(
         color: colors.surface,
@@ -908,7 +1151,11 @@ class _NotificationDropdown extends ConsumerWidget {
           // ── Header ──────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md, AppSpacing.md, AppSpacing.sm, AppSpacing.xs),
+              AppSpacing.md,
+              AppSpacing.md,
+              AppSpacing.sm,
+              AppSpacing.xs,
+            ),
             child: Row(
               children: [
                 Text(
@@ -1090,6 +1337,7 @@ class _YellowBorderTile extends StatefulWidget {
     required this.title,
     this.subtitle,
     this.onTap,
+    this.tutorialKey,
   });
 
   final AppColorSet colors;
@@ -1097,6 +1345,7 @@ class _YellowBorderTile extends StatefulWidget {
   final String title;
   final String? subtitle;
   final VoidCallback? onTap;
+  final GlobalKey? tutorialKey;
 
   @override
   State<_YellowBorderTile> createState() => _YellowBorderTileState();
@@ -1121,6 +1370,7 @@ class _YellowBorderTileState extends State<_YellowBorderTile> {
         duration: const Duration(milliseconds: 100),
         curve: Curves.easeOut,
         child: Container(
+          key: widget.tutorialKey,
           width: double.infinity,
           decoration: BoxDecoration(
             color: widget.colors.surface,
@@ -1204,18 +1454,24 @@ class _YellowBorderTileState extends State<_YellowBorderTile> {
 // ── Convenience wrappers ─────────────────────────────────────────────────────
 
 class _StartPrintingTile extends StatelessWidget {
-  const _StartPrintingTile({required this.colors, required this.onTap});
+  const _StartPrintingTile({
+    required this.colors,
+    required this.onTap,
+    this.tutorialKey,
+  });
   final AppColorSet colors;
   final VoidCallback onTap;
+  final GlobalKey? tutorialKey;
 
   @override
   Widget build(BuildContext context) => _YellowBorderTile(
-        colors: colors,
-        icon: HugeIcons.strokeRoundedPrinter,
-        title: 'Start Printing',
-        subtitle: 'New order',
-        onTap: onTap,
-      );
+    colors: colors,
+    icon: HugeIcons.strokeRoundedPrinter,
+    title: 'Start Printing',
+    subtitle: 'New order',
+    onTap: onTap,
+    tutorialKey: tutorialKey,
+  );
 }
 
 class _DataGridTile extends StatelessWidget {
@@ -1224,11 +1480,11 @@ class _DataGridTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _YellowBorderTile(
-        colors: colors,
-        icon: HugeIcons.strokeRoundedCloudUpload,
-        title: 'The Data Grid',
-        onTap: () => context.push('/customer/uploads'),
-      );
+    colors: colors,
+    icon: HugeIcons.strokeRoundedCloudUpload,
+    title: 'The Data Grid',
+    onTap: () => context.push('/customer/uploads'),
+  );
 }
 
 // ── Right-column tile: The Feed ─────────────────────────────────────────────
@@ -1270,11 +1526,17 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
           shape: RoundedRectangleBorder(borderRadius: AppRadius.borderXl),
           title: Row(
             children: [
-              const Icon(Icons.star_rounded, color: Color(0xFFFFDE58), size: 20),
+              const Icon(
+                Icons.star_rounded,
+                color: Color(0xFFFFDE58),
+                size: 20,
+              ),
               const SizedBox(width: 8),
               Text(
                 '${item.rating.toStringAsFixed(1)} / 5.0',
-                style: AppTypography.bodyBold.copyWith(color: widget.colors.onBackground),
+                style: AppTypography.bodyBold.copyWith(
+                  color: widget.colors.onBackground,
+                ),
               ),
             ],
           ),
@@ -1282,13 +1544,25 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(item.userName, style: AppTypography.bodyBold.copyWith(color: widget.colors.brand)),
-              Text('Student', style: AppTypography.caption.copyWith(color: widget.colors.onSurfaceDim)),
+              Text(
+                item.userName,
+                style: AppTypography.bodyBold.copyWith(
+                  color: widget.colors.brand,
+                ),
+              ),
+              Text(
+                'Student',
+                style: AppTypography.caption.copyWith(
+                  color: widget.colors.onSurfaceDim,
+                ),
+              ),
               const SizedBox(height: 16),
               if (item.feedback != null && item.feedback!.isNotEmpty)
                 Text(
                   item.feedback!,
-                  style: AppTypography.body.copyWith(color: widget.colors.onBackground),
+                  style: AppTypography.body.copyWith(
+                    color: widget.colors.onBackground,
+                  ),
                 )
               else
                 Text(
@@ -1303,7 +1577,10 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: Text('Close', style: TextStyle(color: widget.colors.brand)),
+              child: Text(
+                'Close',
+                style: TextStyle(color: widget.colors.brand),
+              ),
             ),
           ],
         );
@@ -1318,8 +1595,10 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.end,
+          spacing: 6,
+          runSpacing: 2,
           children: [
             Text(
               'The Feed',
@@ -1330,7 +1609,6 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
                 height: 1.0,
               ),
             ),
-            const SizedBox(width: 6),
             Padding(
               padding: const EdgeInsets.only(bottom: 2),
               child: Text(
@@ -1339,6 +1617,7 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
                   color: const Color(0xFFFFDE58),
                   fontSize: 10,
                 ),
+                softWrap: true,
               ),
             ),
           ],
@@ -1360,7 +1639,9 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
                   return Center(
                     child: Text(
                       'No community feedback yet.',
-                      style: AppTypography.caption.copyWith(color: widget.colors.onSurfaceDim),
+                      style: AppTypography.caption.copyWith(
+                        color: widget.colors.onSurfaceDim,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   );
@@ -1381,71 +1662,104 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
                     key: ValueKey<int>(item.id),
                     onTap: () => _showFeedbackModal(context, item),
                     behavior: HitTestBehavior.opaque,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 4),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Row(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final h = constraints.maxHeight;
+                        final w = constraints.maxWidth;
+                        final scale = (h / 122).clamp(0.85, 1.4);
+                        final starSize = (14 * scale).clamp(11.0, 18.0);
+                        final nameSize = (11 * scale).clamp(10.0, 14.0);
+                        final roleSize = (9 * scale).clamp(8.0, 12.0);
+                        final quoteSize = (9 * scale).clamp(8.0, 12.0);
+                        final gap = (4 * scale).clamp(2.0, 8.0);
+                        final hPad = (w * 0.06).clamp(6.0, 14.0);
+                        final hasFeedback =
+                            item.feedback != null && item.feedback!.isNotEmpty;
+
+                        return Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: hPad,
+                            vertical: gap,
+                          ),
+                          child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
-                            children: List.generate(5, (starIdx) {
-                              final isFilled = starIdx < item.rating.round();
-                              return Icon(
-                                Icons.star_rounded,
-                                color: isFilled ? const Color(0xFFFFDE58) : widget.colors.onSurfaceDim.withValues(alpha: 0.4),
-                                size: 14,
-                              );
-                            }),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            item.userName,
-                            style: AppTypography.bodyBold.copyWith(
-                              color: widget.colors.onBackground,
-                              fontSize: 11,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                          ),
-                          Text(
-                            'Student',
-                            style: AppTypography.caption.copyWith(
-                              color: widget.colors.onSurfaceDim,
-                              fontSize: 9,
-                              fontStyle: FontStyle.italic,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          if (item.feedback != null && item.feedback!.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              '"${item.feedback!}"',
-                              style: AppTypography.body.copyWith(
-                                color: widget.colors.onBackground.withValues(alpha: 0.9),
-                                fontSize: 9,
-                                height: 1.2,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: List.generate(5, (starIdx) {
+                                  final isFilled =
+                                      starIdx < item.rating.round();
+                                  return Icon(
+                                    Icons.star_rounded,
+                                    color: isFilled
+                                        ? const Color(0xFFFFDE58)
+                                        : widget.colors.onSurfaceDim
+                                              .withValues(alpha: 0.4),
+                                    size: starSize,
+                                  );
+                                }),
                               ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ],
-                      ),
+                              SizedBox(height: gap),
+                              Text(
+                                item.userName,
+                                style: AppTypography.bodyBold.copyWith(
+                                  color: widget.colors.onBackground,
+                                  fontSize: nameSize,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                              ),
+                              Text(
+                                'Student',
+                                style: AppTypography.caption.copyWith(
+                                  color: widget.colors.onSurfaceDim,
+                                  fontSize: roleSize,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              if (hasFeedback) ...[
+                                SizedBox(height: gap),
+                                Flexible(
+                                  child: Text(
+                                    '"${item.feedback!}"',
+                                    style: AppTypography.body.copyWith(
+                                      color: widget.colors.onBackground
+                                          .withValues(alpha: 0.9),
+                                      fontSize: quoteSize,
+                                      height: 1.2,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        );
+                      },
                     ),
                   ),
                 );
               },
               loading: () => const Center(
-                  child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(color: Color(0xFFFFDE58), strokeWidth: 2.0))),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    color: Color(0xFFFFDE58),
+                    strokeWidth: 2.0,
+                  ),
+                ),
+              ),
               error: (err, _) => Center(
                 child: Text(
                   'Failed to load feed',
-                  style: AppTypography.caption.copyWith(color: Colors.redAccent),
+                  style: AppTypography.caption.copyWith(
+                    color: Colors.redAccent,
+                  ),
                 ),
               ),
             ),

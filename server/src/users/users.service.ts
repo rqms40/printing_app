@@ -14,6 +14,7 @@ import {
   ProfileCategory,
   ProfileField,
 } from './profile.constants';
+import { PrintMode } from '../orders/print-mode.enum';
 
 type UserProfilingInput = {
   fullName?: string;
@@ -27,10 +28,13 @@ type UserProfilingInput = {
   course?: string;
   organization?: string;
   printingPreferences?: PrintingPreference[];
+  defaultPrintMode?: PrintMode;
 };
 
 @Injectable()
 export class UsersService {
+  private static readonly VALID_PAYMENT_METHODS = ['gcash', 'maya', 'cod', 'credits'] as const;
+
   constructor(@InjectRepository(User) private usersRepo: Repository<User>) {}
 
   async findByEmail(email: string): Promise<User | null> {
@@ -107,13 +111,22 @@ export class UsersService {
     userId: number,
     fileRetentionDays: number | null,
   ): Promise<{ fileRetentionDays: number | null }> {
-    if (![null, 1, 7, 30].includes(fileRetentionDays)) {
-      throw new BadRequestException(
-        'fileRetentionDays must be null, 1, 7, or 30',
-      );
-    }
     await this.usersRepo.update(userId, { fileRetentionDays });
     return { fileRetentionDays };
+  }
+
+  async setDefaultPaymentMethod(
+    userId: number,
+    method: 'gcash' | 'maya' | 'cod' | 'credits',
+  ): Promise<void> {
+    if (!UsersService.VALID_PAYMENT_METHODS.includes(method)) {
+      throw new BadRequestException('invalid payment method');
+    }
+    await this.usersRepo.update(userId, { defaultPaymentMethod: method });
+  }
+
+  async updateTutorialSeenKeys(userId: number, keys: string[]): Promise<void> {
+    await this.usersRepo.update(userId, { tutorialSeenKeys: keys });
   }
 
   private normalizeProfilingData(data: Partial<UserProfilingInput | User>) {
@@ -165,6 +178,10 @@ export class UsersService {
       normalized.printingPreferences = Array.from(
         new Set(data.printingPreferences),
       );
+    }
+
+    if (data.defaultPrintMode !== undefined) {
+      normalized.defaultPrintMode = data.defaultPrintMode ?? null;
     }
 
     return normalized;

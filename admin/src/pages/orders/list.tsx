@@ -1,19 +1,48 @@
 import { List } from "@refinedev/antd";
-import { Table, Input, Radio, Space, Badge, Tag, Tooltip, Select, Button, App } from "antd";
-import { SearchOutlined, EyeOutlined, DownloadOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
+import {
+  Table,
+  Input,
+  Radio,
+  Space,
+  Badge,
+  Tag,
+  Tooltip,
+  Select,
+  Button,
+  App,
+  Alert,
+} from "antd";
+import {
+  SearchOutlined,
+  EyeOutlined,
+  DownloadOutlined,
+  ExclamationCircleOutlined,
+} from "@ant-design/icons";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import type { Order } from "@/types/order";
+import type { Order, OrderItem } from "@/types/order";
 import type { OrderStatus, PaymentStatus } from "@/types/enums";
 import { ORDER_STATUS_LABELS, ORDER_STATUS_TRANSITIONS } from "@/types/enums";
 import { StatusBadge } from "@/components/status-badge";
-import { formatCurrency, formatRelativeTime, formatDate, statusLabel } from "@/utils/format";
-import { mockOrders } from "@/providers/mock-data";
+import {
+  formatCurrency,
+  formatRelativeTime,
+  formatDate,
+  statusLabel,
+} from "@/utils/format";
 import { apiClient } from "@/providers/api-client";
-import { humanizeEnumValue, normalizeOrders, normalizeOrder } from "@/utils/api-normalizers";
+import {
+  humanizeEnumValue,
+  normalizeOrders,
+  normalizeOrder,
+} from "@/utils/api-normalizers";
 import { subscribeToOrderUpdates } from "@/providers/live-provider";
 
 type TabFilter = "new" | "production" | "done" | "all";
+type OrderTypeMeta = {
+  label: "Paper" | "3D" | "Mixed";
+  color: string;
+};
 
 const TAB_STATUSES: Record<TabFilter, OrderStatus[] | null> = {
   new: ["order_placed", "file_verified"],
@@ -29,15 +58,71 @@ const PAYMENT_COLORS: Record<PaymentStatus, string> = {
   refunded: "blue",
 };
 
+function getOrderLineItems(order: Order): OrderItem[] {
+  if (order.items && order.items.length > 0) return order.items;
+
+  return [
+    {
+      id: order.id,
+      category: order.category === "3d" ? "3d" : "paper",
+      file_name: order.file_name,
+      quantity: order.quantity,
+      total_price: order.total_price,
+      paper_specs: order.paper_specs,
+      three_d_specs: order.three_d_specs,
+    },
+  ];
+}
+
+function getOrderTypeMeta(order: Order): OrderTypeMeta {
+  const categories = new Set(
+    getOrderLineItems(order)
+      .map((item) => item.category)
+      .filter(
+        (category): category is "paper" | "3d" =>
+          category === "paper" || category === "3d",
+      ),
+  );
+
+  if (categories.has("paper") && categories.has("3d")) {
+    return { label: "Mixed", color: "magenta" };
+  }
+
+  if (categories.has("3d")) {
+    return { label: "3D", color: "purple" };
+  }
+
+  return { label: "Paper", color: "blue" };
+}
+
+function getOrderCategoryLabel(order: Order) {
+  const type = getOrderTypeMeta(order);
+  const itemCount = getOrderLineItems(order).length;
+  return itemCount > 1 ? `${type.label} (${itemCount} items)` : type.label;
+}
+
 function exportDeliveredCSV(orders: Order[]) {
   const delivered = orders.filter(
-    (o) => o.order_status === "delivered" || o.order_status === "completed_pickup",
+    (o) =>
+      o.order_status === "delivered" || o.order_status === "completed_pickup",
   );
-  const headers = ["Order ID", "User ID", "Category", "Status", "Amount", "Delivery Fee", "Total", "Payment Method", "Payment Status", "Delivery Option", "Date"];
+  const headers = [
+    "Order ID",
+    "User ID",
+    "Category",
+    "Status",
+    "Amount",
+    "Delivery Fee",
+    "Total",
+    "Payment Method",
+    "Payment Status",
+    "Delivery Option",
+    "Date",
+  ];
   const rows = delivered.map((o) => [
     o.order_id,
     o.user_id,
-    o.category === "paper" ? "Paper" : "3D",
+    getOrderCategoryLabel(o),
     ORDER_STATUS_LABELS[o.order_status] ?? o.order_status,
     o.total_price,
     o.delivery_fee,
@@ -47,7 +132,11 @@ function exportDeliveredCSV(orders: Order[]) {
     o.delivery_option,
     new Date(o.created_at).toLocaleDateString("en-PH"),
   ]);
-  const csv = [headers, ...rows].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const csv = [headers, ...rows]
+    .map((row) =>
+      row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","),
+    )
+    .join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -62,16 +151,27 @@ export function OrderList() {
   const [activeTab, setActiveTab] = useState<TabFilter>("all");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
-  const [orders, setOrders] = useState<Order[]>(mockOrders);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
-    void apiClient.get("/admin/orders")
-      .then((res) => setOrders(normalizeOrders(res.data)))
-      .catch(() => { /* keep mock fallback already in state */ })
+    setLoading(true);
+    setError(null);
+
+    void apiClient
+      .get("/admin/orders")
+      .then((res) => {
+        setOrders(normalizeOrders(res.data));
+      })
+      .catch((cause: unknown) => {
+        setOrders([]);
+        setError(cause instanceof Error ? cause.message : "Unable to load orders");
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [reloadKey]);
 
   useEffect(() => {
     return subscribeToOrderUpdates((incoming) => {
@@ -93,7 +193,9 @@ export function OrderList() {
       content: `Change status to "${statusLabel(newStatus)}"?`,
       onOk: async () => {
         try {
-          await apiClient.patch(`/admin/orders/${orderId}/status`, { status: newStatus });
+          await apiClient.patch(`/admin/orders/${orderId}/status`, {
+            status: newStatus,
+          });
           void message.success(`Status updated to ${statusLabel(newStatus)}`);
           const res = await apiClient.get(`/admin/orders/${orderId}`);
           const updated = normalizeOrder(res.data);
@@ -120,23 +222,42 @@ export function OrderList() {
     filtered = filtered.filter((o) => o.order_status === statusFilter);
   }
   if (search) {
-    filtered = filtered.filter((o) =>
-      o.order_id.toLowerCase().includes(search.toLowerCase()) ||
-      o.user_id.toLowerCase().includes(search.toLowerCase()) ||
-      (o.customer_name && o.customer_name.toLowerCase().includes(search.toLowerCase())),
+    filtered = filtered.filter(
+      (o) =>
+        o.order_id.toLowerCase().includes(search.toLowerCase()) ||
+        o.user_id.toLowerCase().includes(search.toLowerCase()) ||
+        (o.customer_name &&
+          o.customer_name.toLowerCase().includes(search.toLowerCase())),
     );
   }
 
   const counts = {
-    new: orders.filter((o) => TAB_STATUSES.new!.includes(o.order_status)).length,
-    production: orders.filter((o) => TAB_STATUSES.production!.includes(o.order_status)).length,
-    done: orders.filter((o) => TAB_STATUSES.done!.includes(o.order_status)).length,
+    new: orders.filter((o) => TAB_STATUSES.new!.includes(o.order_status))
+      .length,
+    production: orders.filter((o) =>
+      TAB_STATUSES.production!.includes(o.order_status),
+    ).length,
+    done: orders.filter((o) => TAB_STATUSES.done!.includes(o.order_status))
+      .length,
     all: orders.length,
   };
 
   return (
     <List title="Orders">
       <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+        {error ? (
+          <Alert
+            type="error"
+            showIcon
+            message={error}
+            action={
+              <Button type="link" onClick={() => setReloadKey((value) => value + 1)}>
+                Retry
+              </Button>
+            }
+          />
+        ) : null}
+
         <Space
           wrap
           style={{
@@ -155,16 +276,37 @@ export function OrderList() {
             buttonStyle="solid"
           >
             <Radio.Button value="new">
-              New <Badge count={counts.new} style={{ marginLeft: 6 }} size="small" />
+              New{" "}
+              <Badge
+                count={counts.new}
+                style={{ marginLeft: 6 }}
+                size="small"
+              />
             </Radio.Button>
             <Radio.Button value="production">
-              Production <Badge count={counts.production} style={{ marginLeft: 6 }} size="small" />
+              Production{" "}
+              <Badge
+                count={counts.production}
+                style={{ marginLeft: 6 }}
+                size="small"
+              />
             </Radio.Button>
             <Radio.Button value="done">
-              Done <Badge count={counts.done} style={{ marginLeft: 6 }} size="small" />
+              Done{" "}
+              <Badge
+                count={counts.done}
+                style={{ marginLeft: 6 }}
+                size="small"
+              />
             </Radio.Button>
             <Radio.Button value="all">
-              All <Badge count={counts.all} style={{ marginLeft: 6 }} size="small" showZero />
+              All{" "}
+              <Badge
+                count={counts.all}
+                style={{ marginLeft: 6 }}
+                size="small"
+                showZero
+              />
             </Radio.Button>
           </Radio.Group>
 
@@ -175,7 +317,9 @@ export function OrderList() {
               style={{ width: 200 }}
               options={[
                 { value: "all", label: "All Statuses" },
-                ...Object.entries(ORDER_STATUS_LABELS).map(([value, label]) => ({ value: value as OrderStatus, label })),
+                ...Object.entries(ORDER_STATUS_LABELS).map(
+                  ([value, label]) => ({ value: value as OrderStatus, label }),
+                ),
               ]}
             />
             <Input
@@ -220,20 +364,31 @@ export function OrderList() {
             title="Order ID"
             width={130}
             render={(v: string) => (
-              <span style={{ fontFamily: "monospace", fontWeight: 600 }}>{v}</span>
+              <span style={{ fontFamily: "monospace", fontWeight: 600 }}>
+                {v}
+              </span>
             )}
           />
           <Table.Column
             title="Customer"
             width={140}
             render={(_v: unknown, record: Order) => (
-              <Tooltip title={record.customer_email ?? `User ID: ${record.user_id}`}>
+              <Tooltip
+                title={record.customer_email ?? `User ID: ${record.user_id}`}
+              >
                 <Space direction="vertical" size={0}>
                   <span style={{ fontWeight: 500, color: "#e6e6e6" }}>
                     {record.customer_name ?? "Unknown"}
                   </span>
-                  <span style={{ fontFamily: "monospace", fontSize: 10, color: "#888" }}>
-                    #{record.customer_id ?? record.user_id?.split("-")[0] ?? "—"}
+                  <span
+                    style={{
+                      fontFamily: "monospace",
+                      fontSize: 10,
+                      color: "#888",
+                    }}
+                  >
+                    #
+                    {record.customer_id ?? record.user_id?.split("-")[0] ?? "—"}
                   </span>
                 </Space>
               </Tooltip>
@@ -242,12 +397,40 @@ export function OrderList() {
           <Table.Column
             dataIndex="category"
             title="Type"
-            width={80}
-            render={(v: string) => (
-              <Tag color={v === "paper" ? "blue" : "purple"}>
-                {v === "paper" ? "Paper" : "3D"}
-              </Tag>
-            )}
+            width={110}
+            render={(_v: string, record: Order) => {
+              const type = getOrderTypeMeta(record);
+              return <Tag color={type.color}>{type.label}</Tag>;
+            }}
+          />
+          <Table.Column
+            title="Items"
+            width={220}
+            render={(_v: unknown, record: Order) => {
+              const items = getOrderLineItems(record);
+              return (
+                <Space direction="vertical" size={0}>
+                  <span style={{ color: "#888", fontSize: 11 }}>
+                    {items.length} {items.length === 1 ? "item" : "items"}
+                  </span>
+                  <span style={{ color: "#e6e6e6" }}>
+                    {items
+                      .slice(0, 2)
+                      .map(
+                        (item) =>
+                          item.file_name ??
+                          (item.category === "3d" ? "3D print" : "Paper"),
+                      )
+                      .join(" + ")}
+                  </span>
+                  {items.length > 2 && (
+                    <span style={{ color: "#888", fontSize: 11 }}>
+                      +{items.length - 2} more
+                    </span>
+                  )}
+                </Space>
+              );
+            }}
           />
           <Table.Column
             dataIndex="order_status"
@@ -276,6 +459,16 @@ export function OrderList() {
             )}
           />
           <Table.Column
+            title="Delivery"
+            dataIndex="deliveryType"
+            width={110}
+            render={(v: string | undefined) =>
+              v === "external" ? <Tag color="purple">External</Tag> :
+              v === "local" ? <Tag color="blue">Local</Tag> :
+              <span>—</span>
+            }
+          />
+          <Table.Column
             dataIndex="created_at"
             title="Date"
             width={120}
@@ -285,7 +478,8 @@ export function OrderList() {
               </Tooltip>
             )}
             sorter={(a: Order, b: Order) =>
-              new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+              new Date(a.created_at).getTime() -
+              new Date(b.created_at).getTime()
             }
             defaultSortOrder="descend"
           />
@@ -294,15 +488,18 @@ export function OrderList() {
             key="action"
             width={180}
             render={(_v: unknown, record: Order) => {
-              const validNextStatuses = ORDER_STATUS_TRANSITIONS[record.order_status] || [];
+              const validNextStatuses =
+                ORDER_STATUS_TRANSITIONS[record.order_status] || [];
               if (validNextStatuses.length === 0) return null;
-              
+
               return (
                 <Select
                   placeholder="Update Status"
                   style={{ width: 160 }}
                   onClick={(e) => e.stopPropagation()}
-                  onChange={(val: OrderStatus) => handleStatusChange(record.id, val)}
+                  onChange={(val: OrderStatus) =>
+                    handleStatusChange(record.id, val)
+                  }
                   value={undefined}
                   options={validNextStatuses.map((s) => ({
                     label: ORDER_STATUS_LABELS[s],
@@ -315,7 +512,6 @@ export function OrderList() {
           <Table.Column
             title=""
             width={50}
-
             render={(_: unknown, record: Order) => (
               <Tooltip title="View Details">
                 <EyeOutlined

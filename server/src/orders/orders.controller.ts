@@ -5,18 +5,21 @@ import {
   Patch,
   Param,
   Body,
+  Query,
   UseGuards,
   Request,
   ForbiddenException,
   NotFoundException,
   BadRequestException,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { OrdersService } from './orders.service';
-import { CreateOrderDto } from './dto/create-order.dto';
+import { CreateBatchOrderDto, CreateOrderDto } from './dto/create-order.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
+import { UpdateManualStatusDto } from './dto/update-manual-status.dto';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
 
 @ApiTags('orders')
@@ -46,6 +49,14 @@ export class OrdersController {
     return this.ordersService.create({ ...dto, userId: req.user.sub });
   }
 
+  @Post('batch')
+  createBatchOrder(
+    @Request() req: RequestWithUser,
+    @Body() dto: CreateBatchOrderDto,
+  ) {
+    return this.ordersService.createBatch(req.user.sub, dto);
+  }
+
   @Patch(':id/cancel')
   async cancelOrder(@Request() req: RequestWithUser, @Param('id') id: number) {
     try {
@@ -60,10 +71,31 @@ export class OrdersController {
     }
   }
 
+  @Patch('batch/:id/cancel')
+  @UseGuards(JwtAuthGuard)
+  async cancelBatch(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: { user: { sub: number } },
+  ) {
+    await this.ordersService.cancelBatch(id, req.user.sub);
+    return { ok: true };
+  }
+
   @Patch(':id/status')
   @Roles('admin')
   @UseGuards(RolesGuard)
   updateStatus(@Param('id') id: number, @Body() dto: UpdateStatusDto) {
     return this.ordersService.updateStatus(id, dto.status);
   }
+
+  @Patch('admin/orders/:id/manual-status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  async updateManualStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateManualStatusDto,
+  ) {
+    return this.ordersService.updateManualStatus(id, dto);
+  }
+
 }

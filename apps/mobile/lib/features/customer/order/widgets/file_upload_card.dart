@@ -15,6 +15,7 @@ class FileUploadCard extends StatelessWidget {
   const FileUploadCard({
     super.key,
     required this.onTap,
+    this.onPreview,
     this.fileName,
     this.fileSize,
     this.errorText,
@@ -26,6 +27,7 @@ class FileUploadCard extends StatelessWidget {
   });
 
   final VoidCallback onTap;
+  final VoidCallback? onPreview;
   final String? fileName;
   final int? fileSize;
   final String? errorText;
@@ -136,9 +138,10 @@ class FileUploadCard extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         HugeIcon(
-            icon: HugeIcons.strokeRoundedFileUpload,
-            size: 48,
-            color: colors.onSurfaceDim),
+          icon: HugeIcons.strokeRoundedFileUpload,
+          size: 48,
+          color: colors.onSurfaceDim,
+        ),
         const SizedBox(height: AppSpacing.md),
         Text(
           'Tap to select file',
@@ -174,17 +177,44 @@ class FileUploadCard extends StatelessWidget {
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   formatFileSize(fileSize!),
-                  style: AppTypography.caption
-                      .copyWith(color: colors.onSurfaceDim),
+                  style: AppTypography.caption.copyWith(
+                    color: colors.onSurfaceDim,
+                  ),
                 ),
               ],
             ],
           ),
         ),
         const SizedBox(width: AppSpacing.sm),
-        Text(
-          'Change',
-          style: AppTypography.bodyBold.copyWith(color: colors.accent),
+        Wrap(
+          spacing: AppSpacing.xs,
+          children: [
+            if (onPreview != null)
+              TextButton(
+                onPressed: onPreview,
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(0, 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  'Preview',
+                  style: AppTypography.bodyBold.copyWith(color: colors.accent),
+                ),
+              ),
+            TextButton(
+              onPressed: onTap,
+              style: TextButton.styleFrom(
+                minimumSize: const Size(0, 44),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                'Change',
+                style: AppTypography.bodyBold.copyWith(color: colors.accent),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -192,10 +222,7 @@ class FileUploadCard extends StatelessWidget {
 }
 
 class _DashedBorderPainter extends CustomPainter {
-  _DashedBorderPainter({
-    required this.color,
-    required this.borderRadius,
-  });
+  _DashedBorderPainter({required this.color, required this.borderRadius});
 
   final Color color;
   final double borderRadius;

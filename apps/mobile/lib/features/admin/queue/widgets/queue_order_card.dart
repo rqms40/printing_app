@@ -16,11 +16,7 @@ import 'package:printing_app/utils/formatters.dart';
 /// Center: Order ID + customer name, status dot + label + date
 /// Right: price + chevron
 class QueueOrderCard extends StatefulWidget {
-  const QueueOrderCard({
-    super.key,
-    required this.order,
-    this.onTap,
-  });
+  const QueueOrderCard({super.key, required this.order, this.onTap});
 
   final Order order;
   final VoidCallback? onTap;
@@ -106,6 +102,7 @@ class _QueueOrderCardState extends State<QueueOrderCard> {
     final colors = _colors(context);
     final visual = _visual(colors);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final itemSummary = _itemSummary(widget.order);
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -171,6 +168,17 @@ class _QueueOrderCardState extends State<QueueOrderCard> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (itemSummary.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          itemSummary,
+                          style: AppTypography.caption.copyWith(
+                            color: colors.onSurfaceDim,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                       const SizedBox(height: 6),
 
                       // Status dot + label + date
@@ -206,7 +214,9 @@ class _QueueOrderCardState extends State<QueueOrderCard> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      formatCurrency(widget.order.totalPrice),
+                      formatCurrency(
+                        widget.order.totalPrice + widget.order.deliveryFee,
+                      ),
                       style: AppTypography.bodyBold.copyWith(
                         color: colors.onBackground,
                       ),
@@ -226,11 +236,22 @@ class _QueueOrderCardState extends State<QueueOrderCard> {
       ),
     );
   }
+
+  String _itemSummary(Order order) {
+    final items = order.lineItems;
+    final countLabel =
+        '${items.length} ${items.length == 1 ? 'item' : 'items'}';
+    return '${order.orderTypeShortLabel} · $countLabel · ${order.itemSummary}';
+  }
 }
 
 class _QueueVisual {
   const _QueueVisual(
-      this.icon, this.background, this.foreground, this.statusLabel);
+    this.icon,
+    this.background,
+    this.foreground,
+    this.statusLabel,
+  );
 
   final dynamic icon;
   final Color background;

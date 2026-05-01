@@ -12,6 +12,7 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/home/providers/daily_grid_provider.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
 import 'package:printing_app/shared/models/daily_grid_item.dart';
+import 'package:printing_app/shared/services/websocket_service.dart';
 
 // ─── Fallback data (shown on error / while server is unreachable) ─────────────
 
@@ -99,23 +100,37 @@ class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
         );
       }
     });
+    unawaited(WebSocketService.instance.connectDailyGrid(onUpdated: _onDailyGridUpdated));
   }
 
   @override
   void dispose() {
     _autoScrollTimer?.cancel();
     _pageController.dispose();
+    WebSocketService.instance.disconnectDailyGrid();
     super.dispose();
   }
 
-  void _selectCategory(BuildContext context, String category) {
-    ref.read(orderFlowProvider.notifier).setCategory(category);
-    ref.read(orderFlowProvider.notifier).goToStep(1);
+  void _onCardTap(BuildContext context, DailyGridItem card) {
+    final notifier = ref.read(orderFlowProvider.notifier);
+    notifier.reset();
+    // setCategory must come before spec setters — it clears specs internally.
+    notifier.setCategory(card.category);
+    if (card.category == 'paper' && card.paperSpecs != null) {
+      notifier.setPaperSpecsFromMap(card.paperSpecs!);
+    } else if (card.category == '3d' && card.threeDSpecs != null) {
+      notifier.setThreeDSpecsFromMap(card.threeDSpecs!);
+    }
+    notifier.goToStep(1);
     context.push(
-      category == 'paper'
+      card.category == 'paper'
           ? '/customer/order/paper-specs'
           : '/customer/order/3d-specs',
     );
+  }
+
+  void _onDailyGridUpdated() {
+    if (mounted) ref.invalidate(dailyGridProvider);
   }
 
   @override
@@ -195,7 +210,7 @@ class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
                 child: _DailyGridCard(
                   item: item,
                   colors: colors,
-                  onTap: () => _selectCategory(context, item.category),
+                  onTap: () => _onCardTap(context, item),
                 ),
               );
             },

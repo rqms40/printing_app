@@ -24,8 +24,13 @@ class ApiClient {
 
     _dio = Dio(BaseOptions(
       baseUrl: baseUrl ?? _defaultBaseUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
+      // Generous timeouts: 3D model uploads can be 200 MB. The server also
+      // does inline file analysis (3MF → GLB conversion can take a few
+      // seconds for large meshes) before responding, so receiveTimeout
+      // covers both transfer + processing time.
+      connectTimeout: const Duration(seconds: 15),
+      sendTimeout: const Duration(minutes: 5),
+      receiveTimeout: const Duration(minutes: 5),
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',

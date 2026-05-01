@@ -84,7 +84,10 @@ describe("UserShow", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/users/show/7"]}>
+      <MemoryRouter
+        initialEntries={["/users/show/7"]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           <Route path="/users/show/:id" element={<UserShow />} />
         </Routes>
@@ -140,7 +143,10 @@ describe("UserShow", () => {
     const user = userEvent.setup();
 
     render(
-      <MemoryRouter initialEntries={["/users/show/7"]}>
+      <MemoryRouter
+        initialEntries={["/users/show/7"]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           <Route path="/users/show/:id" element={<UserShow />} />
         </Routes>

@@ -1,6 +1,11 @@
 import React, { useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
+const THIRTY_DAY_SALES = Array.from({ length: 30 }, (_, i) => ({
+  name: `Day ${i + 1}`,
+  revenue: 1200 + ((i * 791) % 4600),
+}));
+
 interface SalesChartProps {
   period: '7D' | '30D' | '6M';
 }
@@ -19,11 +24,7 @@ export const SalesChart: React.FC<SalesChartProps> = ({ period }) => {
           { name: 'Sun', revenue: 3490 },
         ];
       case '30D':
-        // Generate 30 data points mock
-        return Array.from({ length: 30 }, (_, i) => ({
-          name: `Day ${i + 1}`,
-          revenue: Math.floor(Math.random() * 5000) + 1000,
-        }));
+        return THIRTY_DAY_SALES;
       case '6M':
         return [
           { name: 'Jan', revenue: 40000 },
@@ -58,7 +59,7 @@ export const SalesChart: React.FC<SalesChartProps> = ({ period }) => {
             <Tooltip 
               contentStyle={{ backgroundColor: 'var(--surface-color)', borderColor: 'var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)' }}
               itemStyle={{ color: 'var(--brand-yellow)' }}
-              formatter={(value: any) => [`₱${value}`, 'Revenue']}
+              formatter={(value: unknown) => [`₱${Number(value)}`, 'Revenue']}
             />
             <Area type="monotone" dataKey="revenue" stroke="var(--brand-yellow)" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" />
           </AreaChart>
