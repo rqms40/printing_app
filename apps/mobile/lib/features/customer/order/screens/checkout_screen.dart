@@ -175,6 +175,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           icon: HugeIcons.strokeRoundedLocation01,
           title: 'Pick a delivery option',
           body: "Choose Delivery, Pickup, or Multi-drop. Tap 'Got it' to continue.",
+          // After ensureVisible scrolls the segmented to the top of the
+          // viewport, the bubble sits cleanly below it.
+          align: ContentAlign.bottom,
           advanceOnSpotlightTap: false,
         ),
       ],
