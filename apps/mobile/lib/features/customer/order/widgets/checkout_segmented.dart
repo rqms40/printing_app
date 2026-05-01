@@ -18,12 +18,65 @@ class CheckoutSegmented<T> extends StatelessWidget {
     required this.selected,
     required this.onChanged,
     this.tutorialKey,
+    this.multiDropTabKey,
+    this.multiDropValue,
   });
 
   final List<SegmentedItem<T>> items;
   final T selected;
   final ValueChanged<T> onChanged;
   final GlobalKey? tutorialKey;
+  /// The key applied to the Multi-drop tab tile specifically (narrower target
+  /// for the checkoutFeatures coach mark).
+  final GlobalKey? multiDropTabKey;
+  /// The value that identifies the Multi-drop item. When [multiDropTabKey] is
+  /// provided, the tile whose [SegmentedItem.value] equals this gets keyed.
+  final T? multiDropValue;
+
+  Widget _maybKeyedTab({
+    required SegmentedItem<T> item,
+    required AppColorSet colors,
+  }) {
+    final tile = AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: item.value == selected ? colors.brand : Colors.transparent,
+        borderRadius: AppRadius.borderMd,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          HugeIcon(
+            icon: item.icon,
+            size: 16,
+            color: item.value == selected
+                ? colors.background
+                : colors.onSurfaceDim,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            item.label,
+            style: AppTypography.caption.copyWith(
+              color: item.value == selected
+                  ? colors.background
+                  : colors.onBackground,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (multiDropTabKey != null &&
+        multiDropValue != null &&
+        item.value == multiDropValue) {
+      return KeyedSubtree(key: multiDropTabKey, child: tile);
+    }
+    return tile;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,37 +100,9 @@ class CheckoutSegmented<T> extends StatelessWidget {
               child: GestureDetector(
                 onTap: () => onChanged(item.value),
                 behavior: HitTestBehavior.opaque,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOut,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(
-                    color: item.value == selected ? colors.brand : Colors.transparent,
-                    borderRadius: AppRadius.borderMd,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      HugeIcon(
-                        icon: item.icon,
-                        size: 16,
-                        color: item.value == selected
-                            ? colors.background
-                            : colors.onSurfaceDim,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        item.label,
-                        style: AppTypography.caption.copyWith(
-                          color: item.value == selected
-                              ? colors.background
-                              : colors.onBackground,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
+                child: _maybKeyedTab(
+                  item: item,
+                  colors: colors,
                 ),
               ),
             ),

@@ -31,6 +31,7 @@ class CheckoutScreen extends ConsumerStatefulWidget {
 
 class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final _multiDropKey = GlobalKey();
+  final _multiDropTabKey = GlobalKey();
   final _paymentMethodKey = GlobalKey();
   final _itemsKey = GlobalKey();
   final _placeOrderKey = GlobalKey();
@@ -99,7 +100,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     if (ref.read(tutorialSeenProvider(TutorialKey.pipeline)) &&
         !ref.read(tutorialSeenProvider(TutorialKey.checkoutFeatures)) &&
         !multidropDone) {
-      _startCheckoutFeaturesCoachMarks();
+      await _startCheckoutFeaturesCoachMarks();
     }
   }
 
@@ -244,15 +245,19 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     );
   }
 
-  void _startCheckoutFeaturesCoachMarks() {
+  Future<void> _startCheckoutFeaturesCoachMarks() async {
+    if (!mounted) return;
+    await _ensureVisible(_multiDropTabKey);
+    if (!mounted) return;
     showCoachMark(
       context,
       [
         TutorialStep(
-          targetKey: _multiDropKey,
+          targetKey: _multiDropTabKey,
           icon: HugeIcons.strokeRoundedRoute01,
           title: 'Multi-drop Delivery',
-          body: 'Send prints to different addresses in one order. One rider, all the stops.',
+          body: 'Tap Multi-drop to send prints to different addresses in one order — one rider handles all the stops.',
+          align: ContentAlign.top,
           advanceOnSpotlightTap: false,
         ),
       ],
@@ -334,7 +339,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 children: [
                   CheckoutItemsCard(tutorialKey: _itemsKey),
                   divider,
-                  CheckoutDeliveryCard(segmentedKey: _multiDropKey),
+                  CheckoutDeliveryCard(segmentedKey: _multiDropKey, multiDropTabKey: _multiDropTabKey),
                   divider,
                   const CheckoutSpeedCard(),
                   divider,
