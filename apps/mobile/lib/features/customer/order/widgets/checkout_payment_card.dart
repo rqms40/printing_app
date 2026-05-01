@@ -25,13 +25,16 @@ String _labelFor(PaymentMethod m) {
 }
 
 class CheckoutPaymentCard extends ConsumerWidget {
-  const CheckoutPaymentCard({super.key, this.tutorialKey, this.sectionKey});
+  const CheckoutPaymentCard({super.key, this.tutorialKey, this.sectionKey, this.methodPickerKey});
 
-  /// Spotlights the whole payment section (pipeline tutorial step 7).
+  /// Spotlights the whole payment section (kept for compatibility, may be unused).
   final GlobalKey? sectionKey;
 
   /// Spotlights just the GRID Credits row (post-pipeline checkoutFeatures tutorial).
   final GlobalKey? tutorialKey;
+
+  /// Spotlights the actual payment-method selector tile (pipeline tutorial step payment).
+  final GlobalKey? methodPickerKey;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -63,7 +66,9 @@ class CheckoutPaymentCard extends ConsumerWidget {
           ),
         ),
       ),
-      child: InkWell(
+      child: KeyedSubtree(
+        key: methodPickerKey,
+        child: InkWell(
         borderRadius: AppRadius.borderLg,
         onTap: () async {
           final result = await PaymentMethodSheet.show(context, current: method);
@@ -151,7 +156,8 @@ class CheckoutPaymentCard extends ConsumerWidget {
                   ],
                 ),
         ),
-      ),
+        ), // InkWell
+      ), // methodPickerKey KeyedSubtree
     ),
     ),
     );

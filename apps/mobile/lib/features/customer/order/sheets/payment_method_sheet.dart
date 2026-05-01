@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/payment_method_glyph.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/services/api_client.dart';
+import 'package:printing_app/utils/formatters.dart';
 
 class PaymentMethodSheet {
   static Future<PaymentMethod?> show(
@@ -54,6 +57,10 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
+
+    final authState = ref.watch(authProvider);
+    final creditsBalance =
+        double.tryParse(authState.user?.credits ?? '0') ?? 0.0;
 
     return SafeArea(
       child: Container(
@@ -105,7 +112,12 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
                 method: PaymentMethod.values[i],
                 selected: _chosen == PaymentMethod.values[i],
                 colors: colors,
-                onTap: () => setState(() => _chosen = PaymentMethod.values[i]),
+                creditsBalance: creditsBalance,
+                onTap: PaymentMethod.values[i] == PaymentMethod.gridCredits &&
+                        creditsBalance == 0
+                    ? null
+                    : () =>
+                        setState(() => _chosen = PaymentMethod.values[i]),
               ),
             ],
             const SizedBox(height: AppSpacing.md),
@@ -180,11 +192,16 @@ class _MethodRow extends StatelessWidget {
     required this.selected,
     required this.colors,
     required this.onTap,
+    this.creditsBalance = 0.0,
   });
   final PaymentMethod method;
   final bool selected;
   final AppColorSet colors;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final double creditsBalance;
+
+  bool get _isCredits => method == PaymentMethod.gridCredits;
+  bool get _disabled => _isCredits && creditsBalance == 0;
 
   String _label(PaymentMethod m) {
     switch (m) {
@@ -200,6 +217,13 @@ class _MethodRow extends StatelessWidget {
   }
 
   String _subtitle(PaymentMethod m) {
+    if (m == PaymentMethod.gridCredits) {
+      if (creditsBalance > 0) {
+        return '${formatCurrency(creditsBalance)} available';
+      } else {
+        return 'No credits — top up to use';
+      }
+    }
     switch (m) {
       case PaymentMethod.gcash:
         return 'e-wallet · instant';
@@ -214,67 +238,95 @@ class _MethodRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: AppRadius.borderLg,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: selected
-              ? colors.brand.withValues(alpha: 0.10)
-              : colors.background,
-          borderRadius: AppRadius.borderLg,
-          border: Border.all(
+    final labelColor =
+        _disabled ? colors.onSurfaceDim : colors.onBackground;
+    final subtitleColor = _disabled
+        ? colors.onSurfaceDim.withValues(alpha: 0.55)
+        : colors.onSurfaceDim;
+
+    return Opacity(
+      opacity: _disabled ? 0.55 : 1.0,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppRadius.borderLg,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
             color: selected
-                ? colors.brand.withValues(alpha: 0.6)
-                : colors.outline.withValues(alpha: 0.35),
-            width: selected ? 1.5 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            PaymentMethodGlyph(method: method, size: 36),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _label(method),
-                    style: AppTypography.bodyBold.copyWith(
-                      color: colors.onBackground,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _subtitle(method),
-                    style: AppTypography.caption.copyWith(
-                      color: colors.onSurfaceDim,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
+                ? colors.brand.withValues(alpha: 0.10)
+                : colors.background,
+            borderRadius: AppRadius.borderLg,
+            border: Border.all(
+              color: selected
+                  ? colors.brand.withValues(alpha: 0.6)
+                  : colors.outline.withValues(alpha: 0.35),
+              width: selected ? 1.5 : 1,
             ),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 140),
-              width: 22,
-              height: 22,
-              decoration: BoxDecoration(
-                color: selected ? colors.brand : Colors.transparent,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: selected ? colors.brand : colors.outline,
-                  width: 1.5,
+          ),
+          child: Row(
+            children: [
+              PaymentMethodGlyph(method: method, size: 36),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _label(method),
+                      style: AppTypography.bodyBold.copyWith(
+                        color: labelColor,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _subtitle(method),
+                      style: AppTypography.caption.copyWith(
+                        color: subtitleColor,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              child: selected
-                  ? Icon(Icons.check, size: 14, color: colors.background)
-                  : null,
-            ),
-          ],
+              if (_disabled) ...[
+                GestureDetector(
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    context.push('/customer/profile/top-up');
+                  },
+                  child: Text(
+                    'Top up',
+                    style: AppTypography.caption.copyWith(
+                      color: colors.brand,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      decoration: TextDecoration.underline,
+                      decorationColor: colors.brand,
+                    ),
+                  ),
+                ),
+              ] else ...[
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 140),
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: selected ? colors.brand : Colors.transparent,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: selected ? colors.brand : colors.outline,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: selected
+                      ? Icon(Icons.check, size: 14, color: colors.background)
+                      : null,
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

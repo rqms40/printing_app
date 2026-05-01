@@ -31,7 +31,7 @@ class CheckoutScreen extends ConsumerStatefulWidget {
 class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final _multiDropKey = GlobalKey();
   final _paymentKey = GlobalKey();
-  final _paymentSectionKey = GlobalKey();
+  final _paymentMethodKey = GlobalKey();
   final _itemsKey = GlobalKey();
   final _placeOrderKey = GlobalKey();
   bool _advancedThisFrame = false;
@@ -193,17 +193,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   Future<void> _firePipelinePayment() async {
     if (!mounted) return;
-    await _ensureVisible(_paymentSectionKey);
+    await _ensureVisible(_paymentMethodKey);
     if (!mounted) return;
     showCoachMark(
       context,
       [
         TutorialStep(
-          targetKey: _paymentSectionKey,
+          targetKey: _paymentMethodKey,
           icon: HugeIcons.strokeRoundedWallet01,
           title: 'Payment method',
-          body: 'Choose how you want to pay — GRID Credits or GCash. Tap "Got it" when you\'ve picked one.',
-          align: ContentAlign.top,
+          body: 'Choose how you want to pay — tap here to switch between GRID Credits and GCash.',
+          align: ContentAlign.bottom,
           advanceOnSpotlightTap: false,
         ),
       ],
@@ -228,17 +228,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           targetKey: _placeOrderKey,
           icon: HugeIcons.strokeRoundedCheckmarkCircle02,
           title: 'Place Order',
-          body: 'All set — tap Place Order to send it.',
+          body: "That's the Place Order button — tap it whenever you're ready to send your order.",
           align: ContentAlign.top,
-          advanceOnSpotlightTap: true,
-          onSpotlightTap: () {
-            _advancedThisFrame = true;
-            ref.read(pipelineTutorialProvider.notifier).advance();
-            _placeOrder(context);
-          },
+          advanceOnSpotlightTap: false,
         ),
       ],
-      () {},
+      () {
+        ref.read(pipelineTutorialProvider.notifier).advance();
+      },
       onSkip: () => ref.read(pipelineTutorialProvider.notifier).abandon(),
     );
   }
@@ -331,7 +328,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   divider,
                   const CheckoutSpeedCard(),
                   divider,
-                  CheckoutPaymentCard(tutorialKey: _paymentKey, sectionKey: _paymentSectionKey),
+                  CheckoutPaymentCard(tutorialKey: _paymentKey, methodPickerKey: _paymentMethodKey),
                   divider,
                   const CheckoutSummaryCard(),
                   const SizedBox(height: 8),
