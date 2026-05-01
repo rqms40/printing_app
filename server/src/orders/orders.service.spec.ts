@@ -1324,6 +1324,105 @@ describe('createBatch with slot + destinations', () => {
     expect(capturedBatch.priorityFee).toBe(0);
     expect(capturedBatch.speedTier).toBe(DeliverySpeedTier.STANDARD);
   });
+
+  describe('Standard same-day bookable check (no slotTemplateId)', () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('accepts a future-today slot at 10:39 AM PH (UTC 02:39) — only seeded slots are 09:30, 14:00, 21:00 PH', async () => {
+      // Reproduces bug: customer placing Standard delivery at PH morning,
+      // server is in UTC, slot times are stored as PH wall-clock. The previous
+      // "live RIGHT NOW" check rejected all today's slots because at 02:39 UTC
+      // every slot's start (in server-local UTC) was still in the future.
+      jest.useFakeTimers().setSystemTime(new Date('2026-05-01T02:39:33Z'));
+
+      addressRepo.findOne.mockImplementation(async ({ where }: any) => {
+        if (where.id === 1) return { id: 1, userId: 1 } as unknown as Address;
+        return makeAddress(where.id, 7.07, 125.61);
+      });
+      settingsService.isInsideServiceArea.mockResolvedValue(true);
+      // Seeded slots (PH wall-clock): 09:30-11:30, 14:00-16:00, 21:00-23:00
+      slotsService.getAvailability!.mockResolvedValue([
+        { templateId: 1, startTime: '09:30:00', endTime: '11:30:00', capacity: 10, bookedCount: 0, isFull: false },
+        { templateId: 2, startTime: '14:00:00', endTime: '16:00:00', capacity: 10, bookedCount: 0, isFull: false },
+        { templateId: 3, startTime: '21:00:00', endTime: '23:00:00', capacity: 10, bookedCount: 0, isFull: false },
+      ]);
+
+      const dto = {
+        paymentMethod: 'gcash',
+        deliveryOption: 'delivery',
+        deliveryAddressId: 1,
+        deliveryFee: 0,
+        speedTier: DeliverySpeedTier.STANDARD,
+        items: [
+          makeItem({ category: 'paper', quantity: 1, totalPrice: 2, fileName: 'TalaSora.png' }),
+        ],
+      };
+
+      // Expect the order to be accepted (capturedBatch populated, no throw).
+      await expect((service as any).createBatch(1, dto)).resolves.toBeDefined();
+      expect(capturedBatch).not.toBeNull();
+      expect(capturedBatch.speedTier).toBe(DeliverySpeedTier.STANDARD);
+    });
+
+    it('rejects with no_slot_available_today when every slot today is full', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-05-01T02:39:33Z'));
+
+      addressRepo.findOne.mockImplementation(async ({ where }: any) => {
+        if (where.id === 1) return { id: 1, userId: 1 } as unknown as Address;
+        return makeAddress(where.id, 7.07, 125.61);
+      });
+      settingsService.isInsideServiceArea.mockResolvedValue(true);
+      slotsService.getAvailability!.mockResolvedValue([
+        { templateId: 1, startTime: '09:30:00', endTime: '11:30:00', capacity: 10, bookedCount: 10, isFull: true },
+        { templateId: 2, startTime: '14:00:00', endTime: '16:00:00', capacity: 10, bookedCount: 10, isFull: true },
+        { templateId: 3, startTime: '21:00:00', endTime: '23:00:00', capacity: 10, bookedCount: 10, isFull: true },
+      ]);
+
+      const dto = {
+        paymentMethod: 'gcash',
+        deliveryOption: 'delivery',
+        deliveryAddressId: 1,
+        deliveryFee: 0,
+        speedTier: DeliverySpeedTier.STANDARD,
+        items: [makeItem({ category: 'paper', quantity: 1, totalPrice: 2, fileName: 'a.pdf' })],
+      };
+
+      await expect((service as any).createBatch(1, dto)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'no_slot_available_today' }),
+      });
+    });
+
+    it('rejects with no_slot_available_today when every slot today has already ended (PH late evening)', async () => {
+      // PH 23:30 = UTC 15:30. All seeded slots (latest ends 23:00 PH) are past.
+      jest.useFakeTimers().setSystemTime(new Date('2026-05-01T15:30:00Z'));
+
+      addressRepo.findOne.mockImplementation(async ({ where }: any) => {
+        if (where.id === 1) return { id: 1, userId: 1 } as unknown as Address;
+        return makeAddress(where.id, 7.07, 125.61);
+      });
+      settingsService.isInsideServiceArea.mockResolvedValue(true);
+      slotsService.getAvailability!.mockResolvedValue([
+        { templateId: 1, startTime: '09:30:00', endTime: '11:30:00', capacity: 10, bookedCount: 0, isFull: false },
+        { templateId: 2, startTime: '14:00:00', endTime: '16:00:00', capacity: 10, bookedCount: 0, isFull: false },
+        { templateId: 3, startTime: '21:00:00', endTime: '23:00:00', capacity: 10, bookedCount: 0, isFull: false },
+      ]);
+
+      const dto = {
+        paymentMethod: 'gcash',
+        deliveryOption: 'delivery',
+        deliveryAddressId: 1,
+        deliveryFee: 0,
+        speedTier: DeliverySpeedTier.STANDARD,
+        items: [makeItem({ category: 'paper', quantity: 1, totalPrice: 2, fileName: 'a.pdf' })],
+      };
+
+      await expect((service as any).createBatch(1, dto)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'no_slot_available_today' }),
+      });
+    });
+  });
 });
 
 describe('cancelBatch', () => {

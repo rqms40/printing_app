@@ -38,6 +38,23 @@ import { DeliverySlotBooking } from '../delivery-slots/entities/delivery-slot-bo
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
 import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 
+// Slot definitions live in operator-local time (Asia/Manila, UTC+8). The API
+// server may run in UTC, so we never use server-local Date#getHours/setHours
+// for slot math — we compute against PH wall-clock directly from the UTC clock.
+const PH_OFFSET_MINUTES = 8 * 60;
+
+function phMinutesSinceMidnight(date: Date): number {
+  const utcMin = date.getUTCHours() * 60 + date.getUTCMinutes();
+  return (utcMin + PH_OFFSET_MINUTES) % (24 * 60);
+}
+
+function phTodayDateString(now: Date = new Date()): string {
+  // Shift to PH then take YYYY-MM-DD. Avoids returning yesterday's UTC date
+  // when an order is placed late at night PH (which is "tomorrow" UTC).
+  const phMs = now.getTime() + PH_OFFSET_MINUTES * 60_000;
+  return new Date(phMs).toISOString().slice(0, 10);
+}
+
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
@@ -302,9 +319,14 @@ export class OrdersService {
     }
 
     // --- Standard/Express delivery requires a bookable slot today ---
-    // Both implicitly happen "today". If today has no slot still open
-    // for booking (all full or all already ended), reject with a clear
-    // code so the client can prompt the user to pick Pickup or Schedule.
+    // Slot HH:MM in DB is stored as Asia/Manila wall-clock (the operator's
+    // local time). The server may run in UTC, so we compare against the
+    // current minute-of-day in PH (UTC+8), not server-local. A slot is
+    // bookable today iff it has remaining capacity AND its end-time has
+    // not yet passed in PH local time. Future-today slots (e.g. a 14:00
+    // slot at 10:39 AM) ARE valid — the customer accepts whatever today
+    // window the slot picker shows; we don't require the slot to be live
+    // right now.
     const isImmediateTier =
       speedTier === DeliverySpeedTier.STANDARD ||
       speedTier === DeliverySpeedTier.PRIORITY;
@@ -314,21 +336,14 @@ export class OrdersService {
       isImmediateTier &&
       dto.slotTemplateId == null
     ) {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = phTodayDateString();
       const todaySlots = await this.slotsService.getAvailability(today);
-      const now = new Date();
-      // A slot is usable for an immediate (Standard/Express) drop only if it
-      // is live RIGHT NOW: start ≤ now < end, AND not full. A slot starting
-      // hours from now (e.g. 9:30 AM seen at 1 AM) doesn't count.
+      const phNowMinutes = phMinutesSinceMidnight(new Date());
       const hasBookable = todaySlots.some((s) => {
         if (s.isFull) return false;
         const [eh, em] = s.endTime.split(':').map(Number);
-        const [sh, sm] = s.startTime.split(':').map(Number);
-        const end = new Date(now);
-        end.setHours(eh, em, 0, 0);
-        const start = new Date(now);
-        start.setHours(sh, sm, 0, 0);
-        return start.getTime() <= now.getTime() && end.getTime() > now.getTime();
+        const slotEndMin = eh * 60 + em;
+        return slotEndMin > phNowMinutes;
       });
       if (!hasBookable) {
         throw new BadRequestException({
