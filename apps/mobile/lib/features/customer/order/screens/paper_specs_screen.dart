@@ -61,7 +61,7 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
     // Delay long enough for the entry animations (400ms + 60ms delay) to
     // settle so the coach-mark spotlight captures the final widget positions.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(const Duration(milliseconds: 500), _maybePipelineCoachMark);
+      Future.delayed(const Duration(milliseconds: 500), () => _maybePipelineCoachMark());
     });
   }
 
@@ -78,12 +78,26 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
     super.dispose();
   }
 
-  void _maybePipelineCoachMark() {
+  Future<void> _ensureVisible(GlobalKey key) async {
+    final ctx = key.currentContext;
+    if (ctx == null) return;
+    await Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 250),
+      alignment: 0.0, // align to top of viewport
+    );
+    // Let the scroll settle one more frame before measuring renderbox.
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+  }
+
+  Future<void> _maybePipelineCoachMark() async {
     if (!mounted) return;
     final state = ref.read(pipelineTutorialProvider);
     if (!state.active) return;
 
     if (state.step == PipelineStep.paperSpecsForm) {
+      await _ensureVisible(_specsFormKey);
+      if (!mounted) return;
       showCoachMark(
         context,
         [
@@ -93,6 +107,7 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
             title: 'Set your specs',
             body: 'Set your paper size, color mode, and copies. Defaults work for most prints.',
             shape: ShapeLightFocus.RRect,
+            align: ContentAlign.bottom,
             advanceOnSpotlightTap: false,
           ),
         ],
@@ -106,6 +121,8 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
         onSkip: () => ref.read(pipelineTutorialProvider.notifier).abandon(),
       );
     } else if (state.step == PipelineStep.paperSpecsContinue) {
+      await _ensureVisible(_specsContinueKey);
+      if (!mounted) return;
       showCoachMark(
         context,
         [
@@ -114,6 +131,7 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
             icon: HugeIcons.strokeRoundedArrowRight01,
             title: 'Continue',
             body: 'Tap Continue when your specs look right.',
+            align: ContentAlign.top,
             advanceOnSpotlightTap: true,
             onSpotlightTap: () {
               _advancedThisFrame = true;

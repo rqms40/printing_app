@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/customer/address/providers/address_provider.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_delivery_card.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_footer.dart';
@@ -17,6 +18,8 @@ import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
 import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
 import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
 import 'package:printing_app/features/tutorial/widgets/coach_mark_sequence.dart';
+import 'package:printing_app/features/tutorial/widgets/feature_overlay_card.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 
 class CheckoutScreen extends ConsumerStatefulWidget {
   const CheckoutScreen({super.key});
@@ -63,12 +66,29 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     super.dispose();
   }
 
-  void _maybeShowCheckoutTutorial() {
+  Future<void> _ensureVisible(GlobalKey key) async {
+    final ctx = key.currentContext;
+    if (ctx == null) return;
+    await Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 250),
+      alignment: 0.0, // align to top of viewport
+    );
+    // Let the scroll settle one more frame before measuring renderbox.
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+  }
+
+  void _maybeShowCheckoutTutorial() async {
     if (!mounted) return;
 
     final pipeline = ref.read(pipelineTutorialProvider);
     if (pipeline.active && pipeline.step == PipelineStep.checkoutItems) {
-      _firePipelineItems();
+      final addresses = ref.read(addressProvider);
+      if (addresses.isEmpty) {
+        _showAddAddressPrompt();
+        return;
+      }
+      await _firePipelineItems();
       return;
     }
 
@@ -79,7 +99,48 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     }
   }
 
-  void _firePipelineItems() {
+  void _showAddAddressPrompt() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        final media = MediaQuery.of(sheetCtx);
+        final extraBottom = media.viewInsets.bottom > 0
+            ? media.viewInsets.bottom
+            : media.viewPadding.bottom;
+        return Padding(
+          padding: EdgeInsets.only(bottom: extraBottom),
+          child: FeatureOverlayCard(
+            heroIcon: HugeIcons.strokeRoundedLocation01,
+            title: 'Add a delivery address',
+            body: "Save your address once and you'll never have to type it again — let's add your first one before we continue.",
+            iconTiles: const [],
+            ctaLabel: 'Add address →',
+            showSkip: true,
+            onCta: () async {
+              Navigator.of(sheetCtx).pop();
+              await context.push('/customer/addresses/new');
+              // After they return, retry the entry. Pipeline state still in
+              // checkoutItems, so this re-enters the address-check; if they
+              // added one, it'll fall through to _firePipelineItems.
+              if (mounted) _maybeShowCheckoutTutorial();
+            },
+            onSkip: () {
+              Navigator.of(sheetCtx).pop();
+              ref.read(pipelineTutorialProvider.notifier).abandon();
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _firePipelineItems() async {
+    if (!mounted) return;
+    await _ensureVisible(_itemsKey);
+    if (!mounted) return;
     showCoachMark(
       context,
       [
@@ -88,6 +149,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           icon: HugeIcons.strokeRoundedFile02,
           title: 'Items',
           body: "Quick review of what you're printing.",
+          align: ContentAlign.bottom,
           advanceOnSpotlightTap: false,
         ),
       ],
@@ -101,7 +163,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     );
   }
 
-  void _firePipelineDelivery() {
+  Future<void> _firePipelineDelivery() async {
+    if (!mounted) return;
+    await _ensureVisible(_multiDropKey);
     if (!mounted) return;
     showCoachMark(
       context,
@@ -124,7 +188,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     );
   }
 
-  void _firePipelinePayment() {
+  Future<void> _firePipelinePayment() async {
+    if (!mounted) return;
+    await _ensureVisible(_paymentSectionKey);
     if (!mounted) return;
     showCoachMark(
       context,
@@ -134,6 +200,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           icon: HugeIcons.strokeRoundedWallet01,
           title: 'Payment method',
           body: 'Choose how you want to pay — GRID Credits or GCash. Tap "Got it" when you\'ve picked one.',
+          align: ContentAlign.top,
           advanceOnSpotlightTap: false,
         ),
       ],
@@ -147,7 +214,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     );
   }
 
-  void _firePipelinePlaceOrder() {
+  Future<void> _firePipelinePlaceOrder() async {
+    if (!mounted) return;
+    await _ensureVisible(_placeOrderKey);
     if (!mounted) return;
     showCoachMark(
       context,
@@ -157,6 +226,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           icon: HugeIcons.strokeRoundedCheckmarkCircle02,
           title: 'Place Order',
           body: 'All set — tap Place Order to send it.',
+          align: ContentAlign.top,
           advanceOnSpotlightTap: true,
           onSpotlightTap: () {
             _advancedThisFrame = true;
