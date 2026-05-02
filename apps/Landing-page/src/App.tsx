@@ -439,7 +439,7 @@ function TeamMember({ image, role, name, quote, delay = 0, reverse = false }: an
       className={`flex flex-col ${reverse ? 'md:flex-row-reverse' : 'md:flex-row'} items-center gap-12 max-w-5xl mx-auto mb-32`}
     >
       <div className="w-full md:w-1/2 flex justify-center">
-        <img src={image} alt={name} className="w-64 h-64 object-cover rounded-full grayscale hover:grayscale-0 transition-all duration-500" />
+        <img src={image} alt={name} className="w-64 h-64 object-cover rounded-full grayscale" />
       </div>
       <div className={`w-full md:w-1/2 ${reverse ? 'text-right' : 'text-left'}`}>
         <p className="text-[var(--color-primary)] font-semibold mb-1">Meet the {role}</p>
