@@ -179,7 +179,7 @@ function FeaturesSection() {
           <FeatureCard
             icon={Headphones}
             title="Live Support & Tracking"
-            desc="From the moment you upload to the second it hits your doorstep, help is just a tap away. Chat live with your delivery rider for drop-off updates or message our support team anytime for any questions. We bridge the gap between you and your print."
+            desc="From upload to doorstep, help is just a tap away. Chat live with your delivery rider for drop-off updates, or message our support team anytime. We bridge the gap to your print."
           />
         </div>
       </div>
