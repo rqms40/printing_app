@@ -15,7 +15,7 @@ function GridTextLayer({ index }: { index: number }) {
   const baseZ = -(index * 0.18)
   // Staggered opacity — front layer is brightest
   const baseAlpha = 1.0 - index * 0.18
-  // fontSize stays fixed at 4.5 (desktop native); per-frame scale handles responsiveness
+  // Keep the mesh itself moderately sized; per-frame scale handles viewport fit.
 
   useFrame(() => {
     if (!mesh.current) return
@@ -33,10 +33,11 @@ function GridTextLayer({ index }: { index: number }) {
     // ── Viewport-responsive scale ─────────────────────────────────────────
     // Camera z=8, vertical fov=45° → visible height = 6.63 units.
     // Visible WIDTH = 6.63 × aspect, which shrinks dramatically on portrait mobile.
-    // Scale the text down so "GRID" always fills ~40% of the visible width.
+    // Keep GRID as an oversized backdrop while preserving side breathing room.
     const aspect = window.innerWidth / window.innerHeight
     const visibleWidth = 2 * Math.tan(Math.PI / 8) * 8 * aspect
-    const responsiveScale = Math.min(1.0, visibleWidth / 11.8) // 11.8 = desktop ref width
+    const targetFill = aspect < 0.75 ? 0.9 : 0.86
+    const responsiveScale = Math.min(1.0, (visibleWidth * targetFill) / 11.8)
 
     const fadeScale = THREE.MathUtils.lerp(1, 0.85, ease)
     mesh.current.scale.setScalar(fadeScale * responsiveScale)
@@ -53,9 +54,9 @@ function GridTextLayer({ index }: { index: number }) {
   return (
     <Text
       ref={mesh}
-      fontSize={4.5}
+      fontSize={4.15}
       fontWeight={900}
-      letterSpacing={0.37}
+      letterSpacing={0.28}
       color="white"
       outlineWidth={index === 0 ? 0 : 0.025}
       outlineColor="rgba(255,255,255,0.85)"
@@ -95,9 +96,9 @@ function getPhoneState(vh: number, fromBottomVh: number) {
   // ║           YOUR TWEAK VALUES HERE             ║
   // ╠══════════════════════════════════════════════╣
   // ║  HERO section (first screen)                 ║
-  const HERO_ROT_X = -1.5  // + = top toward you,  - = top away
-  const HERO_ROT_Y = -0.02    // + = shows left side, - = shows right side
-  const HERO_ROT_Z = 0.4 // + = leans left,      - = leans right
+  const HERO_ROT_X = -1.42  // + = top toward you,  - = top away
+  const HERO_ROT_Y = 0.08    // + = shows left side, - = shows right side
+  const HERO_ROT_Z = 0.28 // + = leans left,      - = leans right
 
   // ║  BETA section (last screen)                  ║
   const BETA_ROT_X = -1.5      // + = top toward you,  - = top away
@@ -107,13 +108,13 @@ function getPhoneState(vh: number, fromBottomVh: number) {
 
   if (vh <= 1.0) {
     const t = THREE.MathUtils.clamp(vh, 0, 1)
-    const x = mobile ? THREE.MathUtils.lerp(-0.2, 0.1, t) : 0.1
+    const x = mobile ? THREE.MathUtils.lerp(-0.08, 0.04, t) : 0.02
     const y = mobile
       ? THREE.MathUtils.lerp(0, 1.5, t)
       : THREE.MathUtils.lerp(0, 1.2, t)
     const scale = mobile
-      ? THREE.MathUtils.lerp(1.0, 1.0, t)
-      : THREE.MathUtils.lerp(1.3, 1.3, t)
+      ? THREE.MathUtils.lerp(0.92, 0.96, t)
+      : THREE.MathUtils.lerp(1.16, 1.16, t)
 
     return {
       pos: [x, y, 0] as [number, number, number],
@@ -213,7 +214,7 @@ export function PhoneScene() {
   return (
     <div className="fixed inset-0 pointer-events-none z-30">
       <ErrorBoundary>
-        <Canvas camera={{ position: [0, 0, 8.0], fov: 45 }} gl={{ antialias: true, alpha: true }}>
+        <Canvas style={{ pointerEvents: 'none' }} camera={{ position: [0, 0, 8.0], fov: 45 }} gl={{ antialias: true, alpha: true }}>
           <ambientLight intensity={0.3} color="#ffffff" />
           <spotLight
             position={[5, 8, 5]}

@@ -1,7 +1,7 @@
-import React from 'react'
 import { useGLTF, Center } from '@react-three/drei'
+import type { ThreeElements } from '@react-three/fiber'
 
-export function Model(props: JSX.IntrinsicElements['group']) {
+export function Model(props: ThreeElements['group']) {
   const { scene } = useGLTF('/smartphone.glb')
 
   return (

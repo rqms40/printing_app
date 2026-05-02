@@ -1,10 +1,27 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion';
+import { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { PhoneScene } from './components/PhoneScene';
-import { UploadCloud, Truck, ListOrdered, Clock, Headphones, Menu, X, Phone, MessageCircle, Zap, ShieldCheck } from 'lucide-react';
+import { UploadCloud, Truck, ListOrdered, Clock, Headphones, Menu, X, Phone, MessageCircle, Zap, ShieldCheck, ChevronUp } from 'lucide-react';
 
 function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [isLogoGlassy, setIsLogoGlassy] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20);
+
+      const featuresEl = document.getElementById('features');
+      if (featuresEl) {
+        const rect = featuresEl.getBoundingClientRect();
+        setIsLogoGlassy(rect.top <= 80 && rect.bottom >= 20);
+      }
+    };
+    window.addEventListener('scroll', handleScroll);
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   return (
     <>
@@ -15,7 +32,7 @@ function Navbar() {
         className="fixed top-0 left-0 right-0 z-[60] px-8 py-4 flex items-center justify-between"
       >
         {/* Logo */}
-        <div className="flex items-center gap-2">
+        <a href="#hero" className={`flex items-center gap-3 cursor-pointer px-5 py-2.5 rounded-full border transition-all duration-500 ${isLogoGlassy ? 'bg-black/60 backdrop-blur-md border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}>
           <div className="grid grid-cols-3 gap-1">
             <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
             <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
@@ -28,10 +45,10 @@ function Navbar() {
             <div className="w-1.5 h-1.5 bg-gray-500 rounded-full"></div>
           </div>
           <span className="text-xl font-bold tracking-widest uppercase">GRID</span>
-        </div>
+        </a>
 
         {/* Center Nav */}
-        <div className="hidden md:flex glass-nav rounded-full px-6 py-2 items-center gap-8 text-sm font-medium">
+        <div className={`hidden md:flex rounded-full px-6 py-2.5 items-center gap-8 text-sm font-medium absolute left-1/2 -translate-x-1/2 border transition-all duration-500 ${isScrolled ? 'bg-black/60 backdrop-blur-md border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}>
           <a href="#features" className="hover:text-[var(--color-primary)] transition-colors">Features</a>
           <a href="#process" className="hover:text-[var(--color-primary)] transition-colors">How it Works</a>
           <a href="#support" className="hover:text-[var(--color-primary)] transition-colors">Support</a>
@@ -40,14 +57,14 @@ function Navbar() {
         </div>
 
         {/* Right Nav */}
-        <div className="hidden md:flex glass-nav rounded-full items-center text-sm font-medium overflow-hidden p-1">
+        <div className={`hidden md:flex rounded-full items-center text-sm font-medium overflow-hidden p-1 border transition-all duration-500 ${isScrolled ? 'bg-black/60 backdrop-blur-md border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}>
           <button className="px-6 py-2 hover:bg-white/10 rounded-full transition-colors">Log In</button>
           <button className="px-6 py-2 bg-white text-black rounded-full hover:bg-gray-200 transition-colors">Sign Up</button>
         </div>
 
         {/* Mobile Hamburger Button */}
         <button 
-          className="md:hidden glass-nav p-2 rounded-full z-50 relative"
+          className={`md:hidden p-2 rounded-full z-50 relative border transition-all duration-500 ${isScrolled ? 'bg-black/60 backdrop-blur-md border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}
           onClick={() => setIsOpen(!isOpen)}
         >
           {isOpen ? <X size={24} /> : <Menu size={24} />}
@@ -69,7 +86,7 @@ function Navbar() {
             <a href="#about" onClick={() => setIsOpen(false)} className="text-2xl font-bold hover:text-[var(--color-primary)] transition-colors">About Us</a>
             <a href="#download" onClick={() => setIsOpen(false)} className="text-2xl font-bold hover:text-[var(--color-primary)] transition-colors">Download</a>
             <div className="flex gap-4 mt-8">
-              <button className="px-8 py-3 glass-nav rounded-full transition-colors font-bold" onClick={() => setIsOpen(false)}>Log In</button>
+              <button className="px-8 py-3 bg-black/60 backdrop-blur-md border border-white/10 rounded-full transition-colors font-bold" onClick={() => setIsOpen(false)}>Log In</button>
               <button className="px-8 py-3 bg-[var(--color-primary)] text-black rounded-full hover:bg-yellow-400 transition-colors font-bold" onClick={() => setIsOpen(false)}>Sign Up</button>
             </div>
           </motion.div>
@@ -81,7 +98,7 @@ function Navbar() {
 
 function HeroSection() {
   return (
-    <section className="h-[100vh] flex flex-col items-center justify-center relative z-10 pointer-events-none">
+    <section id="hero" className="h-[100vh] flex flex-col items-center justify-center relative z-10 pointer-events-none">
       {/* The Hero text is now fully rendered in 3D within PhoneScene.tsx */}
     </section>
   );
@@ -89,7 +106,7 @@ function HeroSection() {
 
 function ProcessSection() {
   return (
-    <section id="process" className="h-[100vh] flex flex-col items-center justify-end pb-32 relative z-10 bg-map">
+    <section className="h-[100vh] flex flex-col items-center justify-end pb-32 relative z-10 bg-map">
       <motion.div
         initial={{ opacity: 0, y: 50, filter: 'blur(20px)' }}
         whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
@@ -118,25 +135,24 @@ function FeatureCard({ icon: Icon, title, desc }: { icon: any, title: string, de
       whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
       transition={{ duration: 0.8, ease: 'easeOut' }}
       viewport={{ once: true, margin: '-50px' }}
-      whileHover={{ y: -10 }}
-      className="flex flex-col items-center text-center p-6 text-black"
+      className="flex flex-col items-center text-center px-4 py-2 text-black"
     >
-      <div className="w-16 h-16 mb-4 relative flex items-center justify-center">
-        <Icon size={48} strokeWidth={1.5} />
+      <div className="w-20 h-20 mb-3 relative flex items-center justify-center text-black">
+        <Icon size={56} strokeWidth={1.5} />
       </div>
-      <h3 className="text-xl font-bold mb-3">{title}</h3>
-      <p className="text-sm opacity-80 leading-relaxed">{desc}</p>
+      <h3 className="font-heading text-[20px] font-bold mb-2 tracking-tight">{title}</h3>
+      <p className="text-[13px] md:text-[14px] leading-relaxed max-w-[350px] font-medium text-black/90">{desc}</p>
     </motion.div>
   );
 }
 
 function FeaturesSection() {
   return (
-    <section id="features" className="min-h-screen bg-[var(--color-primary)] text-black py-24 relative z-10">
-      <div className="max-w-7xl mx-auto px-4">
-        <h2 className="text-4xl font-bold text-center mb-20">Features</h2>
+    <section id="features" className="min-h-screen bg-[var(--color-primary)] text-black py-20 relative z-10 flex flex-col justify-center">
+      <div className="max-w-6xl mx-auto px-4 w-full">
+        <h2 className="font-heading text-[36px] md:text-[42px] tracking-tight font-bold text-center mb-16">Features</h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-4 mb-10">
           <FeatureCard
             icon={UploadCloud}
             title="One-Tap Upload"
@@ -154,7 +170,7 @@ function FeaturesSection() {
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 max-w-4xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 max-w-4xl mx-auto">
           <FeatureCard
             icon={Clock}
             title="24/7 App Operations"
@@ -165,6 +181,61 @@ function FeaturesSection() {
             title="Live Support & Tracking"
             desc="From the moment you upload to the second it hits your doorstep, help is just a tap away. Chat live with your delivery rider for drop-off updates or message our support team anytime for any questions. We bridge the gap between you and your print."
           />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function HowItWorksSection() {
+  return (
+    <section id="process" className="min-h-screen bg-black py-32 relative z-10 text-white flex flex-col justify-center">
+      <div className="max-w-6xl mx-auto px-6 w-full">
+        <h2 className="text-4xl md:text-5xl font-bold text-center mb-24">How it Works</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-16 text-center">
+          
+          <motion.div
+            initial={{ opacity: 0, y: 30, filter: 'blur(15px)' }}
+            whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.8, ease: 'easeOut' }}
+            viewport={{ once: true, margin: '-50px' }}
+            className="flex flex-col items-center"
+          >
+            <div className="text-7xl md:text-8xl font-bold text-gray-500 mb-6 tracking-tighter">01</div>
+            <h3 className="text-2xl font-bold mb-4">Upload</h3>
+            <p className="text-sm text-gray-300 leading-relaxed max-w-sm mx-auto">
+              No more carrying USB sticks or emailing files to yourself. Directly upload your documents or 3D designs from your phone or cloud storage in seconds.
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 30, filter: 'blur(15px)' }}
+            whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.8, delay: 0.2, ease: 'easeOut' }}
+            viewport={{ once: true, margin: '-50px' }}
+            className="flex flex-col items-center"
+          >
+            <div className="text-7xl md:text-8xl font-bold text-gray-500 mb-6 tracking-tighter">02</div>
+            <h3 className="text-2xl font-bold mb-4">Print</h3>
+            <p className="text-sm text-gray-300 leading-relaxed max-w-sm mx-auto">
+              Select your printing preferences, paper types, or 3D materials. Our system instantly routes your files directly to our high-quality printing hubs.
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 30, filter: 'blur(15px)' }}
+            whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.8, delay: 0.4, ease: 'easeOut' }}
+            viewport={{ once: true, margin: '-50px' }}
+            className="flex flex-col items-center"
+          >
+            <div className="text-7xl md:text-8xl font-bold text-gray-500 mb-6 tracking-tighter">03</div>
+            <h3 className="text-2xl font-bold mb-4">Receive</h3>
+            <p className="text-sm text-gray-300 leading-relaxed max-w-sm mx-auto">
+              Watch your project move from the printer to the delivery rider in real-time. You'll know exactly when your package is arriving at your door.
+            </p>
+          </motion.div>
+
         </div>
       </div>
     </section>
@@ -312,34 +383,44 @@ function SupportSection() {
 
 function AboutSection() {
   return (
-    <section id="about" className="min-h-screen bg-map py-32 relative z-10">
-      <div className="max-w-6xl mx-auto px-8">
-        <h2 className="text-4xl font-bold text-center mb-20">About Us</h2>
+    <section id="about" className="min-h-screen bg-map py-32 relative z-10 flex flex-col justify-center">
+      <div className="max-w-[1100px] mx-auto px-8 w-full">
+        <h2 className="font-heading text-4xl md:text-[42px] font-bold text-center mb-24 tracking-tight">About Us</h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-16 items-center">
+        <div className="grid grid-cols-1 md:grid-cols-[4.5fr_7.5fr] gap-10 md:gap-16 items-stretch">
           <motion.div
             initial={{ opacity: 0, x: -50, filter: 'blur(20px)' }}
             whileInView={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
             transition={{ duration: 1, ease: 'easeOut' }}
             viewport={{ once: true, margin: '-100px' }}
+            className="w-full flex justify-center h-full"
           >
-            <img src="/office.png" alt="GRID Office" className="w-full rounded-2xl grayscale" />
+            <img src="/office.png" alt="GRID Office" className="w-full h-full object-cover grayscale aspect-[4/5]" />
           </motion.div>
 
-          <div className="flex flex-col gap-8">
+          <div className="flex flex-col justify-between h-full py-1">
             <motion.div initial={{ opacity: 0, y: 20, filter: 'blur(10px)' }} whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }} viewport={{ once: true, margin: '-50px' }} transition={{ duration: 0.8, ease: 'easeOut' }}>
-              <h3 className="text-2xl font-bold mb-2">the <br />vision.</h3>
-              <p className="text-gray-300">"To be the essential <span className="text-[var(--color-primary)] font-bold">digital printing partner in the global market</span>, making the transition from digital design to physical reality effortless and stress-free for every user."</p>
+              <div className="mb-2 leading-tight">
+                <span className="font-heading text-[16px] md:text-[18px] font-normal text-white block">the</span>
+                <span className="font-heading text-[24px] md:text-[28px] font-bold text-white block tracking-tight">vision.</span>
+              </div>
+              <p className="text-gray-300 text-[13px] md:text-[14px] font-light leading-relaxed">"To be the essential <span className="text-[var(--color-primary)] font-bold">digital printing partner in the global market</span>, making the transition from digital design to physical reality effortless and stress-free for every user."</p>
             </motion.div>
 
             <motion.div initial={{ opacity: 0, y: 20, filter: 'blur(10px)' }} whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }} viewport={{ once: true, margin: '-50px' }} transition={{ delay: 0.2, duration: 0.8, ease: 'easeOut' }}>
-              <h3 className="text-2xl font-bold mb-2">the <br />mission.</h3>
-              <p className="text-gray-300">"To <span className="text-[var(--color-primary)] font-bold">revolutionize the printing experience</span> by combining precision technology, high-quality output, and seamless logistics, empowering professionals and students to focus on their craft."</p>
+              <div className="mb-2 leading-tight">
+                <span className="font-heading text-[16px] md:text-[18px] font-normal text-white block">the</span>
+                <span className="font-heading text-[24px] md:text-[28px] font-bold text-white block tracking-tight">mission.</span>
+              </div>
+              <p className="text-gray-300 text-[13px] md:text-[14px] font-light leading-relaxed">"To <span className="text-[var(--color-primary)] font-bold">revolutionize the printing experience</span> by combining precision technology, high - quality output, and seamless logistics, empowering professionals and students to focus on their craft."</p>
             </motion.div>
 
             <motion.div initial={{ opacity: 0, y: 20, filter: 'blur(10px)' }} whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }} viewport={{ once: true, margin: '-50px' }} transition={{ delay: 0.4, duration: 0.8, ease: 'easeOut' }}>
-              <h3 className="text-2xl font-bold mb-2">the <br />goal.</h3>
-              <p className="text-gray-300">"To become and lead the digital printing industry within the Philippine market in the span of <span className="text-[var(--color-primary)] font-bold">three to five years</span>."</p>
+              <div className="mb-2 leading-tight">
+                <span className="font-heading text-[16px] md:text-[18px] font-normal text-white block">the</span>
+                <span className="font-heading text-[24px] md:text-[28px] font-bold text-white block tracking-tight">goal.</span>
+              </div>
+              <p className="text-gray-300 text-[13px] md:text-[14px] font-light leading-relaxed">"To become and lead the digital printing industry within the Philippine market in the span of <span className="text-[var(--color-primary)] font-bold">three to five years</span>."</p>
             </motion.div>
           </div>
         </div>
@@ -386,7 +467,7 @@ function TeamSection() {
           image="/Mark.png"
           role="Developer"
           name="Mark David Prado"
-          quote="Programming is not about what you know; it is about what you can figure out. Therefore, I am a programmer."
+          quote='"Roses are red, violets are blue. My code might have bugs, but my love for you is true."'
           reverse={true}
         />
         <TeamMember
@@ -402,68 +483,86 @@ function TeamSection() {
 
 function BetaSection() {
   return (
-    <section id="download" className="h-[100vh] flex flex-col justify-center relative z-10 p-8 md:p-20 overflow-hidden bg-map">
-      <div className="max-w-7xl mx-auto w-full flex justify-end">
+    <section id="download" className="min-h-[100vh] flex items-center justify-center relative z-10 py-20 px-8 overflow-hidden bg-[#050505]">
+      {/* Background Glow */}
+      <div className="absolute left-[10%] bottom-[10%] w-[600px] h-[600px] bg-[#FFDE58]/5 rounded-full blur-[100px] pointer-events-none"></div>
+      
+      <div className="max-w-4xl mx-auto w-full flex justify-end relative z-20">
+        
+        {/* Content */}
         <motion.div
-          initial={{ opacity: 0, x: 50, filter: 'blur(20px)' }}
-          whileInView={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 1, ease: 'easeOut' }}
+          initial={{ opacity: 0, x: 50 }}
+          whileInView={{ opacity: 1, x: 0 }}
+          transition={{ duration: 1, delay: 0.2 }}
           viewport={{ once: true, margin: '-100px' }}
-          className="w-full md:w-1/2 flex flex-col items-center md:items-start text-center md:text-left"
+          className="w-full md:w-1/2 flex flex-col items-center text-center"
         >
-          <h2 className="text-4xl md:text-5xl font-bold mb-4">
-            Be part of <span className="text-[var(--color-primary)]">Beta Access</span>
-          </h2>
+          <div className="w-full max-w-[450px] flex flex-col items-center">
+            <h2 className="font-heading text-[30px] md:text-[34px] font-bold mb-3 tracking-tight">
+              Be part of <span className="text-[var(--color-primary)]">Beta Access</span>
+            </h2>
 
-          <p className="text-gray-300 mb-10 max-w-sm">
-            Become a founding member of GRID and have a <span className="text-[var(--color-primary)]">free printing service</span> delivered to your door step.
-          </p>
+            <p className="text-gray-200 text-[13px] md:text-[14px] mb-8 max-w-[380px] font-light leading-relaxed">
+              Become a founding member of GRID and have a <span className="text-[var(--color-primary)] font-medium">free printing service</span> delivered to your door step.
+            </p>
 
-          <div className="flex flex-col sm:flex-row gap-4 mb-16 w-full max-w-sm">
-            <button className="flex-1 bg-white text-black font-bold py-3 px-6 rounded-full hover:bg-gray-200 transition-colors text-sm">
-              Access Mobile Web
-            </button>
-            <button className="flex-1 bg-[var(--color-primary)] text-black font-bold py-3 px-6 rounded-full hover:bg-yellow-400 transition-colors text-sm">
-              Download APK
-            </button>
-          </div>
+            <div className="grid grid-cols-2 gap-3 mb-14 w-[95%]">
+              <button className="bg-white text-black font-bold py-3 rounded-full hover:bg-gray-200 transition-colors text-[13px] md:text-[14px]">
+                Access Mobile Web
+              </button>
+              <button className="bg-[var(--color-primary)] text-black font-bold py-3 rounded-full hover:bg-yellow-400 transition-colors text-[13px] md:text-[14px]">
+                Download APK
+              </button>
+            </div>
 
-          <div className="flex flex-col items-center md:items-start">
-            <p className="text-lg text-[var(--color-primary)] mb-1">The future of printing is almost here.</p>
-            <p className="text-lg mb-8">Launching soon.</p>
+            <div className="flex flex-col items-center w-full">
+              <p className="font-heading text-[16px] md:text-[18px] text-[var(--color-primary)] mb-0 tracking-wide font-normal">The future of printing is almost here.</p>
+              <p className="font-heading text-[16px] md:text-[18px] text-white mb-6 tracking-wide font-normal">Launching soon.</p>
 
-            <div className="flex gap-4">
-              <div className="border border-white/30 rounded-lg p-2 flex items-center gap-2 cursor-pointer hover:bg-white/10 transition-colors">
-                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M16.365 14.363c-.015-3.08 2.502-4.545 2.617-4.618-1.428-2.091-3.64-2.378-4.423-2.42-1.894-.19-3.693 1.115-4.654 1.115-.963 0-2.434-1.09-4.01-1.059-2.063.03-3.965 1.196-5.029 3.037-2.146 3.712-.55 9.206 1.543 12.235 1.025 1.48 2.235 3.134 3.84 3.076 1.531-.061 2.112-.99 3.94-.99 1.828 0 2.35.99 3.94 1.02 1.636.03 2.686-1.449 3.706-2.94 1.176-1.716 1.66-3.376 1.682-3.46-.035-.015-3.146-1.206-3.152-4.996zM14.935 5.568c.843-1.02 1.411-2.436 1.256-3.848-1.218.049-2.695.811-3.565 1.826-.701.815-1.383 2.264-1.198 3.645 1.364.105 2.663-.603 3.507-1.623z" />
-                </svg>
-                <div className="text-left">
-                  <div className="text-[9px] leading-none text-gray-300">Download on the</div>
-                  <div className="text-xs font-bold leading-none mt-1">App Store</div>
+              <div className="flex gap-3">
+                {/* App Store button */}
+                <div className="border border-white/20 bg-black/40 rounded-lg px-3 py-1.5 flex items-center gap-2 cursor-pointer hover:bg-white/10 transition-colors h-[44px]">
+                  <svg className="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M16.365 14.363c-.015-3.08 2.502-4.545 2.617-4.618-1.428-2.091-3.64-2.378-4.423-2.42-1.894-.19-3.693 1.115-4.654 1.115-.963 0-2.434-1.09-4.01-1.059-2.063.03-3.965 1.196-5.029 3.037-2.146 3.712-.55 9.206 1.543 12.235 1.025 1.48 2.235 3.134 3.84 3.076 1.531-.061 2.112-.99 3.94-.99 1.828 0 2.35.99 3.94 1.02 1.636.03 2.686-1.449 3.706-2.94 1.176-1.716 1.66-3.376 1.682-3.46-.035-.015-3.146-1.206-3.152-4.996zM14.935 5.568c.843-1.02 1.411-2.436 1.256-3.848-1.218.049-2.695.811-3.565 1.826-.701.815-1.383 2.264-1.198 3.645 1.364.105 2.663-.603 3.507-1.623z" />
+                  </svg>
+                  <div className="flex flex-col items-start justify-center">
+                    <span className="text-[9px] leading-[1] text-gray-300 mb-[2px]">Download on the</span>
+                    <span className="text-[14px] font-semibold leading-[1]">App Store</span>
+                  </div>
                 </div>
-              </div>
 
-              <div className="border border-white/30 rounded-lg p-2 flex items-center gap-2 cursor-pointer hover:bg-white/10 transition-colors">
-                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M3.609 1.814L13.792 12 3.61 22.186c-.165-.133-.298-.3-.389-.49A1.737 1.737 0 013 20.854V3.146c0-.306.075-.596.221-.842.146-.246.353-.448.6-.58.058-.031.121-.059.188-.083v.173zm1.116-.503l9.96 5.75L15.3 7.644 4.725 1.311zm11.393 6.643L20.655 10.6a1.738 1.738 0 010 2.802l-4.537 2.645-1.572-1.571 1.572-1.572zM4.725 22.689l10.575-6.333-1.403-1.403-9.172 7.736z" />
-                </svg>
-                <div className="text-left">
-                  <div className="text-[9px] leading-none text-gray-300">GET IT ON</div>
-                  <div className="text-xs font-bold leading-none mt-1">Google Play</div>
+                {/* Google Play button */}
+                <div className="border border-white/20 bg-black/40 rounded-lg px-3 py-1.5 flex items-center gap-2 cursor-pointer hover:bg-white/10 transition-colors h-[44px]">
+                  <svg className="w-[22px] h-[22px]" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3.609 1.814L13.792 12 3.61 22.186c-.165-.133-.298-.3-.389-.49A1.737 1.737 0 013 20.854V3.146c0-.306.075-.596.221-.842.146-.246.353-.448.6-.58.058-.031.121-.059.188-.083v.173zm1.116-.503l9.96 5.75L15.3 7.644 4.725 1.311zm11.393 6.643L20.655 10.6a1.738 1.738 0 010 2.802l-4.537 2.645-1.572-1.571 1.572-1.572zM4.725 22.689l10.575-6.333-1.403-1.403-9.172 7.736z" />
+                  </svg>
+                  <div className="flex flex-col items-start justify-center">
+                    <span className="text-[9px] leading-[1] text-gray-300 mb-[2px]">GET IT ON</span>
+                    <span className="text-[14px] font-semibold leading-[1]">Google Play</span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </motion.div>
+
       </div>
     </section>
   );
 }
 
 function App() {
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
   useEffect(() => {
     document.body.style.backgroundColor = '#000';
     document.body.style.color = '#fff';
+
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 500);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   return (
@@ -478,11 +577,27 @@ function App() {
         <HeroSection />
         <ProcessSection />
         <FeaturesSection />
+        <HowItWorksSection />
         <SupportSection />
         <AboutSection />
         <TeamSection />
         <BetaSection />
       </div>
+
+      {/* Scroll to Top Button */}
+      <AnimatePresence>
+        {showScrollTop && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: 20 }}
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="fixed bottom-8 right-8 z-50 p-3 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-white hover:text-[var(--color-primary)] hover:border-[var(--color-primary)] shadow-lg transition-all duration-300"
+          >
+            <ChevronUp size={24} strokeWidth={2.5} />
+          </motion.button>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

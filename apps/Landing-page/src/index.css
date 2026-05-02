@@ -2,7 +2,12 @@
 
 @theme {
   --color-primary: #FFDE58;
-  --font-sans: "Inter", "Roboto", "Outfit", sans-serif;
+  --font-sans: "Montserrat", sans-serif;
+  --font-heading: "Evolve Sans", sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
@@ -43,7 +48,7 @@ body {
 }
 
 .glass-nav {
-  background: rgba(0, 0, 0, 0.6);
+  background-color: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.1);
