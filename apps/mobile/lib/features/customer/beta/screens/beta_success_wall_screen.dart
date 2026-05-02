@@ -1,13 +1,10 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, Uint8List;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -16,11 +13,6 @@ import 'package:printing_app/features/customer/beta/providers/beta_testimonial_p
 import 'package:printing_app/features/customer/beta/widgets/beta_hero_illustration.dart';
 import 'package:printing_app/features/customer/beta/widgets/beta_photo_upload_card.dart';
 import 'package:printing_app/features/customer/beta/widgets/beta_share_row.dart';
-
-const _kBetaChannelUrl = 'https://t.me/gridbeta';
-const _kBetaShareUrl = 'https://gridprint.ph/beta';
-const _kBetaShareMessage =
-    'I just tested GRID — print delivery in Davao! Check it out: $_kBetaShareUrl';
 
 class BetaSuccessWallScreen extends ConsumerStatefulWidget {
   const BetaSuccessWallScreen({super.key});
@@ -38,7 +30,7 @@ class _BetaSuccessWallScreenState
   Uint8List? _photoBytes;
   String? _photoFileName;
 
-  bool _sharedOnSocial = false;
+  final bool _sharedOnSocial = true; // BetaShareRow tracks this internally now
 
   Future<void> _pickPhoto() async {
     try {
@@ -75,28 +67,6 @@ class _BetaSuccessWallScreenState
         );
       }
     }
-  }
-
-  Future<void> _handleShare() async {
-    await Share.share(_kBetaShareMessage);
-    setState(() => _sharedOnSocial = true);
-  }
-
-  Future<void> _handleCopyLink() async {
-    await Clipboard.setData(const ClipboardData(text: _kBetaShareUrl));
-    if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Link copied')));
-    }
-    setState(() => _sharedOnSocial = true);
-  }
-
-  Future<void> _handleOpenChannel() async {
-    final uri = Uri.parse(_kBetaChannelUrl);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-    setState(() => _sharedOnSocial = true);
   }
 
   Future<void> _submit() async {
@@ -190,11 +160,7 @@ class _BetaSuccessWallScreenState
 
                       const SizedBox(height: AppSpacing.md),
 
-                      BetaShareRow(
-                        onShare: _handleShare,
-                        onCopyLink: _handleCopyLink,
-                        onOpenChannel: _handleOpenChannel,
-                      ),
+                      const BetaShareRow(),
 
                       const SizedBox(height: AppSpacing.lg),
 
