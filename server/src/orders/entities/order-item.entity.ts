@@ -3,12 +3,13 @@ import {
   Entity,
   JoinColumn,
   ManyToOne,
-  OneToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { Order } from './order.entity';
-import { PaperSpec } from './paper-specs.entity';
-import { ThreeDSpec } from './three-d-specs.entity';
+import { OrderItemSpecValue } from './order-item-spec-value.entity';
+import type { PaperSpec } from './paper-specs.entity';
+import type { ThreeDSpec } from './three-d-specs.entity';
 
 @Entity('order_items')
 export class OrderItem {
@@ -28,6 +29,18 @@ export class OrderItem {
   @Column()
   category: string;
 
+  @Column({ name: 'category_id', type: 'int', nullable: true })
+  categoryId: number | null;
+
+  @Column({ name: 'category_slug', type: 'varchar', length: 50, nullable: true })
+  categorySlug: string | null;
+
+  @Column({ name: 'category_name', type: 'varchar', length: 100, nullable: true })
+  categoryName: string | null;
+
+  @Column({ name: 'pricing_model', type: 'varchar', length: 50, nullable: true })
+  pricingModel: string | null;
+
   @Column({ name: 'file_url', nullable: true })
   fileUrl: string;
 
@@ -43,9 +56,9 @@ export class OrderItem {
   @Column({ name: 'total_price', type: 'decimal', precision: 10, scale: 2 })
   totalPrice: number;
 
-  @OneToOne(() => PaperSpec, (spec) => spec.orderItem, { nullable: true })
-  paperSpec: PaperSpec | null;
+  @OneToMany(() => OrderItemSpecValue, (value) => value.orderItem)
+  specValues: OrderItemSpecValue[];
 
-  @OneToOne(() => ThreeDSpec, (spec) => spec.orderItem, { nullable: true })
-  threeDSpec: ThreeDSpec | null;
+  paperSpec?: PaperSpec | null;
+  threeDSpec?: ThreeDSpec | null;
 }

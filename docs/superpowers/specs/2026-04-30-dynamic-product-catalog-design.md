@@ -35,7 +35,7 @@ Important hardcoded values:
 - Paper options: A1, A2, A3, A4, A5, 20x30, Custom; Black & White, Full Color; Glossy, Matte; Front Only, Back to Back; None, Spiral, Staple, Premium.
 - 3D fields: file format, material, color, infill percentage, layer height, supports, notes.
 - 3D options: STL, OBJ, 3MF; PLA, ABS, PETG; 10%, 20%, 50%, 100%; 0.1mm, 0.2mm, 0.3mm; supports yes/no.
-- Upload limits are hardcoded: paper 50 MB with `pdf/png/jpg/jpeg/docx`; 3D 200 MB with `stl/obj/3mf/glb/gltf`.
+- Upload limits are hardcoded: paper 50 MB with `pdf/png/jpg/jpeg/tif/tiff/docx`; 3D 200 MB with `stl/obj/3mf/glb/gltf`.
 - Pricing is hardcoded in `apps/mobile/lib/utils/pricing_engine.dart`.
 
 ### Server
@@ -240,7 +240,7 @@ Category:
 - `pricing_model`: `per_page_modifiers`
 - `base_rate`: `2.00`
 - `max_file_size_mb`: `50`
-- `allowed_extensions`: `pdf`, `png`, `jpg`, `jpeg`, `docx`
+- `allowed_extensions`: `pdf`, `png`, `jpg`, `jpeg`, `tif`, `tiff`, `docx`
 
 Spec definitions:
 
@@ -530,7 +530,7 @@ The current file analysis routes remain:
 - `/files/:id/inspect?paperSize=a4` for paper-like document processing.
 - `/files/:id/inspect` for 3D model processing.
 
-MIME helpers should align with catalog extensions, including `docx`, `glb`, and `gltf`.
+MIME helpers should align with catalog extensions, including `docx`, `tif`, `tiff`, `glb`, and `gltf`.
 
 ---
 

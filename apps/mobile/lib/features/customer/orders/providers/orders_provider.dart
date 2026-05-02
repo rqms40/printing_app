@@ -74,51 +74,66 @@ PaymentStatus _parsePaymentStatus(String value) {
 }
 
 PaperSize _parsePaperSize(String value) {
+  final normalized = _serverValueToEnumName(value);
   return PaperSize.values.firstWhere(
-    (e) => e.name == value,
+    (e) => e.name == normalized,
     orElse: () => PaperSize.a4,
   );
 }
 
 ColorMode _parseColorMode(String value) {
+  final normalized = _serverValueToEnumName(value);
   return ColorMode.values.firstWhere(
-    (e) => e.name == value,
+    (e) => e.name == normalized,
     orElse: () => ColorMode.fullColor,
   );
 }
 
 MediaType _parseMediaType(String value) {
+  final normalized = _serverValueToEnumName(value);
   return MediaType.values.firstWhere(
-    (e) => e.name == value,
+    (e) => e.name == normalized,
     orElse: () => MediaType.matte,
   );
 }
 
 PrintSides _parsePrintSides(String value) {
+  final normalized = _serverValueToEnumName(value);
   return PrintSides.values.firstWhere(
-    (e) => e.name == value,
+    (e) => e.name == normalized,
     orElse: () => PrintSides.frontOnly,
   );
 }
 
 Binding _parseBinding(String value) {
+  final normalized = _serverValueToEnumName(value);
   return Binding.values.firstWhere(
-    (e) => e.name == value,
+    (e) => e.name == normalized,
     orElse: () => Binding.none,
   );
 }
 
 FileFormat3D _parseFileFormat3D(String value) {
+  final normalized = _serverValueToEnumName(value);
   return FileFormat3D.values.firstWhere(
-    (e) => e.name == value,
+    (e) => e.name == normalized,
     orElse: () => FileFormat3D.stl,
   );
 }
 
 Material3D _parseMaterial3D(String value) {
+  final normalized = _serverValueToEnumName(value);
   return Material3D.values.firstWhere(
-    (e) => e.name == value,
+    (e) => e.name == normalized,
     orElse: () => Material3D.pla,
+  );
+}
+
+String _serverValueToEnumName(String value) {
+  if (value == '3mf') return 'threeMf';
+  return value.replaceAllMapped(
+    RegExp(r'_([a-z0-9])'),
+    (match) => match.group(1)!.toUpperCase(),
   );
 }
 
@@ -168,6 +183,33 @@ ThreeDSpecs? _parseThreeDSpecs(Map<String, dynamic>? json) {
   );
 }
 
+Map<String, dynamic> _parseSpecValues(dynamic raw) {
+  if (raw is! List) return const {};
+  final specs = <String, dynamic>{};
+  for (final entry in raw.whereType<Map>()) {
+    final row = Map<String, dynamic>.from(entry);
+    final key = _readJsonValue(row, 'specKey', 'spec_key')?.toString();
+    if (key == null || key.isEmpty) continue;
+    specs[key] = _readJsonValue(row, 'value');
+  }
+  return specs;
+}
+
+Map<String, String> _parseSpecDisplayValues(dynamic raw) {
+  if (raw is! List) return const {};
+  final display = <String, String>{};
+  for (final entry in raw.whereType<Map>()) {
+    final row = Map<String, dynamic>.from(entry);
+    final key = _readJsonValue(row, 'specKey', 'spec_key')?.toString();
+    if (key == null || key.isEmpty) continue;
+    display[key] =
+        _readJsonValue(row, 'displayValue', 'display_value')?.toString() ??
+        _readJsonValue(row, 'value')?.toString() ??
+        '';
+  }
+  return display;
+}
+
 DateTime _parseDate(dynamic value) {
   if (value is String) return DateTime.parse(value);
   return DateTime.now();
@@ -181,6 +223,10 @@ DateTime? _parseDateNullable(dynamic value) {
 Order _parseOrder(Map<String, dynamic> json) {
   final batch = _readJsonValue(json, 'batchOrder', 'batch_order');
   final batchJson = batch is Map ? Map<String, dynamic>.from(batch) : null;
+  final specValuesRaw = _readJsonValue(json, 'specValues', 'spec_values');
+  final specs = _parseSpecValues(specValuesRaw);
+  final specDisplayValues = _parseSpecDisplayValues(specValuesRaw);
+  final category = _readJsonValue(json, 'category')?.toString() ?? '';
   final itemsJson = _readJsonValue(json, 'items');
   final items = itemsJson is List
       ? itemsJson
@@ -201,7 +247,7 @@ Order _parseOrder(Map<String, dynamic> json) {
     batchId:
         _readJsonValue(json, 'batchId', 'batch_id')?.toString() ??
         batchJson?['batchRef']?.toString(),
-    category: _readJsonValue(json, 'category')?.toString() ?? '',
+    category: category,
     fileUrl: _readJsonValue(json, 'fileUrl', 'file_url')?.toString(),
     fileName: _readJsonValue(json, 'fileName', 'file_name')?.toString(),
     fileMetadataId:
@@ -211,13 +257,25 @@ Order _parseOrder(Map<String, dynamic> json) {
             _readJsonValue(json, 'fileMetadataId', 'file_metadata_id'),
             0,
           ),
+    specs: specs,
+    specDisplayValues: specDisplayValues,
     paperSpecs: _parsePaperSpecs(
-      _readJsonValue(json, 'paperSpecs', 'paper_specs')
-          as Map<String, dynamic>?,
+      _readJsonValue(json, 'paperSpecs', 'paper_specs') is Map
+          ? Map<String, dynamic>.from(
+              _readJsonValue(json, 'paperSpecs', 'paper_specs') as Map,
+            )
+          : category == 'paper' && specs.isNotEmpty
+          ? specs
+          : null,
     ),
     threeDSpecs: _parseThreeDSpecs(
-      _readJsonValue(json, 'threeDSpecs', 'three_d_specs')
-          as Map<String, dynamic>?,
+      _readJsonValue(json, 'threeDSpecs', 'three_d_specs') is Map
+          ? Map<String, dynamic>.from(
+              _readJsonValue(json, 'threeDSpecs', 'three_d_specs') as Map,
+            )
+          : category == '3d' && specs.isNotEmpty
+          ? specs
+          : null,
     ),
     quantity:
         int.tryParse(_readJsonValue(json, 'quantity')?.toString() ?? '1') ?? 1,
@@ -299,10 +357,20 @@ Order _parseOrder(Map<String, dynamic> json) {
 }
 
 OrderLineItem _parseOrderLineItem(Map<String, dynamic> json) {
+  final specValuesRaw = _readJsonValue(json, 'specValues', 'spec_values');
+  final specs = _parseSpecValues(specValuesRaw);
+  final specDisplayValues = _parseSpecDisplayValues(specValuesRaw);
+  final category = _readJsonValue(json, 'category')?.toString() ?? '';
+  final paperSpecJson =
+      (_readJsonValue(json, 'paperSpecs', 'paper_specs') ??
+      _readJsonValue(json, 'paperSpec', 'paper_spec'));
+  final threeDSpecJson =
+      (_readJsonValue(json, 'threeDSpecs', 'three_d_specs') ??
+      _readJsonValue(json, 'threeDSpec', 'three_d_spec'));
   return OrderLineItem(
     id: _readJsonValue(json, 'id')?.toString() ?? '',
     orderId: _readJsonValue(json, 'orderId', 'order_id')?.toString() ?? '',
-    category: _readJsonValue(json, 'category')?.toString() ?? '',
+    category: category,
     fileUrl: _readJsonValue(json, 'fileUrl', 'file_url')?.toString(),
     fileName: _readJsonValue(json, 'fileName', 'file_name')?.toString(),
     fileMetadataId:
@@ -312,15 +380,21 @@ OrderLineItem _parseOrderLineItem(Map<String, dynamic> json) {
             _readJsonValue(json, 'fileMetadataId', 'file_metadata_id'),
             0,
           ),
+    specs: specs,
+    specDisplayValues: specDisplayValues,
     paperSpecs: _parsePaperSpecs(
-      (_readJsonValue(json, 'paperSpecs', 'paper_specs') ??
-              _readJsonValue(json, 'paperSpec', 'paper_spec'))
-          as Map<String, dynamic>?,
+      paperSpecJson is Map
+          ? Map<String, dynamic>.from(paperSpecJson)
+          : category == 'paper' && specs.isNotEmpty
+          ? specs
+          : null,
     ),
     threeDSpecs: _parseThreeDSpecs(
-      (_readJsonValue(json, 'threeDSpecs', 'three_d_specs') ??
-              _readJsonValue(json, 'threeDSpec', 'three_d_spec'))
-          as Map<String, dynamic>?,
+      threeDSpecJson is Map
+          ? Map<String, dynamic>.from(threeDSpecJson)
+          : category == '3d' && specs.isNotEmpty
+          ? specs
+          : null,
     ),
     quantity:
         int.tryParse(_readJsonValue(json, 'quantity')?.toString() ?? '1') ?? 1,
@@ -340,6 +414,8 @@ OrderLineItem _lineItemFromOrder(Order order) {
     fileUrl: order.fileUrl,
     fileName: order.fileName,
     fileMetadataId: order.fileMetadataId,
+    specs: order.specs,
+    specDisplayValues: order.specDisplayValues,
     paperSpecs: order.paperSpecs,
     threeDSpecs: order.threeDSpecs,
     quantity: order.quantity,
@@ -668,11 +744,9 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       final expandedItems = <CartItem>[];
       final indices = <int>[];
       for (final item in state.items) {
-        final assignments =
-            state.unitAssignments[item.id] ?? const <String?>[];
+        final assignments = state.unitAssignments[item.id] ?? const <String?>[];
         for (var copy = 0; copy < item.quantity; copy++) {
-          final dropId =
-              copy < assignments.length ? assignments[copy] : null;
+          final dropId = copy < assignments.length ? assignments[copy] : null;
           final di = dropId == null ? null : dropIndexById[dropId];
           // Skip copies whose drop has no address — caller should block this
           // upstream, but be defensive.
@@ -699,8 +773,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
 
     return addBatchOrder(
       items: state.items,
-      deliveryOption:
-          state.mode == DeliveryMode.pickup ? 'pickup' : 'delivery',
+      deliveryOption: state.mode == DeliveryMode.pickup ? 'pickup' : 'delivery',
       deliveryAddressId: addressIdString,
       deliveryFee: 0,
       paymentMethod: state.paymentMethod!,
@@ -744,6 +817,7 @@ Map<String, dynamic> _cartItemPayload(CartItem item) {
     'fileName': item.fileName,
     'fileUrl': item.filePath,
     'fileMetadataId': item.fileMetadataId,
+    'specs': item.specs.isEmpty ? null : item.specs,
     'paperSpecs': item.paperSpecs != null
         ? {
             'paperSize': item.paperSpecs!.paperSize.name,

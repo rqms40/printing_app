@@ -4,6 +4,7 @@ import {
   humanizeEnumValue,
   normalizeAdminUser,
   normalizeOrder,
+  normalizeProductSpecDefinition,
   normalizeServiceAddon,
   normalizeServiceCategory,
   normalizeSpecOption,
@@ -48,10 +49,25 @@ describe("api normalizers", () => {
       name: "Paper Printing",
       slug: "paper",
       description: "Docs",
+      mobileDescription: "Mobile docs",
       icon: "FileTextOutlined",
+      fileProcessingType: "document",
+      pricingModel: "per_page_modifiers",
       baseRate: "12.5",
+      quantityUnit: "page",
       maxFileSizeMb: 25,
       allowedExtensions: "[\"pdf\",\"png\"]",
+      specs: [
+        {
+          id: 8,
+          categoryId: 2,
+          key: "paper_size",
+          label: "Paper Size",
+          inputType: "select",
+          valueType: "string",
+          pricingRole: "multiplier",
+        },
+      ],
       isActive: true,
       sortOrder: 1,
       createdAt: "2026-03-01T00:00:00.000Z",
@@ -60,25 +76,56 @@ describe("api normalizers", () => {
 
     expect(category).toMatchObject({
       id: "2",
+      mobile_description: "Mobile docs",
+      file_processing_type: "document",
+      pricing_model: "per_page_modifiers",
       base_rate: 12.5,
+      quantity_unit: "page",
       max_file_size_mb: 25,
       allowed_extensions: ["pdf", "png"],
+      specs: [{ id: "8", key: "paper_size", pricing_role: "multiplier" }],
       is_active: true,
       sort_order: 1,
     });
   });
 
-  it("maps product spec options and addons into the UI shape", () => {
+  it("maps product spec definitions, options, and addons into the UI shape", () => {
+    const spec = normalizeProductSpecDefinition({
+      id: 4,
+      categoryId: 2,
+      key: "material",
+      label: "Material",
+      helpText: "Choose a filament",
+      inputType: "select",
+      valueType: "string",
+      isRequired: true,
+      isActive: false,
+      defaultValue: "pla",
+      pricingRole: "unit_cost",
+      unitLabel: "g",
+      minValue: null,
+      maxValue: "100",
+      stepValue: "0.5",
+      sortOrder: 20,
+      options: [],
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-15T00:00:00.000Z",
+    });
+
     const option = normalizeSpecOption({
       id: 5,
-      categoryId: 2,
-      optionGroup: "paper_size",
+      specDefinitionId: 4,
+      specDefinition: {
+        id: 4,
+        categoryId: 2,
+        key: "material",
+      },
       label: "A4",
       value: "a4",
       multiplier: "1.2",
       fixedFee: "0",
       unitCost: "0",
-      estimatedGrams: null,
+      estimatedQuantity: "42",
       isDefault: true,
       isActive: true,
       sortOrder: 10,
@@ -99,11 +146,23 @@ describe("api normalizers", () => {
       updatedAt: "2026-03-15T00:00:00.000Z",
     });
 
+    expect(spec).toMatchObject({
+      id: "4",
+      category_id: "2",
+      key: "material",
+      is_active: false,
+      pricing_role: "unit_cost",
+      max_value: 100,
+      step_value: 0.5,
+    });
     expect(option).toMatchObject({
       id: "5",
       category_id: "2",
-      option_group: "paper_size",
+      spec_definition_id: "4",
+      option_group: "material",
       fixed_fee: 0,
+      estimated_quantity: 42,
+      estimated_grams: 42,
       is_default: true,
       is_active: true,
     });

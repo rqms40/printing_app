@@ -6,6 +6,18 @@ import 'package:printing_app/shared/models/three_d_specs.dart';
 import 'package:printing_app/shared/services/draft_storage_service.dart';
 import 'package:printing_app/utils/pricing_engine.dart';
 
+Map<String, dynamic> _readStringKeyedMap(dynamic value) {
+  if (value is! Map) return const {};
+  return Map<String, dynamic>.from(value);
+}
+
+Map<String, String> _readStringMap(dynamic value) {
+  if (value is! Map) return const {};
+  return value.map(
+    (key, entry) => MapEntry(key.toString(), entry?.toString() ?? ''),
+  );
+}
+
 int _readInt(dynamic value, int fallback) {
   if (value is num) return value.toInt();
   if (value is String) return int.tryParse(value) ?? fallback;
@@ -23,6 +35,9 @@ class OrderFlowState {
   const OrderFlowState({
     this.currentStep = 0,
     this.category,
+    this.categoryName,
+    this.specs = const {},
+    this.specDisplayValues = const {},
     this.paperSpecs,
     this.threeDSpecs,
     this.fileName,
@@ -44,6 +59,13 @@ class OrderFlowState {
 
   /// Either `'paper'` or `'3d'`.
   final String? category;
+  final String? categoryName;
+
+  /// Dynamic catalog spec values keyed by `product_spec_definitions.key`.
+  final Map<String, dynamic> specs;
+
+  /// Human-readable selected spec labels keyed by spec key.
+  final Map<String, String> specDisplayValues;
 
   final PaperSpecs? paperSpecs;
   final ThreeDSpecs? threeDSpecs;
@@ -73,6 +95,9 @@ class OrderFlowState {
   OrderFlowState copyWith({
     int? currentStep,
     String? category,
+    String? categoryName,
+    Map<String, dynamic>? specs,
+    Map<String, String>? specDisplayValues,
     PaperSpecs? paperSpecs,
     ThreeDSpecs? threeDSpecs,
     String? fileName,
@@ -90,6 +115,7 @@ class OrderFlowState {
     // Allow explicit null clearing
     bool clearPaperSpecs = false,
     bool clearThreeDSpecs = false,
+    bool clearSpecs = false,
     bool clearFile = false,
     bool clearAddress = false,
     bool clearPaymentMethod = false,
@@ -97,6 +123,11 @@ class OrderFlowState {
     return OrderFlowState(
       currentStep: currentStep ?? this.currentStep,
       category: category ?? this.category,
+      categoryName: categoryName ?? this.categoryName,
+      specs: clearSpecs ? const {} : (specs ?? this.specs),
+      specDisplayValues: clearSpecs
+          ? const {}
+          : (specDisplayValues ?? this.specDisplayValues),
       paperSpecs: clearPaperSpecs ? null : (paperSpecs ?? this.paperSpecs),
       threeDSpecs: clearThreeDSpecs ? null : (threeDSpecs ?? this.threeDSpecs),
       fileName: clearFile ? null : (fileName ?? this.fileName),
@@ -125,6 +156,9 @@ class OrderFlowState {
     return {
       'currentStep': currentStep,
       'category': category,
+      'categoryName': categoryName,
+      'specs': specs,
+      'specDisplayValues': specDisplayValues,
       'paperSpecs': paperSpecs != null
           ? {
               'paperSize': paperSpecs!.paperSize.name,
@@ -246,6 +280,9 @@ class OrderFlowState {
     return OrderFlowState(
       currentStep: map['currentStep'] as int? ?? 0,
       category: map['category'] as String?,
+      categoryName: map['categoryName'] as String?,
+      specs: _readStringKeyedMap(map['specs']),
+      specDisplayValues: _readStringMap(map['specDisplayValues']),
       paperSpecs: paperSpecs,
       threeDSpecs: threeDSpecs,
       fileName: map['fileName'] as String?,
@@ -284,9 +321,11 @@ class OrderFlowNotifier extends StateNotifier<OrderFlowState> {
     DraftStorageService.saveDraft(state.toMap());
   }
 
-  void setCategory(String category) {
+  void setCategory(String category, {String? categoryName}) {
     state = state.copyWith(
       category: category,
+      categoryName: categoryName ?? _defaultCategoryName(category),
+      clearSpecs: true,
       clearPaperSpecs: true,
       clearThreeDSpecs: true,
       clearFile: true,
@@ -303,6 +342,19 @@ class OrderFlowNotifier extends StateNotifier<OrderFlowState> {
   void setThreeDSpecs(ThreeDSpecs specs) {
     state = state.copyWith(threeDSpecs: specs);
     _recalculatePrice();
+    _saveDraft();
+  }
+
+  void setCatalogSpecs({
+    required Map<String, dynamic> specs,
+    required Map<String, String> displayValues,
+    double? totalPrice,
+  }) {
+    state = state.copyWith(
+      specs: Map<String, dynamic>.unmodifiable(specs),
+      specDisplayValues: Map<String, String>.unmodifiable(displayValues),
+      totalPrice: totalPrice,
+    );
     _saveDraft();
   }
 
@@ -377,7 +429,14 @@ class OrderFlowNotifier extends StateNotifier<OrderFlowState> {
   }
 
   void setPageCount(int pageCount) {
-    state = state.copyWith(pageCount: pageCount);
+    final Map<String, dynamic>? specs;
+    if (state.specs.isEmpty) {
+      specs = null;
+    } else {
+      specs = Map<String, dynamic>.from(state.specs);
+      specs['page_count'] = pageCount;
+    }
+    state = state.copyWith(pageCount: pageCount, specs: specs);
     _recalculatePrice();
     _saveDraft();
   }
@@ -404,7 +463,14 @@ class OrderFlowNotifier extends StateNotifier<OrderFlowState> {
   }
 
   void setPrintMode(String mode) {
-    state = state.copyWith(printMode: mode);
+    final Map<String, dynamic>? specs;
+    if (state.specs.isEmpty) {
+      specs = null;
+    } else {
+      specs = Map<String, dynamic>.from(state.specs);
+      specs['print_mode'] = mode;
+    }
+    state = state.copyWith(printMode: mode, specs: specs);
     _saveDraft();
   }
 
@@ -466,6 +532,12 @@ T? _parseEnum<T extends Enum>(List<T> values, String? name) {
   } catch (_) {
     return null;
   }
+}
+
+String _defaultCategoryName(String category) {
+  if (category == '3d') return '3D Printing';
+  if (category == 'paper') return 'Paper Printing';
+  return category;
 }
 
 /// Global provider for the order creation flow.

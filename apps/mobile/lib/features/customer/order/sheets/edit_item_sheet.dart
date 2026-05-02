@@ -106,9 +106,53 @@ class _EditItemBodyState extends State<_EditItemBody> {
   }
 
   void _save() {
+    final quantity = int.tryParse(_qty.text) ?? widget.item.quantity;
+    final pageCount = int.tryParse(_pages.text) ?? widget.item.pageCount;
+    final updatedSpecs = widget.item.category == 'paper'
+        ? _paperCatalogSpecs(
+            paperSize: _paperSize,
+            colorMode: _colorMode,
+            mediaType: _mediaType,
+            printSides: _printSides,
+            binding: _binding,
+            pageCount: pageCount,
+          )
+        : _threeDCatalogSpecs(
+            fileFormat: _fileFormat,
+            material: _material3d,
+            color: _color3d.text.trim().isEmpty
+                ? 'white'
+                : _color3d.text.trim().toLowerCase(),
+            infill: _infill,
+            layerHeight: _layerHeight,
+            supports: _supports,
+            notes: _notes3d.text.trim(),
+          );
+    final updatedDisplayValues = widget.item.category == 'paper'
+        ? _paperDisplayValues(
+            paperSize: _paperSize,
+            colorMode: _colorMode,
+            mediaType: _mediaType,
+            printSides: _printSides,
+            binding: _binding,
+            pageCount: pageCount,
+          )
+        : _threeDDisplayValues(
+            fileFormat: _fileFormat,
+            material: _material3d,
+            color: _color3d.text.trim().isEmpty
+                ? 'White'
+                : _color3d.text.trim(),
+            infill: _infill,
+            layerHeight: _layerHeight,
+            supports: _supports,
+            notes: _notes3d.text.trim(),
+          );
     final updated = widget.item.copyWith(
-      quantity: int.tryParse(_qty.text) ?? widget.item.quantity,
-      pageCount: int.tryParse(_pages.text) ?? widget.item.pageCount,
+      quantity: quantity,
+      pageCount: pageCount,
+      specs: updatedSpecs,
+      specDisplayValues: updatedDisplayValues,
       paperSpecs: widget.item.category == 'paper'
           ? PaperSpecs(
               paperSize: _paperSize,
@@ -373,6 +417,94 @@ class _SectionLabel extends StatelessWidget {
     );
   }
 }
+
+Map<String, dynamic> _paperCatalogSpecs({
+  required PaperSize paperSize,
+  required ColorMode colorMode,
+  required MediaType mediaType,
+  required PrintSides printSides,
+  required Binding binding,
+  required int pageCount,
+}) {
+  return {
+    'paper_size': _paperSizeValue(paperSize),
+    'color_mode': _colorModeValue(colorMode),
+    'media_type': mediaType.name,
+    'print_sides': _printSidesValue(printSides),
+    'binding': binding.name,
+    'page_count': pageCount,
+  };
+}
+
+Map<String, String> _paperDisplayValues({
+  required PaperSize paperSize,
+  required ColorMode colorMode,
+  required MediaType mediaType,
+  required PrintSides printSides,
+  required Binding binding,
+  required int pageCount,
+}) {
+  return {
+    'paper_size': paperSize.displayName,
+    'color_mode': colorMode.displayName,
+    'media_type': mediaType.displayName,
+    'print_sides': printSides.displayName,
+    'binding': binding.displayName,
+    'page_count': '$pageCount pages',
+  };
+}
+
+Map<String, dynamic> _threeDCatalogSpecs({
+  required FileFormat3D fileFormat,
+  required Material3D material,
+  required String color,
+  required int infill,
+  required double layerHeight,
+  required bool supports,
+  required String notes,
+}) {
+  return {
+    'file_format': _fileFormatValue(fileFormat),
+    'material': material.name,
+    'color': color,
+    'infill_percentage': infill,
+    'layer_height': layerHeight,
+    'supports': supports,
+    'notes': notes,
+  };
+}
+
+Map<String, String> _threeDDisplayValues({
+  required FileFormat3D fileFormat,
+  required Material3D material,
+  required String color,
+  required int infill,
+  required double layerHeight,
+  required bool supports,
+  required String notes,
+}) {
+  return {
+    'file_format': fileFormat.displayName,
+    'material': material.displayName,
+    'color': color,
+    'infill_percentage': '$infill%',
+    'layer_height': '${layerHeight}mm',
+    'supports': supports ? 'Yes' : 'No',
+    if (notes.isNotEmpty) 'notes': notes,
+  };
+}
+
+String _paperSizeValue(PaperSize value) =>
+    value == PaperSize.twentyByThirty ? 'twenty_by_thirty' : value.name;
+
+String _colorModeValue(ColorMode value) =>
+    value == ColorMode.blackAndWhite ? 'black_and_white' : 'full_color';
+
+String _printSidesValue(PrintSides value) =>
+    value == PrintSides.frontOnly ? 'front_only' : 'back_to_back';
+
+String _fileFormatValue(FileFormat3D value) =>
+    value == FileFormat3D.threeMf ? '3mf' : value.name;
 
 class _FileTile extends StatelessWidget {
   const _FileTile({

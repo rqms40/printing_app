@@ -18,6 +18,7 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
+import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/file_upload_card.dart';
 import 'package:printing_app/features/customer/order/widgets/model_3d_preview.dart';
 import 'package:printing_app/features/customer/order/widgets/printer_limits_card.dart';
@@ -163,6 +164,11 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
 
   List<String> get _allowedTypes {
     final state = ref.read(orderFlowProvider);
+    final catalog = ref.read(productCatalogProvider).valueOrNull;
+    final category = catalog?.categoryBySlug(state.category);
+    if (category != null && category.allowedExtensions.isNotEmpty) {
+      return category.allowedExtensions;
+    }
     return state.category == 'paper'
         ? AppConstants.paperTypes
         : AppConstants.threeDTypes;
@@ -170,6 +176,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
 
   int get _maxSizeMB {
     final state = ref.read(orderFlowProvider);
+    final catalog = ref.read(productCatalogProvider).valueOrNull;
+    final category = catalog?.categoryBySlug(state.category);
+    if (category != null) return category.maxFileSizeMb;
     return state.category == 'paper'
         ? AppConstants.paperMaxSizeMB
         : AppConstants.threeDMaxSizeMB;
@@ -688,10 +697,13 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
     final item = CartItem(
       id: const Uuid().v4(),
       category: flow.category!,
+      categoryName: flow.categoryName,
       fileName: flow.fileName!,
       filePath: flow.filePath,
       fileSize: flow.fileSize,
       fileMetadataId: flow.fileMetadataId ?? 0,
+      specs: flow.specs,
+      specDisplayValues: flow.specDisplayValues,
       paperSpecs: flow.category == 'paper' ? flow.paperSpecs : null,
       threeDSpecs: flow.category == '3d' ? flow.threeDSpecs : null,
       quantity: flow.quantity,

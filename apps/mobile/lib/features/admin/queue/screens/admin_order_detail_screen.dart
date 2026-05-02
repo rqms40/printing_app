@@ -299,6 +299,16 @@ class _AdminOrderDetailScreenState
   }
 
   List<Widget> _itemSpecRows(OrderLineItem item, AppColorSet colors) {
+    if (item.specDisplayValues.isNotEmpty) {
+      return item.specDisplayValues.entries
+          .where((entry) => entry.value.trim().isNotEmpty)
+          .map(
+            (entry) =>
+                _specRow(_humanizeSpecKey(entry.key), entry.value, colors),
+          )
+          .toList();
+    }
+
     final paperSpecs = item.paperSpecs;
     if (paperSpecs != null) {
       return [
@@ -331,6 +341,17 @@ class _AdminOrderDetailScreenState
     if (category == '3d') return '3D Print';
     if (category == 'paper') return 'Paper Print';
     return category;
+  }
+
+  String _humanizeSpecKey(String key) {
+    return key
+        .split('_')
+        .map(
+          (part) => part.isEmpty
+              ? part
+              : '${part[0].toUpperCase()}${part.substring(1)}',
+        )
+        .join(' ');
   }
 
   Widget _specRow(String label, String value, AppColorSet colors) {

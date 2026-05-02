@@ -21,12 +21,165 @@ interface OrderRow {
   order_id: string;
 }
 
+interface SpecSeed {
+  categoryId: number;
+  key: string;
+  label: string;
+  inputType: string;
+  valueType: string;
+  pricingRole: string;
+  sortOrder: number;
+  defaultValue?: string | null;
+  unitLabel?: string | null;
+  minValue?: number | null;
+  maxValue?: number | null;
+  stepValue?: number | null;
+  isRequired?: boolean;
+  metadata?: Record<string, unknown> | null;
+}
+
+interface OptionSeed {
+  specDefinitionId: number;
+  label: string;
+  value: string;
+  multiplier?: number;
+  fixedFee?: number;
+  unitCost?: number;
+  estimatedQuantity?: number | null;
+  isDefault?: boolean;
+  sortOrder: number;
+}
+
+interface SpecSnapshotLookupRow {
+  spec_definition_id: number;
+  spec_key: string;
+  spec_label: string;
+  input_type: string;
+  option_id: number | null;
+  option_label: string | null;
+  multiplier: string | null;
+  fixed_fee: string | null;
+  unit_cost: string | null;
+  estimated_quantity: string | null;
+}
+
 function typedQuery<T>(
   ds: DataSource,
   sql: string,
   params?: unknown[],
 ): Promise<T[]> {
   return ds.query(sql, params);
+}
+
+async function insertSpecDefinition(
+  ds: DataSource,
+  spec: SpecSeed,
+): Promise<number> {
+  const [row] = await typedQuery<IdRow>(
+    ds,
+    `INSERT INTO product_spec_definitions (
+      category_id, key, label, input_type, value_type, is_required,
+      is_active, default_value, pricing_role, unit_label, min_value,
+      max_value, step_value, sort_order, metadata
+    )
+     VALUES ($1,$2,$3,$4,$5,$6,true,$7,$8,$9,$10,$11,$12,$13,$14::jsonb)
+     RETURNING id`,
+    [
+      spec.categoryId,
+      spec.key,
+      spec.label,
+      spec.inputType,
+      spec.valueType,
+      spec.isRequired ?? true,
+      spec.defaultValue ?? null,
+      spec.pricingRole,
+      spec.unitLabel ?? null,
+      spec.minValue ?? null,
+      spec.maxValue ?? null,
+      spec.stepValue ?? null,
+      spec.sortOrder,
+      JSON.stringify(spec.metadata ?? null),
+    ],
+  );
+  return row.id;
+}
+
+async function insertSpecOption(
+  ds: DataSource,
+  option: OptionSeed,
+): Promise<void> {
+  await ds.query(
+    `INSERT INTO product_spec_options (
+      spec_definition_id, label, value, multiplier, fixed_fee, unit_cost,
+      estimated_quantity, is_default, is_active, sort_order
+    )
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9)`,
+    [
+      option.specDefinitionId,
+      option.label,
+      option.value,
+      option.multiplier ?? 1,
+      option.fixedFee ?? 0,
+      option.unitCost ?? 0,
+      option.estimatedQuantity ?? null,
+      option.isDefault ?? false,
+      option.sortOrder,
+    ],
+  );
+}
+
+async function insertOrderItemSpecSnapshot(
+  ds: DataSource,
+  orderItemId: number,
+  specKey: string,
+  value: string,
+  displayValue?: string,
+): Promise<void> {
+  const [lookup] = await typedQuery<SpecSnapshotLookupRow>(
+    ds,
+    `SELECT
+       d.id AS spec_definition_id,
+       d.key AS spec_key,
+       d.label AS spec_label,
+       d.input_type,
+       o.id AS option_id,
+       o.label AS option_label,
+       o.multiplier,
+       o.fixed_fee,
+       o.unit_cost,
+       o.estimated_quantity
+     FROM product_spec_definitions d
+     LEFT JOIN product_spec_options o
+       ON o.spec_definition_id = d.id AND o.value = $2
+     WHERE d.key = $1
+     ORDER BY d.id
+     LIMIT 1`,
+    [specKey, value],
+  );
+  if (!lookup) return;
+  await ds.query(
+    `INSERT INTO order_item_spec_values (
+      order_item_id, spec_definition_id, spec_key, spec_label, input_type,
+      value, display_value, option_id, option_label, multiplier, fixed_fee,
+      unit_cost, estimated_quantity
+    )
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+    [
+      orderItemId,
+      lookup.spec_definition_id,
+      lookup.spec_key,
+      lookup.spec_label,
+      lookup.input_type,
+      value,
+      displayValue ?? lookup.option_label ?? value,
+      lookup.option_id,
+      lookup.option_label,
+      lookup.multiplier ?? 1,
+      lookup.fixed_fee ?? 0,
+      lookup.unit_cost ?? 0,
+      lookup.estimated_quantity,
+    ],
+  );
 }
 
 /**
@@ -107,10 +260,11 @@ async function seed() {
   // Clear all tables — CASCADE handles FK ordering automatically
   await ds.query(`
     TRUNCATE TABLE
-      spec_options, service_addons, service_categories,
+      order_item_spec_values, product_spec_options, product_spec_definitions,
+      product_categories, service_addons,
       notifications, payment_transactions, credit_transactions, credit_settings,
       delivery_assignments, order_status_history,
-      paper_specs, three_d_specs, order_items, orders, batch_orders,
+      order_items, orders, batch_orders,
       addresses, driver_profiles, file_metadata,
       beta_mode_settings,
       tam_survey_settings, tam_surveys, tam_survey_requirements,
@@ -353,49 +507,6 @@ async function seed() {
   }
   console.log('✅ Order items added to 6 orders');
 
-  // ─── Paper Specs ────────────────────────────────────────────────────
-  const paperOrderIds: OrderRow[] = orderRows.filter((r: OrderRow) =>
-    ['ORD-10001', 'ORD-10002', 'ORD-10004', 'ORD-10005'].includes(r.order_id),
-  );
-  for (const o of paperOrderIds) {
-    await ds.query(
-      `INSERT INTO paper_specs (order_id, order_item_id, paper_size, color_mode, media_type, print_sides, binding)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        o.id,
-        orderItemByOrderId.get(o.order_id),
-        'a4',
-        'fullColor',
-        'glossy',
-        'frontOnly',
-        'none',
-      ],
-    );
-  }
-  console.log('✅ Paper specs added to 4 orders');
-
-  // ─── 3D Specs ───────────────────────────────────────────────────────
-  const threeDOrderIds: OrderRow[] = orderRows.filter((r: OrderRow) =>
-    ['ORD-10003', 'ORD-10006'].includes(r.order_id),
-  );
-  for (const o of threeDOrderIds) {
-    await ds.query(
-      `INSERT INTO three_d_specs (order_id, order_item_id, file_format, material, color, infill_percentage, layer_height, supports)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [
-        o.id,
-        orderItemByOrderId.get(o.order_id),
-        'stl',
-        'pla',
-        'White',
-        20,
-        0.2,
-        false,
-      ],
-    );
-  }
-  console.log('✅ 3D specs added to 2 orders');
-
   // ─── Delivery Assignment ────────────────────────────────────────────
   // Get driver profile ID (FK references driver_profiles, not users)
   const [driverProfile] = await typedQuery<IdRow>(
@@ -506,280 +617,313 @@ async function seed() {
   }
   console.log('✅ 4 payment transactions created');
 
-  // ─── Service Categories ─────────────────────────────────────────────
-  await ds.query(
-    `INSERT INTO service_categories (name, slug, description, icon, base_rate, max_file_size_mb, allowed_extensions, is_active, sort_order)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+  // ─── Product Catalog ────────────────────────────────────────────────
+  const paperExtensions = '["pdf","png","jpg","jpeg","tif","tiff","docx"]';
+  const threeDExtensions = '["stl","obj","3mf","glb","gltf"]';
+
+  const [paperCat] = await typedQuery<IdRow>(
+    ds,
+    `INSERT INTO product_categories (
+      name, slug, description, mobile_description, icon, file_processing_type,
+      pricing_model, base_rate, quantity_unit, max_file_size_mb,
+      allowed_extensions, is_active, sort_order
+    )
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,true,$12)
+     RETURNING id`,
     [
       'Paper Printing',
       'paper',
       'Standard and large-format paper printing',
+      'Print documents, plans, posters, and handouts.',
       'FileTextOutlined',
-      2.0,
+      'document',
+      'per_page_modifiers',
+      2,
+      'copy',
       50,
-      '["pdf","png","jpg","jpeg","docx"]',
-      true,
+      paperExtensions,
       1,
     ],
   );
-  await ds.query(
-    `INSERT INTO service_categories (name, slug, description, icon, base_rate, max_file_size_mb, allowed_extensions, is_active, sort_order)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+  const [threeDCat] = await typedQuery<IdRow>(
+    ds,
+    `INSERT INTO product_categories (
+      name, slug, description, mobile_description, icon, file_processing_type,
+      pricing_model, base_rate, quantity_unit, max_file_size_mb,
+      allowed_extensions, is_active, sort_order
+    )
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,true,$12)
+     RETURNING id`,
     [
       '3D Printing',
       '3d',
       'FDM 3D printing with PLA, ABS, and PETG materials',
+      'Upload a model and configure print material and finish.',
       'AppstoreOutlined',
-      50.0,
+      'model_3d',
+      'base_plus_material_estimate',
+      50,
+      'model',
       200,
-      '["stl","obj","3mf"]',
-      true,
+      threeDExtensions,
       2,
     ],
   );
-  console.log('✅ 2 service categories created (paper, 3d)');
-
-  const [paperCat] = await ds.query<IdRow[]>(
-    'SELECT id FROM service_categories WHERE slug = $1',
-    ['paper'],
+  const paperId = paperCat.id;
+  const tdId = threeDCat.id;
+  await ds.query(
+    `UPDATE order_items
+     SET category_id = $1, category_slug = 'paper', category_name = 'Paper Printing',
+         pricing_model = 'per_page_modifiers'
+     WHERE category = 'paper'`,
+    [paperId],
   );
-  const [threeDCat] = await ds.query<IdRow[]>(
-    'SELECT id FROM service_categories WHERE slug = $1',
-    ['3d'],
+  await ds.query(
+    `UPDATE order_items
+     SET category_id = $1, category_slug = '3d', category_name = '3D Printing',
+         pricing_model = 'base_plus_material_estimate'
+     WHERE category = '3d'`,
+    [tdId],
   );
-  const paperId: number = paperCat.id;
-  const tdId: number = threeDCat.id;
+  console.log('✅ 2 product categories created (paper, 3d)');
 
-  // ─── Paper Spec Options ─────────────────────────────────────────────
-  const paperOptions = [
-    // paper_size
-    [paperId, 'paper_size', 'A5', 'a5', 0.8, 0, 0, null, false, true, 10],
-    [paperId, 'paper_size', 'A4', 'a4', 1.0, 0, 0, null, true, true, 20],
-    [paperId, 'paper_size', 'A3', 'a3', 1.5, 0, 0, null, false, true, 30],
-    [paperId, 'paper_size', 'A2', 'a2', 2.5, 0, 0, null, false, true, 40],
-    [paperId, 'paper_size', 'A1', 'a1', 4.0, 0, 0, null, false, true, 50],
-    [
-      paperId,
-      'paper_size',
-      '20×30in',
-      'twenty_by_thirty',
-      3.0,
-      0,
-      0,
-      null,
-      false,
-      true,
-      60,
-    ],
-    [
-      paperId,
-      'paper_size',
-      'Custom',
-      'custom',
-      2.0,
-      0,
-      0,
-      null,
-      false,
-      true,
-      70,
-    ],
-    // color_mode
-    [
-      paperId,
+  const paperSizeSpec = await insertSpecDefinition(ds, {
+    categoryId: paperId,
+    key: 'paper_size',
+    label: 'Paper Size',
+    inputType: 'select',
+    valueType: 'string',
+    pricingRole: 'multiplier',
+    sortOrder: 10,
+  });
+  const colorModeSpec = await insertSpecDefinition(ds, {
+    categoryId: paperId,
+    key: 'color_mode',
+    label: 'Color Mode',
+    inputType: 'select',
+    valueType: 'string',
+    pricingRole: 'multiplier',
+    sortOrder: 20,
+  });
+  const mediaTypeSpec = await insertSpecDefinition(ds, {
+    categoryId: paperId,
+    key: 'media_type',
+    label: 'Media Type',
+    inputType: 'select',
+    valueType: 'string',
+    pricingRole: 'multiplier',
+    sortOrder: 30,
+  });
+  const printSidesSpec = await insertSpecDefinition(ds, {
+    categoryId: paperId,
+    key: 'print_sides',
+    label: 'Print Sides',
+    inputType: 'select',
+    valueType: 'string',
+    pricingRole: 'multiplier',
+    sortOrder: 40,
+  });
+  const bindingSpec = await insertSpecDefinition(ds, {
+    categoryId: paperId,
+    key: 'binding',
+    label: 'Binding',
+    inputType: 'select',
+    valueType: 'string',
+    pricingRole: 'fixed_fee',
+    sortOrder: 50,
+  });
+  const printModeSpec = await insertSpecDefinition(ds, {
+    categoryId: paperId,
+    key: 'print_mode',
+    label: 'Print Mode',
+    inputType: 'select',
+    valueType: 'string',
+    pricingRole: 'none',
+    sortOrder: 60,
+    defaultValue: 'fitToPage',
+  });
+  await insertSpecDefinition(ds, {
+    categoryId: paperId,
+    key: 'page_count',
+    label: 'Page Count',
+    inputType: 'number',
+    valueType: 'number',
+    pricingRole: 'estimated_quantity',
+    sortOrder: 70,
+    defaultValue: '1',
+    unitLabel: 'pages',
+    minValue: 1,
+    maxValue: 500,
+    stepValue: 1,
+    metadata: { hidden: true },
+  });
+
+  const paperOptions: OptionSeed[] = [
+    { specDefinitionId: paperSizeSpec, label: 'A5', value: 'a5', multiplier: 0.8, sortOrder: 10 },
+    { specDefinitionId: paperSizeSpec, label: 'A4', value: 'a4', multiplier: 1, isDefault: true, sortOrder: 20 },
+    { specDefinitionId: paperSizeSpec, label: 'A3', value: 'a3', multiplier: 1.5, sortOrder: 30 },
+    { specDefinitionId: paperSizeSpec, label: 'A2', value: 'a2', multiplier: 2.5, sortOrder: 40 },
+    { specDefinitionId: paperSizeSpec, label: 'A1', value: 'a1', multiplier: 4, sortOrder: 50 },
+    { specDefinitionId: paperSizeSpec, label: '20x30', value: 'twenty_by_thirty', multiplier: 3, sortOrder: 60 },
+    { specDefinitionId: paperSizeSpec, label: 'Custom', value: 'custom', multiplier: 2, sortOrder: 70 },
+    { specDefinitionId: colorModeSpec, label: 'Black & White', value: 'black_and_white', multiplier: 1, isDefault: true, sortOrder: 10 },
+    { specDefinitionId: colorModeSpec, label: 'Full Color', value: 'full_color', multiplier: 2.5, sortOrder: 20 },
+    { specDefinitionId: mediaTypeSpec, label: 'Matte', value: 'matte', multiplier: 1, isDefault: true, sortOrder: 10 },
+    { specDefinitionId: mediaTypeSpec, label: 'Glossy', value: 'glossy', multiplier: 1.3, sortOrder: 20 },
+    { specDefinitionId: printSidesSpec, label: 'Front Only', value: 'front_only', multiplier: 1, isDefault: true, sortOrder: 10 },
+    { specDefinitionId: printSidesSpec, label: 'Back to Back', value: 'back_to_back', multiplier: 1.8, sortOrder: 20 },
+    { specDefinitionId: bindingSpec, label: 'None', value: 'none', fixedFee: 0, isDefault: true, sortOrder: 10 },
+    { specDefinitionId: bindingSpec, label: 'Staple', value: 'staple', fixedFee: 10, sortOrder: 20 },
+    { specDefinitionId: bindingSpec, label: 'Spiral', value: 'spiral', fixedFee: 25, sortOrder: 30 },
+    { specDefinitionId: bindingSpec, label: 'Premium', value: 'premium', fixedFee: 50, sortOrder: 40 },
+    { specDefinitionId: printModeSpec, label: 'Fit to Page', value: 'fitToPage', isDefault: true, sortOrder: 10 },
+    { specDefinitionId: printModeSpec, label: 'Actual Size', value: 'actualSize', sortOrder: 20 },
+  ];
+  for (const option of paperOptions) await insertSpecOption(ds, option);
+  console.log('✅ Paper catalog specs and options created');
+
+  const fileFormatSpec = await insertSpecDefinition(ds, {
+    categoryId: tdId,
+    key: 'file_format',
+    label: 'File Format',
+    inputType: 'select',
+    valueType: 'string',
+    pricingRole: 'none',
+    sortOrder: 10,
+  });
+  const materialSpec = await insertSpecDefinition(ds, {
+    categoryId: tdId,
+    key: 'material',
+    label: 'Material',
+    inputType: 'select',
+    valueType: 'string',
+    pricingRole: 'unit_cost',
+    sortOrder: 20,
+  });
+  const colorSpec = await insertSpecDefinition(ds, {
+    categoryId: tdId,
+    key: 'color',
+    label: 'Color',
+    inputType: 'select',
+    valueType: 'string',
+    pricingRole: 'none',
+    sortOrder: 30,
+  });
+  const infillSpec = await insertSpecDefinition(ds, {
+    categoryId: tdId,
+    key: 'infill_percentage',
+    label: 'Infill Percentage',
+    inputType: 'select',
+    valueType: 'number',
+    pricingRole: 'estimated_quantity',
+    unitLabel: '%',
+    sortOrder: 40,
+  });
+  const layerHeightSpec = await insertSpecDefinition(ds, {
+    categoryId: tdId,
+    key: 'layer_height',
+    label: 'Layer Height',
+    inputType: 'select',
+    valueType: 'number',
+    pricingRole: 'none',
+    unitLabel: 'mm',
+    sortOrder: 50,
+  });
+  const supportsSpec = await insertSpecDefinition(ds, {
+    categoryId: tdId,
+    key: 'supports',
+    label: 'Supports',
+    inputType: 'select',
+    valueType: 'boolean',
+    pricingRole: 'fixed_fee',
+    sortOrder: 60,
+  });
+  await insertSpecDefinition(ds, {
+    categoryId: tdId,
+    key: 'notes',
+    label: 'Notes',
+    inputType: 'text',
+    valueType: 'string',
+    pricingRole: 'none',
+    sortOrder: 70,
+    isRequired: false,
+  });
+
+  const tdOptions: OptionSeed[] = [
+    { specDefinitionId: fileFormatSpec, label: 'STL', value: 'stl', isDefault: true, sortOrder: 10 },
+    { specDefinitionId: fileFormatSpec, label: 'OBJ', value: 'obj', sortOrder: 20 },
+    { specDefinitionId: fileFormatSpec, label: '3MF', value: '3mf', sortOrder: 30 },
+    { specDefinitionId: fileFormatSpec, label: 'GLB', value: 'glb', sortOrder: 40 },
+    { specDefinitionId: fileFormatSpec, label: 'GLTF', value: 'gltf', sortOrder: 50 },
+    { specDefinitionId: materialSpec, label: 'PLA', value: 'pla', unitCost: 3, isDefault: true, sortOrder: 10 },
+    { specDefinitionId: materialSpec, label: 'ABS', value: 'abs', unitCost: 3, sortOrder: 20 },
+    { specDefinitionId: materialSpec, label: 'PETG', value: 'petg', unitCost: 4, sortOrder: 30 },
+    { specDefinitionId: colorSpec, label: 'White', value: 'white', isDefault: true, sortOrder: 10 },
+    { specDefinitionId: colorSpec, label: 'Black', value: 'black', sortOrder: 20 },
+    { specDefinitionId: colorSpec, label: 'Gray', value: 'gray', sortOrder: 30 },
+    { specDefinitionId: infillSpec, label: '10%', value: '10', estimatedQuantity: 20, isDefault: true, sortOrder: 10 },
+    { specDefinitionId: infillSpec, label: '20%', value: '20', estimatedQuantity: 40, sortOrder: 20 },
+    { specDefinitionId: infillSpec, label: '50%', value: '50', estimatedQuantity: 100, sortOrder: 30 },
+    { specDefinitionId: infillSpec, label: '100%', value: '100', estimatedQuantity: 200, sortOrder: 40 },
+    { specDefinitionId: layerHeightSpec, label: '0.1mm', value: '0.1', sortOrder: 10 },
+    { specDefinitionId: layerHeightSpec, label: '0.2mm', value: '0.2', isDefault: true, sortOrder: 20 },
+    { specDefinitionId: layerHeightSpec, label: '0.3mm', value: '0.3', sortOrder: 30 },
+    { specDefinitionId: supportsSpec, label: 'No', value: 'false', fixedFee: 0, isDefault: true, sortOrder: 10 },
+    { specDefinitionId: supportsSpec, label: 'Yes', value: 'true', fixedFee: 30, sortOrder: 20 },
+  ];
+  for (const option of tdOptions) await insertSpecOption(ds, option);
+  console.log('✅ 3D catalog specs and options created');
+
+  const paperOrderIds: OrderRow[] = orderRows.filter((r: OrderRow) =>
+    ['ORD-10001', 'ORD-10002', 'ORD-10004', 'ORD-10005'].includes(r.order_id),
+  );
+  for (const order of paperOrderIds) {
+    const orderItemId = orderItemByOrderId.get(order.order_id);
+    if (!orderItemId) continue;
+    await insertOrderItemSpecSnapshot(ds, orderItemId, 'paper_size', 'a4');
+    await insertOrderItemSpecSnapshot(
+      ds,
+      orderItemId,
       'color_mode',
-      'Black & White',
-      'black_and_white',
-      1.0,
-      0,
-      0,
-      null,
-      true,
-      true,
-      10,
-    ],
-    [
-      paperId,
-      'color_mode',
-      'Full Color',
       'full_color',
-      2.5,
-      0,
-      0,
-      null,
-      false,
-      true,
-      20,
-    ],
-    // media_type
-    [paperId, 'media_type', 'Matte', 'matte', 1.0, 0, 0, null, true, true, 10],
-    [
-      paperId,
-      'media_type',
-      'Glossy',
-      'glossy',
-      1.3,
-      0,
-      0,
-      null,
-      false,
-      true,
-      20,
-    ],
-    // print_sides
-    [
-      paperId,
+    );
+    await insertOrderItemSpecSnapshot(ds, orderItemId, 'media_type', 'glossy');
+    await insertOrderItemSpecSnapshot(
+      ds,
+      orderItemId,
       'print_sides',
-      'Front Only',
       'front_only',
-      1.0,
-      0,
-      0,
-      null,
-      true,
-      true,
-      10,
-    ],
-    [
-      paperId,
-      'print_sides',
-      'Back-to-Back',
-      'back_to_back',
-      1.8,
-      0,
-      0,
-      null,
-      false,
-      true,
-      20,
-    ],
-    // binding
-    [paperId, 'binding', 'None', 'none', 1.0, 0.0, 0, null, true, true, 10],
-    [
-      paperId,
-      'binding',
-      'Staple',
-      'staple',
-      1.0,
-      10.0,
-      0,
-      null,
-      false,
-      true,
-      20,
-    ],
-    [
-      paperId,
-      'binding',
-      'Spiral',
-      'spiral',
-      1.0,
-      25.0,
-      0,
-      null,
-      false,
-      true,
-      30,
-    ],
-    [
-      paperId,
-      'binding',
-      'Premium',
-      'premium',
-      1.0,
-      50.0,
-      0,
-      null,
-      false,
-      true,
-      40,
-    ],
-  ];
-  for (const o of paperOptions) {
-    await ds.query(
-      `INSERT INTO spec_options (category_id, option_group, label, value, multiplier, fixed_fee, unit_cost, estimated_grams, is_default, is_active, sort_order)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-      o,
     );
+    await insertOrderItemSpecSnapshot(ds, orderItemId, 'binding', 'none');
+    await insertOrderItemSpecSnapshot(
+      ds,
+      orderItemId,
+      'print_mode',
+      'fitToPage',
+    );
+    await insertOrderItemSpecSnapshot(ds, orderItemId, 'page_count', '1');
   }
-  console.log('✅ 17 paper spec options created');
 
-  // ─── 3D Spec Options ────────────────────────────────────────────────
-  const tdOptions = [
-    // file_format
-    [tdId, 'file_format', 'STL', 'stl', 1.0, 0, 0.0, null, true, true, 10],
-    [tdId, 'file_format', 'OBJ', 'obj', 1.0, 0, 0.0, null, false, true, 20],
-    [
-      tdId,
-      'file_format',
-      '3MF',
-      'three_mf',
-      1.0,
-      0,
-      0.0,
-      null,
-      false,
-      true,
-      30,
-    ],
-    // material
-    [tdId, 'material', 'PLA', 'pla', 1.0, 0, 3.0, null, true, true, 10],
-    [tdId, 'material', 'ABS', 'abs', 1.0, 0, 3.0, null, false, true, 20],
-    [tdId, 'material', 'PETG', 'petg', 1.0, 0, 4.0, null, false, true, 30],
-    // infill
-    [tdId, 'infill', '10%', 'infill_10', 1.0, 0, 0, 20, true, true, 10],
-    [tdId, 'infill', '20%', 'infill_20', 1.0, 0, 0, 40, false, true, 20],
-    [tdId, 'infill', '50%', 'infill_50', 1.0, 0, 0, 100, false, true, 30],
-    [tdId, 'infill', '100%', 'infill_100', 1.0, 0, 0, 200, false, true, 40],
-    // layer_height
-    [
-      tdId,
-      'layer_height',
-      '0.1mm',
-      'layer_01',
-      1.0,
-      0,
-      0,
-      null,
-      false,
-      true,
-      10,
-    ],
-    [
-      tdId,
-      'layer_height',
-      '0.2mm',
-      'layer_02',
-      1.0,
-      0,
-      0,
-      null,
-      true,
-      true,
-      20,
-    ],
-    [
-      tdId,
-      'layer_height',
-      '0.3mm',
-      'layer_03',
-      1.0,
-      0,
-      0,
-      null,
-      false,
-      true,
-      30,
-    ],
-  ];
-  for (const o of tdOptions) {
-    await ds.query(
-      `INSERT INTO spec_options (category_id, option_group, label, value, multiplier, fixed_fee, unit_cost, estimated_grams, is_default, is_active, sort_order)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-      o,
+  const threeDOrderIds: OrderRow[] = orderRows.filter((r: OrderRow) =>
+    ['ORD-10003', 'ORD-10006'].includes(r.order_id),
+  );
+  for (const order of threeDOrderIds) {
+    const orderItemId = orderItemByOrderId.get(order.order_id);
+    if (!orderItemId) continue;
+    await insertOrderItemSpecSnapshot(ds, orderItemId, 'file_format', 'stl');
+    await insertOrderItemSpecSnapshot(ds, orderItemId, 'material', 'pla');
+    await insertOrderItemSpecSnapshot(ds, orderItemId, 'color', 'white');
+    await insertOrderItemSpecSnapshot(
+      ds,
+      orderItemId,
+      'infill_percentage',
+      '20',
     );
+    await insertOrderItemSpecSnapshot(ds, orderItemId, 'layer_height', '0.2');
+    await insertOrderItemSpecSnapshot(ds, orderItemId, 'supports', 'false');
+    await insertOrderItemSpecSnapshot(ds, orderItemId, 'notes', '');
   }
-  console.log('✅ 13 3D spec options created');
+  console.log('✅ Dynamic order item spec snapshots added to seeded orders');
 
   // ─── Service Addons ─────────────────────────────────────────────────
   await ds.query(

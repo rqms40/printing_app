@@ -54,8 +54,10 @@ class CheckoutItemsCard extends ConsumerWidget {
                 item: state.items[i],
                 colors: colors,
                 onEdit: () async {
-                  final updated =
-                      await EditItemSheet.show(context, item: state.items[i]);
+                  final updated = await EditItemSheet.show(
+                    context,
+                    item: state.items[i],
+                  );
                   if (updated != null) notifier.replaceItem(updated);
                 },
                 onDecrement: () {
@@ -127,6 +129,18 @@ class _ItemRow extends StatelessWidget {
   final VoidCallback onIncrement;
 
   String _specSummary() {
+    if (item.specDisplayValues.isNotEmpty) {
+      final entries = item.specDisplayValues.entries
+          .where((entry) => entry.value.trim().isNotEmpty)
+          .where((entry) => entry.key != 'notes')
+          .take(2)
+          .map((entry) => entry.value)
+          .toList();
+      if (item.category == 'paper') {
+        entries.add('${item.pageCount} pages');
+      }
+      if (entries.isNotEmpty) return entries.join(' · ');
+    }
     if (item.category == 'paper' && item.paperSpecs != null) {
       return '${item.paperSpecs!.paperSize.name.toUpperCase()} · ${item.pageCount} pages';
     }

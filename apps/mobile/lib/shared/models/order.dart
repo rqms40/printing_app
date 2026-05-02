@@ -10,6 +10,8 @@ class OrderLineItem {
     this.fileUrl,
     this.fileName,
     this.fileMetadataId,
+    this.specs = const {},
+    this.specDisplayValues = const {},
     this.paperSpecs,
     this.threeDSpecs,
     required this.quantity,
@@ -22,6 +24,8 @@ class OrderLineItem {
   final String? fileUrl;
   final String? fileName;
   final int? fileMetadataId;
+  final Map<String, dynamic> specs;
+  final Map<String, String> specDisplayValues;
   final PaperSpecs? paperSpecs;
   final ThreeDSpecs? threeDSpecs;
   final int quantity;
@@ -39,6 +43,8 @@ class Order {
     this.fileUrl,
     this.fileName,
     this.fileMetadataId,
+    this.specs = const {},
+    this.specDisplayValues = const {},
     this.paperSpecs,
     this.threeDSpecs,
     required this.quantity,
@@ -74,6 +80,8 @@ class Order {
   final String? fileUrl;
   final String? fileName;
   final int? fileMetadataId;
+  final Map<String, dynamic> specs;
+  final Map<String, String> specDisplayValues;
   final PaperSpecs? paperSpecs;
   final ThreeDSpecs? threeDSpecs;
   final int quantity;
@@ -112,6 +120,8 @@ class Order {
         fileUrl: fileUrl,
         fileName: fileName,
         fileMetadataId: fileMetadataId,
+        specs: specs,
+        specDisplayValues: specDisplayValues,
         paperSpecs: paperSpecs,
         threeDSpecs: threeDSpecs,
         quantity: quantity,
@@ -156,6 +166,8 @@ class Order {
     String? fileUrl,
     String? fileName,
     int? fileMetadataId,
+    Map<String, dynamic>? specs,
+    Map<String, String>? specDisplayValues,
     PaperSpecs? paperSpecs,
     ThreeDSpecs? threeDSpecs,
     int? quantity,
@@ -191,6 +203,8 @@ class Order {
       fileUrl: fileUrl ?? this.fileUrl,
       fileName: fileName ?? this.fileName,
       fileMetadataId: fileMetadataId ?? this.fileMetadataId,
+      specs: specs ?? this.specs,
+      specDisplayValues: specDisplayValues ?? this.specDisplayValues,
       paperSpecs: paperSpecs ?? this.paperSpecs,
       threeDSpecs: threeDSpecs ?? this.threeDSpecs,
       quantity: quantity ?? this.quantity,

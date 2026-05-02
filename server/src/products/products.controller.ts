@@ -19,6 +19,10 @@ import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CreateSpecOptionDto } from './dto/create-spec-option.dto';
 import { UpdateSpecOptionDto } from './dto/update-spec-option.dto';
+import { CreateSpecDefinitionDto } from './dto/create-spec-definition.dto';
+import { UpdateSpecDefinitionDto } from './dto/update-spec-definition.dto';
+import { CreateSpecOptionV2Dto } from './dto/create-spec-option-v2.dto';
+import { UpdateSpecOptionV2Dto } from './dto/update-spec-option-v2.dto';
 import { ReorderOptionsDto } from './dto/reorder-options.dto';
 import { CreateAddonDto } from './dto/create-addon.dto';
 import { UpdateAddonDto } from './dto/update-addon.dto';
@@ -29,6 +33,11 @@ export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   // ─── Categories (public reads, admin writes) ──────────────────────
+
+  @Get('catalog')
+  getPublicCatalog() {
+    return this.productsService.getPublicCatalog();
+  }
 
   @Get('categories')
   findAllCategories(@Query('include_inactive') includeInactive?: string) {
@@ -73,6 +82,41 @@ export class ProductsController {
     return this.productsService.deleteCategory(id);
   }
 
+  // ─── Spec Definitions ─────────────────────────────────────────────
+
+  @ApiQuery({ name: 'category_id', required: false, type: Number })
+  @Get('spec-definitions')
+  findSpecDefinitions(@Query('category_id') categoryId?: number) {
+    return this.productsService.findSpecDefinitions(categoryId);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Post('spec-definitions')
+  createSpecDefinition(@Body() dto: CreateSpecDefinitionDto) {
+    return this.productsService.createSpecDefinition(dto);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Patch('spec-definitions/:id')
+  updateSpecDefinition(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateSpecDefinitionDto,
+  ) {
+    return this.productsService.updateSpecDefinition(id, dto);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Delete('spec-definitions/:id')
+  deleteSpecDefinition(@Param('id', ParseIntPipe) id: number) {
+    return this.productsService.deleteSpecDefinition(id);
+  }
+
   // ─── Spec Options ─────────────────────────────────────────────────
 
   @ApiQuery({ name: 'category_id', required: false, type: Number })
@@ -106,6 +150,14 @@ export class ProductsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
+  @Post('spec-options')
+  createOptionV2(@Body() dto: CreateSpecOptionV2Dto) {
+    return this.productsService.createOptionV2(dto);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   @Patch('options/:id')
   updateOption(
     @Param('id', ParseIntPipe) id: number,
@@ -120,6 +172,17 @@ export class ProductsController {
   @Delete('options/:id')
   deleteOption(@Param('id', ParseIntPipe) id: number) {
     return this.productsService.deleteOption(id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @Patch('spec-options/:id')
+  updateOptionV2(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateSpecOptionV2Dto,
+  ) {
+    return this.productsService.updateOptionV2(id, dto);
   }
 
   // ─── Addons ───────────────────────────────────────────────────────

@@ -13,6 +13,12 @@ import type {
   ThreeDSpecs,
 } from "@/types/order";
 import type {
+  ProductFileProcessingType,
+  ProductInputType,
+  ProductPricingModel,
+  ProductPricingRole,
+  ProductSpecDefinition,
+  ProductValueType,
   ServiceAddon,
   ServiceCategory,
   SpecOption,
@@ -705,8 +711,31 @@ export function normalizeServiceCategory(input: unknown): ServiceCategory {
     name: toRequiredString(record, "", "name"),
     slug: toRequiredString(record, "", "slug"),
     description: toOptionalString(record, "description"),
+    mobile_description: toOptionalString(
+      record,
+      "mobile_description",
+      "mobileDescription",
+    ),
     icon: toOptionalString(record, "icon"),
+    file_processing_type: toRequiredString(
+      record,
+      "generic_file",
+      "file_processing_type",
+      "fileProcessingType",
+    ) as ProductFileProcessingType,
+    pricing_model: toRequiredString(
+      record,
+      "per_page_modifiers",
+      "pricing_model",
+      "pricingModel",
+    ) as ProductPricingModel,
     base_rate: toNumberValue(record, 0, "base_rate", "baseRate"),
+    quantity_unit: toRequiredString(
+      record,
+      "copy",
+      "quantity_unit",
+      "quantityUnit",
+    ),
     max_file_size_mb: toNumberValue(
       record,
       0,
@@ -718,6 +747,7 @@ export function normalizeServiceCategory(input: unknown): ServiceCategory {
     ),
     is_active: toBooleanValue(record, true, "is_active", "isActive"),
     sort_order: toNumberValue(record, 0, "sort_order", "sortOrder"),
+    specs: normalizeProductSpecDefinitions(read(record, "specs")),
     created_at: toRequiredString(record, EMPTY_DATE, "created_at", "createdAt"),
     updated_at: toRequiredString(record, EMPTY_DATE, "updated_at", "updatedAt"),
   };
@@ -729,23 +759,120 @@ export function normalizeServiceCategories(
   return Array.isArray(payload) ? payload.map(normalizeServiceCategory) : [];
 }
 
-export function normalizeSpecOption(input: unknown): SpecOption {
+export function normalizeProductSpecDefinition(
+  input: unknown,
+): ProductSpecDefinition {
   const record = asRecord(input);
 
   return {
     id: toRequiredString(record, "", "id"),
     category_id: toRequiredString(record, "", "category_id", "categoryId"),
-    option_group: toRequiredString(record, "", "option_group", "optionGroup"),
+    key: toRequiredString(record, "", "key"),
+    label: toRequiredString(record, "", "label"),
+    help_text: toOptionalString(record, "help_text", "helpText"),
+    input_type: toRequiredString(
+      record,
+      "select",
+      "input_type",
+      "inputType",
+    ) as ProductInputType,
+    value_type: toRequiredString(
+      record,
+      "string",
+      "value_type",
+      "valueType",
+    ) as ProductValueType,
+    is_required: toBooleanValue(record, true, "is_required", "isRequired"),
+    is_active: toBooleanValue(record, true, "is_active", "isActive"),
+    default_value: toOptionalString(record, "default_value", "defaultValue"),
+    pricing_role: toRequiredString(
+      record,
+      "none",
+      "pricing_role",
+      "pricingRole",
+    ) as ProductPricingRole,
+    unit_label: toOptionalString(record, "unit_label", "unitLabel"),
+    placeholder: toOptionalString(record, "placeholder"),
+    min_value:
+      read(record, "min_value", "minValue") === undefined ||
+      read(record, "min_value", "minValue") === null
+        ? undefined
+        : toNumberValue(record, 0, "min_value", "minValue"),
+    max_value:
+      read(record, "max_value", "maxValue") === undefined ||
+      read(record, "max_value", "maxValue") === null
+        ? undefined
+        : toNumberValue(record, 0, "max_value", "maxValue"),
+    step_value:
+      read(record, "step_value", "stepValue") === undefined ||
+      read(record, "step_value", "stepValue") === null
+        ? undefined
+        : toNumberValue(record, 0, "step_value", "stepValue"),
+    sort_order: toNumberValue(record, 0, "sort_order", "sortOrder"),
+    options: normalizeSpecOptions(read(record, "options")),
+    created_at: toRequiredString(record, EMPTY_DATE, "created_at", "createdAt"),
+    updated_at: toRequiredString(record, EMPTY_DATE, "updated_at", "updatedAt"),
+  };
+}
+
+export function normalizeProductSpecDefinitions(
+  payload: unknown,
+): ProductSpecDefinition[] {
+  return Array.isArray(payload)
+    ? payload.map(normalizeProductSpecDefinition)
+    : [];
+}
+
+export function normalizeSpecOption(input: unknown): SpecOption {
+  const record = asRecord(input);
+  const specDefinition = asRecord(read(record, "specDefinition", "spec_definition"));
+  const estimatedQuantity = read(
+    record,
+    "estimated_quantity",
+    "estimatedQuantity",
+    "estimated_grams",
+    "estimatedGrams",
+  );
+
+  return {
+    id: toRequiredString(record, "", "id"),
+    category_id:
+      toOptionalString(record, "category_id", "categoryId") ??
+      toRequiredString(specDefinition, "", "category_id", "categoryId"),
+    spec_definition_id:
+      toOptionalString(record, "spec_definition_id", "specDefinitionId") ??
+      toOptionalString(specDefinition, "id"),
+    option_group:
+      toOptionalString(record, "option_group", "optionGroup") ??
+      toRequiredString(specDefinition, "", "key"),
     label: toRequiredString(record, "", "label"),
     value: toRequiredString(record, "", "value"),
     multiplier: toNumberValue(record, 1, "multiplier"),
     fixed_fee: toNumberValue(record, 0, "fixed_fee", "fixedFee"),
     unit_cost: toNumberValue(record, 0, "unit_cost", "unitCost"),
-    estimated_grams:
-      read(record, "estimated_grams", "estimatedGrams") === undefined ||
-      read(record, "estimated_grams", "estimatedGrams") === null
+    estimated_quantity:
+      estimatedQuantity === undefined || estimatedQuantity === null
         ? undefined
-        : toNumberValue(record, 0, "estimated_grams", "estimatedGrams"),
+        : toNumberValue(
+            record,
+            0,
+            "estimated_quantity",
+            "estimatedQuantity",
+            "estimated_grams",
+            "estimatedGrams",
+          ),
+    estimated_grams:
+      estimatedQuantity === undefined ||
+      estimatedQuantity === null
+        ? undefined
+        : toNumberValue(
+            record,
+            0,
+            "estimated_quantity",
+            "estimatedQuantity",
+            "estimated_grams",
+            "estimatedGrams",
+          ),
     is_default: toBooleanValue(record, false, "is_default", "isDefault"),
     is_active: toBooleanValue(record, true, "is_active", "isActive"),
     sort_order: toNumberValue(record, 0, "sort_order", "sortOrder"),

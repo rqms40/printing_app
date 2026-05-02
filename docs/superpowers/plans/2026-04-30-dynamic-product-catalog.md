@@ -16,6 +16,15 @@ This is a full-stack feature. Implement tasks in order because later tasks depen
 
 The plan intentionally keeps pricing formulas in server code. Database records provide formula inputs only.
 
+## Current Code Drift Notes
+
+Reviewed again on 2026-05-02 at `dbeb735`. The worktree also had unrelated dirty landing-page files; ignore those while implementing catalog work.
+
+- Preserve recent mobile tutorial and checkout coach-mark state when changing category, spec, upload, checkout, and payment screens.
+- Preserve recent upload support: paper uploads now include `tif` and `tiff`; both the initial upload screen and edit-item replacement picker must read active catalog extensions instead of `AppConstants`.
+- Preserve current `OrdersService.createBatch` behavior for PH-local same-day slot validation, 3D bounds validation, delivery/priority/extra-destination fee calculation, credits/payment handling, slot broadcasts, notifications, and post-delivery survey triggers while adding catalog pricing.
+- Use a migration timestamp newer than the existing `1777593600000-add-beta-testimonial-columns.ts`.
+
 ---
 
 ## File Structure
@@ -41,7 +50,7 @@ The plan intentionally keeps pricing formulas in server code. Database records p
 - Modify `server/src/products/products.module.ts`, `server/src/products/products.controller.ts`, `server/src/products/products.service.ts`.
 - Modify `server/src/orders/orders.module.ts`, `server/src/orders/orders.controller.ts`, `server/src/orders/orders.service.ts`.
 - Modify `server/src/seed.ts`.
-- Create migration `server/migrations/1777593600000-dynamic-product-catalog.ts`.
+- Create migration `server/migrations/1777680000000-dynamic-product-catalog.ts`.
 
 ### Admin
 
@@ -64,7 +73,7 @@ The plan intentionally keeps pricing formulas in server code. Database records p
 - Modify `apps/mobile/lib/features/customer/order/screens/upload_screen.dart`.
 - Modify `apps/mobile/lib/features/customer/cart/models/cart_item.dart`.
 - Modify `apps/mobile/lib/features/customer/orders/providers/orders_provider.dart`.
-- Modify checkout item/edit widgets that display or edit paper/3D enum specs.
+- Modify checkout item/edit widgets, especially `apps/mobile/lib/features/customer/order/sheets/edit_item_sheet.dart`, that display, edit, or replace files for paper/3D enum specs.
 - Keep old enum files until checkout/order parsing is migrated; remove obsolete pricing use in the cleanup task.
 
 ---
@@ -1754,6 +1763,8 @@ export class CatalogPricingService {
 }
 ```
 
+This quote is authoritative for catalog item pricing and spec validation. Do not let mobile treat the placeholder `deliveryFee` and `serviceFee` values as final checkout delivery pricing unless this service is extended to use the same delivery settings and destination inputs as `OrdersService.createBatch`; final order creation must still recompute delivery, priority, and extra-destination fees server-side.
+
 - [ ] **Step 6: Run pricing tests**
 
 Run:
@@ -2015,6 +2026,14 @@ for (const snapshot of quoteItem.specSnapshots) {
 
 Keep legacy `paperSpecs`/`threeDSpecs` handling until mobile migrates. Once mobile uses generic specs, remove legacy branches in the cleanup task.
 
+Preserve the existing non-catalog `createBatch` branches while inserting quote validation:
+
+- Keep 3D printer bounds validation before the transaction rejects impossible models.
+- Keep PH-local same-day bookable-slot validation when no `slotTemplateId` is provided.
+- Keep current delivery type, speed tier, priority, and extra-destination fee calculation.
+- Keep credits deduction, payment summary behavior, slot WebSocket broadcasts, and `notifyOrderPlaced` after the transaction.
+- Keep post-delivery survey trigger logic in order status updates; catalog work must not move or delete it.
+
 - [ ] **Step 7: Run server tests**
 
 Run:
@@ -2024,7 +2043,7 @@ cd server
 npm test -- orders/orders.service.spec.ts products/catalog-pricing.service.spec.ts
 ```
 
-Expected: PASS after expanding the order-service mock providers to include `CatalogPricingService` and `OrderItemSpecValue`.
+Expected: PASS after expanding the order-service mock providers to include `CatalogPricingService` and `OrderItemSpecValue`; keep the existing no-slot, printer-bounds, delivery-fee, credits, and survey-related tests passing.
 
 - [ ] **Step 8: Commit**
 
@@ -2038,7 +2057,7 @@ git commit -m "feat(server): price orders from catalog quotes"
 ### Task 6: Migration And Seed Data
 
 **Files:**
-- Create: `server/migrations/1777593600000-dynamic-product-catalog.ts`
+- Create: `server/migrations/1777680000000-dynamic-product-catalog.ts`
 - Modify: `server/src/seed.ts`
 - Modify: `server/src/seed.spec.ts`
 
@@ -2072,13 +2091,13 @@ Expected: FAIL because seed still uses old tables.
 
 - [ ] **Step 3: Create migration**
 
-Create `server/migrations/1777593600000-dynamic-product-catalog.ts`:
+Create `server/migrations/1777680000000-dynamic-product-catalog.ts`:
 
 ```ts
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class DynamicProductCatalog1777593600000 implements MigrationInterface {
-  name = 'DynamicProductCatalog1777593600000';
+export class DynamicProductCatalog1777680000000 implements MigrationInterface {
+  name = 'DynamicProductCatalog1777680000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`DROP TABLE IF EXISTS "paper_specs" CASCADE`);
@@ -2205,7 +2224,7 @@ In `server/src/seed.ts`:
   - 3D spec definitions and options
   - addons pointing to `product_categories`
 
-Use canonical values from the design spec. For 3D allowed extensions, include `stl`, `obj`, `3mf`, `glb`, `gltf`.
+Use canonical values from the design spec. For paper allowed extensions, include `pdf`, `png`, `jpg`, `jpeg`, `tif`, `tiff`, `docx`. For 3D allowed extensions, include `stl`, `obj`, `3mf`, `glb`, `gltf`.
 
 - [ ] **Step 5: Run seed tests**
 
@@ -2221,7 +2240,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add server/migrations/1777593600000-dynamic-product-catalog.ts server/src/seed.ts server/src/seed.spec.ts
+git add server/migrations/1777680000000-dynamic-product-catalog.ts server/src/seed.ts server/src/seed.spec.ts
 git commit -m "feat(server): seed dynamic product catalog"
 ```
 
@@ -3038,6 +3057,8 @@ git commit -m "feat(mobile): add product catalog models"
 - Modify: `apps/mobile/lib/features/customer/order/screens/paper_specs_screen.dart`
 - Modify: `apps/mobile/lib/features/customer/order/screens/three_d_specs_screen.dart`
 - Modify: `apps/mobile/lib/features/customer/order/screens/upload_screen.dart`
+- Modify: `apps/mobile/lib/features/customer/order/screens/checkout_screen.dart`
+- Modify: `apps/mobile/lib/features/customer/order/sheets/edit_item_sheet.dart`
 - Modify: `apps/mobile/lib/features/customer/cart/models/cart_item.dart`
 - Modify: `apps/mobile/lib/features/customer/orders/providers/orders_provider.dart`
 - Test: `apps/mobile/test/features/customer/order/catalog/dynamic_spec_field_test.dart`
@@ -3197,6 +3218,7 @@ In `category_screen.dart`:
 
 - Watch `catalogProvider`.
 - Render loading, error with retry, and category cards from `catalog.categories`.
+- Preserve the current pipeline tutorial listener/dispose/`GlobalKey` flow. Attach the existing paper-category tutorial key to the rendered `paper` category card when that category is active.
 - On tap, set category slug/name in order flow and navigate. Paper and 3D routes may remain:
 
 ```dart
@@ -3218,6 +3240,7 @@ In both `paper_specs_screen.dart` and `three_d_specs_screen.dart`:
 - Render `DynamicSpecField` for every spec.
 - Store selected specs as `Map<String, dynamic>` in order flow or directly in `CartItem`.
 - Request quote before continuing and store quoted subtotal.
+- Preserve existing tutorial keys and coach marks in the paper specs screen; map those keys onto the equivalent dynamic fields when `paper_size`, `color_mode`, `media_type`, `print_sides`, and `binding` are active.
 
 Use helper:
 
@@ -3230,7 +3253,7 @@ Map<String, Object?> defaultSpecValues(ProductCategoryCatalog category) {
 }
 ```
 
-- [ ] **Step 6: Update upload limits**
+- [ ] **Step 6: Update upload limits and replacement picker**
 
 In `upload_screen.dart`, replace `_allowedTypes` and `_maxSizeMB` with selected category catalog values:
 
@@ -3239,7 +3262,9 @@ final category = ref.read(selectedCategoryCatalogProvider);
 return category?.allowedExtensions ?? const <String>[];
 ```
 
-If the catalog is missing, disable file picking and show retry.
+In `edit_item_sheet.dart`, replace `AppConstants.paperTypes`/`AppConstants.threeDTypes` and category string checks with the cart item's selected category catalog values when replacing a file. Paper support must include `tif` and `tiff` if those extensions are active in the catalog. If the catalog is missing, disable file picking and show retry.
+
+Preserve the existing upload screen tutorial key and coach mark on the primary upload action.
 
 - [ ] **Step 7: Update `CartItem` and order payload**
 
@@ -3273,6 +3298,8 @@ return {
 ```
 
 Keep legacy `paperSpecs`/`threeDSpecs` parsing until all UI display is migrated.
+
+Update checkout item display to read generic `selectedSpecs` snapshots/options, and preserve the current checkout tutorial keys/coach marks. If payment or credits UI is touched while adjusting totals, preserve the existing credits coach mark in `payment_method_sheet.dart`.
 
 - [ ] **Step 8: Run mobile tests**
 

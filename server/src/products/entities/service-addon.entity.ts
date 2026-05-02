@@ -8,7 +8,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { ServiceCategory } from './service-category.entity';
+import { ProductCategory } from './product-category.entity';
 
 const numberTransformer = {
   to: (value: number | null) => value,
@@ -23,12 +23,12 @@ export class ServiceAddon {
   @Column({ name: 'category_id', type: 'int', nullable: true })
   categoryId: number | null;
 
-  @ManyToOne(() => ServiceCategory, (cat) => cat.addons, {
+  @ManyToOne(() => ProductCategory, (cat) => cat.addons, {
     nullable: true,
     onDelete: 'SET NULL',
   })
   @JoinColumn({ name: 'category_id' })
-  category: ServiceCategory | null;
+  category: ProductCategory | null;
 
   @Column({ length: 100 })
   name: string;

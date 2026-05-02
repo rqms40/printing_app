@@ -13,6 +13,7 @@ import {
   IsPositive,
   Matches,
   MaxLength,
+  IsObject,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -108,6 +109,17 @@ export class CreateOrderDto {
   @ValidateNested()
   @Type(() => ThreeDSpecsDto)
   threeDSpecs?: ThreeDSpecsDto;
+
+  @ApiPropertyOptional({ example: { paper_size: 'a4' } })
+  @IsOptional()
+  @IsObject()
+  specs?: Record<string, unknown>;
+
+  @ApiPropertyOptional({ type: [Number] })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  addonIds?: number[];
 }
 
 export class CreateBatchDestinationDto {
@@ -165,6 +177,17 @@ export class CreateBatchOrderItemDto {
   @ValidateNested()
   @Type(() => ThreeDSpecsDto)
   threeDSpecs?: ThreeDSpecsDto;
+
+  @ApiPropertyOptional({ example: { paper_size: 'a4' } })
+  @IsOptional()
+  @IsObject()
+  specs?: Record<string, unknown>;
+
+  @ApiPropertyOptional({ type: [Number] })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  addonIds?: number[];
 
   @IsOptional()
   @IsInt()

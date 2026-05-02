@@ -335,6 +335,16 @@ class OrderDetailScreen extends ConsumerWidget {
   }
 
   List<Widget> _itemSpecRows(OrderLineItem item, AppColorSet colors) {
+    if (item.specDisplayValues.isNotEmpty) {
+      return item.specDisplayValues.entries
+          .where((entry) => entry.value.trim().isNotEmpty)
+          .map(
+            (entry) =>
+                _specRow(_humanizeSpecKey(entry.key), entry.value, colors),
+          )
+          .toList();
+    }
+
     final paperSpecs = item.paperSpecs;
     if (paperSpecs != null) {
       return [
@@ -367,6 +377,17 @@ class OrderDetailScreen extends ConsumerWidget {
     if (category == '3d') return '3D Print';
     if (category == 'paper') return 'Paper Print';
     return category;
+  }
+
+  String _humanizeSpecKey(String key) {
+    return key
+        .split('_')
+        .map(
+          (part) => part.isEmpty
+              ? part
+              : '${part[0].toUpperCase()}${part.substring(1)}',
+        )
+        .join(' ');
   }
 
   String _mimeFromExtension(String ext) {

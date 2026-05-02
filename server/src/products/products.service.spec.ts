@@ -3,8 +3,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { ProductsService } from './products.service';
-import { ServiceCategory } from './entities/service-category.entity';
-import { SpecOption } from './entities/spec-option.entity';
+import { CatalogReadService } from './catalog-read.service';
+import { ProductCategory } from './entities/product-category.entity';
+import { ProductSpecDefinition } from './entities/product-spec-definition.entity';
+import { ProductSpecOption } from './entities/product-spec-option.entity';
 import { ServiceAddon } from './entities/service-addon.entity';
 
 const mockCatRepo = () => ({
@@ -27,6 +29,15 @@ const mockOptRepo = () => ({
   remove: jest.fn(),
 });
 
+const mockSpecRepo = () => ({
+  find: jest.fn(),
+  findOne: jest.fn(),
+  findOneOrFail: jest.fn(),
+  create: jest.fn(),
+  save: jest.fn(),
+  update: jest.fn(),
+});
+
 const mockAddonRepo = () => ({
   find: jest.fn(),
   findOneOrFail: jest.fn(),
@@ -40,26 +51,39 @@ describe('ProductsService', () => {
   let service: ProductsService;
   let optRepo: ReturnType<typeof mockOptRepo>;
   let catRepo: ReturnType<typeof mockCatRepo>;
+  let specRepo: ReturnType<typeof mockSpecRepo>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ProductsService,
         {
-          provide: getRepositoryToken(ServiceCategory),
+          provide: getRepositoryToken(ProductCategory),
           useFactory: mockCatRepo,
         },
-        { provide: getRepositoryToken(SpecOption), useFactory: mockOptRepo },
+        {
+          provide: getRepositoryToken(ProductSpecDefinition),
+          useFactory: mockSpecRepo,
+        },
+        {
+          provide: getRepositoryToken(ProductSpecOption),
+          useFactory: mockOptRepo,
+        },
         {
           provide: getRepositoryToken(ServiceAddon),
           useFactory: mockAddonRepo,
+        },
+        {
+          provide: CatalogReadService,
+          useValue: { getPublicCatalog: jest.fn() },
         },
       ],
     }).compile();
 
     service = module.get<ProductsService>(ProductsService);
-    catRepo = module.get(getRepositoryToken(ServiceCategory));
-    optRepo = module.get(getRepositoryToken(SpecOption));
+    catRepo = module.get(getRepositoryToken(ProductCategory));
+    specRepo = module.get(getRepositoryToken(ProductSpecDefinition));
+    optRepo = module.get(getRepositoryToken(ProductSpecOption));
   });
 
   describe('createCategory', () => {
@@ -94,6 +118,7 @@ describe('ProductsService', () => {
 
   describe('createOption', () => {
     it('throws ConflictException if (categoryId, optionGroup, value) already exists', async () => {
+      specRepo.findOne.mockResolvedValue({ id: 10, key: 'paper_size' });
       optRepo.findOne.mockResolvedValue({ id: 1 });
       await expect(
         service.createOption({
@@ -106,6 +131,7 @@ describe('ProductsService', () => {
     });
 
     it('throws BadRequestException if multiplier is 0', async () => {
+      specRepo.findOne.mockResolvedValue({ id: 10, key: 'paper_size' });
       optRepo.findOne.mockResolvedValue(null);
       await expect(
         service.createOption({
@@ -119,6 +145,7 @@ describe('ProductsService', () => {
     });
 
     it('throws BadRequestException if multiplier is negative', async () => {
+      specRepo.findOne.mockResolvedValue({ id: 10, key: 'paper_size' });
       optRepo.findOne.mockResolvedValue(null);
       await expect(
         service.createOption({
@@ -132,6 +159,7 @@ describe('ProductsService', () => {
     });
 
     it('creates and returns the option', async () => {
+      specRepo.findOne.mockResolvedValue({ id: 10, key: 'paper_size' });
       optRepo.findOne.mockResolvedValue(null);
       optRepo.create.mockReturnValue({ id: 1, label: 'A4' });
       optRepo.save.mockResolvedValue({ id: 1, label: 'A4' });
@@ -150,8 +178,7 @@ describe('ProductsService', () => {
     it('throws BadRequestException when disabling the last active option in a group', async () => {
       optRepo.findOneOrFail.mockResolvedValue({
         id: 1,
-        categoryId: 1,
-        optionGroup: 'paper_size',
+        specDefinitionId: 10,
         isActive: true,
       });
       optRepo.count.mockResolvedValue(1); // only 1 active
@@ -164,8 +191,7 @@ describe('ProductsService', () => {
       optRepo.findOneOrFail
         .mockResolvedValueOnce({
           id: 1,
-          categoryId: 1,
-          optionGroup: 'paper_size',
+          specDefinitionId: 10,
           isActive: true,
         })
         .mockResolvedValueOnce({ id: 1, isActive: false });
@@ -193,8 +219,7 @@ describe('ProductsService', () => {
     it('removes the option when it is not the last active', async () => {
       const opt = {
         id: 1,
-        categoryId: 1,
-        optionGroup: 'paper_size',
+        specDefinitionId: 10,
         isActive: true,
       };
       optRepo.findOneOrFail.mockResolvedValue(opt);

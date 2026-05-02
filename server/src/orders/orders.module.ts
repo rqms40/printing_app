@@ -4,10 +4,9 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Order } from './entities/order.entity';
 import { BatchOrder } from './entities/batch-order.entity';
-import { PaperSpec } from './entities/paper-specs.entity';
-import { ThreeDSpec } from './entities/three-d-specs.entity';
 import { OrderStatusHistory } from './entities/order-status-history.entity';
 import { OrderItem } from './entities/order-item.entity';
+import { OrderItemSpecValue } from './entities/order-item-spec-value.entity';
 import { DeliveryDestination } from './entities/delivery-destination.entity';
 import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
@@ -23,16 +22,16 @@ import { Address } from '../addresses/entities/address.entity';
 import { DeliverySlotsModule } from '../delivery-slots/delivery-slots.module';
 import { PrinterProfileModule } from '../printer-profile/printer-profile.module';
 import { TamSurveysModule } from '../tam-surveys/tam-surveys.module';
+import { ProductsModule } from '../products/products.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       Order,
       BatchOrder,
-      PaperSpec,
-      ThreeDSpec,
       OrderStatusHistory,
       OrderItem,
+      OrderItemSpecValue,
       DeliveryAssignment,
       Address,
       DeliveryDestination,
@@ -52,6 +51,7 @@ import { TamSurveysModule } from '../tam-surveys/tam-surveys.module';
     TamSurveysModule,
     DeliverySlotsModule,
     PrinterProfileModule,
+    ProductsModule,
   ],
   providers: [OrdersService, OrdersGateway],
   controllers: [OrdersController, ExternalDeliveriesController],

@@ -13,8 +13,7 @@ import {
 import { Order, OrderStatus } from './entities/order.entity';
 import { BatchOrder } from './entities/batch-order.entity';
 import { OrderItem } from './entities/order-item.entity';
-import { PaperSpec } from './entities/paper-specs.entity';
-import { ThreeDSpec } from './entities/three-d-specs.entity';
+import { OrderItemSpecValue } from './entities/order-item-spec-value.entity';
 import { DeliveryDestination } from './entities/delivery-destination.entity';
 import {
   DeliveryAssignment,
@@ -28,6 +27,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { FilesService } from '../files/files.service';
 import { FileMetadata } from '../files/entities/file-metadata.entity';
 import { CreateBatchOrderDto } from './dto/create-order.dto';
+import { QuoteOrderDto } from './dto/quote-order.dto';
 import { DeliverySpeedTier } from './enums/delivery-speed-tier.enum';
 import { UpdateManualStatusDto } from './dto/update-manual-status.dto';
 import { Address } from '../addresses/entities/address.entity';
@@ -37,6 +37,7 @@ import { DeliverySlotsGateway } from '../delivery-slots/delivery-slots.gateway';
 import { DeliverySlotBooking } from '../delivery-slots/entities/delivery-slot-booking.entity';
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
 import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
+import { CatalogPricingService } from '../products/catalog-pricing.service';
 
 // Slot definitions live in operator-local time (Asia/Manila, UTC+8). The API
 // server may run in UTC, so we never use server-local Date#getHours/setHours
@@ -58,14 +59,18 @@ function phTodayDateString(now: Date = new Date()): string {
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
+  private static readonly ORDER_RELATIONS = [
+    'batchOrder',
+    'items',
+    'items.specValues',
+  ];
 
   constructor(
     @InjectRepository(Order) private ordersRepo: Repository<Order>,
     @InjectRepository(OrderItem)
     private orderItemsRepo: Repository<OrderItem>,
-    @InjectRepository(PaperSpec) private paperSpecsRepo: Repository<PaperSpec>,
-    @InjectRepository(ThreeDSpec)
-    private threeDSpecsRepo: Repository<ThreeDSpec>,
+    @InjectRepository(OrderItemSpecValue)
+    private orderItemSpecValueRepo: Repository<OrderItemSpecValue>,
     @InjectRepository(DeliveryAssignment)
     private deliveryAssignmentRepo: Repository<DeliveryAssignment>,
     @InjectRepository(Address)
@@ -85,6 +90,7 @@ export class OrdersService {
     private settingsService: DeliverySettingsService,
     private slotsGateway: DeliverySlotsGateway,
     private printerProfileService: PrinterProfileService,
+    private catalogPricingService: CatalogPricingService,
     @InjectRepository(FileMetadata)
     private readonly fileMetadataRepo: Repository<FileMetadata>,
   ) {}
@@ -92,7 +98,7 @@ export class OrdersService {
   async findByUser(userId: number): Promise<Order[]> {
     const orders = await this.ordersRepo.find({
       where: { userId },
-      relations: ['batchOrder', 'items', 'items.paperSpec', 'items.threeDSpec'],
+      relations: OrdersService.ORDER_RELATIONS,
       order: { createdAt: 'DESC' },
     });
     return this.attachDeliveryAssignmentIds(orders);
@@ -101,7 +107,7 @@ export class OrdersService {
   async findById(id: number): Promise<Order | null> {
     const order = await this.ordersRepo.findOne({
       where: { id },
-      relations: ['batchOrder', 'items', 'items.paperSpec', 'items.threeDSpec'],
+      relations: OrdersService.ORDER_RELATIONS,
     });
     if (!order) return null;
     const [withTracking] = await this.attachDeliveryAssignmentIds([order]);
@@ -159,20 +165,60 @@ export class OrdersService {
 
   async create(
     data: Partial<Order> & {
-      paperSpecs?: Partial<PaperSpec>;
-      threeDSpecs?: Partial<ThreeDSpec>;
+      paperSpecs?: {
+        paperSize?: unknown;
+        colorMode?: unknown;
+        mediaType?: unknown;
+        printSides?: unknown;
+        binding?: unknown;
+        printMode?: unknown;
+      };
+      threeDSpecs?: {
+        fileFormat?: unknown;
+        material?: unknown;
+        color?: unknown;
+        infillPercentage?: unknown;
+        infill_percentage?: unknown;
+        layerHeight?: unknown;
+        layer_height?: unknown;
+        supports?: unknown;
+        notes?: unknown;
+      };
+      specs?: Record<string, unknown>;
+      addonIds?: number[];
     },
   ): Promise<Order> {
     if (data.userId != null) {
       await this.assertBetaOrderLimit(Number(data.userId));
     }
-    const { paperSpecs, threeDSpecs, ...orderData } = data;
+    const { paperSpecs, threeDSpecs, specs, addonIds, ...orderData } = data;
     if (orderData.deliveryAddressId != null && orderData.userId != null) {
       orderData.deliveryAddressId = await this.validateDeliveryAddress(
         Number(orderData.deliveryAddressId),
         Number(orderData.userId),
       );
     }
+
+    const selectedSpecs = this.selectedSpecsFromLegacy({
+      category: String(orderData.category ?? ''),
+      specs,
+      paperSpecs,
+      threeDSpecs,
+    });
+    const quote = await this.catalogPricingService.quote({
+      items: [
+        {
+          categorySlug: String(orderData.category ?? ''),
+          quantity: Number(orderData.quantity ?? 1),
+          specs: selectedSpecs,
+          addonIds: addonIds ?? [],
+        },
+      ],
+      deliveryOption: orderData.deliveryOption,
+    });
+    const quoteItem = quote.items[0];
+    orderData.totalPrice = quote.subtotal;
+    orderData.category = quoteItem.categorySlug;
 
     // Validate and deduct credits if payment method is credits
     if (
@@ -208,29 +254,29 @@ export class OrdersService {
         fileName: savedOrder.fileName,
         fileUrl: savedOrder.fileUrl,
         fileMetadataId: savedOrder.fileMetadataId,
+        categoryId: quoteItem.categoryId,
+        categorySlug: quoteItem.categorySlug,
+        categoryName: quoteItem.categoryName,
+        pricingModel: quoteItem.pricingModel,
       }),
     );
 
-    if (paperSpecs) {
-      const spec = this.paperSpecsRepo.create({
-        orderId: savedOrder.id,
-        orderItemId: savedItem.id,
-        ...paperSpecs,
-      });
-      await this.paperSpecsRepo.save(spec);
-    }
-    if (threeDSpecs) {
-      const spec = this.threeDSpecsRepo.create({
-        orderId: savedOrder.id,
-        orderItemId: savedItem.id,
-        ...threeDSpecs,
-      });
-      await this.threeDSpecsRepo.save(spec);
+    for (const snapshot of quoteItem.specSnapshots) {
+      await this.orderItemSpecValueRepo.save(
+        this.orderItemSpecValueRepo.create({
+          orderItemId: savedItem.id,
+          ...snapshot,
+        }),
+      );
     }
 
     await this.notifyOrderPlaced(savedOrder);
 
     return savedOrder;
+  }
+
+  quote(dto: QuoteOrderDto) {
+    return this.catalogPricingService.quote(dto);
   }
 
   async createBatch(
@@ -257,10 +303,17 @@ export class OrdersService {
         : undefined,
     }));
 
-    const subtotal = normalizedItems.reduce(
-      (sum, item) => sum + item.totalPrice,
-      0,
-    );
+    const quote = await this.catalogPricingService.quote({
+      items: normalizedItems.map((item) => ({
+        categorySlug: item.category,
+        quantity: item.quantity,
+        specs: this.selectedSpecsFromLegacy(item),
+        addonIds: item.addonIds ?? [],
+      })),
+      deliveryOption: dto.deliveryOption,
+      speedTier: dto.speedTier,
+    });
+    const subtotal = quote.subtotal;
     const deliveryFee = Number(dto.deliveryFee ?? 0);
     const deliveryAddressId =
       dto.deliveryAddressId == null ? undefined : Number(dto.deliveryAddressId);
@@ -358,8 +411,7 @@ export class OrdersService {
       const batchOrdersRepo = manager.getRepository(BatchOrder);
       const txOrdersRepo = manager.getRepository(Order);
       const txOrderItemsRepo = manager.getRepository(OrderItem);
-      const txPaperSpecsRepo = manager.getRepository(PaperSpec);
-      const txThreeDSpecsRepo = manager.getRepository(ThreeDSpec);
+      const txSpecValueRepo = manager.getRepository(OrderItemSpecValue);
       const txDestinationRepo = manager.getRepository(DeliveryDestination);
 
       const batchCount = await batchOrdersRepo.count();
@@ -447,32 +499,30 @@ export class OrdersService {
       } as Partial<Order>);
       const savedOrder = await txOrdersRepo.save(aggregateOrder);
 
-      for (const item of normalizedItems) {
+      for (const [index, item] of normalizedItems.entries()) {
+        const quoteItem = quote.items[index];
         const savedItem = await txOrderItemsRepo.save(
           txOrderItemsRepo.create({
             orderId: savedOrder.id,
             category: item.category,
+            categoryId: quoteItem.categoryId,
+            categorySlug: quoteItem.categorySlug,
+            categoryName: quoteItem.categoryName,
+            pricingModel: quoteItem.pricingModel,
             quantity: item.quantity,
-            totalPrice: item.totalPrice,
+            totalPrice: quoteItem.printSubtotal,
             fileName: item.fileName,
             fileUrl: item.fileUrl,
             fileMetadataId: item.fileMetadataId,
           }),
         );
-        if (item.paperSpecs) {
-          const spec = txPaperSpecsRepo.create({
-            orderItemId: savedItem.id,
-            ...item.paperSpecs,
-          });
-          await txPaperSpecsRepo.save(spec);
-        }
-        if (item.threeDSpecs) {
-          const spec = txThreeDSpecsRepo.create({
-            orderId: savedOrder.id,
-            orderItemId: savedItem.id,
-            ...item.threeDSpecs,
-          });
-          await txThreeDSpecsRepo.save(spec);
+        for (const snapshot of quoteItem.specSnapshots) {
+          await txSpecValueRepo.save(
+            txSpecValueRepo.create({
+              orderItemId: savedItem.id,
+              ...snapshot,
+            }),
+          );
         }
       }
 
@@ -489,12 +539,7 @@ export class OrdersService {
 
       const orderWithItems = await txOrdersRepo.findOneOrFail({
         where: { id: savedOrder.id },
-        relations: [
-          'batchOrder',
-          'items',
-          'items.paperSpec',
-          'items.threeDSpec',
-        ],
+        relations: OrdersService.ORDER_RELATIONS,
       });
 
       return { batchRef: savedBatch.batchRef, orders: [orderWithItems] };
@@ -571,6 +616,94 @@ export class OrdersService {
     }
 
     return deliveryAddressId;
+  }
+
+  private selectedSpecsFromLegacy(item: {
+    category?: string;
+    specs?: Record<string, unknown>;
+    paperSpecs?: {
+      paperSize?: unknown;
+      colorMode?: unknown;
+      mediaType?: unknown;
+      printSides?: unknown;
+      binding?: unknown;
+      printMode?: unknown;
+    };
+    threeDSpecs?: {
+      fileFormat?: unknown;
+      material?: unknown;
+      color?: unknown;
+      infillPercentage?: unknown;
+      infill_percentage?: unknown;
+      layerHeight?: unknown;
+      layer_height?: unknown;
+      supports?: unknown;
+      notes?: unknown;
+    };
+    pageCount?: unknown;
+  }): Record<string, unknown> {
+    const selected: Record<string, unknown> = { ...(item.specs ?? {}) };
+
+    if (item.paperSpecs) {
+      selected.paper_size ??= this.normalizeSpecValue(
+        item.paperSpecs.paperSize,
+        {
+          twentyByThirty: 'twenty_by_thirty',
+        },
+      );
+      selected.color_mode ??= this.normalizeSpecValue(
+        item.paperSpecs.colorMode,
+        {
+          blackAndWhite: 'black_and_white',
+          fullColor: 'full_color',
+        },
+      );
+      selected.media_type ??= this.normalizeSpecValue(item.paperSpecs.mediaType);
+      selected.print_sides ??= this.normalizeSpecValue(
+        item.paperSpecs.printSides,
+        {
+          frontOnly: 'front_only',
+          backToBack: 'back_to_back',
+        },
+      );
+      selected.binding ??= this.normalizeSpecValue(item.paperSpecs.binding);
+      selected.print_mode ??= this.normalizeSpecValue(item.paperSpecs.printMode);
+    }
+
+    if (item.threeDSpecs) {
+      selected.file_format ??= this.normalizeSpecValue(
+        item.threeDSpecs.fileFormat,
+        {
+          threeMf: '3mf',
+          three_mf: '3mf',
+        },
+      );
+      selected.material ??= this.normalizeSpecValue(item.threeDSpecs.material);
+      selected.color ??= item.threeDSpecs.color ?? 'white';
+      selected.infill_percentage ??=
+        item.threeDSpecs.infillPercentage ??
+        item.threeDSpecs.infill_percentage;
+      selected.layer_height ??=
+        item.threeDSpecs.layerHeight ?? item.threeDSpecs.layer_height;
+      selected.supports ??= item.threeDSpecs.supports ?? false;
+      selected.notes ??= item.threeDSpecs.notes ?? '';
+    }
+
+    if (item.pageCount != null) {
+      selected.page_count ??= item.pageCount;
+    }
+
+    return selected;
+  }
+
+  private normalizeSpecValue(
+    value: unknown,
+    aliases: Record<string, string> = {},
+  ): unknown {
+    if (value == null) return value;
+    const raw = String(value);
+    if (aliases[raw]) return aliases[raw];
+    return raw;
   }
 
   async listExternalDeliveries(status?: string) {
@@ -650,7 +783,7 @@ export class OrdersService {
   async cancelOrder(id: number, userId: number): Promise<Order> {
     const order = await this.ordersRepo.findOneOrFail({
       where: { id },
-      relations: ['batchOrder', 'items', 'items.paperSpec', 'items.threeDSpec'],
+      relations: OrdersService.ORDER_RELATIONS,
     });
     if (order.userId !== userId) {
       throw new Error('Forbidden');

@@ -7,6 +7,7 @@ import { BETA_ORDER_LIMIT_REACHED } from './dto/beta-order-limit.error';
 import { OrdersService } from './orders.service';
 import { Order, OrderStatus } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
+import { OrderItemSpecValue } from './entities/order-item-spec-value.entity';
 import { PaperSpec } from './entities/paper-specs.entity';
 import { ThreeDSpec } from './entities/three-d-specs.entity';
 import { OrdersGateway } from './orders.gateway';
@@ -29,11 +30,63 @@ import { PrinterProfileService } from '../printer-profile/printer-profile.servic
 import { FileMetadata } from '../files/entities/file-metadata.entity';
 import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 import { DeliverySpeedTier } from './enums/delivery-speed-tier.enum';
+import { CatalogPricingService } from '../products/catalog-pricing.service';
+
+const specValueRepoProvider = () => ({
+  provide: getRepositoryToken(OrderItemSpecValue),
+  useValue: {
+    create: jest.fn((data) => data),
+    save: jest.fn(async (data) => data),
+  },
+});
+
+const catalogPricingProvider = () => ({
+  provide: CatalogPricingService,
+  useValue: {
+    quote: jest.fn(async (dto) => {
+      const items = dto.items.map((item: any) => {
+        const is3d = item.categorySlug === '3d';
+        const printSubtotal = is3d
+          ? 300
+          : item.categorySlug === 'paper'
+            ? 120
+            : 250;
+        return {
+          categoryId: is3d ? 2 : 1,
+          categorySlug: item.categorySlug || 'paper',
+          categoryName: is3d ? '3D Printing' : 'Paper Printing',
+          pricingModel: is3d
+            ? 'base_plus_material_estimate'
+            : 'per_page_modifiers',
+          quantity: item.quantity ?? 1,
+          printSubtotal,
+          specSnapshots: [],
+          pricingBreakdown: [],
+        };
+      });
+      const subtotal = items.reduce(
+        (sum: number, item: { printSubtotal: number }) =>
+          sum + item.printSubtotal,
+        0,
+      );
+      return {
+        items,
+        subtotal,
+        deliveryFee: 0,
+        serviceFee: 0,
+        total: subtotal,
+      };
+    }),
+  },
+});
 
 describe('OrdersService', () => {
   let service: OrdersService;
   let repo: jest.Mocked<Partial<Repository<Order>>>;
   let orderItemsRepo: jest.Mocked<Partial<Repository<OrderItem>>>;
+  let orderItemSpecValueRepo: jest.Mocked<
+    Partial<Repository<OrderItemSpecValue>>
+  >;
   let batchRepo: jest.Mocked<Partial<Repository<any>>>;
   let paperSpecsRepo: jest.Mocked<Partial<Repository<PaperSpec>>>;
   let threeDSpecsRepo: jest.Mocked<Partial<Repository<ThreeDSpec>>>;
@@ -45,6 +98,7 @@ describe('OrdersService', () => {
   let usersService: Partial<UsersService>;
   let creditsService: Partial<CreditsService>;
   let notificationsService: Partial<NotificationsService>;
+  let catalogPricingService: { quote: jest.Mock };
 
   const mockOrder = {
     id: 1,
@@ -53,6 +107,54 @@ describe('OrdersService', () => {
     orderStatus: 'pending',
     createdAt: new Date(),
   } as Order;
+
+  const specValueRepoProvider = () => ({
+    provide: getRepositoryToken(OrderItemSpecValue),
+    useValue: {
+      create: jest.fn((data) => data),
+      save: jest.fn(async (data) => data),
+    },
+  });
+
+  const catalogPricingProvider = () => ({
+    provide: CatalogPricingService,
+    useValue: {
+      quote: jest.fn(async (dto) => {
+        const items = dto.items.map((item: any, index: number) => {
+          const is3d = item.categorySlug === '3d';
+          const printSubtotal = is3d
+            ? 300
+            : item.categorySlug === 'paper'
+              ? 120
+              : 250;
+          return {
+            categoryId: is3d ? 2 : 1,
+            categorySlug: item.categorySlug || 'paper',
+            categoryName: is3d ? '3D Printing' : 'Paper Printing',
+            pricingModel: is3d
+              ? 'base_plus_material_estimate'
+              : 'per_page_modifiers',
+            quantity: item.quantity ?? 1,
+            printSubtotal,
+            specSnapshots: [],
+            pricingBreakdown: [],
+          };
+        });
+        const subtotal = items.reduce(
+          (sum: number, item: { printSubtotal: number }) =>
+            sum + item.printSubtotal,
+          0,
+        );
+        return {
+          items,
+          subtotal,
+          deliveryFee: 0,
+          serviceFee: 0,
+          total: subtotal,
+        };
+      }),
+    },
+  });
 
   beforeEach(async () => {
     repo = {
@@ -67,6 +169,10 @@ describe('OrdersService', () => {
     orderItemsRepo = {
       create: jest.fn(),
       save: jest.fn(),
+    };
+    orderItemSpecValueRepo = {
+      create: jest.fn((data) => data as OrderItemSpecValue),
+      save: jest.fn(async (data) => data as OrderItemSpecValue),
     };
     batchRepo = {
       create: jest.fn(),
@@ -108,6 +214,51 @@ describe('OrdersService', () => {
     notificationsService = {
       createForAllAdmins: jest.fn().mockResolvedValue(undefined),
     };
+    catalogPricingService = {
+      quote: jest.fn(async (dto) => {
+        const items = dto.items.map((item: any, index: number) => {
+          const is3d = item.categorySlug === '3d';
+          const printSubtotal = is3d
+            ? 300
+            : item.categorySlug === 'paper'
+              ? 120
+              : 250;
+          return {
+            categoryId: is3d ? 2 : 1,
+            categorySlug: item.categorySlug || 'paper',
+            categoryName: is3d ? '3D Printing' : 'Paper Printing',
+            pricingModel: is3d
+              ? 'base_plus_material_estimate'
+              : 'per_page_modifiers',
+            quantity: item.quantity ?? 1,
+            printSubtotal,
+            specSnapshots: [
+              {
+                specDefinitionId: index + 1,
+                specKey: is3d ? 'material' : 'paper_size',
+                specLabel: is3d ? 'Material' : 'Paper Size',
+                inputType: 'select',
+                value: is3d ? 'pla' : 'a4',
+                displayValue: is3d ? 'PLA' : 'A4',
+                optionId: index + 10,
+                optionLabel: is3d ? 'PLA' : 'A4',
+                multiplier: 1,
+                fixedFee: 0,
+                unitCost: 0,
+                estimatedQuantity: null,
+              },
+            ],
+            pricingBreakdown: [],
+          };
+        });
+        const subtotal = items.reduce(
+          (sum: number, item: { printSubtotal: number }) =>
+            sum + item.printSubtotal,
+          0,
+        );
+        return { items, subtotal, deliveryFee: 0, serviceFee: 0, total: subtotal };
+      }),
+    };
     orderItemsRepo.create.mockImplementation((data) => data as OrderItem);
     orderItemsRepo.save.mockImplementation(
       async (item) =>
@@ -122,6 +273,8 @@ describe('OrdersService', () => {
           getRepository: (entity: { name?: string }) => {
             if (entity?.name === 'Order') return repo;
             if (entity?.name === 'OrderItem') return orderItemsRepo;
+            if (entity?.name === 'OrderItemSpecValue')
+              return orderItemSpecValueRepo;
             if (entity?.name === 'PaperSpec') return paperSpecsRepo;
             if (entity?.name === 'ThreeDSpec') return threeDSpecsRepo;
             if (entity?.name === 'BatchOrder') return batchRepo;
@@ -138,6 +291,10 @@ describe('OrdersService', () => {
         OrdersService,
         { provide: getRepositoryToken(Order), useValue: repo },
         { provide: getRepositoryToken(OrderItem), useValue: orderItemsRepo },
+        {
+          provide: getRepositoryToken(OrderItemSpecValue),
+          useValue: orderItemSpecValueRepo,
+        },
         { provide: getRepositoryToken(BatchOrder), useValue: batchRepo },
         { provide: getRepositoryToken(PaperSpec), useValue: paperSpecsRepo },
         { provide: getRepositoryToken(ThreeDSpec), useValue: threeDSpecsRepo },
@@ -190,6 +347,8 @@ describe('OrdersService', () => {
           provide: PrinterProfileService,
           useValue: { getProfile: jest.fn().mockResolvedValue({ buildVolumeWidthMm: 999, buildVolumeDepthMm: 999, buildVolumeHeightMm: 999, maxFileSizeMb: 999 }) },
         },
+        catalogPricingProvider(),
+        { provide: CatalogPricingService, useValue: catalogPricingService },
       ],
     }).compile();
 
@@ -445,7 +604,7 @@ describe('OrdersService', () => {
       expect(repo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           quantity: 2,
-          totalPrice: 300.5,
+          totalPrice: 300,
           deliveryFee: 45,
           deliveryAddressId: 9,
         }),
@@ -453,14 +612,20 @@ describe('OrdersService', () => {
       expect(orderItemsRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           quantity: 2,
-          totalPrice: 300.5,
+          totalPrice: 300,
           fileMetadataId: 12,
         }),
       );
-      expect(threeDSpecsRepo.create).toHaveBeenCalledWith(
+      expect(catalogPricingService.quote).toHaveBeenCalledWith(
         expect.objectContaining({
-          infillPercentage: 20,
-          layerHeight: 0.2,
+          items: [
+            expect.objectContaining({
+              specs: expect.objectContaining({
+                infill_percentage: 20,
+                layer_height: 0.2,
+              }),
+            }),
+          ],
         }),
       );
     });
@@ -479,8 +644,7 @@ describe('OrdersService', () => {
         relations: [
           'batchOrder',
           'items',
-          'items.paperSpec',
-          'items.threeDSpec',
+          'items.specValues',
         ],
         order: { createdAt: 'DESC' },
       });
@@ -525,8 +689,7 @@ describe('OrdersService', () => {
         relations: [
           'batchOrder',
           'items',
-          'items.paperSpec',
-          'items.threeDSpec',
+          'items.specValues',
         ],
       });
       expect(result).toEqual(mockOrder);
@@ -811,6 +974,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
           provide: getRepositoryToken(OrderItem),
           useValue: { create: jest.fn(), save: jest.fn() },
         },
+        specValueRepoProvider(),
         { provide: getRepositoryToken(BatchOrder), useValue: {} },
         {
           provide: getRepositoryToken(PaperSpec),
@@ -869,6 +1033,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
           provide: PrinterProfileService,
           useValue: { getProfile: jest.fn().mockResolvedValue({ buildVolumeWidthMm: 999, buildVolumeDepthMm: 999, buildVolumeHeightMm: 999, maxFileSizeMb: 999 }) },
         },
+        catalogPricingProvider(),
       ],
     }).compile();
     service = module.get<OrdersService>(OrdersService);
@@ -1218,6 +1383,11 @@ describe('createBatch with slot + destinations', () => {
           getRepository: (entity: { name?: string }) => {
             if (entity?.name === 'Order') return ordersRepo;
             if (entity?.name === 'OrderItem') return orderItemsRepo;
+            if (entity?.name === 'OrderItemSpecValue')
+              return {
+                create: jest.fn((data) => data),
+                save: jest.fn(async (data) => data),
+              };
             if (entity?.name === 'PaperSpec') return paperSpecsRepo;
             if (entity?.name === 'ThreeDSpec') return threeDSpecsRepo;
             if (entity?.name === 'BatchOrder') return batchRepo;
@@ -1233,6 +1403,7 @@ describe('createBatch with slot + destinations', () => {
         OrdersService,
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
         { provide: getRepositoryToken(OrderItem), useValue: orderItemsRepo },
+        specValueRepoProvider(),
         { provide: getRepositoryToken(BatchOrder), useValue: batchRepo },
         { provide: getRepositoryToken(PaperSpec), useValue: paperSpecsRepo },
         { provide: getRepositoryToken(ThreeDSpec), useValue: threeDSpecsRepo },
@@ -1285,6 +1456,7 @@ describe('createBatch with slot + destinations', () => {
           provide: PrinterProfileService,
           useValue: { getProfile: jest.fn().mockResolvedValue({ buildVolumeWidthMm: 999, buildVolumeDepthMm: 999, buildVolumeHeightMm: 999, maxFileSizeMb: 999 }) },
         },
+        catalogPricingProvider(),
       ],
     }).compile();
 
@@ -1550,6 +1722,7 @@ describe('cancelBatch', () => {
         OrdersService,
         { provide: getRepositoryToken(Order), useValue: { find: jest.fn(), findOne: jest.fn(), findOneOrFail: jest.fn(), create: jest.fn(), save: jest.fn(), update: jest.fn(), count: jest.fn() } },
         { provide: getRepositoryToken(OrderItem), useValue: { create: jest.fn(), save: jest.fn() } },
+        specValueRepoProvider(),
         { provide: getRepositoryToken(BatchOrder), useValue: {} },
         { provide: getRepositoryToken(PaperSpec), useValue: { create: jest.fn(), save: jest.fn() } },
         { provide: getRepositoryToken(ThreeDSpec), useValue: { create: jest.fn(), save: jest.fn() } },
@@ -1581,6 +1754,7 @@ describe('cancelBatch', () => {
           provide: PrinterProfileService,
           useValue: { getProfile: jest.fn().mockResolvedValue({ buildVolumeWidthMm: 999, buildVolumeDepthMm: 999, buildVolumeHeightMm: 999, maxFileSizeMb: 999 }) },
         },
+        catalogPricingProvider(),
       ],
     }).compile();
 
@@ -1632,6 +1806,7 @@ describe('updateManualStatus', () => {
         OrdersService,
         { provide: getRepositoryToken(Order), useValue: { find: jest.fn(), findOne: jest.fn(), findOneOrFail: ordersRepo.findOneOrFail, create: jest.fn(), save: ordersRepo.save, update: jest.fn(), count: jest.fn() } },
         { provide: getRepositoryToken(OrderItem), useValue: { create: jest.fn(), save: jest.fn() } },
+        specValueRepoProvider(),
         { provide: getRepositoryToken(BatchOrder), useValue: {} },
         { provide: getRepositoryToken(PaperSpec), useValue: { create: jest.fn(), save: jest.fn() } },
         { provide: getRepositoryToken(ThreeDSpec), useValue: { create: jest.fn(), save: jest.fn() } },
@@ -1657,6 +1832,7 @@ describe('updateManualStatus', () => {
           provide: PrinterProfileService,
           useValue: { getProfile: jest.fn().mockResolvedValue({ buildVolumeWidthMm: 999, buildVolumeDepthMm: 999, buildVolumeHeightMm: 999, maxFileSizeMb: 999 }) },
         },
+        catalogPricingProvider(),
       ],
     }).compile();
 
@@ -1715,6 +1891,7 @@ describe('createBatch — 3D bounds enforcement', () => {
         OrdersService,
         { provide: getRepositoryToken(Order), useValue: { find: jest.fn(), findOne: jest.fn(), findOneOrFail: jest.fn(), create: jest.fn(), save: jest.fn(), update: jest.fn(), count: jest.fn() } },
         { provide: getRepositoryToken(OrderItem), useValue: { create: jest.fn(), save: jest.fn() } },
+        specValueRepoProvider(),
         { provide: getRepositoryToken(BatchOrder), useValue: {} },
         { provide: getRepositoryToken(PaperSpec), useValue: { create: jest.fn(), save: jest.fn() } },
         { provide: getRepositoryToken(ThreeDSpec), useValue: { create: jest.fn(), save: jest.fn() } },
@@ -1743,6 +1920,7 @@ describe('createBatch — 3D bounds enforcement', () => {
         },
         { provide: DeliverySlotsGateway, useValue: { notifySlotUpdated: jest.fn() } },
         { provide: PrinterProfileService, useValue: printerProfileService },
+        catalogPricingProvider(),
       ],
     }).compile();
 
@@ -1792,6 +1970,7 @@ describe('listExternalDeliveries and updateExternalDeliveryStatus', () => {
         OrdersService,
         { provide: getRepositoryToken(Order), useValue: { find: jest.fn(), findOne: jest.fn(), findOneOrFail: jest.fn(), create: jest.fn(), save: jest.fn(), update: jest.fn(), count: jest.fn() } },
         { provide: getRepositoryToken(OrderItem), useValue: { create: jest.fn(), save: jest.fn() } },
+        specValueRepoProvider(),
         { provide: getRepositoryToken(BatchOrder), useValue: batchOrdersRepo },
         { provide: getRepositoryToken(PaperSpec), useValue: { create: jest.fn(), save: jest.fn() } },
         { provide: getRepositoryToken(ThreeDSpec), useValue: { create: jest.fn(), save: jest.fn() } },
@@ -1817,6 +1996,7 @@ describe('listExternalDeliveries and updateExternalDeliveryStatus', () => {
           provide: PrinterProfileService,
           useValue: { getProfile: jest.fn().mockResolvedValue({ buildVolumeWidthMm: 999, buildVolumeDepthMm: 999, buildVolumeHeightMm: 999, maxFileSizeMb: 999 }) },
         },
+        catalogPricingProvider(),
       ],
     }).compile();
 

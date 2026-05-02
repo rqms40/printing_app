@@ -18,6 +18,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { OrdersService } from './orders.service';
 import { CreateBatchOrderDto, CreateOrderDto } from './dto/create-order.dto';
+import { QuoteOrderDto } from './dto/quote-order.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { UpdateManualStatusDto } from './dto/update-manual-status.dto';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
@@ -55,6 +56,11 @@ export class OrdersController {
     @Body() dto: CreateBatchOrderDto,
   ) {
     return this.ordersService.createBatch(req.user.sub, dto);
+  }
+
+  @Post('quote')
+  quote(@Body() dto: QuoteOrderDto) {
+    return this.ordersService.quote(dto);
   }
 
   @Patch(':id/cancel')

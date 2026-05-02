@@ -6,12 +6,13 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:go_router/go_router.dart';
+import 'package:printing_app/features/customer/order/models/catalog_spec_mappers.dart';
+import 'package:printing_app/features/customer/order/models/product_catalog.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
+import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/spec_selector.dart';
 import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
 import 'package:printing_app/features/tutorial/widgets/coach_mark_sequence.dart';
-import 'package:printing_app/shared/models/enums.dart';
-import 'package:printing_app/shared/models/paper_specs.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_text_field.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
@@ -28,14 +29,11 @@ class PaperSpecsScreen extends ConsumerStatefulWidget {
 }
 
 class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
-  PaperSize _paperSize = PaperSize.a4;
-  ColorMode _colorMode = ColorMode.blackAndWhite;
-  MediaType _mediaType = MediaType.matte;
-  PrintSides _printSides = PrintSides.frontOnly;
-  Binding _binding = Binding.none;
-
   final _quantityController = TextEditingController(text: '1');
   final _pageCountController = TextEditingController(text: '1');
+  final _textControllers = <String, TextEditingController>{};
+  final _values = <String, dynamic>{};
+  String? _initializedSlug;
 
   final _specsFormKey = GlobalKey();
   final _specsContinueKey = GlobalKey();
@@ -58,10 +56,11 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
       (_, next) => _pipelineState = next,
       fireImmediately: true,
     );
-    // Delay long enough for the entry animations (400ms + 60ms delay) to
-    // settle so the coach-mark spotlight captures the final widget positions.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(const Duration(milliseconds: 500), () => _maybePipelineCoachMark());
+      Future.delayed(
+        const Duration(milliseconds: 500),
+        () => _maybePipelineCoachMark(),
+      );
     });
   }
 
@@ -69,12 +68,15 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
   void dispose() {
     if (_pipelineState.active &&
         (_pipelineState.step == PipelineStep.paperSpecsForm ||
-         _pipelineState.step == PipelineStep.paperSpecsContinue) &&
+            _pipelineState.step == PipelineStep.paperSpecsContinue) &&
         !_advancedThisFrame) {
       _pipelineNotifier?.abandon();
     }
     _quantityController.dispose();
     _pageCountController.dispose();
+    for (final controller in _textControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -84,9 +86,8 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
     await Scrollable.ensureVisible(
       ctx,
       duration: const Duration(milliseconds: 250),
-      alignment: 0.0, // align to top of viewport
+      alignment: 0.0,
     );
-    // Let the scroll settle one more frame before measuring renderbox.
     await Future<void>.delayed(const Duration(milliseconds: 100));
   }
 
@@ -105,7 +106,8 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
             targetKey: _specsFormKey,
             icon: HugeIcons.strokeRoundedSettings01,
             title: 'Set your specs',
-            body: 'Set your paper size, color mode, and copies. Defaults work for most prints.',
+            body:
+                'Set your paper size, color mode, and copies. Defaults work for most prints.',
             shape: ShapeLightFocus.RRect,
             align: ContentAlign.bottom,
             advanceOnSpotlightTap: false,
@@ -113,7 +115,6 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
         ],
         () {
           ref.read(pipelineTutorialProvider.notifier).advance();
-          // Wait for previous coach mark to fully dismiss before showing next
           Future.delayed(const Duration(milliseconds: 300), () {
             if (mounted) _maybePipelineCoachMark();
           });
@@ -146,9 +147,42 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
     }
   }
 
+  ProductCategory _category() {
+    final catalog =
+        ref.read(productCatalogProvider).valueOrNull ??
+        ProductCatalog.fallback();
+    final slug = ref.read(orderFlowProvider).category ?? 'paper';
+    return catalog.categoryBySlug(slug) ??
+        ProductCatalog.fallback().categoryBySlug('paper')!;
+  }
+
+  void _ensureDefaults(ProductCategory category) {
+    if (_initializedSlug == category.slug) return;
+    final flow = ref.read(orderFlowProvider);
+    _values
+      ..clear()
+      ..addAll(
+        category.defaultSpecValues(
+          overrides: {
+            'page_count': int.tryParse(_pageCountController.text) ?? 1,
+            if (flow.printMode.isNotEmpty) 'print_mode': flow.printMode,
+          },
+        ),
+      );
+    _initializedSlug = category.slug;
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
+    final catalog =
+        ref.watch(productCatalogProvider).valueOrNull ??
+        ProductCatalog.fallback();
+    final slug = ref.watch(orderFlowProvider).category ?? 'paper';
+    final category =
+        catalog.categoryBySlug(slug) ??
+        ProductCatalog.fallback().categoryBySlug('paper')!;
+    _ensureDefaults(category);
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -165,8 +199,7 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
         child: Column(
           children: [
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -174,135 +207,181 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
                   const StepIndicator(totalSteps: 6, currentStep: 1),
                   const SizedBox(height: AppSpacing.xl),
                   Text(
-                    'Paper Specifications',
-                    style:
-                        AppTypography.h1.copyWith(color: colors.onBackground),
-                  ).animate()
-                    .fadeIn(duration: 400.ms, curve: Curves.easeOut)
-                    .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
+                        category.name,
+                        style: AppTypography.h1.copyWith(
+                          color: colors.onBackground,
+                        ),
+                      )
+                      .animate()
+                      .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                      .slideY(
+                        begin: 0.03,
+                        duration: 400.ms,
+                        curve: Curves.easeOut,
+                      ),
                 ],
               ),
             ),
             const SizedBox(height: AppSpacing.md),
             Expanded(
-              child: ListView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-                children: [
-                  const SizedBox(height: AppSpacing.sm),
-                  KeyedSubtree(
-                    key: _specsFormKey,
-                    child: SpecSelector<PaperSize>(
-                      label: 'PAPER SIZE',
-                      options: PaperSize.values,
-                      selected: _paperSize,
-                      onChanged: (v) => setState(() => _paperSize = v),
-                      displayName: (v) => v.displayName,
+                  child: ListView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.lg,
+                    ),
+                    children: [
+                      const SizedBox(height: AppSpacing.sm),
+                      KeyedSubtree(
+                        key: _specsFormKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: _specWidgets(category),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      AppTextField(
+                        label: 'Quantity',
+                        controller: _quantityController,
+                        keyboardType: TextInputType.number,
+                        hintText: 'Enter quantity',
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      AppTextField(
+                        label: 'Page Count',
+                        controller: _pageCountController,
+                        keyboardType: TextInputType.number,
+                        hintText: 'Number of pages',
+                      ),
+                      const SizedBox(height: AppSpacing.xxl),
+                    ],
+                  ),
+                )
+                .animate()
+                .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
+                .slideY(
+                  begin: 0.02,
+                  duration: 400.ms,
+                  delay: 60.ms,
+                  curve: Curves.easeOut,
+                ),
+            Container(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  decoration: BoxDecoration(
+                    color: colors.surface,
+                    border: Border(
+                      top: BorderSide(color: colors.outline, width: 0.5),
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.lg),
-                  SpecSelector<ColorMode>(
-                    label: 'COLOR MODE',
-                    options: ColorMode.values,
-                    selected: _colorMode,
-                    onChanged: (v) => setState(() => _colorMode = v),
-                    displayName: (v) => v.displayName,
+                  child: KeyedSubtree(
+                    key: _specsContinueKey,
+                    child: AppButton(
+                      label: 'Continue',
+                      isFullWidth: true,
+                      onTap: () {
+                        final pipeline = ref.read(pipelineTutorialProvider);
+                        if (pipeline.active &&
+                            pipeline.step == PipelineStep.paperSpecsContinue) {
+                          _advancedThisFrame = true;
+                          ref.read(pipelineTutorialProvider.notifier).advance();
+                        }
+                        _onContinue();
+                      },
+                    ),
                   ),
-                  const SizedBox(height: AppSpacing.lg),
-                  SpecSelector<MediaType>(
-                    label: 'MEDIA TYPE',
-                    options: MediaType.values,
-                    selected: _mediaType,
-                    onChanged: (v) => setState(() => _mediaType = v),
-                    displayName: (v) => v.displayName,
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  SpecSelector<PrintSides>(
-                    label: 'PRINT SIDES',
-                    options: PrintSides.values,
-                    selected: _printSides,
-                    onChanged: (v) => setState(() => _printSides = v),
-                    displayName: (v) => v.displayName,
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  SpecSelector<Binding>(
-                    label: 'BINDING',
-                    options: Binding.values,
-                    selected: _binding,
-                    onChanged: (v) => setState(() => _binding = v),
-                    displayName: (v) => v.displayName,
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  AppTextField(
-                    label: 'Quantity',
-                    controller: _quantityController,
-                    keyboardType: TextInputType.number,
-                    hintText: 'Enter quantity',
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  AppTextField(
-                    label: 'Page Count',
-                    controller: _pageCountController,
-                    keyboardType: TextInputType.number,
-                    hintText: 'Number of pages',
-                  ),
-                  const SizedBox(height: AppSpacing.xxl),
-                ],
-              ),
-            ).animate()
-              .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
-              .slideY(begin: 0.02, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
-            // Sticky bottom button
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              decoration: BoxDecoration(
-                color: colors.surface,
-                border: Border(
-                  top: BorderSide(color: colors.outline, width: 0.5),
+                )
+                .animate()
+                .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
+                .slideY(
+                  begin: 0.03,
+                  duration: 400.ms,
+                  delay: 120.ms,
+                  curve: Curves.easeOut,
                 ),
-              ),
-              child: KeyedSubtree(
-                key: _specsContinueKey,
-                child: AppButton(
-                  label: 'Continue',
-                  isFullWidth: true,
-                  onTap: () {
-                    final pipeline = ref.read(pipelineTutorialProvider);
-                    if (pipeline.active && pipeline.step == PipelineStep.paperSpecsContinue) {
-                      _advancedThisFrame = true;
-                      ref.read(pipelineTutorialProvider.notifier).advance();
-                    }
-                    _onContinue();
-                  },
-                ),
-              ),
-            ).animate()
-              .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
-              .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
           ],
         ),
       ),
     );
   }
 
+  List<Widget> _specWidgets(ProductCategory category) {
+    final widgets = <Widget>[];
+    for (final spec in category.visibleSpecs) {
+      widgets.add(_specWidget(spec));
+      widgets.add(const SizedBox(height: AppSpacing.lg));
+    }
+    if (widgets.isNotEmpty) widgets.removeLast();
+    return widgets;
+  }
+
+  Widget _specWidget(ProductSpecDefinition spec) {
+    if (spec.inputType == 'select') {
+      return SpecSelector<String>(
+        label: spec.label.toUpperCase(),
+        options: spec.options.map((option) => option.value).toList(),
+        selected:
+            _values[spec.key]?.toString() ?? spec.defaultSelection.toString(),
+        onChanged: (value) => setState(() => _values[spec.key] = value),
+        displayName: (value) => spec.optionForValue(value)?.label ?? value,
+      );
+    }
+
+    if (spec.valueType == 'boolean') {
+      final selected = _readBool(_values[spec.key], false);
+      return SpecSelector<bool>(
+        label: spec.label.toUpperCase(),
+        options: const [true, false],
+        selected: selected,
+        onChanged: (value) => setState(() => _values[spec.key] = value),
+        displayName: (value) => value ? 'Yes' : 'No',
+      );
+    }
+
+    final controller = _textControllers.putIfAbsent(
+      spec.key,
+      () => TextEditingController(text: _values[spec.key]?.toString() ?? ''),
+    );
+    return AppTextField(
+      label: spec.label,
+      controller: controller,
+      keyboardType: spec.valueType == 'number'
+          ? TextInputType.number
+          : TextInputType.text,
+      hintText: spec.placeholder ?? spec.label,
+      onChanged: (value) => _values[spec.key] = spec.valueType == 'number'
+          ? (num.tryParse(value) ?? value)
+          : value,
+    );
+  }
+
   void _onContinue() {
+    final category = _category();
     final quantity = int.tryParse(_quantityController.text) ?? 1;
     final pageCount = int.tryParse(_pageCountController.text) ?? 1;
+    final selected = Map<String, dynamic>.from(_values)
+      ..['page_count'] = pageCount;
+    final printMode = selected['print_mode']?.toString() ?? 'fitToPage';
 
-    final specs = PaperSpecs(
-      paperSize: _paperSize,
-      colorMode: _colorMode,
-      mediaType: _mediaType,
-      printSides: _printSides,
-      binding: _binding,
-    );
+    final specs = paperSpecsFromCatalogValues(selected);
+    final displayValues = category.displayValues(selected);
+    final printSubtotal = category.estimatePrice(selected, quantity);
 
     final notifier = ref.read(orderFlowProvider.notifier);
     notifier.setPaperSpecs(specs);
     notifier.setQuantity(quantity);
     notifier.setPageCount(pageCount);
+    notifier.setPrintMode(printMode);
+    notifier.setCatalogSpecs(
+      specs: selected,
+      displayValues: displayValues,
+      totalPrice: printSubtotal,
+    );
     notifier.nextStep();
 
     context.push('/customer/order/upload');
   }
+}
+
+bool _readBool(dynamic value, bool fallback) {
+  if (value is bool) return value;
+  if (value is String) return value.toLowerCase() == 'true';
+  return fallback;
 }

@@ -6,7 +6,9 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:go_router/go_router.dart';
+import 'package:printing_app/features/customer/order/models/product_catalog.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
+import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
 import 'package:printing_app/features/tutorial/widgets/coach_mark_sequence.dart';
 import 'package:printing_app/shared/services/api_client.dart';
@@ -51,7 +53,10 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
     // Delay long enough for the card's entry animation (400ms + 60ms delay) to
     // settle so the coach-mark spotlight captures the final card position.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(const Duration(milliseconds: 500), _maybePipelineCoachMark);
+      Future.delayed(
+        const Duration(milliseconds: 500),
+        _maybePipelineCoachMark,
+      );
     });
   }
 
@@ -81,7 +86,13 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
           onSpotlightTap: () {
             _advancedThisFrame = true;
             ref.read(pipelineTutorialProvider.notifier).advance();
-            _selectCategory('paper');
+            final catalog =
+                ref.read(productCatalogProvider).valueOrNull ??
+                ProductCatalog.fallback();
+            _selectCategory(
+              catalog.categoryBySlug('paper') ??
+                  ProductCatalog.fallback().categoryBySlug('paper')!,
+            );
           },
         ),
       ],
@@ -105,6 +116,10 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
+    final catalogAsync = ref.watch(productCatalogProvider);
+    final categories =
+        catalogAsync.valueOrNull?.activeCategories ??
+        ProductCatalog.fallback().activeCategories;
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -130,8 +145,7 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
-                    onPressed: () =>
-                        context.go('/customer/order/checkout'),
+                    onPressed: () => context.go('/customer/order/checkout'),
                     child: Text(
                       'Skip — review checkout',
                       style: AppTypography.body.copyWith(color: colors.accent),
@@ -141,39 +155,71 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
               ],
               const SizedBox(height: AppSpacing.xl),
               Text(
-                'What would you\nlike to print?',
-                style: AppTypography.h1.copyWith(color: colors.onBackground),
-              ).animate()
-                .fadeIn(duration: 400.ms, curve: Curves.easeOut)
-                .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
+                    'What would you\nlike to print?',
+                    style: AppTypography.h1.copyWith(
+                      color: colors.onBackground,
+                    ),
+                  )
+                  .animate()
+                  .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                  .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
               const SizedBox(height: AppSpacing.xl),
               Expanded(
                 child: ListView(
                   children: [
-                    _CategoryCard(
-                      tutorialKey: _paperCategoryKey,
-                      illustration: PrinterIllustration(
-                        size: 60,
-                        color: colors.accent,
+                    if (catalogAsync.isLoading &&
+                        catalogAsync.valueOrNull == null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                        child: LinearProgressIndicator(
+                          minHeight: 2,
+                          color: colors.accent,
+                          backgroundColor: colors.surfaceVariant,
+                        ),
                       ),
-                      title: 'Paper Printing',
-                      description: 'Documents, posters, photos',
-                      onTap: () => _selectCategory('paper'),
-                    ).animate()
-                      .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
-                      .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
-                    const SizedBox(height: AppSpacing.md),
-                    _CategoryCard(
-                      illustration: ThreeDCubeIllustration(
-                        size: 60,
-                        color: colors.accent,
-                      ),
-                      title: '3D Printing',
-                      description: 'Models, prototypes, figures',
-                      onTap: () => _selectCategory('3d'),
-                    ).animate()
-                      .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
-                      .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
+                    ...categories.indexed.map((entry) {
+                      final index = entry.$1;
+                      final category = entry.$2;
+                      return Padding(
+                        padding: EdgeInsets.only(
+                          bottom: index == categories.length - 1
+                              ? 0
+                              : AppSpacing.md,
+                        ),
+                        child:
+                            _CategoryCard(
+                                  tutorialKey: category.slug == 'paper'
+                                      ? _paperCategoryKey
+                                      : null,
+                                  illustration: _categoryIllustration(
+                                    category,
+                                    colors,
+                                  ),
+                                  title: category.name,
+                                  description:
+                                      category.mobileDescription ??
+                                      category.description ??
+                                      'Configure specs and upload your file',
+                                  onTap: () => _selectCategory(category),
+                                )
+                                .animate()
+                                .fadeIn(
+                                  duration: 400.ms,
+                                  delay: Duration(
+                                    milliseconds: 60 * (index + 1),
+                                  ),
+                                  curve: Curves.easeOut,
+                                )
+                                .slideY(
+                                  begin: 0.03,
+                                  duration: 400.ms,
+                                  delay: Duration(
+                                    milliseconds: 60 * (index + 1),
+                                  ),
+                                  curve: Curves.easeOut,
+                                ),
+                      );
+                    }),
                   ],
                 ),
               ),
@@ -184,11 +230,20 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
     );
   }
 
-  Future<void> _selectCategory(String category) async {
-    ref.read(orderFlowProvider.notifier).setCategory(category);
+  Widget _categoryIllustration(ProductCategory category, AppColorSet colors) {
+    if (category.fileProcessingType == 'model_3d' || category.slug == '3d') {
+      return ThreeDCubeIllustration(size: 60, color: colors.accent);
+    }
+    return PrinterIllustration(size: 60, color: colors.accent);
+  }
+
+  Future<void> _selectCategory(ProductCategory category) async {
+    ref
+        .read(orderFlowProvider.notifier)
+        .setCategory(category.slug, categoryName: category.name);
     ref.read(orderFlowProvider.notifier).goToStep(1);
     await context.push(
-      category == 'paper'
+      category.fileProcessingType == 'document' || category.slug == 'paper'
           ? '/customer/order/paper-specs'
           : '/customer/order/3d-specs',
     );
@@ -223,33 +278,37 @@ class _CategoryCard extends StatelessWidget {
     return KeyedSubtree(
       key: tutorialKey,
       child: AppCard(
-      onTap: onTap,
-      padding: const EdgeInsets.all(AppSpacing.xl),
-      child: Row(
-        children: [
-          illustration,
-          const SizedBox(width: AppSpacing.xl),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  title,
-                  style: AppTypography.h3.copyWith(color: colors.onBackground),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  description,
-                  style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
-                ),
-              ],
+        onTap: onTap,
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Row(
+          children: [
+            illustration,
+            const SizedBox(width: AppSpacing.xl),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    title,
+                    style: AppTypography.h3.copyWith(
+                      color: colors.onBackground,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    description,
+                    style: AppTypography.body.copyWith(
+                      color: colors.onSurfaceDim,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          Icon(Icons.chevron_right, color: colors.onSurfaceDim),
-        ],
+            Icon(Icons.chevron_right, color: colors.onSurfaceDim),
+          ],
+        ),
       ),
-    ),
     );
   }
 }

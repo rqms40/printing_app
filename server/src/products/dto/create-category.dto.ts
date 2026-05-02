@@ -7,10 +7,16 @@ import {
   IsPositive,
   IsOptional,
   IsBoolean,
+  IsEnum,
   MaxLength,
   Matches,
   IsNotEmpty,
 } from 'class-validator';
+
+import {
+  FileProcessingType,
+  PricingModel,
+} from '../enums/catalog.enums';
 
 export class CreateCategoryDto {
   @ApiProperty({ example: 'Paper Printing' })
@@ -36,16 +42,38 @@ export class CreateCategoryDto {
   @IsString()
   description?: string;
 
+  @ApiPropertyOptional({ example: 'Print documents, handouts, and posters.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  mobileDescription?: string;
+
   @ApiPropertyOptional({ example: 'FileTextOutlined' })
   @IsOptional()
   @IsString()
   @MaxLength(50)
   icon?: string;
 
+  @ApiPropertyOptional({ enum: FileProcessingType })
+  @IsOptional()
+  @IsEnum(FileProcessingType)
+  fileProcessingType?: FileProcessingType;
+
+  @ApiPropertyOptional({ enum: PricingModel })
+  @IsOptional()
+  @IsEnum(PricingModel)
+  pricingModel?: PricingModel;
+
   @ApiProperty({ example: 2.0 })
   @IsNumber()
   @IsPositive()
   baseRate: number;
+
+  @ApiPropertyOptional({ example: 'page' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  quantityUnit?: string;
 
   @ApiProperty({ example: 50 })
   @IsInt()
