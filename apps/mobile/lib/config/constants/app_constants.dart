@@ -16,6 +16,8 @@ class AppConstants {
     'png',
     'jpg',
     'jpeg',
+    'tif',
+    'tiff',
     'docx',
   ];
 

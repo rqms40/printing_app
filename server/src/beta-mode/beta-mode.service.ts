@@ -35,6 +35,11 @@ export class BetaModeService {
     private fileMetadataRepo: Repository<FileMetadata>,
   ) {}
 
+  async getGlobalStatus(): Promise<{ isEnabled: boolean }> {
+    const settings = await this.getSettings();
+    return { isEnabled: settings.isEnabled };
+  }
+
   async getSettings(): Promise<BetaModeSettings> {
     let settings = await this.settingsRepo.find();
     if (settings.length === 0) {

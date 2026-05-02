@@ -125,7 +125,7 @@ async function seed() {
   await ds.query('INSERT INTO beta_mode_settings (is_enabled) VALUES ($1)', [
     false,
   ]);
-  console.log('✅ Beta mode reset to disabled');
+  console.log('✅ Beta mode seeded (disabled)');
 
   for (const u of users) {
     await ds.query(
@@ -169,6 +169,7 @@ async function seed() {
     ds,
     "SELECT id FROM users WHERE email = 'maria@gridprint.ph'",
   );
+
   const [juan] = await typedQuery<IdRow>(
     ds,
     "SELECT id FROM users WHERE email = 'juan@gridprint.ph'",

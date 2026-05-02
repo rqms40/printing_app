@@ -1,6 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:hugeicons/hugeicons.dart';
+import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -11,7 +12,10 @@ import 'package:printing_app/shared/models/paper_specs.dart';
 import 'package:printing_app/shared/models/three_d_specs.dart';
 
 class EditItemSheet {
-  static Future<CartItem?> show(BuildContext context, {required CartItem item}) {
+  static Future<CartItem?> show(
+    BuildContext context, {
+    required CartItem item,
+  }) {
     return showModalBottomSheet<CartItem>(
       context: context,
       isScrollControlled: true,
@@ -56,8 +60,12 @@ class _EditItemBodyState extends State<_EditItemBody> {
     super.initState();
     _qty = TextEditingController(text: widget.item.quantity.toString());
     _pages = TextEditingController(text: widget.item.pageCount.toString());
-    _color3d = TextEditingController(text: widget.item.threeDSpecs?.color ?? 'White');
-    _notes3d = TextEditingController(text: widget.item.threeDSpecs?.notes ?? '');
+    _color3d = TextEditingController(
+      text: widget.item.threeDSpecs?.color ?? 'White',
+    );
+    _notes3d = TextEditingController(
+      text: widget.item.threeDSpecs?.notes ?? '',
+    );
 
     _paperSize = widget.item.paperSpecs?.paperSize ?? PaperSize.a4;
     _colorMode = widget.item.paperSpecs?.colorMode ?? ColorMode.fullColor;
@@ -85,8 +93,8 @@ class _EditItemBodyState extends State<_EditItemBody> {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: widget.item.category == '3d'
-          ? ['stl', 'obj', '3mf']
-          : ['pdf', 'jpg', 'jpeg', 'png'],
+          ? AppConstants.threeDTypes
+          : AppConstants.paperTypes,
     );
     if (result == null || result.files.isEmpty) return;
     final f = result.files.single;
@@ -114,7 +122,9 @@ class _EditItemBodyState extends State<_EditItemBody> {
           ? ThreeDSpecs(
               fileFormat: _fileFormat,
               material: _material3d,
-              color: _color3d.text.trim().isEmpty ? 'White' : _color3d.text.trim(),
+              color: _color3d.text.trim().isEmpty
+                  ? 'White'
+                  : _color3d.text.trim(),
               infillPercentage: _infill,
               layerHeight: _layerHeight,
               supports: _supports,
@@ -153,7 +163,8 @@ class _EditItemBodyState extends State<_EditItemBody> {
               const SizedBox(height: 8),
               Center(
                 child: Container(
-                  width: 36, height: 4,
+                  width: 36,
+                  height: 4,
                   decoration: BoxDecoration(
                     color: colors.outline,
                     borderRadius: BorderRadius.circular(2),
@@ -394,7 +405,8 @@ class _FileTile extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 40, height: 40,
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
               color: colors.surface,
               borderRadius: AppRadius.borderMd,
@@ -548,13 +560,19 @@ class _NumberField extends StatelessWidget {
     return TextField(
       controller: controller,
       keyboardType: TextInputType.number,
-      style: AppTypography.bodyBold.copyWith(color: colors.onBackground, fontSize: 14),
+      style: AppTypography.bodyBold.copyWith(
+        color: colors.onBackground,
+        fontSize: 14,
+      ),
       decoration: InputDecoration(
         labelText: label,
         labelStyle: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
         filled: true,
         fillColor: colors.background,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
           borderRadius: AppRadius.borderMd,
           borderSide: BorderSide(color: colors.outline.withValues(alpha: 0.4)),
@@ -591,20 +609,32 @@ class _TextFieldTile extends StatelessWidget {
       child: TextField(
         controller: controller,
         maxLines: maxLines,
-        style: AppTypography.body.copyWith(color: colors.onBackground, fontSize: 14),
+        style: AppTypography.body.copyWith(
+          color: colors.onBackground,
+          fontSize: 14,
+        ),
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+          labelStyle: AppTypography.caption.copyWith(
+            color: colors.onSurfaceDim,
+          ),
           filled: true,
           fillColor: colors.background,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
           border: OutlineInputBorder(
             borderRadius: AppRadius.borderMd,
-            borderSide: BorderSide(color: colors.outline.withValues(alpha: 0.4)),
+            borderSide: BorderSide(
+              color: colors.outline.withValues(alpha: 0.4),
+            ),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: AppRadius.borderMd,
-            borderSide: BorderSide(color: colors.outline.withValues(alpha: 0.4)),
+            borderSide: BorderSide(
+              color: colors.outline.withValues(alpha: 0.4),
+            ),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: AppRadius.borderMd,

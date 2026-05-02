@@ -75,7 +75,10 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
     // Delay long enough for the entry animations (400ms + 60ms delay) to
     // settle so the coach-mark spotlight captures the final widget positions.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(const Duration(milliseconds: 500), _maybePipelineCoachMark);
+      Future.delayed(
+        const Duration(milliseconds: 500),
+        _maybePipelineCoachMark,
+      );
     });
   }
 
@@ -100,7 +103,8 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
           targetKey: _uploadCardKey,
           icon: HugeIcons.strokeRoundedFile02,
           title: 'Upload your file',
-          body: 'Drop a file here, or tap to browse. PDFs, images, and docs all work.',
+          body:
+              'Drop a file here, or tap to browse. PDFs, images, and docs all work.',
           shape: ShapeLightFocus.RRect,
           advanceOnSpotlightTap: false,
         ),
@@ -333,7 +337,8 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
             if (category == '3d') {
               inspectUrl = '/files/$fileMetadataId/inspect';
             } else if (paperSizeName != null) {
-              inspectUrl = '/files/$fileMetadataId/inspect?paperSize=$paperSizeName';
+              inspectUrl =
+                  '/files/$fileMetadataId/inspect?paperSize=$paperSizeName';
             } else {
               inspectUrl = '';
             }
@@ -405,7 +410,9 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
     // Fire the Continue coach mark once a file is ready and the upload card
     // coach mark has been dismissed (Got it →).
     if (_canContinue) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeFireContinueCoach());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _maybeFireContinueCoach(),
+      );
     }
 
     return Scaffold(
@@ -454,44 +461,45 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                     const SizedBox(height: AppSpacing.xl),
                     KeyedSubtree(
                       key: _uploadCardKey,
-                      child: FileUploadCard(
-                            onTap: _pickFile,
-                            onPreview: _fileName != null && !_isUploading
-                                ? _showPreview
-                                : null,
-                            fileName: _fileName,
-                            fileSize: _fileSize,
-                            errorText: _errorText,
-                            isUploading: _isUploading,
-                            uploadProgress: _uploadProgress,
-                            localFilePath: _filePath,
-                            localFileBytes: _fileBytes,
-                            mimeType: _fileMimeType,
-                          )
-                          .animate()
-                          .fadeIn(
-                            duration: 400.ms,
-                            delay: 60.ms,
-                            curve: Curves.easeOut,
-                          )
-                          .slideY(
-                            begin: 0.03,
-                            duration: 400.ms,
-                            delay: 60.ms,
-                            curve: Curves.easeOut,
-                          ),
+                      child:
+                          FileUploadCard(
+                                onTap: _pickFile,
+                                onPreview: _fileName != null && !_isUploading
+                                    ? _showPreview
+                                    : null,
+                                fileName: _fileName,
+                                fileSize: _fileSize,
+                                errorText: _errorText,
+                                isUploading: _isUploading,
+                                uploadProgress: _uploadProgress,
+                                localFilePath: _filePath,
+                                localFileBytes: _fileBytes,
+                                mimeType: _fileMimeType,
+                              )
+                              .animate()
+                              .fadeIn(
+                                duration: 400.ms,
+                                delay: 60.ms,
+                                curve: Curves.easeOut,
+                              )
+                              .slideY(
+                                begin: 0.03,
+                                duration: 400.ms,
+                                delay: 60.ms,
+                                curve: Curves.easeOut,
+                              ),
                     ),
                     if (_inspection != null) ...[
                       const SizedBox(height: AppSpacing.sm),
                       if (_inspection!['colorSpace'] == 'cmyk')
-                        _InspectionChip(
+                        const _InspectionChip(
                           icon: Icons.palette_outlined,
                           label: 'CMYK — print ready',
                           color: Colors.green,
                         ),
                       if (_inspection!['colorSpace'] != null &&
                           _inspection!['colorSpace'] != 'cmyk')
-                        _InspectionChip(
+                        const _InspectionChip(
                           icon: Icons.palette_outlined,
                           label: 'RGB — colors may shift when printed',
                           color: Colors.orange,
@@ -540,13 +548,15 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                       Text(
                         'File Preview',
                         style: AppTypography.h3.copyWith(
-                            color: colors.onBackground),
+                          color: colors.onBackground,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         _fileName ?? '',
-                        style: AppTypography.caption
-                            .copyWith(color: colors.onSurfaceDim),
+                        style: AppTypography.caption.copyWith(
+                          color: colors.onSurfaceDim,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       Model3dPreview(
@@ -559,28 +569,27 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                         PrinterLimitsCard(
                           printerName:
                               (_inspection!['printerLimits']['profileName']
-                                      as String?) ??
-                                  'Printer',
-                          widthMm: (_inspection!['printerLimits']['widthMm']
-                                  as num)
-                              .toInt(),
-                          depthMm: (_inspection!['printerLimits']['depthMm']
-                                  as num)
-                              .toInt(),
-                          heightMm: (_inspection!['printerLimits']['heightMm']
-                                  as num)
-                              .toInt(),
-                          modelWidthMm: (_inspection!['modelBounds']
-                                  ?['widthMm'] as num?)
-                              ?.toDouble(),
-                          modelDepthMm: (_inspection!['modelBounds']
-                                  ?['depthMm'] as num?)
-                              ?.toDouble(),
-                          modelHeightMm: (_inspection!['modelBounds']
-                                  ?['heightMm'] as num?)
-                              ?.toDouble(),
-                          fits:
-                              _inspection!['printerLimits']['fits'] as bool,
+                                  as String?) ??
+                              'Printer',
+                          widthMm:
+                              (_inspection!['printerLimits']['widthMm'] as num)
+                                  .toInt(),
+                          depthMm:
+                              (_inspection!['printerLimits']['depthMm'] as num)
+                                  .toInt(),
+                          heightMm:
+                              (_inspection!['printerLimits']['heightMm'] as num)
+                                  .toInt(),
+                          modelWidthMm:
+                              (_inspection!['modelBounds']?['widthMm'] as num?)
+                                  ?.toDouble(),
+                          modelDepthMm:
+                              (_inspection!['modelBounds']?['depthMm'] as num?)
+                                  ?.toDouble(),
+                          modelHeightMm:
+                              (_inspection!['modelBounds']?['heightMm'] as num?)
+                                  ?.toDouble(),
+                          fits: _inspection!['printerLimits']['fits'] as bool,
                         ),
                       ],
                     ],
@@ -597,12 +606,13 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                       top: BorderSide(color: colors.outline, width: 0.5),
                     ),
                   ),
-                  child: category == '3d' &&
+                  child:
+                      category == '3d' &&
                           _inspection?['printerLimits']?['fits'] == false
                       ? Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            AppButton(
+                            const AppButton(
                               label: 'Unavailable for Beta Testing',
                               variant: AppButtonVariant.secondary,
                               isFullWidth: true,
@@ -641,9 +651,17 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
   }
 
   void _openOversizedChat() {
-    final w = (_inspection?['modelBounds']?['widthMm'] as num?)?.toStringAsFixed(0) ?? '?';
-    final d = (_inspection?['modelBounds']?['depthMm'] as num?)?.toStringAsFixed(0) ?? '?';
-    final h = (_inspection?['modelBounds']?['heightMm'] as num?)?.toStringAsFixed(0) ?? '?';
+    final w =
+        (_inspection?['modelBounds']?['widthMm'] as num?)?.toStringAsFixed(0) ??
+        '?';
+    final d =
+        (_inspection?['modelBounds']?['depthMm'] as num?)?.toStringAsFixed(0) ??
+        '?';
+    final h =
+        (_inspection?['modelBounds']?['heightMm'] as num?)?.toStringAsFixed(
+          0,
+        ) ??
+        '?';
     final filename = _fileName ?? 'my model';
     final draftMessage =
         "Hi! I'm uploading $filename ($w×$d×$h mm) but it exceeds the printer build volume — can you help with personalization?";

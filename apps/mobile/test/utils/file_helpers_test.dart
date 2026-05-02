@@ -13,5 +13,17 @@ void main() {
       expect(mimeTypeForExtension('PDF'), 'application/pdf');
       expect(mimeTypeForExtension('unknown'), 'application/octet-stream');
     });
+
+    test('maps TIFF paper-print extensions to image/tiff', () {
+      expect(mimeTypeForExtension('tif'), 'image/tiff');
+      expect(mimeTypeForExtension('tiff'), 'image/tiff');
+    });
+  });
+
+  group('isValidFileType', () {
+    test('allows TIFF paper-print extensions', () {
+      expect(isValidFileType('poster.tif'), isTrue);
+      expect(isValidFileType('scan.tiff'), isTrue);
+    });
   });
 }

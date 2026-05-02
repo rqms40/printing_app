@@ -4,6 +4,7 @@ const _allowedDocumentExtensions = {
   'png',
   'jpg',
   'jpeg',
+  'tif',
   'tiff',
   'bmp',
   'svg',
@@ -48,6 +49,9 @@ String mimeTypeForExtension(String extension) {
       return 'image/png';
     case 'webp':
       return 'image/webp';
+    case 'tif':
+    case 'tiff':
+      return 'image/tiff';
     case 'pdf':
       return 'application/pdf';
     case 'stl':

@@ -95,6 +95,11 @@ export class BetaModeController {
     return this.service.resetOrderLimit(userId);
   }
 
+  @Get('status')
+  getGlobalStatus() {
+    return this.service.getGlobalStatus();
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('me')
   getBetaStatus(@Req() req: { user: { sub: number } }) {

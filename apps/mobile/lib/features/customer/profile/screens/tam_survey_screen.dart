@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -15,7 +17,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/utils/formatters.dart';
 import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter/foundation.dart';
 
 // ---------------------------------------------------------------------------
 // TAM Questionnaire Data
@@ -101,6 +102,17 @@ extension LikertScaleExt on LikertScale {
         return 'audio/Strongly_Agree.wav';
     }
   }
+}
+
+@visibleForTesting
+Source tamSurveySoundSourceFor(LikertScale scale, {bool isWeb = kIsWeb}) {
+  if (isWeb) {
+    return UrlSource(
+      'assets/assets/${scale.soundEffect}',
+      mimeType: 'audio/wav',
+    );
+  }
+  return AssetSource(scale.soundEffect);
 }
 
 enum _FaceExpression { veryBad, bad, neutral, good, veryGood }
@@ -1172,12 +1184,7 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
 
     if (newScale != _currentScale) {
       HapticFeedback.selectionClick();
-      try {
-        final source = kIsWeb
-            ? UrlSource('assets/${newScale.soundEffect}')
-            : AssetSource(newScale.soundEffect);
-        _audioPlayer.play(source);
-      } catch (_) {}
+      _playSelectionSound(newScale);
       setState(() {
         _sliderValue = value;
         _currentScale = newScale;
@@ -1191,6 +1198,14 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
     } else {
       setState(() => _sliderValue = value);
     }
+  }
+
+  void _playSelectionSound(LikertScale scale) {
+    try {
+      unawaited(
+        _audioPlayer.play(tamSurveySoundSourceFor(scale)).catchError((_) {}),
+      );
+    } catch (_) {}
   }
 
   void _confirm() {

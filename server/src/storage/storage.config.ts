@@ -3,6 +3,8 @@ export const ALLOWED_MIME_TYPES: string[] = [
   'image/jpeg',
   'image/png',
   'image/webp',
+  'image/tiff',
+  'image/tif',
   // Documents
   'application/pdf',
   // 3D model formats
@@ -23,7 +25,13 @@ export const ALLOWED_MIME_TYPES: string[] = [
   'application/zip',
 ];
 
-export const THREE_D_EXTENSIONS: string[] = ['.stl', '.obj', '.3mf', '.glb', '.gltf'];
+export const THREE_D_EXTENSIONS: string[] = [
+  '.stl',
+  '.obj',
+  '.3mf',
+  '.glb',
+  '.gltf',
+];
 
 /**
  * Extensions allowed when MIME type is a generic fallback like
@@ -36,6 +44,8 @@ export const ALLOWED_EXTENSIONS: string[] = [
   '.jpeg',
   '.png',
   '.webp',
+  '.tif',
+  '.tiff',
   '.pdf',
   '.stl',
   '.obj',
@@ -55,6 +65,8 @@ export const MIME_TO_EXT: Record<string, string> = {
   'image/jpeg': '.jpg',
   'image/png': '.png',
   'image/webp': '.webp',
+  'image/tiff': '.tiff',
+  'image/tif': '.tif',
   'application/pdf': '.pdf',
   'model/stl': '.stl',
   'application/sla': '.stl',
@@ -71,6 +83,8 @@ export const MIME_ALLOWED_EXTENSIONS: Record<string, string[]> = {
   'image/jpeg': ['.jpg', '.jpeg'],
   'image/png': ['.png'],
   'image/webp': ['.webp'],
+  'image/tiff': ['.tif', '.tiff'],
+  'image/tif': ['.tif', '.tiff'],
   'application/pdf': ['.pdf'],
   'model/stl': ['.stl'],
   'application/sla': ['.stl'],

@@ -151,6 +151,52 @@ describe('FilesService', () => {
       expect(mockStorageService.upload).toHaveBeenCalled();
     });
 
+    it('accepts a TIFF upload with image/tiff MIME (paper-print case)', async () => {
+      const file = makeFile({
+        mimetype: 'image/tiff',
+        originalname: 'poster.tif',
+      });
+      mockFileRepo.create.mockReturnValue({ id: 102 });
+      mockFileRepo.save.mockResolvedValue({ id: 102 });
+      mockStorageService.upload.mockResolvedValue('http://x/y');
+
+      await service.storeMetadata(file, 1, 'paper');
+
+      expect(mockStorageService.upload).toHaveBeenCalledWith(
+        file.buffer,
+        expect.stringMatching(/uploads\/paper\/\d{4}\/\d{2}\/\d{2}\/.+\.tif$/),
+        'image/tiff',
+      );
+      expect(mockAnalysisService.analyze).toHaveBeenCalledWith(
+        file.buffer,
+        'image/tiff',
+        'poster.tif',
+      );
+    });
+
+    it('accepts a TIFF upload with generic binary MIME (paper-print fallback)', async () => {
+      const file = makeFile({
+        mimetype: 'application/octet-stream',
+        originalname: 'scan.tiff',
+      });
+      mockFileRepo.create.mockReturnValue({ id: 103 });
+      mockFileRepo.save.mockResolvedValue({ id: 103 });
+      mockStorageService.upload.mockResolvedValue('http://x/y');
+
+      await service.storeMetadata(file, 1, 'paper');
+
+      expect(mockStorageService.upload).toHaveBeenCalledWith(
+        file.buffer,
+        expect.stringMatching(/uploads\/paper\/\d{4}\/\d{2}\/\d{2}\/.+\.tiff$/),
+        'application/octet-stream',
+      );
+      expect(mockAnalysisService.analyze).toHaveBeenCalledWith(
+        file.buffer,
+        'application/octet-stream',
+        'scan.tiff',
+      );
+    });
+
     it('accepts a 3MF upload with zip MIME and a spaced filename', async () => {
       const file = makeFile({
         mimetype: 'application/zip',
@@ -282,9 +328,16 @@ describe('FilesService', () => {
       });
       mockStorageService.upload.mockResolvedValue('http://x/y');
       mockAnalysisService.analyze.mockResolvedValue({
-        widthPt: null, heightPt: null, widthPx: null, heightPx: null,
-        colorSpace: null, pageCount: null, dpi: null,
-        model3dWidthMm: 50, model3dDepthMm: 60, model3dHeightMm: 70,
+        widthPt: null,
+        heightPt: null,
+        widthPx: null,
+        heightPx: null,
+        colorSpace: null,
+        pageCount: null,
+        dpi: null,
+        model3dWidthMm: 50,
+        model3dDepthMm: 60,
+        model3dHeightMm: 70,
         model3dTriangleCount: 12,
       });
       mockFileRepo.create.mockReturnValue({ id: 1 });

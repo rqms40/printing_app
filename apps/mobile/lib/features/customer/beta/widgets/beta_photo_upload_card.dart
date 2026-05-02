@@ -72,6 +72,14 @@ class BetaPhotoUploadCard extends StatelessWidget {
   // ── Empty state ─────────────────────────────────────────────────────────────
 
   Widget _emptyState(AppColorSet colors) {
+    // On dark backgrounds (brand = bright yellow) the dashed border and icon
+    // switch to the brand accent so the upload zone is clearly visible.
+    final isDark = colors.background.computeLuminance() < 0.05;
+    final borderColor = isDark
+        ? colors.brand.withValues(alpha: 0.5)
+        : colors.outline;
+    final iconColor = isDark ? colors.brand : colors.onSurfaceDim;
+
     return GestureDetector(
       onTap: onPick,
       child: Container(
@@ -80,7 +88,7 @@ class BetaPhotoUploadCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
         ),
         child: CustomPaint(
-          painter: _DashedBorderPainter(color: colors.outline),
+          painter: _DashedBorderPainter(color: borderColor),
           child: Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -88,7 +96,7 @@ class BetaPhotoUploadCard extends StatelessWidget {
                 Icon(
                   Icons.camera_alt_rounded,
                   size: 32,
-                  color: colors.onSurfaceDim,
+                  color: iconColor,
                 ),
                 const SizedBox(height: 8),
                 Text(

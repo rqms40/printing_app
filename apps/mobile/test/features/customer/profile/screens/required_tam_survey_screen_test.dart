@@ -1,3 +1,4 @@
+import 'package:audioplayers/audioplayers.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,9 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
+import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/features/customer/profile/models/account_state.dart';
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 import 'package:printing_app/features/customer/profile/screens/required_tam_survey_screen.dart';
+import 'package:printing_app/features/customer/profile/screens/tam_survey_screen.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 
 class _FakeAccountStateNotifier extends AccountStateNotifier {
@@ -42,6 +45,7 @@ Widget _wrap({_TestAuthNotifier? authNotifier}) {
   return ProviderScope(
     overrides: [
       accountStateProvider.overrideWith((ref) => _FakeAccountStateNotifier()),
+      ordersProvider.overrideWith((ref) => OrdersNotifier(skipBootstrap: true)),
       if (authNotifier != null)
         authProvider.overrideWith((ref) => authNotifier),
     ],
@@ -61,12 +65,17 @@ Widget _wrapWithRouter(_TestAuthNotifier authNotifier) {
         path: '/auth/login',
         builder: (_, _) => const Scaffold(body: Text('Login Screen')),
       ),
+      GoRoute(
+        path: '/customer/beta/success-wall',
+        builder: (_, _) => const Scaffold(body: Text('Beta Success Wall')),
+      ),
     ],
   );
 
   return ProviderScope(
     overrides: [
       accountStateProvider.overrideWith((ref) => _FakeAccountStateNotifier()),
+      ordersProvider.overrideWith((ref) => OrdersNotifier(skipBootstrap: true)),
       authProvider.overrideWith((ref) => authNotifier),
     ],
     child: MaterialApp.router(routerConfig: router),
@@ -126,6 +135,29 @@ void main() {
   });
 
   group('RequiredTamSurveyScreen', () {
+    test('maps TAM survey Likert ratings to bundled audio asset sources', () {
+      final expectedAssets = {
+        LikertScale.stronglyDisagree: 'audio/Strongly_Disagree.wav',
+        LikertScale.disagree: 'audio/Disagree.wav',
+        LikertScale.neutral: 'audio/Neutral.wav',
+        LikertScale.agree: 'audio/Agree.wav',
+        LikertScale.stronglyAgree: 'audio/Strongly_Agree.wav',
+      };
+
+      for (final entry in expectedAssets.entries) {
+        final source = tamSurveySoundSourceFor(entry.key, isWeb: false);
+
+        expect(source, isA<AssetSource>());
+        expect((source as AssetSource).path, entry.value);
+
+        final webSource = tamSurveySoundSourceFor(entry.key, isWeb: true);
+
+        expect(webSource, isA<UrlSource>());
+        expect((webSource as UrlSource).url, 'assets/assets/${entry.value}');
+        expect(webSource.mimeType, 'audio/wav');
+      }
+    });
+
     testWidgets('disables system pop', (tester) async {
       await tester.pumpWidget(_wrap());
       await tester.pump(const Duration(seconds: 1));
@@ -173,7 +205,9 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
-    testWidgets('submits required survey payload and logs out', (tester) async {
+    testWidgets('submits required survey payload and opens beta success wall', (
+      tester,
+    ) async {
       final authNotifier = _TestAuthNotifier();
       await tester.pumpWidget(_wrapWithRouter(authNotifier));
       await tester.pump();
@@ -185,12 +219,15 @@ void main() {
         await tester.pump(const Duration(milliseconds: 700));
       }
 
+      final textFields = find.byType(TextField, skipOffstage: false);
+      await tester.ensureVisible(textFields.at(2));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.enterText(textFields.at(2), 'Add saved presets.');
+
+      await tester.ensureVisible(textFields.at(3));
+      await tester.pump(const Duration(milliseconds: 300));
       await tester.enterText(
-        find.byType(TextField).at(0),
-        'Add saved presets.',
-      );
-      await tester.enterText(
-        find.byType(TextField).at(1),
+        textFields.at(3),
         'Fast delivery and clear updates.',
       );
       await tester.tap(find.byKey(const ValueKey('tam-open-forum-submit')));
@@ -210,8 +247,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1400));
       await tester.pump(const Duration(milliseconds: 500));
 
-      expect(authNotifier.logoutCalls, 1);
-      expect(find.text('Login Screen'), findsOneWidget);
+      expect(authNotifier.logoutCalls, 0);
+      expect(find.text('Beta Success Wall'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
     });

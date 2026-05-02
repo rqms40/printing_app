@@ -23,7 +23,7 @@ class BetaIndicatorOverlay extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final betaAsync = ref.watch(betaStatusProvider);
     final visible = betaAsync.maybeWhen(
-      data: (s) => s != null && s.globallyEnabled && s.isBetaUser,
+      data: (s) => s != null && s.globallyEnabled,
       orElse: () => false,
     );
 
@@ -171,7 +171,7 @@ class _BetaBadge extends ConsumerWidget {
       loading: () => const SizedBox.shrink(),
       error: (_, _) => const SizedBox.shrink(),
       data: (status) {
-        if (status == null || !status.globallyEnabled || !status.isBetaUser) {
+        if (status == null || !status.globallyEnabled) {
           return const SizedBox.shrink();
         }
 

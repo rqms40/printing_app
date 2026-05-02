@@ -33,6 +33,15 @@ const EMPTY: FileAnalysisResult = {
   model3dTriangleCount: null,
 };
 
+const ANALYZABLE_IMAGE_EXTENSIONS = [
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.webp',
+  '.tif',
+  '.tiff',
+];
+
 @Injectable()
 export class FileAnalysisService {
   constructor(private readonly model3d: Model3dAnalysisService) {}
@@ -57,7 +66,12 @@ export class FileAnalysisService {
         };
       }
       if (mimeType === 'application/pdf') return this.analyzePdf(buffer);
-      if (mimeType.startsWith('image/')) return this.analyzeImage(buffer);
+      if (
+        mimeType.startsWith('image/') ||
+        ANALYZABLE_IMAGE_EXTENSIONS.includes(ext)
+      ) {
+        return this.analyzeImage(buffer);
+      }
       return null;
     } catch {
       return null;
@@ -86,7 +100,9 @@ export class FileAnalysisService {
     }
   }
 
-  private async analyzeImage(buffer: Buffer): Promise<FileAnalysisResult | null> {
+  private async analyzeImage(
+    buffer: Buffer,
+  ): Promise<FileAnalysisResult | null> {
     try {
       const meta = await sharp(buffer).metadata();
       return {
