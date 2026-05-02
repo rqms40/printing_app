@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -10,6 +11,7 @@ import 'package:hugeicons/hugeicons.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import 'package:uuid/uuid.dart';
 import 'package:printing_app/config/constants/app_constants.dart';
+import 'package:printing_app/features/customer/beta/providers/beta_status_provider.dart';
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
@@ -17,6 +19,7 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:go_router/go_router.dart';
+import 'package:printing_app/features/customer/order/beta_demo_3d_upload.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
 import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/file_upload_card.dart';
@@ -184,7 +187,31 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
         : AppConstants.threeDMaxSizeMB;
   }
 
+  bool get _isBetaDemo3dUploadActive {
+    final state = ref.read(orderFlowProvider);
+    final betaStatus = ref.read(betaStatusProvider).valueOrNull;
+    return shouldUseBetaDemo3dUpload(
+      category: state.category,
+      betaStatus: betaStatus,
+    );
+  }
+
+  void _preloadBetaDemo3dAsset() {
+    unawaited(() async {
+      try {
+        await preloadBetaDemo3dFile();
+      } catch (e) {
+        debugPrint('[upload_screen] beta demo preload failed: $e');
+      }
+    }());
+  }
+
   Future<void> _pickFile() async {
+    if (_isBetaDemo3dUploadActive) {
+      await _loadBetaDemo3dFile();
+      return;
+    }
+
     FilePickerResult? result;
     bool nativeSucceeded = false;
 
@@ -257,6 +284,64 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
     });
 
     await _uploadFile(file);
+  }
+
+  Future<void> _loadBetaDemo3dFile() async {
+    if (_isUploading) return;
+
+    setState(() {
+      _errorText = null;
+      _fileName = kBetaDemo3dFileName;
+      _filePath = kBetaDemo3dAssetPath;
+      _fileBytes = null;
+      _fileMimeType = kBetaDemo3dMimeType;
+      _fileSize = null;
+      _fileMetadataId = null;
+      _inspection = null;
+      _isUploading = true;
+      _uploadProgress = 0.35;
+    });
+
+    final assetBytes = preloadBetaDemo3dFile();
+
+    try {
+      await Future<void>.delayed(kBetaDemo3dMockLoadingDuration);
+      if (!mounted) return;
+
+      setState(() {
+        _inspection = betaDemo3dInspection(
+          previewGlbUrl: betaDemo3dPreviewUrl(isWeb: kIsWeb),
+        );
+        _isUploading = false;
+        _uploadProgress = 1;
+      });
+
+      unawaited(
+        assetBytes
+            .then((bytes) {
+              if (!mounted || _fileName != kBetaDemo3dFileName) return;
+              setState(() => _fileSize = bytes.lengthInBytes);
+            })
+            .catchError((Object e) {
+              debugPrint('[upload_screen] beta demo size load failed: $e');
+            }),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      debugPrint('[upload_screen] beta demo load failed: $e');
+      setState(() {
+        _errorText = 'Demo file unavailable. Please try again.';
+        _fileName = null;
+        _filePath = null;
+        _fileBytes = null;
+        _fileMimeType = null;
+        _fileSize = null;
+        _fileMetadataId = null;
+        _inspection = null;
+        _isUploading = false;
+        _uploadProgress = 0;
+      });
+    }
   }
 
   void _useMockFile() {
@@ -409,12 +494,30 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
   }
 
   bool get _canContinue =>
-      _fileName != null && !_isUploading && _errorText == null;
+      !_isBetaDemo3dUploadActive &&
+      _fileName != null &&
+      !_isUploading &&
+      _errorText == null;
 
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
     final category = ref.watch(orderFlowProvider).category;
+    final betaStatus = ref.watch(betaStatusProvider).valueOrNull;
+    final isBetaDemo3dActive = shouldUseBetaDemo3dUpload(
+      category: category,
+      betaStatus: betaStatus,
+    );
+    final modelExceedsPrinterLimits =
+        category == '3d' && _inspection?['printerLimits']?['fits'] == false;
+    final primaryActionLabel = uploadPrimaryActionLabel(
+      isBetaDemo3dActive: isBetaDemo3dActive,
+      modelExceedsPrinterLimits: modelExceedsPrinterLimits,
+    );
+
+    if (isBetaDemo3dActive) {
+      _preloadBetaDemo3dAsset();
+    }
 
     // Fire the Continue coach mark once a file is ready and the upload card
     // coach mark has been dismissed (Got it →).
@@ -615,14 +718,20 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
                       top: BorderSide(color: colors.outline, width: 0.5),
                     ),
                   ),
-                  child:
-                      category == '3d' &&
-                          _inspection?['printerLimits']?['fits'] == false
+                  child: isBetaDemo3dActive
+                      ? AppButton(
+                          label: primaryActionLabel,
+                          variant: AppButtonVariant.secondary,
+                          isFullWidth: true,
+                          isDisabled: true,
+                          onTap: null,
+                        )
+                      : modelExceedsPrinterLimits
                       ? Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const AppButton(
-                              label: 'Unavailable for Beta Testing',
+                            AppButton(
+                              label: primaryActionLabel,
                               variant: AppButtonVariant.secondary,
                               isFullWidth: true,
                               isDisabled: true,
