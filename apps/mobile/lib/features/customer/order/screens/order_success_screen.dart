@@ -21,7 +21,7 @@ class OrderSuccessScreen extends ConsumerStatefulWidget {
   /// Human-readable order references (e.g. "ORD-10042"). One entry per order.
   final List<String> orderRefs;
 
-  /// First placed order's numeric id, used by the "Track order" button.
+  /// First placed order's numeric id, used by the primary order action.
   final int? firstOrderId;
 
   @override
@@ -89,22 +89,18 @@ class _OrderSuccessScreenState extends ConsumerState<OrderSuccessScreen> {
               const Spacer(flex: 3),
               if (widget.firstOrderId != null) ...[
                 _PrimaryButton(
-                  label: isMulti ? 'View orders' : 'Track order',
-                  icon: HugeIcons.strokeRoundedLocation01,
+                  label: isMulti ? 'View orders' : 'View order',
+                  icon: isMulti
+                      ? HugeIcons.strokeRoundedShoppingBag03
+                      : HugeIcons.strokeRoundedInvoice01,
                   colors: colors,
                   onTap: () {
-                    // Always land on the Orders tab so the bottom-nav stays
-                    // active. For a single-item checkout, push the order
-                    // detail on top of the list so the user sees their just-
-                    // placed order immediately. For multi-item checkouts the
-                    // list is the right landing page.
-                    context.go('/customer/orders');
-                    if (!isMulti) {
-                      Future.microtask(
-                        // ignore: use_build_context_synchronously
-                        () => context.push('/customer/orders/${widget.firstOrderId}'),
-                      );
+                    final firstOrderId = widget.firstOrderId;
+                    if (!isMulti && firstOrderId != null) {
+                      context.go('/customer/orders/$firstOrderId');
+                      return;
                     }
+                    context.go('/customer/orders');
                   },
                 ),
                 const SizedBox(height: AppSpacing.sm),

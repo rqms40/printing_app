@@ -39,6 +39,11 @@ double _readDouble(dynamic value, double fallback) {
   return fallback;
 }
 
+String? _normalizeOptionalText(dynamic value) {
+  final text = value?.toString().trim();
+  return text == null || text.isEmpty ? null : text;
+}
+
 String _toCamelCase(String value) {
   final normalized = value.replaceAll('-', '_').toLowerCase();
   return normalized.replaceAllMapped(
@@ -59,6 +64,12 @@ OrderStatus _parseOrderStatus(String value) {
 
 PaymentMethod _parsePaymentMethod(String value) {
   final normalized = value.replaceAll(RegExp(r'[_-]'), '').toLowerCase();
+  if (normalized == 'credits' || normalized == 'gridcredit') {
+    return PaymentMethod.gridCredits;
+  }
+  if (normalized == 'cash' || normalized == 'cashondelivery') {
+    return PaymentMethod.cod;
+  }
   return PaymentMethod.values.firstWhere(
     (e) => e.name.toLowerCase() == normalized,
     orElse: () => PaymentMethod.cod,
@@ -137,6 +148,40 @@ DateTime? _parseDateNullable(dynamic value) {
   return null;
 }
 
+OrderDeliveryAddress? _parseOrderDeliveryAddress(Map<String, dynamic> json) {
+  final deliveryAddress = _readJsonValue(
+    json,
+    'deliveryAddress',
+    'delivery_address',
+  );
+  final destination = _readJsonValue(json, 'destination');
+  final raw = deliveryAddress is Map
+      ? Map<String, dynamic>.from(deliveryAddress)
+      : destination is Map
+      ? Map<String, dynamic>.from(destination)
+      : null;
+  if (raw == null) return null;
+  final fullAddress = _readJsonValue(
+    raw,
+    'fullAddress',
+    'full_address',
+  )?.toString().trim();
+  final city = _readJsonValue(raw, 'city')?.toString().trim();
+  if (fullAddress == null || fullAddress.isEmpty) return null;
+  if (city == null || city.isEmpty) return null;
+  return OrderDeliveryAddress(
+    label: _normalizeOptionalText(_readJsonValue(raw, 'label')),
+    fullAddress: fullAddress,
+    barangay: _normalizeOptionalText(_readJsonValue(raw, 'barangay')),
+    city: city,
+    province: _normalizeOptionalText(_readJsonValue(raw, 'province')),
+    zipCode: _normalizeOptionalText(_readJsonValue(raw, 'zipCode', 'zip_code')),
+    landmark: _normalizeOptionalText(_readJsonValue(raw, 'landmark')),
+    latitude: _readDouble(_readJsonValue(raw, 'latitude'), 0),
+    longitude: _readDouble(_readJsonValue(raw, 'longitude'), 0),
+  );
+}
+
 Order _parseOrder(Map<String, dynamic> json) {
   final batch = _readJsonValue(json, 'batchOrder', 'batch_order');
   final batchJson = batch is Map ? Map<String, dynamic>.from(batch) : null;
@@ -159,7 +204,9 @@ Order _parseOrder(Map<String, dynamic> json) {
     )?.toString(),
     batchId:
         _readJsonValue(json, 'batchId', 'batch_id')?.toString() ??
-        batchJson?['batchRef']?.toString(),
+        (batchJson == null
+            ? null
+            : _readJsonValue(batchJson, 'batchRef', 'batch_ref')?.toString()),
     category: _readJsonValue(json, 'category')?.toString() ?? '',
     fileUrl: _readJsonValue(json, 'fileUrl', 'file_url')?.toString(),
     fileName: _readJsonValue(json, 'fileName', 'file_name')?.toString(),
@@ -224,6 +271,7 @@ Order _parseOrder(Map<String, dynamic> json) {
       'deliveryAddressId',
       'delivery_address_id',
     )?.toString(),
+    deliveryAddress: _parseOrderDeliveryAddress(json),
     assignedDriverId: _readJsonValue(
       json,
       'assignedDriverId',
@@ -237,9 +285,11 @@ Order _parseOrder(Map<String, dynamic> json) {
     estimatedCompletionAt: _parseDateNullable(
       _readJsonValue(json, 'estimatedCompletionAt', 'estimated_completion_at'),
     ),
-    adminStatusNote:
-        _readJsonValue(json, 'adminStatusNote', 'admin_status_note')
-            ?.toString(),
+    adminStatusNote: _readJsonValue(
+      json,
+      'adminStatusNote',
+      'admin_status_note',
+    )?.toString(),
     adminStatusSetAt: _parseDateNullable(
       _readJsonValue(json, 'adminStatusSetAt', 'admin_status_set_at'),
     ),
@@ -250,6 +300,9 @@ Order _parseOrder(Map<String, dynamic> json) {
       'tracking_link',
     )?.toString(),
     items: items,
+    specialInstructions: _normalizeOptionalText(
+      _readJsonValue(json, 'specialInstructions', 'special_instructions'),
+    ),
     createdAt: _parseDate(_readJsonValue(json, 'createdAt', 'created_at')),
     updatedAt: _parseDate(_readJsonValue(json, 'updatedAt', 'updated_at')),
   );
@@ -286,6 +339,9 @@ OrderLineItem _parseOrderLineItem(Map<String, dynamic> json) {
           _readJsonValue(json, 'totalPrice', 'total_price')?.toString() ?? '0',
         ) ??
         0,
+    specialInstructions: _normalizeOptionalText(
+      _readJsonValue(json, 'specialInstructions', 'special_instructions'),
+    ),
   );
 }
 

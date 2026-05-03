@@ -105,6 +105,7 @@ void showCoachMark(
     colorShadow: Colors.black,
     opacityShadow: 0.75,
     pulseEnable: false,
+    hideSkip: true,
     onFinish: onFinish,
     onSkip: () {
       (onSkip ?? onFinish).call();

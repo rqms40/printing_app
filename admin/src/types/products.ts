@@ -1,15 +1,20 @@
 // admin/src/types/products.ts
 
-export type ProductFileProcessingType = 'document' | 'model_3d' | 'generic_file';
-export type ProductPricingModel = 'per_page_modifiers' | 'base_plus_material_estimate';
-export type ProductInputType = 'select' | 'number' | 'boolean' | 'text';
-export type ProductValueType = 'string' | 'number' | 'boolean';
+export type ProductFileProcessingType =
+  | "document"
+  | "model_3d"
+  | "generic_file";
+export type ProductPricingModel =
+  | "per_page_modifiers"
+  | "base_plus_material_estimate";
+export type ProductInputType = "select" | "number" | "boolean" | "text";
+export type ProductValueType = "string" | "number" | "boolean";
 export type ProductPricingRole =
-  | 'none'
-  | 'multiplier'
-  | 'fixed_fee'
-  | 'unit_cost'
-  | 'estimated_quantity';
+  | "none"
+  | "multiplier"
+  | "fixed_fee"
+  | "unit_cost"
+  | "estimated_quantity";
 
 export interface ServiceCategory {
   id: string;
@@ -49,6 +54,7 @@ export interface ProductSpecDefinition {
   max_value?: number;
   step_value?: number;
   sort_order: number;
+  metadata?: Record<string, unknown>;
   options?: SpecOption[];
   created_at: string;
   updated_at: string;
@@ -79,7 +85,7 @@ export interface ServiceAddon {
   name: string;
   description?: string;
   price: number;
-  price_type: 'flat' | 'per_unit';
+  price_type: "flat" | "per_unit";
   is_active: boolean;
   sort_order: number;
   created_at: string;

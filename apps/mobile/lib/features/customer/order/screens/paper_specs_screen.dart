@@ -30,12 +30,12 @@ class PaperSpecsScreen extends ConsumerStatefulWidget {
 
 class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
   final _quantityController = TextEditingController(text: '1');
-  final _pageCountController = TextEditingController(text: '1');
+  final _specialInstructionsController = TextEditingController();
   final _textControllers = <String, TextEditingController>{};
   final _values = <String, dynamic>{};
   String? _initializedSlug;
 
-  final _specsFormKey = GlobalKey();
+  final _primarySpecKey = GlobalKey();
   final _specsContinueKey = GlobalKey();
   bool _advancedThisFrame = false;
   PipelineTutorialNotifier? _pipelineNotifier;
@@ -50,6 +50,8 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
   @override
   void initState() {
     super.initState();
+    _specialInstructionsController.text =
+        ref.read(orderFlowProvider).specialInstructions ?? '';
     _pipelineNotifier = ref.read(pipelineTutorialProvider.notifier);
     ref.listenManual<PipelineState>(
       pipelineTutorialProvider,
@@ -73,20 +75,20 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
       _pipelineNotifier?.abandon();
     }
     _quantityController.dispose();
-    _pageCountController.dispose();
+    _specialInstructionsController.dispose();
     for (final controller in _textControllers.values) {
       controller.dispose();
     }
     super.dispose();
   }
 
-  Future<void> _ensureVisible(GlobalKey key) async {
+  Future<void> _ensureVisible(GlobalKey key, {double alignment = 0.0}) async {
     final ctx = key.currentContext;
     if (ctx == null) return;
     await Scrollable.ensureVisible(
       ctx,
       duration: const Duration(milliseconds: 250),
-      alignment: 0.0,
+      alignment: alignment,
     );
     await Future<void>.delayed(const Duration(milliseconds: 100));
   }
@@ -97,13 +99,13 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
     if (!state.active) return;
 
     if (state.step == PipelineStep.paperSpecsForm) {
-      await _ensureVisible(_specsFormKey);
-      if (!mounted) return;
+      await _ensureVisible(_primarySpecKey, alignment: 0.12);
+      if (!mounted || _primarySpecKey.currentContext == null) return;
       showCoachMark(
         context,
         [
           TutorialStep(
-            targetKey: _specsFormKey,
+            targetKey: _primarySpecKey,
             icon: HugeIcons.strokeRoundedSettings01,
             title: 'Set your specs',
             body:
@@ -162,12 +164,7 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
     _values
       ..clear()
       ..addAll(
-        category.defaultSpecValues(
-          overrides: {
-            'page_count': int.tryParse(_pageCountController.text) ?? 1,
-            if (flow.printMode.isNotEmpty) 'print_mode': flow.printMode,
-          },
-        ),
+        category.defaultSpecValues(overrides: {...flow.specs, 'page_count': 1}),
       );
     _initializedSlug = category.slug;
   }
@@ -230,12 +227,9 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
                     ),
                     children: [
                       const SizedBox(height: AppSpacing.sm),
-                      KeyedSubtree(
-                        key: _specsFormKey,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: _specWidgets(category),
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: _specWidgets(category),
                       ),
                       const SizedBox(height: AppSpacing.lg),
                       AppTextField(
@@ -246,10 +240,16 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
                       ),
                       const SizedBox(height: AppSpacing.lg),
                       AppTextField(
-                        label: 'Page Count',
-                        controller: _pageCountController,
-                        keyboardType: TextInputType.number,
-                        hintText: 'Number of pages',
+                        label: 'Special Instructions / Notes',
+                        controller: _specialInstructionsController,
+                        keyboardType: TextInputType.multiline,
+                        textInputAction: TextInputAction.newline,
+                        maxLines: 4,
+                        hintText:
+                            'Color, cutting, folding, binding, or handling notes',
+                        onChanged: ref
+                            .read(orderFlowProvider.notifier)
+                            .setSpecialInstructions,
                       ),
                       const SizedBox(height: AppSpacing.xxl),
                     ],
@@ -304,8 +304,14 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
 
   List<Widget> _specWidgets(ProductCategory category) {
     final widgets = <Widget>[];
-    for (final spec in category.visibleSpecs) {
-      widgets.add(_specWidget(spec));
+    for (final entry in category.visibleSpecs.indexed) {
+      final spec = entry.$2;
+      final specWidget = _specWidget(spec);
+      widgets.add(
+        entry.$1 == 0
+            ? KeyedSubtree(key: _primarySpecKey, child: specWidget)
+            : specWidget,
+      );
       widgets.add(const SizedBox(height: AppSpacing.lg));
     }
     if (widgets.isNotEmpty) widgets.removeLast();
@@ -355,7 +361,7 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
   void _onContinue() {
     final category = _category();
     final quantity = int.tryParse(_quantityController.text) ?? 1;
-    final pageCount = int.tryParse(_pageCountController.text) ?? 1;
+    const pageCount = 1;
     final selected = Map<String, dynamic>.from(_values)
       ..['page_count'] = pageCount;
     final printMode = selected['print_mode']?.toString() ?? 'fitToPage';
@@ -369,6 +375,7 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
     notifier.setQuantity(quantity);
     notifier.setPageCount(pageCount);
     notifier.setPrintMode(printMode);
+    notifier.setSpecialInstructions(_specialInstructionsController.text);
     notifier.setCatalogSpecs(
       specs: selected,
       displayValues: displayValues,

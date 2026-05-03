@@ -32,6 +32,7 @@ import {
   DeliveryAssignment,
   DeliveryStatus,
 } from '../drivers/entities/delivery-assignment.entity';
+import { DeliveryDestination } from '../orders/entities/delivery-destination.entity';
 
 type AnalyticsPeriod = '7D' | '30D' | '6M';
 type AnalyticsPoint = { label: string; value: number };
@@ -258,8 +259,10 @@ export class AdminController {
 
       if (paperItems.length > 0) {
         for (const item of paperItems) {
-          const paperSize = this.specValue(item.specValues, 'paper_size')
-            .toUpperCase();
+          const paperSize = this.specValue(
+            item.specValues,
+            'paper_size',
+          ).toUpperCase();
           totals.set(
             paperSize,
             (totals.get(paperSize) ?? 0) + (item.quantity ?? 1),
@@ -348,6 +351,7 @@ export class AdminController {
       media_type: this.specValue(values, 'media_type'),
       print_sides: this.specValue(values, 'print_sides'),
       binding: this.specValue(values, 'binding'),
+      print_mode: this.specValue(values, 'print_mode'),
     };
   }
 
@@ -368,6 +372,60 @@ export class AdminController {
     };
   }
 
+  private destinationSnapshot(destination?: DeliveryDestination | null) {
+    if (!destination?.fullAddress) return null;
+
+    return {
+      id: destination.id,
+      address_id: destination.addressId ?? null,
+      label: destination.label ?? null,
+      sort_order: destination.sortOrder ?? 0,
+      address: destination.fullAddress,
+      full_address: destination.fullAddress,
+      barangay: destination.barangay ?? null,
+      city: destination.city ?? null,
+      province: destination.province ?? null,
+      zip_code: destination.zipCode ?? null,
+      landmark: destination.landmark ?? null,
+      latitude:
+        destination.latitude == null ? null : Number(destination.latitude),
+      longitude:
+        destination.longitude == null ? null : Number(destination.longitude),
+    };
+  }
+
+  private destinationSnapshotsForOrder(o: Order) {
+    const byId = new Map<
+      number,
+      NonNullable<ReturnType<typeof this.destinationSnapshot>>
+    >();
+    const byValue = new Map<
+      string,
+      NonNullable<ReturnType<typeof this.destinationSnapshot>>
+    >();
+    const add = (destination?: DeliveryDestination | null) => {
+      const snapshot = this.destinationSnapshot(destination);
+      if (!snapshot) return;
+      if (snapshot.id != null) {
+        byId.set(snapshot.id, snapshot);
+        return;
+      }
+      byValue.set(
+        `${snapshot.full_address}:${snapshot.latitude}:${snapshot.longitude}`,
+        snapshot,
+      );
+    };
+
+    add(o.destination);
+    for (const item of o.items ?? []) {
+      add(item.destination);
+    }
+
+    return [...byId.values(), ...byValue.values()].sort(
+      (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0),
+    );
+  }
+
   private mapOrder(o: Order) {
     const firstPaperItem = (o.items ?? []).find(
       (item) => item.category === 'paper',
@@ -386,6 +444,7 @@ export class AdminController {
       file_url: o.fileUrl ?? null,
       file_name: o.fileName ?? null,
       file_metadata_id: o.fileMetadataId ?? null,
+      special_instructions: o.items?.[0]?.specialInstructions ?? null,
       quantity: o.quantity,
       total_price: Number(o.totalPrice),
       delivery_fee: Number(o.deliveryFee),
@@ -393,6 +452,22 @@ export class AdminController {
       payment_status: o.paymentStatus,
       order_status: o.orderStatus,
       delivery_option: o.deliveryOption,
+      delivery_address_id: o.deliveryAddressId ?? null,
+      delivery_address: this.destinationSnapshot(o.destination),
+      destinations: this.destinationSnapshotsForOrder(o),
+      delivery_slot_booking_id: o.batchOrder?.slotBookingId ?? null,
+      speed_tier: o.batchOrder?.speedTier ?? null,
+      priority_fee:
+        o.batchOrder?.priorityFee == null ? 0 : Number(o.batchOrder.priorityFee),
+      priority:
+        o.batchOrder?.priorityFee == null
+          ? false
+          : Number(o.batchOrder.priorityFee) > 0,
+      delivery_type: o.batchOrder?.deliveryType ?? null,
+      extra_destination_fee:
+        o.batchOrder?.extraDestinationFee == null
+          ? 0
+          : Number(o.batchOrder.extraDestinationFee),
       admin_notes: o.adminNotes ?? null,
       decline_reason: o.declineReason ?? null,
       cancellation_reason: o.cancellationReason ?? null,
@@ -405,10 +480,14 @@ export class AdminController {
       items: (o.items ?? []).map((item) => ({
         id: item.id,
         order_id: item.orderId,
+        destination_id: item.destinationId ?? null,
+        delivery_address_id: item.destination?.addressId ?? null,
+        delivery_address: this.destinationSnapshot(item.destination),
         category: item.category,
         file_url: item.fileUrl ?? null,
         file_name: item.fileName ?? null,
         file_metadata_id: item.fileMetadataId ?? null,
+        special_instructions: item.specialInstructions ?? null,
         quantity: item.quantity,
         total_price: Number(item.totalPrice),
         category_id: item.categoryId,
@@ -492,7 +571,14 @@ export class AdminController {
   async getAllOrders() {
     const orders = await this.ordersRepo.find({
       order: { createdAt: 'DESC' },
-      relations: ['items', 'items.specValues', 'user'],
+      relations: [
+        'batchOrder',
+        'destination',
+        'items',
+        'items.destination',
+        'items.specValues',
+        'user',
+      ],
     });
     return orders.map((o) => this.mapOrder(o));
   }
@@ -502,7 +588,15 @@ export class AdminController {
   async getOrder(@Param('id', ParseIntPipe) id: number) {
     const order = await this.ordersRepo.findOneOrFail({
       where: { id },
-      relations: ['items', 'items.specValues', 'statusHistory', 'user'],
+      relations: [
+        'batchOrder',
+        'destination',
+        'items',
+        'items.destination',
+        'items.specValues',
+        'statusHistory',
+        'user',
+      ],
     });
     return this.mapOrder(order);
   }

@@ -5,6 +5,7 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/customer/order/models/delivery_slot.dart';
 import 'package:printing_app/features/customer/order/models/delivery_speed_tier.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
 import 'package:printing_app/features/customer/order/providers/delivery_slot_provider.dart';
@@ -15,25 +16,78 @@ import 'package:printing_app/utils/formatters.dart';
 class CheckoutSpeedCard extends ConsumerWidget {
   const CheckoutSpeedCard({super.key});
 
-  /// True if any of today's slots is **live right now** — start time has
-  /// passed, end time hasn't, and capacity isn't exhausted. Standard /
-  /// Express delivery only makes sense during a live slot. Mirrors the
-  /// server-side check in OrdersService.createBatch.
-  bool _hasBookableTodaySlot(WidgetRef ref) {
-    final now = DateTime.now();
-    final today =
-        '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    final slots = ref.watch(deliverySlotProvider(today)).slots;
-    if (slots.isEmpty) return false;
+  static const _standardPreviewDays = 14;
+
+  String _isoDate(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  String _dayLabel(DateTime date, int offset) {
+    if (offset == 0) return 'Today';
+    if (offset == 1) return 'Tomorrow';
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${months[date.month - 1]} ${date.day}';
+  }
+
+  DateTime _parseSlotTime(String date, String hms) {
+    final dParts = date.split('-').map(int.parse).toList();
+    final tParts = hms.split(':').map((s) => int.tryParse(s) ?? 0).toList();
+    return DateTime(
+      dParts[0],
+      dParts[1],
+      dParts[2],
+      tParts.isNotEmpty ? tParts[0] : 0,
+      tParts.length > 1 ? tParts[1] : 0,
+      tParts.length > 2 ? tParts[2] : 0,
+    );
+  }
+
+  bool _hasLiveTodaySlot(
+    DateTime now,
+    String today,
+    Iterable<DeliverySlot> slots,
+  ) {
     return slots.any((s) {
       if (s.isFull) return false;
-      final eParts = s.endTime.split(':').map(int.parse).toList();
-      final sParts = s.startTime.split(':').map(int.parse).toList();
-      final end = DateTime(now.year, now.month, now.day, eParts[0], eParts[1]);
-      final start = DateTime(now.year, now.month, now.day, sParts[0], sParts[1]);
+      final start = _parseSlotTime(today, s.startTime);
+      final end = _parseSlotTime(today, s.endTime);
       return !start.isAfter(now) && end.isAfter(now);
     });
   }
+
+  String? _nextBatchLabel({
+    required DateTime now,
+    required Iterable<_SlotPreviewDay> days,
+  }) {
+    for (final day in days) {
+      final available = day.slots.where((slot) {
+        if (slot.isFull) return false;
+        if (day.offset == 0) {
+          return _parseSlotTime(day.date, slot.endTime).isAfter(now);
+        }
+        return true;
+      }).toList()..sort((a, b) => a.startTime.compareTo(b.startTime));
+      if (available.isNotEmpty) {
+        return _formatBatchLabel(day.label, available.first);
+      }
+    }
+    return null;
+  }
+
+  String _formatBatchLabel(String dayLabel, DeliverySlot slot) =>
+      'Next batch: $dayLabel ${slot.startTime.substring(0, 5)}-${slot.endTime.substring(0, 5)} · ${slot.bookedCount}/${slot.capacity} booked';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -43,7 +97,21 @@ class CheckoutSpeedCard extends ConsumerWidget {
         ? AppColors.dark
         : AppColors.light;
 
-    final hasBookable = _hasBookableTodaySlot(ref);
+    final now = DateTime.now();
+    final previewDays = List.generate(_standardPreviewDays, (offset) {
+      final date = now.add(Duration(days: offset));
+      final isoDate = _isoDate(date);
+      return _SlotPreviewDay(
+        offset: offset,
+        date: isoDate,
+        label: _dayLabel(date, offset),
+        slots: ref.watch(deliverySlotProvider(isoDate)).slots,
+      );
+    });
+    final today = previewDays.first.date;
+    final todaySlots = previewDays.first.slots;
+    final hasLiveTodaySlot = _hasLiveTodaySlot(now, today, todaySlots);
+    final nextBatchLabel = _nextBatchLabel(now: now, days: previewDays);
 
     // Express tier preview shows the express fee directly so users see the
     // real number without selecting it. Standard + Scheduled use the current
@@ -60,17 +128,18 @@ class CheckoutSpeedCard extends ConsumerWidget {
             ? fees.deliveryFee
             : expressFeePreview,
         HugeIcons.strokeRoundedFlash,
-        disabled: !hasBookable,
+        disabled: !hasLiveTodaySlot,
       ),
       _TierSpec(
         DeliverySpeedTier.standard,
         'Standard',
-        '~30 min · most popular',
+        hasLiveTodaySlot
+            ? '~30 min · most popular'
+            : nextBatchLabel ?? 'Nearest available batch will be assigned',
         state.speedTier == DeliverySpeedTier.standard
             ? fees.deliveryFee
             : standardFeePreview,
         HugeIcons.strokeRoundedClock01,
-        disabled: !hasBookable,
       ),
       _TierSpec(
         DeliverySpeedTier.scheduled,
@@ -90,7 +159,7 @@ class CheckoutSpeedCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (!hasBookable) ...[
+          if (!hasLiveTodaySlot) ...[
             _NoSlotBanner(colors: colors),
             const SizedBox(height: 10),
           ],
@@ -104,13 +173,29 @@ class CheckoutSpeedCard extends ConsumerWidget {
                   ? null
                   : () async {
                       if (tiers[i].tier == DeliverySpeedTier.scheduled) {
-                        final slot = await SlotPickerSheet.show(context);
+                        final selectedDate = await showDatePicker(
+                          context: context,
+                          initialDate: now.add(const Duration(days: 1)),
+                          firstDate: now.add(const Duration(days: 1)),
+                          lastDate: now.add(const Duration(days: 30)),
+                        );
+                        if (selectedDate == null || !context.mounted) {
+                          return;
+                        }
+                        final slot = await SlotPickerSheet.show(
+                          context,
+                          initialDate: _isoDate(selectedDate),
+                        );
                         if (slot != null) {
-                          ref.read(checkoutProvider.notifier).setScheduledSlot(slot);
+                          ref
+                              .read(checkoutProvider.notifier)
+                              .setScheduledSlot(slot);
                         }
                         return;
                       }
-                      ref.read(checkoutProvider.notifier).setSpeedTier(tiers[i].tier);
+                      ref
+                          .read(checkoutProvider.notifier)
+                          .setSpeedTier(tiers[i].tier);
                     },
             ),
           ],
@@ -135,6 +220,20 @@ class _TierSpec {
   final double fee;
   final List<List<dynamic>> icon;
   final bool disabled;
+}
+
+class _SlotPreviewDay {
+  const _SlotPreviewDay({
+    required this.offset,
+    required this.date,
+    required this.label,
+    required this.slots,
+  });
+
+  final int offset;
+  final String date;
+  final String label;
+  final List<DeliverySlot> slots;
 }
 
 class _NoSlotBanner extends StatelessWidget {
@@ -162,7 +261,7 @@ class _NoSlotBanner extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'No slot is open right now. Choose Pickup or Schedule a future drop.',
+              'No slot is open right now. Standard will join the nearest available batch, or schedule a future drop.',
               style: AppTypography.caption.copyWith(
                 color: colors.onBackground,
                 fontSize: 12,

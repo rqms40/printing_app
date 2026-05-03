@@ -11,7 +11,6 @@ import {
   ProfileCategory,
   ProfileField,
 } from '../profile.constants';
-import { PrintMode } from '../../orders/print-mode.enum';
 
 export enum UserRole {
   CUSTOMER = 'customer',
@@ -113,9 +112,6 @@ export class User {
     default: null,
   })
   fileRetentionDays: number | null;
-
-  @Column({ name: 'default_print_mode', type: 'varchar', length: 20, nullable: true, default: 'fitToPage' })
-  defaultPrintMode: PrintMode | null;
 
   @Column({ name: 'default_payment_method', type: 'varchar', length: 20, nullable: true })
   defaultPaymentMethod: 'gcash' | 'maya' | 'cod' | 'credits' | null;

@@ -27,11 +27,21 @@ class CheckoutFooter extends ConsumerWidget {
         ? AppColors.dark
         : AppColors.light;
 
-    final canPlace = state.items.isNotEmpty &&
+    final hasDeliveryAddress =
+        state.singleAddress != null ||
+        (state.temporaryAddress?.isValid ?? false);
+    final hasMultidropDestinations =
+        state.drops.isNotEmpty &&
+        state.drops.every((drop) => drop.hasValidDestination);
+    final hasRequiredDestination = switch (state.mode) {
+      DeliveryMode.pickup => true,
+      DeliveryMode.delivery => hasDeliveryAddress,
+      DeliveryMode.multidrop => hasMultidropDestinations,
+    };
+    final canPlace =
+        state.items.isNotEmpty &&
         state.paymentMethod != null &&
-        (state.mode == DeliveryMode.pickup ||
-            state.singleAddress != null ||
-            state.drops.isNotEmpty);
+        hasRequiredDestination;
 
     return Container(
       padding: EdgeInsets.fromLTRB(

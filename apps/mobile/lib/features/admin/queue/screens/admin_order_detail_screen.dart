@@ -291,6 +291,13 @@ class _AdminOrderDetailScreenState
           ),
           const SizedBox(height: AppSpacing.sm),
           ..._itemSpecRows(item, colors),
+          if (item.specialInstructions != null)
+            _specRow(
+              'Special Instructions / Notes',
+              item.specialInstructions!,
+              colors,
+              multiline: true,
+            ),
           const Divider(),
           _specRow('Item Subtotal', formatCurrency(item.totalPrice), colors),
         ],
@@ -354,7 +361,32 @@ class _AdminOrderDetailScreenState
         .join(' ');
   }
 
-  Widget _specRow(String label, String value, AppColorSet colors) {
+  Widget _specRow(
+    String label,
+    String value,
+    AppColorSet colors, {
+    bool multiline = false,
+  }) {
+    if (multiline) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: AppTypography.body.copyWith(color: colors.onSurface),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.xs),
       child: Row(
@@ -364,9 +396,13 @@ class _AdminOrderDetailScreenState
             label,
             style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
           ),
-          Text(
-            value,
-            style: AppTypography.body.copyWith(color: colors.onSurface),
+          const SizedBox(width: AppSpacing.md),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: AppTypography.body.copyWith(color: colors.onSurface),
+            ),
           ),
         ],
       ),

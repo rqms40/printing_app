@@ -17,9 +17,13 @@ import {
 } from "antd";
 import {
   ExclamationCircleOutlined,
+  EnvironmentOutlined,
   UserSwitchOutlined,
   StopOutlined,
 } from "@ant-design/icons";
+import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
+import { DivIcon, LatLngBounds, type LatLngExpression } from "leaflet";
+import "leaflet/dist/leaflet.css";
 import { useParams } from "react-router";
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
@@ -29,7 +33,12 @@ import { StatusBadge } from "@/components/status-badge";
 import { FilePreviewModal } from "@/components/file-preview-modal";
 import { ShowPage } from "@/components/show-page";
 import { formatCurrency, formatDateTime, statusLabel } from "@/utils/format";
-import type { Order, OrderItem, OrderStatusHistory } from "@/types/order";
+import type {
+  Order,
+  OrderDestination,
+  OrderItem,
+  OrderStatusHistory,
+} from "@/types/order";
 import { apiClient } from "@/providers/api-client";
 import { FileInspectorModal } from "@/components/file-inspector/file-inspector-modal";
 import {
@@ -42,6 +51,127 @@ import { ManualStatusCard } from "./components/manual-status-card";
 
 const { Text } = Typography;
 const { TextArea } = Input;
+
+const DESTINATION_PIN_ICON = new DivIcon({
+  className: "order-destination-pin",
+  html: `<div style="width:18px;height:18px;border-radius:50%;background:#1677ff;border:3px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,.35);"></div>`,
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
+});
+
+function hasCoordinates(destination?: OrderDestination | null) {
+  return (
+    Number.isFinite(destination?.latitude) &&
+    Number.isFinite(destination?.longitude)
+  );
+}
+
+function destinationTitle(destination: OrderDestination, index: number) {
+  return (
+    destination.label ||
+    destination.full_address ||
+    destination.address ||
+    `Destination ${index + 1}`
+  );
+}
+
+function destinationAddress(destination: OrderDestination) {
+  return destination.full_address || destination.address || "Pinned location";
+}
+
+function getMappableDestinations(order: Order): OrderDestination[] {
+  const seen = new Set<string>();
+  const result: OrderDestination[] = [];
+  const add = (destination?: OrderDestination | null) => {
+    if (!destination || !hasCoordinates(destination)) return;
+    const key =
+      destination.id != null
+        ? `id:${destination.id}`
+        : `${destination.latitude}:${destination.longitude}:${destinationAddress(destination)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    result.push(destination);
+  };
+
+  order.destinations?.forEach(add);
+  add(order.delivery_address);
+  order.items?.forEach((item) => add(item.delivery_address));
+
+  return result.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+}
+
+function DestinationMapViewport({
+  positions,
+}: {
+  positions: LatLngExpression[];
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (positions.length === 0) return;
+    if (positions.length === 1) {
+      map.setView(positions[0], 15);
+      return;
+    }
+    map.fitBounds(new LatLngBounds(positions), { padding: [32, 32] });
+  }, [map, positions]);
+
+  return null;
+}
+
+function OrderDestinationMap({
+  destinations,
+}: {
+  destinations: OrderDestination[];
+}) {
+  const positions = destinations.map(
+    (destination) =>
+      [destination.latitude as number, destination.longitude as number] as [
+        number,
+        number,
+      ],
+  );
+  const center = positions[0] ?? ([7.0713113, 125.6123279] as [number, number]);
+
+  return (
+    <div style={{ height: 320, borderRadius: 8, overflow: "hidden" }}>
+      <MapContainer
+        center={center}
+        zoom={15}
+        style={{ height: "100%", width: "100%", zIndex: 1 }}
+      >
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+        />
+        <DestinationMapViewport positions={positions} />
+        {destinations.map((destination, index) => (
+          <Marker
+            key={
+              destination.id ??
+              `${destination.latitude}:${destination.longitude}:${index}`
+            }
+            position={positions[index]}
+            icon={DESTINATION_PIN_ICON}
+          >
+            <Popup>
+              <div style={{ minWidth: 180 }}>
+                <strong>{destinationTitle(destination, index)}</strong>
+                <div>{destinationAddress(destination)}</div>
+                {destination.landmark && (
+                  <div>Landmark: {destination.landmark}</div>
+                )}
+                <div style={{ color: "#666", fontSize: 12 }}>
+                  {destination.latitude}, {destination.longitude}
+                </div>
+              </div>
+            </Popup>
+          </Marker>
+        ))}
+      </MapContainer>
+    </div>
+  );
+}
 
 function getOrderLineItems(order: Order): OrderItem[] {
   if (order.items && order.items.length > 0) return order.items;
@@ -138,6 +268,7 @@ export function OrderShow() {
 
   const history = order.status_history ?? [];
   const items = getOrderLineItems(order);
+  const destinations = getMappableDestinations(order);
   const validNextStatuses = ORDER_STATUS_TRANSITIONS[order.order_status];
   const canAssignDriver =
     order.order_status === "ready_for_dispatch" ||
@@ -351,6 +482,17 @@ export function OrderShow() {
                 ) : (v ?? "—")
               }
             />
+            {destinations.length > 1 && (
+              <Table.Column
+                title="Destination"
+                render={(_: unknown, item: OrderItem) => {
+                  const destination = item.delivery_address;
+                  return destination
+                    ? destinationTitle(destination, 0)
+                    : "Unassigned";
+                }}
+              />
+            )}
             <Table.Column title="Qty" dataIndex="quantity" width={80} />
             <Table.Column
               title="Specs"
@@ -403,7 +545,12 @@ export function OrderShow() {
         </Card>
 
         {/* Delivery / Slot Info */}
-        {(order.deliverySlotBookingId ?? order.destinations ?? order.priorityFee ?? order.priority) && (
+        {(order.deliverySlotBookingId != null ||
+          destinations.length > 0 ||
+          (order.priorityFee ?? 0) > 0 ||
+          Boolean(order.priority) ||
+          Boolean(order.speedTier) ||
+          Boolean(order.deliveryType)) && (
           <Card title="Delivery Info">
             <Descriptions column={2} bordered size="small">
               {order.deliverySlotBookingId && (
@@ -416,16 +563,54 @@ export function OrderShow() {
                   <Tag color="gold">Priority</Tag>
                 </Descriptions.Item>
               ) : null}
-              {order.destinations && Array.isArray(order.destinations) && order.destinations.length > 0 && (
+              {order.speedTier && (
+                <Descriptions.Item label="Speed">
+                  {humanizeEnumValue(order.speedTier)}
+                </Descriptions.Item>
+              )}
+              {order.deliveryType && (
+                <Descriptions.Item label="Delivery Type">
+                  {humanizeEnumValue(order.deliveryType)}
+                </Descriptions.Item>
+              )}
+              {(order.extraDestinationFee ?? 0) > 0 && (
+                <Descriptions.Item label="Extra Destination Fee">
+                  {formatCurrency(order.extraDestinationFee ?? 0)}
+                </Descriptions.Item>
+              )}
+              {destinations.length > 0 && (
                 <Descriptions.Item label="Destinations" span={2}>
-                  <Space direction="vertical" size={2}>
-                    {(order.destinations as { address?: string; label?: string }[]).map((d, i) => (
-                      <span key={i}>{d.address ?? d.label ?? `Destination ${i + 1}`}</span>
+                  <Space direction="vertical" size={6}>
+                    {destinations.map((destination, index) => (
+                      <span key={destination.id ?? index}>
+                        <Text strong>
+                          {destinationTitle(destination, index)}
+                        </Text>
+                        {" — "}
+                        {destinationAddress(destination)}
+                        <Text type="secondary">
+                          {" "}
+                          ({destination.latitude}, {destination.longitude})
+                        </Text>
+                      </span>
                     ))}
                   </Space>
                 </Descriptions.Item>
               )}
             </Descriptions>
+          </Card>
+        )}
+
+        {destinations.length > 0 && (
+          <Card
+            title={
+              <Space>
+                <EnvironmentOutlined />
+                Pinned Delivery Map
+              </Space>
+            }
+          >
+            <OrderDestinationMap destinations={destinations} />
           </Card>
         )}
 

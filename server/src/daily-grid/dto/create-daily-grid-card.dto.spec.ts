@@ -13,31 +13,31 @@ describe('CreateDailyGridCardDto', () => {
     expect(errs).toHaveLength(0);
   });
 
-  it('accepts valid paperSpecs object', async () => {
+  it('accepts dynamic catalog specs object', async () => {
     const errs = await v({
       title: 'Bond A4',
       category: 'paper',
-      paperSpecs: { paperSize: 'a4', colorMode: 'blackAndWhite' },
+      specs: { paper_size: 'a4', color_mode: 'black_and_white' },
     });
     expect(errs).toHaveLength(0);
   });
 
-  it('accepts valid threeDSpecs object', async () => {
+  it('accepts any product category slug', async () => {
     const errs = await v({
-      title: '3D Print',
-      category: '3d',
-      threeDSpecs: { material: 'pla', infillPercentage: 20 },
+      title: 'Sticker Pack',
+      category: 'stickers',
+      specs: { size: 'small' },
     });
     expect(errs).toHaveLength(0);
   });
 
-  it('rejects paperSpecs as a string', async () => {
+  it('rejects specs as a string', async () => {
     const errs = await v({
       title: 'Bond A4',
       category: 'paper',
-      paperSpecs: 'not-an-object',
+      specs: 'not-an-object',
     });
-    expect(errs.some((e) => e.property === 'paperSpecs')).toBe(true);
+    expect(errs.some((e) => e.property === 'specs')).toBe(true);
   });
 
   it('accepts card without specs', async () => {
@@ -50,8 +50,8 @@ describe('CreateDailyGridCardDto', () => {
     expect(errs.some((e) => e.property === 'title')).toBe(true);
   });
 
-  it('rejects invalid category', async () => {
-    const errs = await v({ title: 'Test', category: 'laser' });
+  it('rejects invalid category slug format', async () => {
+    const errs = await v({ title: 'Test', category: 'Laser Prints' });
     expect(errs.some((e) => e.property === 'category')).toBe(true);
   });
 });

@@ -43,6 +43,74 @@ describe("api normalizers", () => {
     });
   });
 
+  it("preserves order destination snapshots and coordinates", () => {
+    const order = normalizeOrder({
+      id: 7,
+      order_id: "ORD-10007",
+      user_id: 1,
+      category: "paper",
+      total_price: 2,
+      delivery_fee: 0,
+      payment_method: "gcash",
+      payment_status: "pending",
+      order_status: "order_placed",
+      delivery_option: "delivery",
+      delivery_address: {
+        label: "Test",
+        full_address: "Test",
+        city: "Test",
+        landmark: "Test",
+        latitude: 7.0713113,
+        longitude: 125.6123279,
+      },
+      destinations: [
+        {
+          id: 1,
+          label: "Drop 1",
+          full_address: "Drop one",
+          city: "Davao City",
+          latitude: "7.0713113",
+          longitude: "125.6123279",
+        },
+        {
+          id: 2,
+          label: "Drop 2",
+          full_address: "Drop two",
+          city: "Davao City",
+          latitude: "7.0900000",
+          longitude: "125.6200000",
+        },
+      ],
+      created_at: "2026-05-02T19:00:36.788Z",
+      updated_at: "2026-05-02T19:00:36.788Z",
+    });
+
+    expect(order.delivery_address).toMatchObject({
+      label: "Test",
+      full_address: "Test",
+      city: "Test",
+      landmark: "Test",
+      latitude: 7.0713113,
+      longitude: 125.6123279,
+    });
+    expect(order.destinations).toEqual([
+      expect.objectContaining({
+        id: 1,
+        label: "Drop 1",
+        full_address: "Drop one",
+        latitude: 7.0713113,
+        longitude: 125.6123279,
+      }),
+      expect.objectContaining({
+        id: 2,
+        label: "Drop 2",
+        full_address: "Drop two",
+        latitude: 7.09,
+        longitude: 125.62,
+      }),
+    ]);
+  });
+
   it("maps product category responses and parses allowed extensions", () => {
     const category = normalizeServiceCategory({
       id: 2,

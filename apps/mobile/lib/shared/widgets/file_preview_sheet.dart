@@ -74,11 +74,11 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
   double? _widthMm;
   double? _heightMm;
 
-  int get _rulerScale => kRulerScales[_rulerScaleIndex];
+  ArchitectScale get _rulerScale => kArchitectScales[_rulerScaleIndex];
 
   void _cycleRulerScale() {
     setState(() {
-      _rulerScaleIndex = (_rulerScaleIndex + 1) % kRulerScales.length;
+      _rulerScaleIndex = (_rulerScaleIndex + 1) % kArchitectScales.length;
     });
   }
 

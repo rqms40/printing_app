@@ -2,7 +2,6 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
-  IsIn,
   IsOptional,
   IsString,
 } from 'class-validator';
@@ -13,7 +12,6 @@ import {
   ProfileCategory,
   ProfileField,
 } from '../profile.constants';
-import { PrintMode } from '../../orders/print-mode.enum';
 
 export class UpdateProfileDto {
   @ApiPropertyOptional({ example: 'Maria Santos' })
@@ -71,9 +69,4 @@ export class UpdateProfileDto {
   @IsArray()
   @IsEnum(PrintingPreference, { each: true })
   printingPreferences?: PrintingPreference[];
-
-  @ApiPropertyOptional({ enum: PrintMode })
-  @IsOptional()
-  @IsIn(Object.values(PrintMode))
-  defaultPrintMode?: PrintMode;
 }

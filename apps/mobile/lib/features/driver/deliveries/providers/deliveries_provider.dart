@@ -37,11 +37,13 @@ DateTime _parseDate(dynamic value) {
   return DateTime.now();
 }
 
+String _readId(dynamic value) => value?.toString() ?? '';
+
 DeliveryAssignment _parseAssignment(Map<String, dynamic> json) {
   return DeliveryAssignment(
-    id: json['id'] as String? ?? json['_id'] as String? ?? '',
-    orderId: json['orderId'] as String? ?? '',
-    driverId: json['driverId'] as String? ?? '',
+    id: _readId(json['id'] ?? json['_id']),
+    orderId: _readId(json['orderId'] ?? json['order_id']),
+    driverId: _readId(json['driverId'] ?? json['driver_id']),
     status: _parseDeliveryStatus(json['status'] as String? ?? 'assigned'),
     assignedAt: _parseDateNullable(json['assignedAt']),
     acceptedAt: _parseDateNullable(json['acceptedAt']),

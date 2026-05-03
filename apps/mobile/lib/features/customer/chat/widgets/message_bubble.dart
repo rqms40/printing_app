@@ -12,25 +12,30 @@ import 'package:printing_app/features/customer/chat/widgets/chat_avatar.dart';
 import 'package:printing_app/shared/providers/dio_provider.dart';
 
 /// Resolves a presigned URL for a chat attachment file id. Cached per id.
-final attachmentPresignedUrlProvider =
-    FutureProvider.family.autoDispose<String?, int>((ref, fileId) async {
-  final dio = ref.read(dioProvider);
-  try {
-    final res = await dio.get<Map<String, dynamic>>(
-      '/files/$fileId/presigned-url',
-    );
-    return res.data?['url'] as String?;
-  } catch (_) {
-    return null;
-  }
-});
+final attachmentPresignedUrlProvider = FutureProvider.family
+    .autoDispose<String?, int>((ref, fileId) async {
+      final dio = ref.read(dioProvider);
+      try {
+        final res = await dio.get<Map<String, dynamic>>(
+          '/files/$fileId/presigned-url',
+        );
+        return res.data?['url'] as String?;
+      } catch (_) {
+        return null;
+      }
+    });
 
 class MessageBubble extends ConsumerWidget {
-  const MessageBubble({super.key, required this.message});
+  const MessageBubble({
+    super.key,
+    required this.message,
+    this.currentUserRole = SenderRole.customer,
+  });
 
   final ChatMessage message;
+  final SenderRole currentUserRole;
 
-  bool get _isOutgoing => message.senderRole == SenderRole.customer;
+  bool get _isOutgoing => message.senderRole == currentUserRole;
   bool get _shouldRenderMarkdown =>
       message.senderRole == SenderRole.bot ||
       message.senderRole == SenderRole.admin;
@@ -94,9 +99,8 @@ class MessageBubble extends ConsumerWidget {
         a: baseStyle.copyWith(
           color: _isOutgoing ? colors.accentOnColor : colors.accent,
           decoration: TextDecoration.underline,
-          decorationColor:
-              (_isOutgoing ? colors.accentOnColor : colors.accent)
-                  .withValues(alpha: 0.5),
+          decorationColor: (_isOutgoing ? colors.accentOnColor : colors.accent)
+              .withValues(alpha: 0.5),
         ),
         code: baseStyle.copyWith(
           fontFamily: 'monospace',
@@ -118,10 +122,7 @@ class MessageBubble extends ConsumerWidget {
         ),
         blockquoteDecoration: BoxDecoration(
           border: Border(
-            left: BorderSide(
-              color: textColor.withValues(alpha: 0.3),
-              width: 3,
-            ),
+            left: BorderSide(color: textColor.withValues(alpha: 0.3), width: 3),
           ),
         ),
         blockquotePadding: const EdgeInsets.only(left: 12, top: 4, bottom: 4),
@@ -141,8 +142,9 @@ class MessageBubble extends ConsumerWidget {
     required WidgetRef ref,
     required AppColorSet colors,
   }) {
-    final urlAsync =
-        ref.watch(attachmentPresignedUrlProvider(message.attachmentFileId!));
+    final urlAsync = ref.watch(
+      attachmentPresignedUrlProvider(message.attachmentFileId!),
+    );
 
     return GestureDetector(
       onTap: urlAsync.asData?.value == null
@@ -178,31 +180,28 @@ class MessageBubble extends ConsumerWidget {
   }
 
   Widget _imageLoading(AppColorSet colors) => Container(
-        width: 200,
-        height: 160,
-        color: colors.surfaceVariant,
-        alignment: Alignment.center,
-        child: SizedBox(
-          width: 22,
-          height: 22,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: colors.accent,
-          ),
-        ),
-      );
+    width: 200,
+    height: 160,
+    color: colors.surfaceVariant,
+    alignment: Alignment.center,
+    child: SizedBox(
+      width: 22,
+      height: 22,
+      child: CircularProgressIndicator(strokeWidth: 2, color: colors.accent),
+    ),
+  );
 
   Widget _imageError(AppColorSet colors) => Container(
-        width: 180,
-        height: 130,
-        color: colors.surfaceVariant,
-        alignment: Alignment.center,
-        child: HugeIcon(
-          icon: HugeIcons.strokeRoundedImageNotFound01,
-          size: 28,
-          color: colors.onSurfaceDim,
-        ),
-      );
+    width: 180,
+    height: 130,
+    color: colors.surfaceVariant,
+    alignment: Alignment.center,
+    child: HugeIcon(
+      icon: HugeIcons.strokeRoundedImageNotFound01,
+      size: 28,
+      color: colors.onSurfaceDim,
+    ),
+  );
 
   void _showImagePreview(BuildContext context, String url) {
     Navigator.of(context).push(
@@ -410,4 +409,3 @@ class _ImagePreviewScreen extends StatelessWidget {
     );
   }
 }
-

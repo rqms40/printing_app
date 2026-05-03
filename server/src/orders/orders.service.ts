@@ -26,7 +26,10 @@ import { CreditsService } from '../credits/credits.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { FilesService } from '../files/files.service';
 import { FileMetadata } from '../files/entities/file-metadata.entity';
-import { CreateBatchOrderDto } from './dto/create-order.dto';
+import {
+  CreateBatchOrderDto,
+  TemporaryDeliveryAddressDto,
+} from './dto/create-order.dto';
 import { QuoteOrderDto } from './dto/quote-order.dto';
 import { DeliverySpeedTier } from './enums/delivery-speed-tier.enum';
 import { UpdateManualStatusDto } from './dto/update-manual-status.dto';
@@ -35,6 +38,7 @@ import { DeliverySlotsService } from '../delivery-slots/delivery-slots.service';
 import { DeliverySettingsService } from '../delivery-slots/delivery-settings.service';
 import { DeliverySlotsGateway } from '../delivery-slots/delivery-slots.gateway';
 import { DeliverySlotBooking } from '../delivery-slots/entities/delivery-slot-booking.entity';
+import { SlotFullException } from '../delivery-slots/exceptions';
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
 import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 import { CatalogPricingService } from '../products/catalog-pricing.service';
@@ -43,6 +47,7 @@ import { CatalogPricingService } from '../products/catalog-pricing.service';
 // server may run in UTC, so we never use server-local Date#getHours/setHours
 // for slot math — we compute against PH wall-clock directly from the UTC clock.
 const PH_OFFSET_MINUTES = 8 * 60;
+const AUTO_SLOT_SEARCH_DAYS = 14;
 
 function phMinutesSinceMidnight(date: Date): number {
   const utcMin = date.getUTCHours() * 60 + date.getUTCMinutes();
@@ -56,12 +61,62 @@ function phTodayDateString(now: Date = new Date()): string {
   return new Date(phMs).toISOString().slice(0, 10);
 }
 
+function addDaysToDateString(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+type NormalizedTemporaryDeliveryAddress = {
+  label?: string;
+  fullAddress: string;
+  barangay?: string;
+  city: string;
+  province?: string;
+  zipCode?: string;
+  landmark?: string;
+  latitude: number;
+  longitude: number;
+};
+
+type NormalizedDeliveryDestination = {
+  addressId: number | null;
+  label: string | null;
+  fullAddress: string | null;
+  barangay: string | null;
+  city: string | null;
+  province: string | null;
+  zipCode: string | null;
+  landmark: string | null;
+  latitude: number | null;
+  longitude: number | null;
+};
+
+type SlotCandidate = {
+  slotTemplateId: number;
+  date: string;
+  startTime: string;
+  endTime: string;
+};
+
+type AssignedSlot = SlotCandidate & {
+  bookingId: number;
+};
+
+type CreateBatchResult = {
+  batchId: string;
+  orders: Order[];
+  assignedSlot?: AssignedSlot;
+};
+
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
   private static readonly ORDER_RELATIONS = [
     'batchOrder',
+    'destination',
     'items',
+    'items.destination',
     'items.specValues',
   ];
 
@@ -77,7 +132,8 @@ export class OrdersService {
     private addressRepo: Repository<Address>,
     @InjectRepository(DeliveryDestination)
     private deliveryDestinationRepo: Repository<DeliveryDestination>,
-    @InjectRepository(BatchOrder) private batchOrdersRepo: Repository<BatchOrder>,
+    @InjectRepository(BatchOrder)
+    private batchOrdersRepo: Repository<BatchOrder>,
     private ordersGateway: OrdersGateway,
     private firebaseService: FirebaseService,
     private usersService: UsersService,
@@ -186,12 +242,20 @@ export class OrdersService {
       };
       specs?: Record<string, unknown>;
       addonIds?: number[];
+      specialInstructions?: unknown;
     },
   ): Promise<Order> {
     if (data.userId != null) {
       await this.assertBetaOrderLimit(Number(data.userId));
     }
-    const { paperSpecs, threeDSpecs, specs, addonIds, ...orderData } = data;
+    const {
+      paperSpecs,
+      threeDSpecs,
+      specs,
+      addonIds,
+      specialInstructions,
+      ...orderData
+    } = data;
     if (orderData.deliveryAddressId != null && orderData.userId != null) {
       orderData.deliveryAddressId = await this.validateDeliveryAddress(
         Number(orderData.deliveryAddressId),
@@ -254,6 +318,8 @@ export class OrdersService {
         fileName: savedOrder.fileName,
         fileUrl: savedOrder.fileUrl,
         fileMetadataId: savedOrder.fileMetadataId,
+        specialInstructions:
+          this.normalizeSpecialInstructions(specialInstructions),
         categoryId: quoteItem.categoryId,
         categorySlug: quoteItem.categorySlug,
         categoryName: quoteItem.categoryName,
@@ -282,7 +348,7 @@ export class OrdersService {
   async createBatch(
     userId: number,
     dto: CreateBatchOrderDto,
-  ): Promise<{ batchId: string; orders: Order[] }> {
+  ): Promise<CreateBatchResult> {
     await this.assertBetaOrderLimit(userId);
     if (!dto.items || dto.items.length === 0) {
       throw new BadRequestException('Batch order requires at least one item');
@@ -294,6 +360,9 @@ export class OrdersService {
       totalPrice: Number(item.totalPrice ?? 0),
       fileMetadataId:
         item.fileMetadataId == null ? undefined : Number(item.fileMetadataId),
+      specialInstructions: this.normalizeSpecialInstructions(
+        item.specialInstructions,
+      ),
       threeDSpecs: item.threeDSpecs
         ? {
             ...item.threeDSpecs,
@@ -317,20 +386,108 @@ export class OrdersService {
     const deliveryFee = Number(dto.deliveryFee ?? 0);
     const deliveryAddressId =
       dto.deliveryAddressId == null ? undefined : Number(dto.deliveryAddressId);
-    const validatedDeliveryAddressId =
+    const validatedDeliveryAddress =
       deliveryAddressId == null
-        ? undefined
-        : await this.validateDeliveryAddress(deliveryAddressId, userId);
+        ? null
+        : await this.findOwnedDeliveryAddress(deliveryAddressId, userId);
+    const validatedDeliveryAddressId = validatedDeliveryAddress?.id;
+    const temporaryAddress = this.normalizeTemporaryAddress(
+      dto.temporaryAddress,
+    );
 
     // --- Destination resolution ---
-    const destinations = dto.destinations ?? [];
+    const inputDestinations = dto.destinations ?? [];
+    if (
+      dto.deliveryOption !== 'delivery' &&
+      (temporaryAddress != null || inputDestinations.length > 0)
+    ) {
+      throw new BadRequestException(
+        'Delivery destinations are only allowed for delivery',
+      );
+    }
+    if (
+      dto.deliveryOption === 'delivery' &&
+      validatedDeliveryAddressId == null &&
+      temporaryAddress == null &&
+      inputDestinations.length === 0
+    ) {
+      throw new BadRequestException('Delivery address is required');
+    }
+    if (validatedDeliveryAddressId != null && temporaryAddress != null) {
+      throw new BadRequestException(
+        'Choose either a saved address or a temporary address',
+      );
+    }
+    if (temporaryAddress != null && inputDestinations.length > 0) {
+      throw new BadRequestException(
+        'Choose either a temporary address or delivery destinations',
+      );
+    }
+
+    const resolvedDestinations: NormalizedDeliveryDestination[] = [];
+    for (const dest of inputDestinations) {
+      if (dest.addressId != null && dest.address != null) {
+        throw new BadRequestException(
+          'Choose either a saved address or a temporary address for each destination',
+        );
+      }
+
+      if (dest.address) {
+        const normalized = this.normalizeTemporaryAddress(dest.address);
+        if (!normalized) {
+          throw new BadRequestException('Invalid temporary address');
+        }
+        resolvedDestinations.push(
+          this.destinationFromTemporaryAddress(normalized, dest.label),
+        );
+        continue;
+      }
+
+      if (dest.addressId == null) {
+        throw new BadRequestException('Invalid delivery address');
+      }
+
+      const addr = await this.addressRepo.findOne({
+        where: { id: dest.addressId, userId },
+      });
+      if (!addr) {
+        throw new BadRequestException('Invalid delivery address');
+      }
+      resolvedDestinations.push(
+        this.destinationFromSavedAddress(addr, dest.label),
+      );
+    }
+
+    if (temporaryAddress != null && resolvedDestinations.length === 0) {
+      resolvedDestinations.push(
+        this.destinationFromTemporaryAddress(temporaryAddress),
+      );
+    }
+    if (validatedDeliveryAddress != null && resolvedDestinations.length === 0) {
+      resolvedDestinations.push(
+        this.destinationFromSavedAddress(validatedDeliveryAddress),
+      );
+    }
+
+    if (resolvedDestinations.length > 0) {
+      for (const item of normalizedItems) {
+        const destinationIndex = item.destinationIndex ?? 0;
+        if (
+          !Number.isInteger(destinationIndex) ||
+          destinationIndex < 0 ||
+          destinationIndex >= resolvedDestinations.length
+        ) {
+          throw new BadRequestException('Invalid destination index');
+        }
+      }
+    }
+
     let deliveryType: 'local' | 'external' = 'local';
 
-    for (const dest of destinations) {
-      const addr = await this.addressRepo.findOne({ where: { id: dest.addressId } });
+    for (const dest of resolvedDestinations) {
       const inside = await this.settingsService.isInsideServiceArea(
-        addr ? Number(addr.latitude) : null,
-        addr ? Number(addr.longitude) : null,
+        dest.latitude,
+        dest.longitude,
       );
       if (!inside) {
         deliveryType = 'external';
@@ -343,9 +500,11 @@ export class OrdersService {
     const speedTier = dto.speedTier ?? DeliverySpeedTier.STANDARD;
     const isPriority = speedTier === DeliverySpeedTier.PRIORITY;
     const priorityFee = isPriority ? Number(settings.priorityFeeAmount) : 0;
-    const extraDestCount = Math.max(0, destinations.length - 1);
-    const extraDestinationFee = extraDestCount * Number(settings.extraDestinationSurcharge);
-    const totalPrice = subtotal + deliveryFee + priorityFee + extraDestinationFee;
+    const extraDestCount = Math.max(0, resolvedDestinations.length - 1);
+    const extraDestinationFee =
+      extraDestCount * Number(settings.extraDestinationSurcharge);
+    const totalPrice =
+      subtotal + deliveryFee + priorityFee + extraDestinationFee;
 
     // --- 3D bounds enforcement ---
     const profile = await this.printerProfileService.getProfile();
@@ -371,40 +530,25 @@ export class OrdersService {
       }
     }
 
-    // --- Standard/Express delivery requires a bookable slot today ---
     // Slot HH:MM in DB is stored as Asia/Manila wall-clock (the operator's
-    // local time). The server may run in UTC, so we compare against the
-    // current minute-of-day in PH (UTC+8), not server-local. A slot is
-    // bookable today iff it has remaining capacity AND its end-time has
-    // not yet passed in PH local time. Future-today slots (e.g. a 14:00
-    // slot at 10:39 AM) ARE valid — the customer accepts whatever today
-    // window the slot picker shows; we don't require the slot to be live
-    // right now.
-    const isImmediateTier =
-      speedTier === DeliverySpeedTier.STANDARD ||
-      speedTier === DeliverySpeedTier.PRIORITY;
-    if (
+    // local time). Auto assignment compares same-day slot end-times against
+    // the current PH minute-of-day, then continues through future PH dates.
+    const hasExplicitSlot = dto.slotTemplateId != null && dto.slotDate != null;
+    const shouldAutoAssignSlot =
       dto.deliveryOption === 'delivery' &&
       deliveryType === 'local' &&
-      isImmediateTier &&
-      dto.slotTemplateId == null
-    ) {
-      const today = phTodayDateString();
-      const todaySlots = await this.slotsService.getAvailability(today);
-      const phNowMinutes = phMinutesSinceMidnight(new Date());
-      const hasBookable = todaySlots.some((s) => {
-        if (s.isFull) return false;
-        const [eh, em] = s.endTime.split(':').map(Number);
-        const slotEndMin = eh * 60 + em;
-        return slotEndMin > phNowMinutes;
+      speedTier === DeliverySpeedTier.STANDARD &&
+      dto.slotTemplateId == null &&
+      dto.slotDate == null;
+    const autoSlotCandidates = shouldAutoAssignSlot
+      ? await this.findAutoSlotCandidates()
+      : [];
+    if (shouldAutoAssignSlot && autoSlotCandidates.length === 0) {
+      throw new BadRequestException({
+        code: 'no_slot_available_today',
+        message:
+          'No delivery slot is available right now. Please choose Pickup or Schedule a future slot.',
       });
-      if (!hasBookable) {
-        throw new BadRequestException({
-          code: 'no_slot_available_today',
-          message:
-            'No delivery slot is available right now. Please choose Pickup or Schedule a future slot.',
-        });
-      }
     }
 
     const orders = await this.dataSource.transaction(async (manager) => {
@@ -437,16 +581,23 @@ export class OrdersService {
       savedBatch.externalDeliveryStatus =
         deliveryType === 'external' ? 'pending_admin' : null;
       savedBatch.slotBookingId = null;
-      await batchOrdersRepo.save(savedBatch);
 
       // --- Insert DeliveryDestination rows ---
       const savedDestinations: DeliveryDestination[] = [];
-      for (let i = 0; i < destinations.length; i++) {
-        const dest = destinations[i];
+      for (let i = 0; i < resolvedDestinations.length; i++) {
+        const dest = resolvedDestinations[i];
         const destEntity = txDestinationRepo.create({
           batchOrderId: savedBatch.id,
           addressId: dest.addressId,
-          label: dest.label ?? null,
+          label: dest.label,
+          fullAddress: dest.fullAddress,
+          barangay: dest.barangay,
+          city: dest.city,
+          province: dest.province,
+          zipCode: dest.zipCode,
+          landmark: dest.landmark,
+          latitude: dest.latitude,
+          longitude: dest.longitude,
           sortOrder: i,
         });
         const savedDest = await txDestinationRepo.save(destEntity);
@@ -454,26 +605,60 @@ export class OrdersService {
       }
 
       // --- Book slot if local ---
-      if (
-        deliveryType === 'local' &&
-        dto.slotTemplateId != null &&
-        dto.slotDate != null
-      ) {
+      let assignedSlot: AssignedSlot | undefined;
+      if (deliveryType === 'local' && hasExplicitSlot) {
         const booking = await this.slotsService.bookSlot(manager, {
-          slotTemplateId: dto.slotTemplateId,
-          date: dto.slotDate,
+          slotTemplateId: dto.slotTemplateId!,
+          date: dto.slotDate!,
           batchOrderId: savedBatch.id,
           priority: isPriority,
         });
         savedBatch.slotBookingId = booking.id;
-        await batchOrdersRepo.save(savedBatch);
+        assignedSlot = {
+          bookingId: booking.id,
+          slotTemplateId: dto.slotTemplateId!,
+          date: dto.slotDate!,
+          startTime: '',
+          endTime: '',
+        };
+      } else if (deliveryType === 'local' && shouldAutoAssignSlot) {
+        for (const candidate of autoSlotCandidates) {
+          try {
+            const booking = await this.slotsService.bookSlot(manager, {
+              slotTemplateId: candidate.slotTemplateId,
+              date: candidate.date,
+              batchOrderId: savedBatch.id,
+              priority: false,
+            });
+            savedBatch.slotBookingId = booking.id;
+            assignedSlot = {
+              bookingId: booking.id,
+              ...candidate,
+            };
+            break;
+          } catch (err) {
+            if (this.isSlotFullError(err)) continue;
+            throw err;
+          }
+        }
+
+        if (!assignedSlot) {
+          throw new BadRequestException({
+            code: 'no_slot_available_today',
+            message:
+              'No delivery slot is available right now. Please choose Pickup or Schedule a future slot.',
+          });
+        }
       }
+      await batchOrdersRepo.save(savedBatch);
 
       const orderCount = await txOrdersRepo.count();
       const orderId = `ORD-${(10001 + orderCount).toString().padStart(5, '0')}`;
       const firstItem = normalizedItems[0];
       // For the aggregate order, wire it to the first item's destination (if any)
-      const firstDestId = savedDestinations[normalizedItems[0]?.destinationIndex ?? 0]?.id ?? null;
+      const firstDestId =
+        savedDestinations[normalizedItems[0]?.destinationIndex ?? 0]?.id ??
+        null;
       const aggregateOrder = txOrdersRepo.create({
         userId,
         orderId,
@@ -501,6 +686,8 @@ export class OrdersService {
 
       for (const [index, item] of normalizedItems.entries()) {
         const quoteItem = quote.items[index];
+        const itemDestinationId =
+          savedDestinations[item.destinationIndex ?? 0]?.id ?? null;
         const savedItem = await txOrderItemsRepo.save(
           txOrderItemsRepo.create({
             orderId: savedOrder.id,
@@ -514,6 +701,8 @@ export class OrdersService {
             fileName: item.fileName,
             fileUrl: item.fileUrl,
             fileMetadataId: item.fileMetadataId,
+            specialInstructions: item.specialInstructions,
+            destinationId: itemDestinationId,
           }),
         );
         for (const snapshot of quoteItem.specSnapshots) {
@@ -542,17 +731,29 @@ export class OrdersService {
         relations: OrdersService.ORDER_RELATIONS,
       });
 
-      return { batchRef: savedBatch.batchRef, orders: [orderWithItems] };
+      return {
+        batchRef: savedBatch.batchRef,
+        orders: [orderWithItems],
+        assignedSlot,
+      };
     });
 
     // --- After transaction: emit WS event if local ---
-    if (deliveryType === 'local' && dto.slotDate != null && dto.slotTemplateId != null) {
-      const counts = await this.slotsService.getAvailability(dto.slotDate);
-      const updated = counts.find((c) => c.templateId === dto.slotTemplateId);
+    if (deliveryType === 'local' && orders.assignedSlot) {
+      const counts = await this.slotsService.getAvailability(
+        orders.assignedSlot.date,
+      );
+      const updated = counts.find(
+        (c) => c.templateId === orders.assignedSlot?.slotTemplateId,
+      );
       if (updated) {
+        if (!orders.assignedSlot.startTime) {
+          orders.assignedSlot.startTime = updated.startTime;
+          orders.assignedSlot.endTime = updated.endTime;
+        }
         this.slotsGateway.notifySlotUpdated({
           templateId: updated.templateId,
-          date: dto.slotDate,
+          date: orders.assignedSlot.date,
           bookedCount: updated.bookedCount,
         });
       }
@@ -562,7 +763,11 @@ export class OrdersService {
       await this.notifyOrderPlaced(order);
     }
 
-    return { batchId: orders.batchRef, orders: orders.orders };
+    return {
+      batchId: orders.batchRef,
+      orders: orders.orders,
+      ...(orders.assignedSlot ? { assignedSlot: orders.assignedSlot } : {}),
+    };
   }
 
   private async notifyOrderPlaced(savedOrder: Order): Promise<void> {
@@ -599,10 +804,144 @@ export class OrdersService {
     return normalized === 'credits' || normalized === 'gridcredits';
   }
 
+  private async findAutoSlotCandidates(
+    now: Date = new Date(),
+  ): Promise<SlotCandidate[]> {
+    const today = phTodayDateString(now);
+    const phNowMinutes = phMinutesSinceMidnight(now);
+    const candidates: SlotCandidate[] = [];
+
+    for (let offset = 0; offset < AUTO_SLOT_SEARCH_DAYS; offset += 1) {
+      const date = addDaysToDateString(today, offset);
+      const slots = await this.slotsService.getAvailability(date);
+      for (const slot of slots) {
+        if (slot.isFull) continue;
+        if (
+          offset === 0 &&
+          !this.sameDaySlotEndIsFuture(slot.endTime, phNowMinutes)
+        ) {
+          continue;
+        }
+        candidates.push({
+          slotTemplateId: slot.templateId,
+          date,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+        });
+      }
+    }
+
+    return candidates;
+  }
+
+  private sameDaySlotEndIsFuture(
+    endTime: string,
+    phNowMinutes: number,
+  ): boolean {
+    const [hours, minutes] = endTime.split(':').map(Number);
+    return hours * 60 + minutes > phNowMinutes;
+  }
+
+  private isSlotFullError(err: unknown): boolean {
+    if (err instanceof SlotFullException) return true;
+    return (
+      typeof err === 'object' &&
+      err !== null &&
+      'response' in err &&
+      typeof (err as { response?: { code?: unknown } }).response === 'object' &&
+      (err as { response?: { code?: unknown } }).response?.code === 'slot_full'
+    );
+  }
+
+  private normalizeTemporaryAddress(
+    address?: TemporaryDeliveryAddressDto | null,
+  ): NormalizedTemporaryDeliveryAddress | null {
+    if (!address) return null;
+    const fullAddress = this.normalizeOptionalText(address.fullAddress);
+    const city = this.normalizeOptionalText(address.city);
+    const latitude = Number(address.latitude);
+    const longitude = Number(address.longitude);
+    if (
+      !fullAddress ||
+      !city ||
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      latitude < -90 ||
+      latitude > 90 ||
+      longitude < -180 ||
+      longitude > 180 ||
+      (latitude === 0 && longitude === 0)
+    ) {
+      throw new BadRequestException('Invalid temporary address');
+    }
+
+    return {
+      label: this.normalizeOptionalText(address.label) ?? undefined,
+      fullAddress,
+      barangay: this.normalizeOptionalText(address.barangay) ?? undefined,
+      city,
+      province: this.normalizeOptionalText(address.province) ?? undefined,
+      zipCode: this.normalizeOptionalText(address.zipCode) ?? undefined,
+      landmark: this.normalizeOptionalText(address.landmark) ?? undefined,
+      latitude,
+      longitude,
+    };
+  }
+
+  private destinationFromTemporaryAddress(
+    address: NormalizedTemporaryDeliveryAddress,
+    labelOverride?: string,
+  ): NormalizedDeliveryDestination {
+    return {
+      addressId: null,
+      label: this.normalizeOptionalText(labelOverride) ?? address.label ?? null,
+      fullAddress: address.fullAddress,
+      barangay: address.barangay ?? null,
+      city: address.city,
+      province: address.province ?? null,
+      zipCode: address.zipCode ?? null,
+      landmark: address.landmark ?? null,
+      latitude: address.latitude,
+      longitude: address.longitude,
+    };
+  }
+
+  private destinationFromSavedAddress(
+    address: Address,
+    labelOverride?: string,
+  ): NormalizedDeliveryDestination {
+    return {
+      addressId: address.id,
+      label:
+        this.normalizeOptionalText(labelOverride) ??
+        this.normalizeOptionalText(address.label) ??
+        null,
+      fullAddress: address.fullAddress,
+      barangay: address.barangay ?? null,
+      city: address.city,
+      province: address.province ?? null,
+      zipCode: address.zipCode ?? null,
+      landmark: address.landmark ?? null,
+      latitude: Number(address.latitude),
+      longitude: Number(address.longitude),
+    };
+  }
+
   private async validateDeliveryAddress(
     deliveryAddressId: number,
     userId: number,
   ): Promise<number> {
+    const address = await this.findOwnedDeliveryAddress(
+      deliveryAddressId,
+      userId,
+    );
+    return address.id;
+  }
+
+  private async findOwnedDeliveryAddress(
+    deliveryAddressId: number,
+    userId: number,
+  ): Promise<Address> {
     if (!Number.isInteger(deliveryAddressId) || deliveryAddressId <= 0) {
       throw new BadRequestException('Invalid delivery address');
     }
@@ -615,7 +954,7 @@ export class OrdersService {
       throw new BadRequestException('Invalid delivery address');
     }
 
-    return deliveryAddressId;
+    return address;
   }
 
   private selectedSpecsFromLegacy(item: {
@@ -658,7 +997,9 @@ export class OrdersService {
           fullColor: 'full_color',
         },
       );
-      selected.media_type ??= this.normalizeSpecValue(item.paperSpecs.mediaType);
+      selected.media_type ??= this.normalizeSpecValue(
+        item.paperSpecs.mediaType,
+      );
       selected.print_sides ??= this.normalizeSpecValue(
         item.paperSpecs.printSides,
         {
@@ -667,7 +1008,9 @@ export class OrdersService {
         },
       );
       selected.binding ??= this.normalizeSpecValue(item.paperSpecs.binding);
-      selected.print_mode ??= this.normalizeSpecValue(item.paperSpecs.printMode);
+      selected.print_mode ??= this.normalizeSpecValue(
+        item.paperSpecs.printMode,
+      );
     }
 
     if (item.threeDSpecs) {
@@ -681,8 +1024,7 @@ export class OrdersService {
       selected.material ??= this.normalizeSpecValue(item.threeDSpecs.material);
       selected.color ??= item.threeDSpecs.color ?? 'white';
       selected.infill_percentage ??=
-        item.threeDSpecs.infillPercentage ??
-        item.threeDSpecs.infill_percentage;
+        item.threeDSpecs.infillPercentage ?? item.threeDSpecs.infill_percentage;
       selected.layer_height ??=
         item.threeDSpecs.layerHeight ?? item.threeDSpecs.layer_height;
       selected.supports ??= item.threeDSpecs.supports ?? false;
@@ -694,6 +1036,18 @@ export class OrdersService {
     }
 
     return selected;
+  }
+
+  private normalizeSpecialInstructions(value: unknown): string | null {
+    if (value == null) return null;
+    const text = String(value).trim();
+    return text.length === 0 ? null : text;
+  }
+
+  private normalizeOptionalText(value: unknown): string | null {
+    if (value == null) return null;
+    const text = String(value).trim();
+    return text.length === 0 ? null : text;
   }
 
   private normalizeSpecValue(

@@ -6,23 +6,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-export interface PaperSpecsShape {
-  paperSize?: string;
-  colorMode?: string;
-  mediaType?: string;
-  printSides?: string;
-  binding?: string;
-}
-
-export interface ThreeDSpecsShape {
-  fileFormat?: string;
-  material?: string;
-  color?: string;
-  infillPercentage?: number;
-  layerHeight?: number;
-  supports?: boolean;
-  notes?: string;
-}
+export type DailyGridSpecValues = Record<string, unknown>;
 
 @Entity('daily_grid_cards')
 export class DailyGridCard {
@@ -38,7 +22,7 @@ export class DailyGridCard {
   @Column({ nullable: true, type: 'varchar' })
   imageUrl: string | null;
 
-  /** 'paper' | '3d' — matches OrderFlowState.category */
+  /** Product category slug, e.g. `paper` or `3d`. */
   @Column({ default: 'paper' })
   category: string;
 
@@ -48,11 +32,8 @@ export class DailyGridCard {
   @Column({ default: true })
   isActive: boolean;
 
-  @Column({ name: 'paper_specs', type: 'jsonb', nullable: true })
-  paperSpecs: PaperSpecsShape | null;
-
-  @Column({ name: 'three_d_specs', type: 'jsonb', nullable: true })
-  threeDSpecs: ThreeDSpecsShape | null;
+  @Column({ type: 'jsonb', nullable: true })
+  specs: DailyGridSpecValues | null;
 
   @CreateDateColumn()
   createdAt: Date;

@@ -51,6 +51,7 @@ import 'package:printing_app/features/customer/profile/screens/tam_survey_screen
 import 'package:printing_app/features/customer/profile/screens/required_tam_survey_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/storage_settings_screen.dart';
 import 'package:printing_app/features/customer/uploads/screens/my_uploads_screen.dart';
+import 'package:printing_app/features/customer/chat/models/chat_message.dart';
 import 'package:printing_app/features/customer/chat/models/conversation.dart';
 import 'package:printing_app/features/customer/chat/screens/chat_list_screen.dart';
 import 'package:printing_app/features/customer/chat/screens/chat_select_screen.dart';
@@ -130,7 +131,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Beta-locked: redirect to locked screen when on any auth route
       final isBetaLocked = authState.betaLocked != null;
       final isOnBetaLocked = state.matchedLocation == '/customer/beta/locked';
-      final isOnBetaSuccess = state.matchedLocation == '/customer/beta/success-wall';
+      final isOnBetaSuccess =
+          state.matchedLocation == '/customer/beta/success-wall';
       if (isBetaLocked && isOnAuth && !isOnBetaLocked) {
         return '/customer/beta/locked';
       }
@@ -167,7 +169,9 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // Authenticated users on auth pages go through onboarding first (first login only)
       if (isAuth && isOnAuth) {
-        final seenOnboarding = ref.read(tutorialSeenProvider(TutorialKey.onboarding));
+        final seenOnboarding = ref.read(
+          tutorialSeenProvider(TutorialKey.onboarding),
+        );
         if (seenOnboarding) {
           final role = ref.read(authProvider).user?.role ?? 'customer';
           return switch (role) {
@@ -278,9 +282,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                         ),
                       ],
                     ),
-                    backgroundColor: (Theme.of(context).brightness == Brightness.dark
-                        ? AppColors.dark
-                        : AppColors.light).brand,
+                    backgroundColor:
+                        (Theme.of(context).brightness == Brightness.dark
+                                ? AppColors.dark
+                                : AppColors.light)
+                            .brand,
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -293,37 +299,37 @@ final routerProvider = Provider<GoRouter>((ref) {
 
             return NextBatchSessionTrigger(
               child: ScaffoldWithNav(
-              currentIndex: navigationShell.currentIndex,
-              showFab: true,
-              onTap: (i) => navigationShell.goBranch(
-                i,
-                initialLocation: i == navigationShell.currentIndex,
+                currentIndex: navigationShell.currentIndex,
+                showFab: true,
+                onTap: (i) => navigationShell.goBranch(
+                  i,
+                  initialLocation: i == navigationShell.currentIndex,
+                ),
+                items: [
+                  const NavItem(
+                    icon: HugeIcons.strokeRoundedHome01,
+                    activeIcon: HugeIcons.strokeRoundedHome01,
+                    label: 'Home',
+                  ),
+                  const NavItem(
+                    icon: HugeIcons.strokeRoundedPackage,
+                    activeIcon: HugeIcons.strokeRoundedPackage,
+                    label: 'Orders',
+                  ),
+                  NavItem(
+                    icon: HugeIcons.strokeRoundedNotification02,
+                    activeIcon: HugeIcons.strokeRoundedNotification02,
+                    label: 'Notifications',
+                    badge: unreadCount,
+                  ),
+                  const NavItem(
+                    icon: HugeIcons.strokeRoundedUser,
+                    activeIcon: HugeIcons.strokeRoundedUser,
+                    label: 'Profile',
+                  ),
+                ],
+                child: navigationShell,
               ),
-              items: [
-                const NavItem(
-                  icon: HugeIcons.strokeRoundedHome01,
-                  activeIcon: HugeIcons.strokeRoundedHome01,
-                  label: 'Home',
-                ),
-                const NavItem(
-                  icon: HugeIcons.strokeRoundedPackage,
-                  activeIcon: HugeIcons.strokeRoundedPackage,
-                  label: 'Orders',
-                ),
-                NavItem(
-                  icon: HugeIcons.strokeRoundedNotification02,
-                  activeIcon: HugeIcons.strokeRoundedNotification02,
-                  label: 'Notifications',
-                  badge: unreadCount,
-                ),
-                const NavItem(
-                  icon: HugeIcons.strokeRoundedUser,
-                  activeIcon: HugeIcons.strokeRoundedUser,
-                  label: 'Profile',
-                ),
-              ],
-              child: navigationShell,
-            ),
             );
           },
         ),
@@ -406,8 +412,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/customer/order/success',
         pageBuilder: (_, state) {
           final extra = (state.extra as Map?) ?? const {};
-          final refs = (extra['orderRefs'] as List?)?.cast<String>() ??
-              const <String>[];
+          final refs =
+              (extra['orderRefs'] as List?)?.cast<String>() ?? const <String>[];
           final firstId = extra['firstOrderId'] as int?;
           return slideUpTransition(
             OrderSuccessScreen(orderRefs: refs, firstOrderId: firstId),
@@ -417,8 +423,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/customer/orders/:id/track',
-        pageBuilder: (_, state) =>
-            slideTransition(const DeliveryTrackingScreen(), state),
+        pageBuilder: (_, state) => slideTransition(
+          DeliveryTrackingScreen(orderId: state.pathParameters['id']),
+          state,
+        ),
       ),
       GoRoute(
         path: '/customer/tracking',
@@ -506,8 +514,17 @@ final routerProvider = Provider<GoRouter>((ref) {
             (t) => t.name == typeStr,
             orElse: () => ConversationType.admin,
           );
+          final orderRef = state.uri.queryParameters['orderRef'];
+          final orderStatus = state.uri.queryParameters['orderStatus'];
           return slideTransition(
-            ConversationScreen(conversationId: id, conversationType: type),
+            ConversationScreen(
+              conversationId: id,
+              conversationType: type,
+              titleOverride: orderRef == null ? null : 'Order $orderRef',
+              subtitleOverride: orderStatus == null
+                  ? null
+                  : '${type == ConversationType.rider ? 'Rider' : 'Support'} · $orderStatus',
+            ),
             state,
           );
         },
@@ -584,6 +601,32 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/driver/deliveries/:id/active',
         pageBuilder: (_, state) =>
             slideTransition(const ActiveDeliveryScreen(), state),
+      ),
+      GoRoute(
+        path: '/driver/chat/:id',
+        pageBuilder: (_, state) {
+          final id = int.parse(state.pathParameters['id']!);
+          final typeStr = state.uri.queryParameters['type'] ?? 'rider';
+          final type = ConversationType.values.firstWhere(
+            (t) => t.name == typeStr,
+            orElse: () => ConversationType.rider,
+          );
+          final orderRef = state.uri.queryParameters['orderRef'];
+          final orderStatus = state.uri.queryParameters['orderStatus'];
+          return slideTransition(
+            ConversationScreen(
+              conversationId: id,
+              conversationType: type,
+              currentUserRole: SenderRole.rider,
+              titleOverride: orderRef == null ? null : 'Order $orderRef',
+              subtitleOverride: orderStatus == null
+                  ? null
+                  : 'Customer · $orderStatus',
+              backFallback: '/driver/deliveries',
+            ),
+            state,
+          );
+        },
       ),
 
       // -----------------------------------------------------------------------

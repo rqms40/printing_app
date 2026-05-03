@@ -40,4 +40,29 @@ describe('seed script', () => {
     expect(seedSource).toContain('base_plus_material_estimate');
     expect(seedSource).toContain('"tif","tiff"');
   });
+
+  it('seeds print scaling as a paper catalog option', () => {
+    const seedSource = readFileSync(join(__dirname, 'seed.ts'), 'utf8');
+
+    expect(seedSource).toContain("label: 'Print Mode'");
+    expect(seedSource).toContain("label: 'Fit to Scale'");
+    expect(seedSource).toContain("label: 'Actual Size'");
+  });
+
+  it('migrates print scaling out of user profile defaults', () => {
+    const migrationSource = readFileSync(
+      join(
+        __dirname,
+        '..',
+        'migrations',
+        '1777766500000-rename-print-mode-fit-to-scale.ts',
+      ),
+      'utf8',
+    );
+
+    expect(migrationSource).toContain('category."slug" = \'paper\'');
+    expect(migrationSource).toContain(
+      'DROP COLUMN IF EXISTS "default_print_mode"',
+    );
+  });
 });

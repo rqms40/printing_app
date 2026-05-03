@@ -2,6 +2,44 @@ import 'enums.dart';
 import 'paper_specs.dart';
 import 'three_d_specs.dart';
 
+class OrderDeliveryAddress {
+  const OrderDeliveryAddress({
+    this.label,
+    required this.fullAddress,
+    this.barangay,
+    required this.city,
+    this.province,
+    this.zipCode,
+    this.landmark,
+    required this.latitude,
+    required this.longitude,
+  });
+
+  final String? label;
+  final String fullAddress;
+  final String? barangay;
+  final String city;
+  final String? province;
+  final String? zipCode;
+  final String? landmark;
+  final double latitude;
+  final double longitude;
+}
+
+class AssignedDeliverySlot {
+  const AssignedDeliverySlot({
+    required this.slotTemplateId,
+    required this.date,
+    required this.startTime,
+    required this.endTime,
+  });
+
+  final int slotTemplateId;
+  final String date;
+  final String startTime;
+  final String endTime;
+}
+
 class OrderLineItem {
   const OrderLineItem({
     required this.id,
@@ -16,6 +54,7 @@ class OrderLineItem {
     this.threeDSpecs,
     required this.quantity,
     required this.totalPrice,
+    this.specialInstructions,
   });
 
   final String id;
@@ -30,6 +69,7 @@ class OrderLineItem {
   final ThreeDSpecs? threeDSpecs;
   final int quantity;
   final double totalPrice;
+  final String? specialInstructions;
 }
 
 class Order {
@@ -58,6 +98,7 @@ class Order {
     this.cancelledAt,
     required this.deliveryOption,
     this.deliveryAddressId,
+    this.deliveryAddress,
     this.assignedDriverId,
     this.deliveryAssignmentId,
     this.estimatedCompletionAt,
@@ -65,7 +106,9 @@ class Order {
     this.adminStatusSetAt,
     this.adminNotes,
     this.trackingLink,
+    this.assignedSlot,
     this.items = const [],
+    this.specialInstructions,
     required this.createdAt,
     required this.updatedAt,
     this.printMode = 'fitToPage',
@@ -95,6 +138,7 @@ class Order {
   final DateTime? cancelledAt;
   final String deliveryOption;
   final String? deliveryAddressId;
+  final OrderDeliveryAddress? deliveryAddress;
   final String? assignedDriverId;
   final String? deliveryAssignmentId;
   final DateTime? estimatedCompletionAt;
@@ -102,7 +146,9 @@ class Order {
   final DateTime? adminStatusSetAt;
   final String? adminNotes;
   final String? trackingLink;
+  final AssignedDeliverySlot? assignedSlot;
   final List<OrderLineItem> items;
+  final String? specialInstructions;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -126,11 +172,12 @@ class Order {
         threeDSpecs: threeDSpecs,
         quantity: quantity,
         totalPrice: totalPrice,
+        specialInstructions: specialInstructions,
       ),
     ];
   }
 
-  bool get isBatchOrder => lineItems.length > 1 || batchOrderId != null;
+  bool get isBatchOrder => lineItems.length > 1;
   int get itemCount => lineItems.length;
   bool get hasMixedItemTypes {
     final categories = lineItems.map((item) => item.category).toSet();
@@ -181,6 +228,7 @@ class Order {
     DateTime? cancelledAt,
     String? deliveryOption,
     String? deliveryAddressId,
+    OrderDeliveryAddress? deliveryAddress,
     String? assignedDriverId,
     String? deliveryAssignmentId,
     DateTime? estimatedCompletionAt,
@@ -188,7 +236,9 @@ class Order {
     DateTime? adminStatusSetAt,
     String? adminNotes,
     String? trackingLink,
+    AssignedDeliverySlot? assignedSlot,
     List<OrderLineItem>? items,
+    String? specialInstructions,
     DateTime? createdAt,
     DateTime? updatedAt,
     String? printMode,
@@ -218,6 +268,7 @@ class Order {
       cancelledAt: cancelledAt ?? this.cancelledAt,
       deliveryOption: deliveryOption ?? this.deliveryOption,
       deliveryAddressId: deliveryAddressId ?? this.deliveryAddressId,
+      deliveryAddress: deliveryAddress ?? this.deliveryAddress,
       assignedDriverId: assignedDriverId ?? this.assignedDriverId,
       deliveryAssignmentId: deliveryAssignmentId ?? this.deliveryAssignmentId,
       estimatedCompletionAt:
@@ -226,7 +277,9 @@ class Order {
       adminStatusSetAt: adminStatusSetAt ?? this.adminStatusSetAt,
       adminNotes: adminNotes ?? this.adminNotes,
       trackingLink: trackingLink ?? this.trackingLink,
+      assignedSlot: assignedSlot ?? this.assignedSlot,
       items: items ?? this.items,
+      specialInstructions: specialInstructions ?? this.specialInstructions,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       printMode: printMode ?? this.printMode,

@@ -9,6 +9,7 @@ import 'package:printing_app/features/customer/address/widgets/map_pin_picker.da
 import 'package:printing_app/shared/models/address.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_text_field.dart';
+import 'package:latlong2/latlong.dart';
 
 class AddressPickerScreen extends ConsumerStatefulWidget {
   const AddressPickerScreen({super.key, this.existingAddress});
@@ -30,6 +31,7 @@ class _AddressPickerScreenState extends ConsumerState<AddressPickerScreen> {
   late final TextEditingController _landmarkController;
   bool _isDefault = false;
   bool _isEditing = false;
+  late LatLng _pinnedLocation;
 
   @override
   void initState() {
@@ -37,18 +39,19 @@ class _AddressPickerScreenState extends ConsumerState<AddressPickerScreen> {
     final existing = widget.existingAddress;
     _isEditing = existing != null;
     _labelController = TextEditingController(text: existing?.label ?? '');
-    _fullAddressController =
-        TextEditingController(text: existing?.fullAddress ?? '');
-    _barangayController =
-        TextEditingController(text: existing?.barangay ?? '');
+    _fullAddressController = TextEditingController(
+      text: existing?.fullAddress ?? '',
+    );
+    _barangayController = TextEditingController(text: existing?.barangay ?? '');
     _cityController = TextEditingController(text: existing?.city ?? '');
-    _provinceController =
-        TextEditingController(text: existing?.province ?? '');
-    _zipCodeController =
-        TextEditingController(text: existing?.zipCode ?? '');
-    _landmarkController =
-        TextEditingController(text: existing?.landmark ?? '');
+    _provinceController = TextEditingController(text: existing?.province ?? '');
+    _zipCodeController = TextEditingController(text: existing?.zipCode ?? '');
+    _landmarkController = TextEditingController(text: existing?.landmark ?? '');
     _isDefault = existing?.isDefault ?? false;
+    _pinnedLocation = LatLng(
+      existing?.latitude ?? 7.0731,
+      existing?.longitude ?? 125.6128,
+    );
   }
 
   @override
@@ -84,6 +87,8 @@ class _AddressPickerScreenState extends ConsumerState<AddressPickerScreen> {
         province: _provinceController.text.trim(),
         zipCode: _zipCodeController.text.trim(),
         landmark: _landmarkController.text.trim(),
+        latitude: _pinnedLocation.latitude,
+        longitude: _pinnedLocation.longitude,
         isDefault: _isDefault,
         updatedAt: now,
       );
@@ -104,8 +109,8 @@ class _AddressPickerScreenState extends ConsumerState<AddressPickerScreen> {
         province: _provinceController.text.trim(),
         zipCode: _zipCodeController.text.trim(),
         landmark: _landmarkController.text.trim(),
-        latitude: 14.5547,
-        longitude: 121.0244,
+        latitude: _pinnedLocation.latitude,
+        longitude: _pinnedLocation.longitude,
         isDefault: _isDefault,
         createdAt: now,
         updatedAt: now,
@@ -136,100 +141,118 @@ class _AddressPickerScreenState extends ConsumerState<AddressPickerScreen> {
       body: Column(
         children: [
           // Map placeholder
-          const Padding(
-            padding: EdgeInsets.all(AppSpacing.md),
-            child: MapPinPicker(),
-          ).animate()
-            .fadeIn(duration: 400.ms, curve: Curves.easeOut)
-            .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
+          Padding(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: MapPinPicker(
+                  initialCenter: _pinnedLocation,
+                  onChanged: (location) => _pinnedLocation = location,
+                ),
+              )
+              .animate()
+              .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+              .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
           // Form fields
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  AppTextField(
-                    controller: _labelController,
-                    label: 'Label',
-                    hintText: 'e.g. Home, Office',
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
                   ),
-                  const SizedBox(height: AppSpacing.md),
-                  AppTextField(
-                    controller: _fullAddressController,
-                    label: 'Full Address',
-                    hintText: 'Street, Building, Unit',
-                    maxLines: 2,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  AppTextField(
-                    controller: _barangayController,
-                    label: 'Barangay',
-                    hintText: 'Barangay name',
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  AppTextField(
-                    controller: _cityController,
-                    label: 'City *',
-                    hintText: 'City or Municipality',
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  AppTextField(
-                    controller: _provinceController,
-                    label: 'Province',
-                    hintText: 'Province',
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  AppTextField(
-                    controller: _zipCodeController,
-                    label: 'Zip Code',
-                    hintText: 'e.g. 1229',
-                    keyboardType: TextInputType.number,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  AppTextField(
-                    controller: _landmarkController,
-                    label: 'Landmark *',
-                    hintText: 'e.g. Near Jollibee on Main St',
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  // Set as default toggle
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Set as default address',
-                        style: AppTypography.body.copyWith(
-                          color: colors.onSurface,
-                        ),
+                      AppTextField(
+                        controller: _labelController,
+                        label: 'Label',
+                        hintText: 'e.g. Home, Office',
                       ),
-                      Switch(
-                        value: _isDefault,
-                        onChanged: (value) {
-                          setState(() => _isDefault = value);
-                        },
-                        activeThumbColor: colors.accent,
+                      const SizedBox(height: AppSpacing.md),
+                      AppTextField(
+                        controller: _fullAddressController,
+                        label: 'Full Address',
+                        hintText: 'Street, Building, Unit',
+                        maxLines: 2,
                       ),
+                      const SizedBox(height: AppSpacing.md),
+                      AppTextField(
+                        controller: _barangayController,
+                        label: 'Barangay',
+                        hintText: 'Barangay name',
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      AppTextField(
+                        controller: _cityController,
+                        label: 'City *',
+                        hintText: 'City or Municipality',
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      AppTextField(
+                        controller: _provinceController,
+                        label: 'Province',
+                        hintText: 'Province',
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      AppTextField(
+                        controller: _zipCodeController,
+                        label: 'Zip Code',
+                        hintText: 'e.g. 1229',
+                        keyboardType: TextInputType.number,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      AppTextField(
+                        controller: _landmarkController,
+                        label: 'Landmark *',
+                        hintText: 'e.g. Near Jollibee on Main St',
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      // Set as default toggle
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Set as default address',
+                            style: AppTypography.body.copyWith(
+                              color: colors.onSurface,
+                            ),
+                          ),
+                          Switch(
+                            value: _isDefault,
+                            onChanged: (value) {
+                              setState(() => _isDefault = value);
+                            },
+                            activeThumbColor: colors.accent,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
                     ],
                   ),
-                  const SizedBox(height: AppSpacing.lg),
-                ],
+                ),
+              )
+              .animate()
+              .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
+              .slideY(
+                begin: 0.02,
+                duration: 400.ms,
+                delay: 60.ms,
+                curve: Curves.easeOut,
               ),
-            ),
-          ).animate()
-            .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
-            .slideY(begin: 0.02, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),
           // Save button
           Padding(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            child: AppButton(
-              label: 'Save Address',
-              isFullWidth: true,
-              onTap: _save,
-            ),
-          ).animate()
-            .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
-            .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: AppButton(
+                  label: 'Save Address',
+                  isFullWidth: true,
+                  onTap: _save,
+                ),
+              )
+              .animate()
+              .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
+              .slideY(
+                begin: 0.03,
+                duration: 400.ms,
+                delay: 120.ms,
+                curve: Curves.easeOut,
+              ),
         ],
       ),
     );

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PhoneScene } from './components/PhoneScene';
-import { UploadCloud, Truck, ListOrdered, Clock, Headphones, Menu, X, Phone, MessageCircle, Zap, ShieldCheck, ChevronUp } from 'lucide-react';
+import { Menu, X, Phone, MessageCircle, Zap, ShieldCheck, ChevronUp } from 'lucide-react';
+import { HardDriveUploadIcon, TruckIcon, ListIcon, AlarmClockIcon, MessageCircleIcon } from 'lucide-animated';
 
 function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
@@ -129,6 +130,15 @@ function ProcessSection() {
 }
 
 function FeatureCard({ icon: Icon, title, desc }: { icon: any, title: string, desc: string }) {
+  const iconRef = useRef<any>(null);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      iconRef.current?.startAnimation();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 30, filter: 'blur(15px)' }}
@@ -138,7 +148,7 @@ function FeatureCard({ icon: Icon, title, desc }: { icon: any, title: string, de
       className="flex flex-col items-center text-center px-4 py-2 text-black"
     >
       <div className="w-20 h-20 mb-3 relative flex items-center justify-center text-black">
-        <Icon size={56} strokeWidth={1.5} />
+        <Icon ref={iconRef} size={56} />
       </div>
       <h3 className="font-heading text-[20px] font-bold mb-2 tracking-tight">{title}</h3>
       <p className="text-[13px] md:text-[14px] leading-relaxed max-w-[350px] font-medium text-black/90">{desc}</p>
@@ -154,17 +164,17 @@ function FeaturesSection() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-4 mb-10">
           <FeatureCard
-            icon={UploadCloud}
+            icon={HardDriveUploadIcon}
             title="One-Tap Upload"
             desc="No more carrying USB sticks or emailing files to yourself. Directly upload your documents or 3D designs from your phone or cloud storage in seconds."
           />
           <FeatureCard
-            icon={Truck}
+            icon={TruckIcon}
             title="Live Order Tracking"
             desc="Watch your project move from the printer to the delivery rider in real-time. You'll know exactly when your package is arriving, just like a food delivery app."
           />
           <FeatureCard
-            icon={ListOrdered}
+            icon={ListIcon}
             title="The Queue"
             desc="Need a document and a 3D model at the same time? Add different types of prints to a single order and have them all delivered in one go to save on shipping."
           />
@@ -172,12 +182,12 @@ function FeaturesSection() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 max-w-4xl mx-auto">
           <FeatureCard
-            icon={Clock}
+            icon={AlarmClockIcon}
             title="24/7 App Operations"
             desc="Inspiration doesn't have a closing time. Whether it's 2 PM or 2 AM, you can upload your files and start the process. Our system works 24/7 so your project never has to wait for a shop to open."
           />
           <FeatureCard
-            icon={Headphones}
+            icon={MessageCircleIcon}
             title="Live Support & Tracking"
             desc="From upload to doorstep, help is just a tap away. Chat live with your delivery rider for drop-off updates, or message our support team anytime. We bridge the gap to your print."
           />

@@ -818,6 +818,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
       quantity: flow.quantity,
       pageCount: flow.pageCount,
       printSubtotal: flow.totalPrice,
+      specialInstructions: flow.specialInstructions,
       createdAt: DateTime.now(),
     );
     ref.read(checkoutProvider.notifier).addItem(item);

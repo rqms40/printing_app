@@ -10,12 +10,25 @@ import 'package:printing_app/features/customer/cart/models/cart_item.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
 import 'package:printing_app/features/customer/order/sheets/edit_item_sheet.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_section_card.dart';
+import 'package:printing_app/shared/models/enums.dart';
+import 'package:printing_app/shared/widgets/file_preview_sheet.dart';
+import 'package:printing_app/utils/file_helpers.dart';
 import 'package:printing_app/utils/formatters.dart';
 
 class CheckoutItemsCard extends ConsumerWidget {
   const CheckoutItemsCard({super.key, this.tutorialKey});
 
   final GlobalKey? tutorialKey;
+
+  void _viewItem(BuildContext context, CartItem item) {
+    FilePreviewSheet.show(
+      context,
+      fileId: item.fileMetadataId,
+      fileName: item.fileName,
+      mimeType: mimeTypeForExtension(getFileExtension(item.fileName)),
+      fileSize: item.fileSize,
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -60,6 +73,9 @@ class CheckoutItemsCard extends ConsumerWidget {
                   );
                   if (updated != null) notifier.replaceItem(updated);
                 },
+                onView: state.items[i].fileMetadataId > 0
+                    ? () => _viewItem(context, state.items[i])
+                    : null,
                 onDecrement: () {
                   final current = state.items[i];
                   if (current.quantity <= 1) {
@@ -118,6 +134,7 @@ class _ItemRow extends StatelessWidget {
     required this.item,
     required this.colors,
     required this.onEdit,
+    required this.onView,
     required this.onDecrement,
     required this.onIncrement,
   });
@@ -125,29 +142,63 @@ class _ItemRow extends StatelessWidget {
   final CartItem item;
   final AppColorSet colors;
   final VoidCallback onEdit;
+  final VoidCallback? onView;
   final VoidCallback onDecrement;
   final VoidCallback onIncrement;
 
   String _specSummary() {
-    if (item.specDisplayValues.isNotEmpty) {
-      final entries = item.specDisplayValues.entries
-          .where((entry) => entry.value.trim().isNotEmpty)
-          .where((entry) => entry.key != 'notes')
-          .take(2)
-          .map((entry) => entry.value)
-          .toList();
-      if (item.category == 'paper') {
-        entries.add('${item.pageCount} pages');
-      }
-      if (entries.isNotEmpty) return entries.join(' · ');
-    }
-    if (item.category == 'paper' && item.paperSpecs != null) {
-      return '${item.paperSpecs!.paperSize.name.toUpperCase()} · ${item.pageCount} pages';
-    }
-    if (item.threeDSpecs != null) {
-      return '${item.threeDSpecs!.material.name.toUpperCase()} · ${item.threeDSpecs!.infillPercentage}% infill';
-    }
+    if (item.category == 'paper') return _paperSpecSummary();
+    if (item.category == '3d') return _threeDSpecSummary();
     return item.category == 'paper' ? 'Paper' : '3D';
+  }
+
+  String _paperSpecSummary() {
+    final values = _displayValuesFor(const [
+      'paper_size',
+      'color_mode',
+      'media_type',
+      'print_sides',
+      'binding',
+    ]);
+    final pageDisplay = item.specDisplayValues['page_count']?.trim();
+    values.add(
+      pageDisplay != null && pageDisplay.isNotEmpty
+          ? pageDisplay
+          : '${item.pageCount} pages',
+    );
+    if (values.isNotEmpty) return values.join(' · ');
+
+    final specs = item.paperSpecs;
+    if (specs != null) {
+      return '${specs.paperSize.displayName} · ${specs.colorMode.displayName} · ${specs.mediaType.displayName} · ${specs.printSides.displayName} · ${specs.binding.displayName} · ${item.pageCount} pages';
+    }
+    return 'Paper';
+  }
+
+  String _threeDSpecSummary() {
+    final values = _displayValuesFor(const [
+      'file_format',
+      'material',
+      'color',
+      'infill_percentage',
+      'layer_height',
+      'supports',
+    ]);
+    if (values.isNotEmpty) return values.join(' · ');
+
+    final specs = item.threeDSpecs;
+    if (specs != null) {
+      return '${specs.fileFormat.displayName} · ${specs.material.displayName} · ${specs.infillPercentage}% infill · ${specs.layerHeight}mm';
+    }
+    return '3D';
+  }
+
+  List<String> _displayValuesFor(List<String> keys) {
+    return [
+      for (final key in keys)
+        if ((item.specDisplayValues[key]?.trim() ?? '').isNotEmpty)
+          item.specDisplayValues[key]!.trim(),
+    ];
   }
 
   @override
@@ -192,13 +243,18 @@ class _ItemRow extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   _specSummary(),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: AppTypography.caption.copyWith(
                     color: colors.onSurfaceDim,
                     fontSize: 11,
                   ),
                 ),
                 const SizedBox(height: 6),
-                Row(
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: 2,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(
                       formatCurrency(item.printSubtotal),
@@ -207,20 +263,8 @@ class _ItemRow extends StatelessWidget {
                         fontSize: 13,
                       ),
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    GestureDetector(
-                      onTap: onEdit,
-                      child: Text(
-                        'Edit',
-                        style: AppTypography.caption.copyWith(
-                          color: colors.onSurfaceDim,
-                          fontWeight: FontWeight.w700,
-                          decoration: TextDecoration.underline,
-                          decorationColor: colors.onSurfaceDim,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ),
+                    _RowAction(label: 'View', onTap: onView, colors: colors),
+                    _RowAction(label: 'Edit', onTap: onEdit, colors: colors),
                   ],
                 ),
               ],
@@ -234,6 +278,38 @@ class _ItemRow extends StatelessWidget {
             onIncrement: onIncrement,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _RowAction extends StatelessWidget {
+  const _RowAction({
+    required this.label,
+    required this.onTap,
+    required this.colors,
+  });
+
+  final String label;
+  final VoidCallback? onTap;
+  final AppColorSet colors;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    final color = enabled ? colors.onSurfaceDim : colors.disabled;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Text(
+        label,
+        style: AppTypography.caption.copyWith(
+          color: color,
+          fontWeight: FontWeight.w700,
+          decoration: enabled ? TextDecoration.underline : TextDecoration.none,
+          decorationColor: color,
+          fontSize: 11,
+        ),
       ),
     );
   }

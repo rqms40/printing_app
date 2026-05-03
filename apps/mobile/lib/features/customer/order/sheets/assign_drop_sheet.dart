@@ -229,9 +229,9 @@ class _DropRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    drop.addressId == null
-                        ? 'No address yet'
-                        : 'Address #${drop.addressId}',
+                    drop.hasValidDestination
+                        ? drop.destinationLabel
+                        : 'No address yet',
                     style: AppTypography.caption.copyWith(
                       color: colors.onSurfaceDim,
                       fontSize: 11,

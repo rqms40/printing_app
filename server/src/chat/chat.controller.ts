@@ -10,6 +10,7 @@ import {
   UseGuards,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
@@ -46,6 +47,33 @@ export class ChatController {
       );
     }
     return conv;
+  }
+
+  @Post('orders/:orderId/conversation')
+  async openOrderConversation(
+    @Param('orderId') orderId: string,
+    @Request() req: { user: JwtUser },
+  ): Promise<Conversation> {
+    const orderRef = orderId.trim();
+    if (!orderRef) {
+      throw new BadRequestException('Invalid order id');
+    }
+
+    if (req.user.role === 'driver') {
+      return this.chatService.getOrCreateDriverOrderConversation(
+        req.user.sub,
+        orderRef,
+      );
+    }
+
+    if (req.user.role !== 'customer') {
+      throw new ForbiddenException();
+    }
+
+    return this.chatService.getOrCreateCustomerOrderConversation(
+      req.user.sub,
+      orderRef,
+    );
   }
 
   @Get('conversations')

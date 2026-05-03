@@ -19,7 +19,33 @@ export class CatalogValidationService {
     rawSpecs: Record<string, unknown> = {},
   ): SelectedSpec[] {
     const specs = category.specs ?? [];
-    return specs.map((spec) => this.validateSpec(category.slug, spec, rawSpecs));
+    return specs.map((spec) =>
+      this.validateSpec(category.slug, spec, rawSpecs),
+    );
+  }
+
+  validatePartialSpecs(
+    category: CatalogCategory,
+    rawSpecs: Record<string, unknown> = {},
+  ): SelectedSpec[] {
+    const specsByKey = new Map(
+      (category.specs ?? []).map((spec) => [spec.key, spec]),
+    );
+
+    return Object.entries(rawSpecs)
+      .filter(([, value]) => value != null && value !== '')
+      .map(([key, value]) => {
+        const spec = specsByKey.get(key);
+        if (!spec) {
+          throw new BadRequestException({
+            code: 'SPEC_NOT_AVAILABLE',
+            message: `Spec '${key}' is not available`,
+            category: category.slug,
+            specKey: key,
+          });
+        }
+        return this.validateSpec(category.slug, spec, { [key]: value });
+      });
   }
 
   private validateSpec(
@@ -30,7 +56,8 @@ export class CatalogValidationService {
     const rawValue = rawSpecs[spec.key] ?? spec.defaultValue;
     if (
       spec.isRequired &&
-      (rawValue == null || (typeof rawValue === 'string' && rawValue.trim() === ''))
+      (rawValue == null ||
+        (typeof rawValue === 'string' && rawValue.trim() === ''))
     ) {
       throw new BadRequestException({
         code: 'SPEC_REQUIRED',
@@ -46,7 +73,9 @@ export class CatalogValidationService {
 
     if (spec.inputType === InputType.SELECT) {
       const value = String(rawValue);
-      const option = (spec.options ?? []).find((entry) => entry.value === value);
+      const option = (spec.options ?? []).find(
+        (entry) => entry.value === value,
+      );
       if (!option) {
         throw new BadRequestException({
           code: 'SPEC_OPTION_INACTIVE',

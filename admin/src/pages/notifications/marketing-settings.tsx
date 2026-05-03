@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   Form,
   Input,
+  InputNumber,
   Select,
   Switch,
   Button,
@@ -21,6 +22,13 @@ import { GridLogo } from "@/components/grid-logo";
 const { Text, Title } = Typography;
 const { TextArea } = Input;
 
+type IntervalUnit = "days" | "weeks" | "months";
+
+interface FrequencyFormValues {
+  intervalCount?: number;
+  intervalUnit?: IntervalUnit;
+}
+
 interface MarketingNotification {
   id: number;
   description: string;
@@ -30,11 +38,87 @@ interface MarketingNotification {
   isActive: boolean;
 }
 
+const unitSuffixByIntervalUnit: Record<IntervalUnit, string> = {
+  days: "d",
+  weeks: "w",
+  months: "m",
+};
+
+const intervalUnitBySuffix: Record<string, IntervalUnit> = {
+  d: "days",
+  w: "weeks",
+  m: "months",
+};
+
+const intervalUnitLabels: Record<IntervalUnit, string> = {
+  days: "day",
+  weeks: "week",
+  months: "month",
+};
+
+function normalizeIntervalCount(value: unknown): number {
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric)) return 1;
+  return Math.max(1, Math.floor(numeric));
+}
+
+export function parseFrequencyValue(
+  frequency?: string,
+): Required<FrequencyFormValues> {
+  if (frequency === "monthly") {
+    return { intervalCount: 1, intervalUnit: "months" };
+  }
+
+  const match = frequency?.match(/^(\d+)([dwm])$/);
+  if (match) {
+    return {
+      intervalCount: normalizeIntervalCount(match[1]),
+      intervalUnit: intervalUnitBySuffix[match[2]],
+    };
+  }
+
+  return { intervalCount: 1, intervalUnit: "days" };
+}
+
+export function buildFrequencyValue(values: FrequencyFormValues): string {
+  const intervalUnit = values.intervalUnit ?? "days";
+  return `${normalizeIntervalCount(values.intervalCount)}${unitSuffixByIntervalUnit[intervalUnit]}`;
+}
+
+function pluralizeUnit(count: number, unit: IntervalUnit): string {
+  const label = intervalUnitLabels[unit];
+  return count === 1 ? label : `${label}s`;
+}
+
+export function formatFrequencyLabel(frequency?: string): string {
+  if (!frequency) return "Not scheduled";
+  if (frequency === "6h") return "Every 6 hours";
+  if (frequency === "daily") return "Every day";
+  if (frequency === "monthly") return "Every month";
+
+  if (!/^(\d+)([dwm])$/.test(frequency)) return frequency;
+
+  const parsed = parseFrequencyValue(frequency);
+  return parsed.intervalCount === 1
+    ? `Every ${pluralizeUnit(parsed.intervalCount, parsed.intervalUnit)}`
+    : `Every ${parsed.intervalCount} ${pluralizeUnit(
+        parsed.intervalCount,
+        parsed.intervalUnit,
+      )}`;
+}
+
+function formatScheduleSentence(values: FrequencyFormValues): string {
+  const label = formatFrequencyLabel(buildFrequencyValue(values));
+  return `Runs ${label.charAt(0).toLowerCase()}${label.slice(1)}.`;
+}
+
 export function MarketingSettings() {
   const { token } = theme.useToken();
   const [form] = Form.useForm();
   const [previewHeader, setPreviewHeader] = useState("Plane Available");
-  const [previewBody, setPreviewBody] = useState("The plane you requested will be fueled and ready at 1pm");
+  const [previewBody, setPreviewBody] = useState(
+    "The plane you requested will be fueled and ready at 1pm",
+  );
   const [editingId, setEditingId] = useState<number | null>(null);
 
   const { data, isLoading, refetch } = useCustom<MarketingNotification[]>({
@@ -45,6 +129,8 @@ export function MarketingSettings() {
   const { mutate } = useCustomMutation<MarketingNotification>();
 
   const notifications = data?.data || [];
+  const intervalCount = Form.useWatch("intervalCount", form) ?? 1;
+  const intervalUnit = Form.useWatch("intervalUnit", form) ?? "days";
 
   const handleValuesChange = (_changedValues: any, allValues: any) => {
     if (allValues.header !== undefined) setPreviewHeader(allValues.header);
@@ -52,8 +138,9 @@ export function MarketingSettings() {
   };
 
   const onEdit = (record: MarketingNotification) => {
+    const frequencyValues = parseFrequencyValue(record.frequency);
     setEditingId(record.id);
-    form.setFieldsValue(record);
+    form.setFieldsValue({ ...record, ...frequencyValues });
     setPreviewHeader(record.header);
     setPreviewBody(record.body);
   };
@@ -66,12 +153,18 @@ export function MarketingSettings() {
   };
 
   const onFinish = (values: any) => {
+    const { intervalCount, intervalUnit, ...rest } = values;
+    const payload = {
+      ...rest,
+      frequency: buildFrequencyValue({ intervalCount, intervalUnit }),
+    };
+
     if (editingId) {
       mutate(
         {
           url: `/notifications/marketing/${editingId}`,
           method: "patch",
-          values,
+          values: payload,
         },
         {
           onSuccess: () => {
@@ -86,7 +179,7 @@ export function MarketingSettings() {
         {
           url: "/notifications/marketing",
           method: "post",
-          values,
+          values: payload,
         },
         {
           onSuccess: () => {
@@ -119,20 +212,38 @@ export function MarketingSettings() {
   return (
     <Row gutter={[24, 24]}>
       <Col xs={24} lg={12}>
-        <Card title="Marketing Notifications" extra={<Button icon={<PlusOutlined />} onClick={resetForm}>New</Button>}>
+        <Card
+          title="Marketing Notifications"
+          extra={
+            <Button icon={<PlusOutlined />} onClick={resetForm}>
+              New
+            </Button>
+          }
+        >
           <List
             loading={isLoading}
             dataSource={notifications}
             renderItem={(item) => (
               <List.Item
                 actions={[
-                  <Button type="text" icon={<EditOutlined />} onClick={() => onEdit(item)} />,
-                  <Button type="text" danger icon={<DeleteOutlined />} onClick={() => onDelete(item.id)} />,
+                  <Button
+                    type="text"
+                    icon={<EditOutlined />}
+                    onClick={() => onEdit(item)}
+                  />,
+                  <Button
+                    type="text"
+                    danger
+                    icon={<DeleteOutlined />}
+                    onClick={() => onDelete(item.id)}
+                  />,
                 ]}
               >
                 <List.Item.Meta
                   title={item.description || item.header}
-                  description={`Frequency: ${item.frequency} | Active: ${item.isActive ? 'Yes' : 'No'}`}
+                  description={`Frequency: ${formatFrequencyLabel(
+                    item.frequency,
+                  )} | Active: ${item.isActive ? "Yes" : "No"}`}
                 />
               </List.Item>
             )}
@@ -147,27 +258,65 @@ export function MarketingSettings() {
             layout="vertical"
             onValuesChange={handleValuesChange}
             onFinish={onFinish}
-            initialValues={{ frequency: "daily", isActive: true }}
+            initialValues={{
+              intervalCount: 1,
+              intervalUnit: "days",
+              isActive: true,
+            }}
           >
-            <Form.Item name="description" label="Customized Description (Admin Only)">
+            <Form.Item
+              name="description"
+              label="Customized Description (Admin Only)"
+            >
               <Input placeholder="e.g., Summer Promo Reminder" />
             </Form.Item>
 
-            <Form.Item name="header" label="Notification Header" rules={[{ required: true }]}>
+            <Form.Item
+              name="header"
+              label="Notification Header"
+              rules={[{ required: true }]}
+            >
               <Input placeholder="e.g., Plane Available" />
             </Form.Item>
 
-            <Form.Item name="body" label="Notification Body" rules={[{ required: true }]}>
+            <Form.Item
+              name="body"
+              label="Notification Body"
+              rules={[{ required: true }]}
+            >
               <TextArea rows={3} placeholder="e.g., The plane you requested..." />
             </Form.Item>
 
-            <Form.Item name="frequency" label="Frequency" rules={[{ required: true }]}>
-              <Select>
-                <Select.Option value="6h">Every 6 Hours</Select.Option>
-                <Select.Option value="daily">Daily</Select.Option>
-                <Select.Option value="monthly">Monthly</Select.Option>
-              </Select>
-            </Form.Item>
+            <Row gutter={12}>
+              <Col xs={24} sm={10}>
+                <Form.Item
+                  name="intervalCount"
+                  label="Repeat every"
+                  rules={[{ required: true }]}
+                >
+                  <InputNumber min={1} precision={0} style={{ width: "100%" }} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={14}>
+                <Form.Item
+                  name="intervalUnit"
+                  label="Interval unit"
+                  rules={[{ required: true }]}
+                >
+                  <Select>
+                    <Select.Option value="days">Days</Select.Option>
+                    <Select.Option value="weeks">Weeks</Select.Option>
+                    <Select.Option value="months">Months</Select.Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+            <Text
+              type="secondary"
+              style={{ display: "block", marginTop: -12, marginBottom: 16 }}
+            >
+              {formatScheduleSentence({ intervalCount, intervalUnit })}
+            </Text>
 
             <Form.Item name="isActive" label="Active" valuePropName="checked">
               <Switch />

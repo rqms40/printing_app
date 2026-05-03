@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/customer/chat/providers/chat_provider.dart';
 import 'package:printing_app/shared/services/routing_service.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 import 'package:printing_app/features/driver/deliveries/providers/deliveries_provider.dart';
@@ -22,10 +24,7 @@ import 'package:printing_app/utils/formatters.dart';
 
 /// Detail screen for a single delivery assignment.
 class DeliveryDetailScreen extends ConsumerWidget {
-  const DeliveryDetailScreen({
-    super.key,
-    required this.assignmentId,
-  });
+  const DeliveryDetailScreen({super.key, required this.assignmentId});
 
   final String assignmentId;
 
@@ -33,6 +32,39 @@ class DeliveryDetailScreen extends ConsumerWidget {
     return Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
+  }
+
+  Future<void> _openCustomerChat(
+    BuildContext context,
+    WidgetRef ref,
+    String orderId,
+    String orderRef,
+    DeliveryStatus status,
+  ) async {
+    final apiOrderRef = int.tryParse(orderId) == null ? orderRef : orderId;
+
+    final conv = await ref
+        .read(chatProvider.notifier)
+        .openOrderConversation(apiOrderRef);
+    if (!context.mounted) return;
+    if (conv == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open customer chat. Please try again.'),
+        ),
+      );
+      return;
+    }
+
+    final uri = Uri(
+      path: '/driver/chat/${conv.id}',
+      queryParameters: {
+        'type': conv.type.name,
+        'orderRef': orderRef,
+        'orderStatus': status.displayName,
+      },
+    );
+    context.push(uri.toString());
   }
 
   @override
@@ -53,9 +85,9 @@ class DeliveryDetailScreen extends ConsumerWidget {
 
     final Address? address = order.deliveryAddressId != null
         ? MockData.addresses.cast<dynamic>().firstWhere(
-              (a) => a.id == order.deliveryAddressId,
-              orElse: () => null,
-            )
+            (a) => a.id == order.deliveryAddressId,
+            orElse: () => null,
+          )
         : null;
 
     return Scaffold(
@@ -68,7 +100,10 @@ class DeliveryDetailScreen extends ConsumerWidget {
         ),
         elevation: 0,
         leading: IconButton(
-          icon: HugeIcon(icon: HugeIcons.strokeRoundedArrowLeft01, color: colors.onBackground),
+          icon: HugeIcon(
+            icon: HugeIcons.strokeRoundedArrowLeft01,
+            color: colors.onBackground,
+          ),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
@@ -94,11 +129,9 @@ class DeliveryDetailScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildInfoRow(
-                            context, 'Category', order.category),
+                        _buildInfoRow(context, 'Category', order.category),
                         const SizedBox(height: AppSpacing.sm),
-                        _buildInfoRow(
-                            context, 'Quantity', '${order.quantity}'),
+                        _buildInfoRow(context, 'Quantity', '${order.quantity}'),
                         const SizedBox(height: AppSpacing.sm),
                         _buildInfoRow(
                           context,
@@ -130,14 +163,18 @@ class DeliveryDetailScreen extends ConsumerWidget {
                         children: [
                           Row(
                             children: [
-                              HugeIcon(icon: HugeIcons.strokeRoundedLocation01,
-                                  size: 18, color: colors.onSurface),
+                              HugeIcon(
+                                icon: HugeIcons.strokeRoundedLocation01,
+                                size: 18,
+                                color: colors.onSurface,
+                              ),
                               const SizedBox(width: AppSpacing.sm),
                               Expanded(
                                 child: Text(
                                   address.fullAddress,
-                                  style: AppTypography.body
-                                      .copyWith(color: colors.onSurface),
+                                  style: AppTypography.body.copyWith(
+                                    color: colors.onSurface,
+                                  ),
                                 ),
                               ),
                             ],
@@ -145,24 +182,24 @@ class DeliveryDetailScreen extends ConsumerWidget {
                           if (address.landmark != null) ...[
                             const SizedBox(height: AppSpacing.sm),
                             Padding(
-                              padding:
-                                  const EdgeInsets.only(left: 26),
+                              padding: const EdgeInsets.only(left: 26),
                               child: Text(
                                 address.landmark!,
-                                style: AppTypography.bodyBold
-                                    .copyWith(color: colors.onBackground),
+                                style: AppTypography.bodyBold.copyWith(
+                                  color: colors.onBackground,
+                                ),
                               ),
                             ),
                           ],
                           if (address.barangay != null) ...[
                             const SizedBox(height: AppSpacing.xs),
                             Padding(
-                              padding:
-                                  const EdgeInsets.only(left: 26),
+                              padding: const EdgeInsets.only(left: 26),
                               child: Text(
                                 'Brgy. ${address.barangay}, ${address.city}',
-                                style: AppTypography.caption
-                                    .copyWith(color: colors.onSurfaceDim),
+                                style: AppTypography.caption.copyWith(
+                                  color: colors.onSurfaceDim,
+                                ),
                               ),
                             ),
                           ],
@@ -189,12 +226,29 @@ class DeliveryDetailScreen extends ConsumerWidget {
                       final lat = address?.latitude ?? 14.6400;
                       final lng = address?.longitude ?? 121.0530;
                       final url = Uri.parse(
-                          'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving');
+                        'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
+                      );
                       if (await canLaunchUrl(url)) {
-                        await launchUrl(url,
-                            mode: LaunchMode.externalApplication);
+                        await launchUrl(
+                          url,
+                          mode: LaunchMode.externalApplication,
+                        );
                       }
                     },
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  AppButton(
+                    label: 'Chat customer',
+                    variant: AppButtonVariant.secondary,
+                    isFullWidth: true,
+                    icon: HugeIcons.strokeRoundedMessage01,
+                    onTap: () => _openCustomerChat(
+                      context,
+                      ref,
+                      assignment.orderId,
+                      order.orderId,
+                      assignment.status,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.lg),
                 ],
@@ -217,8 +271,7 @@ class DeliveryDetailScreen extends ConsumerWidget {
                 top: false,
                 child: CheckpointAction(
                   currentStatus: assignment.status,
-                  onAdvance: () =>
-                      notifier.advanceCheckpoint(assignmentId),
+                  onAdvance: () => notifier.advanceCheckpoint(assignmentId),
                 ),
               ),
             ),
@@ -244,15 +297,13 @@ class DeliveryDetailScreen extends ConsumerWidget {
           width: 80,
           child: Text(
             label,
-            style: AppTypography.caption
-                .copyWith(color: colors.onSurfaceDim),
+            style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
           ),
         ),
         Expanded(
           child: Text(
             value,
-            style:
-                AppTypography.body.copyWith(color: colors.onBackground),
+            style: AppTypography.body.copyWith(color: colors.onBackground),
           ),
         ),
       ],

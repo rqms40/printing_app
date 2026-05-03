@@ -21,6 +21,8 @@ void main() {
 
   Map<String, dynamic>? lastBatchPayload;
   var batchResponseOrders = <Map<String, dynamic>>[];
+  Map<String, dynamic>? batchAssignedSlot;
+  var failOrdersGet = false;
   final forceBetaLimitPaths = <String>{};
   final force500Paths = <String>{};
 
@@ -47,6 +49,21 @@ void main() {
           }
 
           if (options.path == '/orders' && options.method == 'GET') {
+            if (failOrdersGet) {
+              handler.reject(
+                DioException(
+                  requestOptions: options,
+                  response: Response(
+                    requestOptions: options,
+                    statusCode: 500,
+                    data: {'message': 'orders refresh failed'},
+                  ),
+                  type: DioExceptionType.badResponse,
+                ),
+              );
+              return;
+            }
+
             handler.resolve(
               Response(requestOptions: options, statusCode: 200, data: []),
             );
@@ -94,7 +111,11 @@ void main() {
               Response(
                 requestOptions: options,
                 statusCode: 201,
-                data: {'batchId': 'BATCH-10001', 'orders': batchResponseOrders},
+                data: {
+                  'batchId': 'BATCH-10001',
+                  'orders': batchResponseOrders,
+                  'assignedSlot': ?batchAssignedSlot,
+                },
               ),
             );
             return;
@@ -113,6 +134,8 @@ void main() {
     await Hive.openBox('draft_orders');
     await Hive.box('draft_orders').clear();
     lastBatchPayload = null;
+    batchAssignedSlot = null;
+    failOrdersGet = false;
     batchResponseOrders = [
       _orderJson(id: '101', orderId: 'ORD-BATCH-1', fileName: 'proposal.pdf'),
       _orderJson(id: '102', orderId: 'ORD-BATCH-2', fileName: 'gear.stl'),
@@ -289,6 +312,31 @@ void main() {
   });
 
   group('OrdersNotifier lifecycle', () {
+    test('failed refresh preserves existing real orders', () async {
+      failOrdersGet = true;
+      final existingOrder = _orderFromJson(
+        _orderJson(id: '7', orderId: 'ORD-10007', fileName: 'proposal.pdf'),
+      );
+      final container = ProviderContainer(
+        overrides: [
+          ordersProvider.overrideWith(
+            (ref) => OrdersNotifier(
+              initialState: [existingOrder],
+              skipBootstrap: true,
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(ordersProvider.notifier).refreshOrders();
+
+      final orders = container.read(ordersProvider);
+      expect(orders, hasLength(1));
+      expect(orders.single.id, '7');
+      expect(orders.single.orderId, 'ORD-10007');
+    });
+
     test('dispose unregisters websocket completion listener', () async {
       WebSocketService.disableOrdersSocketForTests = true;
       WebSocketService.instance.disconnect();
@@ -329,6 +377,141 @@ void main() {
   });
 
   group('OrdersNotifier.addBatchOrder', () {
+    test(
+      'single item aggregate response keeps ORD-10007 as visible order',
+      () async {
+        batchResponseOrders = [
+          _singleItemBatchOrderJson(paymentMethod: 'gcash'),
+        ];
+        final container = ProviderContainer(
+          overrides: [
+            ordersProvider.overrideWith(
+              (ref) =>
+                  OrdersNotifier(initialState: const [], skipBootstrap: true),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final createdOrders = await container
+            .read(ordersProvider.notifier)
+            .addBatchOrder(
+              items: [_paperCartItem(printSubtotal: 175)],
+              deliveryOption: 'delivery',
+              deliveryAddressId: '9',
+              deliveryFee: 50,
+              paymentMethod: PaymentMethod.gcash,
+            );
+
+        expect(createdOrders, hasLength(1));
+        final order = createdOrders.single;
+        expect(order.id, '7');
+        expect(order.orderId, 'ORD-10007');
+        expect(order.batchId, 'BATCH-10001');
+        expect(order.batchOrderId, '1');
+        expect(order.isBatchOrder, isFalse);
+        expect(order.itemCount, 1);
+        expect(order.paymentMethod, PaymentMethod.gcash);
+        expect(order.deliveryAddress?.fullAddress, 'Test');
+        expect(order.deliveryAddress?.city, 'Test');
+        expect(order.deliveryAddress?.latitude, 7.0793179);
+        expect(order.deliveryAddress?.longitude, 125.6149458);
+        expect(container.read(ordersProvider).single.orderId, 'ORD-10007');
+      },
+    );
+
+    test(
+      'single child batch response without items preserves ORD-10007',
+      () async {
+        batchResponseOrders = [
+          _singleItemBatchOrderJson(
+            paymentMethod: 'credits',
+            includeItems: false,
+          ),
+        ];
+        final container = ProviderContainer(
+          overrides: [
+            ordersProvider.overrideWith(
+              (ref) =>
+                  OrdersNotifier(initialState: const [], skipBootstrap: true),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final createdOrders = await container
+            .read(ordersProvider.notifier)
+            .addBatchOrder(
+              items: [_paperCartItem(printSubtotal: 175)],
+              deliveryOption: 'delivery',
+              deliveryAddressId: '9',
+              deliveryFee: 50,
+              paymentMethod: PaymentMethod.gridCredits,
+            );
+
+        final order = createdOrders.single;
+        expect(order.orderId, 'ORD-10007');
+        expect(order.batchId, 'BATCH-10001');
+        expect(order.isBatchOrder, isFalse);
+        expect(order.itemCount, 1);
+        expect(order.items.single.orderId, 'ORD-10007');
+        expect(order.paymentMethod, PaymentMethod.gridCredits);
+        expect(container.read(ordersProvider).single.orderId, 'ORD-10007');
+      },
+    );
+
+    test(
+      'single aggregate batch response displays order id and keeps batch metadata',
+      () async {
+        final cases = {
+          'gridCredits': PaymentMethod.gridCredits,
+          'gcash': PaymentMethod.gcash,
+        };
+
+        for (final entry in cases.entries) {
+          batchResponseOrders = [
+            _aggregateBatchOrderJson(paymentMethod: entry.key),
+          ];
+          final container = ProviderContainer(
+            overrides: [
+              ordersProvider.overrideWith(
+                (ref) =>
+                    OrdersNotifier(initialState: const [], skipBootstrap: true),
+              ),
+            ],
+          );
+          addTearDown(container.dispose);
+
+          final createdOrders = await container
+              .read(ordersProvider.notifier)
+              .addBatchOrder(
+                items: [_paperCartItem(printSubtotal: 175)],
+                deliveryOption: 'delivery',
+                deliveryAddressId: '9',
+                deliveryFee: 50,
+                paymentMethod: PaymentMethod.gridCredits,
+              );
+
+          expect(createdOrders, hasLength(1));
+          final order = createdOrders.single;
+          expect(order.id, '7');
+          expect(order.orderId, 'ORD-10007');
+          expect(order.batchId, 'BATCH-10001');
+          expect(order.batchOrderId, '1');
+          expect(order.isBatchOrder, isTrue);
+          expect(order.paymentMethod, entry.value);
+          expect(order.deliveryAddress?.latitude, 14.5995);
+          expect(order.deliveryAddress?.longitude, 120.9842);
+          expect(order.items, hasLength(2));
+          expect(order.items.map((item) => item.orderId), [
+            'ORD-ITEM-1',
+            'ORD-ITEM-2',
+          ]);
+          expect(container.read(ordersProvider).single.orderId, 'ORD-10007');
+        }
+      },
+    );
+
     test(
       'posts batch payload and prepends one grouped customer order',
       () async {
@@ -388,6 +571,10 @@ void main() {
         expect(items.first, containsPair('fileMetadataId', 42));
         expect(
           items.first,
+          containsPair('specialInstructions', 'Trim to the crop marks.'),
+        );
+        expect(
+          items.first,
           containsPair(
             'paperSpecs',
             containsPair('paperSize', PaperSize.a4.name),
@@ -405,6 +592,49 @@ void main() {
             containsPair('fileFormat', FileFormat3D.stl.name),
           ),
         );
+      },
+    );
+
+    test(
+      'parses top-level assigned slot returned from batch response',
+      () async {
+        batchResponseOrders = [
+          _orderJson(
+            id: '101',
+            orderId: 'ORD-BATCH-1',
+            fileName: 'proposal.pdf',
+          ),
+        ];
+        batchAssignedSlot = {
+          'slotTemplateId': 7,
+          'date': '2026-05-04',
+          'startTime': '09:00:00',
+          'endTime': '11:00:00',
+        };
+        final container = ProviderContainer(
+          overrides: [
+            ordersProvider.overrideWith(
+              (ref) =>
+                  OrdersNotifier(initialState: const [], skipBootstrap: true),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final createdOrders = await container
+            .read(ordersProvider.notifier)
+            .addBatchOrder(
+              items: [_paperCartItem(printSubtotal: 175)],
+              deliveryOption: 'delivery',
+              deliveryAddressId: '9',
+              deliveryFee: 50,
+              paymentMethod: PaymentMethod.gridCredits,
+            );
+
+        expect(createdOrders.single.assignedSlot?.slotTemplateId, 7);
+        expect(createdOrders.single.assignedSlot?.date, '2026-05-04');
+        expect(createdOrders.single.assignedSlot?.startTime, '09:00:00');
+        expect(createdOrders.single.assignedSlot?.endTime, '11:00:00');
       },
     );
 
@@ -459,6 +689,7 @@ void main() {
               'category': '3d',
               'fileName': 'gear.stl',
               'fileMetadataId': '84',
+              'specialInstructions': 'Keep the embossed logo sharp.',
               'quantity': '1',
               'totalPrice': '240.00',
               'threeDSpecs': {
@@ -495,36 +726,42 @@ void main() {
 
       final item = createdOrders.single.items.single;
       expect(item.fileMetadataId, 84);
+      expect(item.specialInstructions, 'Keep the embossed logo sharp.');
       expect(item.threeDSpecs?.infillPercentage, 20);
       expect(item.threeDSpecs?.layerHeight, 0.2);
     });
   });
 
   group('OrdersNotifier — beta order limit', () {
-    test('addBatchOrder throws BetaOrderLimitException on 403 with code', () async {
-      forceBetaLimitPaths.add('/orders/batch');
+    test(
+      'addBatchOrder throws BetaOrderLimitException on 403 with code',
+      () async {
+        forceBetaLimitPaths.add('/orders/batch');
 
-      final container = ProviderContainer(
-        overrides: [
-          ordersProvider.overrideWith(
-            (ref) =>
-                OrdersNotifier(initialState: const [], skipBootstrap: true),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
-
-      await expectLater(
-        container.read(ordersProvider.notifier).addBatchOrder(
-              items: [_paperCartItem(printSubtotal: 175)],
-              deliveryOption: 'delivery',
-              deliveryAddressId: '9',
-              deliveryFee: 50,
-              paymentMethod: PaymentMethod.gridCredits,
+        final container = ProviderContainer(
+          overrides: [
+            ordersProvider.overrideWith(
+              (ref) =>
+                  OrdersNotifier(initialState: const [], skipBootstrap: true),
             ),
-        throwsA(isA<BetaOrderLimitException>()),
-      );
-    });
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await expectLater(
+          container
+              .read(ordersProvider.notifier)
+              .addBatchOrder(
+                items: [_paperCartItem(printSubtotal: 175)],
+                deliveryOption: 'delivery',
+                deliveryAddressId: '9',
+                deliveryFee: 50,
+                paymentMethod: PaymentMethod.gridCredits,
+              ),
+          throwsA(isA<BetaOrderLimitException>()),
+        );
+      },
+    );
 
     test('addBatchOrder rethrows generic 500s without conversion', () async {
       force500Paths.add('/orders/batch');
@@ -540,7 +777,9 @@ void main() {
       addTearDown(container.dispose);
 
       await expectLater(
-        container.read(ordersProvider.notifier).addBatchOrder(
+        container
+            .read(ordersProvider.notifier)
+            .addBatchOrder(
               items: [_paperCartItem(printSubtotal: 175)],
               deliveryOption: 'delivery',
               deliveryAddressId: '9',
@@ -551,43 +790,46 @@ void main() {
       );
     });
 
-    test('addOrder throws BetaOrderLimitException on 403 with code (no local fallback)', () async {
-      forceBetaLimitPaths.add('/orders');
+    test(
+      'addOrder throws BetaOrderLimitException on 403 with code (no local fallback)',
+      () async {
+        forceBetaLimitPaths.add('/orders');
 
-      final container = ProviderContainer(
-        overrides: [
-          ordersProvider.overrideWith(
-            (ref) =>
-                OrdersNotifier(initialState: const [], skipBootstrap: true),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
+        final container = ProviderContainer(
+          overrides: [
+            ordersProvider.overrideWith(
+              (ref) =>
+                  OrdersNotifier(initialState: const [], skipBootstrap: true),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
 
-      final newOrder = Order(
-        id: 'test_new',
-        orderId: 'ORD-99999',
-        userId: 'usr_001',
-        category: 'paper',
-        quantity: 1,
-        totalPrice: 100,
-        deliveryFee: 0,
-        paymentMethod: PaymentMethod.cod,
-        paymentStatus: PaymentStatus.pending,
-        orderStatus: OrderStatus.orderPlaced,
-        deliveryOption: 'delivery',
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
+        final newOrder = Order(
+          id: 'test_new',
+          orderId: 'ORD-99999',
+          userId: 'usr_001',
+          category: 'paper',
+          quantity: 1,
+          totalPrice: 100,
+          deliveryFee: 0,
+          paymentMethod: PaymentMethod.cod,
+          paymentStatus: PaymentStatus.pending,
+          orderStatus: OrderStatus.orderPlaced,
+          deliveryOption: 'delivery',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
 
-      final notifier = container.read(ordersProvider.notifier);
-      await expectLater(
-        notifier.addOrder(newOrder),
-        throwsA(isA<BetaOrderLimitException>()),
-      );
-      // Local fallback must NOT have happened.
-      expect(container.read(ordersProvider), isEmpty);
-    });
+        final notifier = container.read(ordersProvider.notifier);
+        await expectLater(
+          notifier.addOrder(newOrder),
+          throwsA(isA<BetaOrderLimitException>()),
+        );
+        // Local fallback must NOT have happened.
+        expect(container.read(ordersProvider), isEmpty);
+      },
+    );
 
     test('addOrder falls back locally on generic 500', () async {
       force500Paths.add('/orders');
@@ -621,7 +863,9 @@ void main() {
       final notifier = container.read(ordersProvider.notifier);
       final result = await notifier.addOrder(newOrder);
       expect(result.id, 'test_new_fallback');
-      expect(container.read(ordersProvider).map((o) => o.id), ['test_new_fallback']);
+      expect(container.read(ordersProvider).map((o) => o.id), [
+        'test_new_fallback',
+      ]);
     });
   });
 
@@ -642,6 +886,56 @@ void main() {
       expect(order1, equals(order2)); // same id
     });
   });
+}
+
+Map<String, dynamic> _singleItemBatchOrderJson({
+  required String paymentMethod,
+  bool includeItems = true,
+}) {
+  final now = DateTime(2026, 5, 2, 20, 13, 43).toIso8601String();
+  final json = <String, dynamic>{
+    'id': 7,
+    'orderId': 'ORD-10007',
+    'userId': '1',
+    'batchOrderId': 1,
+    'batchOrder': {'batchRef': 'BATCH-10001'},
+    'category': 'paper',
+    'fileName': 'bad-design-hero.png',
+    'fileUrl': '/uploads/bad-design-hero.png',
+    'quantity': 1,
+    'totalPrice': '2.00',
+    'deliveryFee': '0.00',
+    'paymentMethod': paymentMethod,
+    'paymentStatus': 'pending',
+    'orderStatus': 'orderPlaced',
+    'deliveryOption': 'delivery',
+    'deliveryAddressId': 1,
+    'destination': {
+      'id': 1,
+      'label': 'Test',
+      'fullAddress': 'Test',
+      'city': 'Test',
+      'landmark': 'Test',
+      'latitude': 7.0793179,
+      'longitude': 125.6149458,
+    },
+    'createdAt': now,
+    'updatedAt': now,
+  };
+  if (includeItems) {
+    json['items'] = [
+      {
+        'id': 7,
+        'orderId': 'ORD-10007',
+        'category': 'paper',
+        'fileName': 'bad-design-hero.png',
+        'fileUrl': '/uploads/bad-design-hero.png',
+        'quantity': 1,
+        'totalPrice': '2.00',
+      },
+    ];
+  }
+  return json;
 }
 
 Map<String, dynamic> _orderJson({
@@ -674,6 +968,86 @@ Map<String, dynamic> _orderJson({
   };
 }
 
+Order _orderFromJson(Map<String, dynamic> json) {
+  final now = DateTime.parse(json['createdAt'] as String);
+  return Order(
+    id: json['id'].toString(),
+    orderId: json['orderId'] as String,
+    userId: json['userId'] as String,
+    batchOrderId: json['batchOrderId'].toString(),
+    batchId: (json['batchOrder'] as Map<String, dynamic>)['batchRef']
+        .toString(),
+    category: json['category'] as String,
+    fileName: json['fileName'] as String?,
+    fileUrl: json['fileUrl'] as String?,
+    fileMetadataId: json['fileMetadataId'] as int?,
+    quantity: json['quantity'] as int,
+    totalPrice: (json['totalPrice'] as num).toDouble(),
+    deliveryFee: (json['deliveryFee'] as num).toDouble(),
+    paymentMethod: PaymentMethod.gridCredits,
+    paymentStatus: PaymentStatus.pending,
+    orderStatus: OrderStatus.orderPlaced,
+    deliveryOption: json['deliveryOption'] as String,
+    deliveryAddressId: json['deliveryAddressId'].toString(),
+    createdAt: now,
+    updatedAt: now,
+  );
+}
+
+Map<String, dynamic> _aggregateBatchOrderJson({required String paymentMethod}) {
+  final now = DateTime(2026, 4, 25, 12).toIso8601String();
+  return {
+    'id': 7,
+    'orderId': 'ORD-10007',
+    'userId': 'usr_001',
+    'batchOrderId': 1,
+    'batchOrder': {'batchRef': 'BATCH-10001'},
+    'category': 'batch',
+    'quantity': 2,
+    'totalPrice': '415.00',
+    'deliveryFee': '50.00',
+    'paymentMethod': paymentMethod,
+    'paymentStatus': 'pending',
+    'orderStatus': 'orderPlaced',
+    'deliveryOption': 'delivery',
+    'deliveryAddressId': 9,
+    'deliveryAddress': {
+      'label': 'Studio',
+      'fullAddress': '123 Print Street',
+      'barangay': 'Barangay 1',
+      'city': 'Manila',
+      'province': 'Metro Manila',
+      'zipCode': '1000',
+      'latitude': 14.5995,
+      'longitude': 120.9842,
+    },
+    'createdAt': now,
+    'updatedAt': now,
+    'items': [
+      {
+        'id': 701,
+        'orderId': 'ORD-ITEM-1',
+        'category': 'paper',
+        'fileName': 'proposal.pdf',
+        'fileUrl': '/tmp/proposal.pdf',
+        'fileMetadataId': 42,
+        'quantity': 1,
+        'totalPrice': '175.00',
+      },
+      {
+        'id': 702,
+        'orderId': 'ORD-ITEM-2',
+        'category': '3d',
+        'fileName': 'gear.stl',
+        'fileUrl': '/tmp/gear.stl',
+        'fileMetadataId': 84,
+        'quantity': 1,
+        'totalPrice': '240.00',
+      },
+    ],
+  };
+}
+
 CartItem _paperCartItem({double printSubtotal = 175}) {
   return CartItem(
     id: 'cart-paper',
@@ -692,6 +1066,7 @@ CartItem _paperCartItem({double printSubtotal = 175}) {
     quantity: 2,
     pageCount: 10,
     printSubtotal: printSubtotal,
+    specialInstructions: 'Trim to the crop marks.',
     createdAt: DateTime(2026, 4, 25, 10),
   );
 }

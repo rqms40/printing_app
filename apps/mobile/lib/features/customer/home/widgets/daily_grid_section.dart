@@ -10,7 +10,9 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/home/providers/daily_grid_provider.dart';
+import 'package:printing_app/features/customer/order/models/product_catalog.dart';
 import 'package:printing_app/features/customer/order/providers/order_provider.dart';
+import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/shared/models/daily_grid_item.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
 
@@ -21,45 +23,74 @@ const _kFallback = [
     id: -1,
     title: 'Bond Paper A4',
     subtitle: '₱15 / page',
-    imageUrl: 'https://images.unsplash.com/photo-1588580000645-4562a6d2c839'
+    imageUrl:
+        'https://images.unsplash.com/photo-1588580000645-4562a6d2c839'
         '?w=160&h=160&fit=crop&q=80',
     category: 'paper',
+    specs: {'paper_size': 'a4', 'color_mode': 'black_and_white'},
     sortOrder: 0,
   ),
   DailyGridItem(
     id: -2,
     title: 'A3 Poster',
     subtitle: '₱75 / sheet',
-    imageUrl: 'https://images.unsplash.com/photo-1503455637927-730bce8583c0'
+    imageUrl:
+        'https://images.unsplash.com/photo-1503455637927-730bce8583c0'
         '?w=160&h=160&fit=crop&q=80',
     category: 'paper',
+    specs: {
+      'paper_size': 'a3',
+      'color_mode': 'full_color',
+      'media_type': 'glossy',
+    },
     sortOrder: 1,
   ),
   DailyGridItem(
     id: -3,
     title: '3D Print',
     subtitle: 'From ₱120',
-    imageUrl: 'https://images.unsplash.com/photo-1617839625591-e5a789593135'
+    imageUrl:
+        'https://images.unsplash.com/photo-1617839625591-e5a789593135'
         '?w=160&h=160&fit=crop&q=80',
     category: '3d',
+    specs: {
+      'file_format': 'stl',
+      'material': 'pla',
+      'color': 'white',
+      'infill_percentage': '20',
+      'layer_height': '0.2',
+      'supports': 'false',
+    },
     sortOrder: 2,
   ),
   DailyGridItem(
     id: -4,
     title: 'Large Banner',
     subtitle: 'From ₱350',
-    imageUrl: 'https://images.unsplash.com/photo-1586717791821-3f44a563fa4c'
+    imageUrl:
+        'https://images.unsplash.com/photo-1586717791821-3f44a563fa4c'
         '?w=160&h=160&fit=crop&q=80',
     category: 'paper',
+    specs: {
+      'paper_size': 'a1',
+      'color_mode': 'full_color',
+      'media_type': 'glossy',
+    },
     sortOrder: 3,
   ),
   DailyGridItem(
     id: -5,
     title: 'Flyer Print',
     subtitle: '₱12 / sheet',
-    imageUrl: 'https://images.unsplash.com/photo-1601645191163-3fc0d5d64e35'
+    imageUrl:
+        'https://images.unsplash.com/photo-1601645191163-3fc0d5d64e35'
         '?w=160&h=160&fit=crop&q=80',
     category: 'paper',
+    specs: {
+      'paper_size': 'a5',
+      'color_mode': 'full_color',
+      'media_type': 'matte',
+    },
     sortOrder: 4,
   ),
 ];
@@ -100,7 +131,11 @@ class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
         );
       }
     });
-    unawaited(WebSocketService.instance.connectDailyGrid(onUpdated: _onDailyGridUpdated));
+    unawaited(
+      WebSocketService.instance.connectDailyGrid(
+        onUpdated: _onDailyGridUpdated,
+      ),
+    );
   }
 
   @override
@@ -113,17 +148,36 @@ class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
 
   void _onCardTap(BuildContext context, DailyGridItem card) {
     final notifier = ref.read(orderFlowProvider.notifier);
+    final catalog =
+        ref.read(productCatalogProvider).valueOrNull ??
+        ProductCatalog.fallback();
+    final fallback = ProductCatalog.fallback();
+    final category =
+        catalog.categoryBySlug(card.category) ??
+        fallback.categoryBySlug(card.category) ??
+        fallback.categoryBySlug(card.category == '3d' ? '3d' : 'paper')!;
+    final selectedSpecs = card.specs ?? const <String, dynamic>{};
+    final displayValues = card.specDisplayValues.isNotEmpty
+        ? card.specDisplayValues
+        : category.displayValues(
+            category.defaultSpecValues(overrides: selectedSpecs),
+          );
+
     notifier.reset();
-    // setCategory must come before spec setters — it clears specs internally.
-    notifier.setCategory(card.category);
-    if (card.category == 'paper' && card.paperSpecs != null) {
-      notifier.setPaperSpecsFromMap(card.paperSpecs!);
-    } else if (card.category == '3d' && card.threeDSpecs != null) {
-      notifier.setThreeDSpecsFromMap(card.threeDSpecs!);
+    // setCategory must come before spec setters because it clears spec state.
+    notifier.setCategory(
+      category.slug,
+      categoryName: card.categoryName ?? category.name,
+    );
+    if (selectedSpecs.isNotEmpty) {
+      notifier.setCatalogSpecs(
+        specs: selectedSpecs,
+        displayValues: displayValues,
+      );
     }
     notifier.goToStep(1);
     context.push(
-      card.category == 'paper'
+      category.fileProcessingType == 'document' || category.slug == 'paper'
           ? '/customer/order/paper-specs'
           : '/customer/order/3d-specs',
     );
@@ -156,7 +210,9 @@ class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
                 children: [
                   Text(
                     'The Daily Grid',
-                    style: AppTypography.h2.copyWith(color: colors.onBackground),
+                    style: AppTypography.h2.copyWith(
+                      color: colors.onBackground,
+                    ),
                   ),
                   Text(
                     'Ready-to-print essentials.',
@@ -181,10 +237,8 @@ class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
           child: gridAsync.when(
             loading: () => _buildShimmer(colors),
             error: (_, _) => _buildCarousel(_kFallback, colors),
-            data: (items) => _buildCarousel(
-              items.isEmpty ? _kFallback : items,
-              colors,
-            ),
+            data: (items) =>
+                _buildCarousel(items.isEmpty ? _kFallback : items, colors),
           ),
         ),
       ],

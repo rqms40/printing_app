@@ -14,6 +14,8 @@ import {
   Matches,
   MaxLength,
   IsObject,
+  IsLatitude,
+  IsLongitude,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -94,6 +96,12 @@ export class CreateOrderDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  specialInstructions?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   fileMetadataId?: number;
@@ -122,15 +130,67 @@ export class CreateOrderDto {
   addonIds?: number[];
 }
 
+export class TemporaryDeliveryAddressDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  label?: string;
+
+  @IsString()
+  @MaxLength(500)
+  fullAddress: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  barangay?: string;
+
+  @IsString()
+  @MaxLength(100)
+  city: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  province?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  zipCode?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  landmark?: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsLatitude()
+  latitude: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsLongitude()
+  longitude: number;
+}
+
 export class CreateBatchDestinationDto {
+  @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @IsPositive()
-  addressId: number;
+  addressId?: number;
 
   @IsOptional()
   @IsString()
   @MaxLength(100)
   label?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TemporaryDeliveryAddressDto)
+  address?: TemporaryDeliveryAddressDto;
 }
 
 export class CreateBatchOrderItemDto {
@@ -159,6 +219,12 @@ export class CreateBatchOrderItemDto {
   @IsOptional()
   @IsString()
   fileUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  specialInstructions?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -247,4 +313,9 @@ export class CreateBatchOrderDto {
   @ValidateNested({ each: true })
   @Type(() => CreateBatchDestinationDto)
   destinations?: CreateBatchDestinationDto[];
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TemporaryDeliveryAddressDto)
+  temporaryAddress?: TemporaryDeliveryAddressDto;
 }

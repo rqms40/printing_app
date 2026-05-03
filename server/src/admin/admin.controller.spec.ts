@@ -94,7 +94,13 @@ describe('AdminController analytics', () => {
         totalPrice: 100,
         orderStatus: OrderStatus.DELIVERED,
         createdAt: new Date('2026-03-31T09:00:00.000Z'),
-        paperSpec: { paperSize: 'a4' },
+        items: [
+          {
+            category: 'paper',
+            quantity: 1,
+            specValues: [{ specKey: 'paper_size', value: 'a4' }],
+          },
+        ],
       },
       {
         id: 2,
@@ -103,7 +109,13 @@ describe('AdminController analytics', () => {
         totalPrice: 80,
         orderStatus: OrderStatus.PRINTING_IN_PROGRESS,
         createdAt: new Date('2026-03-30T09:00:00.000Z'),
-        paperSpec: { paperSize: 'a3' },
+        items: [
+          {
+            category: 'paper',
+            quantity: 1,
+            specValues: [{ specKey: 'paper_size', value: 'a3' }],
+          },
+        ],
       },
       {
         id: 3,
@@ -120,7 +132,13 @@ describe('AdminController analytics', () => {
         totalPrice: 150,
         orderStatus: OrderStatus.DELIVERED,
         createdAt: new Date('2026-03-05T09:00:00.000Z'),
-        paperSpec: { paperSize: 'a4' },
+        items: [
+          {
+            category: 'paper',
+            quantity: 1,
+            specValues: [{ specKey: 'paper_size', value: 'a4' }],
+          },
+        ],
       },
       {
         id: 5,
@@ -129,7 +147,13 @@ describe('AdminController analytics', () => {
         totalPrice: 90,
         orderStatus: OrderStatus.DELIVERED,
         createdAt: new Date('2026-02-12T09:00:00.000Z'),
-        paperSpec: { paperSize: 'a5' },
+        items: [
+          {
+            category: 'paper',
+            quantity: 1,
+            specValues: [{ specKey: 'paper_size', value: 'a5' }],
+          },
+        ],
       },
       {
         id: 6,
@@ -138,7 +162,13 @@ describe('AdminController analytics', () => {
         totalPrice: 400,
         orderStatus: OrderStatus.DELIVERED,
         createdAt: new Date('2025-11-10T09:00:00.000Z'),
-        paperSpec: { paperSize: 'a2' },
+        items: [
+          {
+            category: 'paper',
+            quantity: 1,
+            specValues: [{ specKey: 'paper_size', value: 'a2' }],
+          },
+        ],
       },
       {
         id: 7,
@@ -147,7 +177,13 @@ describe('AdminController analytics', () => {
         totalPrice: 50,
         orderStatus: OrderStatus.CANCELLED,
         createdAt: new Date('2026-03-15T09:00:00.000Z'),
-        paperSpec: { paperSize: 'a1' },
+        items: [
+          {
+            category: 'paper',
+            quantity: 1,
+            specValues: [{ specKey: 'paper_size', value: 'a1' }],
+          },
+        ],
       },
     ] as Order[]);
 
@@ -184,7 +220,7 @@ describe('AdminController analytics', () => {
     });
 
     expect(ordersRepo.find).toHaveBeenCalledWith({
-      relations: ['paperSpec', 'items', 'items.paperSpec'],
+      relations: ['items', 'items.specValues'],
     });
     expect(analytics.sales).toEqual(expectedSales);
     expect(analytics.volume).toEqual(expectedVolume);
@@ -270,6 +306,122 @@ describe('AdminController analytics', () => {
       const result = await controller.getBadgeCounts();
 
       expect(result).toEqual({ newOrders: 0, pendingTopUps: 0 });
+    });
+  });
+
+  describe('mapOrder', () => {
+    it('includes pinned delivery coordinates and unique multidrop destinations', () => {
+      const order = {
+        id: 7,
+        orderId: 'ORD-10007',
+        userId: 1,
+        category: 'batch',
+        quantity: 2,
+        totalPrice: 12,
+        deliveryFee: 0,
+        paymentMethod: 'gcash',
+        paymentStatus: 'pending',
+        orderStatus: OrderStatus.ORDER_PLACED,
+        deliveryOption: 'delivery',
+        destination: {
+          id: 1,
+          addressId: null,
+          label: 'Drop 1',
+          sortOrder: 0,
+          fullAddress: 'Drop one',
+          barangay: null,
+          city: 'Davao City',
+          province: null,
+          zipCode: null,
+          landmark: 'Gate 1',
+          latitude: '7.0713113',
+          longitude: '125.6123279',
+        },
+        batchOrder: {
+          slotBookingId: 5,
+          speedTier: 'scheduled',
+          priorityFee: '0.00',
+          extraDestinationFee: '20.00',
+          deliveryType: 'local',
+        },
+        items: [
+          {
+            id: 7,
+            orderId: 7,
+            category: 'paper',
+            quantity: 1,
+            totalPrice: 2,
+            destinationId: 1,
+            destination: {
+              id: 1,
+              addressId: null,
+              label: 'Drop 1',
+              sortOrder: 0,
+              fullAddress: 'Drop one',
+              barangay: null,
+              city: 'Davao City',
+              province: null,
+              zipCode: null,
+              landmark: 'Gate 1',
+              latitude: '7.0713113',
+              longitude: '125.6123279',
+            },
+            specValues: [],
+          },
+          {
+            id: 8,
+            orderId: 7,
+            category: 'paper',
+            quantity: 1,
+            totalPrice: 10,
+            destinationId: 2,
+            destination: {
+              id: 2,
+              addressId: null,
+              label: 'Drop 2',
+              sortOrder: 1,
+              fullAddress: 'Drop two',
+              barangay: null,
+              city: 'Davao City',
+              province: null,
+              zipCode: null,
+              landmark: null,
+              latitude: '7.0900000',
+              longitude: '125.6200000',
+            },
+            specValues: [],
+          },
+        ],
+        statusHistory: [],
+        createdAt: new Date('2026-05-02T19:00:36.788Z'),
+        updatedAt: new Date('2026-05-02T19:00:36.788Z'),
+      } as unknown as Order;
+
+      const mapped = (controller as any).mapOrder(order);
+
+      expect(mapped.payment_method).toBe('gcash');
+      expect(mapped.delivery_address).toMatchObject({
+        label: 'Drop 1',
+        full_address: 'Drop one',
+        latitude: 7.0713113,
+        longitude: 125.6123279,
+      });
+      expect(mapped.destinations).toEqual([
+        expect.objectContaining({
+          id: 1,
+          label: 'Drop 1',
+          latitude: 7.0713113,
+          longitude: 125.6123279,
+        }),
+        expect.objectContaining({
+          id: 2,
+          label: 'Drop 2',
+          latitude: 7.09,
+          longitude: 125.62,
+        }),
+      ]);
+      expect(mapped.delivery_slot_booking_id).toBe(5);
+      expect(mapped.extra_destination_fee).toBe(20);
     });
   });
 

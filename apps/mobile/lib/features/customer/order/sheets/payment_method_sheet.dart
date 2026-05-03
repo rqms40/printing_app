@@ -7,6 +7,7 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
+import 'package:printing_app/features/customer/order/providers/checkout_payment_settings_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/payment_method_glyph.dart';
 import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
 import 'package:printing_app/features/tutorial/providers/checkout_tutorial_session_provider.dart';
@@ -57,10 +58,12 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(milliseconds: 400), () {
         if (!mounted) return;
-        final pipelineSeen =
-            ref.read(tutorialSeenProvider(TutorialKey.pipeline));
-        final checkoutSeen =
-            ref.read(tutorialSeenProvider(TutorialKey.checkoutFeatures));
+        final pipelineSeen = ref.read(
+          tutorialSeenProvider(TutorialKey.pipeline),
+        );
+        final checkoutSeen = ref.read(
+          tutorialSeenProvider(TutorialKey.checkoutFeatures),
+        );
         final multidropDone = ref.read(checkoutMultidropSeenInSessionProvider);
         if (pipelineSeen && !checkoutSeen && multidropDone) {
           _fireCreditsCoachMark();
@@ -79,7 +82,8 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
           targetKey: _creditsCoachKey,
           icon: HugeIcons.strokeRoundedCoins01,
           title: 'Pay with GRID Credits',
-          body: 'Top up once and pay instantly — no GCash OTP, no app-switching.',
+          body:
+              'Top up once and pay instantly — no GCash OTP, no app-switching.',
           align: ContentAlign.top,
           advanceOnSpotlightTap: false,
         ),
@@ -113,6 +117,15 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
     final authState = ref.watch(authProvider);
     final creditsBalance =
         double.tryParse(authState.user?.credits ?? '0') ?? 0.0;
+    final settings = ref.watch(checkoutPaymentSettingsProvider);
+    final settingsReady = settings.hasValue;
+    final creditsOnlyMode = settings.valueOrNull?.creditsOnlyMode ?? false;
+    final effectiveChosen =
+        settingsReady &&
+            _chosen != null &&
+            _isPaymentMethodEnabled(_chosen!, creditsOnlyMode, creditsBalance)
+        ? _chosen
+        : null;
 
     return SafeArea(
       child: Container(
@@ -151,7 +164,11 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Pick how you want to pay',
+              !settingsReady
+                  ? 'Checking payment availability'
+                  : creditsOnlyMode
+                  ? 'Only GRID Credits is available right now'
+                  : 'Pick how you want to pay',
               style: AppTypography.caption.copyWith(
                 color: colors.onSurfaceDim,
                 fontSize: 12,
@@ -165,23 +182,33 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
                   key: _creditsCoachKey,
                   child: _MethodRow(
                     method: PaymentMethod.gridCredits,
-                    selected: _chosen == PaymentMethod.gridCredits,
+                    selected: effectiveChosen == PaymentMethod.gridCredits,
                     colors: colors,
                     creditsBalance: creditsBalance,
-                    onTap: creditsBalance == 0
+                    disabledSubtitle: settingsReady
+                        ? null
+                        : 'Checking availability',
+                    onTap: !settingsReady || creditsBalance == 0
                         ? null
                         : () => setState(
-                            () => _chosen = PaymentMethod.gridCredits),
+                            () => _chosen = PaymentMethod.gridCredits,
+                          ),
                   ),
                 )
               else
                 _MethodRow(
                   method: PaymentMethod.values[i],
-                  selected: _chosen == PaymentMethod.values[i],
+                  selected: effectiveChosen == PaymentMethod.values[i],
                   colors: colors,
                   creditsBalance: creditsBalance,
-                  onTap: () =>
-                      setState(() => _chosen = PaymentMethod.values[i]),
+                  disabledSubtitle: !settingsReady
+                      ? 'Checking availability'
+                      : creditsOnlyMode
+                      ? 'Temporarily unavailable'
+                      : null,
+                  onTap: !settingsReady || creditsOnlyMode
+                      ? null
+                      : () => setState(() => _chosen = PaymentMethod.values[i]),
                 ),
             ],
             const SizedBox(height: AppSpacing.md),
@@ -200,14 +227,16 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
                         color: _setDefault ? colors.brand : Colors.transparent,
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: _setDefault
-                              ? colors.brand
-                              : colors.outline,
+                          color: _setDefault ? colors.brand : colors.outline,
                           width: 1.5,
                         ),
                       ),
                       child: _setDefault
-                          ? Icon(Icons.check, size: 14, color: colors.background)
+                          ? Icon(
+                              Icons.check,
+                              size: 14,
+                              color: colors.background,
+                            )
                           : null,
                     ),
                     const SizedBox(width: AppSpacing.sm),
@@ -224,29 +253,45 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
             ),
             const SizedBox(height: AppSpacing.md),
             _UseThisButton(
-              enabled: _chosen != null,
+              enabled: effectiveChosen != null,
               colors: colors,
-              onTap: _chosen == null
+              onTap: effectiveChosen == null
                   ? null
                   : () async {
+                      final chosen = effectiveChosen;
                       if (_setDefault) {
                         try {
                           await ApiClient.instance.dio.patch(
                             '/users/me/default-payment-method',
-                            data: {'method': _wireValue(_chosen!)},
+                            data: {'method': _wireValue(chosen)},
                           );
+                          ref
+                              .read(authProvider.notifier)
+                              .setDefaultPaymentMethod(chosen);
                         } catch (_) {
                           // non-fatal — selection still applied for this order
                         }
                       }
                       if (!context.mounted) return;
-                      Navigator.of(context).pop(_chosen);
+                      Navigator.of(context).pop(chosen);
                     },
             ),
           ],
         ),
       ),
     );
+  }
+
+  bool _isPaymentMethodEnabled(
+    PaymentMethod method,
+    bool creditsOnlyMode,
+    double creditsBalance,
+  ) {
+    if (creditsOnlyMode && method != PaymentMethod.gridCredits) return false;
+    if (method == PaymentMethod.gridCredits && creditsBalance <= 0) {
+      return false;
+    }
+    return true;
   }
 }
 
@@ -257,15 +302,18 @@ class _MethodRow extends StatelessWidget {
     required this.colors,
     required this.onTap,
     this.creditsBalance = 0.0,
+    this.disabledSubtitle,
   });
   final PaymentMethod method;
   final bool selected;
   final AppColorSet colors;
   final VoidCallback? onTap;
   final double creditsBalance;
+  final String? disabledSubtitle;
 
   bool get _isCredits => method == PaymentMethod.gridCredits;
-  bool get _disabled => _isCredits && creditsBalance == 0;
+  bool get _disabled =>
+      disabledSubtitle != null || (_isCredits && creditsBalance == 0);
 
   String _label(PaymentMethod m) {
     switch (m) {
@@ -281,6 +329,7 @@ class _MethodRow extends StatelessWidget {
   }
 
   String _subtitle(PaymentMethod m) {
+    if (disabledSubtitle != null) return disabledSubtitle!;
     if (m == PaymentMethod.gridCredits) {
       if (creditsBalance > 0) {
         return '${formatCurrency(creditsBalance)} available';
@@ -302,8 +351,7 @@ class _MethodRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final labelColor =
-        _disabled ? colors.onSurfaceDim : colors.onBackground;
+    final labelColor = _disabled ? colors.onSurfaceDim : colors.onBackground;
     final subtitleColor = _disabled
         ? colors.onSurfaceDim.withValues(alpha: 0.55)
         : colors.onSurfaceDim;
@@ -354,7 +402,7 @@ class _MethodRow extends StatelessWidget {
                   ],
                 ),
               ),
-              if (_disabled) ...[
+              if (_disabled && _isCredits) ...[
                 GestureDetector(
                   onTap: () {
                     Navigator.of(context).pop();
@@ -418,9 +466,7 @@ class _UseThisButton extends StatelessWidget {
           duration: const Duration(milliseconds: 140),
           height: 52,
           decoration: BoxDecoration(
-            color: enabled
-                ? colors.brand
-                : colors.brand.withValues(alpha: 0.4),
+            color: enabled ? colors.brand : colors.brand.withValues(alpha: 0.4),
             borderRadius: AppRadius.borderXl,
           ),
           child: Center(

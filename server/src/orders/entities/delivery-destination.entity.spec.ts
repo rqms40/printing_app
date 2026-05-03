@@ -13,6 +13,14 @@ describe('DeliveryDestination entity metadata', () => {
       'addressId',
       'label',
       'sortOrder',
+      'fullAddress',
+      'barangay',
+      'city',
+      'province',
+      'zipCode',
+      'landmark',
+      'latitude',
+      'longitude',
     ]) {
       expect(cols).toContain(name);
     }

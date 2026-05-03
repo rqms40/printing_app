@@ -11,6 +11,7 @@ import 'package:printing_app/shared/services/websocket_service.dart';
 import 'package:printing_app/features/customer/home/widgets/next_batch_session_trigger.dart';
 import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
 import 'package:printing_app/features/tutorial/repository/tutorial_repository.dart';
+import 'package:printing_app/shared/models/enums.dart';
 
 // ---------------------------------------------------------------------------
 // Auth status
@@ -39,6 +40,7 @@ class AuthUser {
     this.organization,
     this.printingPreferences = const [],
     this.tutorialSeenKeys = const [],
+    this.defaultPaymentMethod,
   });
 
   final String id;
@@ -58,6 +60,7 @@ class AuthUser {
   final String? organization;
   final List<String> printingPreferences;
   final List<String> tutorialSeenKeys;
+  final PaymentMethod? defaultPaymentMethod;
 
   AuthUser copyWith({
     String? id,
@@ -77,6 +80,7 @@ class AuthUser {
     String? organization,
     List<String>? printingPreferences,
     List<String>? tutorialSeenKeys,
+    PaymentMethod? defaultPaymentMethod,
   }) {
     return AuthUser(
       id: id ?? this.id,
@@ -96,6 +100,7 @@ class AuthUser {
       organization: organization ?? this.organization,
       printingPreferences: printingPreferences ?? this.printingPreferences,
       tutorialSeenKeys: tutorialSeenKeys ?? this.tutorialSeenKeys,
+      defaultPaymentMethod: defaultPaymentMethod ?? this.defaultPaymentMethod,
     );
   }
 }
@@ -197,8 +202,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (e.response?.statusCode == 403 &&
           e.response?.data is Map &&
           (e.response!.data as Map)['code'] == 'beta_held') {
-        final info =
-            BetaLockedInfo.fromJson(e.response!.data as Map<String, dynamic>);
+        final info = BetaLockedInfo.fromJson(
+          e.response!.data as Map<String, dynamic>,
+        );
         state = state.copyWith(
           isLoading: false,
           betaLocked: info,
@@ -326,6 +332,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     };
     state = AuthState(status: AuthStatus.authenticated, user: users[role]!);
     _ref?.read(accountStateProvider.notifier).clear();
+  }
+
+  void setDefaultPaymentMethod(PaymentMethod method) {
+    final user = state.user;
+    if (user == null) return;
+    state = state.copyWith(user: user.copyWith(defaultPaymentMethod: method));
   }
 
   Future<bool> completeProfile({
@@ -485,6 +497,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         json['printingPreferences'] ?? json['printing_preferences'],
       ),
       tutorialSeenKeys: _parseStringList(json['tutorialSeenKeys']),
+      defaultPaymentMethod: _parseDefaultPaymentMethod(
+        json['defaultPaymentMethod'] ?? json['default_payment_method'],
+      ),
       dateOfBirth: json['dateOfBirth'] != null
           ? DateTime.tryParse(json['dateOfBirth'] as String)
           : null,
@@ -505,6 +520,27 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
 
     return const [];
+  }
+
+  PaymentMethod? _parseDefaultPaymentMethod(dynamic value) {
+    final normalized = value
+        ?.toString()
+        .replaceAll(RegExp(r'[_-]'), '')
+        .toLowerCase();
+    switch (normalized) {
+      case 'gcash':
+        return PaymentMethod.gcash;
+      case 'maya':
+        return PaymentMethod.maya;
+      case 'cod':
+      case 'cash':
+        return PaymentMethod.cod;
+      case 'credits':
+      case 'gridcredits':
+        return PaymentMethod.gridCredits;
+      default:
+        return null;
+    }
   }
 }
 

@@ -20,6 +20,7 @@ class CartItem {
     required this.pageCount,
     double? unitPrice,
     double? printSubtotal,
+    this.specialInstructions,
     required this.createdAt,
   }) : assert(
          unitPrice != null || printSubtotal != null,
@@ -44,6 +45,7 @@ class CartItem {
   final int quantity;
   final int pageCount;
   final double unitPrice;
+  final String? specialInstructions;
   final DateTime createdAt;
 
   double get printSubtotal => unitPrice * quantity;
@@ -66,6 +68,7 @@ class CartItem {
       quantity: flow.quantity,
       pageCount: flow.pageCount,
       unitPrice: flow.totalPrice / flow.quantity,
+      specialInstructions: flow.specialInstructions,
       createdAt: DateTime.now(),
     );
   }
@@ -90,6 +93,9 @@ class CartItem {
       pageCount: (map['pageCount'] as num?)?.toInt() ?? 1,
       unitPrice:
           (map['unitPrice'] as num?)?.toDouble() ?? legacySubtotal / quantity,
+      specialInstructions: _normalizeOptionalText(
+        map['specialInstructions']?.toString(),
+      ),
       createdAt:
           DateTime.tryParse(map['createdAt']?.toString() ?? '') ??
           DateTime.now(),
@@ -131,6 +137,7 @@ class CartItem {
       'pageCount': pageCount,
       'unitPrice': unitPrice,
       'printSubtotal': printSubtotal,
+      'specialInstructions': specialInstructions,
       'createdAt': createdAt.toIso8601String(),
     };
   }
@@ -148,6 +155,8 @@ class CartItem {
     String? filePath,
     int? fileSize,
     int? fileMetadataId,
+    String? specialInstructions,
+    bool clearSpecialInstructions = false,
   }) {
     return CartItem(
       id: id,
@@ -164,6 +173,9 @@ class CartItem {
       quantity: quantity ?? this.quantity,
       pageCount: pageCount ?? this.pageCount,
       unitPrice: unitPrice ?? this.unitPrice,
+      specialInstructions: clearSpecialInstructions
+          ? null
+          : (specialInstructions ?? this.specialInstructions),
       createdAt: createdAt,
     );
   }
@@ -234,6 +246,11 @@ double _readDouble(dynamic value, double fallback) {
   if (value is num) return value.toDouble();
   if (value is String) return double.tryParse(value) ?? fallback;
   return fallback;
+}
+
+String? _normalizeOptionalText(String? value) {
+  final text = value?.trim();
+  return text == null || text.isEmpty ? null : text;
 }
 
 PaperSpecs? _paperSpecsFromMap(dynamic data) {

@@ -15,6 +15,7 @@ Order _makeOrder({
   String orderId = 'ORD-TEST-001',
   OrderStatus status = OrderStatus.onTheWay,
   String? deliveryAddressId = 'addr_test',
+  OrderDeliveryAddress? deliveryAddress,
   String? deliveryAssignmentId = 'da_test',
 }) => Order(
   id: id,
@@ -29,6 +30,7 @@ Order _makeOrder({
   orderStatus: status,
   deliveryOption: 'delivery',
   deliveryAddressId: deliveryAddressId,
+  deliveryAddress: deliveryAddress,
   deliveryAssignmentId: deliveryAssignmentId,
   createdAt: DateTime(2026, 4, 21),
   updatedAt: DateTime(2026, 4, 21),
@@ -193,6 +195,33 @@ void main() {
         expect(state.destPoint.longitude, closeTo(125.6128, 0.001));
         // Route fallback always returns non-empty list
         expect(state.routePoints, isNotEmpty);
+      },
+    );
+
+    test(
+      'returns active from temporary delivery address snapshot without saved id',
+      () async {
+        container = _container(
+          orders: [
+            _makeOrder(
+              deliveryAddressId: null,
+              deliveryAddress: const OrderDeliveryAddress(
+                label: 'Temporary drop',
+                fullAddress: 'Unit 12, Jacinto Extension, Davao City',
+                city: 'Davao City',
+                latitude: 7.0731,
+                longitude: 125.6128,
+              ),
+            ),
+          ],
+          addresses: const [],
+        );
+        final state = await container.read(liveDeliveryMapProvider.future);
+
+        expect(state.status, LiveMapStatus.active);
+        expect(state.orderId, 'ORD-TEST-001');
+        expect(state.destPoint.latitude, closeTo(7.0731, 0.001));
+        expect(state.destPoint.longitude, closeTo(125.6128, 0.001));
       },
     );
 

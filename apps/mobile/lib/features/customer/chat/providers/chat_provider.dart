@@ -61,12 +61,35 @@ class ChatNotifier extends StateNotifier<ChatState> {
         data: {'type': type.name, 'orderId': ?orderId},
       );
       final conv = Conversation.fromJson(res.data!);
-      state = state.copyWith(conversations: [conv, ...state.conversations]);
+      state = state.copyWith(conversations: _upsertConversation(conv));
       return conv;
     } catch (e) {
       state = state.copyWith(createError: e.toString());
       return null;
     }
+  }
+
+  Future<Conversation?> openOrderConversation(Object orderRef) async {
+    state = state.copyWith(createError: null);
+    try {
+      final encodedRef = Uri.encodeComponent(orderRef.toString());
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/chat/orders/$encodedRef/conversation',
+      );
+      final conv = Conversation.fromJson(res.data!);
+      state = state.copyWith(conversations: _upsertConversation(conv));
+      return conv;
+    } catch (e) {
+      state = state.copyWith(createError: e.toString());
+      return null;
+    }
+  }
+
+  List<Conversation> _upsertConversation(Conversation conv) {
+    final withoutExisting = state.conversations.where(
+      (existing) => existing.id != conv.id,
+    );
+    return [conv, ...withoutExisting];
   }
 }
 

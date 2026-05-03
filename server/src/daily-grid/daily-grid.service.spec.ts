@@ -3,6 +3,8 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { DailyGridService } from './daily-grid.service';
 import { DailyGridCard } from './entities/daily-grid-card.entity';
 import { DailyGridGateway } from './daily-grid.gateway';
+import { CatalogReadService } from '../products/catalog-read.service';
+import { CatalogValidationService } from '../products/catalog-validation.service';
 
 const mockCard = {
   id: 1,
@@ -10,13 +12,27 @@ const mockCard = {
   category: 'paper',
   isActive: true,
   sortOrder: 0,
-  paperSpecs: null,
-  threeDSpecs: null,
+  specs: null,
 } as DailyGridCard;
+
+const mockCategory = {
+  id: 1,
+  name: 'Paper Printing',
+  slug: 'paper',
+  isActive: true,
+  specs: [],
+};
 
 describe('DailyGridService — gateway notifications', () => {
   let service: DailyGridService;
   let gateway: { notifyUpdated: jest.Mock };
+  let catalogRead: {
+    getPublicCategoryBySlug: jest.Mock;
+    getPublicCatalog: jest.Mock;
+  };
+  let catalogValidation: {
+    validatePartialSpecs: jest.Mock;
+  };
   let repo: {
     find: jest.Mock;
     findOne: jest.Mock;
@@ -49,12 +65,23 @@ describe('DailyGridService — gateway notifications', () => {
         callOrder.push('delete');
       }),
     };
+    catalogRead = {
+      getPublicCategoryBySlug: jest.fn().mockResolvedValue(mockCategory),
+      getPublicCatalog: jest
+        .fn()
+        .mockResolvedValue({ categories: [mockCategory] }),
+    };
+    catalogValidation = {
+      validatePartialSpecs: jest.fn().mockReturnValue([]),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
         DailyGridService,
         { provide: getRepositoryToken(DailyGridCard), useValue: repo },
         { provide: DailyGridGateway, useValue: gateway },
+        { provide: CatalogReadService, useValue: catalogRead },
+        { provide: CatalogValidationService, useValue: catalogValidation },
       ],
     }).compile();
 

@@ -9,10 +9,11 @@ import { ChatService } from './chat.service';
 import { ChatController } from './chat.controller';
 import { OpenRouterService } from './openrouter.service';
 import { UsersModule } from '../users/users.module';
+import { Order } from '../orders/entities/order.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Conversation, ChatMessage]),
+    TypeOrmModule.forFeature([Conversation, ChatMessage, Order]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

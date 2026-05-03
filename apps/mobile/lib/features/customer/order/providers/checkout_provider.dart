@@ -26,8 +26,9 @@ class CheckoutNotifier extends StateNotifier<CheckoutState> {
 
   void removeItem(String id) {
     final newItems = state.items.where((i) => i.id != id).toList();
-    final newAssignments = Map<String, List<String?>>.from(state.unitAssignments)
-      ..remove(id);
+    final newAssignments = Map<String, List<String?>>.from(
+      state.unitAssignments,
+    )..remove(id);
     state = state.copyWith(items: newItems, unitAssignments: newAssignments);
   }
 
@@ -87,8 +88,13 @@ class CheckoutNotifier extends StateNotifier<CheckoutState> {
     }
   }
 
-  void setSingleAddress(Address address) =>
-      state = state.copyWith(singleAddress: address);
+  void setSingleAddress(Address address) => state = state.copyWith(
+    singleAddress: address,
+    clearTemporaryAddress: true,
+  );
+
+  void setTemporaryAddress(TemporaryCheckoutAddress address) =>
+      state = state.copyWith(temporaryAddress: address);
 
   void setDrops(List<DestinationGroup> drops) {
     state = state.copyWith(
@@ -108,17 +114,16 @@ class CheckoutNotifier extends StateNotifier<CheckoutState> {
     final next = [...current];
     next[copyIndex] = dropId;
     state = state.copyWith(
-      unitAssignments: {
-        ...state.unitAssignments,
-        itemId: next,
-      },
+      unitAssignments: {...state.unitAssignments, itemId: next},
     );
   }
 
   // ── Speed / payment / misc ─────────────────────────────────────────────
 
-  void setSpeedTier(DeliverySpeedTier tier) =>
-      state = state.copyWith(speedTier: tier);
+  void setSpeedTier(DeliverySpeedTier tier) => state = state.copyWith(
+    speedTier: tier,
+    clearScheduledSlot: tier != DeliverySpeedTier.scheduled,
+  );
 
   void setScheduledSlot(ScheduledSlot slot) {
     state = state.copyWith(
@@ -129,8 +134,8 @@ class CheckoutNotifier extends StateNotifier<CheckoutState> {
 
   void setPaymentMethod(PaymentMethod method) =>
       state = state.copyWith(paymentMethod: method);
-  void setLeaveAtDoor(bool value) =>
-      state = state.copyWith(leaveAtDoor: value);
+  void clearPaymentMethod() => state = state.copyWith(clearPaymentMethod: true);
+  void setLeaveAtDoor(bool value) => state = state.copyWith(leaveAtDoor: value);
   void setRiderNote(String note) => state = state.copyWith(riderNote: note);
   void reset() => state = const CheckoutState();
 
@@ -164,10 +169,9 @@ class CheckoutNotifier extends StateNotifier<CheckoutState> {
   }
 }
 
-final checkoutProvider =
-    StateNotifierProvider<CheckoutNotifier, CheckoutState>(
-      (ref) => CheckoutNotifier(),
-    );
+final checkoutProvider = StateNotifierProvider<CheckoutNotifier, CheckoutState>(
+  (ref) => CheckoutNotifier(),
+);
 
 class CheckoutFees {
   const CheckoutFees({

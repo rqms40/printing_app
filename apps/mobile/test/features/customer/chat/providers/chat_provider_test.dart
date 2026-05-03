@@ -139,6 +139,134 @@ void main() {
       expect(conv!.orderId, equals(42));
     });
 
+    test(
+      'openOrderConversation uses the dedicated order chat endpoint',
+      () async {
+        when(
+          mockDio.post<Map<String, dynamic>>('/chat/orders/42/conversation'),
+        ).thenAnswer(
+          (_) async => Response(
+            data: {
+              'id': 4,
+              'customerId': 5,
+              'type': 'rider',
+              'orderId': 42,
+              'assignedRiderId': 12,
+              'status': 'open',
+              'createdAt': '2026-04-25T10:00:00.000Z',
+              'updatedAt': '2026-04-25T10:00:00.000Z',
+            },
+            statusCode: 201,
+            requestOptions: RequestOptions(
+              path: '/chat/orders/42/conversation',
+            ),
+          ),
+        );
+
+        final conv = await container
+            .read(chatProvider.notifier)
+            .openOrderConversation(42);
+
+        expect(conv, isNotNull);
+        expect(conv!.type, ConversationType.rider);
+        expect(conv.orderId, 42);
+        expect(conv.assignedRiderId, 12);
+        expect(container.read(chatProvider).conversations.single.id, 4);
+      },
+    );
+
+    test('openOrderConversation can use a public order ref', () async {
+      when(
+        mockDio.post<Map<String, dynamic>>(
+          '/chat/orders/ORD-10005/conversation',
+        ),
+      ).thenAnswer(
+        (_) async => Response(
+          data: {
+            'id': 5,
+            'customerId': 5,
+            'type': 'admin',
+            'orderId': 42,
+            'status': 'open',
+            'createdAt': '2026-04-25T10:00:00.000Z',
+            'updatedAt': '2026-04-25T10:00:00.000Z',
+          },
+          statusCode: 201,
+          requestOptions: RequestOptions(
+            path: '/chat/orders/ORD-10005/conversation',
+          ),
+        ),
+      );
+
+      final conv = await container
+          .read(chatProvider.notifier)
+          .openOrderConversation('ORD-10005');
+
+      expect(conv, isNotNull);
+      expect(conv!.type, ConversationType.admin);
+      expect(conv.orderId, 42);
+    });
+
+    test(
+      'openOrderConversation replaces an existing cached conversation',
+      () async {
+        final existing = Conversation(
+          id: 4,
+          customerId: 5,
+          type: ConversationType.admin,
+          orderId: 42,
+          status: ConversationStatus.open,
+          createdAt: DateTime.parse('2026-04-25T09:00:00.000Z'),
+          updatedAt: DateTime.parse('2026-04-25T09:00:00.000Z'),
+        );
+        when(mockDio.get<List<dynamic>>('/chat/conversations')).thenAnswer(
+          (_) async => Response(
+            data: [
+              {
+                'id': existing.id,
+                'customerId': existing.customerId,
+                'type': existing.type.name,
+                'orderId': existing.orderId,
+                'status': existing.status.name,
+                'createdAt': existing.createdAt.toIso8601String(),
+                'updatedAt': existing.updatedAt.toIso8601String(),
+              },
+            ],
+            statusCode: 200,
+            requestOptions: RequestOptions(path: '/chat/conversations'),
+          ),
+        );
+        when(
+          mockDio.post<Map<String, dynamic>>('/chat/orders/42/conversation'),
+        ).thenAnswer(
+          (_) async => Response(
+            data: {
+              'id': 4,
+              'customerId': 5,
+              'type': 'rider',
+              'orderId': 42,
+              'assignedRiderId': 12,
+              'status': 'open',
+              'createdAt': '2026-04-25T09:00:00.000Z',
+              'updatedAt': '2026-04-25T11:00:00.000Z',
+            },
+            statusCode: 200,
+            requestOptions: RequestOptions(
+              path: '/chat/orders/42/conversation',
+            ),
+          ),
+        );
+
+        await container.read(chatProvider.notifier).loadConversations();
+        await container.read(chatProvider.notifier).openOrderConversation(42);
+
+        final conversations = container.read(chatProvider).conversations;
+        expect(conversations, hasLength(1));
+        expect(conversations.single.type, ConversationType.rider);
+        expect(conversations.single.assignedRiderId, 12);
+      },
+    );
+
     test('createConversation returns null on exception', () async {
       when(
         mockDio.post<Map<String, dynamic>>(

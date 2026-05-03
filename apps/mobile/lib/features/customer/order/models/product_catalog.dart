@@ -163,7 +163,7 @@ class ProductCatalog {
             defaultValue: 'fitToPage',
             options: [
               ProductSpecOption(
-                label: 'Fit to Page',
+                label: 'Fit to Scale',
                 value: 'fitToPage',
                 isDefault: true,
               ),

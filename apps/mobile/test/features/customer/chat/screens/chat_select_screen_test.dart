@@ -88,14 +88,16 @@ void main() {
     expect(find.text('conversation 9'), findsOneWidget);
   });
 
-  testWidgets('order-linked chat offers rider support', (tester) async {
+  testWidgets('new chat keeps order rider chat out of the generic selector', (
+    tester,
+  ) async {
     final mockDio = MockDio();
 
     await pumpChatSelect(tester, mockDio);
 
     expect(find.text('GridBot AI'), findsOneWidget);
     expect(find.text('Human Support'), findsOneWidget);
-    expect(find.text('Rider Support'), findsOneWidget);
+    expect(find.text('Rider Support'), findsNothing);
   });
 
   testWidgets('create failure shows a friendly retry message', (tester) async {

@@ -14,6 +14,7 @@ import { Address } from '../../addresses/entities/address.entity';
 import { OrderStatusHistory } from './order-status-history.entity';
 import { BatchOrder } from './batch-order.entity';
 import { OrderItem } from './order-item.entity';
+import { DeliveryDestination } from './delivery-destination.entity';
 import type { PaperSpec } from './paper-specs.entity';
 import type { ThreeDSpec } from './three-d-specs.entity';
 
@@ -56,6 +57,10 @@ export class Order {
 
   @Column({ name: 'destination_id', type: 'int', nullable: true })
   destinationId: number | null;
+
+  @ManyToOne(() => DeliveryDestination, { nullable: true })
+  @JoinColumn({ name: 'destination_id' })
+  destination: DeliveryDestination | null;
 
   @ManyToOne(() => BatchOrder, (batchOrder) => batchOrder.orders, {
     nullable: true,
@@ -108,7 +113,12 @@ export class Order {
   @Column({ name: 'delivery_option', default: 'pickup' })
   deliveryOption: string;
 
-  @Column({ name: 'admin_status_note', type: 'varchar', length: 255, nullable: true })
+  @Column({
+    name: 'admin_status_note',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+  })
   adminStatusNote: string | null;
 
   @Column({

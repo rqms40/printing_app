@@ -6,6 +6,7 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
+import 'package:printing_app/features/customer/order/models/checkout_state.dart';
 import 'package:printing_app/features/customer/order/models/destination_group.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
 import 'package:printing_app/features/customer/order/sheets/address_picker_sheet.dart';
@@ -13,7 +14,9 @@ import 'package:printing_app/features/customer/order/sheets/assign_drop_sheet.da
 import 'package:uuid/uuid.dart';
 
 class MultidropGroups extends ConsumerWidget {
-  const MultidropGroups({super.key});
+  const MultidropGroups({super.key, this.mapTilesEnabled = true});
+
+  final bool mapTilesEnabled;
 
   /// Returns a list of (item, copyIndex) refs assigned to [dropId].
   List<_UnitRef> _unitsForDrop(
@@ -128,6 +131,7 @@ class MultidropGroups extends ConsumerWidget {
           _DropCard(
             title: 'Unassigned',
             subtitle: 'Tap each to send to a drop',
+            hasDestination: false,
             colors: colors,
             isWarning: true,
             trailing: const SizedBox.shrink(),
@@ -161,17 +165,20 @@ class MultidropGroups extends ConsumerWidget {
               );
               return _DropCard(
                 title: drop.label,
-                subtitle: drop.addressId == null
-                    ? 'No address yet'
-                    : 'Address chosen',
+                subtitle: drop.hasValidDestination
+                    ? drop.destinationLabel
+                    : 'No address yet',
+                hasDestination: drop.hasValidDestination,
                 colors: colors,
                 trailing: state.drops.length > 1
                     ? GestureDetector(
                         onTap: () => ref
                             .read(checkoutProvider.notifier)
-                            .setDrops(state.drops
-                                .where((d) => d.id != drop.id)
-                                .toList()),
+                            .setDrops(
+                              state.drops
+                                  .where((d) => d.id != drop.id)
+                                  .toList(),
+                            ),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 6,
@@ -186,15 +193,16 @@ class MultidropGroups extends ConsumerWidget {
                       )
                     : const SizedBox.shrink(),
                 onPickAddress: () async {
-                  final addr = await AddressPickerSheet.show(context);
-                  if (addr == null) return;
+                  final selection = await AddressPickerSheet.showSelection(
+                    context,
+                    mapTilesEnabled: mapTilesEnabled,
+                    initialTemporaryAddress: drop.temporaryAddress,
+                  );
+                  if (selection == null) return;
                   ref.read(checkoutProvider.notifier).setDrops([
                     for (final d in state.drops)
                       if (d.id == drop.id)
-                        d.copyWith(
-                          addressId: int.tryParse(addr.id) ?? 0,
-                          label: addr.label,
-                        )
+                        _dropWithAddressSelection(d, selection)
                       else
                         d,
                   ]);
@@ -279,6 +287,31 @@ class MultidropGroups extends ConsumerWidget {
       ],
     );
   }
+
+  DestinationGroup _dropWithAddressSelection(
+    DestinationGroup drop,
+    CheckoutAddressSelection selection,
+  ) {
+    final savedAddress = selection.savedAddress;
+    if (savedAddress != null) {
+      return drop.copyWith(
+        addressId: int.tryParse(savedAddress.id) ?? 0,
+        label: savedAddress.label,
+        clearTemporaryAddress: true,
+      );
+    }
+
+    final temporaryAddress = selection.temporaryAddress;
+    if (temporaryAddress != null) {
+      return drop.copyWith(
+        label: temporaryAddress.displayLabel,
+        temporaryAddress: temporaryAddress,
+        clearAddressId: true,
+      );
+    }
+
+    return drop;
+  }
 }
 
 class _UnitRef {
@@ -291,6 +324,7 @@ class _DropCard extends StatelessWidget {
   const _DropCard({
     required this.title,
     required this.subtitle,
+    required this.hasDestination,
     required this.colors,
     required this.children,
     required this.trailing,
@@ -300,6 +334,7 @@ class _DropCard extends StatelessWidget {
 
   final String title;
   final String subtitle;
+  final bool hasDestination;
   final AppColorSet colors;
   final List<Widget> children;
   final Widget trailing;
@@ -346,16 +381,31 @@ class _DropCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           if (onPickAddress != null)
-            GestureDetector(
-              onTap: onPickAddress,
-              child: Text(
-                subtitle == 'Address chosen' ? 'Change address' : 'Pick address',
-                style: AppTypography.caption.copyWith(
-                  color: colors.brand,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (hasDestination) ...[
+                  Text(
+                    subtitle,
+                    style: AppTypography.caption.copyWith(
+                      color: colors.onSurfaceDim,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                ],
+                GestureDetector(
+                  onTap: onPickAddress,
+                  child: Text(
+                    hasDestination ? 'Change address' : 'Pick address',
+                    style: AppTypography.caption.copyWith(
+                      color: colors.brand,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
                 ),
-              ),
+              ],
             )
           else
             Text(
@@ -366,11 +416,7 @@ class _DropCard extends StatelessWidget {
               ),
             ),
           const SizedBox(height: AppSpacing.sm),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: children,
-          ),
+          Wrap(spacing: 6, runSpacing: 6, children: children),
         ],
       ),
     );

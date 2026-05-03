@@ -11,7 +11,6 @@ import 'package:printing_app/features/customer/order/providers/order_provider.da
 import 'package:printing_app/features/customer/order/providers/product_catalog_provider.dart';
 import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
 import 'package:printing_app/features/tutorial/widgets/coach_mark_sequence.dart';
-import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/app_illustrations.dart';
 import 'package:printing_app/shared/widgets/step_indicator.dart';
@@ -31,6 +30,8 @@ class CategoryScreen extends ConsumerStatefulWidget {
 class _CategoryScreenState extends ConsumerState<CategoryScreen> {
   final _paperCategoryKey = GlobalKey();
   bool _advancedThisFrame = false;
+  bool _categoryCoachScheduled = false;
+  bool _categoryCoachVisible = false;
   PipelineTutorialNotifier? _pipelineNotifier;
   PipelineState _pipelineState = const PipelineState();
 
@@ -44,20 +45,23 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
   void initState() {
     super.initState();
     _pipelineNotifier = ref.read(pipelineTutorialProvider.notifier);
-    ref.listenManual<PipelineState>(
-      pipelineTutorialProvider,
-      (_, next) => _pipelineState = next,
-      fireImmediately: true,
-    );
-    _loadDefaultPrintMode();
-    // Delay long enough for the card's entry animation (400ms + 60ms delay) to
-    // settle so the coach-mark spotlight captures the final card position.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(
-        const Duration(milliseconds: 500),
-        _maybePipelineCoachMark,
-      );
+    ref.listenManual<PipelineState>(pipelineTutorialProvider, (_, next) {
+      _pipelineState = next;
+      if (next.active && next.step == PipelineStep.paperCategoryCard) {
+        _schedulePipelineCoachMark();
+      }
+    }, fireImmediately: true);
+    ref.listenManual<AsyncValue<ProductCatalog>>(productCatalogProvider, (
+      _,
+      next,
+    ) {
+      if (!next.isLoading && next.hasValue) {
+        _schedulePipelineCoachMark();
+      }
     });
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _schedulePipelineCoachMark(),
+    );
   }
 
   @override
@@ -70,10 +74,72 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
     super.dispose();
   }
 
+  ProductCategory? _activePaperCategory(ProductCatalog catalog) {
+    for (final category in catalog.activeCategories) {
+      if (category.slug == 'paper') return category;
+    }
+    return null;
+  }
+
+  int _activePaperCategoryIndex(ProductCatalog catalog) {
+    final categories = catalog.activeCategories;
+    for (var i = 0; i < categories.length; i++) {
+      if (categories[i].slug == 'paper') return i;
+    }
+    return -1;
+  }
+
+  void _schedulePipelineCoachMark() {
+    if (!mounted || _categoryCoachScheduled || _categoryCoachVisible) return;
+    final state = ref.read(pipelineTutorialProvider);
+    if (!state.active || state.step != PipelineStep.paperCategoryCard) return;
+
+    final catalogAsync = ref.read(productCatalogProvider);
+    if (catalogAsync.isLoading || !catalogAsync.hasValue) return;
+
+    final catalog = catalogAsync.requireValue;
+    final paperIndex = _activePaperCategoryIndex(catalog);
+    if (paperIndex == -1) {
+      ref.read(pipelineTutorialProvider.notifier).abandon();
+      return;
+    }
+
+    _categoryCoachScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // The cards animate in with a 400ms duration and 60ms stagger. Waiting
+      // from the catalog-backed render keeps the spotlight bounds accurate.
+      await Future<void>.delayed(
+        Duration(milliseconds: 460 + (paperIndex + 1) * 60),
+      );
+      if (!mounted) return;
+      _categoryCoachScheduled = false;
+      _maybePipelineCoachMark();
+    });
+  }
+
   void _maybePipelineCoachMark() {
     if (!mounted) return;
     final state = ref.read(pipelineTutorialProvider);
     if (!state.active || state.step != PipelineStep.paperCategoryCard) return;
+    if (_categoryCoachVisible) return;
+
+    final catalogAsync = ref.read(productCatalogProvider);
+    if (catalogAsync.isLoading || !catalogAsync.hasValue) {
+      _schedulePipelineCoachMark();
+      return;
+    }
+
+    final paperCategory = _activePaperCategory(catalogAsync.requireValue);
+    if (paperCategory == null) {
+      ref.read(pipelineTutorialProvider.notifier).abandon();
+      return;
+    }
+    if (_paperCategoryKey.currentContext == null) {
+      _schedulePipelineCoachMark();
+      return;
+    }
+
+    _categoryCoachVisible = true;
     showCoachMark(
       context,
       [
@@ -85,32 +151,18 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
           advanceOnSpotlightTap: true,
           onSpotlightTap: () {
             _advancedThisFrame = true;
+            _categoryCoachVisible = false;
             ref.read(pipelineTutorialProvider.notifier).advance();
-            final catalog =
-                ref.read(productCatalogProvider).valueOrNull ??
-                ProductCatalog.fallback();
-            _selectCategory(
-              catalog.categoryBySlug('paper') ??
-                  ProductCatalog.fallback().categoryBySlug('paper')!,
-            );
+            _selectCategory(paperCategory);
           },
         ),
       ],
-      () {},
-      onSkip: () => ref.read(pipelineTutorialProvider.notifier).abandon(),
+      () => _categoryCoachVisible = false,
+      onSkip: () {
+        _categoryCoachVisible = false;
+        ref.read(pipelineTutorialProvider.notifier).abandon();
+      },
     );
-  }
-
-  Future<void> _loadDefaultPrintMode() async {
-    try {
-      final res = await ApiClient.instance.get('/users/profile');
-      final mode = (res.data['defaultPrintMode'] as String?) ?? 'fitToPage';
-      if (mounted) {
-        ref.read(orderFlowProvider.notifier).setPrintMode(mode);
-      }
-    } catch (_) {
-      // Non-critical — keep the current default
-    }
   }
 
   @override

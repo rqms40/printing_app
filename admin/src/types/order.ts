@@ -29,6 +29,22 @@ export interface ThreeDSpecs {
   notes?: string;
 }
 
+export interface OrderDestination {
+  id?: number;
+  address_id?: number | null;
+  label?: string | null;
+  address?: string | null;
+  full_address?: string | null;
+  barangay?: string | null;
+  city?: string | null;
+  province?: string | null;
+  zip_code?: string | null;
+  landmark?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  sort_order?: number;
+}
+
 export interface Order {
   id: string;
   order_id: string;
@@ -53,6 +69,7 @@ export interface Order {
   cancelled_at?: string;
   delivery_option: "pickup" | "delivery";
   delivery_address_id?: string;
+  delivery_address?: OrderDestination | null;
   assigned_driver_id?: string;
   estimated_completion_at?: string;
   admin_notes?: string;
@@ -67,8 +84,10 @@ export interface Order {
   deliverySlotBookingId?: number;
   priority?: boolean;
   priorityFee?: number;
+  speedTier?: string;
   deliveryType?: "local" | "external";
-  destinations?: { address?: string; label?: string; [key: string]: unknown }[];
+  extraDestinationFee?: number;
+  destinations?: OrderDestination[];
 }
 
 export interface OrderItem {
@@ -82,6 +101,7 @@ export interface OrderItem {
   three_d_specs?: ThreeDSpecs;
   quantity: number;
   total_price: number;
+  delivery_address?: OrderDestination | null;
 }
 
 export interface OrderStatusHistory {

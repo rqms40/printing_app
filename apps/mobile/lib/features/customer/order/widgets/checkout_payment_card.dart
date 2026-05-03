@@ -5,6 +5,8 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/auth/providers/auth_provider.dart';
+import 'package:printing_app/features/customer/order/providers/checkout_payment_settings_provider.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
 import 'package:printing_app/features/customer/order/sheets/payment_method_sheet.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_section_card.dart';
@@ -24,8 +26,13 @@ String _labelFor(PaymentMethod m) {
   }
 }
 
-class CheckoutPaymentCard extends ConsumerWidget {
-  const CheckoutPaymentCard({super.key, this.tutorialKey, this.sectionKey, this.methodPickerKey});
+class CheckoutPaymentCard extends ConsumerStatefulWidget {
+  const CheckoutPaymentCard({
+    super.key,
+    this.tutorialKey,
+    this.sectionKey,
+    this.methodPickerKey,
+  });
 
   /// Spotlights the whole payment section (kept for compatibility, may be unused).
   final GlobalKey? sectionKey;
@@ -37,129 +44,210 @@ class CheckoutPaymentCard extends ConsumerWidget {
   final GlobalKey? methodPickerKey;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CheckoutPaymentCard> createState() =>
+      _CheckoutPaymentCardState();
+}
+
+class _CheckoutPaymentCardState extends ConsumerState<CheckoutPaymentCard> {
+  void _syncCheckoutPayment({
+    required PaymentMethod? defaultMethod,
+    required bool creditsOnlyMode,
+    required bool settingsReady,
+  }) {
+    if (!settingsReady) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final current = ref.read(checkoutProvider).paymentMethod;
+      final notifier = ref.read(checkoutProvider.notifier);
+
+      if (creditsOnlyMode &&
+          current != null &&
+          current != PaymentMethod.gridCredits) {
+        notifier.clearPaymentMethod();
+        return;
+      }
+
+      if (current == null &&
+          defaultMethod != null &&
+          (!creditsOnlyMode || defaultMethod == PaymentMethod.gridCredits)) {
+        notifier.setPaymentMethod(defaultMethod);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(checkoutProvider);
+    final settings = ref.watch(checkoutPaymentSettingsProvider);
+    final defaultMethod = ref.watch(
+      authProvider.select((state) => state.user?.defaultPaymentMethod),
+    );
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
     final method = state.paymentMethod;
+    final creditsOnlyMode = settings.valueOrNull?.creditsOnlyMode ?? false;
+
+    _syncCheckoutPayment(
+      defaultMethod: defaultMethod,
+      creditsOnlyMode: creditsOnlyMode,
+      settingsReady: settings.hasValue,
+    );
 
     return KeyedSubtree(
-      key: sectionKey,
+      key: widget.sectionKey,
       child: KeyedSubtree(
-      key: tutorialKey,
-      child: CheckoutSectionCard(
-      title: 'Payment method',
-      trailing: GestureDetector(
-        onTap: () async {
-          final result = await PaymentMethodSheet.show(context, current: method);
-          if (result != null) {
-            ref.read(checkoutProvider.notifier).setPaymentMethod(result);
-          }
-        },
-        child: Text(
-          'Change',
-          style: AppTypography.body.copyWith(
-            color: colors.brand,
-            fontWeight: FontWeight.w700,
-            fontSize: 14,
+        key: widget.tutorialKey,
+        child: CheckoutSectionCard(
+          title: 'Payment method',
+          trailing: GestureDetector(
+            onTap: () => _openPaymentSheet(context, method),
+            child: Text(
+              'Change',
+              style: AppTypography.body.copyWith(
+                color: colors.brand,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              KeyedSubtree(
+                key: widget.methodPickerKey,
+                child: InkWell(
+                  borderRadius: AppRadius.borderLg,
+                  onTap: () => _openPaymentSheet(context, method),
+                  child: Container(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: colors.background,
+                      borderRadius: AppRadius.borderLg,
+                      border: Border.all(
+                        color: colors.outline.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: method == null
+                        ? _EmptyPaymentRow(colors: colors)
+                        : _SelectedPaymentRow(method: method, colors: colors),
+                  ),
+                ),
+              ),
+              if (creditsOnlyMode) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'GCash, Maya, and Cash on Delivery are unavailable right now. Use GRID Credits for checkout.',
+                  style: AppTypography.caption.copyWith(
+                    color: colors.onSurfaceDim,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ),
-      child: KeyedSubtree(
-        key: methodPickerKey,
-        child: InkWell(
-        borderRadius: AppRadius.borderLg,
-        onTap: () async {
-          final result = await PaymentMethodSheet.show(context, current: method);
-          if (result != null) {
-            ref.read(checkoutProvider.notifier).setPaymentMethod(result);
-          }
-        },
-        child: Container(
-          padding: const EdgeInsets.all(AppSpacing.md),
+    );
+  }
+
+  Future<void> _openPaymentSheet(
+    BuildContext context,
+    PaymentMethod? method,
+  ) async {
+    final result = await PaymentMethodSheet.show(context, current: method);
+    if (!mounted || result == null) return;
+    ref.read(checkoutProvider.notifier).setPaymentMethod(result);
+  }
+}
+
+class _EmptyPaymentRow extends StatelessWidget {
+  const _EmptyPaymentRow({required this.colors});
+
+  final AppColorSet colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
           decoration: BoxDecoration(
-            color: colors.background,
-            borderRadius: AppRadius.borderLg,
+            color: colors.surface,
+            shape: BoxShape.circle,
             border: Border.all(color: colors.outline.withValues(alpha: 0.4)),
           ),
-          child: method == null
-              ? Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: colors.surface,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                            color: colors.outline.withValues(alpha: 0.4)),
-                      ),
-                      child: Center(
-                        child: HugeIcon(
-                          icon: HugeIcons.strokeRoundedAdd01,
-                          size: 16,
-                          color: colors.onSurfaceDim,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        'Choose payment method',
-                        style: AppTypography.bodyBold.copyWith(
-                          color: colors.onSurfaceDim,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                    HugeIcon(
-                      icon: HugeIcons.strokeRoundedArrowRight01,
-                      size: 18,
-                      color: colors.onSurfaceDim,
-                    ),
-                  ],
-                )
-              : Row(
-                  children: [
-                    PaymentMethodGlyph(method: method, size: 36),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _labelFor(method),
-                            style: AppTypography.bodyBold.copyWith(
-                              color: colors.onBackground,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            method == PaymentMethod.gridCredits
-                                ? 'Pay with your GRID balance'
-                                : 'Tap Change to pick another',
-                            style: AppTypography.caption.copyWith(
-                              color: colors.onSurfaceDim,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    HugeIcon(
-                      icon: HugeIcons.strokeRoundedTick02,
-                      size: 18,
-                      color: colors.brand,
-                    ),
-                  ],
-                ),
+          child: Center(
+            child: HugeIcon(
+              icon: HugeIcons.strokeRoundedAdd01,
+              size: 16,
+              color: colors.onSurfaceDim,
+            ),
+          ),
         ),
-        ), // InkWell
-      ), // methodPickerKey KeyedSubtree
-    ),
-    ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Text(
+            'Choose payment method',
+            style: AppTypography.bodyBold.copyWith(
+              color: colors.onSurfaceDim,
+              fontSize: 14,
+            ),
+          ),
+        ),
+        HugeIcon(
+          icon: HugeIcons.strokeRoundedArrowRight01,
+          size: 18,
+          color: colors.onSurfaceDim,
+        ),
+      ],
+    );
+  }
+}
+
+class _SelectedPaymentRow extends StatelessWidget {
+  const _SelectedPaymentRow({required this.method, required this.colors});
+
+  final PaymentMethod method;
+  final AppColorSet colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        PaymentMethodGlyph(method: method, size: 36),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _labelFor(method),
+                style: AppTypography.bodyBold.copyWith(
+                  color: colors.onBackground,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                method == PaymentMethod.gridCredits
+                    ? 'Pay with your GRID balance'
+                    : 'Tap Change to pick another',
+                style: AppTypography.caption.copyWith(
+                  color: colors.onSurfaceDim,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+        ),
+        HugeIcon(
+          icon: HugeIcons.strokeRoundedTick02,
+          size: 18,
+          color: colors.brand,
+        ),
+      ],
     );
   }
 }

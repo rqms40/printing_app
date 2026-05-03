@@ -9,6 +9,7 @@ import {
 import { ChatMessage, SenderRole } from './entities/chat-message.entity';
 import { OpenRouterService } from './openrouter.service';
 import { GRIDBOT_REFUSAL, GRIDBOT_SYSTEM_PROMPT } from './gridbot.prompt';
+import { Order } from '../orders/entities/order.entity';
 
 const makeConvRepo = () => ({
   create: jest.fn(),
@@ -24,16 +25,21 @@ const makeMsgRepo = () => ({
   find: jest.fn(),
   update: jest.fn(),
 });
+const makeOrderRepo = () => ({
+  findOne: jest.fn(),
+});
 
 describe('ChatService', () => {
   let service: ChatService;
   let convRepo: ReturnType<typeof makeConvRepo>;
   let msgRepo: ReturnType<typeof makeMsgRepo>;
+  let orderRepo: ReturnType<typeof makeOrderRepo>;
   let openRouter: { complete: jest.Mock };
 
   beforeEach(async () => {
     convRepo = makeConvRepo();
     msgRepo = makeMsgRepo();
+    orderRepo = makeOrderRepo();
     openRouter = { complete: jest.fn() };
 
     const module = await Test.createTestingModule({
@@ -41,6 +47,7 @@ describe('ChatService', () => {
         ChatService,
         { provide: getRepositoryToken(Conversation), useValue: convRepo },
         { provide: getRepositoryToken(ChatMessage), useValue: msgRepo },
+        { provide: getRepositoryToken(Order), useValue: orderRepo },
         { provide: OpenRouterService, useValue: openRouter },
       ],
     }).compile();
@@ -91,6 +98,181 @@ describe('ChatService', () => {
           assignedRiderId: null,
         }),
       );
+    });
+  });
+
+  describe('getOrCreateCustomerOrderConversation', () => {
+    it('creates a rider conversation by deriving the assigned rider from the order', async () => {
+      orderRepo.findOne.mockResolvedValue({
+        id: 42,
+        userId: 5,
+        assignedDriverId: 12,
+      });
+      convRepo.findOne.mockResolvedValue(null);
+      const built = {
+        customerId: 5,
+        type: ConversationType.RIDER,
+        orderId: 42,
+        assignedRiderId: 12,
+        status: ConversationStatus.OPEN,
+      };
+      convRepo.create.mockReturnValue(built);
+      convRepo.save.mockResolvedValue({ id: 7, ...built });
+
+      const result = await service.getOrCreateCustomerOrderConversation(5, 42);
+
+      expect(convRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customerId: 5,
+          type: ConversationType.RIDER,
+          orderId: 42,
+          assignedRiderId: 12,
+          status: ConversationStatus.OPEN,
+        }),
+      );
+      expect(result.id).toBe(7);
+    });
+
+    it('creates an admin order conversation when no rider is assigned yet', async () => {
+      orderRepo.findOne.mockResolvedValue({
+        id: 42,
+        userId: 5,
+        assignedDriverId: null,
+      });
+      convRepo.findOne.mockResolvedValue(null);
+      convRepo.create.mockReturnValue({
+        customerId: 5,
+        type: ConversationType.ADMIN,
+        orderId: 42,
+        assignedRiderId: null,
+        status: ConversationStatus.OPEN,
+      });
+      convRepo.save.mockResolvedValue({
+        id: 8,
+        customerId: 5,
+        type: ConversationType.ADMIN,
+        orderId: 42,
+      });
+
+      const result = await service.getOrCreateCustomerOrderConversation(5, 42);
+
+      expect(convRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: ConversationType.ADMIN,
+          assignedRiderId: null,
+        }),
+      );
+      expect(result.id).toBe(8);
+    });
+
+    it('returns an existing open order conversation instead of creating a duplicate', async () => {
+      const existing = {
+        id: 9,
+        customerId: 5,
+        type: ConversationType.RIDER,
+        orderId: 42,
+        assignedRiderId: 12,
+      };
+      orderRepo.findOne.mockResolvedValue({
+        id: 42,
+        userId: 5,
+        assignedDriverId: 12,
+      });
+      convRepo.findOne.mockResolvedValue(existing);
+
+      const result = await service.getOrCreateCustomerOrderConversation(5, 42);
+
+      expect(result).toBe(existing);
+      expect(convRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('can resolve an order conversation from the public order ref', async () => {
+      orderRepo.findOne.mockResolvedValue({
+        id: 42,
+        orderId: 'ORD-10005',
+        userId: 5,
+        assignedDriverId: null,
+      });
+      convRepo.findOne.mockResolvedValue(null);
+      convRepo.create.mockReturnValue({
+        customerId: 5,
+        type: ConversationType.ADMIN,
+        orderId: 42,
+        assignedRiderId: null,
+        status: ConversationStatus.OPEN,
+      });
+      convRepo.save.mockResolvedValue({
+        id: 12,
+        customerId: 5,
+        type: ConversationType.ADMIN,
+        orderId: 42,
+      });
+
+      await service.getOrCreateCustomerOrderConversation(5, 'ORD-10005');
+
+      expect(orderRepo.findOne).toHaveBeenCalledWith({
+        where: [{ orderId: 'ORD-10005' }],
+      });
+    });
+
+    it('rejects a customer opening another customer order chat', async () => {
+      orderRepo.findOne.mockResolvedValue({
+        id: 42,
+        userId: 99,
+        assignedDriverId: 12,
+      });
+
+      await expect(
+        service.getOrCreateCustomerOrderConversation(5, 42),
+      ).rejects.toThrow('You can only chat about your own orders');
+    });
+  });
+
+  describe('getOrCreateDriverOrderConversation', () => {
+    it('creates a rider conversation for the assigned driver user', async () => {
+      orderRepo.findOne.mockResolvedValue({
+        id: 42,
+        userId: 5,
+        assignedDriverId: 12,
+      });
+      convRepo.findOne.mockResolvedValue(null);
+      convRepo.create.mockReturnValue({
+        customerId: 5,
+        type: ConversationType.RIDER,
+        orderId: 42,
+        assignedRiderId: 12,
+        status: ConversationStatus.OPEN,
+      });
+      convRepo.save.mockResolvedValue({
+        id: 11,
+        customerId: 5,
+        type: ConversationType.RIDER,
+        orderId: 42,
+        assignedRiderId: 12,
+      });
+
+      const result = await service.getOrCreateDriverOrderConversation(12, 42);
+
+      expect(result.id).toBe(11);
+      expect(convRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customerId: 5,
+          type: ConversationType.RIDER,
+          assignedRiderId: 12,
+        }),
+      );
+    });
+
+    it('rejects a driver who is not assigned to the order', async () => {
+      orderRepo.findOne.mockResolvedValue({
+        id: 42,
+        userId: 5,
+        assignedDriverId: 12,
+      });
+
+      await expect(
+        service.getOrCreateDriverOrderConversation(99, 42),
+      ).rejects.toThrow('Only the assigned rider can chat about this order');
     });
   });
 

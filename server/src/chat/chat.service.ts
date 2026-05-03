@@ -1,6 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Repository } from 'typeorm';
+import { FindOptionsWhere, Not, Repository } from 'typeorm';
 import {
   Conversation,
   ConversationStatus,
@@ -10,6 +15,7 @@ import { ChatMessage, SenderRole } from './entities/chat-message.entity';
 import { OpenRouterService } from './openrouter.service';
 import { GRIDBOT_SYSTEM_PROMPT } from './gridbot.prompt';
 import { CreateConversationDto } from './dto/create-conversation.dto';
+import { Order } from '../orders/entities/order.entity';
 
 @Injectable()
 export class ChatService {
@@ -20,6 +26,8 @@ export class ChatService {
     private readonly convRepo: Repository<Conversation>,
     @InjectRepository(ChatMessage)
     private readonly msgRepo: Repository<ChatMessage>,
+    @InjectRepository(Order)
+    private readonly orderRepo: Repository<Order>,
     private readonly openRouter: OpenRouterService,
   ) {}
 
@@ -27,14 +35,121 @@ export class ChatService {
     customerId: number,
     dto: CreateConversationDto,
   ): Promise<Conversation> {
+    if (dto.orderId != null && dto.type !== ConversationType.AI) {
+      return this.getOrCreateCustomerOrderConversation(
+        customerId,
+        dto.orderId,
+        dto.type,
+      );
+    }
+
     const conv = this.convRepo.create({
       customerId,
       type: dto.type,
       orderId: dto.orderId ?? null,
+      assignedRiderId: null,
+      status: ConversationStatus.OPEN,
+    });
+    return this.convRepo.save(conv);
+  }
+
+  async getOrCreateCustomerOrderConversation(
+    customerId: number,
+    orderRef: string | number,
+    requestedType?: ConversationType,
+  ): Promise<Conversation> {
+    const order = await this.findOrderByRef(orderRef);
+    if (order.userId !== customerId) {
+      throw new ForbiddenException('You can only chat about your own orders');
+    }
+
+    const type =
+      requestedType ??
+      (order.assignedDriverId
+        ? ConversationType.RIDER
+        : ConversationType.ADMIN);
+
+    if (type === ConversationType.RIDER && !order.assignedDriverId) {
+      throw new BadRequestException('No rider is assigned to this order yet');
+    }
+
+    return this.getOrCreateOrderConversation({
+      customerId: order.userId,
+      orderId: order.id,
+      type,
       assignedRiderId:
-        dto.type === ConversationType.RIDER
-          ? (dto.assignedRiderId ?? null)
-          : null,
+        type === ConversationType.RIDER ? order.assignedDriverId : null,
+    });
+  }
+
+  async getOrCreateDriverOrderConversation(
+    driverUserId: number,
+    orderRef: string | number,
+  ): Promise<Conversation> {
+    const order = await this.findOrderByRef(orderRef);
+    if (order.assignedDriverId !== driverUserId) {
+      throw new ForbiddenException(
+        'Only the assigned rider can chat about this order',
+      );
+    }
+
+    return this.getOrCreateOrderConversation({
+      customerId: order.userId,
+      orderId: order.id,
+      type: ConversationType.RIDER,
+      assignedRiderId: driverUserId,
+    });
+  }
+
+  private async findOrderByRef(orderRef: string | number): Promise<Order> {
+    const ref = String(orderRef).trim();
+    const numericId = Number(ref);
+    const where: FindOptionsWhere<Order>[] = [];
+    if (Number.isInteger(numericId) && numericId > 0) {
+      where.push({ id: numericId });
+    }
+    where.push({ orderId: ref });
+
+    const order = await this.orderRepo.findOne({ where });
+    if (!order) throw new NotFoundException('Order not found');
+    return order;
+  }
+
+  private async getOrCreateOrderConversation({
+    customerId,
+    orderId,
+    type,
+    assignedRiderId,
+  }: {
+    customerId: number;
+    orderId: number;
+    type: ConversationType;
+    assignedRiderId: number | null;
+  }): Promise<Conversation> {
+    const where: FindOptionsWhere<Conversation> = {
+      customerId,
+      orderId,
+      type,
+      status: Not(ConversationStatus.CLOSED),
+    };
+    if (type === ConversationType.RIDER) {
+      if (assignedRiderId == null) {
+        throw new BadRequestException('No rider is assigned to this order yet');
+      }
+      where.assignedRiderId = assignedRiderId;
+    }
+
+    const existing = await this.convRepo.findOne({
+      where,
+      order: { updatedAt: 'DESC' },
+    });
+    if (existing) return existing;
+
+    const conv = this.convRepo.create({
+      customerId,
+      type,
+      orderId,
+      assignedRiderId,
       status: ConversationStatus.OPEN,
     });
     return this.convRepo.save(conv);

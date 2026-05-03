@@ -16,6 +16,7 @@ class DriverInfoCard extends StatelessWidget {
     this.plateNumber = 'ABC 1234',
     this.phoneNumber = '+639181234567',
     this.eta = '~10 min',
+    this.onChat,
   });
 
   final String driverName;
@@ -23,6 +24,7 @@ class DriverInfoCard extends StatelessWidget {
   final String plateNumber;
   final String phoneNumber;
   final String eta;
+  final VoidCallback? onChat;
 
   Future<void> _callDriver() async {
     final uri = Uri.parse('tel:$phoneNumber');
@@ -104,18 +106,29 @@ class DriverInfoCard extends StatelessWidget {
           // Phone number
           Row(
             children: [
-              HugeIcon(icon: HugeIcons.strokeRoundedCall, size: 16, color: colors.onSurfaceDim),
+              HugeIcon(
+                icon: HugeIcons.strokeRoundedCall,
+                size: 16,
+                color: colors.onSurfaceDim,
+              ),
               const SizedBox(width: AppSpacing.sm),
               Text(
                 phoneNumber,
-                style: AppTypography.body.copyWith(
-                  color: colors.onSurfaceDim,
-                ),
+                style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
               ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-          // Call driver button
+          if (onChat != null) ...[
+            AppButton(
+              label: 'Chat Driver',
+              icon: HugeIcons.strokeRoundedMessage01,
+              variant: AppButtonVariant.primary,
+              isFullWidth: true,
+              onTap: onChat,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
           AppButton(
             label: 'Call Driver',
             icon: HugeIcons.strokeRoundedCall,

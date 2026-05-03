@@ -100,18 +100,25 @@ final liveDeliveryMapProvider =
       if (onTheWayOrder == null) return LiveDeliveryMapState.idle();
 
       // Resolve delivery address lat/lng
-      final address = onTheWayOrder.deliveryAddressId != null
+      final temporaryAddress = onTheWayOrder.deliveryAddress;
+      final address =
+          temporaryAddress == null && onTheWayOrder.deliveryAddressId != null
           ? addresses
                 .where((a) => a.id == onTheWayOrder.deliveryAddressId)
                 .firstOrNull
           : null;
 
-      if (address == null) return LiveDeliveryMapState.idle();
-      if (address.latitude == 0 && address.longitude == 0) {
+      final latitude = temporaryAddress?.latitude ?? address?.latitude;
+      final longitude = temporaryAddress?.longitude ?? address?.longitude;
+
+      if (latitude == null || longitude == null) {
+        return LiveDeliveryMapState.idle();
+      }
+      if (latitude == 0 && longitude == 0) {
         return LiveDeliveryMapState.idle();
       }
 
-      final destPoint = LatLng(address.latitude, address.longitude);
+      final destPoint = LatLng(latitude, longitude);
 
       // Fetch route (cached by RoutingService). driverPoint is resolved by
       // consumers watching locationProvider directly.

@@ -99,6 +99,41 @@ void main() {
       expect(minimalOrder.orderTypeLabel, 'Paper Printing');
     });
 
+    test('single item with batch logistics is not a customer batch order', () {
+      final order = Order(
+        id: '7',
+        orderId: 'ORD-10007',
+        userId: '1',
+        batchOrderId: '1',
+        batchId: 'BATCH-10001',
+        category: 'paper',
+        fileName: 'bad-design-hero.png',
+        quantity: 1,
+        totalPrice: 2,
+        deliveryFee: 0,
+        paymentMethod: PaymentMethod.gcash,
+        paymentStatus: PaymentStatus.pending,
+        orderStatus: OrderStatus.orderPlaced,
+        deliveryOption: 'delivery',
+        createdAt: now,
+        updatedAt: now,
+        items: const [
+          OrderLineItem(
+            id: '7',
+            orderId: 'ORD-10007',
+            category: 'paper',
+            fileName: 'bad-design-hero.png',
+            quantity: 1,
+            totalPrice: 2,
+          ),
+        ],
+      );
+
+      expect(order.isBatchOrder, isFalse);
+      expect(order.itemCount, 1);
+      expect(order.orderId, 'ORD-10007');
+    });
+
     test('copyWith updates specified fields only', () {
       final updated = sampleOrder.copyWith(
         orderStatus: OrderStatus.printingInProgress,

@@ -186,18 +186,6 @@ class _ChatSelectScreenState extends ConsumerState<ChatSelectScreen> {
                     onTap: () => _startChat(ConversationType.admin),
                     colors: colors,
                   ),
-                  if (widget.orderId != null) ...[
-                    const SizedBox(height: AppSpacing.md),
-                    _OptionCard(
-                      icon: chatIconForConversation(ConversationType.rider),
-                      title: 'Rider Support',
-                      description: 'Ask about pickup, delivery, or handoff',
-                      isPrimary: false,
-                      isDisabled: _isCreating,
-                      onTap: () => _startChat(ConversationType.rider),
-                      colors: colors,
-                    ),
-                  ],
                 ],
               ),
               if (_isCreating)
@@ -312,9 +300,7 @@ class _OptionCard extends StatelessWidget {
             borderRadius: AppRadius.borderMd,
             border: isPrimary
                 ? null
-                : Border.all(
-                    color: colors.outline.withValues(alpha: 0.6),
-                  ),
+                : Border.all(color: colors.outline.withValues(alpha: 0.6)),
           ),
           child: Row(
             children: [

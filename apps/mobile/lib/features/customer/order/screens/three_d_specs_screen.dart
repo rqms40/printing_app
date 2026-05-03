@@ -56,9 +56,10 @@ class _ThreeDSpecsScreenState extends ConsumerState<ThreeDSpecsScreen> {
 
   void _ensureDefaults(ProductCategory category) {
     if (_initializedSlug == category.slug) return;
+    final flow = ref.read(orderFlowProvider);
     _values
       ..clear()
-      ..addAll(category.defaultSpecValues());
+      ..addAll(category.defaultSpecValues(overrides: flow.specs));
     _initializedSlug = category.slug;
   }
 

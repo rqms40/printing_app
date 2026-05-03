@@ -41,16 +41,38 @@ export class MarketingSchedulerService {
     const lastSent = new Date(notif.lastSentAt).getTime();
     const current = now.getTime();
     const diffHours = (current - lastSent) / (1000 * 60 * 60);
+    const intervalHours = this.frequencyToHours(notif.frequency);
 
-    switch (notif.frequency) {
-      case '6h':
-        return diffHours >= 6;
+    return intervalHours === null ? false : diffHours >= intervalHours;
+  }
+
+  private frequencyToHours(frequency: string): number | null {
+    switch (frequency) {
       case 'daily':
-        return diffHours >= 24;
+        return 24;
       case 'monthly':
-        return diffHours >= 24 * 30;
+        return 24 * 30;
       default:
-        return false;
+        break;
+    }
+
+    const match = frequency.match(/^(\d+)([hdwm])$/);
+    if (!match) return null;
+
+    const count = Number(match[1]);
+    if (!Number.isFinite(count) || count < 1) return null;
+
+    switch (match[2]) {
+      case 'h':
+        return count;
+      case 'd':
+        return count * 24;
+      case 'w':
+        return count * 24 * 7;
+      case 'm':
+        return count * 24 * 30;
+      default:
+        return null;
     }
   }
 
@@ -61,7 +83,10 @@ export class MarketingSchedulerService {
     const users = await this.usersService.findAll();
     const tokens = users
       .map((u: any) => u.fcmToken)
-      .filter((token: any): token is string => !!token && typeof token === 'string' && token.trim() !== '');
+      .filter(
+        (token: any): token is string =>
+          !!token && typeof token === 'string' && token.trim() !== '',
+      );
 
     if (tokens.length === 0) {
       this.logger.warn('No FCM tokens found for any user. Skipping push.');

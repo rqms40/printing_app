@@ -30,6 +30,11 @@ double _readDouble(dynamic value, double fallback) {
   return fallback;
 }
 
+String? _normalizeOptionalText(String? value) {
+  final text = value?.trim();
+  return text == null || text.isEmpty ? null : text;
+}
+
 /// Holds the full state for the 6-step order creation flow.
 class OrderFlowState {
   const OrderFlowState({
@@ -52,6 +57,7 @@ class OrderFlowState {
     this.totalPrice = 0,
     this.deliveryFee = 0,
     this.printMode = 'fitToPage',
+    this.specialInstructions,
   });
 
   /// Current step index (0-5).
@@ -92,6 +98,9 @@ class OrderFlowState {
   /// `'fitToPage'` or `'actualSize'`.
   final String printMode;
 
+  /// Customer-facing instructions for this specific print job.
+  final String? specialInstructions;
+
   OrderFlowState copyWith({
     int? currentStep,
     String? category,
@@ -112,6 +121,7 @@ class OrderFlowState {
     double? totalPrice,
     double? deliveryFee,
     String? printMode,
+    String? specialInstructions,
     // Allow explicit null clearing
     bool clearPaperSpecs = false,
     bool clearThreeDSpecs = false,
@@ -119,6 +129,7 @@ class OrderFlowState {
     bool clearFile = false,
     bool clearAddress = false,
     bool clearPaymentMethod = false,
+    bool clearSpecialInstructions = false,
   }) {
     return OrderFlowState(
       currentStep: currentStep ?? this.currentStep,
@@ -148,6 +159,9 @@ class OrderFlowState {
       totalPrice: totalPrice ?? this.totalPrice,
       deliveryFee: deliveryFee ?? this.deliveryFee,
       printMode: printMode ?? this.printMode,
+      specialInstructions: clearSpecialInstructions
+          ? null
+          : (specialInstructions ?? this.specialInstructions),
     );
   }
 
@@ -208,6 +222,7 @@ class OrderFlowState {
       'totalPrice': totalPrice,
       'deliveryFee': deliveryFee,
       'printMode': printMode,
+      'specialInstructions': specialInstructions,
     };
   }
 
@@ -300,6 +315,9 @@ class OrderFlowState {
       totalPrice: (map['totalPrice'] as num?)?.toDouble() ?? 0,
       deliveryFee: (map['deliveryFee'] as num?)?.toDouble() ?? 0,
       printMode: map['printMode'] as String? ?? 'fitToPage',
+      specialInstructions: _normalizeOptionalText(
+        map['specialInstructions']?.toString(),
+      ),
     );
   }
 }
@@ -329,6 +347,8 @@ class OrderFlowNotifier extends StateNotifier<OrderFlowState> {
       clearPaperSpecs: true,
       clearThreeDSpecs: true,
       clearFile: true,
+      clearSpecialInstructions: true,
+      printMode: 'fitToPage',
     );
     _saveDraft();
   }
@@ -419,6 +439,15 @@ class OrderFlowNotifier extends StateNotifier<OrderFlowState> {
 
   void setFileMetadataId(int? id) {
     state = state.copyWith(fileMetadataId: id);
+    _saveDraft();
+  }
+
+  void setSpecialInstructions(String? value) {
+    final text = _normalizeOptionalText(value);
+    state = state.copyWith(
+      specialInstructions: text,
+      clearSpecialInstructions: text == null,
+    );
     _saveDraft();
   }
 

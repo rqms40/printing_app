@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/customer/chat/providers/chat_provider.dart';
 import 'package:printing_app/features/driver/active_delivery/widgets/delivery_map_view.dart';
 import 'package:printing_app/features/driver/active_delivery/widgets/status_action_bar.dart';
 import 'package:printing_app/features/driver/deliveries/providers/deliveries_provider.dart';
@@ -22,6 +24,39 @@ class ActiveDeliveryScreen extends ConsumerWidget {
     return Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
+  }
+
+  Future<void> _openCustomerChat(
+    BuildContext context,
+    WidgetRef ref,
+    String orderId,
+    String orderRef,
+    DeliveryStatus status,
+  ) async {
+    final apiOrderRef = int.tryParse(orderId) == null ? orderRef : orderId;
+
+    final conv = await ref
+        .read(chatProvider.notifier)
+        .openOrderConversation(apiOrderRef);
+    if (!context.mounted) return;
+    if (conv == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open customer chat. Please try again.'),
+        ),
+      );
+      return;
+    }
+
+    final uri = Uri(
+      path: '/driver/chat/${conv.id}',
+      queryParameters: {
+        'type': conv.type.name,
+        'orderRef': orderRef,
+        'orderStatus': status.displayName,
+      },
+    );
+    context.push(uri.toString());
   }
 
   @override
@@ -107,6 +142,30 @@ class ActiveDeliveryScreen extends ConsumerWidget {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => _openCustomerChat(
+                      context,
+                      ref,
+                      activeDelivery.orderId,
+                      order.orderId,
+                      activeDelivery.status,
+                    ),
+                    icon: HugeIcon(
+                      icon: HugeIcons.strokeRoundedMessage01,
+                      size: 18,
+                      color: colors.accent,
+                    ),
+                    label: Text(
+                      'Chat customer',
+                      style: AppTypography.button.copyWith(
+                        color: colors.accent,
+                      ),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.sm),
 

@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/customer/chat/models/chat_message.dart';
 import 'package:printing_app/features/customer/chat/models/conversation.dart';
 import 'package:printing_app/features/customer/chat/providers/conversation_provider.dart';
 import 'package:printing_app/features/customer/chat/widgets/chat_avatar.dart';
@@ -21,10 +20,18 @@ class ConversationScreen extends ConsumerStatefulWidget {
     super.key,
     required this.conversationId,
     required this.conversationType,
+    this.currentUserRole = SenderRole.customer,
+    this.titleOverride,
+    this.subtitleOverride,
+    this.backFallback = '/customer/chat',
   });
 
   final int conversationId;
   final ConversationType conversationType;
+  final SenderRole currentUserRole;
+  final String? titleOverride;
+  final String? subtitleOverride;
+  final String backFallback;
 
   @override
   ConsumerState<ConversationScreen> createState() => _ConversationScreenState();
@@ -49,11 +56,13 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       ? AppColors.dark
       : AppColors.light;
 
-  String get _title => switch (widget.conversationType) {
-    ConversationType.ai => 'GridBot AI',
-    ConversationType.admin => 'Human Support',
-    ConversationType.rider => 'Rider Support',
-  };
+  String get _title =>
+      widget.titleOverride ??
+      switch (widget.conversationType) {
+        ConversationType.ai => 'GridBot AI',
+        ConversationType.admin => 'Human Support',
+        ConversationType.rider => 'Rider Support',
+      };
 
   String get _emptyTitle => switch (widget.conversationType) {
     ConversationType.ai => 'Ask GridBot anything',
@@ -74,7 +83,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
     } else {
-      context.go('/customer/chat');
+      context.go(widget.backFallback);
     }
   }
 
@@ -144,9 +153,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       _updateCanSend();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not pick image: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not pick image: $e')));
     }
   }
 
@@ -407,9 +416,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                               ),
                               const SizedBox(width: 5),
                               Text(
-                                convState.isConnected
-                                    ? 'Online'
-                                    : 'Reconnecting…',
+                                widget.subtitleOverride ??
+                                    (convState.isConnected
+                                        ? 'Online'
+                                        : 'Reconnecting…'),
                                 style: AppTypography.caption.copyWith(
                                   color: colors.onSurfaceDim,
                                   fontSize: 11,
@@ -469,7 +479,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                     if (i == messages.length && convState.isBotTyping) {
                       return const TypingIndicator();
                     }
-                    return MessageBubble(message: messages[i]);
+                    return MessageBubble(
+                      message: messages[i],
+                      currentUserRole: widget.currentUserRole,
+                    );
                   },
                 );
               }(),
@@ -541,9 +554,7 @@ class _ConnectionBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      decoration: BoxDecoration(
-        color: colors.warning.withValues(alpha: 0.1),
-      ),
+      decoration: BoxDecoration(color: colors.warning.withValues(alpha: 0.1)),
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.md,
         vertical: AppSpacing.sm,
@@ -693,11 +704,7 @@ class _AttachmentOption extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               alignment: Alignment.center,
-              child: HugeIcon(
-                icon: icon,
-                size: 20,
-                color: colors.accent,
-              ),
+              child: HugeIcon(icon: icon, size: 20, color: colors.accent),
             ),
             const SizedBox(width: 14),
             Text(

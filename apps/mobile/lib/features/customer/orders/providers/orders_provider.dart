@@ -28,10 +28,15 @@ const cancellableStatuses = {OrderStatus.orderPlaced, OrderStatus.fileVerified};
 
 dynamic _readJsonValue(
   Map<String, dynamic> json,
-  String camelKey, [
-  String? snakeKey,
+  String primaryKey, [
+  String? secondaryKey,
+  String? tertiaryKey,
+  String? quaternaryKey,
 ]) {
-  return json[camelKey] ?? (snakeKey != null ? json[snakeKey] : null);
+  for (final key in [primaryKey, ?secondaryKey, ?tertiaryKey, ?quaternaryKey]) {
+    if (json.containsKey(key)) return json[key];
+  }
+  return null;
 }
 
 int _readInt(dynamic value, int fallback) {
@@ -44,6 +49,23 @@ double _readDouble(dynamic value, double fallback) {
   if (value is num) return value.toDouble();
   if (value is String) return double.tryParse(value) ?? fallback;
   return fallback;
+}
+
+String? _normalizeOptionalText(dynamic value) {
+  final text = value?.toString().trim();
+  return text == null || text.isEmpty ? null : text;
+}
+
+String? _readSpecialInstructions(
+  Map<String, dynamic> json,
+  Map<String, dynamic> specs,
+  Map<String, String> specDisplayValues,
+) {
+  return _normalizeOptionalText(
+        _readJsonValue(json, 'specialInstructions', 'special_instructions'),
+      ) ??
+      _normalizeOptionalText(specDisplayValues['special_instructions']) ??
+      _normalizeOptionalText(specs['special_instructions']);
 }
 
 OrderStatus _parseOrderStatus(String value) {
@@ -60,6 +82,12 @@ OrderStatus _parseOrderStatus(String value) {
 
 PaymentMethod _parsePaymentMethod(String value) {
   final normalized = value.replaceAll(RegExp(r'[_-]'), '').toLowerCase();
+  if (normalized == 'credits' || normalized == 'gridcredit') {
+    return PaymentMethod.gridCredits;
+  }
+  if (normalized == 'cash' || normalized == 'cashondelivery') {
+    return PaymentMethod.cod;
+  }
   return PaymentMethod.values.firstWhere(
     (e) => e.name.toLowerCase() == normalized,
     orElse: () => PaymentMethod.cod,
@@ -183,6 +211,81 @@ ThreeDSpecs? _parseThreeDSpecs(Map<String, dynamic>? json) {
   );
 }
 
+OrderDeliveryAddress? _parseOrderDeliveryAddress(Map<String, dynamic> json) {
+  final deliveryAddress = _readJsonValue(
+    json,
+    'deliveryAddress',
+    'delivery_address',
+  );
+  final destination = _readJsonValue(json, 'destination');
+  final raw = deliveryAddress is Map
+      ? Map<String, dynamic>.from(deliveryAddress)
+      : destination is Map
+      ? Map<String, dynamic>.from(destination)
+      : null;
+  if (raw == null) return null;
+
+  final fullAddress = _readJsonValue(
+    raw,
+    'fullAddress',
+    'full_address',
+  )?.toString().trim();
+  final city = _readJsonValue(raw, 'city')?.toString().trim();
+  if (fullAddress == null || fullAddress.isEmpty) return null;
+  if (city == null || city.isEmpty) return null;
+
+  return OrderDeliveryAddress(
+    label: _normalizeOptionalText(_readJsonValue(raw, 'label')),
+    fullAddress: fullAddress,
+    barangay: _normalizeOptionalText(_readJsonValue(raw, 'barangay')),
+    city: city,
+    province: _normalizeOptionalText(_readJsonValue(raw, 'province')),
+    zipCode: _normalizeOptionalText(_readJsonValue(raw, 'zipCode', 'zip_code')),
+    landmark: _normalizeOptionalText(_readJsonValue(raw, 'landmark')),
+    latitude: _readDouble(_readJsonValue(raw, 'latitude'), 0),
+    longitude: _readDouble(_readJsonValue(raw, 'longitude'), 0),
+  );
+}
+
+AssignedDeliverySlot? _parseAssignedSlot(Map<String, dynamic> json) {
+  final rawSlot = _readJsonValue(json, 'assignedSlot', 'assigned_slot');
+  if (rawSlot is! Map) return null;
+  final slot = Map<String, dynamic>.from(rawSlot);
+  final templateValue =
+      _readJsonValue(slot, 'slotTemplateId', 'slot_template_id') ??
+      _readJsonValue(slot, 'templateId', 'template_id');
+  final date =
+      (_readJsonValue(slot, 'date') ??
+              _readJsonValue(slot, 'slotDate', 'slot_date'))
+          ?.toString()
+          .trim();
+  final startTime = _readJsonValue(
+    slot,
+    'startTime',
+    'start_time',
+  )?.toString().trim();
+  final endTime = _readJsonValue(
+    slot,
+    'endTime',
+    'end_time',
+  )?.toString().trim();
+  if (templateValue == null ||
+      date == null ||
+      date.isEmpty ||
+      startTime == null ||
+      startTime.isEmpty ||
+      endTime == null ||
+      endTime.isEmpty) {
+    return null;
+  }
+  return AssignedDeliverySlot(
+    slotTemplateId: _readInt(templateValue, 0),
+    date: date,
+    startTime: startTime,
+    endTime: endTime,
+  );
+}
+
 Map<String, dynamic> _parseSpecValues(dynamic raw) {
   if (raw is! List) return const {};
   final specs = <String, dynamic>{};
@@ -246,7 +349,9 @@ Order _parseOrder(Map<String, dynamic> json) {
     )?.toString(),
     batchId:
         _readJsonValue(json, 'batchId', 'batch_id')?.toString() ??
-        batchJson?['batchRef']?.toString(),
+        (batchJson == null
+            ? null
+            : _readJsonValue(batchJson, 'batchRef', 'batch_ref')?.toString()),
     category: category,
     fileUrl: _readJsonValue(json, 'fileUrl', 'file_url')?.toString(),
     fileName: _readJsonValue(json, 'fileName', 'file_name')?.toString(),
@@ -323,6 +428,7 @@ Order _parseOrder(Map<String, dynamic> json) {
       'deliveryAddressId',
       'delivery_address_id',
     )?.toString(),
+    deliveryAddress: _parseOrderDeliveryAddress(json),
     assignedDriverId: _readJsonValue(
       json,
       'assignedDriverId',
@@ -350,7 +456,13 @@ Order _parseOrder(Map<String, dynamic> json) {
       'trackingLink',
       'tracking_link',
     )?.toString(),
+    assignedSlot: _parseAssignedSlot(json),
     items: items,
+    specialInstructions: _readSpecialInstructions(
+      json,
+      specs,
+      specDisplayValues,
+    ),
     createdAt: _parseDate(_readJsonValue(json, 'createdAt', 'created_at')),
     updatedAt: _parseDate(_readJsonValue(json, 'updatedAt', 'updated_at')),
   );
@@ -403,6 +515,11 @@ OrderLineItem _parseOrderLineItem(Map<String, dynamic> json) {
           _readJsonValue(json, 'totalPrice', 'total_price')?.toString() ?? '0',
         ) ??
         0,
+    specialInstructions: _readSpecialInstructions(
+      json,
+      specs,
+      specDisplayValues,
+    ),
   );
 }
 
@@ -420,6 +537,7 @@ OrderLineItem _lineItemFromOrder(Order order) {
     threeDSpecs: order.threeDSpecs,
     quantity: order.quantity,
     totalPrice: order.totalPrice,
+    specialInstructions: order.specialInstructions,
   );
 }
 
@@ -448,6 +566,12 @@ List<Order> _groupBatchOrders(List<Order> orders) {
     final children = entry.value
       ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     final first = children.first;
+
+    if (children.length == 1) {
+      grouped.add(first.copyWith(items: [_lineItemFromOrder(first)]));
+      continue;
+    }
+
     final latest = children.reduce(
       (a, b) => a.updatedAt.isAfter(b.updatedAt) ? a : b,
     );
@@ -548,8 +672,20 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   /// Emits a `subscribe` event for every order currently in state.
   /// Safe to call multiple times — idempotent on the server.
   void _subscribeToAllOrders() {
+    final orderRefs = <String>{};
     for (final order in state) {
-      WebSocketService.instance.subscribeToOrder(order.orderId);
+      if (order.orderId.isNotEmpty) {
+        orderRefs.add(order.orderId);
+      }
+      for (final item in order.lineItems) {
+        if (item.orderId.isNotEmpty) {
+          orderRefs.add(item.orderId);
+        }
+      }
+    }
+
+    for (final orderRef in orderRefs) {
+      WebSocketService.instance.subscribeToOrder(orderRef);
     }
   }
 
@@ -571,9 +707,13 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       );
       debugPrint('OrdersProvider: Loaded ${state.length} orders from API');
     } catch (e) {
-      debugPrint('OrdersProvider: API failed ($e), using MockData');
       if (!mounted) return;
-      state = List.of(MockData.orders);
+      if (state.isEmpty) {
+        debugPrint('OrdersProvider: API failed ($e), using MockData');
+        state = List.of(MockData.orders);
+      } else {
+        debugPrint('OrdersProvider: API failed ($e), preserving current state');
+      }
     }
     // Subscribe to all loaded orders in case socket connected before fetch completed.
     _subscribeToAllOrders();
@@ -598,6 +738,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
           'fileName': order.fileName,
           'fileUrl': order.fileUrl,
           'fileMetadataId': order.fileMetadataId,
+          'specialInstructions': order.specialInstructions,
           'paperSpecs': order.paperSpecs != null
               ? {
                   'paperSize': order.paperSpecs!.paperSize.name,
@@ -657,6 +798,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     DeliverySpeedTier speedTier = DeliverySpeedTier.standard,
     List<Map<String, dynamic>> destinations = const [],
     List<int> itemDestinationIndices = const [],
+    Map<String, dynamic>? temporaryAddress,
   }) async {
     final addressId = _deliveryAddressIdValue(deliveryAddressId);
 
@@ -680,6 +822,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       'slotTemplateId': ?slotTemplateId,
       'slotDate': ?slotDate,
       if (destinations.isNotEmpty) 'destinations': destinations,
+      'temporaryAddress': ?temporaryAddress,
     };
 
     final Response response;
@@ -697,6 +840,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
 
     final data = Map<String, dynamic>.from(response.data as Map);
     final batchId = data['batchId']?.toString();
+    final batchAssignedSlot = _parseAssignedSlot(data);
     final rawOrders = data['orders'] as List<dynamic>? ?? const [];
     final createdOrders = _groupBatchOrders(
       rawOrders.map((json) {
@@ -704,7 +848,11 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
         if (batchId != null && batchId.isNotEmpty) {
           orderJson['batchId'] = batchId;
         }
-        return _parseOrder(orderJson);
+        final order = _parseOrder(orderJson);
+        if (batchAssignedSlot == null || order.assignedSlot != null) {
+          return order;
+        }
+        return order.copyWith(assignedSlot: batchAssignedSlot);
       }).toList(),
     );
 
@@ -722,23 +870,45 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     if (state.paymentMethod == null) {
       throw StateError('paymentMethod is required');
     }
-    final addressIdString = state.singleAddress?.id;
+    final scheduledSlot = state.speedTier == DeliverySpeedTier.scheduled
+        ? state.scheduledSlot
+        : null;
+    final hasTemporaryAddress =
+        state.mode == DeliveryMode.delivery &&
+        (state.temporaryAddress?.isValid ?? false);
+    final addressIdString = hasTemporaryAddress
+        ? null
+        : state.singleAddress?.id;
 
     // Multi-drop: expand each item by quantity so each copy lands at its
     // assigned destination. Build parallel `items` and `itemDestinationIndices`
     // lists indexed into `destinations`.
     if (state.mode == DeliveryMode.multidrop) {
-      final destinations = state.drops
-          .where((d) => d.addressId != null)
-          .map((d) => {'addressId': d.addressId!, 'label': d.label})
+      final validDrops = state.drops
+          .where((drop) => drop.hasValidDestination)
           .toList();
-      final dropIndexById = <String, int>{};
-      var validIdx = 0;
-      for (final d in state.drops) {
-        if (d.addressId != null) {
-          dropIndexById[d.id] = validIdx;
-          validIdx++;
+      if (validDrops.length != state.drops.length) {
+        throw StateError('Every drop needs a delivery destination');
+      }
+      final destinations = validDrops.map((drop) {
+        final addressId = drop.addressId;
+        if (addressId != null && addressId > 0) {
+          return <String, dynamic>{'addressId': addressId, 'label': drop.label};
         }
+
+        final temporaryAddress = drop.temporaryAddress;
+        if (temporaryAddress != null && temporaryAddress.isValid) {
+          return <String, dynamic>{
+            'label': temporaryAddress.displayLabel,
+            'address': temporaryAddress.toJson(),
+          };
+        }
+
+        throw StateError('Invalid drop destination');
+      }).toList();
+      final dropIndexById = <String, int>{};
+      for (var index = 0; index < validDrops.length; index++) {
+        dropIndexById[validDrops[index].id] = index;
       }
 
       final expandedItems = <CartItem>[];
@@ -748,9 +918,9 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
         for (var copy = 0; copy < item.quantity; copy++) {
           final dropId = copy < assignments.length ? assignments[copy] : null;
           final di = dropId == null ? null : dropIndexById[dropId];
-          // Skip copies whose drop has no address — caller should block this
-          // upstream, but be defensive.
-          if (di == null) continue;
+          if (di == null) {
+            throw StateError('Every item copy needs a delivery destination');
+          }
           expandedItems.add(item.copyWith(quantity: 1));
           indices.add(di);
         }
@@ -762,8 +932,8 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
         deliveryAddressId: null,
         deliveryFee: 0,
         paymentMethod: state.paymentMethod!,
-        slotTemplateId: state.scheduledSlot?.templateId,
-        slotDate: state.scheduledSlot?.date,
+        slotTemplateId: scheduledSlot?.templateId,
+        slotDate: scheduledSlot?.date,
         priority: state.speedTier == DeliverySpeedTier.priority,
         speedTier: state.speedTier,
         destinations: destinations,
@@ -777,10 +947,13 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       deliveryAddressId: addressIdString,
       deliveryFee: 0,
       paymentMethod: state.paymentMethod!,
-      slotTemplateId: state.scheduledSlot?.templateId,
-      slotDate: state.scheduledSlot?.date,
+      slotTemplateId: scheduledSlot?.templateId,
+      slotDate: scheduledSlot?.date,
       priority: state.speedTier == DeliverySpeedTier.priority,
       speedTier: state.speedTier,
+      temporaryAddress: hasTemporaryAddress
+          ? state.temporaryAddress!.toJson()
+          : null,
     );
   }
 
@@ -817,6 +990,7 @@ Map<String, dynamic> _cartItemPayload(CartItem item) {
     'fileName': item.fileName,
     'fileUrl': item.filePath,
     'fileMetadataId': item.fileMetadataId,
+    'specialInstructions': item.specialInstructions,
     'specs': item.specs.isEmpty ? null : item.specs,
     'paperSpecs': item.paperSpecs != null
         ? {

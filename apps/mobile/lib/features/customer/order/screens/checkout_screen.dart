@@ -48,7 +48,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       (_, next) => _pipelineState = next,
       fireImmediately: true,
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowCheckoutTutorial());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _maybeShowCheckoutTutorial(),
+    );
   }
 
   @override
@@ -120,7 +122,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           child: FeatureOverlayCard(
             heroIcon: HugeIcons.strokeRoundedLocation01,
             title: 'Add a delivery address',
-            body: "Save your address once and you'll never have to type it again — let's add your first one before we continue.",
+            body:
+                "Save your address once and you'll never have to type it again — let's add your first one before we continue.",
             iconTiles: const [],
             ctaLabel: 'Add address →',
             showSkip: true,
@@ -179,7 +182,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           targetKey: _multiDropKey,
           icon: HugeIcons.strokeRoundedLocation01,
           title: 'Pick a delivery option',
-          body: "Choose Delivery, Pickup, or Multi-drop. Tap 'Got it' to continue.",
+          body:
+              "Choose Delivery, Pickup, or Multi-drop. Tap 'Got it' to continue.",
           // After ensureVisible scrolls the segmented to the top of the
           // viewport, the bubble sits cleanly below it.
           align: ContentAlign.bottom,
@@ -207,7 +211,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           targetKey: _paymentMethodKey,
           icon: HugeIcons.strokeRoundedWallet01,
           title: 'Payment method',
-          body: 'Choose how you want to pay — tap here to switch between GRID Credits and GCash.',
+          body:
+              'Choose how you want to pay — tap here to switch between GRID Credits and GCash.',
           align: ContentAlign.bottom,
           advanceOnSpotlightTap: false,
         ),
@@ -233,7 +238,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           targetKey: _placeOrderKey,
           icon: HugeIcons.strokeRoundedCheckmarkCircle02,
           title: 'Place Order',
-          body: "That's the Place Order button — tap it whenever you're ready to send your order.",
+          body:
+              "That's the Place Order button — tap it whenever you're ready to send your order.",
           align: ContentAlign.top,
           advanceOnSpotlightTap: false,
         ),
@@ -256,8 +262,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           targetKey: _multiDropTabKey,
           icon: HugeIcons.strokeRoundedRoute01,
           title: 'Multi-drop Delivery',
-          body: 'Tap Multi-drop to send prints to different addresses in one order — one rider handles all the stops.',
-          align: ContentAlign.top,
+          body:
+              'Tap Multi-drop to send prints to different addresses in one order — one rider handles all the stops.',
+          align: ContentAlign.bottom,
           advanceOnSpotlightTap: false,
           // Tighten the spotlight: the GestureDetector spans a full
           // one-third of the segmented row. paddingFocus: 4 keeps the
@@ -272,7 +279,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text("One more thing — tap 'Choose payment method' to see GRID Credits."),
+              content: Text(
+                "One more thing — tap 'Choose payment method' to see GRID Credits.",
+              ),
               duration: Duration(seconds: 4),
             ),
           );
@@ -292,10 +301,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     // Sections sit on `surface`. The thin gap between sections uses
     // `background` (a darker shade), giving a Grab/FoodPanda-style
     // segmented look without bordered cards.
-    final divider = Container(
-      height: 8,
-      color: colors.background,
-    );
+    final divider = Container(height: 8, color: colors.background);
 
     final isEmpty = state.items.isEmpty;
 
@@ -331,7 +337,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: colors.outline.withValues(alpha: 0.2)),
+          child: Container(
+            height: 1,
+            color: colors.outline.withValues(alpha: 0.2),
+          ),
         ),
       ),
       body: SafeArea(
@@ -343,7 +352,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 children: [
                   CheckoutItemsCard(tutorialKey: _itemsKey),
                   divider,
-                  CheckoutDeliveryCard(segmentedKey: _multiDropKey, multiDropTabKey: _multiDropTabKey),
+                  CheckoutDeliveryCard(
+                    segmentedKey: _multiDropKey,
+                    multiDropTabKey: _multiDropTabKey,
+                  ),
                   divider,
                   const CheckoutSpeedCard(),
                   divider,
@@ -376,8 +388,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       ref.read(checkoutProvider.notifier).reset();
       if (!context.mounted) return;
       final refs = placed.map((o) => o.orderId).toList();
-      final firstNumericId =
-          placed.isEmpty ? null : int.tryParse(placed.first.id);
+      final firstNumericId = placed.isEmpty
+          ? null
+          : int.tryParse(placed.first.id);
       context.go(
         '/customer/order/success',
         extra: {'orderRefs': refs, 'firstOrderId': firstNumericId},

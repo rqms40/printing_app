@@ -24,7 +24,10 @@ import { DeliveryDestination } from './entities/delivery-destination.entity';
 import { DeliverySlotsService } from '../delivery-slots/delivery-slots.service';
 import { DeliverySettingsService } from '../delivery-slots/delivery-settings.service';
 import { DeliverySlotsGateway } from '../delivery-slots/delivery-slots.gateway';
-import { CancellationClosedException } from '../delivery-slots/exceptions';
+import {
+  CancellationClosedException,
+  SlotFullException,
+} from '../delivery-slots/exceptions';
 import { BatchOrder } from './entities/batch-order.entity';
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
 import { FileMetadata } from '../files/entities/file-metadata.entity';
@@ -256,7 +259,13 @@ describe('OrdersService', () => {
             sum + item.printSubtotal,
           0,
         );
-        return { items, subtotal, deliveryFee: 0, serviceFee: 0, total: subtotal };
+        return {
+          items,
+          subtotal,
+          deliveryFee: 0,
+          serviceFee: 0,
+          total: subtotal,
+        };
       }),
     };
     orderItemsRepo.create.mockImplementation((data) => data as OrderItem);
@@ -279,7 +288,10 @@ describe('OrdersService', () => {
             if (entity?.name === 'ThreeDSpec') return threeDSpecsRepo;
             if (entity?.name === 'BatchOrder') return batchRepo;
             if (entity?.name === 'DeliveryDestination')
-              return { create: jest.fn((d) => d), save: jest.fn(async (d) => ({ id: 1, ...d })) };
+              return {
+                create: jest.fn((d) => d),
+                save: jest.fn(async (d) => ({ id: 1, ...d })),
+              };
             throw new Error(`Unexpected repository ${entity?.name}`);
           },
         }),
@@ -305,11 +317,18 @@ describe('OrdersService', () => {
         { provide: getRepositoryToken(Address), useValue: addressRepo },
         {
           provide: getRepositoryToken(DeliveryDestination),
-          useValue: { create: jest.fn((d) => d), save: jest.fn(async (d) => ({ id: 1, ...d })) },
+          useValue: {
+            create: jest.fn((d) => d),
+            save: jest.fn(async (d) => ({ id: 1, ...d })),
+          },
         },
         {
           provide: getRepositoryToken(FileMetadata),
-          useValue: { findOneOrFail: jest.fn().mockResolvedValue({ model3dWidthMm: null }) },
+          useValue: {
+            findOneOrFail: jest
+              .fn()
+              .mockResolvedValue({ model3dWidthMm: null }),
+          },
         },
         { provide: OrdersGateway, useValue: gateway },
         { provide: FirebaseService, useValue: firebaseService },
@@ -326,7 +345,16 @@ describe('OrdersService', () => {
           provide: DeliverySlotsService,
           useValue: {
             bookSlot: jest.fn().mockResolvedValue({ id: 1 }),
-            getAvailability: jest.fn().mockResolvedValue([{ templateId: 1, startTime: '00:00:00', endTime: '23:59:00', capacity: 10, bookedCount: 0, isFull: false }]),
+            getAvailability: jest.fn().mockResolvedValue([
+              {
+                templateId: 1,
+                startTime: '00:00:00',
+                endTime: '23:59:00',
+                capacity: 10,
+                bookedCount: 0,
+                isFull: false,
+              },
+            ]),
           },
         },
         {
@@ -345,7 +373,14 @@ describe('OrdersService', () => {
         },
         {
           provide: PrinterProfileService,
-          useValue: { getProfile: jest.fn().mockResolvedValue({ buildVolumeWidthMm: 999, buildVolumeDepthMm: 999, buildVolumeHeightMm: 999, maxFileSizeMb: 999 }) },
+          useValue: {
+            getProfile: jest.fn().mockResolvedValue({
+              buildVolumeWidthMm: 999,
+              buildVolumeDepthMm: 999,
+              buildVolumeHeightMm: 999,
+              maxFileSizeMb: 999,
+            }),
+          },
         },
         catalogPricingProvider(),
         { provide: CatalogPricingService, useValue: catalogPricingService },
@@ -434,6 +469,7 @@ describe('OrdersService', () => {
           fileName: 'deck.pdf',
           fileUrl: 'https://files/deck.pdf',
           fileMetadataId: 11,
+          specialInstructions: 'Trim to the crop marks.',
           paperSpecs: {
             paperSize: 'A4',
             colorMode: 'color',
@@ -547,6 +583,7 @@ describe('OrdersService', () => {
         expect.objectContaining({
           orderId: 1,
           category: 'paper',
+          specialInstructions: 'Trim to the crop marks.',
         }),
       );
       expect(orderItemsRepo.create).toHaveBeenCalledWith(
@@ -555,10 +592,16 @@ describe('OrdersService', () => {
           category: '3d',
         }),
       );
-      expect(result).toEqual({
-        batchId: 'BATCH-10001',
-        orders: [expect.objectContaining({ id: 1, category: 'batch' })],
-      });
+      expect(result).toEqual(
+        expect.objectContaining({
+          batchId: 'BATCH-10001',
+          orders: [expect.objectContaining({ id: 1, category: 'batch' })],
+          assignedSlot: expect.objectContaining({
+            bookingId: 1,
+            slotTemplateId: 1,
+          }),
+        }),
+      );
     });
 
     it('allocates shared deliveryFee to the aggregate order only', async () => {
@@ -643,7 +686,9 @@ describe('OrdersService', () => {
         where: { userId: 1 },
         relations: [
           'batchOrder',
+          'destination',
           'items',
+          'items.destination',
           'items.specValues',
         ],
         order: { createdAt: 'DESC' },
@@ -688,7 +733,9 @@ describe('OrdersService', () => {
         where: { id: 1 },
         relations: [
           'batchOrder',
+          'destination',
           'items',
+          'items.destination',
           'items.specValues',
         ],
       });
@@ -940,7 +987,10 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
   };
   const mockFilesService = { stampExpiry: jest.fn() };
   const mockUsersService = { findById: jest.fn(), getFcmToken: jest.fn() };
-  const mockGateway = { notifyOrderUpdate: jest.fn(), notifySurveyRequired: jest.fn() };
+  const mockGateway = {
+    notifyOrderUpdate: jest.fn(),
+    notifySurveyRequired: jest.fn(),
+  };
   const mockFirebase = { sendToDevice: jest.fn() };
   const mockCredits = {
     subtractCredits: jest.fn(),
@@ -1012,7 +1062,16 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
           provide: DeliverySlotsService,
           useValue: {
             bookSlot: jest.fn().mockResolvedValue({ id: 1 }),
-            getAvailability: jest.fn().mockResolvedValue([{ templateId: 1, startTime: '00:00:00', endTime: '23:59:00', capacity: 10, bookedCount: 0, isFull: false }]),
+            getAvailability: jest.fn().mockResolvedValue([
+              {
+                templateId: 1,
+                startTime: '00:00:00',
+                endTime: '23:59:00',
+                capacity: 10,
+                bookedCount: 0,
+                isFull: false,
+              },
+            ]),
           },
         },
         {
@@ -1031,7 +1090,14 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         },
         {
           provide: PrinterProfileService,
-          useValue: { getProfile: jest.fn().mockResolvedValue({ buildVolumeWidthMm: 999, buildVolumeDepthMm: 999, buildVolumeHeightMm: 999, maxFileSizeMb: 999 }) },
+          useValue: {
+            getProfile: jest.fn().mockResolvedValue({
+              buildVolumeWidthMm: 999,
+              buildVolumeDepthMm: 999,
+              buildVolumeHeightMm: 999,
+              maxFileSizeMb: 999,
+            }),
+          },
         },
         catalogPricingProvider(),
       ],
@@ -1148,7 +1214,9 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
     mockNotifications.create.mockResolvedValue({});
 
     try {
-      await expect(service.updateStatus(1, 'delivered')).resolves.toEqual(order);
+      await expect(service.updateStatus(1, 'delivered')).resolves.toEqual(
+        order,
+      );
 
       expect(mockNotifications.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1241,9 +1309,9 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       await service.updateStatus(1, 'delivered');
 
       // Verify at least one call was made with the survey_required metadata
-      const surveyCalls = (mockFirebase.sendToDevice as jest.Mock).mock.calls.filter(
-        (call: any[]) => call[3]?.type === 'survey_required',
-      );
+      const surveyCalls = (
+        mockFirebase.sendToDevice as jest.Mock
+      ).mock.calls.filter((call: any[]) => call[3]?.type === 'survey_required');
       expect(surveyCalls).toHaveLength(1);
       expect(surveyCalls[0][0]).toBe('fcm-xyz');
     });
@@ -1261,9 +1329,9 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       await service.updateStatus(1, 'delivered');
 
       expect(mockGateway.notifySurveyRequired).not.toHaveBeenCalled();
-      const surveyCalls = (mockNotifications.create as jest.Mock).mock.calls.filter(
-        (call: any[]) => call[0]?.type === 'survey_required',
-      );
+      const surveyCalls = (
+        mockNotifications.create as jest.Mock
+      ).mock.calls.filter((call: any[]) => call[0]?.type === 'survey_required');
       expect(surveyCalls).toHaveLength(0);
     });
   });
@@ -1301,7 +1369,19 @@ describe('createBatch with slot + destinations', () => {
   });
 
   const makeAddress = (id: number, lat: number, lng: number): Address =>
-    ({ id, userId: 1, latitude: lat, longitude: lng } as unknown as Address);
+    ({
+      id,
+      userId: 1,
+      label: id === 10 ? 'Saved Home' : `Saved ${id}`,
+      fullAddress: `${id} Saved Address`,
+      barangay: 'Barangay 1',
+      city: 'Davao City',
+      province: 'Davao del Sur',
+      zipCode: '8000',
+      landmark: 'Near the gate',
+      latitude: lat,
+      longitude: lng,
+    }) as unknown as Address;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -1350,19 +1430,32 @@ describe('createBatch with slot + destinations', () => {
     assignmentRepo = { find: jest.fn().mockResolvedValue([]) };
 
     addressRepo = {
-      findOne: jest.fn().mockImplementation(async ({ where }: any) =>
-        makeAddress(where.id, 7.07, 125.61),
-      ),
+      findOne: jest
+        .fn()
+        .mockImplementation(async ({ where }: any) =>
+          makeAddress(where.id, 7.07, 125.61),
+        ),
     };
 
     destinationRepo = {
-      create: jest.fn().mockImplementation((data) => data as DeliveryDestination),
+      create: jest
+        .fn()
+        .mockImplementation((data) => data as DeliveryDestination),
       save: jest.fn().mockImplementation(async (d) => ({ id: 200, ...d })),
     };
 
     slotsService = {
       bookSlot: jest.fn().mockResolvedValue({ id: 99 }),
-      getAvailability: jest.fn().mockResolvedValue([{ templateId: 1, startTime: '00:00:00', endTime: '23:59:00', capacity: 10, bookedCount: 0, isFull: false }]),
+      getAvailability: jest.fn().mockResolvedValue([
+        {
+          templateId: 1,
+          startTime: '00:00:00',
+          endTime: '23:59:00',
+          capacity: 10,
+          bookedCount: 0,
+          isFull: false,
+        },
+      ]),
     };
 
     settingsService = {
@@ -1437,7 +1530,9 @@ describe('createBatch with slot + destinations', () => {
         },
         {
           provide: NotificationsService,
-          useValue: { createForAllAdmins: jest.fn().mockResolvedValue(undefined) },
+          useValue: {
+            createForAllAdmins: jest.fn().mockResolvedValue(undefined),
+          },
         },
         {
           provide: TamSurveysService,
@@ -1454,7 +1549,14 @@ describe('createBatch with slot + destinations', () => {
         },
         {
           provide: PrinterProfileService,
-          useValue: { getProfile: jest.fn().mockResolvedValue({ buildVolumeWidthMm: 999, buildVolumeDepthMm: 999, buildVolumeHeightMm: 999, maxFileSizeMb: 999 }) },
+          useValue: {
+            getProfile: jest.fn().mockResolvedValue({
+              buildVolumeWidthMm: 999,
+              buildVolumeDepthMm: 999,
+              buildVolumeHeightMm: 999,
+              maxFileSizeMb: 999,
+            }),
+          },
         },
         catalogPricingProvider(),
       ],
@@ -1470,7 +1572,7 @@ describe('createBatch with slot + destinations', () => {
       return makeAddress(where.id, 7.07, 125.61);
     });
     settingsService.isInsideServiceArea
-      .mockResolvedValueOnce(true)   // destination[0] inside
+      .mockResolvedValueOnce(true) // destination[0] inside
       .mockResolvedValueOnce(false); // destination[1] outside
 
     const dto = {
@@ -1483,7 +1585,10 @@ describe('createBatch with slot + destinations', () => {
         { addressId: 10, label: 'Home' },
         { addressId: 11, label: 'Office' },
       ],
-      items: [makeItem({ destinationIndex: 0 }), makeItem({ destinationIndex: 1 })],
+      items: [
+        makeItem({ destinationIndex: 0 }),
+        makeItem({ destinationIndex: 1 }),
+      ],
     };
 
     await (service as any).createBatch(1, dto);
@@ -1513,13 +1618,24 @@ describe('createBatch with slot + destinations', () => {
       items: [makeItem({ destinationIndex: 0 })],
     };
 
-    await (service as any).createBatch(1, dto);
+    const result = await (service as any).createBatch(1, dto);
 
     expect(capturedBatch.deliveryType).toBe('local');
     expect(capturedBatch.slotBookingId).toBe(99);
+    expect(result.assignedSlot).toEqual(
+      expect.objectContaining({
+        bookingId: 99,
+        slotTemplateId: 1,
+        date: '2026-05-01',
+      }),
+    );
     expect(slotsService.bookSlot).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ slotTemplateId: 1, date: '2026-05-01', batchOrderId: 77 }),
+      expect.objectContaining({
+        slotTemplateId: 1,
+        date: '2026-05-01',
+        batchOrderId: 77,
+      }),
     );
   });
 
@@ -1586,6 +1702,517 @@ describe('createBatch with slot + destinations', () => {
     expect(capturedBatch.speedTier).toBe(DeliverySpeedTier.STANDARD);
   });
 
+  describe('standard delivery auto-slot assignment', () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('auto-books the nearest available same-day slot and returns assignedSlot', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-05-01T02:39:33Z'));
+      addressRepo.findOne.mockImplementation(async ({ where }: any) => {
+        if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address;
+        return makeAddress(where.id, 7.07, 125.61);
+      });
+      settingsService.isInsideServiceArea.mockResolvedValue(true);
+      slotsService.getAvailability!.mockResolvedValue([
+        {
+          templateId: 1,
+          startTime: '09:30:00',
+          endTime: '11:30:00',
+          capacity: 10,
+          bookedCount: 0,
+          isFull: false,
+        },
+        {
+          templateId: 2,
+          startTime: '14:00:00',
+          endTime: '16:00:00',
+          capacity: 10,
+          bookedCount: 0,
+          isFull: false,
+        },
+      ]);
+      slotsService.bookSlot!.mockResolvedValue({ id: 99 } as any);
+
+      const result = await (service as any).createBatch(1, {
+        paymentMethod: 'gcash',
+        deliveryOption: 'delivery',
+        deliveryAddressId: 9,
+        speedTier: DeliverySpeedTier.STANDARD,
+        items: [makeItem()],
+      });
+
+      expect(capturedBatch.slotBookingId).toBe(99);
+      expect(slotsService.bookSlot).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          slotTemplateId: 1,
+          date: '2026-05-01',
+          batchOrderId: 77,
+          priority: false,
+        }),
+      );
+      expect(result.assignedSlot).toEqual({
+        bookingId: 99,
+        slotTemplateId: 1,
+        date: '2026-05-01',
+        startTime: '09:30:00',
+        endTime: '11:30:00',
+      });
+      expect(slotsGateway.notifySlotUpdated).toHaveBeenCalledWith(
+        expect.objectContaining({
+          templateId: 1,
+          date: '2026-05-01',
+        }),
+      );
+    });
+
+    it('searches future PH dates when all same-day slots have ended', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-05-01T15:30:00Z'));
+      addressRepo.findOne.mockImplementation(async ({ where }: any) => {
+        if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address;
+        return makeAddress(where.id, 7.07, 125.61);
+      });
+      settingsService.isInsideServiceArea.mockResolvedValue(true);
+      slotsService.getAvailability!.mockImplementation(async (date: string) =>
+        date === '2026-05-01'
+          ? [
+              {
+                templateId: 1,
+                startTime: '09:30:00',
+                endTime: '11:30:00',
+                capacity: 10,
+                bookedCount: 0,
+                isFull: false,
+              },
+            ]
+          : [
+              {
+                templateId: 4,
+                startTime: '09:30:00',
+                endTime: '11:30:00',
+                capacity: 10,
+                bookedCount: 0,
+                isFull: false,
+              },
+            ],
+      );
+      slotsService.bookSlot!.mockResolvedValue({ id: 100 } as any);
+
+      const result = await (service as any).createBatch(1, {
+        paymentMethod: 'gcash',
+        deliveryOption: 'delivery',
+        deliveryAddressId: 9,
+        speedTier: DeliverySpeedTier.STANDARD,
+        items: [makeItem()],
+      });
+
+      expect(slotsService.getAvailability).toHaveBeenCalledWith('2026-05-01');
+      expect(slotsService.getAvailability).toHaveBeenCalledWith('2026-05-02');
+      expect(slotsService.bookSlot).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          slotTemplateId: 4,
+          date: '2026-05-02',
+        }),
+      );
+      expect(result.assignedSlot).toEqual(
+        expect.objectContaining({
+          bookingId: 100,
+          slotTemplateId: 4,
+          date: '2026-05-02',
+        }),
+      );
+    });
+
+    it('moves to the next candidate when capacity is lost during booking', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-05-01T02:39:33Z'));
+      addressRepo.findOne.mockImplementation(async ({ where }: any) => {
+        if (where.id === 9) return { id: 9, userId: 1 } as unknown as Address;
+        return makeAddress(where.id, 7.07, 125.61);
+      });
+      settingsService.isInsideServiceArea.mockResolvedValue(true);
+      slotsService.getAvailability!.mockResolvedValue([
+        {
+          templateId: 1,
+          startTime: '09:30:00',
+          endTime: '11:30:00',
+          capacity: 10,
+          bookedCount: 0,
+          isFull: false,
+        },
+        {
+          templateId: 2,
+          startTime: '14:00:00',
+          endTime: '16:00:00',
+          capacity: 10,
+          bookedCount: 0,
+          isFull: false,
+        },
+      ]);
+      slotsService
+        .bookSlot!.mockRejectedValueOnce(new SlotFullException())
+        .mockResolvedValueOnce({ id: 101 } as any);
+
+      const result = await (service as any).createBatch(1, {
+        paymentMethod: 'gcash',
+        deliveryOption: 'delivery',
+        deliveryAddressId: 9,
+        speedTier: DeliverySpeedTier.STANDARD,
+        items: [makeItem()],
+      });
+
+      expect(slotsService.bookSlot).toHaveBeenCalledTimes(2);
+      expect(slotsService.bookSlot).toHaveBeenNthCalledWith(
+        1,
+        expect.anything(),
+        expect.objectContaining({ slotTemplateId: 1 }),
+      );
+      expect(slotsService.bookSlot).toHaveBeenNthCalledWith(
+        2,
+        expect.anything(),
+        expect.objectContaining({ slotTemplateId: 2 }),
+      );
+      expect(capturedBatch.slotBookingId).toBe(101);
+      expect(result.assignedSlot).toEqual(
+        expect.objectContaining({
+          bookingId: 101,
+          slotTemplateId: 2,
+          date: '2026-05-01',
+        }),
+      );
+    });
+  });
+
+  it('persists a temporary pinned address as a destination snapshot', async () => {
+    settingsService.isInsideServiceArea.mockResolvedValue(true);
+
+    const dto = {
+      paymentMethod: 'gcash',
+      deliveryOption: 'delivery',
+      slotTemplateId: 1,
+      slotDate: '2026-05-01',
+      temporaryAddress: {
+        label: 'Temporary drop',
+        fullAddress: 'Unit 12, Jacinto Extension, Davao City',
+        city: 'Davao City',
+        landmark: 'Beside the blue gate',
+        latitude: 7.0731,
+        longitude: 125.6128,
+      },
+      items: [makeItem()],
+    };
+
+    await (service as any).createBatch(1, dto);
+
+    expect(addressRepo.findOne).not.toHaveBeenCalled();
+    expect(settingsService.isInsideServiceArea).toHaveBeenCalledWith(
+      7.0731,
+      125.6128,
+    );
+    expect(capturedBatch.deliveryAddressId).toBeUndefined();
+    expect(destinationRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        batchOrderId: 77,
+        addressId: null,
+        label: 'Temporary drop',
+        fullAddress: 'Unit 12, Jacinto Extension, Davao City',
+        city: 'Davao City',
+        landmark: 'Beside the blue gate',
+        latitude: 7.0731,
+        longitude: 125.6128,
+        sortOrder: 0,
+      }),
+    );
+    expect(ordersRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deliveryAddressId: undefined,
+        destinationId: 200,
+      }),
+    );
+  });
+
+  it('persists mixed saved and temporary multidrop destinations', async () => {
+    addressRepo.findOne.mockResolvedValueOnce(makeAddress(10, 7.07, 125.61));
+    let nextDestinationId = 200;
+    destinationRepo.save.mockImplementation(async (d) => ({
+      id: nextDestinationId++,
+      ...d,
+    }));
+    settingsService.isInsideServiceArea.mockResolvedValue(true);
+
+    const dto = {
+      paymentMethod: 'gcash',
+      deliveryOption: 'delivery',
+      slotTemplateId: 1,
+      slotDate: '2026-05-01',
+      destinations: [
+        { addressId: 10, label: 'Home' },
+        {
+          label: 'Event booth',
+          address: {
+            fullAddress: 'SMX Booth A12, Davao City',
+            city: 'Davao City',
+            landmark: 'Near loading bay',
+            latitude: 7.0731,
+            longitude: 125.6128,
+          },
+        },
+      ],
+      items: [
+        makeItem({ destinationIndex: 0 }),
+        makeItem({ destinationIndex: 1 }),
+      ],
+    };
+
+    await (service as any).createBatch(1, dto);
+
+    expect(addressRepo.findOne).toHaveBeenCalledWith({
+      where: { id: 10, userId: 1 },
+    });
+    expect(settingsService.isInsideServiceArea).toHaveBeenNthCalledWith(
+      1,
+      7.07,
+      125.61,
+    );
+    expect(settingsService.isInsideServiceArea).toHaveBeenNthCalledWith(
+      2,
+      7.0731,
+      125.6128,
+    );
+    expect(destinationRepo.create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        batchOrderId: 77,
+        addressId: 10,
+        label: 'Home',
+        fullAddress: '10 Saved Address',
+        city: 'Davao City',
+        latitude: 7.07,
+        longitude: 125.61,
+        sortOrder: 0,
+      }),
+    );
+    expect(destinationRepo.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        batchOrderId: 77,
+        addressId: null,
+        label: 'Event booth',
+        fullAddress: 'SMX Booth A12, Davao City',
+        city: 'Davao City',
+        landmark: 'Near loading bay',
+        latitude: 7.0731,
+        longitude: 125.6128,
+        sortOrder: 1,
+      }),
+    );
+    expect(orderItemsRepo.create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        destinationId: 200,
+      }),
+    );
+    expect(orderItemsRepo.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        destinationId: 201,
+      }),
+    );
+    expect(capturedBatch.extraDestinationFee).toBe(30);
+  });
+
+  it('rejects a destination with both saved and temporary address data', async () => {
+    await expect(
+      (service as any).createBatch(1, {
+        paymentMethod: 'gcash',
+        deliveryOption: 'delivery',
+        slotTemplateId: 1,
+        slotDate: '2026-05-01',
+        destinations: [
+          {
+            addressId: 10,
+            address: {
+              fullAddress: 'SMX Booth A12, Davao City',
+              city: 'Davao City',
+              latitude: 7.0731,
+              longitude: 125.6128,
+            },
+          },
+        ],
+        items: [makeItem({ destinationIndex: 0 })],
+      }),
+    ).rejects.toThrow(
+      'Choose either a saved address or a temporary address for each destination',
+    );
+  });
+
+  it('rejects item destinationIndex values outside the destination list', async () => {
+    addressRepo.findOne.mockResolvedValueOnce(makeAddress(10, 7.07, 125.61));
+
+    await expect(
+      (service as any).createBatch(1, {
+        paymentMethod: 'gcash',
+        deliveryOption: 'delivery',
+        slotTemplateId: 1,
+        slotDate: '2026-05-01',
+        destinations: [{ addressId: 10, label: 'Home' }],
+        items: [makeItem({ destinationIndex: 1 })],
+      }),
+    ).rejects.toThrow('Invalid destination index');
+  });
+
+  it('classifies a saved single delivery address with service-area checks', async () => {
+    addressRepo.findOne.mockResolvedValueOnce(makeAddress(9, 7.0731, 125.6128));
+    settingsService.isInsideServiceArea.mockResolvedValueOnce(false);
+
+    await (service as any).createBatch(1, {
+      paymentMethod: 'gcash',
+      deliveryOption: 'delivery',
+      deliveryAddressId: 9,
+      slotTemplateId: 1,
+      slotDate: '2026-05-01',
+      items: [makeItem()],
+    });
+
+    expect(settingsService.isInsideServiceArea).toHaveBeenCalledWith(
+      7.0731,
+      125.6128,
+    );
+    expect(capturedBatch.deliveryType).toBe('external');
+    expect(slotsService.bookSlot).not.toHaveBeenCalled();
+    expect(destinationRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        batchOrderId: 77,
+        addressId: 9,
+        sortOrder: 0,
+      }),
+    );
+  });
+
+  it('rejects delivery checkout without saved or temporary address', async () => {
+    await expect(
+      (service as any).createBatch(1, {
+        paymentMethod: 'gcash',
+        deliveryOption: 'delivery',
+        slotTemplateId: 1,
+        slotDate: '2026-05-01',
+        items: [makeItem()],
+      }),
+    ).rejects.toThrow('Delivery address is required');
+  });
+
+  it('rejects delivery checkout with both saved and temporary addresses', async () => {
+    addressRepo.findOne.mockResolvedValueOnce(makeAddress(9, 7.0731, 125.6128));
+
+    await expect(
+      (service as any).createBatch(1, {
+        paymentMethod: 'gcash',
+        deliveryOption: 'delivery',
+        deliveryAddressId: 9,
+        temporaryAddress: {
+          fullAddress: 'Unit 12, Jacinto Extension, Davao City',
+          city: 'Davao City',
+          latitude: 7.0731,
+          longitude: 125.6128,
+        },
+        slotTemplateId: 1,
+        slotDate: '2026-05-01',
+        items: [makeItem()],
+      }),
+    ).rejects.toThrow('Choose either a saved address or a temporary address');
+  });
+
+  it('rejects top-level temporary address together with destinations', async () => {
+    await expect(
+      (service as any).createBatch(1, {
+        paymentMethod: 'gcash',
+        deliveryOption: 'delivery',
+        temporaryAddress: {
+          fullAddress: 'Unit 12, Jacinto Extension, Davao City',
+          city: 'Davao City',
+          latitude: 7.0731,
+          longitude: 125.6128,
+        },
+        destinations: [{ addressId: 10, label: 'Home' }],
+        items: [makeItem({ destinationIndex: 0 })],
+      }),
+    ).rejects.toThrow(
+      'Choose either a temporary address or delivery destinations',
+    );
+  });
+
+  it('rejects empty destination entries', async () => {
+    await expect(
+      (service as any).createBatch(1, {
+        paymentMethod: 'gcash',
+        deliveryOption: 'delivery',
+        slotTemplateId: 1,
+        slotDate: '2026-05-01',
+        destinations: [{}],
+        items: [makeItem({ destinationIndex: 0 })],
+      }),
+    ).rejects.toThrow('Invalid delivery address');
+  });
+
+  it('rejects saved destination addresses not owned by the user', async () => {
+    addressRepo.findOne.mockResolvedValueOnce(null);
+
+    await expect(
+      (service as any).createBatch(1, {
+        paymentMethod: 'gcash',
+        deliveryOption: 'delivery',
+        slotTemplateId: 1,
+        slotDate: '2026-05-01',
+        destinations: [{ addressId: 10, label: 'Home' }],
+        items: [makeItem({ destinationIndex: 0 })],
+      }),
+    ).rejects.toThrow('Invalid delivery address');
+  });
+
+  it('rejects temporary addresses for pickup checkout', async () => {
+    await expect(
+      (service as any).createBatch(1, {
+        paymentMethod: 'gcash',
+        deliveryOption: 'pickup',
+        temporaryAddress: {
+          fullAddress: 'Unit 12, Jacinto Extension, Davao City',
+          city: 'Davao City',
+          latitude: 7.0731,
+          longitude: 125.6128,
+        },
+        items: [makeItem()],
+      }),
+    ).rejects.toThrow('Delivery destinations are only allowed for delivery');
+  });
+
+  it('rejects destinations for pickup checkout', async () => {
+    await expect(
+      (service as any).createBatch(1, {
+        paymentMethod: 'gcash',
+        deliveryOption: 'pickup',
+        destinations: [{ addressId: 10, label: 'Home' }],
+        items: [makeItem({ destinationIndex: 0 })],
+      }),
+    ).rejects.toThrow('Delivery destinations are only allowed for delivery');
+  });
+
+  it('rejects invalid temporary address coordinates at service level', async () => {
+    await expect(
+      (service as any).createBatch(1, {
+        paymentMethod: 'gcash',
+        deliveryOption: 'delivery',
+        temporaryAddress: {
+          fullAddress: 'Unit 12, Jacinto Extension, Davao City',
+          city: 'Davao City',
+          latitude: 0,
+          longitude: 0,
+        },
+        items: [makeItem()],
+      }),
+    ).rejects.toThrow('Invalid temporary address');
+  });
+
   describe('Standard same-day bookable check (no slotTemplateId)', () => {
     afterEach(() => {
       jest.useRealTimers();
@@ -1605,9 +2232,30 @@ describe('createBatch with slot + destinations', () => {
       settingsService.isInsideServiceArea.mockResolvedValue(true);
       // Seeded slots (PH wall-clock): 09:30-11:30, 14:00-16:00, 21:00-23:00
       slotsService.getAvailability!.mockResolvedValue([
-        { templateId: 1, startTime: '09:30:00', endTime: '11:30:00', capacity: 10, bookedCount: 0, isFull: false },
-        { templateId: 2, startTime: '14:00:00', endTime: '16:00:00', capacity: 10, bookedCount: 0, isFull: false },
-        { templateId: 3, startTime: '21:00:00', endTime: '23:00:00', capacity: 10, bookedCount: 0, isFull: false },
+        {
+          templateId: 1,
+          startTime: '09:30:00',
+          endTime: '11:30:00',
+          capacity: 10,
+          bookedCount: 0,
+          isFull: false,
+        },
+        {
+          templateId: 2,
+          startTime: '14:00:00',
+          endTime: '16:00:00',
+          capacity: 10,
+          bookedCount: 0,
+          isFull: false,
+        },
+        {
+          templateId: 3,
+          startTime: '21:00:00',
+          endTime: '23:00:00',
+          capacity: 10,
+          bookedCount: 0,
+          isFull: false,
+        },
       ]);
 
       const dto = {
@@ -1617,7 +2265,12 @@ describe('createBatch with slot + destinations', () => {
         deliveryFee: 0,
         speedTier: DeliverySpeedTier.STANDARD,
         items: [
-          makeItem({ category: 'paper', quantity: 1, totalPrice: 2, fileName: 'TalaSora.png' }),
+          makeItem({
+            category: 'paper',
+            quantity: 1,
+            totalPrice: 2,
+            fileName: 'TalaSora.png',
+          }),
         ],
       };
 
@@ -1636,9 +2289,30 @@ describe('createBatch with slot + destinations', () => {
       });
       settingsService.isInsideServiceArea.mockResolvedValue(true);
       slotsService.getAvailability!.mockResolvedValue([
-        { templateId: 1, startTime: '09:30:00', endTime: '11:30:00', capacity: 10, bookedCount: 10, isFull: true },
-        { templateId: 2, startTime: '14:00:00', endTime: '16:00:00', capacity: 10, bookedCount: 10, isFull: true },
-        { templateId: 3, startTime: '21:00:00', endTime: '23:00:00', capacity: 10, bookedCount: 10, isFull: true },
+        {
+          templateId: 1,
+          startTime: '09:30:00',
+          endTime: '11:30:00',
+          capacity: 10,
+          bookedCount: 10,
+          isFull: true,
+        },
+        {
+          templateId: 2,
+          startTime: '14:00:00',
+          endTime: '16:00:00',
+          capacity: 10,
+          bookedCount: 10,
+          isFull: true,
+        },
+        {
+          templateId: 3,
+          startTime: '21:00:00',
+          endTime: '23:00:00',
+          capacity: 10,
+          bookedCount: 10,
+          isFull: true,
+        },
       ]);
 
       const dto = {
@@ -1647,7 +2321,14 @@ describe('createBatch with slot + destinations', () => {
         deliveryAddressId: 1,
         deliveryFee: 0,
         speedTier: DeliverySpeedTier.STANDARD,
-        items: [makeItem({ category: 'paper', quantity: 1, totalPrice: 2, fileName: 'a.pdf' })],
+        items: [
+          makeItem({
+            category: 'paper',
+            quantity: 1,
+            totalPrice: 2,
+            fileName: 'a.pdf',
+          }),
+        ],
       };
 
       await expect((service as any).createBatch(1, dto)).rejects.toMatchObject({
@@ -1655,7 +2336,7 @@ describe('createBatch with slot + destinations', () => {
       });
     });
 
-    it('rejects with no_slot_available_today when every slot today has already ended (PH late evening)', async () => {
+    it('books the next future slot when every slot today has already ended (PH late evening)', async () => {
       // PH 23:30 = UTC 15:30. All seeded slots (latest ends 23:00 PH) are past.
       jest.useFakeTimers().setSystemTime(new Date('2026-05-01T15:30:00Z'));
 
@@ -1664,11 +2345,45 @@ describe('createBatch with slot + destinations', () => {
         return makeAddress(where.id, 7.07, 125.61);
       });
       settingsService.isInsideServiceArea.mockResolvedValue(true);
-      slotsService.getAvailability!.mockResolvedValue([
-        { templateId: 1, startTime: '09:30:00', endTime: '11:30:00', capacity: 10, bookedCount: 0, isFull: false },
-        { templateId: 2, startTime: '14:00:00', endTime: '16:00:00', capacity: 10, bookedCount: 0, isFull: false },
-        { templateId: 3, startTime: '21:00:00', endTime: '23:00:00', capacity: 10, bookedCount: 0, isFull: false },
-      ]);
+      slotsService.getAvailability!.mockImplementation(async (date: string) =>
+        date === '2026-05-01'
+          ? [
+              {
+                templateId: 1,
+                startTime: '09:30:00',
+                endTime: '11:30:00',
+                capacity: 10,
+                bookedCount: 0,
+                isFull: false,
+              },
+              {
+                templateId: 2,
+                startTime: '14:00:00',
+                endTime: '16:00:00',
+                capacity: 10,
+                bookedCount: 0,
+                isFull: false,
+              },
+              {
+                templateId: 3,
+                startTime: '21:00:00',
+                endTime: '23:00:00',
+                capacity: 10,
+                bookedCount: 0,
+                isFull: false,
+              },
+            ]
+          : [
+              {
+                templateId: 1,
+                startTime: '09:30:00',
+                endTime: '11:30:00',
+                capacity: 10,
+                bookedCount: 0,
+                isFull: false,
+              },
+            ],
+      );
 
       const dto = {
         paymentMethod: 'gcash',
@@ -1676,12 +2391,24 @@ describe('createBatch with slot + destinations', () => {
         deliveryAddressId: 1,
         deliveryFee: 0,
         speedTier: DeliverySpeedTier.STANDARD,
-        items: [makeItem({ category: 'paper', quantity: 1, totalPrice: 2, fileName: 'a.pdf' })],
+        items: [
+          makeItem({
+            category: 'paper',
+            quantity: 1,
+            totalPrice: 2,
+            fileName: 'a.pdf',
+          }),
+        ],
       };
 
-      await expect((service as any).createBatch(1, dto)).rejects.toMatchObject({
-        response: expect.objectContaining({ code: 'no_slot_available_today' }),
-      });
+      await expect((service as any).createBatch(1, dto)).resolves.toEqual(
+        expect.objectContaining({
+          assignedSlot: expect.objectContaining({
+            slotTemplateId: 1,
+            date: '2026-05-02',
+          }),
+        }),
+      );
     });
   });
 });
@@ -1706,9 +2433,11 @@ describe('cancelBatch', () => {
 
     // Default transaction mock: provides manager with save + update + findOneOrFail routed to batchOrdersRepo
     const makeMockManager = () => ({
-      findOneOrFail: jest.fn().mockImplementation(async (_entity: any, opts: any) => {
-        return batchOrdersRepo.findOneOrFail(opts);
-      }),
+      findOneOrFail: jest
+        .fn()
+        .mockImplementation(async (_entity: any, opts: any) => {
+          return batchOrdersRepo.findOneOrFail(opts);
+        }),
       save: jest.fn().mockImplementation(async (entity: any) => entity),
       update: jest.fn().mockResolvedValue(undefined),
     });
@@ -1720,21 +2449,70 @@ describe('cancelBatch', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrdersService,
-        { provide: getRepositoryToken(Order), useValue: { find: jest.fn(), findOne: jest.fn(), findOneOrFail: jest.fn(), create: jest.fn(), save: jest.fn(), update: jest.fn(), count: jest.fn() } },
-        { provide: getRepositoryToken(OrderItem), useValue: { create: jest.fn(), save: jest.fn() } },
+        {
+          provide: getRepositoryToken(Order),
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+            findOneOrFail: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            update: jest.fn(),
+            count: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(OrderItem),
+          useValue: { create: jest.fn(), save: jest.fn() },
+        },
         specValueRepoProvider(),
         { provide: getRepositoryToken(BatchOrder), useValue: {} },
-        { provide: getRepositoryToken(PaperSpec), useValue: { create: jest.fn(), save: jest.fn() } },
-        { provide: getRepositoryToken(ThreeDSpec), useValue: { create: jest.fn(), save: jest.fn() } },
-        { provide: getRepositoryToken(DeliveryAssignment), useValue: { find: jest.fn().mockResolvedValue([]) } },
-        { provide: getRepositoryToken(Address), useValue: { findOne: jest.fn() } },
-        { provide: getRepositoryToken(DeliveryDestination), useValue: { create: jest.fn(), save: jest.fn() } },
-        { provide: getRepositoryToken(FileMetadata), useValue: { findOneOrFail: jest.fn() } },
+        {
+          provide: getRepositoryToken(PaperSpec),
+          useValue: { create: jest.fn(), save: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(ThreeDSpec),
+          useValue: { create: jest.fn(), save: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(DeliveryAssignment),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: getRepositoryToken(Address),
+          useValue: { findOne: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(DeliveryDestination),
+          useValue: { create: jest.fn(), save: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(FileMetadata),
+          useValue: { findOneOrFail: jest.fn() },
+        },
         { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
-        { provide: FirebaseService, useValue: { sendToDevice: jest.fn(), isAvailable: false } },
-        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null), findById: jest.fn().mockResolvedValue(null) } },
-        { provide: CreditsService, useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() } },
-        { provide: NotificationsService, useValue: { createForAllAdmins: jest.fn().mockResolvedValue(undefined) } },
+        {
+          provide: FirebaseService,
+          useValue: { sendToDevice: jest.fn(), isAvailable: false },
+        },
+        {
+          provide: UsersService,
+          useValue: {
+            getFcmToken: jest.fn().mockResolvedValue(null),
+            findById: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: CreditsService,
+          useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() },
+        },
+        {
+          provide: NotificationsService,
+          useValue: {
+            createForAllAdmins: jest.fn().mockResolvedValue(undefined),
+          },
+        },
         {
           provide: TamSurveysService,
           useValue: { createPostDeliveryRequirementIfNeeded: jest.fn() },
@@ -1746,13 +2524,26 @@ describe('cancelBatch', () => {
           provide: DeliverySettingsService,
           useValue: {
             isInsideServiceArea: jest.fn().mockResolvedValue(true),
-            getSettings: jest.fn().mockResolvedValue({ priorityFeeAmount: 50, extraDestinationSurcharge: 30 }),
+            getSettings: jest.fn().mockResolvedValue({
+              priorityFeeAmount: 50,
+              extraDestinationSurcharge: 30,
+            }),
           },
         },
-        { provide: DeliverySlotsGateway, useValue: { notifySlotUpdated: jest.fn() } },
+        {
+          provide: DeliverySlotsGateway,
+          useValue: { notifySlotUpdated: jest.fn() },
+        },
         {
           provide: PrinterProfileService,
-          useValue: { getProfile: jest.fn().mockResolvedValue({ buildVolumeWidthMm: 999, buildVolumeDepthMm: 999, buildVolumeHeightMm: 999, maxFileSizeMb: 999 }) },
+          useValue: {
+            getProfile: jest.fn().mockResolvedValue({
+              buildVolumeWidthMm: 999,
+              buildVolumeDepthMm: 999,
+              buildVolumeHeightMm: 999,
+              maxFileSizeMb: 999,
+            }),
+          },
         },
         catalogPricingProvider(),
       ],
@@ -1768,25 +2559,30 @@ describe('cancelBatch', () => {
 
     await service.cancelBatch(1, 1);
 
-    expect(slotsService.releaseSlot).toHaveBeenCalledWith(
-      expect.anything(),
-      7,
-    );
+    expect(slotsService.releaseSlot).toHaveBeenCalledWith(expect.anything(), 7);
   });
 
   it('rejects cancellation past cutoff', async () => {
     const fakeBatch = { id: 1, userId: 1, slotBookingId: 7 };
     batchOrdersRepo.findOneOrFail.mockResolvedValue(fakeBatch as any);
-    slotsService.releaseSlot.mockRejectedValue(new CancellationClosedException());
+    slotsService.releaseSlot.mockRejectedValue(
+      new CancellationClosedException(),
+    );
 
-    await expect(service.cancelBatch(1, 1)).rejects.toThrow('cancellation closed');
+    await expect(service.cancelBatch(1, 1)).rejects.toThrow(
+      'cancellation closed',
+    );
   });
 });
 
 describe('updateManualStatus', () => {
   let service: OrdersService;
-  let ordersRepo: jest.Mocked<Pick<Repository<Order>, 'findOneOrFail' | 'save'>>;
-  let notificationsService: jest.Mocked<Pick<NotificationsService, 'create' | 'createForAllAdmins'>>;
+  let ordersRepo: jest.Mocked<
+    Pick<Repository<Order>, 'findOneOrFail' | 'save'>
+  >;
+  let notificationsService: jest.Mocked<
+    Pick<NotificationsService, 'create' | 'createForAllAdmins'>
+  >;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -1804,20 +2600,64 @@ describe('updateManualStatus', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrdersService,
-        { provide: getRepositoryToken(Order), useValue: { find: jest.fn(), findOne: jest.fn(), findOneOrFail: ordersRepo.findOneOrFail, create: jest.fn(), save: ordersRepo.save, update: jest.fn(), count: jest.fn() } },
-        { provide: getRepositoryToken(OrderItem), useValue: { create: jest.fn(), save: jest.fn() } },
+        {
+          provide: getRepositoryToken(Order),
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+            findOneOrFail: ordersRepo.findOneOrFail,
+            create: jest.fn(),
+            save: ordersRepo.save,
+            update: jest.fn(),
+            count: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(OrderItem),
+          useValue: { create: jest.fn(), save: jest.fn() },
+        },
         specValueRepoProvider(),
         { provide: getRepositoryToken(BatchOrder), useValue: {} },
-        { provide: getRepositoryToken(PaperSpec), useValue: { create: jest.fn(), save: jest.fn() } },
-        { provide: getRepositoryToken(ThreeDSpec), useValue: { create: jest.fn(), save: jest.fn() } },
-        { provide: getRepositoryToken(DeliveryAssignment), useValue: { find: jest.fn().mockResolvedValue([]) } },
-        { provide: getRepositoryToken(Address), useValue: { findOne: jest.fn() } },
-        { provide: getRepositoryToken(DeliveryDestination), useValue: { create: jest.fn(), save: jest.fn() } },
-        { provide: getRepositoryToken(FileMetadata), useValue: { findOneOrFail: jest.fn() } },
+        {
+          provide: getRepositoryToken(PaperSpec),
+          useValue: { create: jest.fn(), save: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(ThreeDSpec),
+          useValue: { create: jest.fn(), save: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(DeliveryAssignment),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: getRepositoryToken(Address),
+          useValue: { findOne: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(DeliveryDestination),
+          useValue: { create: jest.fn(), save: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(FileMetadata),
+          useValue: { findOneOrFail: jest.fn() },
+        },
         { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
-        { provide: FirebaseService, useValue: { sendToDevice: jest.fn(), isAvailable: false } },
-        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null), findById: jest.fn().mockResolvedValue(null) } },
-        { provide: CreditsService, useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() } },
+        {
+          provide: FirebaseService,
+          useValue: { sendToDevice: jest.fn(), isAvailable: false },
+        },
+        {
+          provide: UsersService,
+          useValue: {
+            getFcmToken: jest.fn().mockResolvedValue(null),
+            findById: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: CreditsService,
+          useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() },
+        },
         { provide: NotificationsService, useValue: notificationsService },
         {
           provide: TamSurveysService,
@@ -1825,12 +2665,38 @@ describe('updateManualStatus', () => {
         },
         { provide: FilesService, useValue: { stampExpiry: jest.fn() } },
         { provide: DataSource, useValue: { transaction: jest.fn() } },
-        { provide: DeliverySlotsService, useValue: { bookSlot: jest.fn(), releaseSlot: jest.fn(), getAvailability: jest.fn().mockResolvedValue([]) } },
-        { provide: DeliverySettingsService, useValue: { isInsideServiceArea: jest.fn().mockResolvedValue(true), getSettings: jest.fn().mockResolvedValue({ priorityFeeAmount: 50, extraDestinationSurcharge: 30 }) } },
-        { provide: DeliverySlotsGateway, useValue: { notifySlotUpdated: jest.fn() } },
+        {
+          provide: DeliverySlotsService,
+          useValue: {
+            bookSlot: jest.fn(),
+            releaseSlot: jest.fn(),
+            getAvailability: jest.fn().mockResolvedValue([]),
+          },
+        },
+        {
+          provide: DeliverySettingsService,
+          useValue: {
+            isInsideServiceArea: jest.fn().mockResolvedValue(true),
+            getSettings: jest.fn().mockResolvedValue({
+              priorityFeeAmount: 50,
+              extraDestinationSurcharge: 30,
+            }),
+          },
+        },
+        {
+          provide: DeliverySlotsGateway,
+          useValue: { notifySlotUpdated: jest.fn() },
+        },
         {
           provide: PrinterProfileService,
-          useValue: { getProfile: jest.fn().mockResolvedValue({ buildVolumeWidthMm: 999, buildVolumeDepthMm: 999, buildVolumeHeightMm: 999, maxFileSizeMb: 999 }) },
+          useValue: {
+            getProfile: jest.fn().mockResolvedValue({
+              buildVolumeWidthMm: 999,
+              buildVolumeDepthMm: 999,
+              buildVolumeHeightMm: 999,
+              maxFileSizeMb: 999,
+            }),
+          },
         },
         catalogPricingProvider(),
       ],
@@ -1841,7 +2707,10 @@ describe('updateManualStatus', () => {
 
   it('fires notification on first set', async () => {
     ordersRepo.findOneOrFail.mockResolvedValue({
-      id: 5, userId: 7, adminStatusNote: null, adminStatusSetAt: null,
+      id: 5,
+      userId: 7,
+      adminStatusNote: null,
+      adminStatusSetAt: null,
     } as Order);
     ordersRepo.save.mockImplementation(async (o) => o as Order);
 
@@ -1855,7 +2724,9 @@ describe('updateManualStatus', () => {
 
   it('does NOT fire notification on subsequent edit', async () => {
     ordersRepo.findOneOrFail.mockResolvedValue({
-      id: 5, userId: 7, adminStatusNote: 'Old',
+      id: 5,
+      userId: 7,
+      adminStatusNote: 'Old',
       adminStatusSetAt: new Date(),
     } as Order);
     ordersRepo.save.mockImplementation(async (o) => o as Order);
@@ -1872,8 +2743,12 @@ describe('updateManualStatus', () => {
 
 describe('createBatch — 3D bounds enforcement', () => {
   let service: OrdersService;
-  let printerProfileService: jest.Mocked<Pick<PrinterProfileService, 'getProfile'>>;
-  let fileMetadataRepo: jest.Mocked<Pick<Repository<FileMetadata>, 'findOneOrFail'>>;
+  let printerProfileService: jest.Mocked<
+    Pick<PrinterProfileService, 'getProfile'>
+  >;
+  let fileMetadataRepo: jest.Mocked<
+    Pick<Repository<FileMetadata>, 'findOneOrFail'>
+  >;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -1889,36 +2764,100 @@ describe('createBatch — 3D bounds enforcement', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrdersService,
-        { provide: getRepositoryToken(Order), useValue: { find: jest.fn(), findOne: jest.fn(), findOneOrFail: jest.fn(), create: jest.fn(), save: jest.fn(), update: jest.fn(), count: jest.fn() } },
-        { provide: getRepositoryToken(OrderItem), useValue: { create: jest.fn(), save: jest.fn() } },
+        {
+          provide: getRepositoryToken(Order),
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+            findOneOrFail: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            update: jest.fn(),
+            count: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(OrderItem),
+          useValue: { create: jest.fn(), save: jest.fn() },
+        },
         specValueRepoProvider(),
         { provide: getRepositoryToken(BatchOrder), useValue: {} },
-        { provide: getRepositoryToken(PaperSpec), useValue: { create: jest.fn(), save: jest.fn() } },
-        { provide: getRepositoryToken(ThreeDSpec), useValue: { create: jest.fn(), save: jest.fn() } },
-        { provide: getRepositoryToken(DeliveryAssignment), useValue: { find: jest.fn().mockResolvedValue([]) } },
-        { provide: getRepositoryToken(Address), useValue: { findOne: jest.fn().mockResolvedValue({ id: 9, userId: 99 }) } },
-        { provide: getRepositoryToken(DeliveryDestination), useValue: { create: jest.fn(), save: jest.fn() } },
-        { provide: getRepositoryToken(FileMetadata), useValue: fileMetadataRepo },
+        {
+          provide: getRepositoryToken(PaperSpec),
+          useValue: { create: jest.fn(), save: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(ThreeDSpec),
+          useValue: { create: jest.fn(), save: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(DeliveryAssignment),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: getRepositoryToken(Address),
+          useValue: {
+            findOne: jest.fn().mockResolvedValue({ id: 9, userId: 99 }),
+          },
+        },
+        {
+          provide: getRepositoryToken(DeliveryDestination),
+          useValue: { create: jest.fn(), save: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(FileMetadata),
+          useValue: fileMetadataRepo,
+        },
         { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
-        { provide: FirebaseService, useValue: { sendToDevice: jest.fn(), isAvailable: false } },
-        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null), findById: jest.fn().mockResolvedValue(null) } },
-        { provide: CreditsService, useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() } },
-        { provide: NotificationsService, useValue: { createForAllAdmins: jest.fn().mockResolvedValue(undefined) } },
+        {
+          provide: FirebaseService,
+          useValue: { sendToDevice: jest.fn(), isAvailable: false },
+        },
+        {
+          provide: UsersService,
+          useValue: {
+            getFcmToken: jest.fn().mockResolvedValue(null),
+            findById: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: CreditsService,
+          useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() },
+        },
+        {
+          provide: NotificationsService,
+          useValue: {
+            createForAllAdmins: jest.fn().mockResolvedValue(undefined),
+          },
+        },
         {
           provide: TamSurveysService,
           useValue: { createPostDeliveryRequirementIfNeeded: jest.fn() },
         },
         { provide: FilesService, useValue: { stampExpiry: jest.fn() } },
         { provide: DataSource, useValue: { transaction: jest.fn() } },
-        { provide: DeliverySlotsService, useValue: { bookSlot: jest.fn(), releaseSlot: jest.fn(), getAvailability: jest.fn().mockResolvedValue([]) } },
+        {
+          provide: DeliverySlotsService,
+          useValue: {
+            bookSlot: jest.fn(),
+            releaseSlot: jest.fn(),
+            getAvailability: jest.fn().mockResolvedValue([]),
+          },
+        },
         {
           provide: DeliverySettingsService,
           useValue: {
             isInsideServiceArea: jest.fn().mockResolvedValue(true),
-            getSettings: jest.fn().mockResolvedValue({ priorityFeeAmount: 50, extraDestinationSurcharge: 30 }),
+            getSettings: jest.fn().mockResolvedValue({
+              priorityFeeAmount: 50,
+              extraDestinationSurcharge: 30,
+            }),
           },
         },
-        { provide: DeliverySlotsGateway, useValue: { notifySlotUpdated: jest.fn() } },
+        {
+          provide: DeliverySlotsGateway,
+          useValue: { notifySlotUpdated: jest.fn() },
+        },
         { provide: PrinterProfileService, useValue: printerProfileService },
         catalogPricingProvider(),
       ],
@@ -1929,11 +2868,17 @@ describe('createBatch — 3D bounds enforcement', () => {
 
   it('rejects when any 3D item exceeds the printer profile', async () => {
     printerProfileService.getProfile.mockResolvedValue({
-      buildVolumeWidthMm: 180, buildVolumeDepthMm: 180, buildVolumeHeightMm: 180,
-      name: 'X', maxFileSizeMb: 200,
+      buildVolumeWidthMm: 180,
+      buildVolumeDepthMm: 180,
+      buildVolumeHeightMm: 180,
+      name: 'X',
+      maxFileSizeMb: 200,
     } as any);
     fileMetadataRepo.findOneOrFail.mockResolvedValue({
-      id: 1, model3dWidthMm: '200', model3dDepthMm: '50', model3dHeightMm: '50',
+      id: 1,
+      model3dWidthMm: '200',
+      model3dDepthMm: '50',
+      model3dHeightMm: '50',
     } as any);
 
     await expect(
@@ -1947,6 +2892,12 @@ describe('createBatch — 3D bounds enforcement', () => {
           },
         ],
         paymentMethod: 'cash',
+        temporaryAddress: {
+          fullAddress: 'Unit 12, Jacinto Extension, Davao City',
+          city: 'Davao City',
+          latitude: 7.0731,
+          longitude: 125.6128,
+        },
         deliveryOption: 'delivery',
       } as any),
     ).rejects.toThrow(/build volume/);
@@ -1968,33 +2919,104 @@ describe('listExternalDeliveries and updateExternalDeliveryStatus', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrdersService,
-        { provide: getRepositoryToken(Order), useValue: { find: jest.fn(), findOne: jest.fn(), findOneOrFail: jest.fn(), create: jest.fn(), save: jest.fn(), update: jest.fn(), count: jest.fn() } },
-        { provide: getRepositoryToken(OrderItem), useValue: { create: jest.fn(), save: jest.fn() } },
+        {
+          provide: getRepositoryToken(Order),
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+            findOneOrFail: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            update: jest.fn(),
+            count: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(OrderItem),
+          useValue: { create: jest.fn(), save: jest.fn() },
+        },
         specValueRepoProvider(),
         { provide: getRepositoryToken(BatchOrder), useValue: batchOrdersRepo },
-        { provide: getRepositoryToken(PaperSpec), useValue: { create: jest.fn(), save: jest.fn() } },
-        { provide: getRepositoryToken(ThreeDSpec), useValue: { create: jest.fn(), save: jest.fn() } },
-        { provide: getRepositoryToken(DeliveryAssignment), useValue: { find: jest.fn().mockResolvedValue([]) } },
-        { provide: getRepositoryToken(Address), useValue: { findOne: jest.fn() } },
-        { provide: getRepositoryToken(DeliveryDestination), useValue: { create: jest.fn(), save: jest.fn() } },
-        { provide: getRepositoryToken(FileMetadata), useValue: { findOneOrFail: jest.fn() } },
+        {
+          provide: getRepositoryToken(PaperSpec),
+          useValue: { create: jest.fn(), save: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(ThreeDSpec),
+          useValue: { create: jest.fn(), save: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(DeliveryAssignment),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: getRepositoryToken(Address),
+          useValue: { findOne: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(DeliveryDestination),
+          useValue: { create: jest.fn(), save: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(FileMetadata),
+          useValue: { findOneOrFail: jest.fn() },
+        },
         { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
-        { provide: FirebaseService, useValue: { sendToDevice: jest.fn(), isAvailable: false } },
-        { provide: UsersService, useValue: { getFcmToken: jest.fn().mockResolvedValue(null), findById: jest.fn().mockResolvedValue(null) } },
-        { provide: CreditsService, useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() } },
-        { provide: NotificationsService, useValue: { createForAllAdmins: jest.fn().mockResolvedValue(undefined) } },
+        {
+          provide: FirebaseService,
+          useValue: { sendToDevice: jest.fn(), isAvailable: false },
+        },
+        {
+          provide: UsersService,
+          useValue: {
+            getFcmToken: jest.fn().mockResolvedValue(null),
+            findById: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: CreditsService,
+          useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() },
+        },
+        {
+          provide: NotificationsService,
+          useValue: {
+            createForAllAdmins: jest.fn().mockResolvedValue(undefined),
+          },
+        },
         {
           provide: TamSurveysService,
           useValue: { createPostDeliveryRequirementIfNeeded: jest.fn() },
         },
         { provide: FilesService, useValue: { stampExpiry: jest.fn() } },
         { provide: DataSource, useValue: { transaction: jest.fn() } },
-        { provide: DeliverySlotsService, useValue: { bookSlot: jest.fn(), releaseSlot: jest.fn() } },
-        { provide: DeliverySettingsService, useValue: { isInsideServiceArea: jest.fn().mockResolvedValue(true), getSettings: jest.fn().mockResolvedValue({ priorityFeeAmount: 50, extraDestinationSurcharge: 30 }) } },
-        { provide: DeliverySlotsGateway, useValue: { notifySlotUpdated: jest.fn() } },
+        {
+          provide: DeliverySlotsService,
+          useValue: { bookSlot: jest.fn(), releaseSlot: jest.fn() },
+        },
+        {
+          provide: DeliverySettingsService,
+          useValue: {
+            isInsideServiceArea: jest.fn().mockResolvedValue(true),
+            getSettings: jest.fn().mockResolvedValue({
+              priorityFeeAmount: 50,
+              extraDestinationSurcharge: 30,
+            }),
+          },
+        },
+        {
+          provide: DeliverySlotsGateway,
+          useValue: { notifySlotUpdated: jest.fn() },
+        },
         {
           provide: PrinterProfileService,
-          useValue: { getProfile: jest.fn().mockResolvedValue({ buildVolumeWidthMm: 999, buildVolumeDepthMm: 999, buildVolumeHeightMm: 999, maxFileSizeMb: 999 }) },
+          useValue: {
+            getProfile: jest.fn().mockResolvedValue({
+              buildVolumeWidthMm: 999,
+              buildVolumeDepthMm: 999,
+              buildVolumeHeightMm: 999,
+              maxFileSizeMb: 999,
+            }),
+          },
         },
         catalogPricingProvider(),
       ],
@@ -2005,10 +3027,15 @@ describe('listExternalDeliveries and updateExternalDeliveryStatus', () => {
 
   describe('listExternalDeliveries', () => {
     it('filters by externalDeliveryStatus', async () => {
-      batchOrdersRepo.find.mockResolvedValue([{ id: 1, deliveryType: 'external' }]);
+      batchOrdersRepo.find.mockResolvedValue([
+        { id: 1, deliveryType: 'external' },
+      ]);
       const out = await service.listExternalDeliveries('pending_admin');
       expect(batchOrdersRepo.find).toHaveBeenCalledWith({
-        where: { deliveryType: 'external', externalDeliveryStatus: 'pending_admin' },
+        where: {
+          deliveryType: 'external',
+          externalDeliveryStatus: 'pending_admin',
+        },
         order: { createdAt: 'DESC' },
         relations: ['user'],
       });

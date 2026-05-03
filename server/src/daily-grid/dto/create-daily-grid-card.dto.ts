@@ -4,10 +4,10 @@ import {
   IsNumber,
   IsObject,
   IsOptional,
-  IsIn,
+  Matches,
   MinLength,
 } from 'class-validator';
-import type { PaperSpecsShape, ThreeDSpecsShape } from '../entities/daily-grid-card.entity';
+import type { DailyGridSpecValues } from '../entities/daily-grid-card.entity';
 
 export class CreateDailyGridCardDto {
   @IsString()
@@ -22,7 +22,7 @@ export class CreateDailyGridCardDto {
   @IsString()
   imageUrl?: string;
 
-  @IsIn(['paper', '3d'])
+  @Matches(/^[a-z0-9][a-z0-9_-]*$/)
   category: string;
 
   @IsOptional()
@@ -35,9 +35,5 @@ export class CreateDailyGridCardDto {
 
   @IsOptional()
   @IsObject()
-  paperSpecs?: PaperSpecsShape;
-
-  @IsOptional()
-  @IsObject()
-  threeDSpecs?: ThreeDSpecsShape;
+  specs?: DailyGridSpecValues | null;
 }

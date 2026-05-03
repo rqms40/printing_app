@@ -13,10 +13,16 @@ import 'package:printing_app/features/customer/order/widgets/checkout_segmented.
 import 'package:printing_app/features/customer/order/widgets/multidrop_groups.dart';
 
 class CheckoutDeliveryCard extends ConsumerWidget {
-  const CheckoutDeliveryCard({super.key, this.segmentedKey, this.multiDropTabKey});
+  const CheckoutDeliveryCard({
+    super.key,
+    this.segmentedKey,
+    this.multiDropTabKey,
+    this.mapTilesEnabled = true,
+  });
 
   final GlobalKey? segmentedKey;
   final GlobalKey? multiDropTabKey;
+  final bool mapTilesEnabled;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -56,11 +62,16 @@ class CheckoutDeliveryCard extends ConsumerWidget {
           ),
           const SizedBox(height: AppSpacing.md),
           if (state.mode == DeliveryMode.delivery)
-            _SingleAddressRow(state: state, ref: ref, colors: colors)
+            _SingleAddressRow(
+              state: state,
+              ref: ref,
+              colors: colors,
+              mapTilesEnabled: mapTilesEnabled,
+            )
           else if (state.mode == DeliveryMode.pickup)
             _PickupCard(colors: colors)
           else
-            const MultidropGroups(),
+            MultidropGroups(mapTilesEnabled: mapTilesEnabled),
         ],
       ),
     );
@@ -72,20 +83,37 @@ class _SingleAddressRow extends StatelessWidget {
     required this.state,
     required this.ref,
     required this.colors,
+    required this.mapTilesEnabled,
   });
   final CheckoutState state;
   final WidgetRef ref;
   final AppColorSet colors;
+  final bool mapTilesEnabled;
 
   @override
   Widget build(BuildContext context) {
     final addr = state.singleAddress;
+    final tempAddr = state.temporaryAddress;
+    final title =
+        tempAddr?.displayLabel ?? addr?.label ?? 'Pick a delivery address';
+    final subtitle = tempAddr?.fullAddress ?? addr?.fullAddress;
     return InkWell(
       borderRadius: AppRadius.borderLg,
       onTap: () async {
-        final picked = await AddressPickerSheet.show(context);
+        final picked = await AddressPickerSheet.showSelection(
+          context,
+          mapTilesEnabled: mapTilesEnabled,
+          initialTemporaryAddress: tempAddr,
+        );
         if (picked != null) {
-          ref.read(checkoutProvider.notifier).setSingleAddress(picked);
+          final notifier = ref.read(checkoutProvider.notifier);
+          final saved = picked.savedAddress;
+          final temporary = picked.temporaryAddress;
+          if (saved != null) {
+            notifier.setSingleAddress(saved);
+          } else if (temporary != null) {
+            notifier.setTemporaryAddress(temporary);
+          }
         }
       },
       child: Container(
@@ -94,7 +122,7 @@ class _SingleAddressRow extends StatelessWidget {
           color: colors.background,
           borderRadius: AppRadius.borderLg,
           border: Border.all(
-            color: addr == null
+            color: addr == null && tempAddr == null
                 ? colors.brand.withValues(alpha: 0.4)
                 : colors.outline.withValues(alpha: 0.4),
             style: addr == null ? BorderStyle.solid : BorderStyle.solid,
@@ -123,16 +151,16 @@ class _SingleAddressRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    addr?.label ?? 'Pick a delivery address',
+                    title,
                     style: AppTypography.bodyBold.copyWith(
                       color: colors.onBackground,
                       fontSize: 14,
                     ),
                   ),
-                  if (addr != null) ...[
+                  if (subtitle != null) ...[
                     const SizedBox(height: 2),
                     Text(
-                      addr.fullAddress,
+                      subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.caption.copyWith(

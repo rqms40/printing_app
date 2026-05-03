@@ -382,6 +382,58 @@ function normalizeStatusHistory(
   });
 }
 
+function normalizeOrderDestination(value: unknown): Order["delivery_address"] {
+  const record = asRecord(value);
+  const fullAddress =
+    toOptionalString(record, "full_address", "fullAddress") ??
+    toOptionalString(record, "address");
+  const latitudeValue = read(record, "latitude");
+  const longitudeValue = read(record, "longitude");
+  const latitude = latitudeValue == null ? null : Number(latitudeValue);
+  const longitude = longitudeValue == null ? null : Number(longitudeValue);
+
+  if (!fullAddress && !Number.isFinite(latitude) && !Number.isFinite(longitude)) {
+    return undefined;
+  }
+
+  return {
+    id:
+      read(record, "id") === undefined
+        ? undefined
+        : toNumberValue(record, 0, "id"),
+    address_id:
+      read(record, "address_id", "addressId") === undefined
+        ? undefined
+        : toNumberValue(record, 0, "address_id", "addressId") || null,
+    label: toOptionalString(record, "label") ?? null,
+    address: fullAddress ?? null,
+    full_address: fullAddress ?? null,
+    barangay: toOptionalString(record, "barangay") ?? null,
+    city: toOptionalString(record, "city") ?? null,
+    province: toOptionalString(record, "province") ?? null,
+    zip_code: toOptionalString(record, "zip_code", "zipCode") ?? null,
+    landmark: toOptionalString(record, "landmark") ?? null,
+    latitude: Number.isFinite(latitude) ? latitude : null,
+    longitude: Number.isFinite(longitude) ? longitude : null,
+    sort_order:
+      read(record, "sort_order", "sortOrder") === undefined
+        ? undefined
+        : toNumberValue(record, 0, "sort_order", "sortOrder"),
+  };
+}
+
+function normalizeOrderDestinations(value: unknown): Order["destinations"] {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  return value
+    .map(normalizeOrderDestination)
+    .filter((item): item is NonNullable<Order["delivery_address"]> =>
+      Boolean(item),
+    );
+}
+
 function normalizeOrderItems(value: unknown): OrderItem[] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
@@ -409,6 +461,10 @@ function normalizeOrderItems(value: unknown): OrderItem[] | undefined {
       ),
       quantity: toNumberValue(record, 1, "quantity"),
       total_price: toNumberValue(record, 0, "total_price", "totalPrice"),
+      delivery_address:
+        normalizeOrderDestination(
+          read(record, "delivery_address", "deliveryAddress", "destination"),
+        ) ?? null,
     };
   });
 }
@@ -445,9 +501,10 @@ export function normalizeOrder(input: unknown): Order & {
     })(),
     file_url: toOptionalString(record, "file_url", "fileUrl"),
     file_name: toOptionalString(record, "file_name", "fileName"),
-    file_metadata_id: read(record, "file_metadata_id", "fileMetadataId") != null
-      ? toNumberValue(record, 0, "file_metadata_id", "fileMetadataId") || null
-      : null,
+    file_metadata_id:
+      read(record, "file_metadata_id", "fileMetadataId") != null
+        ? toNumberValue(record, 0, "file_metadata_id", "fileMetadataId") || null
+        : null,
     paper_specs: normalizePaperSpecs(read(record, "paper_specs", "paperSpec")),
     three_d_specs: normalizeThreeDSpecs(
       read(record, "three_d_specs", "threeDSpec"),
@@ -491,6 +548,10 @@ export function normalizeOrder(input: unknown): Order & {
       "delivery_address_id",
       "deliveryAddressId",
     ),
+    delivery_address:
+      normalizeOrderDestination(
+        read(record, "delivery_address", "deliveryAddress", "destination"),
+      ) ?? null,
     assigned_driver_id: toOptionalString(
       record,
       "assigned_driver_id",
@@ -517,12 +578,42 @@ export function normalizeOrder(input: unknown): Order & {
       toOptionalString(record, "customer_name", "customerName") ?? null,
     customer_email:
       toOptionalString(record, "customer_email", "customerEmail") ?? null,
-    adminStatusNote:
-      toOptionalString(record, "adminStatusNote") ?? null,
+    adminStatusNote: toOptionalString(record, "adminStatusNote") ?? null,
     estimatedCompletionAt:
       toOptionalString(record, "estimatedCompletionAt") ?? null,
-    adminStatusSetAt:
-      toOptionalString(record, "adminStatusSetAt") ?? null,
+    adminStatusSetAt: toOptionalString(record, "adminStatusSetAt") ?? null,
+    deliverySlotBookingId:
+      read(record, "delivery_slot_booking_id", "deliverySlotBookingId") ===
+      undefined
+        ? undefined
+        : toNumberValue(
+            record,
+            0,
+            "delivery_slot_booking_id",
+            "deliverySlotBookingId",
+          ),
+    priority: toBooleanValue(record, false, "priority"),
+    priorityFee:
+      read(record, "priority_fee", "priorityFee") === undefined
+        ? undefined
+        : toNumberValue(record, 0, "priority_fee", "priorityFee"),
+    speedTier: toOptionalString(record, "speed_tier", "speedTier"),
+    deliveryType:
+      toOptionalString(record, "delivery_type", "deliveryType") === "external"
+        ? "external"
+        : toOptionalString(record, "delivery_type", "deliveryType") === "local"
+        ? "local"
+        : undefined,
+    extraDestinationFee:
+      read(record, "extra_destination_fee", "extraDestinationFee") === undefined
+        ? undefined
+        : toNumberValue(
+            record,
+            0,
+            "extra_destination_fee",
+            "extraDestinationFee",
+          ),
+    destinations: normalizeOrderDestinations(read(record, "destinations")),
   };
 }
 
@@ -809,6 +900,7 @@ export function normalizeProductSpecDefinition(
         ? undefined
         : toNumberValue(record, 0, "step_value", "stepValue"),
     sort_order: toNumberValue(record, 0, "sort_order", "sortOrder"),
+    metadata: asRecord(read(record, "metadata")),
     options: normalizeSpecOptions(read(record, "options")),
     created_at: toRequiredString(record, EMPTY_DATE, "created_at", "createdAt"),
     updated_at: toRequiredString(record, EMPTY_DATE, "updated_at", "updatedAt"),
@@ -825,7 +917,9 @@ export function normalizeProductSpecDefinitions(
 
 export function normalizeSpecOption(input: unknown): SpecOption {
   const record = asRecord(input);
-  const specDefinition = asRecord(read(record, "specDefinition", "spec_definition"));
+  const specDefinition = asRecord(
+    read(record, "specDefinition", "spec_definition"),
+  );
   const estimatedQuantity = read(
     record,
     "estimated_quantity",
@@ -862,8 +956,7 @@ export function normalizeSpecOption(input: unknown): SpecOption {
             "estimatedGrams",
           ),
     estimated_grams:
-      estimatedQuantity === undefined ||
-      estimatedQuantity === null
+      estimatedQuantity === undefined || estimatedQuantity === null
         ? undefined
         : toNumberValue(
             record,

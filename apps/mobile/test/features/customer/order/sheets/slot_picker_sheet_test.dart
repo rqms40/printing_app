@@ -12,31 +12,39 @@ import 'package:printing_app/shared/providers/dio_provider.dart';
 import '../providers/delivery_slot_provider_test.mocks.dart';
 
 void main() {
-  testWidgets('lists available slots and returns chosen ScheduledSlot',
-      (tester) async {
+  testWidgets('lists available slots and returns chosen ScheduledSlot', (
+    tester,
+  ) async {
     final mockDio = MockDio();
     final mockWs = MockWebSocketService();
-    when(mockDio.get<List<dynamic>>(any)).thenAnswer((_) async => Response(
-          data: const <dynamic>[],
-          statusCode: 200,
-          requestOptions: RequestOptions(path: ''),
-        ));
+    when(mockDio.get<List<dynamic>>(any)).thenAnswer(
+      (_) async => Response(
+        data: const <dynamic>[],
+        statusCode: 200,
+        requestOptions: RequestOptions(path: ''),
+      ),
+    );
 
-    final container = ProviderContainer(overrides: [
-      dioProvider.overrideWithValue(mockDio),
-      webSocketServiceProvider.overrideWithValue(mockWs),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        dioProvider.overrideWithValue(mockDio),
+        webSocketServiceProvider.overrideWithValue(mockWs),
+      ],
+    );
     addTearDown(container.dispose);
 
     // Keep the autoDispose family member alive across the test so the seed
     // we apply below isn't thrown away before the sheet builds.
-    final keepAlive =
-        container.listen(deliverySlotProvider('2026-05-01'), (_, __) {});
+    final keepAlive = container.listen(
+      deliverySlotProvider('2026-05-01'),
+      (_, _) {},
+    );
     addTearDown(keepAlive.close);
 
     // Pre-create the notifier and seed slots before opening the sheet.
-    final notifier =
-        container.read(deliverySlotProvider('2026-05-01').notifier);
+    final notifier = container.read(
+      deliverySlotProvider('2026-05-01').notifier,
+    );
     notifier.debugSeedSlotsForTest(const [
       DeliverySlot(
         templateId: 7,
@@ -48,19 +56,26 @@ void main() {
     ]);
 
     ScheduledSlot? picked;
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
-        home: Builder(builder: (ctx) => Scaffold(
-          body: ElevatedButton(
-            onPressed: () async {
-              picked = await SlotPickerSheet.show(ctx, initialDate: '2026-05-01');
-            },
-            child: const Text('Open'),
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Builder(
+            builder: (ctx) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () async {
+                  picked = await SlotPickerSheet.show(
+                    ctx,
+                    initialDate: '2026-05-01',
+                  );
+                },
+                child: const Text('Open'),
+              ),
+            ),
           ),
-        )),
+        ),
       ),
-    ));
+    );
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
     expect(find.text('09:00 – 11:00'), findsOneWidget);
@@ -69,5 +84,63 @@ void main() {
     await tester.tap(find.textContaining('Confirm'));
     await tester.pumpAndSettle();
     expect(picked?.templateId, 7);
+  });
+
+  testWidgets('loads slots for the selected future date on open', (
+    tester,
+  ) async {
+    final mockDio = MockDio();
+    final mockWs = MockWebSocketService();
+    when(
+      mockDio.get<List<dynamic>>('/delivery-slots?date=2026-05-04'),
+    ).thenAnswer(
+      (_) async => Response(
+        data: const <dynamic>[
+          {
+            'templateId': 8,
+            'startTime': '14:00:00',
+            'endTime': '16:00:00',
+            'capacity': 10,
+            'bookedCount': 1,
+          },
+        ],
+        statusCode: 200,
+        requestOptions: RequestOptions(path: ''),
+      ),
+    );
+
+    final container = ProviderContainer(
+      overrides: [
+        dioProvider.overrideWithValue(mockDio),
+        webSocketServiceProvider.overrideWithValue(mockWs),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Builder(
+            builder: (ctx) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () {
+                  SlotPickerSheet.show(ctx, initialDate: '2026-05-04');
+                },
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    verify(
+      mockDio.get<List<dynamic>>('/delivery-slots?date=2026-05-04'),
+    ).called(1);
+    expect(find.text('14:00 – 16:00'), findsOneWidget);
   });
 }

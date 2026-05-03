@@ -20,4 +20,15 @@ describe('user entity column metadata', () => {
     expect(phoneNumber?.options.type).toBe('text');
     expect(gender?.options.type).toBe('text');
   });
+
+  it('does not declare print scaling as a user profile column', () => {
+    const columns = getMetadataArgsStorage().columns;
+
+    const defaultPrintMode = columns.find(
+      (column) =>
+        column.target === User && column.propertyName === 'defaultPrintMode',
+    );
+
+    expect(defaultPrintMode).toBeUndefined();
+  });
 });

@@ -8,6 +8,8 @@ import type { UsersService } from '../users/users.service';
 const makeController = () => {
   const chatService = {
     createConversation: jest.fn(),
+    getOrCreateCustomerOrderConversation: jest.fn(),
+    getOrCreateDriverOrderConversation: jest.fn(),
     findConversation: jest.fn(),
     getMessages: jest.fn(),
     getConversations: jest.fn(),
@@ -33,6 +35,54 @@ const makeController = () => {
 };
 
 describe('ChatController', () => {
+  describe('openOrderConversation', () => {
+    it('uses the customer order conversation flow for customers', async () => {
+      const { controller, chatService } = makeController();
+      const conversation = {
+        id: 7,
+        customerId: 5,
+        type: ConversationType.RIDER,
+        orderId: 42,
+        assignedRiderId: 12,
+      };
+      chatService.getOrCreateCustomerOrderConversation.mockResolvedValue(
+        conversation,
+      );
+
+      await expect(
+        controller.openOrderConversation('42', {
+          user: { sub: 5, role: 'customer', email: 'customer@example.com' },
+        }),
+      ).resolves.toBe(conversation);
+      expect(
+        chatService.getOrCreateCustomerOrderConversation,
+      ).toHaveBeenCalledWith(5, '42');
+    });
+
+    it('uses the driver order conversation flow for drivers', async () => {
+      const { controller, chatService } = makeController();
+      const conversation = {
+        id: 8,
+        customerId: 5,
+        type: ConversationType.RIDER,
+        orderId: 42,
+        assignedRiderId: 12,
+      };
+      chatService.getOrCreateDriverOrderConversation.mockResolvedValue(
+        conversation,
+      );
+
+      await expect(
+        controller.openOrderConversation('42', {
+          user: { sub: 12, role: 'driver', email: 'driver@example.com' },
+        }),
+      ).resolves.toBe(conversation);
+      expect(
+        chatService.getOrCreateDriverOrderConversation,
+      ).toHaveBeenCalledWith(12, '42');
+    });
+  });
+
   describe('getMessages', () => {
     it('allows an assigned rider to load rider conversation history', async () => {
       const { controller, chatService } = makeController();

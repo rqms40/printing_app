@@ -1,8 +1,11 @@
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
+import 'package:printing_app/features/customer/order/models/checkout_address.dart';
 import 'package:printing_app/features/customer/order/models/delivery_speed_tier.dart';
 import 'package:printing_app/features/customer/order/models/destination_group.dart';
 import 'package:printing_app/shared/models/address.dart';
 import 'package:printing_app/shared/models/enums.dart';
+
+export 'package:printing_app/features/customer/order/models/checkout_address.dart';
 
 enum DeliveryMode { delivery, pickup, multidrop }
 
@@ -24,6 +27,7 @@ class CheckoutState {
     this.items = const [],
     this.mode = DeliveryMode.delivery,
     this.singleAddress,
+    this.temporaryAddress,
     this.drops = const [],
     this.speedTier = DeliverySpeedTier.standard,
     this.scheduledSlot,
@@ -36,6 +40,7 @@ class CheckoutState {
   final List<CartItem> items;
   final DeliveryMode mode;
   final Address? singleAddress;
+  final TemporaryCheckoutAddress? temporaryAddress;
   final List<DestinationGroup> drops;
   final DeliverySpeedTier speedTier;
   final ScheduledSlot? scheduledSlot;
@@ -56,6 +61,7 @@ class CheckoutState {
     List<CartItem>? items,
     DeliveryMode? mode,
     Address? singleAddress,
+    TemporaryCheckoutAddress? temporaryAddress,
     List<DestinationGroup>? drops,
     DeliverySpeedTier? speedTier,
     ScheduledSlot? scheduledSlot,
@@ -63,14 +69,27 @@ class CheckoutState {
     bool? leaveAtDoor,
     String? riderNote,
     Map<String, List<String?>>? unitAssignments,
+    bool clearSingleAddress = false,
+    bool clearTemporaryAddress = false,
+    bool clearPaymentMethod = false,
+    bool clearScheduledSlot = false,
   }) => CheckoutState(
     items: items ?? this.items,
     mode: mode ?? this.mode,
-    singleAddress: singleAddress ?? this.singleAddress,
+    singleAddress: clearSingleAddress
+        ? null
+        : singleAddress ?? this.singleAddress,
+    temporaryAddress: clearTemporaryAddress
+        ? null
+        : temporaryAddress ?? this.temporaryAddress,
     drops: drops ?? this.drops,
     speedTier: speedTier ?? this.speedTier,
-    scheduledSlot: scheduledSlot ?? this.scheduledSlot,
-    paymentMethod: paymentMethod ?? this.paymentMethod,
+    scheduledSlot: clearScheduledSlot
+        ? null
+        : scheduledSlot ?? this.scheduledSlot,
+    paymentMethod: clearPaymentMethod
+        ? null
+        : paymentMethod ?? this.paymentMethod,
     leaveAtDoor: leaveAtDoor ?? this.leaveAtDoor,
     riderNote: riderNote ?? this.riderNote,
     unitAssignments: unitAssignments ?? this.unitAssignments,

@@ -6,6 +6,7 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
+import 'package:printing_app/features/customer/chat/providers/chat_provider.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart'
     show ordersProvider, cancellableStatuses;
 import 'package:printing_app/features/customer/orders/widgets/order_status_timeline.dart';
@@ -22,12 +23,62 @@ import 'package:printing_app/shared/widgets/file_preview_sheet.dart';
 import 'package:printing_app/features/customer/orders/widgets/admin_status_banner.dart';
 import 'package:printing_app/utils/formatters.dart';
 
+Order? _findOrderByRouteId(List<Order> orders, String routeId) {
+  for (final order in orders) {
+    if (order.id == routeId ||
+        order.orderId == routeId ||
+        order.batchId == routeId ||
+        order.batchOrderId == routeId) {
+      return order;
+    }
+
+    for (final item in order.lineItems) {
+      if (item.id == routeId || item.orderId == routeId) {
+        return order;
+      }
+    }
+  }
+
+  return null;
+}
+
 /// Detailed view of a single order.
 class OrderDetailScreen extends ConsumerWidget {
   const OrderDetailScreen({super.key, required this.orderId});
 
   /// The internal order id (e.g. 'ord_001').
   final String orderId;
+
+  Future<void> _openOrderChat(
+    BuildContext context,
+    WidgetRef ref,
+    Order order,
+  ) async {
+    final orderRef = int.tryParse(order.id) == null ? order.orderId : order.id;
+
+    final conv = await ref
+        .read(chatProvider.notifier)
+        .openOrderConversation(orderRef);
+    if (!context.mounted) return;
+    if (conv == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open order chat. Please try again.'),
+        ),
+      );
+      return;
+    }
+
+    final uri = Uri(
+      path: '/customer/chat/${conv.id}',
+      queryParameters: {
+        'type': conv.type.name,
+        'orderRef': order.orderId,
+        'orderStatus': order.orderStatus.displayName,
+      },
+    );
+    context.push(uri.toString());
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -36,10 +87,30 @@ class OrderDetailScreen extends ConsumerWidget {
         : AppColors.light;
 
     final orders = ref.watch(ordersProvider);
-    final order = orders.firstWhere(
-      (o) => o.id == orderId,
-      orElse: () => orders.first,
-    );
+    final order = _findOrderByRouteId(orders, orderId);
+
+    if (order == null) {
+      return Scaffold(
+        backgroundColor: colors.background,
+        appBar: AppBar(
+          backgroundColor: colors.surface,
+          title: Text(
+            'Order not found',
+            style: AppTypography.h3.copyWith(color: colors.onBackground),
+          ),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.xl),
+            child: Text(
+              'We could not find order $orderId.',
+              textAlign: TextAlign.center,
+              style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
+            ),
+          ),
+        ),
+      );
+    }
 
     final statusHistory =
         MockData.orderStatusHistory.where((h) => h.orderId == order.id).toList()
@@ -180,6 +251,14 @@ class OrderDetailScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.lg),
 
             // --- Action Buttons ---
+            AppButton(
+              label: 'Chat about this order',
+              variant: AppButtonVariant.secondary,
+              onTap: () => _openOrderChat(context, ref, order),
+              isFullWidth: true,
+              icon: HugeIcons.strokeRoundedMessage01,
+            ),
+            const SizedBox(height: AppSpacing.sm),
             if (isOnTheWay)
               AppButton(
                 label: 'Track Delivery',
@@ -310,12 +389,44 @@ class OrderDetailScreen extends ConsumerWidget {
         _specRow('Type', _itemCategoryLabel(item.category), colors),
         _specRow('Quantity', '${item.quantity}', colors),
         ..._itemSpecRows(item, colors),
+        if (item.specialInstructions != null)
+          _specRow(
+            'Special Instructions / Notes',
+            item.specialInstructions!,
+            colors,
+            multiline: true,
+          ),
         _specRow('Item Subtotal', formatCurrency(item.totalPrice), colors),
       ],
     );
   }
 
-  Widget _specRow(String label, String value, AppColorSet colors) {
+  Widget _specRow(
+    String label,
+    String value,
+    AppColorSet colors, {
+    bool multiline = false,
+  }) {
+    if (multiline) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: AppTypography.body.copyWith(color: colors.onSurface),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Row(
@@ -325,9 +436,13 @@ class OrderDetailScreen extends ConsumerWidget {
             label,
             style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
           ),
-          Text(
-            value,
-            style: AppTypography.body.copyWith(color: colors.onSurface),
+          const SizedBox(width: AppSpacing.md),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: AppTypography.body.copyWith(color: colors.onSurface),
+            ),
           ),
         ],
       ),
@@ -502,6 +617,7 @@ class OrderDetailScreen extends ConsumerWidget {
     AppColorSet colors,
   ) {
     final isPickup = order.deliveryOption == 'pickup';
+    final temporaryAddress = order.deliveryAddress;
 
     return AppCard(
       child: Column(
@@ -529,7 +645,7 @@ class OrderDetailScreen extends ConsumerWidget {
                 ),
               ],
             )
-          else if (address != null) ...[
+          else if (temporaryAddress != null || address != null) ...[
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -544,15 +660,16 @@ class OrderDetailScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        address.fullAddress,
+                        temporaryAddress?.fullAddress ?? address!.fullAddress,
                         style: AppTypography.body.copyWith(
                           color: colors.onSurface,
                         ),
                       ),
-                      if (address.landmark != null) ...[
+                      if ((temporaryAddress?.landmark ?? address?.landmark) !=
+                          null) ...[
                         const SizedBox(height: AppSpacing.xs),
                         Text(
-                          'Landmark: ${address.landmark}',
+                          'Landmark: ${temporaryAddress?.landmark ?? address?.landmark}',
                           style: AppTypography.caption.copyWith(
                             color: colors.onSurfaceDim,
                           ),
