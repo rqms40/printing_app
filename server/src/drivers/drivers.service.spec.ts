@@ -37,6 +37,42 @@ describe('DriversService', () => {
     assignedAt: new Date(),
   } as DeliveryAssignment;
 
+  const makeAssignment = (
+    id: number,
+    latitude: number | null,
+    longitude: number | null,
+    createdAt = new Date(`2026-05-02T0${id}:00:00Z`),
+  ) =>
+    ({
+      id,
+      orderId: id,
+      driverId: 10,
+      status: DeliveryStatus.ACCEPTED,
+      createdAt,
+      order: {
+        id,
+        destination:
+          latitude === null || longitude === null
+            ? null
+            : {
+                latitude,
+                longitude,
+              },
+      },
+    }) as DeliveryAssignment;
+
+  const mockActiveAssignmentsQuery = (assignments: DeliveryAssignment[]) => {
+    const queryBuilder = {
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue(assignments),
+    };
+    assignmentRepo.createQueryBuilder.mockReturnValue(queryBuilder as any);
+    return queryBuilder;
+  };
+
   beforeEach(async () => {
     profileRepo = {
       findOne: jest.fn(),
@@ -280,6 +316,77 @@ describe('DriversService', () => {
       await expect(
         service.updateDeliveryStatus(1, 999, DeliveryStatus.ACCEPTED),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('getActiveAssignments', () => {
+    it('orders active assignments by nearest route from the driver location', async () => {
+      profileRepo.findOne.mockResolvedValue({
+        ...mockProfile,
+        lastLatitude: 7.064,
+        lastLongitude: 125.608,
+      } as DriverProfile);
+      const farFirstFromDb = makeAssignment(1, 7.22, 125.72);
+      const nearestFromShop = makeAssignment(2, 7.065, 125.609);
+      const secondStop = makeAssignment(3, 7.08, 125.62);
+      mockActiveAssignmentsQuery([farFirstFromDb, secondStop, nearestFromShop]);
+
+      const result = await service.getActiveAssignments(1);
+
+      const queryBuilder = assignmentRepo.createQueryBuilder.mock.results[0]
+        .value as {
+        leftJoinAndSelect: jest.Mock;
+      };
+      expect(queryBuilder.leftJoinAndSelect).toHaveBeenCalledWith(
+        'order.destination',
+        'destination',
+      );
+      expect(result.map((assignment) => assignment.id)).toEqual([2, 3, 1]);
+    });
+
+    it('falls back to shop location when driver GPS is partially missing', async () => {
+      profileRepo.findOne.mockResolvedValue({
+        ...mockProfile,
+        lastLatitude: null,
+        lastLongitude: 125.608,
+      } as DriverProfile);
+      const nearShop = makeAssignment(1, 7.065, 125.609);
+      const nearInvalidPartialGps = makeAssignment(2, 0.1, 125.608);
+      mockActiveAssignmentsQuery([nearInvalidPartialGps, nearShop]);
+
+      const result = await service.getActiveAssignments(1);
+
+      expect(result.map((assignment) => assignment.id)).toEqual([1, 2]);
+    });
+
+    it('keeps assignments without destination coordinates after routeable stops', async () => {
+      profileRepo.findOne.mockResolvedValue({
+        ...mockProfile,
+        lastLatitude: null,
+        lastLongitude: null,
+      } as DriverProfile);
+      const missingCoordinates = makeAssignment(1, null, null);
+      const routeable = makeAssignment(2, 7.065, 125.609);
+      mockActiveAssignmentsQuery([missingCoordinates, routeable]);
+
+      const result = await service.getActiveAssignments(1);
+
+      expect(result.map((assignment) => assignment.id)).toEqual([2, 1]);
+    });
+
+    it('keeps partially geocoded destinations after routeable stops', async () => {
+      profileRepo.findOne.mockResolvedValue({
+        ...mockProfile,
+        lastLatitude: 7.064,
+        lastLongitude: 125.608,
+      } as DriverProfile);
+      const partialCoordinates = makeAssignment(1, null, 125.609);
+      const routeable = makeAssignment(2, 7.22, 125.72);
+      mockActiveAssignmentsQuery([partialCoordinates, routeable]);
+
+      const result = await service.getActiveAssignments(1);
+
+      expect(result.map((assignment) => assignment.id)).toEqual([2, 1]);
     });
   });
 });

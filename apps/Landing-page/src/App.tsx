@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PhoneScene } from './components/PhoneScene';
 import { Menu, X, Phone, MessageCircle, Zap, ShieldCheck, ChevronUp } from 'lucide-react';
-import { HardDriveUploadIcon, TruckIcon, ListIcon, AlarmClockIcon, MessageCircleIcon } from 'lucide-animated';
+import { HardDriveUploadIcon, TruckIcon, ListIcon, TimerIcon, MessageCircleIcon } from 'lucide-animated';
 
 function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
@@ -182,7 +182,7 @@ function FeaturesSection() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 max-w-4xl mx-auto">
           <FeatureCard
-            icon={AlarmClockIcon}
+            icon={TimerIcon}
             title="24/7 App Operations"
             desc="Inspiration doesn't have a closing time. Whether it's 2 PM or 2 AM, you can upload your files and start the process. Our system works 24/7 so your project never has to wait for a shop to open."
           />

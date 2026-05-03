@@ -37,6 +37,16 @@ const ORDER_STATUS_BY_DELIVERY_STATUS: Partial<
   [DeliveryStatus.DELIVERED]: OrderStatus.DELIVERED,
 };
 
+const SHOP_LOCATION = {
+  latitude: 7.064,
+  longitude: 125.6079,
+};
+
+type GeoPoint = {
+  latitude: number;
+  longitude: number;
+};
+
 @Injectable()
 export class DriversService {
   constructor(
@@ -141,15 +151,106 @@ export class DriversService {
 
   async getActiveAssignments(userId: number): Promise<DeliveryAssignment[]> {
     const profile = await this.getProfile(userId);
-    return this.assignmentRepo
+    const assignments = await this.assignmentRepo
       .createQueryBuilder('da')
       .leftJoinAndSelect('da.order', 'order')
+      .leftJoinAndSelect('order.destination', 'destination')
       .where('da.driverId = :driverId', { driverId: profile.id })
       .andWhere('da.status NOT IN (:...statuses)', {
         statuses: [DeliveryStatus.DELIVERED, DeliveryStatus.DECLINED],
       })
       .orderBy('da.createdAt', 'DESC')
       .getMany();
+
+    return this.orderAssignmentsByRoute(assignments, profile);
+  }
+
+  private orderAssignmentsByRoute(
+    assignments: DeliveryAssignment[],
+    profile: DriverProfile,
+  ): DeliveryAssignment[] {
+    const startPoint =
+      this.toGeoPoint(profile.lastLatitude, profile.lastLongitude) ??
+      SHOP_LOCATION;
+
+    const routeable = assignments
+      .map((assignment, index) => ({
+        assignment,
+        index,
+        point: this.toGeoPoint(
+          assignment.order?.destination?.latitude,
+          assignment.order?.destination?.longitude,
+        ),
+      }))
+      .filter(
+        (
+          candidate,
+        ): candidate is {
+          assignment: DeliveryAssignment;
+          index: number;
+          point: GeoPoint;
+        } => candidate.point !== null,
+      );
+
+    const missingCoordinates = assignments.filter(
+      (assignment) =>
+        !this.toGeoPoint(
+          assignment.order?.destination?.latitude,
+          assignment.order?.destination?.longitude,
+        ),
+    );
+
+    const ordered: DeliveryAssignment[] = [];
+    let currentPoint = startPoint;
+    const remaining = [...routeable];
+
+    while (remaining.length > 0) {
+      let nearestIndex = 0;
+      let nearestDistance = Number.POSITIVE_INFINITY;
+
+      for (let i = 0; i < remaining.length; i += 1) {
+        const distance = this.distanceKm(currentPoint, remaining[i].point);
+        if (
+          distance < nearestDistance ||
+          (distance === nearestDistance &&
+            remaining[i].index < remaining[nearestIndex].index)
+        ) {
+          nearestIndex = i;
+          nearestDistance = distance;
+        }
+      }
+
+      const [nearest] = remaining.splice(nearestIndex, 1);
+      ordered.push(nearest.assignment);
+      currentPoint = nearest.point;
+    }
+
+    return [...ordered, ...missingCoordinates];
+  }
+
+  private toGeoPoint(
+    latitude: number | string | null | undefined,
+    longitude: number | string | null | undefined,
+  ): GeoPoint | null {
+    if (latitude == null || longitude == null) return null;
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    if (lat === 0 && lng === 0) return null;
+    return { latitude: lat, longitude: lng };
+  }
+
+  private distanceKm(from: GeoPoint, to: GeoPoint): number {
+    const toRadians = (value: number) => (value * Math.PI) / 180;
+    const earthRadiusKm = 6371;
+    const dLat = toRadians(to.latitude - from.latitude);
+    const dLng = toRadians(to.longitude - from.longitude);
+    const fromLat = toRadians(from.latitude);
+    const toLat = toRadians(to.latitude);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(fromLat) * Math.cos(toLat) * Math.sin(dLng / 2) ** 2;
+    return 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
   async updateDeliveryStatus(
