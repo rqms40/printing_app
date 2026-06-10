@@ -72,6 +72,9 @@ error.txt
 out.txt
 status.txt
 
+# === Vite dev cache ===
+**/.vite/
+
 # === Misc ===
 *.class
 *.log

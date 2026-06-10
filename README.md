@@ -2,7 +2,7 @@
 
 **TAP TO PLOT. Simplified. Printing.**
 
-A premium printing service delivery platform — paper and 3D printing as easy as ordering food delivery.
+A premium printing service delivery platform — paper and 3D printing as easy as ordering food delivery. Built for the Philippine market.
 
 [![Mobile CI](https://github.com/rqms40/printing_app/actions/workflows/ci-mobile.yml/badge.svg)](https://github.com/rqms40/printing_app/actions/workflows/ci-mobile.yml)
 [![Server CI](https://github.com/rqms40/printing_app/actions/workflows/ci-server.yml/badge.svg)](https://github.com/rqms40/printing_app/actions/workflows/ci-server.yml)
@@ -15,37 +15,36 @@ A premium printing service delivery platform — paper and 3D printing as easy a
 ```mermaid
 graph TB
     subgraph Clients
-        A[Flutter Mobile App<br/>Customer / Driver]
+        A[Flutter Mobile App<br/>Customer / Driver / Admin]
         AA[Refine Admin Dashboard<br/>React + Ant Design]
-        B[IoT Kiosk<br/>Future]
+        LP[Landing Page<br/>React + Three.js]
     end
 
     subgraph Backend
         C[NestJS API Server<br/>Port 3000]
-        D[WebSocket Gateways<br/>Orders + Chat + Slots + Daily Grid]
+        D[WebSocket Gateways<br/>Orders · Chat · Slots · Notifications · Location · Daily Grid]
     end
 
     subgraph Data
-        E[(PostgreSQL 15)]
-        F[Redis Cache]
-        G[S3 / MinIO<br/>File Storage]
+        E[(PostgreSQL 15<br/>30 tables)]
+        F[Redis 7<br/>Provisioned]
+        G[MinIO<br/>File Storage]
     end
 
     subgraph External
         H[OSRM<br/>Route Directions]
-        I[PayMongo<br/>GCash / Maya]
-        J[Firebase<br/>Push Notifications]
+        I[PayMongo<br/>GCash / Maya — stub]
+        J[Firebase FCM<br/>Push Notifications]
         K[OpenStreetMap<br/>Map Tiles]
         L[OpenRouter<br/>GridBot AI]
     end
 
     A -->|REST + JWT| C
-    A -->|WebSocket| D
+    A -->|Socket.IO| D
     AA -->|REST + JWT| C
-    AA -->|WebSocket| D
-    B -.->|MQTT| C
+    AA -->|Socket.IO| D
     C --> E
-    C --> F
+    C -.->|reserved| F
     C --> G
     D --> E
     A --> H
@@ -124,161 +123,195 @@ stateDiagram-v2
 ## Project Structure
 
 ```
-grid/
+printing_app/
 ├── apps/
-│   └── mobile/                        # Flutter app (Customer + Driver)
-│       ├── lib/
-│       │   ├── config/                # Theme, routes, constants
-│       │   ├── features/
-│       │   │   ├── auth/              # Login, register, profile setup
-│       │   │   ├── onboarding/        # First-login role slides
-│       │   │   ├── tutorial/          # Pipeline walkthrough + coach marks
-│       │   │   ├── customer/
-│       │   │   │   ├── home/          # Bento grid + Daily Grid + greeting
-│       │   │   │   ├── order/         # Category → specs → upload → checkout
-│       │   │   │   ├── orders/        # Active + history with admin status banner
-│       │   │   │   ├── tracking/      # Live driver map, ETA badge
-│       │   │   │   ├── address/       # Saved addresses + multi-drop assignment
-│       │   │   │   ├── chat/          # GridBot AI + admin/rider live chat
-│       │   │   │   ├── beta/          # Beta enrollment + 1-order limit
-│       │   │   │   ├── cart/          # Cart-style batch builder
-│       │   │   │   ├── notifications/ # In-app inbox
-│       │   │   │   ├── uploads/       # My Uploads + retention settings
-│       │   │   │   └── profile/       # Account, TAM survey, preferences
-│       │   │   ├── driver/            # Deliveries, active delivery, history
-│       │   │   └── admin/             # Mobile admin queue + dashboard
-│       │   ├── shared/                # Widgets, models, providers, services
-│       │   └── utils/                 # Formatters, validators, pricing
-│       └── test/                      # 300+ unit/widget/integration tests
+│   ├── mobile/                        # Flutter app (Customer + Driver + Admin)
+│   │   ├── lib/
+│   │   │   ├── config/                # Theme, routes, constants, page transitions
+│   │   │   ├── features/
+│   │   │   │   ├── auth/              # Login, register, profile setup, onboarding
+│   │   │   │   ├── tutorial/          # Pipeline walkthrough + coach marks
+│   │   │   │   ├── customer/
+│   │   │   │   │   ├── home/          # Bento grid, Daily Grid, credits chip
+│   │   │   │   │   ├── order/         # Category → specs → upload → checkout
+│   │   │   │   │   ├── orders/        # Active + history with status banner
+│   │   │   │   │   ├── tracking/      # Live driver map, ETA badge, OSRM route
+│   │   │   │   │   ├── address/       # Saved addresses + multi-drop assignment
+│   │   │   │   │   ├── chat/          # GridBot AI + admin/rider live chat
+│   │   │   │   │   ├── beta/          # Beta enrollment + testimonial wall
+│   │   │   │   │   ├── notifications/ # In-app inbox + WebSocket updates
+│   │   │   │   │   ├── uploads/       # My Uploads + retention settings
+│   │   │   │   │   └── profile/       # Account, TAM survey, top-up, preferences
+│   │   │   │   ├── driver/            # Deliveries, active delivery, history, earnings
+│   │   │   │   └── admin/             # Mobile admin queue + dashboard
+│   │   │   ├── shared/                # Widgets, models, providers, services
+│   │   │   └── utils/                 # Formatters, validators, pricing engine
+│   │   └── test/                      # 424 unit / widget / integration tests
+│   │
+│   ├── Landing-page/                  # Marketing landing page (React 19 + Three.js)
+│   │   ├── src/
+│   │   │   ├── App.tsx                # All sections in one file (~615 lines)
+│   │   │   ├── components/
+│   │   │   │   ├── PhoneScene.tsx     # Scroll-driven 3D WebGL phone animation
+│   │   │   │   └── PhoneModel.tsx     # GLTF loader for smartphone.glb
+│   │   │   └── index.css              # Tailwind v4 theme, bg-map parallax
+│   │   └── public/smartphone.glb      # 3D phone model asset
+│   │
+│   └── admin-web/                     # [DEPRECATED] Early prototype admin UI (React 19, no Refine)
 │
-├── admin/                             # Refine admin dashboard (React + Vite)
+├── admin/                             # Production Refine admin dashboard (React 18 + Ant Design)
 │   ├── src/
 │   │   ├── pages/
-│   │   │   ├── dashboard/             # KPIs, charts, users analytics tab
-│   │   │   ├── orders/                # Queue, detail, manual status, preview
-│   │   │   ├── drivers/               # Availability + GPS
-│   │   │   ├── users/                 # Customer detail + recent orders
-│   │   │   ├── delivery-slots/        # Templates + Today's view
-│   │   │   ├── beta-mode/             # Beta enrollment management
-│   │   │   ├── chat/                  # Conversation list + thread
-│   │   │   ├── tam-surveys/           # Submission viewer
-│   │   │   ├── notifications/        # Marketing notification composer
-│   │   │   ├── credit-requests/       # Customer credit top-up review
-│   │   │   ├── admin-settings/        # Delivery + printer settings
-│   │   │   └── external-deliveries/   # Maxim/Grab integration
+│   │   │   ├── dashboard/             # KPIs, charts (operations/orders/users tabs)
+│   │   │   ├── orders/                # Queue, detail, file preview, manual status
+│   │   │   ├── drivers/               # Live GPS map, dispatch queue, roster
+│   │   │   ├── users/                 # Customer profiles + order history
+│   │   │   ├── products/              # Dynamic catalog (categories + spec options + addons)
+│   │   │   ├── delivery-slots/        # Weekly templates + today's live board
+│   │   │   ├── beta-mode/             # Enrollment management, survey exemptions
+│   │   │   ├── chat/                  # Support inbox, conversation thread
+│   │   │   ├── tam-surveys/           # Submission viewer + feed approval
+│   │   │   ├── notifications/         # Marketing notification composer
+│   │   │   ├── credit-requests/       # Top-up review + proof of payment
+│   │   │   ├── daily-grid/            # Home screen carousel card manager
+│   │   │   ├── external-deliveries/   # Third-party courier handoff queue
+│   │   │   └── settings/              # Delivery zone map + printer profile
 │   │   ├── components/
 │   │   │   ├── chat/                  # ConversationList, MessageBubble, TypingIndicator
-│   │   │   ├── file-inspector/        # PDF page-count + STL/OBJ CAD viewer
-│   │   │   ├── file-preview-modal.tsx # Per-row file preview with inspection
-│   │   │   └── show-page.tsx          # Shared show-detail layout
-│   │   ├── providers/                 # Auth, data, chat-ws, delivery-slot-ws
-│   │   └── services/                  # betaModeApi
-│   └── test/                          # 80+ vitest tests
+│   │   │   ├── file-inspector/        # PDF viewer + STL/OBJ/GLB CAD viewer (Three.js)
+│   │   │   └── notification-bell/     # Real-time badge with dropdown
+│   │   └── providers/                 # Auth, data, chat-ws, delivery-slot-ws, notification-ws
+│   └── src/                           # 23 Vitest test files (not currently run in CI)
 │
-├── server/                            # NestJS backend
+├── server/                            # NestJS 11 backend
 │   ├── src/
-│   │   ├── admin/                     # Admin-only endpoints (dashboard, queue)
-│   │   ├── auth/                      # JWT + Passport, profile setup
-│   │   ├── users/                     # Profile, storage settings, tutorial keys
+│   │   ├── admin/                     # Admin-only endpoints (dashboard, analytics, queue)
+│   │   ├── auth/                      # JWT + Passport, registration, login
+│   │   ├── users/                     # Profile, storage settings, tutorial keys, FCM token
 │   │   ├── orders/                    # CRUD + WebSocket + batch + manual status
 │   │   ├── addresses/                 # Delivery addresses
-│   │   ├── drivers/                   # Assignments + GPS
-│   │   ├── delivery-slots/            # Templates, bookings, geo-radius
+│   │   ├── drivers/                   # Assignments, GPS updates, earnings
+│   │   ├── delivery-slots/            # Templates, bookings, geo-radius, WS gateway
 │   │   ├── credits/                   # GRID Credits top-up + ledger
-│   │   ├── chat/                      # Conversations + messages + GridBot AI
-│   │   ├── beta-mode/                 # Beta enrollment + per-user limits
-│   │   ├── daily-grid/                # Curated daily catalog cards
-│   │   ├── printer-profile/           # Per-printer build volume limits
-│   │   ├── tam-surveys/               # Survey requirements + submissions
-│   │   ├── files/                     # Upload + S3 + analysis (PDF/3D/paper-size)
-│   │   ├── payments/                  # PayMongo integration
-│   │   ├── notifications/             # In-app + FCM + marketing scheduler
+│   │   ├── chat/                      # Conversations, messages, GridBot OpenRouter, WS gateway
+│   │   ├── beta-mode/                 # Settings, enrollment, per-user limits, testimonial
+│   │   ├── daily-grid/                # Curated carousel cards + WS gateway
+│   │   ├── printer-profile/           # 3D printer build volume limits
+│   │   ├── tam-surveys/               # Requirements, submissions, feed
+│   │   ├── files/                     # Upload → MinIO, analysis (PDF/image/3D), purge cron, GLB encoder
+│   │   ├── payments/                  # PayMongo module (currently stubbed)
+│   │   ├── notifications/             # In-app + FCM push + marketing scheduler
+│   │   ├── products/                  # Dynamic catalog (categories, spec definitions, options, addons)
 │   │   ├── firebase/                  # Firebase Admin SDK
-│   │   ├── storage/                   # S3/MinIO storage service
-│   │   ├── health/                    # Health check + DB probe
-│   │   └── common/                    # Guards, filters, interfaces
-│   ├── migrations/                    # TypeORM migrations
-│   ├── test/                          # 350+ unit + integration tests
-│   ├── docker-compose.yml             # PostgreSQL + Redis
-│   ├── Dockerfile                     # Multi-stage production build
-│   └── .env.example                   # Environment variables template
+│   │   ├── storage/                   # MinIO/S3 storage service
+│   │   ├── health/                    # Health check + DB probe at GET /api/health
+│   │   └── common/                    # Guards, filters, exception handler
+│   ├── migrations/                    # 10 TypeORM migrations (prod schema management)
+│   ├── src/seed.ts                    # Demo data (3 users, catalog, slots, orders)
+│   ├── docker-compose.yml             # PostgreSQL 15 + Redis 7 + MinIO
+│   ├── Dockerfile                     # Multi-stage node:20-alpine production build
+│   └── .env.example                   # All required environment variables
 │
 ├── packages/
-│   └── api-types/                     # Shared API type definitions
+│   └── api-types/                     # Planned shared API types (skeleton only, not yet implemented)
 │
-├── docs/
-│   ├── PRD.md                         # Product Requirements (v3)
-│   ├── PRD_SysArchi.md                # System architecture diagram
-│   └── superpowers/                   # Design specs + implementation plans
-│
-├── .github/workflows/                 # CI/CD (mobile + server + admin + release)
-├── Makefile                           # Common commands
+├── docs/                              # PRD, architecture docs, implementation plans
+├── .github/workflows/                 # 4 CI/CD workflows
+├── Makefile                           # Common dev commands
 └── README.md
 ```
 
 ## Tech Stack
 
-| Layer | Technology | Purpose |
+| Layer | Technology | Version / Detail |
 |-------|-----------|---------|
-| **Mobile** | Flutter 3.41.6 + Dart 3.11.4 | Customer + Driver app (FVM-pinned) |
-| **Admin** | React 18 + Refine + Ant Design + Vite | Admin dashboard (web) |
-| **State (mobile)** | Riverpod 2.6.1 (StateNotifier) | Reactive state management |
-| **State (admin)** | Refine data providers | REST data fetching + caching |
-| **Navigation** | GoRouter (mobile) / React Router 6 (admin) | Declarative routing |
-| **Maps** | flutter_map + OpenStreetMap | Free maps, no API key |
-| **Routing** | OSRM | Free driving directions |
-| **3D Viewer** | three.js + @react-three/fiber + @react-three/drei | Admin STL/OBJ/GLB inspector |
-| **PDF Viewer** | pdf-lib (admin) + pdfx (mobile) | Page-count extraction + preview |
-| **Coach Marks** | tutorial_coach_mark 1.3.3 | In-app tutorial pipeline |
-| **Icons** | HugeIcons (mobile) / Ant Design Icons (admin) | Icon sets |
-| **Backend** | NestJS 11 + TypeScript | Modular REST + WebSocket API |
-| **Database** | PostgreSQL 15 + TypeORM | Relational data + migrations |
-| **Auth** | Passport.js + JWT | Stateless authentication |
-| **Security** | Helmet + Throttler + RA 10173 compliance | HTTP headers + rate limiting |
-| **Payments** | PayMongo (GCash + Card) + GRID Credits ledger | Payment + wallet |
-| **Push** | Firebase Cloud Messaging + APNs | Push notifications |
-| **Real-time** | Socket.IO (4 gateways) | Orders + Chat + Slots + Daily Grid |
-| **AI** | OpenRouter (GridBot prompt) | In-app support assistant |
-| **Storage** | S3-compatible (MinIO / AWS S3) | File uploads + retention purge |
-| **Local cache (mobile)** | Hive + SharedPreferences | Offline drafts + tutorial state |
-| **CI/CD** | GitHub Actions | Lint, test, build, release APK |
-| **Container** | Docker + Compose | Production deployment |
+| **Mobile** | Flutter + Dart | 3.41.6 / 3.11.4 (FVM-pinned) |
+| **Mobile target** | Web (primary) + Android APK | Web build for beta; APK via CI release |
+| **State (mobile)** | Riverpod | 2.6.1, `StateNotifierProvider` + `FutureProvider` |
+| **Navigation (mobile)** | go_router | 14.8.1, role-based redirect + `StatefulShellRoute` |
+| **Maps** | flutter_map + OpenStreetMap | Free, no API key |
+| **Routing (directions)** | OSRM | `router.project-osrm.org`, no API key |
+| **3D (mobile)** | flutter_3d_controller | 3D model viewer for print previews |
+| **Admin** | React 18 + Refine v4 + Ant Design 5 + Vite 6 | Production admin dashboard |
+| **Admin charts** | Recharts | Area/bar charts |
+| **Admin 3D** | Three.js + @react-three/fiber + @react-three/drei | STL/OBJ/GLB file inspector |
+| **Admin maps** | Leaflet + react-leaflet | Driver tracking + delivery zone config |
+| **Landing page** | React 19 + Vite 8 + Tailwind CSS v4 | Marketing site (port 5174) |
+| **Landing 3D** | @react-three/fiber 9 + Three.js | Scroll-driven phone model WebGL scene |
+| **Landing animation** | Framer Motion 12 | Scroll-triggered entry animations |
+| **Backend** | NestJS 11 + TypeScript 5.7 | Modular REST + WebSocket API |
+| **Database** | PostgreSQL 15 + TypeORM 0.3 | 30 tables, 10 migrations, `synchronize: true` in dev |
+| **Auth** | Passport.js + JWT | 7-day tokens, bcrypt hashing, 3 roles |
+| **File storage** | MinIO (S3-compatible) | Presigned URLs, GLB preview conversion |
+| **Push** | Firebase Cloud Messaging (Admin SDK 13) | Mobile push notifications |
+| **Real-time** | Socket.IO — 6 namespaces | orders · location · chat · notifications · daily-grid · delivery-slots |
+| **AI** | OpenRouter (GridBot) | `nvidia/nemotron-3-nano-30b-a3b:free`, GPT-3.5-turbo fallback |
+| **PDF analysis** | pdf-lib | Page count + dimensions extraction |
+| **Image analysis** | sharp | DPI, colorspace (CMYK/RGB), dimensions |
+| **3D analysis** | Custom parser | STL/OBJ/3MF → GLB, bounding box vs printer limits |
+| **Payments** | PayMongo (GCash / Maya) | **Currently stubbed** — checkout URL mocked |
+| **Security** | Helmet + Throttler | HTTP headers (prod only) + 30 req/min global / 5 req/min auth |
+| **Local storage (mobile)** | Hive + SharedPreferences + flutter_secure_storage | Draft persistence, JWT, tutorial state |
+| **Scheduling** | @nestjs/schedule | File purge cron, marketing notification broadcaster |
+| **API docs** | Swagger/OpenAPI | Available at `GET /docs` |
+| **CI/CD** | GitHub Actions (4 workflows) | Lint · test · build · APK release |
+| **Containers** | Docker + Compose | postgres:15 + redis:7-alpine + minio |
+
+> **Redis note:** Redis 7 is provisioned in docker-compose but no Redis client is installed in the server package. It is reserved for a future caching or job-queue feature.
 
 ## Quick Start
 
 ### Prerequisites
 
-- Flutter 3.41.6 ([FVM](https://fvm.app) recommended)
-- Node.js 20+ and npm
-- Docker (for PostgreSQL)
+- [FVM](https://fvm.app) with Flutter 3.41.6 installed: `fvm install 3.41.6`
+- Node.js 22+ and npm
+- Docker (for PostgreSQL, MinIO)
 
-### Development
+### 1. Start infrastructure
 
 ```bash
-# 1. Clone
-git clone git@github.com:rqms40/printing_app.git
-cd printing_app
-
-# 2. Start database
 cd server
-cp .env.example .env
-docker-compose up -d
+cp .env.example .env          # fill in JWT_SECRET, OPENROUTER_API_KEY, etc.
+docker-compose up -d          # starts postgres:15, redis:7, minio
+```
 
-# 3. Install + run migrations + seed
+> **After a fresh container restart**, the database may need to be recreated:
+> ```bash
+> docker exec server-postgres-1 psql -U postgres -c "CREATE DATABASE grid_print;"
+> ```
+
+### 2. Start the backend
+
+```bash
+cd server
 npm install
-npm run migration:run   # apply TypeORM migrations
-npm run seed            # load demo data
-npm run start:dev       # http://localhost:3000/docs (Swagger)
+npm run migration:run   # apply the 10 TypeORM migrations
+npm run seed            # load demo data (users, catalog, orders, slots)
+npm run start:dev       # http://localhost:3000/docs  (Swagger)
+```
 
-# 4. Start mobile app (new terminal)
+### 3. Start the mobile app
+
+```bash
 cd apps/mobile
 fvm flutter pub get
-fvm flutter run
+fvm flutter run          # or: fvm flutter build web --release --no-tree-shake-icons
+```
 
-# 5. Start admin dashboard (new terminal)
+### 4. Start the admin dashboard
+
+```bash
 cd admin
 npm install
-npm run dev             # http://localhost:5173
+npm run dev              # http://localhost:5173
+```
+
+### 5. Start the landing page (optional)
+
+```bash
+cd apps/Landing-page
+npm install
+npm run dev              # http://localhost:5174
 ```
 
 ### Demo Credentials
@@ -289,133 +322,222 @@ npm run dev             # http://localhost:5173
 | Driver | juan@gridprint.ph | password123 |
 | Admin | admin@gridprint.ph | password123 |
 
-> Mobile app also has dev bypass buttons on the login screen for quick testing without a server.
+> The mobile app has dev bypass buttons on the login screen for quick testing without a running server.
 
 ## Apps
 
 ### Mobile (`apps/mobile/`)
 
-Flutter app serving Customer + Driver roles. Highlights of what's currently shipped:
+Flutter 3.41.6 app. Single codebase serves three roles (customer, driver, admin) via role-based tab shells. Primary build target is **Flutter Web**; Android APK is also supported and auto-released via CI.
 
 **Customer experience**
-- **In-app tutorial** — multi-screen guided pipeline walkthrough (welcome → Start Printing → category → specs → upload → checkout → place order) with auto-positioning coach marks; post-order discovery pass for Credits, GridBot, Multi-drop, and live tracking; "Reset Tutorials" in profile preferences.
-- **Onboarding** — first-login role-picker slides; staged registration with profiling.
-- **Bento home** — Daily Grid section (curated catalog with real-time WebSocket updates), Resume-your-Queue card, Recent Orders, GridBot floating chat button, GRID Credits chip, batch session trigger dialog.
-- **Order pipeline** — Category → Paper/3D specs → Upload → Checkout. Paper specs include size, color mode, media, sides, binding, copies; 3D specs include format, material, color, infill, layer height, supports + manual W×H×D check vs printer build volume (Bambu A1 / A1 Mini).
-- **Upload screen** — drag-drop file card, real Dio progress, instant validation, file preview sheet, ruler overlay (draggable triangular scale ruler with 1:1/1:50/1:100/1:200/1:500 toggle), CMYK/RGB warning, dimension mismatch warning.
-- **Cart-style batch checkout** — multiple items in one transaction, swipe-to-remove, edit-all-specs, per-copy multi-drop assignment, address picker sheet, slot picker sheet, payment-method sheet, summary card with subtotal/delivery/total, sticky place-order footer.
-- **Delivery options** — single delivery, pickup, or multi-drop (up to 5 destinations with per-stop fees); scheduled delivery via slot picker (templates × geo-radius × today's availability).
-- **GRID Credits wallet** — custom-amount top-up via PayMongo GCash, credits never expire, "Pay with GRID Credits" payment row appears when balance ≥ order total, profile shows ledger.
-- **Live chat** — dedicated Chat tab with conversation list. Two backends: AI GridBot (OpenRouter, 24/7 support) and human admin/rider (WebSocket-backed real-time messaging, typing indicator, message bubbles, chat avatar).
-- **Beta mode** — beta enrollment status indicator, post-delivery TAM survey lockout, 1-order limit while in beta with informational sheet.
-- **My Uploads** — view + delete previously uploaded files; per-user file retention setting (auto-purge cron).
-- **Live tracking** — flutter_map + OSRM driving route, driver marker updates every few seconds, ETA badge, swipeable destination cards on multi-drop.
-- **Notifications** — grouped inbox with day headers, unread count, mark-as-read.
-- **Profile** — account details, storage settings, request-a-feature card, TAM survey (required + optional flows), reset tutorials, notification preferences, dark mode toggle.
+- **Onboarding** — first-login role-picker slides; staged registration with profiling (occupation, course, printing preferences).
+- **In-app tutorial** — multi-screen guided pipeline walkthrough with auto-positioning coach marks; post-order feature discovery pass for Credits, GridBot, Multi-drop, and live tracking.
+- **Bento home** — Daily Grid carousel (curated catalog, real-time WebSocket updates), Resume-your-Queue card, Recent Orders, GridBot floating chat FAB, GRID Credits chip with animated dropdown.
+- **Order pipeline** — Category → Paper/3D specs → Upload → Checkout (6 steps). Paper supports size, color mode, media, sides, binding, copies. 3D supports material, infill %, layer height, supports toggle + printer volume validation.
+- **Upload screen** — file picker, Dio upload progress, instant validation, PDF page preview, draggable ruler overlay (1:1/1:50/1:100/1:200/1:500 scale), CMYK detection warning, paper-size mismatch warning.
+- **Cart-style batch checkout** — multiple items in one transaction, swipe-to-remove, per-copy multi-drop assignment, address picker, delivery slot picker, payment method sheet, price summary.
+- **Delivery options** — single delivery, pickup, or multi-drop (up to 5 destinations with per-stop fees); scheduled delivery slots (weekly templates × geo-radius × real-time capacity).
+- **GRID Credits wallet** — top-up via GCash/Maya proof upload, credits shown in profile ledger, "Pay with GRID Credits" option at checkout.
+- **Live chat** — AI GridBot (OpenRouter, 24/7, markdown rendering) and human admin/rider chat (WebSocket, typing indicator, image attachments, read receipts).
+- **Beta mode** — beta enrollment indicator, post-delivery TAM survey gate, 1-order limit during beta with informational sheet, testimonial photo upload, social share.
+- **My Uploads** — file library, delete, per-user file retention settings (auto-purge via server cron).
+- **Live tracking** — flutter_map + OSRM driving route, driver GPS updates via Socket.IO, ETA badge, swipeable destination cards for multi-drop.
+- **Notifications** — grouped inbox with day headers, unread badge, mark-as-read, WebSocket real-time delivery.
+- **Profile** — account details, storage settings, top-up screen, TAM survey flows (required + optional), tutorial reset, dark/light theme toggle.
 
-**Driver experience** — assignment dashboard, accept/decline, checkpoint status (picked up → on the way → arrived → delivered), live GPS streaming, multi-drop sequential stops, history + earnings.
+**Driver experience** — assignment dashboard, accept/decline, checkpoint status updates (picked up → on the way → arrived → delivered), live GPS streaming, multi-drop sequential stops, history + earnings.
+
+**Admin experience (mobile)** — order queue and dashboard accessible without switching to the web admin panel.
 
 ### Admin Dashboard (`admin/`)
 
-Refine + React web dashboard for shop administrators:
-- **Dashboard** — KPI cards (new, in-production, ready, revenue), 6-month sales + volume charts, Users analytics tab.
-- **Orders queue** — tabs (New / In Production / Done / All), search, status dropdown, manual status note for 3D orders, decline-with-reason, audit timeline, driver-assignment modal.
-- **File inspector** — modal with PDF page-count extractor + RA 10173-aware presigned URL fetch + interactive 3D viewer for STL/OBJ/GLB models. Per-row file preview button on multi-item orders.
-- **Drivers** — availability list, last GPS update, assignment history.
-- **Users** — customer detail with metrics, recent orders, profile fields.
-- **Delivery slots** — Templates page (capacity, time windows, geo-radius) + Today's view (live booked counts via WS).
-- **Beta mode** — enrollment management.
-- **Live chat** — conversation list, message thread, real-time WS updates, reply form.
-- **Marketing notifications** — composer with iOS-style live preview, frequency (6h/daily/monthly), active toggle, FCM + email blast.
-- **TAM surveys** — submission viewer.
-- **Credit requests** — review customer top-up requests.
-- **Admin settings** — delivery zones, printer profiles.
-- **External deliveries** — Maxim / Grab Express handoff for out-of-zone destinations.
-- **Theming** — dark theme with DM Sans font; mock data fallback when server is offline.
+Refine v4 + React 18 + Ant Design 5 web dashboard. ~25 pages with 4 concurrent WebSocket connections.
+
+| Page | Features |
+|------|---------|
+| **Dashboard** | KPI cards (new orders, in-production, ready, revenue), 6-month sales + volume charts, Users analytics tab |
+| **Orders** | Pipeline tabs (New / In Production / Done / All), status dropdown with transition graph enforcement, file preview, manual status bar for 3D orders, decline-with-reason, driver assignment modal, admin notes, CSV export |
+| **File Inspector** | PDF page-count extractor + presigned URL + interactive 3D viewer for STL/OBJ/GLB models (Three.js) |
+| **Drivers** | Live map (Leaflet + CARTO dark tiles), real-time GPS, availability toggle, dispatch queue |
+| **Users** | Customer profiles, role filter, order history, metrics |
+| **Products** | Dynamic catalog management — categories, spec definitions, spec options, addons |
+| **Delivery Slots** | Weekly template editor + today's live capacity board (WebSocket-updated + 5s polling fallback) |
+| **External Deliveries** | Third-party courier handoff queue (pending → booked → delivered) |
+| **Beta Mode** | Global toggle, enroll/unenroll users, survey exemptions, order limit reset |
+| **Live Chat** | Conversation list (all/open/mine/closed), message thread, GridBot AI messages, reply form |
+| **Marketing Notifications** | Composer with frequency scheduling (6h/daily/monthly), FCM blast, active toggle |
+| **TAM Surveys** | Submission viewer, feed approval, enable/disable |
+| **Credit Requests** | Pending top-up requests with proof-of-payment image review, approve/reject |
+| **Daily Grid** | Carousel card CRUD, image upload, reorder, visibility toggle, spec pre-fill |
+| **Settings** | Delivery zone map (service center + radius + fees via interactive Leaflet map), 3D printer build volume |
 
 ### Server (`server/`)
 
-NestJS backend providing REST API + WebSocket. **23 modules**, **3 migrations**, **350+ tests**.
+NestJS 11 backend — REST API + 6 WebSocket namespaces, **59 spec files** (Jest), **10 migrations**, Swagger at `/docs`.
 
-Modules:
-- **admin** · **auth** · **users** · **orders** (with batch + delivery destinations + speed tier) · **addresses** · **drivers**
-- **delivery-slots** (templates, bookings, settings, geo-radius, WS gateway)
-- **credits** (top-up + ledger)
-- **chat** (conversations, messages, GridBot OpenRouter prompt, WS gateway)
-- **beta-mode** (settings, enrollment, per-user 1-order limit)
-- **daily-grid** (curated cards + WS gateway)
-- **printer-profile** (per-printer build volume limits)
-- **tam-surveys** (requirements + submissions)
-- **files** (S3 storage, file analysis service for PDF/3D/paper-size validation, retention purge cron, GLB encoder)
-- **payments** (PayMongo)
-- **notifications** (in-app + FCM + marketing scheduler with broadcast)
-- **firebase** (Admin SDK)
-- **storage** (S3/MinIO config)
-- **health** (DB probe)
-- **common** (guards, filters, interceptors, exception filter that logs + forwards structured errors)
+**WebSocket namespaces (Socket.IO)**
 
-Other:
-- 4 WebSocket gateways: orders, chat, delivery-slots, daily-grid
-- Role-based access control: customer / driver / admin
-- Rate limiting (Helmet + Throttler), Swagger docs at `/docs`
-- TypeORM migrations: `1714435200000-add-speed-tier-and-payment-default`, `1715040000000-drop-priority-boolean`, `1777507200000-add-tutorial-seen-keys`
+| Namespace | Auth | Purpose |
+|---|---|---|
+| `/ws/orders` | JWT | Order status updates, survey-required events |
+| `/ws/location` | None | Real-time driver GPS per delivery assignment |
+| `/ws/chat` | JWT | Customer ↔ admin, customer ↔ GridBot, driver ↔ admin |
+| `/ws/notifications` | JWT | In-app notifications + credits balance updates |
+| `/ws/daily-grid` | None | Push carousel card changes to all clients |
+| `/ws/delivery-slots` | JWT | Real-time slot availability per date |
+
+**Key modules:** admin · auth · users · orders (batch + delivery destinations + speed tiers) · addresses · drivers · delivery-slots · credits · chat · beta-mode · daily-grid · printer-profile · tam-surveys · files (upload + analysis + purge cron + GLB encoder) · payments (stubbed) · notifications (in-app + FCM + marketing scheduler) · products (dynamic catalog) · firebase · storage · health · common
+
+**External integrations:**
+- **Firebase FCM** — live, push notifications to mobile
+- **MinIO** — live, file storage with presigned download URLs
+- **OpenRouter** — live, GridBot AI (`nvidia/nemotron-3-nano-30b-a3b:free`, GPT-3.5-turbo fallback)
+- **OSRM** — live, free driving directions (no API key)
+- **PayMongo** — **stubbed** — checkout URL mocked; real keys in `.env.example` commented out
+
+### Landing Page (`apps/Landing-page/`)
+
+React 19 + Vite 8 + Tailwind CSS v4 marketing site. Runs on port 5174.
+
+**Sections:** Navbar · Hero (3D WebGL scroll scene) · "Design. Tap. Print." pitch · 5 Feature Cards · How It Works (3-step) · Support (GridBot + 24/7 stats) · About (vision/mission/team) · Beta CTA ("Access Mobile Web" / "Download APK")
+
+> Beta CTA buttons are currently presentational stubs — no backend wiring, no email capture, no analytics.
 
 ## Testing
 
 ```bash
-# Mobile (300+ tests across unit, widget, integration)
+# Mobile — 424 tests (unit / widget / integration)
 cd apps/mobile && fvm flutter test
 
-# Server (350+ tests, Jest)
+# Server — 59 spec files (Jest + ts-jest, real PostgreSQL in CI)
 cd server && npm test
+cd server && npm run test:cov      # with coverage
+cd server && npm run test:e2e      # end-to-end (not run in CI)
 
-# Admin (80+ tests, Vitest + Testing Library)
+# Admin — 23 test files (Vitest + Testing Library)
 cd admin && npm test
-cd admin && npm run build   # type check + production build
 
 # Lint
 cd apps/mobile && fvm flutter analyze
 cd server && npm run lint
+cd admin && npx tsc --noEmit
 ```
+
+> **Note:** Admin Vitest tests are **not currently run in `ci-admin.yml`** — the workflow only runs `tsc --noEmit` + `vite build`. The `npm test` script works locally.
+
+## CI/CD
+
+| Workflow | Trigger | Steps |
+|---------|---------|-------|
+| `ci-mobile.yml` | push/PR to `apps/mobile/**` | Flutter 3.41.6 → analyze → test (424) → web build |
+| `ci-server.yml` | push/PR to `server/**` | Node 24 + postgres:15 → lint → build → Jest tests |
+| `ci-admin.yml` | push/PR to `admin/**` | Node 24 → `tsc --noEmit` → `vite build` |
+| `release-apk.yml` | push of `v*` tag | Flutter test → build signed APK → GitHub Release |
+
+**Secrets required for APK release:** `GOOGLE_SERVICES_JSON`, `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`
+
+**Releases:** Tags `v1.0.0` through `v1.3.0` exist. Pushing a `v*` tag triggers the signed APK build and attaches it to a GitHub Release with auto-generated release notes.
 
 ## Deployment
 
-### Docker (production)
+### Local / Development
+
+```bash
+# Infrastructure (postgres + redis + minio)
+cd server && docker-compose up -d
+
+# API server (runs natively, not in Docker)
+cd server && npm run start:dev      # port 3000
+
+# Admin dashboard
+cd admin && npm run dev              # port 5173
+```
+
+### Production (Docker)
 
 ```bash
 cd server
-docker-compose up -d --build  # Builds API + PostgreSQL + Redis
+docker-compose up -d --build        # builds API image from Dockerfile
 ```
 
-### Release APK
+The `server/Dockerfile` is a multi-stage `node:20-alpine` build. Key production checklist:
+- Set a strong `JWT_SECRET` (default is `grid-jwt-secret-change-in-production`)
+- Set real `OPENROUTER_API_KEY`
+- Configure real PayMongo keys when ready
+- Set `NODE_ENV=production` (disables TypeORM `synchronize`, enables Helmet)
+- Run migrations: `npm run migration:run`
+- Replace MinIO with S3/R2 if deploying to cloud (change `MINIO_*` env vars)
 
-```bash
-git tag v1.0.0
-git push origin v1.0.0  # Triggers GitHub Actions → APK release
-```
+> **No cloud deployment is configured.** The project currently runs on a local LAN. No Render/Railway/Fly.io/Vercel/GCP config exists.
 
-## Development Status
+> **Node version note:** The Dockerfile uses `node:20-alpine`; CI workflows use Node 24; the dev system runs Node 22. Consider aligning these.
 
-- [x] Phase 1: UI Shell (3 roles, full screen inventory)
-- [x] Phase 2: Local Logic (Hive drafts, dark mode, connectivity, draft storage)
-- [x] Phase 3: NestJS Backend (23 modules, TypeORM migrations)
-- [x] Phase 4: Flutter ↔ API Integration (dio interceptors, auth refresh)
-- [x] Phase 5: Admin Dashboard (Refine + React + Vitest)
-- [x] Phase 6: Cart-style Batch Checkout (multi-item single-transaction orders)
-- [x] Phase 7: Delivery Slot Booking (templates × geo-radius × real-time capacity)
-- [x] Phase 8: Multi-drop Delivery (per-copy assignment, sequential stops)
-- [x] Phase 9: Live Chat (GridBot AI + human support, WS-backed)
-- [x] Phase 10: Beta Mode (enrollment, post-delivery TAM lockout, 1-order limit)
-- [x] Phase 11: GRID Credits Wallet (top-up + ledger + payment method)
-- [x] Phase 12: File Inspector (PDF page-count + STL/OBJ/GLB CAD viewer)
-- [x] Phase 13: File Retention (per-user storage settings + purge cron)
-- [x] Phase 14: In-App Tutorial (pipeline walkthrough + post-order feature pass)
-- [x] CI/CD Pipelines (mobile + server + admin)
-- [x] Firebase Push Notifications + Marketing Scheduler
-- [x] Test Suite (730+ tests across all apps)
-- [ ] PayMongo Live Integration (sandbox → production)
-- [ ] S3/R2 File Storage in production
-- [ ] Production Deployment
+## Environment Variables
+
+See `server/.env.example` for the full list. Key variables:
+
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `JWT_SECRET` | Yes | Change from default before any deployment |
+| `DATABASE_*` | Yes | Host, port, name, user, password |
+| `MINIO_*` | Yes | Endpoint, keys, bucket, public URL |
+| `OPENROUTER_API_KEY` | Yes | For GridBot AI |
+| `FIREBASE_SERVICE_ACCOUNT` | Yes | Path to Firebase service account JSON |
+| `PAYMONGO_SECRET_KEY` | No | Not yet active — payments are stubbed |
+| `OSRM_BASE_URL` | No | Defaults to `https://router.project-osrm.org` |
+
+## Database
+
+PostgreSQL 15 via TypeORM. **30 tables**, **10 migrations**.
+
+**Core tables:** `users` · `orders` · `batch_orders` · `order_items` · `order_item_spec_values` · `order_status_history` · `delivery_destinations` · `addresses`
+
+**Catalog:** `product_categories` · `product_spec_definitions` · `product_spec_options` · `service_addons`
+
+**Delivery:** `driver_profiles` · `delivery_assignments` · `delivery_settings` · `delivery_slot_templates` · `delivery_slot_bookings`
+
+**Payments:** `payment_transactions` · `credit_transactions` · `credit_settings`
+
+**Chat:** `chat_conversations` · `chat_messages`
+
+**Files:** `file_metadata`
+
+**Notifications:** `notifications` · `marketing_notifications`
+
+**Beta / Surveys:** `beta_mode_settings` · `tam_surveys` · `tam_survey_requirements` · `tam_survey_settings`
+
+**Config:** `daily_grid_cards` · `printer_profiles`
+
+TypeORM `synchronize: true` in development (schema auto-synced). In production, run migrations manually via `npm run migration:run`. Seed script: `npm run seed`.
+
+## Development Status — v1.3.0
+
+- [x] Phase 1 — UI shell (3 roles, full screen inventory, theme system)
+- [x] Phase 2 — Local logic (Hive drafts, dark mode, connectivity, offline mock fallback)
+- [x] Phase 3 — NestJS backend (30 DB tables, 10 migrations, Swagger)
+- [x] Phase 4 — Flutter ↔ API integration (Dio interceptors, JWT auth)
+- [x] Phase 5 — Admin dashboard (Refine + Ant Design, ~25 pages, 4 WebSocket connections)
+- [x] Phase 6 — Cart-style batch checkout (multi-item single-transaction orders)
+- [x] Phase 7 — Delivery slot booking (weekly templates × geo-radius × real-time capacity)
+- [x] Phase 8 — Multi-drop delivery (per-copy assignment, sequential stops, external courier)
+- [x] Phase 9 — Live chat (GridBot AI + human support, WebSocket-backed)
+- [x] Phase 10 — Beta mode (enrollment, post-delivery TAM survey gate, 1-order limit, testimonial wall)
+- [x] Phase 11 — GRID Credits wallet (GCash/Maya proof top-up, ledger, credits payment method)
+- [x] Phase 12 — File inspector (PDF analysis + STL/OBJ/GLB CAD viewer + ruler overlay)
+- [x] Phase 13 — File retention (per-user storage settings + purge cron)
+- [x] Phase 14 — In-app tutorial (pipeline walkthrough + post-order feature coach marks)
+- [x] Phase 15 — Dynamic product catalog (admin-configurable categories + spec definitions + options)
+- [x] Phase 16 — Real-time notifications (FCM push + WebSocket in-app + marketing scheduler)
+- [x] Phase 17 — Landing page (React 19 + Three.js + Framer Motion, scroll-driven 3D phone)
+- [x] CI/CD pipelines (mobile + server + admin + APK release)
+- [x] Test suite (424 Flutter · 59 server spec files · 23 admin test files)
+- [ ] PayMongo live integration (currently stubbed — sandbox → production)
+- [ ] Production cloud deployment (no provider configured yet)
+- [ ] Admin CI: enable Vitest run in `ci-admin.yml`
+- [ ] Redis activation (provisioned, not yet used — planned for caching/queuing)
+- [ ] Align Node.js versions (Dockerfile: 20, CI: 24, dev: 22)
+- [ ] Wire landing page CTAs to real download/signup endpoints
 
 ## License
 
