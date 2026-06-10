@@ -14,6 +14,7 @@ import 'package:printing_app/features/auth/widgets/age_range_selector.dart';
 import 'package:printing_app/features/auth/widgets/gender_identity_selector.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/features/auth/widgets/onboarding_hero.dart';
+import 'package:vector_math/vector_math_64.dart' show Vector3;
 
 enum _RegisterStep {
   privacy,
@@ -977,55 +978,6 @@ class _SummaryChip extends StatelessWidget {
   }
 }
 
-class _PrivacyBulletCard extends StatelessWidget {
-  const _PrivacyBulletCard({required this.colors});
-
-  final AppColorSet colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: colors.surfaceVariant,
-        borderRadius: AppRadius.borderXl,
-        border: Border.all(color: colors.outline),
-      ),
-      child: Column(
-        children: [
-          _BulletRow(label: 'Nickname & profile', colors: colors),
-          const SizedBox(height: AppSpacing.md),
-          _BulletRow(label: 'Contact info', colors: colors),
-          const SizedBox(height: AppSpacing.md),
-          _BulletRow(label: 'Usage preferences', colors: colors),
-        ],
-      ),
-    );
-  }
-}
-
-class _BulletRow extends StatelessWidget {
-  const _BulletRow({required this.label, required this.colors});
-
-  final String label;
-  final AppColorSet colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text('✦', style: TextStyle(color: colors.brand, fontSize: 12)),
-        const SizedBox(width: AppSpacing.md),
-        Text(
-          label,
-          style: AppTypography.body.copyWith(color: colors.onSurface),
-        ),
-      ],
-    );
-  }
-}
-
 IconData _fieldIcon(String fieldValue) {
   switch (fieldValue) {
     case 'architecture':
@@ -1385,7 +1337,7 @@ class _CategoryCarouselState extends State<_CategoryCarousel> {
               final transform = Matrix4.identity()
                 ..setEntry(3, 2, 0.001)
                 ..rotateY(angle)
-                ..scale(scale, scale, 1.0);
+                ..scaleByVector3(Vector3(scale, scale, 1.0));
 
               final cat = _categories[index];
               final isSelected = widget.selectedCategory == cat.id;

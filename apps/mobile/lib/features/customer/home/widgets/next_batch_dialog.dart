@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
-import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/order/models/delivery_slot.dart';
@@ -246,15 +244,15 @@ class _NextBatchDialogState extends State<NextBatchDialog> {
 
     final eyebrow = switch (info.reason) {
       NextBatchReason.allFull => 'TODAY · BATCHES FULL',
-      NextBatchReason.dayOver => "TODAY · DAY OVER",
+      NextBatchReason.dayOver => 'TODAY · DAY OVER',
       NextBatchReason.weekend => 'TODAY · NO RUNS',
       NextBatchReason.midDay => 'TODAY · IN PROGRESS',
     };
     final headline = switch (info.reason) {
       NextBatchReason.allFull => "Today's batches are full",
       NextBatchReason.dayOver => "Today's last batch has departed",
-      NextBatchReason.weekend => "No deliveries scheduled today",
-      NextBatchReason.midDay => "Catch the next batch",
+      NextBatchReason.weekend => 'No deliveries scheduled today',
+      NextBatchReason.midDay => 'Catch the next batch',
     };
 
     final relevantDate = DateTime.parse(info.relevantDate);
@@ -362,19 +360,19 @@ class _NextBatchDialogState extends State<NextBatchDialog> {
                       booked: info.bookedTotal,
                       capacity: info.capacityTotal,
                     ),
-                    _SheetPageHowItWorks(
+                    const _SheetPageHowItWorks(
                       onSheet: onSheet,
                       onSheetDim: onSheetDim,
                       brand: brand,
                     ),
-                    _SheetPageSchedule(
+                    const _SheetPageSchedule(
                       surface: sheetSurface,
                       outline: sheetOutline,
                       onSheet: onSheet,
                       onSheetDim: onSheetDim,
                       brand: brand,
                     ),
-                    _SheetPagePriority(
+                    const _SheetPagePriority(
                       surface: sheetSurface,
                       onSheet: onSheet,
                       onSheetDim: onSheetDim,
@@ -808,7 +806,7 @@ class _SheetPageSchedule extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final slots = const [
+    const slots = [
       ('Morning', '9:30 AM – 11:30 AM'),
       ('Afternoon', '2:00 PM – 4:00 PM'),
       ('Evening', '9:00 PM – 11:00 PM'),
@@ -899,9 +897,9 @@ class _SheetPagePriority extends StatelessWidget {
             ),
             child: Row(
               children: [
-                HugeIcon(
+                const HugeIcon(
                   icon: HugeIcons.strokeRoundedFlash,
-                  color: const Color(0xFF111111),
+                  color: Color(0xFF111111),
                   size: 26,
                 ),
                 const SizedBox(width: AppSpacing.md),

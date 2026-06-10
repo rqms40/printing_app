@@ -255,12 +255,12 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen>
                           // ── Share section ─────────────────────────────────
                           _animated(
                             _fadeShare,
-                            Column(
+                            const Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const _SectionLabel('SPREAD THE WORD'),
-                                const SizedBox(height: 6),
-                                const Text(
+                                _SectionLabel('SPREAD THE WORD'),
+                                SizedBox(height: 6),
+                                Text(
                                   'Tell your crew GRID is coming to Davao.',
                                   style: TextStyle(
                                     fontFamily: 'Satoshi',
@@ -269,8 +269,8 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen>
                                     height: 1.5,
                                   ),
                                 ),
-                                const SizedBox(height: 14),
-                                const BetaShareRow(),
+                                SizedBox(height: 14),
+                                BetaShareRow(),
                               ],
                             ),
                           ),

@@ -1,5 +1,5 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:vector_math/vector_math_64.dart' show Vector3;
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
@@ -94,7 +94,7 @@ class _AgeRangeSelectorState extends State<AgeRangeSelector> {
                   final transform = Matrix4.identity()
                     ..setEntry(3, 2, 0.001) // Standard perspective
                     ..rotateY(angle)
-                    ..scale(scale, scale, 1.0);
+                    ..scaleByVector3(Vector3(scale, scale, 1.0));
 
                   final option = ageRangeOptions[index];
                   final isSelected = _currentPage == index;

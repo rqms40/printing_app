@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:vector_math/vector_math_64.dart' show Vector3;
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
@@ -87,7 +88,7 @@ class _GenderIdentitySelectorState extends State<GenderIdentitySelector> {
                   final transform = Matrix4.identity()
                     ..setEntry(3, 2, 0.001)
                     ..rotateY(angle)
-                    ..scale(scale, scale, 1.0);
+                    ..scaleByVector3(Vector3(scale, scale, 1.0));
 
                   final gender = _genders[index];
                   final isSelected = widget.value == gender.id;
