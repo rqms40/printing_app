@@ -13,6 +13,18 @@ import { ChatService } from './chat.service';
 import { SenderRole } from './entities/chat-message.entity';
 import { ConversationType, Conversation } from './entities/conversation.entity';
 
+interface ChatSocketData {
+  userId?: number;
+  role?: string;
+}
+
+type ChatSocket = Socket<
+  Record<string, never>,
+  Record<string, never>,
+  Record<string, never>,
+  ChatSocketData
+>;
+
 @WebSocketGateway({ namespace: '/ws/chat', cors: { origin: '*' } })
 export class ChatGateway implements OnGatewayConnection {
   @WebSocketServer()
@@ -25,7 +37,7 @@ export class ChatGateway implements OnGatewayConnection {
     private readonly chatService: ChatService,
   ) {}
 
-  async handleConnection(client: Socket) {
+  async handleConnection(client: ChatSocket) {
     const token = client.handshake.auth?.token as string | undefined;
     if (!token) {
       client.disconnect();
@@ -49,7 +61,7 @@ export class ChatGateway implements OnGatewayConnection {
   @SubscribeMessage('join-conversation')
   async handleJoinConversation(
     @MessageBody() data: { conversationId: number },
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: ChatSocket,
   ) {
     await this.assertCanAccessConversation(client, data.conversationId);
     void client.join(`conversation:${data.conversationId}`);
@@ -59,7 +71,7 @@ export class ChatGateway implements OnGatewayConnection {
   @SubscribeMessage('leave-conversation')
   handleLeaveConversation(
     @MessageBody() data: { conversationId: number },
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: ChatSocket,
   ) {
     void client.leave(`conversation:${data.conversationId}`);
   }
@@ -73,11 +85,11 @@ export class ChatGateway implements OnGatewayConnection {
       attachmentFileId?: number;
       attachmentMimeType?: string;
     },
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: ChatSocket,
   ) {
     await this.assertCanAccessConversation(client, data.conversationId);
-    const userId = client.data.userId as number;
-    const role = (client.data.role as string) ?? 'customer';
+    const userId = client.data.userId ?? 0;
+    const role = client.data.role ?? 'customer';
     const senderRole =
       role === 'admin'
         ? SenderRole.ADMIN
@@ -148,10 +160,10 @@ export class ChatGateway implements OnGatewayConnection {
   @SubscribeMessage('typing')
   async handleTyping(
     @MessageBody() data: { conversationId: number },
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: ChatSocket,
   ) {
     await this.assertCanAccessConversation(client, data.conversationId);
-    const role = (client.data.role as string) ?? 'customer';
+    const role = client.data.role ?? 'customer';
     const senderRole =
       role === 'admin'
         ? SenderRole.ADMIN
@@ -167,7 +179,7 @@ export class ChatGateway implements OnGatewayConnection {
   @SubscribeMessage('read-messages')
   async handleReadMessages(
     @MessageBody() data: { conversationId: number },
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: ChatSocket,
   ) {
     if (!client.data.userId) return;
     await this.assertCanAccessConversation(client, data.conversationId);
@@ -191,11 +203,11 @@ export class ChatGateway implements OnGatewayConnection {
   }
 
   private async assertCanAccessConversation(
-    client: Socket,
+    client: ChatSocket,
     conversationId: number,
   ): Promise<Conversation> {
-    const userId = client.data.userId as number | undefined;
-    const role = (client.data.role as string | undefined) ?? 'customer';
+    const userId = client.data.userId;
+    const role = client.data.role ?? 'customer';
     if (!userId) {
       throw new WsException('Unauthorized');
     }

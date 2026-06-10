@@ -7,10 +7,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-import {
-  FileProcessingType,
-  PricingModel,
-} from '../enums/catalog.enums';
+import { FileProcessingType, PricingModel } from '../enums/catalog.enums';
 import { ProductSpecDefinition } from './product-spec-definition.entity';
 import { ServiceAddon } from './service-addon.entity';
 
@@ -33,7 +30,12 @@ export class ProductCategory {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
-  @Column({ name: 'mobile_description', type: 'varchar', length: 160, nullable: true })
+  @Column({
+    name: 'mobile_description',
+    type: 'varchar',
+    length: 160,
+    nullable: true,
+  })
   mobileDescription: string | null;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
@@ -69,7 +71,11 @@ export class ProductCategory {
   @Column({ name: 'max_file_size_mb', default: 50 })
   maxFileSizeMb: number;
 
-  @Column({ name: 'allowed_extensions', type: 'jsonb', default: () => "'[]'::jsonb" })
+  @Column({
+    name: 'allowed_extensions',
+    type: 'jsonb',
+    default: () => "'[]'::jsonb",
+  })
   allowedExtensions: string[];
 
   @Column({ name: 'is_active', default: true })

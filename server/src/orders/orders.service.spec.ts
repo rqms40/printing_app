@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { ForbiddenException, Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { FilesService } from '../files/files.service';
@@ -39,6 +40,7 @@ const specValueRepoProvider = () => ({
   provide: getRepositoryToken(OrderItemSpecValue),
   useValue: {
     create: jest.fn((data) => data),
+
     save: jest.fn(async (data) => data),
   },
 });
@@ -111,7 +113,7 @@ describe('OrdersService', () => {
     createdAt: new Date(),
   } as Order;
 
-  const specValueRepoProvider = () => ({
+  const _specValueRepoProvider = () => ({
     provide: getRepositoryToken(OrderItemSpecValue),
     useValue: {
       create: jest.fn((data) => data),
@@ -123,7 +125,7 @@ describe('OrdersService', () => {
     provide: CatalogPricingService,
     useValue: {
       quote: jest.fn(async (dto) => {
-        const items = dto.items.map((item: any, index: number) => {
+        const items = dto.items.map((item: any, _index: number) => {
           const is3d = item.categorySlug === '3d';
           const printSubtotal = is3d
             ? 300
@@ -1309,9 +1311,9 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       await service.updateStatus(1, 'delivered');
 
       // Verify at least one call was made with the survey_required metadata
-      const surveyCalls = (
-        mockFirebase.sendToDevice as jest.Mock
-      ).mock.calls.filter((call: any[]) => call[3]?.type === 'survey_required');
+      const surveyCalls = mockFirebase.sendToDevice.mock.calls.filter(
+        (call: any[]) => call[3]?.type === 'survey_required',
+      );
       expect(surveyCalls).toHaveLength(1);
       expect(surveyCalls[0][0]).toBe('fcm-xyz');
     });
@@ -1329,9 +1331,9 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       await service.updateStatus(1, 'delivered');
 
       expect(mockGateway.notifySurveyRequired).not.toHaveBeenCalled();
-      const surveyCalls = (
-        mockNotifications.create as jest.Mock
-      ).mock.calls.filter((call: any[]) => call[0]?.type === 'survey_required');
+      const surveyCalls = mockNotifications.create.mock.calls.filter(
+        (call: any[]) => call[0]?.type === 'survey_required',
+      );
       expect(surveyCalls).toHaveLength(0);
     });
   });

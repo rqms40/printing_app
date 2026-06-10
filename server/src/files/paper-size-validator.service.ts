@@ -4,13 +4,13 @@ import { PT_TO_MM } from './files.constants';
 const TOLERANCE_MM = 5;
 
 const PAPER_SIZES_MM: Record<string, { width: number; height: number }> = {
-  A1:     { width: 594,  height: 841  },
-  A2:     { width: 420,  height: 594  },
-  A3:     { width: 297,  height: 420  },
-  A4:     { width: 210,  height: 297  },
-  A5:     { width: 148,  height: 210  },
-  LETTER: { width: 216,  height: 279  },
-  LEGAL:  { width: 216,  height: 356  },
+  A1: { width: 594, height: 841 },
+  A2: { width: 420, height: 594 },
+  A3: { width: 297, height: 420 },
+  A4: { width: 210, height: 297 },
+  A5: { width: 148, height: 210 },
+  LETTER: { width: 216, height: 279 },
+  LEGAL: { width: 216, height: 356 },
 };
 
 interface DimensionInput {
@@ -25,7 +25,8 @@ interface DimensionInput {
 export class PaperSizeValidatorService {
   validate(dims: DimensionInput, paperSize: string): SizeValidationResult {
     const target = PAPER_SIZES_MM[paperSize.toUpperCase()];
-    if (!target) return { status: 'unknown', message: `Unknown paper size: ${paperSize}` };
+    if (!target)
+      return { status: 'unknown', message: `Unknown paper size: ${paperSize}` };
 
     const { wMm, hMm } = this.toMm(dims);
     if (wMm === null || hMm === null) {
@@ -33,11 +34,14 @@ export class PaperSizeValidatorService {
     }
 
     const within = (a: number, b: number) => Math.abs(a - b) <= TOLERANCE_MM;
-    const portrait  = within(wMm, target.width)  && within(hMm, target.height);
+    const portrait = within(wMm, target.width) && within(hMm, target.height);
     const landscape = within(wMm, target.height) && within(hMm, target.width);
 
     if (portrait || landscape) {
-      return { status: 'match', orientation: landscape ? 'landscape' : 'portrait' };
+      return {
+        status: 'match',
+        orientation: landscape ? 'landscape' : 'portrait',
+      };
     }
 
     return {
@@ -48,7 +52,10 @@ export class PaperSizeValidatorService {
     };
   }
 
-  private toMm(dims: DimensionInput): { wMm: number | null; hMm: number | null } {
+  private toMm(dims: DimensionInput): {
+    wMm: number | null;
+    hMm: number | null;
+  } {
     if (dims.widthPt && dims.heightPt) {
       return { wMm: dims.widthPt * PT_TO_MM, hMm: dims.heightPt * PT_TO_MM };
     }

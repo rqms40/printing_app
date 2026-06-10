@@ -117,7 +117,9 @@ describe('DeliverySlotsService', () => {
       };
       bookingRepo.createQueryBuilder.mockReturnValue(qb);
 
-      const result = await svc.getAvailability('2026-04-30', { pickupOnly: true });
+      const result = await svc.getAvailability('2026-04-30', {
+        pickupOnly: true,
+      });
 
       expect(templateRepo.find).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -263,7 +265,13 @@ describe('DeliverySlotsService', () => {
   describe('getTodaySnapshot', () => {
     it('returns templates and bookings for the date', async () => {
       templateRepo.find.mockResolvedValue([
-        { id: 1, dayOfWeek: 4, startTime: '09:30:00', endTime: '11:30:00', capacity: 10 },
+        {
+          id: 1,
+          dayOfWeek: 4,
+          startTime: '09:30:00',
+          endTime: '11:30:00',
+          capacity: 10,
+        },
       ]);
       const qb = {
         leftJoinAndSelect: jest.fn().mockReturnThis(),
@@ -293,14 +301,32 @@ describe('DeliverySlotsService', () => {
         findOne: jest.fn().mockResolvedValue({ id: 3, date: '2026-04-30' }),
         update: jest.fn().mockResolvedValue(undefined),
       };
-      dataSource.transaction.mockImplementation(async (cb: any) => cb(txManager));
+      dataSource.transaction.mockImplementation(
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+        async (cb: any) => cb(txManager),
+      );
 
       await svc.reorderBookings([3, 1, 2]);
 
       expect(txManager.update).toHaveBeenCalledTimes(3);
-      expect(txManager.update).toHaveBeenNthCalledWith(1, expect.anything(), 3, { priorityRank: 1 });
-      expect(txManager.update).toHaveBeenNthCalledWith(2, expect.anything(), 1, { priorityRank: 2 });
-      expect(txManager.update).toHaveBeenNthCalledWith(3, expect.anything(), 2, { priorityRank: 3 });
+      expect(txManager.update).toHaveBeenNthCalledWith(
+        1,
+        expect.anything(),
+        3,
+        { priorityRank: 1 },
+      );
+      expect(txManager.update).toHaveBeenNthCalledWith(
+        2,
+        expect.anything(),
+        1,
+        { priorityRank: 2 },
+      );
+      expect(txManager.update).toHaveBeenNthCalledWith(
+        3,
+        expect.anything(),
+        2,
+        { priorityRank: 3 },
+      );
     });
   });
 });

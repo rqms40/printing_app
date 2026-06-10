@@ -1,8 +1,11 @@
 import { Test } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { DeliverySlotsController } from './delivery-slots.controller';
 import { DeliverySlotsService } from './delivery-slots.service';
 import { DeliverySettingsService } from './delivery-settings.service';
+import { DeliverySlotTemplate } from './entities/delivery-slot-template.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 
 describe('DeliverySlotsController', () => {
   let controller: DeliverySlotsController;
@@ -16,9 +19,7 @@ describe('DeliverySlotsController', () => {
         { provide: DeliverySlotsService, useValue: slotsService },
         { provide: DeliverySettingsService, useValue: {} },
         {
-          provide: require('@nestjs/typeorm').getRepositoryToken(
-            require('./entities/delivery-slot-template.entity').DeliverySlotTemplate,
-          ),
+          provide: getRepositoryToken(DeliverySlotTemplate),
           useValue: { find: jest.fn(), save: jest.fn(), create: jest.fn() },
         },
       ],
@@ -32,7 +33,9 @@ describe('DeliverySlotsController', () => {
   it('GET /delivery-slots returns availability for date', async () => {
     slotsService.getAvailability.mockResolvedValue([{ templateId: 1 }]);
     const out = await controller.list('2026-04-30');
-    expect(slotsService.getAvailability).toHaveBeenCalledWith('2026-04-30', { pickupOnly: false });
+    expect(slotsService.getAvailability).toHaveBeenCalledWith('2026-04-30', {
+      pickupOnly: false,
+    });
     expect(out).toEqual([{ templateId: 1 }]);
   });
 
@@ -52,16 +55,14 @@ describe('DeliverySlotsController', () => {
           { provide: DeliverySlotsService, useValue: slotsService },
           { provide: DeliverySettingsService, useValue: settingsService },
           {
-            provide: require('@nestjs/typeorm').getRepositoryToken(
-              require('./entities/delivery-slot-template.entity').DeliverySlotTemplate,
-            ),
+            provide: getRepositoryToken(DeliverySlotTemplate),
             useValue: tplRepo,
           },
         ],
       })
         .overrideGuard(JwtAuthGuard)
         .useValue({ canActivate: () => true })
-        .overrideGuard(require('../auth/guards/roles.guard').RolesGuard)
+        .overrideGuard(RolesGuard)
         .useValue({ canActivate: () => true })
         .compile();
       adminController = mod.get(DeliverySlotsController);

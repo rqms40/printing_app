@@ -315,9 +315,11 @@ describe('UsersService — storage settings', () => {
 
   describe('setDefaultPaymentMethod', () => {
     it('saves the new default to the user record', async () => {
-      repo.update!.mockResolvedValue({ affected: 1 } as never);
+      repo.update.mockResolvedValue({ affected: 1 } as never);
       await service.setDefaultPaymentMethod(1, 'gcash');
-      expect(repo.update).toHaveBeenCalledWith(1, { defaultPaymentMethod: 'gcash' });
+      expect(repo.update).toHaveBeenCalledWith(1, {
+        defaultPaymentMethod: 'gcash',
+      });
     });
 
     it('rejects unknown methods', async () => {

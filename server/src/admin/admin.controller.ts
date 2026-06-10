@@ -458,7 +458,9 @@ export class AdminController {
       delivery_slot_booking_id: o.batchOrder?.slotBookingId ?? null,
       speed_tier: o.batchOrder?.speedTier ?? null,
       priority_fee:
-        o.batchOrder?.priorityFee == null ? 0 : Number(o.batchOrder.priorityFee),
+        o.batchOrder?.priorityFee == null
+          ? 0
+          : Number(o.batchOrder.priorityFee),
       priority:
         o.batchOrder?.priorityFee == null
           ? false

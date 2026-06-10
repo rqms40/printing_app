@@ -11,7 +11,9 @@ describe('GeoRadiusService', () => {
   it('returns true at exactly the boundary (inclusive)', () => {
     // ~24.9 km offset — comfortably inside 25 km radius after haversine math
     const boundary = { lat: center.lat + 24.9 / 111, lng: center.lng };
-    expect(svc.isInsideRadius(boundary.lat, boundary.lng, center, 25)).toBe(true);
+    expect(svc.isInsideRadius(boundary.lat, boundary.lng, center, 25)).toBe(
+      true,
+    );
   });
 
   it('returns false beyond the radius', () => {

@@ -37,7 +37,11 @@ describe('Order manual-status columns', () => {
     .map((c) => c.propertyName);
 
   it('has admin-status columns', () => {
-    for (const name of ['adminStatusNote', 'estimatedCompletionAt', 'adminStatusSetAt']) {
+    for (const name of [
+      'adminStatusNote',
+      'estimatedCompletionAt',
+      'adminStatusSetAt',
+    ]) {
       expect(cols).toContain(name);
     }
   });

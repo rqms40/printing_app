@@ -88,37 +88,70 @@ describe('FilesController inspect with 3D bounds', () => {
       model3dDepthMm: '60.00',
       model3dHeightMm: '70.00',
       model3dTriangleCount: 12,
-      widthPt: null, heightPt: null,
-      widthPx: null, heightPx: null,
-      colorSpace: null, pageCount: null, dpi: null,
+      widthPt: null,
+      heightPt: null,
+      widthPx: null,
+      heightPx: null,
+      colorSpace: null,
+      pageCount: null,
+      dpi: null,
     });
     mockPrinterProfileService.getProfile.mockResolvedValue({
       name: 'Bambu A1 Mini',
-      buildVolumeWidthMm: 180, buildVolumeDepthMm: 180, buildVolumeHeightMm: 180,
+      buildVolumeWidthMm: 180,
+      buildVolumeDepthMm: 180,
+      buildVolumeHeightMm: 180,
       maxFileSizeMb: 200,
     });
-    const out = await controller.inspect(9, { user: { sub: 1, role: 'customer' } } as any);
-    expect(out.modelBounds).toEqual(expect.objectContaining({
-      widthMm: 50, depthMm: 60, heightMm: 70, triangleCount: 12, unit: 'mm',
-    }));
-    expect(out.printerLimits).toEqual(expect.objectContaining({
-      profileName: 'Bambu A1 Mini', fits: true, overflowAxes: [],
-    }));
+    const out = await controller.inspect(9, {
+      user: { sub: 1, role: 'customer' },
+    } as any);
+    expect(out.modelBounds).toEqual(
+      expect.objectContaining({
+        widthMm: 50,
+        depthMm: 60,
+        heightMm: 70,
+        triangleCount: 12,
+        unit: 'mm',
+      }),
+    );
+    expect(out.printerLimits).toEqual(
+      expect.objectContaining({
+        profileName: 'Bambu A1 Mini',
+        fits: true,
+        overflowAxes: [],
+      }),
+    );
   });
 
   it('inspect flags overflow axes when bounds exceed', async () => {
     mockFilesService.findById.mockResolvedValue({
-      id: 10, uploadedBy: 1, mimeType: 'application/octet-stream', originalName: 'b.stl',
-      model3dWidthMm: '200.00', model3dDepthMm: '60.00', model3dHeightMm: '210.00',
+      id: 10,
+      uploadedBy: 1,
+      mimeType: 'application/octet-stream',
+      originalName: 'b.stl',
+      model3dWidthMm: '200.00',
+      model3dDepthMm: '60.00',
+      model3dHeightMm: '210.00',
       model3dTriangleCount: 1,
-      widthPt: null, heightPt: null, widthPx: null, heightPx: null,
-      colorSpace: null, pageCount: null, dpi: null,
+      widthPt: null,
+      heightPt: null,
+      widthPx: null,
+      heightPx: null,
+      colorSpace: null,
+      pageCount: null,
+      dpi: null,
     });
     mockPrinterProfileService.getProfile.mockResolvedValue({
-      name: 'X', buildVolumeWidthMm: 180, buildVolumeDepthMm: 180,
-      buildVolumeHeightMm: 180, maxFileSizeMb: 200,
+      name: 'X',
+      buildVolumeWidthMm: 180,
+      buildVolumeDepthMm: 180,
+      buildVolumeHeightMm: 180,
+      maxFileSizeMb: 200,
     });
-    const out = await controller.inspect(10, { user: { sub: 1, role: 'customer' } } as any);
+    const out = await controller.inspect(10, {
+      user: { sub: 1, role: 'customer' },
+    } as any);
     expect(out.printerLimits!.fits).toBe(false);
     expect(out.printerLimits!.overflowAxes.sort()).toEqual(['height', 'width']);
   });

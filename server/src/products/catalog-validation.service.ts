@@ -72,7 +72,10 @@ export class CatalogValidationService {
     }
 
     if (spec.inputType === InputType.SELECT) {
-      const value = String(rawValue);
+      const value =
+        typeof rawValue === 'object'
+          ? JSON.stringify(rawValue)
+          : String(rawValue as string | number | boolean);
       const option = (spec.options ?? []).find(
         (entry) => entry.value === value,
       );
@@ -125,7 +128,10 @@ export class CatalogValidationService {
       return { spec, option: null, value, displayValue: value ? 'Yes' : 'No' };
     }
 
-    const value = String(rawValue);
+    const value =
+      typeof rawValue === 'object'
+        ? JSON.stringify(rawValue)
+        : String(rawValue as string | number | boolean);
     return { spec, option: null, value, displayValue: value };
   }
 }

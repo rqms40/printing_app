@@ -53,7 +53,10 @@ describe('NotificationsService', () => {
       providers: [
         NotificationsService,
         { provide: getRepositoryToken(Notification), useValue: repo },
-        { provide: getRepositoryToken(MarketingNotification), useValue: marketingRepo },
+        {
+          provide: getRepositoryToken(MarketingNotification),
+          useValue: marketingRepo,
+        },
         { provide: UsersService, useValue: usersService },
         { provide: NotificationsGateway, useValue: gateway },
       ],

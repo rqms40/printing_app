@@ -7,13 +7,13 @@ import {
 } from 'class-validator';
 
 export class UpdateManualStatusDto {
-  @ValidateIf((o) => o.note !== null)
+  @ValidateIf((o: UpdateManualStatusDto) => o.note !== null)
   @IsOptional()
   @IsString()
   @MaxLength(255)
   note: string | null;
 
-  @ValidateIf((o) => o.estimatedCompletionAt !== null)
+  @ValidateIf((o: UpdateManualStatusDto) => o.estimatedCompletionAt !== null)
   @IsOptional()
   @IsDateString()
   estimatedCompletionAt: string | null;

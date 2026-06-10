@@ -10,6 +10,17 @@ import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 
+interface DeliverySlotsSocketData {
+  userId?: number;
+}
+
+type DeliverySlotsSocket = Socket<
+  Record<string, never>,
+  Record<string, never>,
+  Record<string, never>,
+  DeliverySlotsSocketData
+>;
+
 @WebSocketGateway({ namespace: '/ws/delivery-slots', cors: { origin: '*' } })
 export class DeliverySlotsGateway implements OnGatewayConnection {
   @WebSocketServer()
@@ -18,7 +29,7 @@ export class DeliverySlotsGateway implements OnGatewayConnection {
 
   constructor(private readonly jwtService: JwtService) {}
 
-  async handleConnection(client: Socket) {
+  async handleConnection(client: DeliverySlotsSocket) {
     const token = client.handshake.auth?.token as string | undefined;
     if (!token) return client.disconnect();
     try {
@@ -32,7 +43,7 @@ export class DeliverySlotsGateway implements OnGatewayConnection {
   @SubscribeMessage('subscribe-slots')
   async handleSubscribe(
     @MessageBody() data: { date: string },
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: DeliverySlotsSocket,
   ) {
     const room = `slots:${data.date}`;
     await client.join(room);
@@ -43,7 +54,7 @@ export class DeliverySlotsGateway implements OnGatewayConnection {
   @SubscribeMessage('unsubscribe-slots')
   async handleUnsubscribe(
     @MessageBody() data: { date: string },
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: DeliverySlotsSocket,
   ) {
     await client.leave(`slots:${data.date}`);
   }

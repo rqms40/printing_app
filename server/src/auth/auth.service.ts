@@ -1,4 +1,8 @@
-import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -86,7 +90,8 @@ export class AuthService {
         }
         throw new ForbiddenException({
           code: 'beta_held',
-          message: 'Beta testing completed. Your account will reopen at full release.',
+          message:
+            'Beta testing completed. Your account will reopen at full release.',
           user: {
             fullName: user.fullName,
             email: user.email,

@@ -12,7 +12,13 @@ import { PrinterProfileModule } from '../printer-profile/printer-profile.module'
 @Module({
   imports: [TypeOrmModule.forFeature([FileMetadata]), PrinterProfileModule],
   controllers: [FilesController],
-  providers: [FilesService, PurgeService, FileAnalysisService, Model3dAnalysisService, PaperSizeValidatorService],
+  providers: [
+    FilesService,
+    PurgeService,
+    FileAnalysisService,
+    Model3dAnalysisService,
+    PaperSizeValidatorService,
+  ],
   exports: [FilesService, FileAnalysisService, PaperSizeValidatorService],
 })
 export class FilesModule {}

@@ -1,6 +1,6 @@
 export const GRIDBOT_REFUSAL =
   "I'm GridBot — I can only help with questions about GRID and our printing services. " +
-  "Try asking about paper printing, 3D printing, pricing, file requirements, turnaround, or delivery.";
+  'Try asking about paper printing, 3D printing, pricing, file requirements, turnaround, or delivery.';
 
 export const GRIDBOT_SYSTEM_PROMPT = [
   'You are GridBot, the AI assistant for GRID — a campus printing service that offers paper printing, 3D printing, and delivery.',

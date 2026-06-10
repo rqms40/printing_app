@@ -13,6 +13,7 @@ describe('DeliverySlotsGateway', () => {
       bookedCount: 9,
     });
 
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(gateway.server.to).toHaveBeenCalledWith('slots:2026-04-30');
     expect(emit).toHaveBeenCalledWith('slot-updated', {
       templateId: 1,

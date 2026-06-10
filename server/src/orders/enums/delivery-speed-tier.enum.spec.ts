@@ -1,4 +1,7 @@
-import { DeliverySpeedTier, isValidSpeedTier } from './delivery-speed-tier.enum';
+import {
+  DeliverySpeedTier,
+  isValidSpeedTier,
+} from './delivery-speed-tier.enum';
 
 describe('DeliverySpeedTier', () => {
   it('exposes 4 canonical tiers', () => {

@@ -29,6 +29,9 @@ describe('PrinterProfileController', () => {
 
   it('PATCH /admin/printer-profile updates', async () => {
     service.updateProfile.mockResolvedValue({ id: 1, name: 'New' });
-    expect(await ctrl.adminUpdate({ name: 'New' })).toEqual({ id: 1, name: 'New' });
+    expect(await ctrl.adminUpdate({ name: 'New' })).toEqual({
+      id: 1,
+      name: 'New',
+    });
   });
 });

@@ -31,13 +31,19 @@ describe('PaperSizeValidatorService', () => {
   });
 
   it('returns unknown for unrecognised paper size string', () => {
-    const result = service.validate({ widthPt: 595, heightPt: 842 }, 'CUSTOM_WEIRD');
+    const result = service.validate(
+      { widthPt: 595, heightPt: 842 },
+      'CUSTOM_WEIRD',
+    );
     expect(result.status).toBe('unknown');
   });
 
   it('validates image dimensions via dpi + px (A4 at 300dpi)', () => {
     // A4 at 300dpi = 2480×3508px
-    const result = service.validate({ widthPx: 2480, heightPx: 3508, dpi: 300 }, 'A4');
+    const result = service.validate(
+      { widthPx: 2480, heightPx: 3508, dpi: 300 },
+      'A4',
+    );
     expect(result.status).toBe('match');
   });
 });

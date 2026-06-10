@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { extname } from 'path';
+import JSZip from 'jszip';
 import { encodeGlb } from './glb-encoder';
 
 export interface Model3dBounds {
@@ -54,8 +55,12 @@ export class Model3dAnalysisService {
     const positions = new Float32Array(vertexFloatCount);
     const indices = new Uint32Array(triangleCount * 3);
 
-    let minX = Infinity, minY = Infinity, minZ = Infinity;
-    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    let minX = Infinity,
+      minY = Infinity,
+      minZ = Infinity;
+    let maxX = -Infinity,
+      maxY = -Infinity,
+      maxZ = -Infinity;
     let posIdx = 0;
     let idxIdx = 0;
     let baseIndex = 0;
@@ -102,9 +107,14 @@ export class Model3dAnalysisService {
 
   private analyzeStlAscii(buffer: Buffer): Model3dBounds | null {
     const text = buffer.toString('utf8');
-    const re = /vertex\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/g;
-    let minX = Infinity, minY = Infinity, minZ = Infinity;
-    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    const re =
+      /vertex\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/g;
+    let minX = Infinity,
+      minY = Infinity,
+      minZ = Infinity;
+    let maxX = -Infinity,
+      maxY = -Infinity,
+      maxZ = -Infinity;
     let count = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(text)) !== null) {
@@ -131,8 +141,12 @@ export class Model3dAnalysisService {
 
   private analyzeObj(buffer: Buffer): Model3dBounds | null {
     const text = buffer.toString('utf8');
-    let minX = Infinity, minY = Infinity, minZ = Infinity;
-    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    let minX = Infinity,
+      minY = Infinity,
+      minZ = Infinity;
+    let maxX = -Infinity,
+      maxY = -Infinity,
+      maxZ = -Infinity;
     for (const line of text.split('\n')) {
       if (!line.startsWith('v ')) continue;
       const parts = line.trim().split(/\s+/);
@@ -159,9 +173,7 @@ export class Model3dAnalysisService {
   }
 
   private async analyze3mf(buffer: Buffer): Promise<Model3dBounds | null> {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const JSZip = require('jszip');
-    const zip = await JSZip.loadAsync(buffer);
+    const zip = await new JSZip().loadAsync(buffer);
     const matches = zip.file(/3D\/3dmodel\.model$/i);
     const entry = matches[0];
     if (!entry) return null;
@@ -171,18 +183,27 @@ export class Model3dAnalysisService {
     const scale = UNIT_TO_MM[unitName] ?? 1;
 
     // Vertices: parse in order — index = position in array
-    const vertexRe = /<vertex\s+x="(-?\d+(?:\.\d+)?)"\s+y="(-?\d+(?:\.\d+)?)"\s+z="(-?\d+(?:\.\d+)?)"/g;
+    const vertexRe =
+      /<vertex\s+x="(-?\d+(?:\.\d+)?)"\s+y="(-?\d+(?:\.\d+)?)"\s+z="(-?\d+(?:\.\d+)?)"/g;
     const positions: number[] = [];
-    let minX = Infinity, minY = Infinity, minZ = Infinity;
-    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    let minX = Infinity,
+      minY = Infinity,
+      minZ = Infinity;
+    let maxX = -Infinity,
+      maxY = -Infinity,
+      maxZ = -Infinity;
     let m: RegExpExecArray | null;
     while ((m = vertexRe.exec(xml)) !== null) {
       const x = parseFloat(m[1]) * scale;
       const y = parseFloat(m[2]) * scale;
       const z = parseFloat(m[3]) * scale;
       positions.push(x, y, z);
-      if (x < minX) minX = x; if (y < minY) minY = y; if (z < minZ) minZ = z;
-      if (x > maxX) maxX = x; if (y > maxY) maxY = y; if (z > maxZ) maxZ = z;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (z < minZ) minZ = z;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+      if (z > maxZ) maxZ = z;
     }
     if (!isFinite(minX) || positions.length === 0) return null;
 
@@ -195,7 +216,11 @@ export class Model3dAnalysisService {
     }
 
     const inferredUnit: Model3dBounds['unit'] =
-      unitName === 'inch' ? 'inch' : unitName === 'millimeter' ? 'mm' : 'unknown';
+      unitName === 'inch'
+        ? 'inch'
+        : unitName === 'millimeter'
+          ? 'mm'
+          : 'unknown';
 
     // Build GLB if we have triangles
     let glbBuffer: Buffer | undefined;

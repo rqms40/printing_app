@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { PrinterProfile } from './entities/printer-profile.entity';
@@ -45,11 +46,18 @@ describe('PrinterProfileService', () => {
 
   it('updateProfile patches and saves', async () => {
     repo.findOne.mockResolvedValue({
-      id: 1, name: 'Old', buildVolumeWidthMm: 100,
-      buildVolumeDepthMm: 100, buildVolumeHeightMm: 100, maxFileSizeMb: 50,
+      id: 1,
+      name: 'Old',
+      buildVolumeWidthMm: 100,
+      buildVolumeDepthMm: 100,
+      buildVolumeHeightMm: 100,
+      maxFileSizeMb: 50,
     });
     repo.save.mockImplementation(async (p) => p);
-    const out = await svc.updateProfile({ name: 'New', buildVolumeWidthMm: 256 });
+    const out = await svc.updateProfile({
+      name: 'New',
+      buildVolumeWidthMm: 256,
+    });
     expect(out.name).toBe('New');
     expect(out.buildVolumeWidthMm).toBe(256);
     expect(out.buildVolumeDepthMm).toBe(100);

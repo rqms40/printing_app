@@ -31,7 +31,12 @@ type UserProfilingInput = {
 
 @Injectable()
 export class UsersService {
-  private static readonly VALID_PAYMENT_METHODS = ['gcash', 'maya', 'cod', 'credits'] as const;
+  private static readonly VALID_PAYMENT_METHODS = [
+    'gcash',
+    'maya',
+    'cod',
+    'credits',
+  ] as const;
 
   constructor(@InjectRepository(User) private usersRepo: Repository<User>) {}
 

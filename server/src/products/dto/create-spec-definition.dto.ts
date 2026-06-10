@@ -12,11 +12,7 @@ import {
   Min,
 } from 'class-validator';
 
-import {
-  InputType,
-  PricingRole,
-  ValueType,
-} from '../enums/catalog.enums';
+import { InputType, PricingRole, ValueType } from '../enums/catalog.enums';
 
 export class CreateSpecDefinitionDto {
   @ApiProperty({ example: 1 })

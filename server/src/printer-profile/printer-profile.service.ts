@@ -26,9 +26,7 @@ export class PrinterProfileService {
     );
   }
 
-  async updateProfile(
-    patch: UpdatePrinterProfileDto,
-  ): Promise<PrinterProfile> {
+  async updateProfile(patch: UpdatePrinterProfileDto): Promise<PrinterProfile> {
     const current = await this.getProfile();
     Object.assign(current, patch);
     return this.repo.save(current);

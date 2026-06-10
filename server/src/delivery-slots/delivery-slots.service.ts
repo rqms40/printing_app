@@ -126,16 +126,15 @@ export class DeliverySlotsService {
     return manager.save(booking);
   }
 
-  async releaseSlot(
-    manager: EntityManager,
-    bookingId: number,
-  ): Promise<void> {
+  async releaseSlot(manager: EntityManager, bookingId: number): Promise<void> {
     const booking = await manager.findOne(DeliverySlotBooking, {
       where: { id: bookingId },
       relations: ['slotTemplate'],
     });
     if (!booking) return;
-    const slotStart = new Date(`${booking.date}T${booking.slotTemplate.startTime}`);
+    const slotStart = new Date(
+      `${booking.date}T${booking.slotTemplate.startTime}`,
+    );
     if (Date.now() >= slotStart.getTime()) {
       throw new CancellationClosedException();
     }
@@ -172,7 +171,9 @@ export class DeliverySlotsService {
   /// at `weekStart`. Returns an object keyed by ISO date — every requested day
   /// appears in the result (zero-counts included), so the client can render
   /// without further normalization.
-  async getWeekBookingCounts(weekStart: string): Promise<Record<string, number>> {
+  async getWeekBookingCounts(
+    weekStart: string,
+  ): Promise<Record<string, number>> {
     const start = new Date(weekStart + 'T00:00:00Z');
     const end = new Date(start);
     end.setUTCDate(end.getUTCDate() + 7);
@@ -187,7 +188,10 @@ export class DeliverySlotsService {
         'o.batch_order_id = bo.id AND o.order_status NOT IN (:...excluded)',
         { excluded: ['cancelled', 'file_declined'] },
       )
-      .where('b.date >= :start AND b.date < :end', { start: weekStart, end: endIso })
+      .where('b.date >= :start AND b.date < :end', {
+        start: weekStart,
+        end: endIso,
+      })
       .select('b.date::text', 'date')
       .addSelect('COUNT(DISTINCT b.id)', 'count')
       .groupBy('b.date')
@@ -214,7 +218,9 @@ export class DeliverySlotsService {
       });
       affectedDate = first?.date ?? null;
       for (let i = 0; i < orderedIds.length; i++) {
-        await m.update(DeliverySlotBooking, orderedIds[i], { priorityRank: i + 1 });
+        await m.update(DeliverySlotBooking, orderedIds[i], {
+          priorityRank: i + 1,
+        });
       }
     });
     if (affectedDate) this.gateway.notifyDateChanged(affectedDate);

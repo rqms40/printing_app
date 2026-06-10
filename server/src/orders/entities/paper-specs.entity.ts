@@ -46,6 +46,12 @@ export class PaperSpec {
   @Column({ length: 30, default: 'none' })
   binding: string;
 
-  @Column({ name: 'print_mode', type: 'varchar', length: 20, nullable: true, default: 'fitToPage' })
+  @Column({
+    name: 'print_mode',
+    type: 'varchar',
+    length: 20,
+    nullable: true,
+    default: 'fitToPage',
+  })
   printMode: PrintMode | null;
 }

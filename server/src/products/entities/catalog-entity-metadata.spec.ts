@@ -9,9 +9,9 @@ describe('catalog entity metadata', () => {
   it('maps catalog entities to first-class product tables', () => {
     const tables = getMetadataArgsStorage().tables;
 
-    expect(
-      tables.find((table) => table.target === ProductCategory)?.name,
-    ).toBe('product_categories');
+    expect(tables.find((table) => table.target === ProductCategory)?.name).toBe(
+      'product_categories',
+    );
     expect(
       tables.find((table) => table.target === ProductSpecDefinition)?.name,
     ).toBe('product_spec_definitions');

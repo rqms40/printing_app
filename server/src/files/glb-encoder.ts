@@ -6,7 +6,7 @@
  */
 export interface Glb {
   positions: Float32Array; // length = 3 * vertex count
-  indices: Uint32Array;    // length = 3 * triangle count
+  indices: Uint32Array; // length = 3 * triangle count
 }
 
 const GLB_MAGIC = 0x46546c67; // "glTF"
@@ -27,9 +27,16 @@ function pad4(buf: Buffer, fill: number): Buffer {
   return Buffer.concat([buf, pad]);
 }
 
-function computeBounds(positions: Float32Array): { min: number[]; max: number[] } {
-  let minX = Infinity, minY = Infinity, minZ = Infinity;
-  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+function computeBounds(positions: Float32Array): {
+  min: number[];
+  max: number[];
+} {
+  let minX = Infinity,
+    minY = Infinity,
+    minZ = Infinity;
+  let maxX = -Infinity,
+    maxY = -Infinity,
+    maxZ = -Infinity;
   for (let i = 0; i < positions.length; i += 3) {
     const x = positions[i];
     const y = positions[i + 1];
@@ -45,8 +52,16 @@ function computeBounds(positions: Float32Array): { min: number[]; max: number[] 
 }
 
 export function encodeGlb(mesh: Glb): Buffer {
-  const positionsBuf = Buffer.from(mesh.positions.buffer, mesh.positions.byteOffset, mesh.positions.byteLength);
-  const indicesBuf = Buffer.from(mesh.indices.buffer, mesh.indices.byteOffset, mesh.indices.byteLength);
+  const positionsBuf = Buffer.from(
+    mesh.positions.buffer,
+    mesh.positions.byteOffset,
+    mesh.positions.byteLength,
+  );
+  const indicesBuf = Buffer.from(
+    mesh.indices.buffer,
+    mesh.indices.byteOffset,
+    mesh.indices.byteLength,
+  );
 
   // BIN chunk: positions, then indices, each 4-byte aligned.
   const positionsAligned = pad4(positionsBuf, 0);
@@ -125,7 +140,11 @@ export function encodeGlb(mesh: Glb): Buffer {
 
   // GLB header: 12 bytes (magic, version, total length)
   const totalLength =
-    12 + jsonChunkHeader.length + jsonAligned.length + binChunkHeader.length + binChunkData.length;
+    12 +
+    jsonChunkHeader.length +
+    jsonAligned.length +
+    binChunkHeader.length +
+    binChunkData.length;
   const glbHeader = Buffer.alloc(12);
   glbHeader.writeUInt32LE(GLB_MAGIC, 0);
   glbHeader.writeUInt32LE(GLB_VERSION, 4);

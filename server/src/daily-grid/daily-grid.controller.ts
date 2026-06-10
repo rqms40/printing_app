@@ -72,17 +72,26 @@ export class DailyGridController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Post('admin/upload-image')
-  @UseInterceptors(FileInterceptor('file', {
-    storage: memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024 },
-    fileFilter: (_req, file, cb) => {
-      if (IMAGE_MIME_TYPES.includes(file.mimetype as typeof IMAGE_MIME_TYPES[number])) {
-        cb(null, true);
-      } else {
-        cb(new BadRequestException(`Unsupported file type: ${file.mimetype}`), false);
-      }
-    },
-  }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        if (
+          IMAGE_MIME_TYPES.includes(
+            file.mimetype as (typeof IMAGE_MIME_TYPES)[number],
+          )
+        ) {
+          cb(null, true);
+        } else {
+          cb(
+            new BadRequestException(`Unsupported file type: ${file.mimetype}`),
+            false,
+          );
+        }
+      },
+    }),
+  )
   async uploadImage(
     @UploadedFile() file: Express.Multer.File,
   ): Promise<{ url: string }> {

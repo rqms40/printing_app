@@ -13,10 +13,7 @@ import {
   IsNotEmpty,
 } from 'class-validator';
 
-import {
-  FileProcessingType,
-  PricingModel,
-} from '../enums/catalog.enums';
+import { FileProcessingType, PricingModel } from '../enums/catalog.enums';
 
 export class CreateCategoryDto {
   @ApiProperty({ example: 'Paper Printing' })

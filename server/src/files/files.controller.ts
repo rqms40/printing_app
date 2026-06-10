@@ -136,9 +136,9 @@ export class FilesController {
     // - GLB / GLTF      → the original object IS the renderable preview
     let previewGlbUrl: string | null = null;
     const ext = file.originalName
-      ? file.originalName.toLowerCase().slice(
-          file.originalName.lastIndexOf('.'),
-        )
+      ? file.originalName
+          .toLowerCase()
+          .slice(file.originalName.lastIndexOf('.'))
       : '';
     const isNativelyRenderable =
       ext === '.glb' || ext === '.gltf' || ext === '.obj';

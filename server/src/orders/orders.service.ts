@@ -1040,13 +1040,17 @@ export class OrdersService {
 
   private normalizeSpecialInstructions(value: unknown): string | null {
     if (value == null) return null;
-    const text = String(value).trim();
+    const text = (
+      typeof value === 'string' ? value : JSON.stringify(value)
+    ).trim();
     return text.length === 0 ? null : text;
   }
 
   private normalizeOptionalText(value: unknown): string | null {
     if (value == null) return null;
-    const text = String(value).trim();
+    const text = (
+      typeof value === 'string' ? value : JSON.stringify(value)
+    ).trim();
     return text.length === 0 ? null : text;
   }
 
@@ -1055,7 +1059,7 @@ export class OrdersService {
     aliases: Record<string, string> = {},
   ): unknown {
     if (value == null) return value;
-    const raw = String(value);
+    const raw = typeof value === 'string' ? value : JSON.stringify(value);
     if (aliases[raw]) return aliases[raw];
     return raw;
   }
@@ -1064,7 +1068,14 @@ export class OrdersService {
     return this.batchOrdersRepo.find({
       where: {
         deliveryType: 'external',
-        ...(status ? { externalDeliveryStatus: status as any } : {}),
+        ...(status
+          ? {
+              externalDeliveryStatus: status as
+                | 'pending_admin'
+                | 'booked'
+                | 'delivered',
+            }
+          : {}),
       },
       order: { createdAt: 'DESC' },
       relations: ['user'],
@@ -1129,7 +1140,7 @@ export class OrdersService {
       await manager.update(
         Order,
         { batchOrderId: batch.id },
-        { orderStatus: 'cancelled' as any },
+        { orderStatus: OrderStatus.CANCELLED },
       );
     });
   }

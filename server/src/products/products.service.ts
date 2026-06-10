@@ -65,7 +65,8 @@ export class ProductsService {
   }
 
   async getCategoryPricing(slug: string): Promise<Record<string, unknown>> {
-    const category = await this.catalogReadService.getPublicCategoryBySlug(slug);
+    const category =
+      await this.catalogReadService.getPublicCategoryBySlug(slug);
     const groups: Record<string, unknown[]> = {};
     for (const spec of category.specs ?? []) {
       groups[spec.key] = (spec.options ?? []).map((option) => ({
@@ -172,7 +173,9 @@ export class ProductsService {
     if (dto.key || dto.categoryId) {
       const categoryId = dto.categoryId ?? spec.categoryId;
       const key = dto.key ?? spec.key;
-      const conflict = await this.specRepo.findOne({ where: { categoryId, key } });
+      const conflict = await this.specRepo.findOne({
+        where: { categoryId, key },
+      });
       if (conflict && conflict.id !== id) {
         throw new ConflictException(
           'A spec definition with this category/key already exists',
@@ -230,9 +233,7 @@ export class ProductsService {
     });
   }
 
-  async createOptionV2(
-    dto: CreateSpecOptionV2Dto,
-  ): Promise<ProductSpecOption> {
+  async createOptionV2(dto: CreateSpecOptionV2Dto): Promise<ProductSpecOption> {
     const existing = await this.optRepo.findOne({
       where: {
         specDefinitionId: dto.specDefinitionId,
@@ -369,7 +370,10 @@ export class ProductsService {
   }
 
   private async findSpecForLegacyOption(
-    dto: Pick<CreateSpecOptionDto, 'categoryId' | 'optionGroup' | 'label' | 'value'>,
+    dto: Pick<
+      CreateSpecOptionDto,
+      'categoryId' | 'optionGroup' | 'label' | 'value'
+    >,
   ): Promise<ProductSpecDefinition> {
     let spec = await this.specRepo.findOne({
       where: { categoryId: dto.categoryId, key: dto.optionGroup },

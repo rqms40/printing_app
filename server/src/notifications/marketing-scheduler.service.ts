@@ -82,9 +82,9 @@ export class MarketingSchedulerService {
     // Fetch all users with device tokens
     const users = await this.usersService.findAll();
     const tokens = users
-      .map((u: any) => u.fcmToken)
+      .map((u) => u.fcmToken)
       .filter(
-        (token: any): token is string =>
+        (token): token is string =>
           !!token && typeof token === 'string' && token.trim() !== '',
       );
 

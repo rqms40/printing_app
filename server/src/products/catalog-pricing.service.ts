@@ -91,7 +91,7 @@ export class CatalogPricingService {
       return this.priceBasePlusEstimate(category, selected, quantity);
     }
     throw new BadRequestException(
-      `Unsupported pricing model ${category.pricingModel}`,
+      `Unsupported pricing model ${String(category.pricingModel)}`,
     );
   }
 
@@ -136,7 +136,8 @@ export class CatalogPricingService {
     quantity: number,
   ): QuoteItemResult {
     const material = selected.find(
-      (entry) => entry.spec.pricingRole === PricingRole.UNIT_COST && entry.option,
+      (entry) =>
+        entry.spec.pricingRole === PricingRole.UNIT_COST && entry.option,
     );
     const estimate = selected.find(
       (entry) =>
@@ -165,7 +166,10 @@ export class CatalogPricingService {
       specSnapshots: selected.map((entry) => this.toSnapshot(entry)),
       pricingBreakdown: [
         { label: 'Base', amount: category.baseRate },
-        { label: 'Material estimate', amount: this.roundMoney(materialEstimate) },
+        {
+          label: 'Material estimate',
+          amount: this.roundMoney(materialEstimate),
+        },
         { label: 'Fixed fees', amount: this.roundMoney(fixedFees) },
       ],
     };
@@ -177,7 +181,12 @@ export class CatalogPricingService {
       specKey: entry.spec.key,
       specLabel: entry.spec.label,
       inputType: entry.spec.inputType,
-      value: String(entry.value ?? ''),
+      value:
+        entry.value == null
+          ? ''
+          : typeof entry.value === 'object'
+            ? JSON.stringify(entry.value)
+            : String(entry.value as string | number | boolean),
       displayValue: entry.displayValue,
       optionId: entry.option?.id ?? null,
       optionLabel: entry.option?.label ?? null,

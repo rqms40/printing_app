@@ -19,10 +19,22 @@ export class FileMetadata {
   @Column()
   size: number;
 
-  @Column({ name: 'width_pt', type: 'decimal', precision: 10, scale: 3, nullable: true })
+  @Column({
+    name: 'width_pt',
+    type: 'decimal',
+    precision: 10,
+    scale: 3,
+    nullable: true,
+  })
   widthPt: number | null;
 
-  @Column({ name: 'height_pt', type: 'decimal', precision: 10, scale: 3, nullable: true })
+  @Column({
+    name: 'height_pt',
+    type: 'decimal',
+    precision: 10,
+    scale: 3,
+    nullable: true,
+  })
   heightPt: number | null;
 
   @Column({ name: 'width_px', type: 'integer', nullable: true })

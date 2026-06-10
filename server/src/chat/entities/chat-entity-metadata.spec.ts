@@ -3,9 +3,9 @@ import { ChatMessage } from './chat-message.entity';
 import { Conversation } from './conversation.entity';
 
 function columnType(
-  target: Function,
+  target: new (...args: unknown[]) => unknown,
   propertyName: string,
-): string | Function | undefined {
+): string | (new (...args: unknown[]) => unknown) | undefined {
   return getMetadataArgsStorage().columns.find(
     (column) =>
       column.target === target && column.propertyName === propertyName,

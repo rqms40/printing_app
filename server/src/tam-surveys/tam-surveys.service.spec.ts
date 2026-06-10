@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import {
   BadRequestException,
   ForbiddenException,
@@ -386,5 +387,4 @@ describe('TamSurveysService', () => {
       }),
     ).rejects.toThrow(NotFoundException);
   });
-
 });

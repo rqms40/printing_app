@@ -89,7 +89,9 @@ describe('OpenRouterService', () => {
       .mockRejectedValueOnce(new Error('primary fail'))
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ choices: [{ message: { content: 'fallback reply' } }] }),
+        json: async () => ({
+          choices: [{ message: { content: 'fallback reply' } }],
+        }),
       });
 
     const result = await svc2.complete([{ role: 'user', content: 'Hi' }]);
@@ -106,7 +108,9 @@ describe('OpenRouterService', () => {
           if (opts?.signal) {
             opts.signal.addEventListener('abort', () => {
               aborted = true;
-              reject(new DOMException('The operation was aborted.', 'AbortError'));
+              reject(
+                new DOMException('The operation was aborted.', 'AbortError'),
+              );
             });
           }
           jest.advanceTimersByTime(11_000);

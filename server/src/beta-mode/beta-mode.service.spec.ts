@@ -40,6 +40,7 @@ describe('BetaModeService', () => {
     settingsRepo = {
       find: jest.fn().mockResolvedValue([{ id: 1, isEnabled: false }]),
       create: jest.fn().mockReturnValue({ id: 1, isEnabled: false }),
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
       save: jest.fn().mockImplementation(async (v) => v),
     };
     mockQB = {
@@ -67,7 +68,10 @@ describe('BetaModeService', () => {
           useValue: settingsRepo,
         },
         { provide: getRepositoryToken(User), useValue: userRepo },
-        { provide: getRepositoryToken(FileMetadata), useValue: fileMetadataRepo },
+        {
+          provide: getRepositoryToken(FileMetadata),
+          useValue: fileMetadataRepo,
+        },
       ],
     }).compile();
 
@@ -237,7 +241,10 @@ describe('BetaModeService', () => {
     it('happy path: updates user row and returns { ok: true }', async () => {
       fileMetadataRepo.findOne.mockResolvedValue({ id: 42, uploadedBy: 1 });
 
-      const result = await service.submitTestimonial(1, { fileId: 42, sharedOnSocial: true });
+      const result = await service.submitTestimonial(1, {
+        fileId: 42,
+        sharedOnSocial: true,
+      });
 
       expect(result).toEqual({ ok: true });
       expect(userRepo.update).toHaveBeenCalledWith(
@@ -264,17 +271,17 @@ describe('BetaModeService', () => {
     it('throws NotFoundException when file does not exist', async () => {
       fileMetadataRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.submitTestimonial(1, { fileId: 999 })).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.submitTestimonial(1, { fileId: 999 }),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('throws ForbiddenException when file belongs to a different user', async () => {
       fileMetadataRepo.findOne.mockResolvedValue({ id: 42, uploadedBy: 99 });
 
-      await expect(service.submitTestimonial(1, { fileId: 42 })).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.submitTestimonial(1, { fileId: 42 }),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 
@@ -295,8 +302,9 @@ describe('BetaModeService', () => {
         7,
         expect.objectContaining({ betaEnrolledAt: expect.any(Date) }),
       );
-      const updateCalls = (userRepo.update as jest.Mock).mock.calls;
-      const passedDate: Date = updateCalls[updateCalls.length - 1][1].betaEnrolledAt;
+      const updateCalls = userRepo.update.mock.calls;
+      const passedDate: Date =
+        updateCalls[updateCalls.length - 1][1].betaEnrolledAt;
       expect(passedDate.getTime()).toBeGreaterThanOrEqual(before);
       expect(passedDate.getTime()).toBeLessThanOrEqual(after);
       expect(result.id).toBe(7);

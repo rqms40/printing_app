@@ -37,16 +37,43 @@ export class ProductSpecOption {
   @Column({ length: 50 })
   value: string;
 
-  @Column({ type: 'decimal', precision: 8, scale: 3, default: 1, transformer: decimalTransformer })
+  @Column({
+    type: 'decimal',
+    precision: 8,
+    scale: 3,
+    default: 1,
+    transformer: decimalTransformer,
+  })
   multiplier: number;
 
-  @Column({ name: 'fixed_fee', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: decimalTransformer })
+  @Column({
+    name: 'fixed_fee',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    default: 0,
+    transformer: decimalTransformer,
+  })
   fixedFee: number;
 
-  @Column({ name: 'unit_cost', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: decimalTransformer })
+  @Column({
+    name: 'unit_cost',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    default: 0,
+    transformer: decimalTransformer,
+  })
   unitCost: number;
 
-  @Column({ name: 'estimated_quantity', type: 'decimal', precision: 10, scale: 2, nullable: true, transformer: decimalTransformer })
+  @Column({
+    name: 'estimated_quantity',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    transformer: decimalTransformer,
+  })
   estimatedQuantity: number | null;
 
   @Column({ name: 'is_default', default: false })

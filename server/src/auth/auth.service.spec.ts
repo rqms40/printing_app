@@ -2,7 +2,11 @@ import { Test } from '@nestjs/testing';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
-import { ConflictException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { NotificationsService } from '../notifications/notifications.service';
 import { BetaModeService } from '../beta-mode/beta-mode.service';
@@ -227,12 +231,17 @@ describe('AuthService', () => {
       }
 
       expect(thrown).toBeInstanceOf(ForbiddenException);
-      const body = (thrown as ForbiddenException).getResponse() as Record<string, unknown>;
+      const body = (thrown as ForbiddenException).getResponse() as Record<
+        string,
+        unknown
+      >;
       expect(body.code).toBe('beta_held');
       expect(body.betaPhotoUploaded).toBe(false);
       expect(body.betaSharedOnSocial).toBe(false);
       expect(body.betaCompletedAt).toBe(betaCompletedAt.toISOString());
-      expect((body.user as Record<string, unknown>).email).toBe('test@example.com');
+      expect((body.user as Record<string, unknown>).email).toBe(
+        'test@example.com',
+      );
     });
 
     it('betaPhotoUploaded is true when betaPhotoUploadedAt is set', async () => {
@@ -256,7 +265,10 @@ describe('AuthService', () => {
       }
 
       expect(thrown).toBeInstanceOf(ForbiddenException);
-      const body = (thrown as ForbiddenException).getResponse() as Record<string, unknown>;
+      const body = (thrown as ForbiddenException).getResponse() as Record<
+        string,
+        unknown
+      >;
       expect(body.betaPhotoUploaded).toBe(true);
       expect(body.betaSharedOnSocial).toBe(true);
     });

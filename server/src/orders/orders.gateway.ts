@@ -54,8 +54,6 @@ export class OrdersGateway implements OnGatewayConnection {
     userId: number,
     payload: { requirementId: number; orderId: number; orderRef: string },
   ) {
-    this.server
-      .to(`user_${userId}`)
-      .emit('survey-required', payload);
+    this.server.to(`user_${userId}`).emit('survey-required', payload);
   }
 }

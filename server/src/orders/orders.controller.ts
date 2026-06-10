@@ -5,7 +5,6 @@ import {
   Patch,
   Param,
   Body,
-  Query,
   UseGuards,
   Request,
   ForbiddenException,
@@ -103,5 +102,4 @@ export class OrdersController {
   ) {
     return this.ordersService.updateManualStatus(id, dto);
   }
-
 }

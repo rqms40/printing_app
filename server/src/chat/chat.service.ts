@@ -212,7 +212,7 @@ export class ChatService {
 
   async getBotResponse(
     conversationId: number,
-    userMessage: string,
+    _userMessage: string,
   ): Promise<string> {
     // Called after the user's message is persisted — history already includes it
     const history = await this.msgRepo.find({

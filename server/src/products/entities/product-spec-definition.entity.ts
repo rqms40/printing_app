@@ -10,11 +10,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-import {
-  InputType,
-  PricingRole,
-  ValueType,
-} from '../enums/catalog.enums';
+import { InputType, PricingRole, ValueType } from '../enums/catalog.enums';
 import { ProductCategory } from './product-category.entity';
 import { ProductSpecOption } from './product-spec-option.entity';
 
@@ -59,7 +55,12 @@ export class ProductSpecDefinition {
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 
-  @Column({ name: 'default_value', type: 'varchar', length: 100, nullable: true })
+  @Column({
+    name: 'default_value',
+    type: 'varchar',
+    length: 100,
+    nullable: true,
+  })
   defaultValue: string | null;
 
   @Column({
@@ -76,13 +77,34 @@ export class ProductSpecDefinition {
   @Column({ type: 'varchar', length: 120, nullable: true })
   placeholder: string | null;
 
-  @Column({ name: 'min_value', type: 'decimal', precision: 10, scale: 3, nullable: true, transformer: decimalTransformer })
+  @Column({
+    name: 'min_value',
+    type: 'decimal',
+    precision: 10,
+    scale: 3,
+    nullable: true,
+    transformer: decimalTransformer,
+  })
   minValue: number | null;
 
-  @Column({ name: 'max_value', type: 'decimal', precision: 10, scale: 3, nullable: true, transformer: decimalTransformer })
+  @Column({
+    name: 'max_value',
+    type: 'decimal',
+    precision: 10,
+    scale: 3,
+    nullable: true,
+    transformer: decimalTransformer,
+  })
   maxValue: number | null;
 
-  @Column({ name: 'step_value', type: 'decimal', precision: 10, scale: 3, nullable: true, transformer: decimalTransformer })
+  @Column({
+    name: 'step_value',
+    type: 'decimal',
+    precision: 10,
+    scale: 3,
+    nullable: true,
+    transformer: decimalTransformer,
+  })
   stepValue: number | null;
 
   @Column({ name: 'sort_order', default: 0 })

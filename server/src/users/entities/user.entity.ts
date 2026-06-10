@@ -93,7 +93,12 @@ export class User {
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 
-  @Column({ name: 'account_hold_reason', type: 'varchar', length: 50, nullable: true })
+  @Column({
+    name: 'account_hold_reason',
+    type: 'varchar',
+    length: 50,
+    nullable: true,
+  })
   accountHoldReason: string | null;
 
   @Column({ name: 'account_held_at', type: 'timestamp', nullable: true })
@@ -113,7 +118,12 @@ export class User {
   })
   fileRetentionDays: number | null;
 
-  @Column({ name: 'default_payment_method', type: 'varchar', length: 20, nullable: true })
+  @Column({
+    name: 'default_payment_method',
+    type: 'varchar',
+    length: 20,
+    nullable: true,
+  })
   defaultPaymentMethod: 'gcash' | 'maya' | 'cod' | 'credits' | null;
 
   @Column({
@@ -145,7 +155,11 @@ export class User {
   @Column({ name: 'beta_photo_file_id', type: 'int', nullable: true })
   betaPhotoFileId: number | null;
 
-  @Column({ name: 'beta_photo_uploaded_at', type: 'timestamptz', nullable: true })
+  @Column({
+    name: 'beta_photo_uploaded_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
   betaPhotoUploadedAt: Date | null;
 
   @Column({ name: 'beta_shared_on_social', type: 'boolean', default: false })

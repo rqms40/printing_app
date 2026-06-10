@@ -1,10 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Patch,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles, RolesGuard } from '../auth/guards/roles.guard';
 import { PrinterProfileService } from './printer-profile.service';
