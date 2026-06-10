@@ -1298,6 +1298,9 @@ class _CategoryCarouselState extends State<_CategoryCarousel> {
       initialPage: _currentPage,
       viewportFraction: 0.65,
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onChanged(_categories[_currentPage].id);
+    });
   }
 
   @override

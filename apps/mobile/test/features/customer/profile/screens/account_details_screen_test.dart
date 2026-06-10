@@ -100,15 +100,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       await tester.enterText(find.byType(TextField).first, 'Kai');
-      await tester.ensureVisible(find.text('18–24'));
-      await tester.tap(find.text('18–24'));
-      await tester.pumpAndSettle();
       await tester.tap(find.text('Save Changes'));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 600));
 
       expect(notifier.completeProfileCalls, 1);
       expect(notifier.lastProfilePayload!['nickname'], 'Kai');
-      expect(notifier.lastProfilePayload!['ageRange'], '18_24');
+      expect(notifier.lastProfilePayload!['ageRange'], '25_34');
     });
   });
 }

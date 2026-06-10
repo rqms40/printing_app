@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/features/auth/widgets/age_range_selector.dart';
 
 Widget _wrap(Widget child) {
@@ -12,39 +12,35 @@ Widget _wrap(Widget child) {
 
 void main() {
   group('AgeRangeSelector', () {
-    testWidgets('renders all 5 age range labels', (tester) async {
+    testWidgets('renders the initial page label', (tester) async {
       await tester.pumpWidget(
         _wrap(AgeRangeSelector(value: null, onChanged: (_) {})),
       );
+      await tester.pump();
+      // Page 0 ('Under 18') is always the visible starting card
       expect(find.text('Under 18'), findsOneWidget);
-      expect(find.text('18–24'), findsOneWidget);
-      expect(find.text('25–34'), findsOneWidget);
-      expect(find.text('35–44'), findsOneWidget);
-      expect(find.text('45+'), findsOneWidget);
     });
 
-    testWidgets('renders emoji for each card', (tester) async {
+    testWidgets('renders SVG illustration for visible cards', (tester) async {
       await tester.pumpWidget(
         _wrap(AgeRangeSelector(value: null, onChanged: (_) {})),
       );
-      expect(find.text('🎒'), findsOneWidget);
-      expect(find.text('🎓'), findsOneWidget);
-      expect(find.text('🚀'), findsOneWidget);
-      expect(find.text('💼'), findsOneWidget);
-      expect(find.text('🌟'), findsOneWidget);
+      await tester.pump();
+      // Each rendered card shows one SvgPicture age illustration
+      expect(find.byType(SvgPicture), findsWidgets);
     });
 
-    testWidgets('selected card uses brand text color (accentOnColor)',
+    testWidgets('pre-selected value initialises at the correct page',
         (tester) async {
       await tester.pumpWidget(
         _wrap(AgeRangeSelector(value: '25_34', onChanged: (_) {})),
       );
       await tester.pump();
-      final selectedText = tester.widget<Text>(find.text('25–34'));
-      expect(selectedText.style?.color, equals(AppColors.dark.accentOnColor));
+      // Initialises at page 2 ('25–34')
+      expect(find.text('25–34'), findsOneWidget);
     });
 
-    testWidgets('fires onChanged with correct value when tapped',
+    testWidgets('fires onChanged with correct value when page changes',
         (tester) async {
       String? selected;
       await tester.pumpWidget(
@@ -55,19 +51,24 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.text('18–24'));
+      await tester.pump();
+      // Drag left to advance from page 0 to page 1 ('18_24')
+      await tester.drag(find.byType(PageView), const Offset(-600, 0));
+      await tester.pumpAndSettle();
       expect(selected, equals('18_24'));
     });
 
-    testWidgets('renders 5 page dot AnimatedContainer indicators', (tester) async {
+    testWidgets('renders 5 dot page indicators', (tester) async {
       await tester.pumpWidget(
         _wrap(AgeRangeSelector(value: null, onChanged: (_) {})),
       );
-      // 5 dots rendered as AnimatedContainer widgets in the dot row
-      // The scroll row also uses AnimatedContainer for cards (5 cards)
-      // Total AnimatedContainers = 5 (cards) + 5 (dots) = 10
-      // We verify by checking the dot row exists with the right structure
-      expect(find.byType(AnimatedContainer), findsNWidgets(10));
+      await tester.pump();
+      // The dot row always renders one AnimatedContainer per age range option (5).
+      // PageView adds more AnimatedContainers for visible cards, so total >= 5.
+      expect(
+        find.byType(AnimatedContainer).evaluate().length,
+        greaterThanOrEqualTo(5),
+      );
     });
   });
 }

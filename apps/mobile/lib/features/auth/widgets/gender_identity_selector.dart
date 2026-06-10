@@ -103,6 +103,7 @@ class _GenderIdentitySelectorState extends State<GenderIdentitySelector> {
                         isSelected: isSelected,
                         colors: colors,
                         onTap: () {
+                          widget.onChanged(_genders[index].id);
                           _pageController.animateToPage(
                             index,
                             duration: const Duration(milliseconds: 300),
@@ -191,7 +192,9 @@ class _GenderCard extends StatelessWidget {
               const SizedBox(height: AppSpacing.md),
               Text(
                 label,
-                style: AppTypography.bodyBold.copyWith(color: colors.onBackground),
+                style: AppTypography.bodyBold.copyWith(
+                  color: isSelected ? colors.accentOnColor : colors.onBackground,
+                ),
               ),
             ],
           ),

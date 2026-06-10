@@ -43,6 +43,9 @@ class _AgeRangeSelectorState extends State<AgeRangeSelector> {
       initialPage: _currentPage,
       viewportFraction: 0.65, // Shows peeking cards on the sides
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onChanged(ageRangeOptions[_currentPage].value);
+    });
   }
 
   @override

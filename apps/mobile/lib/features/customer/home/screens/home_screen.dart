@@ -413,10 +413,10 @@ class _ResumeQueueCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final count = cart.itemCount;
-    final plural = count == 1 ? 'item' : 'items';
+    final printJobLabel = count == 1 ? 'print job' : 'print jobs';
     final formattedSubtotal = formatCurrency(cart.subtotal);
     final semanticsLabel =
-        'You left $count $plural in your queue, $formattedSubtotal, tap to resume';
+        'Resume your queue, $count $printJobLabel, $formattedSubtotal subtotal';
 
     void openQueue() => context.push('/customer/order/checkout');
 
@@ -464,7 +464,7 @@ class _ResumeQueueCard extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'You left $count $plural in your queue',
+                          'Resume your queue',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTypography.bodyBold.copyWith(
@@ -474,7 +474,16 @@ class _ResumeQueueCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '$formattedSubtotal · tap to finish',
+                          '$count $printJobLabel',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.caption.copyWith(
+                            color: colors.onSurfaceDim,
+                            fontSize: 11.5,
+                          ),
+                        ),
+                        Text(
+                          '$formattedSubtotal subtotal',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTypography.caption.copyWith(
@@ -486,18 +495,14 @@ class _ResumeQueueCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  HugeIcon(
-                    icon: HugeIcons.strokeRoundedArrowRight01,
-                    size: 18,
-                    color: colors.onSurfaceDim,
-                  )
-                      .animate(onPlay: (c) => c.repeat(reverse: true))
-                      .moveX(
-                        begin: -2,
-                        end: 2,
-                        duration: 1100.ms,
-                        curve: Curves.easeInOut,
-                      ),
+                  Text(
+                    'View queue',
+                    style: AppTypography.caption.copyWith(
+                      color: colors.brand,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11.5,
+                    ),
+                  ),
                 ],
               ),
             ),

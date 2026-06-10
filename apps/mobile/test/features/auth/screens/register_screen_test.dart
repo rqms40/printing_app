@@ -109,24 +109,24 @@ void main() {
         await tester.enterText(find.byType(TextField).first, 'Kai');
         await tester.tap(find.text('Continue'));
         await tester.pump(const Duration(milliseconds: 300));
-        await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 600));
 
-        await tester.tap(find.text('Student'));
+        // postFrameCallback auto-selects 'student' (page 0) on init
         await tester.tap(find.text('Continue'));
-        await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 600));
 
         await tester.tap(find.text('Architecture'));
         await tester.tap(find.text('Continue'));
-        await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 600));
 
         await tester.ensureVisible(find.text('Prefer not to say'));
         await tester.tap(find.text('Prefer not to say'));
         await tester.tap(find.text('Continue'));
-        await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 600));
 
-        await tester.tap(find.text('25–34'));
+        // postFrameCallback auto-selects 'under_18' (page 0) on init
         await tester.tap(find.text('Continue'));
-        await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 600));
 
         expect(find.textContaining('Hi, Kai'), findsOneWidget);
         expect(find.text('Full Name'), findsOneWidget);
@@ -139,12 +139,12 @@ void main() {
         await tester.enterText(find.byType(TextField).at(4), 'password123');
 
         await tester.tap(find.text('Create Account'));
-        await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 600));
 
         expect(notifier.registerCalls, 1);
         expect(notifier.lastRegisterPayload, isNotNull);
         expect(notifier.lastRegisterPayload!['nickname'], 'Kai');
-        expect(notifier.lastRegisterPayload!['ageRange'], '25_34');
+        expect(notifier.lastRegisterPayload!['ageRange'], 'under_18');
         expect(notifier.lastRegisterPayload!['profileCategory'], 'student');
         expect(notifier.lastRegisterPayload!['profileField'], 'architecture');
         expect(notifier.lastRegisterPayload!['printingPreferences'], const [
@@ -179,9 +179,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       await tester.ensureVisible(find.text('View Terms & Conditions'));
-      await tester.pumpAndSettle();
       await tester.tap(find.text('View Terms & Conditions'));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 800));
 
       expect(find.text('Terms Destination'), findsOneWidget);
     });
