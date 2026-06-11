@@ -748,6 +748,19 @@ export function OrderShow() {
         <FileInspectorModal
           open={fileInspectorOpen}
           onClose={() => setFileInspectorOpen(false)}
+          onVerify={async () => {
+            try {
+              await apiClient.patch(`/admin/orders/${id}/status`, {
+                status: "file_verified",
+              });
+              void message.success("File verified successfully");
+              setFileInspectorOpen(false);
+              const res = await apiClient.get(`/admin/orders/${id}`);
+              setOrder(normalizeOrder(res.data));
+            } catch {
+              void message.error("Failed to verify file");
+            }
+          }}
           fileUrl={order.file_url}
           fileName={order.file_name}
           fileMetadataId={order.file_metadata_id ?? undefined}

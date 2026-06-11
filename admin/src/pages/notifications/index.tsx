@@ -14,6 +14,7 @@ import { CheckOutlined } from "@ant-design/icons";
 import { useNotificationsContext } from "@/context/notifications-context";
 import type { Notification, NotificationType } from "@/types/notification";
 import { MarketingSettings } from "./marketing-settings";
+import { CustomStatusNotifications } from "./custom-status";
 
 const { Text } = Typography;
 
@@ -90,6 +91,7 @@ export function NotificationsPage() {
     { key: "credits", label: "Credits" },
     { key: "users", label: "Users" },
     { key: "marketing", label: "Marketing Settings" },
+    { key: "custom-status", label: "Custom Status" },
   ];
 
   return (
@@ -116,6 +118,8 @@ export function NotificationsPage() {
 
         {activeTab === "marketing" ? (
           <MarketingSettings />
+        ) : activeTab === "custom-status" ? (
+          <CustomStatusNotifications />
         ) : filtered.length === 0 ? (
           <Empty description="No notifications" style={{ marginTop: 48 }} />
         ) : (

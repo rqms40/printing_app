@@ -63,15 +63,26 @@ class HeroBanner extends StatelessWidget {
                   const SizedBox(height: AppSpacing.xs),
 
                   // GRID wordmark
-                  Text(
-                    'GRID',
-                    style: AppTypography.display.copyWith(
-                      color: Colors.white,
-                      fontSize: 38,
-                      height: 1.0,
-                      letterSpacing: 5,
-                    ),
-                  ),
+                  Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: 'GRID',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                            TextSpan(
+                              text: 'GO',
+                              style: TextStyle(color: Color(0xFFFFDE58)),
+                            ),
+                          ],
+                        ),
+                        style: AppTypography.display.copyWith(
+                          color: Colors.white,
+                          fontSize: 38,
+                          height: 1.0,
+                          letterSpacing: 5,
+                        ),
+                      ),
 
                   const SizedBox(height: 3),
 

@@ -15,7 +15,7 @@ class ApiClient {
   // without a per-device build. Overridden by main.dart via init(baseUrl:)
   // using the kServerUrl from api_config.dart, which respects the
   // --dart-define=SERVER_URL build flag.
-  static const String _defaultBaseUrl = 'http://192.168.40.201:3000/api';
+  static const String _defaultBaseUrl = 'http://localhost:3000/api';
 
   late final Dio _dio;
   bool _initialized = false;

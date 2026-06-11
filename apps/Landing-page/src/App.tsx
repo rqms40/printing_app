@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { PhoneScene } from './components/PhoneScene';
 import { Menu, X, Phone, MessageCircle, Zap, ShieldCheck, ChevronUp } from 'lucide-react';
 import { HardDriveUploadIcon, TruckIcon, ListIcon, TimerIcon, MessageCircleIcon } from 'lucide-animated';
+import { Link } from 'react-router-dom';
 
 function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
@@ -45,7 +46,7 @@ function Navbar() {
             <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
             <div className="w-1.5 h-1.5 bg-gray-500 rounded-full"></div>
           </div>
-          <span className="text-xl font-bold tracking-widest uppercase">GRID</span>
+          <span className="text-xl font-bold tracking-widest uppercase">GRID<span className="text-[var(--color-primary)]">GO</span></span>
         </a>
 
         {/* Center Nav */}
@@ -58,13 +59,13 @@ function Navbar() {
         </div>
 
         {/* Right Nav */}
-        <div className={`hidden md:flex rounded-full items-center text-sm font-medium overflow-hidden p-1 border transition-all duration-500 ${isScrolled ? 'bg-black/60 backdrop-blur-md border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}>
+        {/* <div className={`hidden md:flex rounded-full items-center text-sm font-medium overflow-hidden p-1 border transition-all duration-500 ${isScrolled ? 'bg-black/60 backdrop-blur-md border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}>
           <button className="px-6 py-2 hover:bg-white/10 rounded-full transition-colors">Log In</button>
           <button className="px-6 py-2 bg-white text-black rounded-full hover:bg-gray-200 transition-colors">Sign Up</button>
-        </div>
+        </div> */}
 
         {/* Mobile Hamburger Button */}
-        <button 
+        <button
           className={`md:hidden p-2 rounded-full z-50 relative border transition-all duration-500 ${isScrolled ? 'bg-black/60 backdrop-blur-md border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}
           onClick={() => setIsOpen(!isOpen)}
         >
@@ -86,10 +87,10 @@ function Navbar() {
             <a href="#support" onClick={() => setIsOpen(false)} className="text-2xl font-bold hover:text-[var(--color-primary)] transition-colors">Support</a>
             <a href="#about" onClick={() => setIsOpen(false)} className="text-2xl font-bold hover:text-[var(--color-primary)] transition-colors">About Us</a>
             <a href="#download" onClick={() => setIsOpen(false)} className="text-2xl font-bold hover:text-[var(--color-primary)] transition-colors">Download</a>
-            <div className="flex gap-4 mt-8">
+            {/* <div className="flex gap-4 mt-8">
               <button className="px-8 py-3 bg-black/60 backdrop-blur-md border border-white/10 rounded-full transition-colors font-bold" onClick={() => setIsOpen(false)}>Log In</button>
               <button className="px-8 py-3 bg-[var(--color-primary)] text-black rounded-full hover:bg-yellow-400 transition-colors font-bold" onClick={() => setIsOpen(false)}>Sign Up</button>
-            </div>
+            </div> */}
           </motion.div>
         )}
       </AnimatePresence>
@@ -203,7 +204,7 @@ function HowItWorksSection() {
       <div className="max-w-6xl mx-auto px-6 w-full">
         <h2 className="text-4xl md:text-5xl font-bold text-center mb-24">How it Works</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-16 text-center">
-          
+
           <motion.div
             initial={{ opacity: 0, y: 30, filter: 'blur(15px)' }}
             whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
@@ -308,9 +309,9 @@ function SupportSection() {
               </div>
             </div>
 
-            <button className="mt-2 w-full py-3 rounded-full border border-[var(--color-primary)] text-[var(--color-primary)] font-semibold text-sm hover:bg-[var(--color-primary)] hover:text-black transition-all duration-300">
+            <Link to="/support" className="mt-2 w-full py-3 rounded-full border border-[var(--color-primary)] text-[var(--color-primary)] font-semibold text-sm hover:bg-[var(--color-primary)] hover:text-black transition-all duration-300 flex justify-center items-center">
               Call Support Hub
-            </button>
+            </Link>
           </motion.div>
 
           {/* ── Live Chat ── */}
@@ -360,9 +361,9 @@ function SupportSection() {
               </div>
             </div>
 
-            <button className="mt-2 w-full py-3 rounded-full bg-[var(--color-primary)] text-black font-semibold text-sm hover:bg-yellow-400 transition-all duration-300">
+            <Link to="/support" className="mt-2 w-full py-3 rounded-full bg-[var(--color-primary)] text-black font-semibold text-sm hover:bg-yellow-400 transition-all duration-300 flex justify-center items-center">
               Start a Chat
-            </button>
+            </Link>
           </motion.div>
         </div>
 
@@ -376,8 +377,8 @@ function SupportSection() {
         >
           {[
             { value: '< 5 min', label: 'Avg. response time' },
-            { value: '24 / 7',  label: 'Support availability' },
-            { value: '99 %',    label: 'Issue resolution rate' },
+            { value: '24 / 7', label: 'Support availability' },
+            { value: '99 %', label: 'Issue resolution rate' },
           ].map(({ value, label }) => (
             <div key={label} className="rounded-2xl bg-white/5 border border-white/10 py-6 px-4">
               <p className="text-2xl md:text-3xl font-bold text-[var(--color-primary)] mb-1">{value}</p>
@@ -484,7 +485,7 @@ function TeamSection() {
           image="/Ven.png"
           role="Developer"
           name="Rovenado Nesta Villotes"
-          quote="Tools will come, Tools will go. Only the Vibe Coder remains."
+          quote="People are not driven by past causes but move toward goals that they themselves set."
         />
       </div>
     </section>
@@ -496,9 +497,9 @@ function BetaSection() {
     <section id="download" className="min-h-[100vh] flex items-center justify-center relative z-10 py-20 px-8 overflow-hidden bg-[#050505]">
       {/* Background Glow */}
       <div className="absolute left-[10%] bottom-[10%] w-[600px] h-[600px] bg-[#FFDE58]/5 rounded-full blur-[100px] pointer-events-none"></div>
-      
+
       <div className="max-w-4xl mx-auto w-full flex justify-end relative z-20">
-        
+
         {/* Content */}
         <motion.div
           initial={{ opacity: 0, x: 50 }}

@@ -131,15 +131,10 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
         final canShowLiveMap =
             state.status == LiveMapStatus.active &&
             state.orderStatus == OrderStatus.onTheWay &&
-            state.deliveryAssignmentId != null &&
-            locationUpdate != null &&
-            locationUpdate.deliveryAssignmentId == state.deliveryAssignmentId &&
-            DateTime.now().difference(locationUpdate.timestamp) <=
-                _freshLocationWindow;
+            state.deliveryAssignmentId != null;
 
         final deliveryAssignmentId = state.deliveryAssignmentId;
-        if (state.status == LiveMapStatus.active &&
-            state.orderStatus == OrderStatus.onTheWay &&
+        if (canShowLiveMap &&
             deliveryAssignmentId != null &&
             deliveryAssignmentId.isNotEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -149,10 +144,14 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
         }
 
         if (canShowLiveMap) {
-          final driverPoint = LatLng(
-            locationUpdate.latitude,
-            locationUpdate.longitude,
-          );
+          final isLocationFresh = locationUpdate != null &&
+              locationUpdate.deliveryAssignmentId == state.deliveryAssignmentId &&
+              DateTime.now().difference(locationUpdate.timestamp) <= _freshLocationWindow;
+
+          final driverPoint = isLocationFresh
+              ? LatLng(locationUpdate.latitude, locationUpdate.longitude)
+              : state.shopPoint;
+
           return _DeliveryStatusAndMapLayout(
             colors: colors,
             brightness: brightness,
@@ -217,6 +216,9 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
         ? _LiveDeliveryStatusTile(
             key: const Key('delivery-status-panel'),
             colors: colors,
+            liveState: liveState!,
+            liveDriverPoint: liveDriverPoint!,
+            slots: slots,
           )
         : _BatchStatusTile(
             key: const Key('delivery-status-panel'),
@@ -515,13 +517,45 @@ class _MapPlaceholder extends StatelessWidget {
 // ── Live Delivery ────────────────────────────────────────────────────────────
 
 class _LiveDeliveryStatusTile extends StatelessWidget {
-  const _LiveDeliveryStatusTile({super.key, required this.colors});
+  const _LiveDeliveryStatusTile({
+    super.key,
+    required this.colors,
+    required this.liveState,
+    required this.liveDriverPoint,
+    required this.slots,
+  });
 
   final AppColorSet colors;
+  final LiveDeliveryMapState liveState;
+  final LatLng liveDriverPoint;
+  final List<DeliverySlot> slots;
+
+  static double _progressRatio(LatLng driver, List<LatLng> route) {
+    if (route.length < 2) return 0.0;
+    const distance = Distance();
+    var nearest = 0;
+    var minDist = double.infinity;
+    for (var i = 0; i < route.length; i++) {
+      final d = distance(driver, route[i]);
+      if (d < minDist) {
+        minDist = d;
+        nearest = i;
+      }
+    }
+    return (nearest / (route.length - 1)).clamp(0.0, 1.0);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
+    final ratio = _progressRatio(liveDriverPoint, liveState.routePoints);
+    final percent = (ratio * 100).round();
+
+    final assignedSlot = liveState.assignedSlot;
+    final activeSlot = assignedSlot != null
+        ? slots.where((s) => s.templateId == assignedSlot.slotTemplateId).firstOrNull
+        : null;
+
+    final child = ClipRRect(
       borderRadius: AppRadius.borderXl,
       child: Container(
         padding: const EdgeInsets.all(AppSpacing.sm),
@@ -529,21 +563,60 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Delivery Status',
-                maxLines: 1,
-                style: AppTypography.h3.copyWith(
-                  color: colors.onSurface,
-                  fontSize: 20,
-                  height: 1.0,
-                  fontWeight: FontWeight.w800,
-                ),
+            Text(
+              'Delivery Status',
+              maxLines: 1,
+              style: AppTypography.h3.copyWith(
+                color: colors.onSurface,
+                fontSize: 20,
+                height: 1.0,
+                fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(height: AppSpacing.xs),
+            if (activeSlot != null) ...[
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '${_formatSlotRange(activeSlot)}: ${activeSlot.bookedCount}/${activeSlot.capacity}',
+                  maxLines: 1,
+                  style: AppTypography.caption.copyWith(
+                    color: colors.onSurface,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    height: 1.1,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+            ],
+            Row(
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: AppRadius.borderFull,
+                    child: LinearProgressIndicator(
+                      value: ratio,
+                      minHeight: 6,
+                      backgroundColor: colors.outline.withValues(alpha: 0.55),
+                      valueColor: AlwaysStoppedAnimation<Color>(colors.brand),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  '$percent%',
+                  style: AppTypography.overline.copyWith(
+                    color: colors.onSurfaceDim,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
             _StatusLine(
               colors: colors,
               icon: Icons.check_rounded,
@@ -553,14 +626,24 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
             const SizedBox(height: AppSpacing.xs),
             _StatusLine(
               colors: colors,
-              icon: Icons.route_rounded,
+              icon: Icons.electric_moped_rounded,
               title: 'Rider is on the way',
-              subtitle: 'Standby for your turn',
+              subtitle: 'Tracking real-time location',
               darkIcon: true,
             ),
           ],
         ),
       ),
+    );
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        if (liveState.orderId != null) {
+          context.push('/customer/orders/${liveState.orderId}');
+        }
+      },
+      child: child,
     );
   }
 }

@@ -278,7 +278,7 @@ class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
     return LayoutBuilder(
       builder: (context, constraints) => OverflowBox(
         alignment: Alignment.centerLeft,
-        maxWidth: constraints.maxWidth + AppSpacing.xl,
+        maxWidth: double.infinity,
         child: SizedBox(
           width: constraints.maxWidth + AppSpacing.xl,
           height: _kCardH,

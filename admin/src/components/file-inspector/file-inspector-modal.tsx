@@ -14,6 +14,7 @@ interface FileInspectorModalProps {
   fileName: string;
   fileMetadataId?: number | null;
   expectedPageCount?: number;
+  onVerify?: () => void;
 }
 
 export function FileInspectorModal({
@@ -23,6 +24,7 @@ export function FileInspectorModal({
   fileName,
   fileMetadataId,
   expectedPageCount,
+  onVerify,
 }: FileInspectorModalProps) {
   const [extractedPageCount, setExtractedPageCount] = useState<number | null>(null);
   const [isValidated, setIsValidated] = useState(false);
@@ -178,7 +180,17 @@ export function FileInspectorModal({
           Close Inspector
         </Button>,
         isValidated && isPDF ? (
-          <Button key="verified" type="primary" onClick={handleClose}>
+          <Button 
+            key="verified" 
+            type="primary" 
+            onClick={() => {
+              if (onVerify) {
+                onVerify();
+              } else {
+                handleClose();
+              }
+            }}
+          >
             Verified
           </Button>
         ) : null,
