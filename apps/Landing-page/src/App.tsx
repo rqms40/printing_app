@@ -248,6 +248,25 @@ function HowItWorksSection() {
           </motion.div>
 
         </div>
+
+        {/* Full Wide Screen Video Container */}
+        <motion.div
+          initial={{ opacity: 0, y: 50, filter: 'blur(20px)' }}
+          whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 1, delay: 0.6, ease: 'easeOut' }}
+          viewport={{ once: true, margin: '-50px' }}
+          className="mt-32 w-full relative rounded-3xl overflow-hidden border border-white/10 shadow-[0_0_50px_rgba(255,222,88,0.05)] aspect-[16/9] bg-white/5"
+        >
+          <video 
+            src="/demo.mp4" 
+            autoPlay 
+            loop 
+            muted 
+            controls
+            playsInline
+            className="w-full h-full object-cover"
+          />
+        </motion.div>
       </div>
     </section>
   );
@@ -373,16 +392,16 @@ function SupportSection() {
           whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           transition={{ duration: 0.8, delay: 0.2, ease: 'easeOut' }}
           viewport={{ once: true, margin: '-60px' }}
-          className="grid grid-cols-3 gap-4 mt-12 text-center"
+          className="grid grid-cols-3 gap-2 md:gap-4 mt-12 text-center"
         >
           {[
             { value: '< 5 min', label: 'Avg. response time' },
             { value: '24 / 7', label: 'Support availability' },
             { value: '99 %', label: 'Issue resolution rate' },
           ].map(({ value, label }) => (
-            <div key={label} className="rounded-2xl bg-white/5 border border-white/10 py-6 px-4">
-              <p className="text-2xl md:text-3xl font-bold text-[var(--color-primary)] mb-1">{value}</p>
-              <p className="text-xs text-gray-400 uppercase tracking-widest">{label}</p>
+            <div key={label} className="rounded-2xl bg-white/5 border border-white/10 py-4 px-2 md:py-6 md:px-4 flex flex-col items-center justify-center">
+              <p className="text-[15px] sm:text-lg md:text-3xl font-bold text-[var(--color-primary)] mb-1">{value}</p>
+              <p className="text-[9px] sm:text-[10px] md:text-xs text-gray-400 uppercase tracking-normal md:tracking-widest break-words w-full">{label}</p>
             </div>
           ))}
         </motion.div>
