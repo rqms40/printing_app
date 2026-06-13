@@ -1,4 +1,4 @@
-import { Typography, theme, Space, Row, Col } from "antd";
+import { Typography, theme, Row, Col } from "antd";
 import { GridLogo } from "@/components/grid-logo";
 
 const { Text } = Typography;

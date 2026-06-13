@@ -8,7 +8,6 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
 import 'package:printing_app/shared/models/app_notification.dart';
 import 'package:printing_app/shared/widgets/grid_logo.dart';
-import 'package:printing_app/utils/formatters.dart';
 
 class GridGoNotificationCard extends ConsumerWidget {
   const GridGoNotificationCard({
@@ -75,8 +74,8 @@ class GridGoNotificationCard extends ConsumerWidget {
     final progress = _getProgress(notification.type);
     
     // Always use dark theme colors for this card to match the "GRID GO" branding
-    final brandYellow = const Color(0xFFFFDE58);
-    final cardBg = const Color(0xFF2A2A2A); // Dark grey
+    const brandYellow = Color(0xFFFFDE58);
+    const cardBg = Color(0xFF2A2A2A);
     
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark

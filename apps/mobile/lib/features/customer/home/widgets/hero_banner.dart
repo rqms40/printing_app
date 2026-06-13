@@ -64,7 +64,7 @@ class HeroBanner extends StatelessWidget {
 
                   // GRID wordmark
                   Text.rich(
-                        TextSpan(
+                        const TextSpan(
                           children: [
                             TextSpan(
                               text: 'GRID',

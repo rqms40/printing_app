@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Layout, Table, Button, Input, Form, Typography, Tag, Space, Drawer, message, Popconfirm, theme } from "antd";
+import { Table, Button, Input, Form, Typography, Tag, Space, Drawer, message, Popconfirm, theme } from "antd";
 import { useList, useUpdate, useDelete } from "@refinedev/core";
 
 const { Text, Paragraph } = Typography;
@@ -87,7 +87,7 @@ export function TicketList() {
     {
       title: "Action",
       key: "action",
-      render: (_, record: SupportTicket) => (
+      render: (_: unknown, record: SupportTicket) => (
         record.status === "closed" ? (
           <Popconfirm
             title="Delete the ticket"

@@ -132,7 +132,7 @@ export class SupportTicketsService {
       });
       this.logger.log(`Reply email sent to ${ticket.email} for ticket ${ticket.id}`);
     } catch (error) {
-      this.logger.error(`Failed to send reply email to ${ticket.email}: ${error.message}`);
+      this.logger.error(`Failed to send reply email to ${ticket.email}: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     return updatedTicket;
