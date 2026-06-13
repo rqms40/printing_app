@@ -48,6 +48,7 @@ class DeliverySlotNotifier extends StateNotifier<DeliverySlotState> {
   }
 
   Future<void> refresh() async {
+    if (!mounted) return;
     state = state.copyWith(isLoading: true);
     try {
       final res =
@@ -55,8 +56,10 @@ class DeliverySlotNotifier extends StateNotifier<DeliverySlotState> {
       final slots = (res.data ?? [])
           .map((e) => DeliverySlot.fromJson(e as Map<String, dynamic>))
           .toList();
+      if (!mounted) return;
       state = state.copyWith(slots: slots, isLoading: false, error: null);
     } catch (e) {
+      if (!mounted) return;
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }

@@ -8,7 +8,8 @@ final productCatalogProvider = FutureProvider<ProductCatalog>((ref) async {
     final response = await dio.get('/products/catalog');
     final data = response.data;
     if (data is Map) {
-      return ProductCatalog.fromJson(Map<String, dynamic>.from(data));
+      final catalog = ProductCatalog.fromJson(Map<String, dynamic>.from(data));
+      if (catalog.categories.isNotEmpty) return catalog;
     }
   } catch (_) {
     // Fall back to the seeded catalog shape so tests and offline dev flows

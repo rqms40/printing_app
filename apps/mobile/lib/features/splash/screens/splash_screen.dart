@@ -299,14 +299,24 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                     // Center "GRID" text
                     const Align(
                       alignment: Alignment.center,
-                      child: Text(
-                        'GRID',
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: 'GRID',
+                              style: TextStyle(color: Color(0xFF1E1E1E)),
+                            ),
+                            TextSpan(
+                              text: 'GO',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ],
+                        ),
                         style: TextStyle(
                           fontFamily: 'Satoshi',
                           fontSize: 48,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 6,
-                          color: Color(0xFF1E1E1E), // Dark
                         ),
                       ),
                     ),

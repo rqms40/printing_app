@@ -164,7 +164,10 @@ function App() {
               {
                 name: "chat",
                 list: "/chat",
-                meta: { label: "Support Chat", icon: <MessageOutlined /> },
+                meta: { label: "Support", icon: <MessageOutlined /> },
+              },
+              {
+                name: "support-tickets",
               },
               {
                 name: 'printer-profile',

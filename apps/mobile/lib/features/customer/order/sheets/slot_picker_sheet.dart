@@ -58,38 +58,68 @@ class _SlotPickerBodyState extends ConsumerState<_SlotPickerBody> {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
           ),
-          RadioGroup<int>(
-            groupValue: _chosenTemplate,
-            onChanged: (value) {
-              DeliverySlot? selectedSlot;
-              for (final slot in slotsState.slots) {
-                if (!slot.isFull && slot.templateId == value) {
-                  selectedSlot = slot;
-                  break;
-                }
-              }
-              final slot = selectedSlot;
-              if (slot == null) return;
-              setState(() {
-                _chosenTemplate = value;
-                _start = slot.startTime;
-                _end = slot.endTime;
-              });
-            },
-            child: Column(
-              children: [
-                for (final s in slotsState.slots)
-                  RadioListTile<int>(
-                    value: s.templateId,
-                    enabled: !s.isFull,
-                    title: Text(
-                      '${s.startTime.substring(0, 5)} – ${s.endTime.substring(0, 5)}',
-                    ),
-                    subtitle: Text('${s.bookedCount}/${s.capacity} booked'),
+          if (slotsState.isLoading)
+            const Padding(
+              padding: EdgeInsets.all(32.0),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (slotsState.error != null)
+            Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Column(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Failed to load slots:\n${slotsState.error}',
+                    textAlign: TextAlign.center,
                   ),
-              ],
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => ref.read(deliverySlotProvider(widget.date).notifier).refresh(),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            )
+          else if (slotsState.slots.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(32.0),
+              child: Center(child: Text('No delivery slots available for this date.')),
+            )
+          else
+            RadioGroup<int>(
+              groupValue: _chosenTemplate,
+              onChanged: (value) {
+                DeliverySlot? selectedSlot;
+                for (final slot in slotsState.slots) {
+                  if (!slot.isFull && slot.templateId == value) {
+                    selectedSlot = slot;
+                    break;
+                  }
+                }
+                final slot = selectedSlot;
+                if (slot == null) return;
+                setState(() {
+                  _chosenTemplate = value;
+                  _start = slot.startTime;
+                  _end = slot.endTime;
+                });
+              },
+              child: Column(
+                children: [
+                  for (final s in slotsState.slots)
+                    RadioListTile<int>(
+                      value: s.templateId,
+                      enabled: !s.isFull,
+                      title: Text(
+                        '${s.startTime.substring(0, 5)} – ${s.endTime.substring(0, 5)}',
+                      ),
+                      subtitle: Text('${s.bookedCount}/${s.capacity} booked'),
+                    ),
+                ],
+              ),
             ),
-          ),
           Padding(
             padding: const EdgeInsets.all(16),
             child: ElevatedButton(

@@ -162,6 +162,9 @@ class CheckoutSpeedCard extends ConsumerWidget {
           if (!hasLiveTodaySlot) ...[
             _NoSlotBanner(colors: colors),
             const SizedBox(height: 10),
+          ] else ...[
+            _OngoingBatchBanner(colors: colors),
+            const SizedBox(height: 10),
           ],
           for (var i = 0; i < tiers.length; i++) ...[
             if (i > 0) const SizedBox(height: 8),
@@ -265,6 +268,45 @@ class _NoSlotBanner extends StatelessWidget {
               style: AppTypography.caption.copyWith(
                 color: colors.onBackground,
                 fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OngoingBatchBanner extends StatelessWidget {
+  const _OngoingBatchBanner({required this.colors});
+  final AppColorSet colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: 10,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFF78EC75).withValues(alpha: 0.15),
+        borderRadius: AppRadius.borderMd,
+      ),
+      child: Row(
+        children: [
+          const HugeIcon(
+            icon: HugeIcons.strokeRoundedDeliveryTruck01,
+            size: 18,
+            color: Color(0xFF78EC75),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'A batch is currently ongoing! Checkout now to join the active delivery.',
+              style: AppTypography.caption.copyWith(
+                color: colors.onBackground,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),

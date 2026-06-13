@@ -11,6 +11,7 @@ import 'package:printing_app/shared/widgets/empty_state.dart';
 import 'package:printing_app/shared/widgets/skeleton_screens.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/utils/formatters.dart';
+import 'package:printing_app/features/customer/notifications/screens/widgets/grid_go_notification_card.dart';
 
 class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
@@ -222,10 +223,20 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
             ...items.asMap().entries.map((entry) {
               final index = entry.key;
               final notification = entry.value;
-              return _NotificationItem(
-                    notification: notification,
-                    isLast: index == items.length - 1,
-                  )
+              
+              Widget notificationWidget;
+              if (notification.type.startsWith('order_') && notification.type != 'order_update') {
+                notificationWidget = GridGoNotificationCard(
+                  notification: notification,
+                );
+              } else {
+                notificationWidget = _NotificationItem(
+                  notification: notification,
+                  isLast: index == items.length - 1,
+                );
+              }
+
+              return notificationWidget
                   .animate()
                   .fadeIn(
                     duration: 350.ms,

@@ -102,9 +102,9 @@ export function formatFrequencyLabel(frequency?: string): string {
   return parsed.intervalCount === 1
     ? `Every ${pluralizeUnit(parsed.intervalCount, parsed.intervalUnit)}`
     : `Every ${parsed.intervalCount} ${pluralizeUnit(
-        parsed.intervalCount,
-        parsed.intervalUnit,
-      )}`;
+      parsed.intervalCount,
+      parsed.intervalUnit,
+    )}`;
 }
 
 function formatScheduleSentence(values: FrequencyFormValues): string {
@@ -337,10 +337,10 @@ export function MarketingSettings() {
           {/* iOS Style Preview Box */}
           <div style={{ marginTop: 24 }}>
             <Title level={5}>Live Preview</Title>
-              <div
-                style={{
-                  background: token.colorBgLayout,
-                  padding: "24px",
+            <div
+              style={{
+                background: token.colorBgLayout,
+                padding: "24px",
                 borderRadius: "16px",
                 display: "flex",
                 justifyContent: "center",
@@ -371,7 +371,7 @@ export function MarketingSettings() {
                   }}>
                     <GridLogo size={12} />
                   </div>
-                  <Text type="secondary" style={{ fontSize: "12px", flex: 1 }}>GRID PRINT</Text>
+                  <Text type="secondary" style={{ fontSize: "12px", flex: 1 }}>GRID GO</Text>
                   <Text type="secondary" style={{ fontSize: "12px" }}>now</Text>
                 </div>
                 <div>

@@ -3,6 +3,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:printing_app/features/customer/address/providers/address_provider.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
+import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/services/routing_service.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
@@ -18,6 +19,7 @@ class LiveDeliveryMapState {
     this.orderId,
     this.deliveryAssignmentId,
     this.orderStatus,
+    this.assignedSlot,
   });
 
   final LiveMapStatus status;
@@ -28,6 +30,7 @@ class LiveDeliveryMapState {
   final String? orderId;
   final String? deliveryAssignmentId;
   final OrderStatus? orderStatus;
+  final AssignedDeliverySlot? assignedSlot;
 
   factory LiveDeliveryMapState.loading() => const LiveDeliveryMapState._(
     status: LiveMapStatus.loading,
@@ -49,6 +52,7 @@ class LiveDeliveryMapState {
     required String orderId,
     String? deliveryAssignmentId,
     required OrderStatus orderStatus,
+    AssignedDeliverySlot? assignedSlot,
   }) => LiveDeliveryMapState._(
     status: LiveMapStatus.active,
     shopPoint: shopPoint,
@@ -58,6 +62,7 @@ class LiveDeliveryMapState {
     orderId: orderId,
     deliveryAssignmentId: deliveryAssignmentId,
     orderStatus: orderStatus,
+    assignedSlot: assignedSlot,
   );
 
   /// Index of the route point nearest to [driverPoint].
@@ -132,5 +137,6 @@ final liveDeliveryMapProvider =
         orderId: onTheWayOrder.orderId,
         deliveryAssignmentId: onTheWayOrder.deliveryAssignmentId,
         orderStatus: onTheWayOrder.orderStatus,
+        assignedSlot: onTheWayOrder.assignedSlot,
       );
     });
