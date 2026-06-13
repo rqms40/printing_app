@@ -148,19 +148,17 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
               locationUpdate.deliveryAssignmentId == state.deliveryAssignmentId &&
               DateTime.now().difference(locationUpdate.timestamp) <= _freshLocationWindow;
 
-          final driverPoint = isLocationFresh
-              ? LatLng(locationUpdate.latitude, locationUpdate.longitude)
-              : state.shopPoint;
-
-          return _DeliveryStatusAndMapLayout(
-            colors: colors,
-            brightness: brightness,
-            slots: slots.slots,
-            isLoading: slots.isLoading,
-            liveState: state,
-            liveDriverPoint: driverPoint,
-            onMapTap: () => context.push('/customer/tracking'),
-          );
+          if (isLocationFresh) {
+            return _DeliveryStatusAndMapLayout(
+              colors: colors,
+              brightness: brightness,
+              slots: slots.slots,
+              isLoading: slots.isLoading,
+              liveState: state,
+              liveDriverPoint: LatLng(locationUpdate!.latitude, locationUpdate.longitude),
+              onMapTap: () => context.push('/customer/tracking'),
+            );
+          }
         }
 
         return _DeliveryStatusAndMapLayout(
