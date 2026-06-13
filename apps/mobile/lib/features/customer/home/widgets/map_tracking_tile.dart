@@ -155,7 +155,7 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
               slots: slots.slots,
               isLoading: slots.isLoading,
               liveState: state,
-              liveDriverPoint: LatLng(locationUpdate!.latitude, locationUpdate.longitude),
+              liveDriverPoint: LatLng(locationUpdate.latitude, locationUpdate.longitude),
               onMapTap: () => context.push('/customer/tracking'),
             );
           }
