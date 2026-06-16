@@ -39,7 +39,7 @@ class StatusPicker extends StatelessWidget {
         return HugeIcons.strokeRoundedCheckmarkBadge01;
       case OrderStatus.readyForDispatch:
         return HugeIcons.strokeRoundedPackageDelivered;
-      case OrderStatus.driverAssigned:
+      case OrderStatus.riderAssigned:
         return HugeIcons.strokeRoundedUserAccount;
       case OrderStatus.pickedUp:
         return HugeIcons.strokeRoundedDeliveryTruck02;

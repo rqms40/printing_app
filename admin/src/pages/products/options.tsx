@@ -492,7 +492,7 @@ export function ProductOptionsPage() {
         </div>
       </div>
 
-      <div className="drivers-table-section">
+      <div className="riders-table-section">
         {visibleSpecs.length === 0 ? (
           <div style={{ padding: 32 }}>
             <Empty description={<Text style={{ color: '#808080' }}>No specs configured for this product.</Text>}>

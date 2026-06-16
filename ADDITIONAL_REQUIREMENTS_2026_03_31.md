@@ -1,4 +1,4 @@
-# GRID
+# GRIDGO
 
 ## Mapping the Future of Printing.
 
@@ -74,7 +74,7 @@ This will guide us in our development.
 
 ### Payments
 
-13. **Payment System** — Direct integration with **GCash** for payments. Additionally, introduce a **GRID Credit Top-Up System** allowing users to pre-load credits to their account to avoid needing to open GCash each time.
+13. **Payment System** — Direct integration with **GCash** for payments. Additionally, introduce a **GRIDGO Credit Top-Up System** allowing users to pre-load credits to their account to avoid needing to open GCash each time.
 
 ### 3D Printing System
 
@@ -97,4 +97,4 @@ Presented by **Mr. Villotes & Mr. Prad**, Full Stack Developers.
 
 ---
 
-_GRID — Mapping the Future of Printing._
+_GRIDGO — Mapping the Future of Printing._

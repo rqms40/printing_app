@@ -8,12 +8,12 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 
-/// Splash screen with animated GRID logo.
+/// Splash screen with animated GRIDGO logo.
 ///
 /// Animation sequence:
 ///   1. Dots appear one-by-one in spiral order, each starting as a ghost
 ///      (pale) then filling to its final color
-///   2. After all 9 dots are lit, "GRID" wordmark fades in below
+///   2. After all 9 dots are lit, "GRIDGO" wordmark fades in below
 ///   3. Subtitle fades in
 ///   4. Everything fades out → navigate (auto-login or login screen)
 class SplashScreen extends ConsumerStatefulWidget {
@@ -125,10 +125,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     await Future.delayed(const Duration(milliseconds: 700));
     if (!mounted) return;
 
-    // Show GRID and powered by text
+    // Show GRIDGO and powered by text
     _yellowTextController.forward();
 
-    // Play outro sound when the GRID text shows up
+    // Play outro sound when the GRIDGO text shows up
     _outroPlayer.resume().catchError((_) {});
 
     await Future.delayed(const Duration(milliseconds: 1500));
@@ -296,14 +296,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
               child: SizedBox.expand(
                 child: Stack(
                   children: [
-                    // Center "GRID" text
+                    // Center "GRIDGO" text
                     const Align(
                       alignment: Alignment.center,
                       child: Text.rich(
                         TextSpan(
                           children: [
                             TextSpan(
-                              text: 'GRID',
+                              text: 'GRIDGO',
                               style: TextStyle(color: Color(0xFF1E1E1E)),
                             ),
                             TextSpan(
@@ -321,7 +321,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                       ),
                     ),
                     
-                    // Bottom "Powered by GRID" text and tagline
+                    // Bottom "Powered by GRIDGO" text and tagline
                     Align(
                       alignment: Alignment.bottomCenter,
                       child: SafeArea(
@@ -331,7 +331,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                'Powered by GRID',
+                                'Powered by GRIDGO',
                                 style: AppTypography.overline.copyWith(
                                   color: const Color(0xFF1E1E1E).withValues(alpha: 0.6),
                                 ),

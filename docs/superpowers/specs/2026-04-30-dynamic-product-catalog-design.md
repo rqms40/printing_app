@@ -8,7 +8,7 @@
 
 ## Summary
 
-GRID currently has two product categories in the mobile app: Paper Printing and 3D Printing. Their categories, specification fields, option values, file limits, and pricing are hardcoded in Flutter. The server and admin already have an early `ProductsModule` with `service_categories`, `spec_options`, and `service_addons`, but mobile does not use it and server order creation trusts client-provided totals.
+GRIDGO currently has two product categories in the mobile app: Paper Printing and 3D Printing. Their categories, specification fields, option values, file limits, and pricing are hardcoded in Flutter. The server and admin already have an early `ProductsModule` with `service_categories`, `spec_options`, and `service_addons`, but mobile does not use it and server order creation trusts client-provided totals.
 
 This design replaces the loose option-group model with a structured, generic catalog:
 

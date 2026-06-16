@@ -83,7 +83,7 @@ This single behavior covers both flows — the first item in a new order and add
 ### Delivery mode tabs
 
 - **Delivery**: shows one address row + rider note row. Speed tier card visible.
-- **Pickup**: shows GRID Print Shop card + simple "As soon as ready / Schedule pickup time" picker. Speed tier card replaced by "When?" card. "Schedule pickup time" reuses `SlotPickerSheet` filtered to pickup-eligible templates (a new `DeliverySlotTemplate.allowsPickup` boolean column, default true for back-compat).
+- **Pickup**: shows GRIDGO Print Shop card + simple "As soon as ready / Schedule pickup time" picker. Speed tier card replaced by "When?" card. "Schedule pickup time" reuses `SlotPickerSheet` filtered to pickup-eligible templates (a new `DeliverySlotTemplate.allowsPickup` boolean column, default true for back-compat).
 - **Multi-drop**: shows N drop groups. Each group has its own address picker; user assigns items via tap-to-move action sheet (drag-and-drop is enhancement). Drop count drives `extraDestinationFee` (existing server logic).
 
 ### External delivery handling
@@ -233,7 +233,7 @@ Every cart-mutation goes through `checkoutProvider`; the screen is purely a view
 
 - Cart icon / global cart access from non-order screens (Home Resume Queue card stays as the entry point).
 - Multi-payment split (one method per order).
-- Tip-your-rider feature shown in FoodPanda screenshot — not part of GRID.
+- Tip-your-rider feature shown in FoodPanda screenshot — not part of GRIDGO.
 - Promo code / offers section — separate spec.
 - Cart sync across devices — local Hive only.
 

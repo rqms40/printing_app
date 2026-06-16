@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { mockOrders } from '../data/mockOrders';
-import { mockDrivers } from '../data/mockDrivers';
+import { mockRiders } from '../data/mockRiders';
 import { UserPlus, Package, ChevronRight } from 'lucide-react';
 
 export const DispatchQueue: React.FC = () => {
@@ -8,8 +8,8 @@ export const DispatchQueue: React.FC = () => {
   
   const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
 
-  // Available drivers only
-  const availableDrivers = mockDrivers.filter(d => d.isAvailable);
+  // Available riders only
+  const availableRiders = mockRiders.filter(d => d.isAvailable);
 
   return (
     <div className="card flex-col gap-4 animate-fade-in" style={{ height: '100%', overflowY: 'auto' }}>
@@ -47,8 +47,8 @@ export const DispatchQueue: React.FC = () => {
                 <div className="flex-col gap-2 mt-2">
                   <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>Select Rider:</span>
                   <div className="flex-col gap-2 max-h-40 overflow-y-auto">
-                    {availableDrivers.map(driver => (
-                      <button key={driver.id} className="flex justify-between items-center" style={{
+                    {availableRiders.map(rider => (
+                      <button key={rider.id} className="flex justify-between items-center" style={{
                         width: '100%',
                         padding: '10px',
                         backgroundColor: 'var(--surface-hover)',
@@ -57,8 +57,8 @@ export const DispatchQueue: React.FC = () => {
                         textAlign: 'left'
                       }}>
                         <div className="flex-col">
-                          <span style={{ fontSize: '0.875rem', color: '#fff', fontWeight: 500 }}>{driver.name}</span>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{driver.vehicleType} &bull; {driver.plateNumber}</span>
+                          <span style={{ fontSize: '0.875rem', color: '#fff', fontWeight: 500 }}>{rider.name}</span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{rider.vehicleType} &bull; {rider.plateNumber}</span>
                         </div>
                         <ChevronRight size={16} color="var(--brand-yellow)" />
                       </button>

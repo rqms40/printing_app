@@ -26,7 +26,7 @@ describe('NotificationsService', () => {
     createdAt: new Date(),
   } as Notification;
 
-  const mockAdmin = { id: 10, email: 'admin@grid.ph', role: 'admin' } as User;
+  const mockAdmin = { id: 10, email: 'admin@gridgo.ph', role: 'admin' } as User;
 
   beforeEach(async () => {
     repo = {
@@ -162,7 +162,7 @@ describe('NotificationsService', () => {
     it('batch-inserts one row per admin and broadcasts', async () => {
       const admins = [
         mockAdmin,
-        { id: 11, email: 'admin2@grid.ph', role: 'admin' } as User,
+        { id: 11, email: 'admin2@gridgo.ph', role: 'admin' } as User,
       ];
       usersService.findAllByRole.mockResolvedValue(admins);
 

@@ -31,7 +31,7 @@ class MapHelpers {
         : 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';
     return TileLayer(
       urlTemplate: url,
-      userAgentPackageName: 'com.gridprint.app',
+      userAgentPackageName: 'com.gridgoprint.app',
     );
   }
 
@@ -94,8 +94,8 @@ class MapHelpers {
         ),
       );
 
-  /// Driver marker — dark circle + navigation arrow.
-  static Marker driverMarker(LatLng point) => Marker(
+  /// Rider marker — dark circle + navigation arrow.
+  static Marker riderMarker(LatLng point) => Marker(
         point: point,
         width: 44,
         height: 44,

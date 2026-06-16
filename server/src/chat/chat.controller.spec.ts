@@ -9,7 +9,7 @@ const makeController = () => {
   const chatService = {
     createConversation: jest.fn(),
     getOrCreateCustomerOrderConversation: jest.fn(),
-    getOrCreateDriverOrderConversation: jest.fn(),
+    getOrCreateRiderOrderConversation: jest.fn(),
     findConversation: jest.fn(),
     getMessages: jest.fn(),
     getConversations: jest.fn(),
@@ -59,7 +59,7 @@ describe('ChatController', () => {
       ).toHaveBeenCalledWith(5, '42');
     });
 
-    it('uses the driver order conversation flow for drivers', async () => {
+    it('uses the rider order conversation flow for riders', async () => {
       const { controller, chatService } = makeController();
       const conversation = {
         id: 8,
@@ -68,17 +68,17 @@ describe('ChatController', () => {
         orderId: 42,
         assignedRiderId: 12,
       };
-      chatService.getOrCreateDriverOrderConversation.mockResolvedValue(
+      chatService.getOrCreateRiderOrderConversation.mockResolvedValue(
         conversation,
       );
 
       await expect(
         controller.openOrderConversation('42', {
-          user: { sub: 12, role: 'driver', email: 'driver@example.com' },
+          user: { sub: 12, role: 'rider', email: 'rider@example.com' },
         }),
       ).resolves.toBe(conversation);
       expect(
-        chatService.getOrCreateDriverOrderConversation,
+        chatService.getOrCreateRiderOrderConversation,
       ).toHaveBeenCalledWith(12, '42');
     });
   });
@@ -104,7 +104,7 @@ describe('ChatController', () => {
 
       await expect(
         controller.getMessages('10', '1', '50', {
-          user: { sub: 12, role: 'driver', email: 'rider@example.com' },
+          user: { sub: 12, role: 'rider', email: 'rider@example.com' },
         }),
       ).resolves.toBe(messages);
       expect(chatService.getMessages).toHaveBeenCalledWith(10, 1, 50);
@@ -121,13 +121,13 @@ describe('ChatController', () => {
 
       await expect(
         controller.getMessages('10', '1', '50', {
-          user: { sub: 99, role: 'driver', email: 'other@example.com' },
+          user: { sub: 99, role: 'rider', email: 'other@example.com' },
         }),
       ).rejects.toThrow(ForbiddenException);
       expect(chatService.getMessages).not.toHaveBeenCalled();
     });
 
-    it('rejects matching assignedRiderId when the requester is not a driver', async () => {
+    it('rejects matching assignedRiderId when the requester is not a rider', async () => {
       const { controller, chatService } = makeController();
       chatService.findConversation.mockResolvedValue({
         id: 10,
@@ -138,7 +138,7 @@ describe('ChatController', () => {
 
       await expect(
         controller.getMessages('10', '1', '50', {
-          user: { sub: 12, role: 'customer', email: 'not-driver@example.com' },
+          user: { sub: 12, role: 'customer', email: 'not-rider@example.com' },
         }),
       ).rejects.toThrow(ForbiddenException);
       expect(chatService.getMessages).not.toHaveBeenCalled();

@@ -65,11 +65,9 @@ export class ChatService {
 
     const type =
       requestedType ??
-      (order.assignedDriverId
-        ? ConversationType.RIDER
-        : ConversationType.ADMIN);
+      (order.assignedRiderId ? ConversationType.RIDER : ConversationType.ADMIN);
 
-    if (type === ConversationType.RIDER && !order.assignedDriverId) {
+    if (type === ConversationType.RIDER && !order.assignedRiderId) {
       throw new BadRequestException('No rider is assigned to this order yet');
     }
 
@@ -78,16 +76,16 @@ export class ChatService {
       orderId: order.id,
       type,
       assignedRiderId:
-        type === ConversationType.RIDER ? order.assignedDriverId : null,
+        type === ConversationType.RIDER ? order.assignedRiderId : null,
     });
   }
 
-  async getOrCreateDriverOrderConversation(
-    driverUserId: number,
+  async getOrCreateRiderOrderConversation(
+    riderUserId: number,
     orderRef: string | number,
   ): Promise<Conversation> {
     const order = await this.findOrderByRef(orderRef);
-    if (order.assignedDriverId !== driverUserId) {
+    if (order.assignedRiderId !== riderUserId) {
       throw new ForbiddenException(
         'Only the assigned rider can chat about this order',
       );
@@ -97,7 +95,7 @@ export class ChatService {
       customerId: order.userId,
       orderId: order.id,
       type: ConversationType.RIDER,
-      assignedRiderId: driverUserId,
+      assignedRiderId: riderUserId,
     });
   }
 

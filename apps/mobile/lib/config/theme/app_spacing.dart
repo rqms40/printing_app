@@ -1,4 +1,4 @@
-/// Spacing tokens used throughout GRID.
+/// Spacing tokens used throughout GRIDGO.
 class AppSpacing {
   const AppSpacing._();
 

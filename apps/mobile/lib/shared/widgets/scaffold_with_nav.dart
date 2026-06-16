@@ -37,7 +37,7 @@ class ScaffoldWithNav extends ConsumerStatefulWidget {
   final ValueChanged<int> onTap;
 
   /// When true the yellow floating FAB, quick-action panel, and backdrop are
-  /// rendered. Set false for driver / admin shells.
+  /// rendered. Set false for rider / admin shells.
   final bool showFab;
 
   @override

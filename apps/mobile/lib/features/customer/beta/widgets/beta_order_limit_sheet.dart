@@ -49,9 +49,9 @@ class BetaOrderLimitSheet extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Thanks for testing GRID — beta testers can place one order during the beta program. '
+              'Thanks for testing GRIDGO — beta testers can place one order during the beta program. '
               'Your earlier order is on its way (or already delivered). '
-              "Reach out to the GRID team if you'd like another test run.",
+              "Reach out to the GRIDGO team if you'd like another test run.",
               style: theme.textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),

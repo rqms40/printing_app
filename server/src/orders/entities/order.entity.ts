@@ -26,7 +26,7 @@ export enum OrderStatus {
   FINISHING_MOUNTING = 'finishing_mounting',
   QUALITY_CHECKED = 'quality_checked',
   READY_FOR_DISPATCH = 'ready_for_dispatch',
-  DRIVER_ASSIGNED = 'driver_assigned',
+  RIDER_ASSIGNED = 'rider_assigned',
   PICKED_UP = 'picked_up',
   ON_THE_WAY = 'on_the_way',
   ARRIVED_AT_DESTINATION = 'arrived_at_destination',
@@ -147,12 +147,12 @@ export class Order {
   @JoinColumn({ name: 'delivery_address_id' })
   deliveryAddress: Address;
 
-  @Column({ name: 'assigned_driver_id', nullable: true })
-  assignedDriverId: number;
+  @Column({ name: 'assigned_rider_id', nullable: true })
+  assignedRiderId: number;
 
   @ManyToOne(() => User)
-  @JoinColumn({ name: 'assigned_driver_id' })
-  assignedDriver: User;
+  @JoinColumn({ name: 'assigned_rider_id' })
+  assignedRider: User;
 
   @Column({ name: 'admin_notes', nullable: true, type: 'text' })
   adminNotes: string;

@@ -189,8 +189,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         TutorialStep(
           targetKey: _creditsTutorialKey,
           icon: HugeIcons.strokeRoundedCoins01,
-          title: 'GRID Credits',
-          body: 'Top up GRID Credits and pay at checkout — no GCash OTP, no app-switching.',
+          title: 'GRIDGO Credits',
+          body: 'Top up GRIDGO Credits and pay at checkout — no GCash OTP, no app-switching.',
           advanceOnSpotlightTap: false,
         ),
         TutorialStep(
@@ -766,7 +766,7 @@ class _CreditsDropdown extends StatelessWidget {
               ),
               const SizedBox(width: AppSpacing.sm),
               Text(
-                'GRID CREDITS',
+                'GRIDGO CREDITS',
                 style: AppTypography.overline.copyWith(
                   color: colors.onSurfaceDim,
                   fontSize: 9,

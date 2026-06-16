@@ -82,7 +82,7 @@ class _MapPinPickerState extends State<MapPinPicker> {
                     TileLayer(
                       urlTemplate:
                           'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.gridprint.app',
+                      userAgentPackageName: 'com.gridgoprint.app',
                     )
                   else
                     ColoredBox(color: colors.surfaceVariant),

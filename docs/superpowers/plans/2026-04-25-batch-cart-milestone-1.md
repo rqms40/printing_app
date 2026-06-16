@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add cart-only, single-destination multi-order checkout while preserving existing single-order checkout and GRID credit cancellation refunds.
+**Goal:** Add cart-only, single-destination multi-order checkout while preserving existing single-order checkout and GRIDGO credit cancellation refunds.
 
 **Architecture:** Add a server-side `BatchOrder` aggregate that creates normal child `Order` rows in one transaction. Add a mobile cart provider/persistence layer that stores multiple configured print jobs and submits them through `POST /orders/batch`; existing single-order APIs remain unchanged.
 
@@ -18,7 +18,7 @@ Server:
 - Modify `server/src/orders/dto/create-order.dto.ts` to add reusable batch DTOs and optional `deliveryAddressId`.
 - Modify `server/src/orders/orders.module.ts` to register `BatchOrder`.
 - Modify `server/src/orders/orders.controller.ts` to add `POST /orders/batch`.
-- Modify `server/src/orders/orders.service.ts` to add transactional batch creation and update GRID-credit refund amount to `totalPrice + deliveryFee`.
+- Modify `server/src/orders/orders.service.ts` to add transactional batch creation and update GRIDGO-credit refund amount to `totalPrice + deliveryFee`.
 - Modify `server/src/orders/orders.service.spec.ts` for TDD coverage.
 
 Mobile:
@@ -50,8 +50,8 @@ Add tests covering:
 - `createBatch` rejects empty item list.
 - `createBatch` saves one `BatchOrder` and two child `Order` records.
 - Shared `deliveryFee` is allocated to the first child only.
-- GRID Credits are deducted once for `subtotal + deliveryFee`.
-- Cancelling a GRID-credit order refunds `totalPrice + deliveryFee`.
+- GRIDGO Credits are deducted once for `subtotal + deliveryFee`.
+- Cancelling a GRIDGO-credit order refunds `totalPrice + deliveryFee`.
 
 Run:
 
@@ -93,7 +93,7 @@ Add `OrdersService.createBatch(userId, dto)`:
 - Compute `subtotal = sum(item.totalPrice)`.
 - Compute `batchTotal = subtotal + dto.deliveryFee`.
 - Use `DataSource.transaction`.
-- Deduct GRID credits once inside the transaction-compatible code path.
+- Deduct GRIDGO credits once inside the transaction-compatible code path.
 - Save `BatchOrder`.
 - Save each child `Order`, with first child receiving `deliveryFee`, later children receiving `0`.
 - Save specs for each child.
@@ -312,6 +312,6 @@ Expected: PASS.
 Confirm:
 - Single-order checkout still posts to `/orders`.
 - Batch checkout posts to `/orders/batch`.
-- GRID-credit cancellation refunds `totalPrice + deliveryFee`.
+- GRIDGO-credit cancellation refunds `totalPrice + deliveryFee`.
 - `creditsUpdate` WebSocket behavior remains unchanged.
 - Cart clear/reset does not delete unrelated current draft unless checkout succeeds or user explicitly clears.

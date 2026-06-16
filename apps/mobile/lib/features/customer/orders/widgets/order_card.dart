@@ -73,7 +73,7 @@ class _OrderCardState extends State<OrderCard> {
           'In Production',
         );
       case OrderStatus.readyForDispatch:
-      case OrderStatus.driverAssigned:
+      case OrderStatus.riderAssigned:
         return _OrderVisual(
           HugeIcons.strokeRoundedPackage,
           colors.success.withValues(alpha: 0.1),

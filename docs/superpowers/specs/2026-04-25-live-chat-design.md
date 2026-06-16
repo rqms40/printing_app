@@ -8,7 +8,7 @@
 
 ## 1. Overview
 
-Add a live chat system to GRID that lets customers talk to GridBot (AI assistant), admin support, or their assigned rider — all in real time, with full message history persisted to the database.
+Add a live chat system to GRIDGO that lets customers talk to GridBot (AI assistant), admin support, or their assigned rider — all in real time, with full message history persisted to the database.
 
 ### Entry points
 - **Floating chat button** on the customer home screen (bottom-right corner)
@@ -18,7 +18,7 @@ Add a live chat system to GRID that lets customers talk to GridBot (AI assistant
 ### Participants
 | Role | Can chat with |
 |------|--------------|
-| Customer | GridBot, Admin, Rider (if order has assigned driver + active delivery) |
+| Customer | GridBot, Admin, Rider (if order has assigned rider + active delivery) |
 | Admin | Customer (via inbox) |
 | Rider | Customer (via order-specific conversation) |
 | GridBot | Customer (AI only, no human involvement) |
@@ -94,7 +94,7 @@ Customer opens chat
 
 type='ai'    → GridBot responds automatically
 type='admin' → sits in admin_inbox until claimed
-type='rider' → assignedRiderId = order.assignedDriverId (auto-set)
+type='rider' → assignedRiderId = order.assignedRiderId (auto-set)
 
 Admin replies to unassigned conversation
   → auto-assigns: assignedAdminId = that admin, status='assigned'
@@ -182,8 +182,8 @@ Content-Type: application/json
 
 ### System prompt
 ```
-You are GridBot, a helpful assistant for GRID printing services. 
-Help customers with questions about paper printing, 3D printing, 
+You are GridBot, a helpful assistant for GRIDGO printing services.
+Help customers with questions about paper printing, 3D printing,
 pricing, and delivery. For order-specific issues or account 
 matters, politely direct them to our admin support team.
 ```
@@ -243,7 +243,7 @@ apps/mobile/test/features/customer/chat/
 - Taps: if no conversations → `ChatSelectScreen`; if has conversations → `ChatListScreen`
 
 ### ChatSelectScreen logic
-- If `orderId` provided: show GridBot, Admin, Rider (rider only if `order.assignedDriverId != null` and order status is one of: `driverAssigned`, `pickedUp`, `onTheWay`, `arrivedAtDestination`)
+- If `orderId` provided: show GridBot, Admin, Rider (rider only if `order.assignedRiderId != null` and order status is one of: `riderAssigned`, `pickedUp`, `onTheWay`, `arrivedAtDestination`)
 - If no `orderId`: show GridBot and Admin only
 
 ### ConversationScreen
@@ -334,7 +334,7 @@ admin/src/
 - [ ] Admin sees `new-conversation` badge increment in real time
 - [ ] Admin claims conversation → customer receives `conversation-assigned`
 - [ ] Customer receives admin reply in real time
-- [ ] Rider option hidden when order has no assigned driver
+- [ ] Rider option hidden when order has no assigned rider
 - [ ] Rider option visible when order status is out for delivery
 - [ ] Full message history loads on reopening a conversation
 - [ ] Unread badge on floating button increments on new message

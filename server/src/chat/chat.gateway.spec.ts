@@ -101,7 +101,7 @@ describe('ChatGateway', () => {
       expect(socket.join).not.toHaveBeenCalled();
     });
 
-    it('rejects assigned rider access when the socket role is not driver', async () => {
+    it('rejects assigned rider access when the socket role is not rider', async () => {
       const socket = makeSocket({ data: { userId: 12, role: 'customer' } });
       chatService.findConversation.mockResolvedValue({
         customerId: 5,
@@ -232,8 +232,8 @@ describe('ChatGateway', () => {
       });
     });
 
-    it('maps driver role to RIDER in user-typing payload', async () => {
-      const socket = makeSocket({ data: { userId: 2, role: 'driver' } });
+    it('maps rider role to RIDER in user-typing payload', async () => {
+      const socket = makeSocket({ data: { userId: 2, role: 'rider' } });
       chatService.findConversation.mockResolvedValue({
         type: ConversationType.RIDER,
         assignedRiderId: 2,

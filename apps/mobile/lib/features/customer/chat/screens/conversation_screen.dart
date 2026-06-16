@@ -66,7 +66,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
 
   String get _emptyTitle => switch (widget.conversationType) {
     ConversationType.ai => 'Ask GridBot anything',
-    ConversationType.admin => 'Start with the GRID team',
+    ConversationType.admin => 'Start with the GRIDGO team',
     ConversationType.rider => 'Message your rider',
   };
 

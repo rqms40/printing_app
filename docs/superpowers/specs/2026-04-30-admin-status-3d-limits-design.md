@@ -8,7 +8,7 @@
 
 ## Goal
 
-Two unrelated-but-related features for the GRID 3D-printing flow:
+Two unrelated-but-related features for the GRIDGO 3D-printing flow:
 
 1. **Admin Manual Print Status** — admin can attach a free-text status note plus an optional estimated-completion timestamp to any order. Customers see the note as a banner on order detail with a live countdown. One push notification fires the first time admin attaches a status; subsequent edits update silently.
 2. **3D Printer Limitations** — single admin-configurable printer profile (Bambu A1 Mini default: 180×180×180 mm, 200 MB) with server-side bounds detection on STL/OBJ/3MF uploads. Mobile shows an inline 3D preview, prints the printer's volume, hard-blocks oversize uploads from checkout, and offers a "Chat with us for personalization" CTA that opens admin chat with the file context pre-loaded.

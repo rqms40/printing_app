@@ -14,7 +14,7 @@ import {
 
 export enum UserRole {
   CUSTOMER = 'customer',
-  DRIVER = 'driver',
+  RIDER = 'rider',
   ADMIN = 'admin',
 }
 

@@ -1,4 +1,4 @@
-export type UserRole = "customer" | "driver" | "admin";
+export type UserRole = "customer" | "rider" | "admin";
 
 export type OrderStatus =
   | "order_placed"
@@ -8,7 +8,7 @@ export type OrderStatus =
   | "finishing_mounting"
   | "quality_checked"
   | "ready_for_dispatch"
-  | "driver_assigned"
+  | "rider_assigned"
   | "picked_up"
   | "on_the_way"
   | "arrived_at_destination"
@@ -46,8 +46,8 @@ export const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   printing_in_progress: ["finishing_mounting"],
   finishing_mounting: ["quality_checked"],
   quality_checked: ["ready_for_dispatch"],
-  ready_for_dispatch: ["driver_assigned", "completed_pickup"],
-  driver_assigned: ["picked_up"],
+  ready_for_dispatch: ["rider_assigned", "completed_pickup"],
+  rider_assigned: ["picked_up"],
   picked_up: ["on_the_way"],
   on_the_way: ["arrived_at_destination"],
   arrived_at_destination: ["delivered"],
@@ -64,7 +64,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   finishing_mounting: "Finishing",
   quality_checked: "Quality Checked",
   ready_for_dispatch: "Ready for Dispatch",
-  driver_assigned: "Driver Assigned",
+  rider_assigned: "Rider Assigned",
   picked_up: "Picked Up",
   on_the_way: "On the Way",
   arrived_at_destination: "Arrived",

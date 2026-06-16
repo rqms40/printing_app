@@ -4,17 +4,17 @@ import { Repository } from 'typeorm';
 
 import { AdminController } from './admin.controller';
 import { OrdersService } from '../orders/orders.service';
-import { DriversService } from '../drivers/drivers.service';
+import { RidersService } from '../riders/riders.service';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { CreditsService } from '../credits/credits.service';
 import { TamSurvey } from '../tam-surveys/entities/tam-survey.entity';
 import { TamSurveySettings } from '../tam-surveys/entities/tam-survey-settings.entity';
-import { DriverProfile } from '../drivers/entities/driver-profile.entity';
+import { RiderProfile } from '../riders/entities/rider-profile.entity';
 import {
   DeliveryAssignment,
   DeliveryStatus,
-} from '../drivers/entities/delivery-assignment.entity';
+} from '../riders/entities/delivery-assignment.entity';
 import { In } from 'typeorm';
 import * as userInsights from './user-insights';
 
@@ -29,14 +29,14 @@ describe('AdminController analytics', () => {
   let controller: AdminController;
   let ordersRepo: jest.Mocked<Partial<Repository<Order>>>;
   let usersRepo: jest.Mocked<Partial<Repository<User>>>;
-  let driverProfilesRepo: jest.Mocked<Partial<Repository<DriverProfile>>>;
+  let riderProfilesRepo: jest.Mocked<Partial<Repository<RiderProfile>>>;
   let assignmentsRepo: jest.Mocked<Partial<Repository<DeliveryAssignment>>>;
   let creditsService: jest.Mocked<Partial<CreditsService>>;
 
   beforeEach(async () => {
     ordersRepo = mockRepo();
     usersRepo = mockRepo();
-    driverProfilesRepo = {
+    riderProfilesRepo = {
       findOneOrFail: jest.fn(),
     };
     assignmentsRepo = {
@@ -51,15 +51,15 @@ describe('AdminController analytics', () => {
       providers: [
         { provide: OrdersService, useValue: { updateStatus: jest.fn() } },
         {
-          provide: DriversService,
-          useValue: { getAllDriversWithUser: jest.fn() },
+          provide: RidersService,
+          useValue: { getAllRidersWithUser: jest.fn() },
         },
         { provide: CreditsService, useValue: creditsService },
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
         { provide: getRepositoryToken(User), useValue: usersRepo },
         {
-          provide: getRepositoryToken(DriverProfile),
-          useValue: driverProfilesRepo,
+          provide: getRepositoryToken(RiderProfile),
+          useValue: riderProfilesRepo,
         },
         {
           provide: getRepositoryToken(DeliveryAssignment),
@@ -425,23 +425,23 @@ describe('AdminController analytics', () => {
     });
   });
 
-  describe('assignDriver', () => {
-    it('creates an active delivery assignment and stores the assigned driver user id on the order', async () => {
-      const driverProfile = {
+  describe('assignRider', () => {
+    it('creates an active delivery assignment and stores the assigned rider user id on the order', async () => {
+      const riderProfile = {
         id: 7,
         userId: 70,
-      } as DriverProfile;
+      } as RiderProfile;
       const assignment = {
         orderId: 42,
-        driverId: 7,
+        riderId: 7,
         status: DeliveryStatus.ASSIGNED,
       } as DeliveryAssignment;
       const savedOrder = {
         id: 42,
-        assignedDriverId: 70,
+        assignedRiderId: 70,
       } as Order;
 
-      driverProfilesRepo.findOneOrFail.mockResolvedValue(driverProfile);
+      riderProfilesRepo.findOneOrFail.mockResolvedValue(riderProfile);
       assignmentsRepo.findOne.mockResolvedValue(null);
       assignmentsRepo.create.mockReturnValue(assignment);
       assignmentsRepo.save.mockResolvedValue({
@@ -450,18 +450,18 @@ describe('AdminController analytics', () => {
       } as DeliveryAssignment);
       ordersRepo.findOneOrFail.mockResolvedValue(savedOrder);
 
-      await expect(controller.assignDriver(42, 7)).resolves.toBe(savedOrder);
+      await expect(controller.assignRider(42, 7)).resolves.toBe(savedOrder);
 
-      expect(driverProfilesRepo.findOneOrFail).toHaveBeenCalledWith({
+      expect(riderProfilesRepo.findOneOrFail).toHaveBeenCalledWith({
         where: { id: 7 },
       });
       expect(ordersRepo.update).toHaveBeenCalledWith(42, {
-        assignedDriverId: 70,
-        orderStatus: OrderStatus.DRIVER_ASSIGNED,
+        assignedRiderId: 70,
+        orderStatus: OrderStatus.RIDER_ASSIGNED,
       });
       expect(assignmentsRepo.create).toHaveBeenCalledWith({
         orderId: 42,
-        driverId: 7,
+        riderId: 7,
         status: DeliveryStatus.ASSIGNED,
       });
       expect(assignmentsRepo.save).toHaveBeenCalledWith(assignment);
@@ -474,7 +474,7 @@ describe('AdminController analytics', () => {
         {
           id: 1,
           fullName: 'Maria Santos',
-          email: 'maria@gridprint.ph',
+          email: 'maria@gridgoprint.ph',
           phoneNumber: '+639171234567',
           role: 'customer',
           isActive: true,
@@ -505,7 +505,7 @@ describe('AdminController analytics', () => {
     it('loads one user and only that user orders for the admin show page', async () => {
       const user = {
         id: 42,
-        email: 'maria@gridprint.ph',
+        email: 'maria@gridgoprint.ph',
         createdAt: new Date('2026-03-01T00:00:00.000Z'),
         updatedAt: new Date('2026-03-15T00:00:00.000Z'),
       } as User;

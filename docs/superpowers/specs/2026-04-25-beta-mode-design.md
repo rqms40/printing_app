@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Admin can toggle a global Beta Mode flag, manage which users are beta members, and each enrolled user automatically receives a one-time 100 GRID credit grant; beta users see a floating indicator on the mobile home screen showing their enrollment rank.
+**Goal:** Admin can toggle a global Beta Mode flag, manage which users are beta members, and each enrolled user automatically receives a one-time 100 GRIDGO credit grant; beta users see a floating indicator on the mobile home screen showing their enrollment rank.
 
 **Architecture:** New `beta-mode` NestJS module (fully isolated — no circular deps) backed by a `BetaModeSettings` singleton entity and three new columns on `users`. Admin React app gains a dedicated `/beta-mode` Refine page. Mobile reads `GET /beta-mode/me` via a `FutureProvider` and renders a floating badge in the home screen `Stack`.
 

@@ -1169,8 +1169,8 @@ class MockWebSocketService extends _i1.Mock implements _i10.WebSocketService {
   );
 
   @override
-  void sendDriverLocation(Map<String, dynamic>? location) => super.noSuchMethod(
-    Invocation.method(#sendDriverLocation, [location]),
+  void sendRiderLocation(Map<String, dynamic>? location) => super.noSuchMethod(
+    Invocation.method(#sendRiderLocation, [location]),
     returnValueForMissingStub: null,
   );
 

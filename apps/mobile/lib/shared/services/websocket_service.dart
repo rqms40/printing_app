@@ -154,7 +154,7 @@ class WebSocketService {
     _locationSocket?.emit('subscribe', assignmentId);
   }
 
-  void sendDriverLocation(Map<String, dynamic> location) {
+  void sendRiderLocation(Map<String, dynamic> location) {
     _locationSocket?.emit('updateLocation', location);
   }
 

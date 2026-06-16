@@ -8,12 +8,12 @@ import { ThreeDSpec } from '../orders/entities/three-d-specs.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
 import { OrderItem } from '../orders/entities/order-item.entity';
 import { OrdersModule } from '../orders/orders.module';
-import { DriversModule } from '../drivers/drivers.module';
+import { RidersModule } from '../riders/riders.module';
 import { CreditsModule } from '../credits/credits.module';
 import { TamSurvey } from '../tam-surveys/entities/tam-survey.entity';
 import { TamSurveySettings } from '../tam-surveys/entities/tam-survey-settings.entity';
-import { DriverProfile } from '../drivers/entities/driver-profile.entity';
-import { DeliveryAssignment } from '../drivers/entities/delivery-assignment.entity';
+import { RiderProfile } from '../riders/entities/rider-profile.entity';
+import { DeliveryAssignment } from '../riders/entities/delivery-assignment.entity';
 
 @Module({
   imports: [
@@ -26,11 +26,11 @@ import { DeliveryAssignment } from '../drivers/entities/delivery-assignment.enti
       OrderItem,
       TamSurvey,
       TamSurveySettings,
-      DriverProfile,
+      RiderProfile,
       DeliveryAssignment,
     ]),
     OrdersModule,
-    DriversModule,
+    RidersModule,
     CreditsModule,
   ],
   controllers: [AdminController],

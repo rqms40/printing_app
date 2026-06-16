@@ -59,8 +59,8 @@ export class ChatController {
       throw new BadRequestException('Invalid order id');
     }
 
-    if (req.user.role === 'driver') {
-      return this.chatService.getOrCreateDriverOrderConversation(
+    if (req.user.role === 'rider') {
+      return this.chatService.getOrCreateRiderOrderConversation(
         req.user.sub,
         orderRef,
       );
@@ -101,7 +101,7 @@ export class ChatController {
     const canAccess =
       req.user.role === 'admin' ||
       conv.customerId === req.user.sub ||
-      (req.user.role === 'driver' &&
+      (req.user.role === 'rider' &&
         conv.type === ConversationType.RIDER &&
         conv.assignedRiderId === req.user.sub);
     if (!canAccess) {

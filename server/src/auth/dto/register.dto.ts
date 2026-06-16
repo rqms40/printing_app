@@ -18,7 +18,7 @@ import {
 } from '../../users/profile.constants';
 
 export class RegisterDto {
-  @ApiProperty({ example: 'user@gridprint.ph' })
+  @ApiProperty({ example: 'user@gridgoprint.ph' })
   @IsEmail()
   email: string;
 

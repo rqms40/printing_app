@@ -180,7 +180,7 @@ class _ChatSelectScreenState extends ConsumerState<ChatSelectScreen> {
                   _OptionCard(
                     icon: chatIconForConversation(ConversationType.admin),
                     title: 'Human Support',
-                    description: 'Talk to a real GRID team member',
+                    description: 'Talk to a real GRIDGO team member',
                     isPrimary: false,
                     isDisabled: _isCreating,
                     onTap: () => _startChat(ConversationType.admin),

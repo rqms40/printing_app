@@ -10,7 +10,7 @@ const STATUS_COLORS: Record<OrderStatus, string> = {
   finishing_mounting: "orange",
   quality_checked: "orange",
   ready_for_dispatch: "cyan",
-  driver_assigned: "cyan",
+  rider_assigned: "cyan",
   picked_up: "gold",
   on_the_way: "gold",
   arrived_at_destination: "gold",

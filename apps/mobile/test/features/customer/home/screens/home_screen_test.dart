@@ -115,7 +115,7 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(milliseconds: 500));
 
-      expect(find.textContaining('GRID'), findsWidgets);
+      expect(find.textContaining('GRIDGO'), findsWidgets);
       expect(find.textContaining('The Daily Grid'), findsOneWidget);
     });
 

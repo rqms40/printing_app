@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Border radius tokens for GRID.
+/// Border radius tokens for GRIDGO.
 class AppRadius {
   const AppRadius._();
 

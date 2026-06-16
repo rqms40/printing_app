@@ -46,7 +46,7 @@ class AuthUser {
   final String id;
   final String email;
   final String fullName;
-  final String role; // 'customer', 'driver', 'admin'
+  final String role; // 'customer', 'rider', 'admin'
   final bool isProfileComplete;
   final String? nickname;
   final String? phone;
@@ -303,12 +303,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
         organization: 'Mapua University',
         printingPreferences: ['plotting_blueprints'],
       ),
-      'driver': const AuthUser(
+      'rider': const AuthUser(
         id: '2',
         email: 'juan@test.com',
         fullName: 'Juan Reyes',
         nickname: 'Juan',
-        role: 'driver',
+        role: 'rider',
         isProfileComplete: true,
         ageRange: '35_44',
         profileCategory: 'professional',

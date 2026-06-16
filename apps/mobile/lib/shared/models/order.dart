@@ -99,7 +99,7 @@ class Order {
     required this.deliveryOption,
     this.deliveryAddressId,
     this.deliveryAddress,
-    this.assignedDriverId,
+    this.assignedRiderId,
     this.deliveryAssignmentId,
     this.estimatedCompletionAt,
     this.adminStatusNote,
@@ -139,7 +139,7 @@ class Order {
   final String deliveryOption;
   final String? deliveryAddressId;
   final OrderDeliveryAddress? deliveryAddress;
-  final String? assignedDriverId;
+  final String? assignedRiderId;
   final String? deliveryAssignmentId;
   final DateTime? estimatedCompletionAt;
   final String? adminStatusNote;
@@ -229,7 +229,7 @@ class Order {
     String? deliveryOption,
     String? deliveryAddressId,
     OrderDeliveryAddress? deliveryAddress,
-    String? assignedDriverId,
+    String? assignedRiderId,
     String? deliveryAssignmentId,
     DateTime? estimatedCompletionAt,
     String? adminStatusNote,
@@ -269,7 +269,7 @@ class Order {
       deliveryOption: deliveryOption ?? this.deliveryOption,
       deliveryAddressId: deliveryAddressId ?? this.deliveryAddressId,
       deliveryAddress: deliveryAddress ?? this.deliveryAddress,
-      assignedDriverId: assignedDriverId ?? this.assignedDriverId,
+      assignedRiderId: assignedRiderId ?? this.assignedRiderId,
       deliveryAssignmentId: deliveryAssignmentId ?? this.deliveryAssignmentId,
       estimatedCompletionAt:
           estimatedCompletionAt ?? this.estimatedCompletionAt,

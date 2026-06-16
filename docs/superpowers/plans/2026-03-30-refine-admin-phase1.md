@@ -1,10 +1,10 @@
-# GRID Admin Dashboard Phase 1 — Implementation Plan
+# GRIDGO Admin Dashboard Phase 1 — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Scaffold a Refine + Ant Design admin dashboard in `./admin` with JWT auth, dashboard KPIs, and full orders management.
 
-**Architecture:** Vite + React 18 + TypeScript project using Refine's `@refinedev/antd` for UI and `@refinedev/simple-rest` for data provider (mock-ready, swappable to `@refinedev/nestjsx-crud` when backend is built). Ant Design 5 themed with GRID dark palette. Auth via JWT with admin-only role guard.
+**Architecture:** Vite + React 18 + TypeScript project using Refine's `@refinedev/antd` for UI and `@refinedev/simple-rest` for data provider (mock-ready, swappable to `@refinedev/nestjsx-crud` when backend is built). Ant Design 5 themed with GRIDGO dark palette. Auth via JWT with admin-only role guard.
 
 **Tech Stack:** Vite, React 18, TypeScript, Refine 4, Ant Design 5, @ant-design/charts, React Router 6
 
@@ -19,16 +19,16 @@
 | `admin/package.json` | Create | Dependencies and scripts |
 | `admin/tsconfig.json` | Create | TypeScript config |
 | `admin/vite.config.ts` | Create | Vite config |
-| `admin/index.html` | Create | HTML entry point with GRID favicon |
-| `admin/public/favicon.svg` | Copy | GRID 3x3 dot logo |
+| `admin/index.html` | Create | HTML entry point with GRIDGO favicon |
+| `admin/public/favicon.svg` | Copy | GRIDGO 3x3 dot logo |
 | `admin/src/main.tsx` | Create | Vite entry, render App |
 | `admin/src/App.tsx` | Create | Refine shell with routes, providers, theme |
-| `admin/src/config/theme.ts` | Create | Ant Design 5 GRID dark theme tokens |
+| `admin/src/config/theme.ts` | Create | Ant Design 5 GRIDGO dark theme tokens |
 | `admin/src/config/constants.ts` | Create | API_URL, pagination defaults |
 | `admin/src/types/enums.ts` | Create | All enum union types |
 | `admin/src/types/order.ts` | Create | Order, PaperSpecs, ThreeDSpecs, OrderStatusHistory |
 | `admin/src/types/user.ts` | Create | User interface |
-| `admin/src/types/driver.ts` | Create | DriverProfile interface |
+| `admin/src/types/rider.ts` | Create | RiderProfile interface |
 | `admin/src/types/dashboard.ts` | Create | KPI, sales, volume response types |
 | `admin/src/providers/auth-provider.ts` | Create | Refine AuthProvider (JWT) |
 | `admin/src/providers/data-provider.ts` | Create | Data provider config + mock interceptor |
@@ -39,7 +39,7 @@
 | `admin/src/pages/login/index.tsx` | Create | Login page |
 | `admin/src/pages/dashboard/index.tsx` | Create | Dashboard with KPIs + charts |
 | `admin/src/pages/orders/list.tsx` | Create | Orders table with tabs/search/pagination |
-| `admin/src/pages/orders/show.tsx` | Create | Order detail with status/driver/audit |
+| `admin/src/pages/orders/show.tsx` | Create | Order detail with status/rider/audit |
 | `admin/src/utils/format.ts` | Create | Currency, date, status label formatters |
 | `admin/src/styles/global.css` | Create | Font imports + global resets |
 
@@ -149,7 +149,7 @@ export default defineConfig({
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GRID Admin</title>
+    <title>GRIDGO Admin</title>
   </head>
   <body>
     <div id="root"></div>
@@ -242,14 +242,14 @@ git commit -m "feat(admin): scaffold Vite + React + TypeScript project"
 - Create: `admin/src/types/enums.ts`
 - Create: `admin/src/types/order.ts`
 - Create: `admin/src/types/user.ts`
-- Create: `admin/src/types/driver.ts`
+- Create: `admin/src/types/rider.ts`
 - Create: `admin/src/types/dashboard.ts`
 - Create: `admin/src/utils/format.ts`
 
 - [ ] **Step 1: Create `admin/src/types/enums.ts`**
 
 ```typescript
-export type UserRole = "customer" | "driver" | "admin";
+export type UserRole = "customer" | "rider" | "admin";
 
 export type OrderStatus =
   | "order_placed"
@@ -259,7 +259,7 @@ export type OrderStatus =
   | "finishing_mounting"
   | "quality_checked"
   | "ready_for_dispatch"
-  | "driver_assigned"
+  | "rider_assigned"
   | "picked_up"
   | "on_the_way"
   | "arrived_at_destination"
@@ -298,8 +298,8 @@ export const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   printing_in_progress: ["finishing_mounting"],
   finishing_mounting: ["quality_checked"],
   quality_checked: ["ready_for_dispatch"],
-  ready_for_dispatch: ["driver_assigned", "completed_pickup"],
-  driver_assigned: ["picked_up"],
+  ready_for_dispatch: ["rider_assigned", "completed_pickup"],
+  rider_assigned: ["picked_up"],
   picked_up: ["on_the_way"],
   on_the_way: ["arrived_at_destination"],
   arrived_at_destination: ["delivered"],
@@ -316,7 +316,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   finishing_mounting: "Finishing",
   quality_checked: "Quality Checked",
   ready_for_dispatch: "Ready for Dispatch",
-  driver_assigned: "Driver Assigned",
+  rider_assigned: "Rider Assigned",
   picked_up: "Picked Up",
   on_the_way: "On the Way",
   arrived_at_destination: "Arrived",
@@ -373,7 +373,7 @@ export interface Order {
   cancelled_at?: string;
   delivery_option: "pickup" | "delivery";
   delivery_address_id?: string;
-  assigned_driver_id?: string;
+  assigned_rider_id?: string;
   estimated_completion_at?: string;
   admin_notes?: string;
   tracking_link?: string;
@@ -413,12 +413,12 @@ export interface User {
 }
 ```
 
-- [ ] **Step 4: Create `admin/src/types/driver.ts`**
+- [ ] **Step 4: Create `admin/src/types/rider.ts`**
 
 ```typescript
 import type { VehicleType } from "./enums";
 
-export interface DriverProfile {
+export interface RiderProfile {
   id: string;
   user_id: string;
   full_name?: string;
@@ -619,7 +619,7 @@ const STATUS_COLORS: Record<OrderStatus, string> = {
   finishing_mounting: "orange",
   quality_checked: "orange",
   ready_for_dispatch: "cyan",
-  driver_assigned: "cyan",
+  rider_assigned: "cyan",
   picked_up: "gold",
   on_the_way: "gold",
   arrived_at_destination: "gold",
@@ -673,7 +673,7 @@ export function KpiCard({ title, value, prefix, color }: KpiCardProps) {
 
 ```bash
 git add admin/src/config/ admin/src/components/
-git commit -m "feat(admin): add GRID theme, logo, status badge, KPI card"
+git commit -m "feat(admin): add GRIDGO theme, logo, status badge, KPI card"
 ```
 
 ---
@@ -714,7 +714,7 @@ export const authProvider: AuthProvider = {
       return { success: true, redirectTo: "/" };
     } catch {
       // Dev mode: allow mock login
-      if (email === "admin@grid.ph" && password === "admin123") {
+      if (email === "admin@gridgo.ph" && password === "admin123") {
         localStorage.setItem(TOKEN_KEY, "mock-jwt-token");
         return { success: true, redirectTo: "/" };
       }
@@ -773,7 +773,7 @@ export const authProvider: AuthProvider = {
 
     // Dev mode mock
     if (token === "mock-jwt-token") {
-      return { id: "1", name: "Admin User", email: "admin@grid.ph" };
+      return { id: "1", name: "Admin User", email: "admin@gridgo.ph" };
     }
 
     try {
@@ -783,7 +783,7 @@ export const authProvider: AuthProvider = {
       if (!response.ok) return null;
       return await response.json();
     } catch {
-      return { id: "1", name: "Admin User", email: "admin@grid.ph" };
+      return { id: "1", name: "Admin User", email: "admin@gridgo.ph" };
     }
   },
 
@@ -801,7 +801,7 @@ export const authProvider: AuthProvider = {
 ```typescript
 import type { DashboardKPIs, ChartDataPoint } from "@/types/dashboard";
 import type { Order } from "@/types/order";
-import type { DriverProfile } from "@/types/driver";
+import type { RiderProfile } from "@/types/rider";
 
 export const mockKPIs: DashboardKPIs = {
   new_orders_count: 5,
@@ -836,7 +836,7 @@ export const mockOrders: Order[] = [
     user_id: "usr_001",
     category: "paper",
     file_name: "thesis_final.pdf",
-    file_url: "https://storage.grid.ph/files/thesis_final.pdf",
+    file_url: "https://storage.gridgo.ph/files/thesis_final.pdf",
     paper_specs: {
       paper_size: "a4",
       color_mode: "full_color",
@@ -902,7 +902,7 @@ export const mockOrders: Order[] = [
     payment_status: "paid",
     order_status: "ready_for_dispatch",
     delivery_option: "delivery",
-    assigned_driver_id: null,
+    assigned_rider_id: null,
     created_at: "2026-03-27T08:00:00Z",
     updated_at: "2026-03-29T16:00:00Z",
   },
@@ -926,7 +926,7 @@ export const mockOrders: Order[] = [
     payment_status: "paid",
     order_status: "delivered",
     delivery_option: "delivery",
-    assigned_driver_id: "drv_001",
+    assigned_rider_id: "rdr_001",
     created_at: "2026-03-20T10:00:00Z",
     updated_at: "2026-03-25T14:00:00Z",
   },
@@ -955,9 +955,9 @@ export const mockOrders: Order[] = [
   },
 ];
 
-export const mockDrivers: DriverProfile[] = [
+export const mockRiders: RiderProfile[] = [
   {
-    id: "drv_001",
+    id: "rdr_001",
     user_id: "usr_010",
     full_name: "Juan Reyes",
     vehicle_type: "motorcycle",
@@ -967,7 +967,7 @@ export const mockDrivers: DriverProfile[] = [
     updated_at: "2026-03-29T10:00:00Z",
   },
   {
-    id: "drv_002",
+    id: "rdr_002",
     user_id: "usr_011",
     full_name: "Marco dela Cruz",
     vehicle_type: "motorcycle",
@@ -977,7 +977,7 @@ export const mockDrivers: DriverProfile[] = [
     updated_at: "2026-03-29T09:00:00Z",
   },
   {
-    id: "drv_003",
+    id: "rdr_003",
     user_id: "usr_012",
     full_name: "Carlos Santos",
     vehicle_type: "car",
@@ -1079,14 +1079,14 @@ export function LoginPage() {
             marginTop: 12,
           }}
         >
-          GRID ADMIN
+          GRIDGO ADMIN
         </h1>
       </div>
       <AuthPage
         type="login"
         formProps={{
           initialValues: {
-            email: "admin@grid.ph",
+            email: "admin@gridgo.ph",
             password: "admin123",
           },
         }}
@@ -1103,7 +1103,7 @@ export function LoginPage() {
 
 ```bash
 git add admin/src/pages/login/
-git commit -m "feat(admin): add login page with GRID branding"
+git commit -m "feat(admin): add login page with GRIDGO branding"
 ```
 
 ---
@@ -1430,7 +1430,7 @@ import {
 } from "@/utils/format";
 import {
   mockOrders,
-  mockDrivers,
+  mockRiders,
   mockStatusHistory,
 } from "@/providers/mock-data";
 
@@ -1441,9 +1441,9 @@ export function OrderShow() {
   const { id } = useParams<{ id: string }>();
   const order = mockOrders.find((o) => o.id === id);
   const history = mockStatusHistory.filter((h) => h.order_id === id);
-  const availableDrivers = mockDrivers.filter((d) => d.is_available);
+  const availableRiders = mockRiders.filter((d) => d.is_available);
 
-  const [driverModalOpen, setDriverModalOpen] = useState(false);
+  const [riderModalOpen, setRiderModalOpen] = useState(false);
   const [declineModalOpen, setDeclineModalOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
 
@@ -1452,9 +1452,9 @@ export function OrderShow() {
   }
 
   const validNextStatuses = ORDER_STATUS_TRANSITIONS[order.order_status];
-  const canAssignDriver =
+  const canAssignRider =
     order.order_status === "ready_for_dispatch" ||
-    order.order_status === "driver_assigned";
+    order.order_status === "rider_assigned";
 
   const handleStatusChange = (newStatus: OrderStatus) => {
     Modal.confirm({
@@ -1468,10 +1468,10 @@ export function OrderShow() {
     });
   };
 
-  const handleAssignDriver = (driverId: string) => {
+  const handleAssignRider = (riderId: string) => {
     // TODO: POST /api/admin/orders/:id/assign
-    message.success("Driver assigned");
-    setDriverModalOpen(false);
+    message.success("Rider assigned");
+    setRiderModalOpen(false);
   };
 
   const handleDecline = () => {
@@ -1512,12 +1512,12 @@ export function OrderShow() {
                     }))}
                   />
                 )}
-                {canAssignDriver && (
+                {canAssignRider && (
                   <Button
                     icon={<UserSwitchOutlined />}
-                    onClick={() => setDriverModalOpen(true)}
+                    onClick={() => setRiderModalOpen(true)}
                   >
-                    Assign Driver
+                    Assign Rider
                   </Button>
                 )}
                 {order.order_status !== "cancelled" &&
@@ -1615,15 +1615,15 @@ export function OrderShow() {
         </Card>
       </Space>
 
-      {/* Driver Assignment Modal */}
+      {/* Rider Assignment Modal */}
       <Modal
-        title="Assign Driver"
-        open={driverModalOpen}
-        onCancel={() => setDriverModalOpen(false)}
+        title="Assign Rider"
+        open={riderModalOpen}
+        onCancel={() => setRiderModalOpen(false)}
         footer={null}
       >
         <Table
-          dataSource={availableDrivers}
+          dataSource={availableRiders}
           rowKey="id"
           pagination={false}
           size="small"
@@ -1641,7 +1641,7 @@ export function OrderShow() {
               <Button
                 type="primary"
                 size="small"
-                onClick={() => handleAssignDriver(record.id)}
+                onClick={() => handleAssignRider(record.id)}
               >
                 Assign
               </Button>
@@ -1679,7 +1679,7 @@ export function OrderShow() {
 
 ```bash
 git add admin/src/pages/orders/show.tsx
-git commit -m "feat(admin): add order detail page with status, driver assign, audit trail"
+git commit -m "feat(admin): add order detail page with status, rider assign, audit trail"
 ```
 
 ---
@@ -1756,7 +1756,7 @@ function App() {
               syncWithLocation: true,
               warnWhenUnsavedChanges: true,
               title: {
-                text: "GRID Admin",
+                text: "GRIDGO Admin",
                 icon: <GridLogo size={24} />,
               },
             }}
@@ -1773,7 +1773,7 @@ function App() {
                       Title={({ collapsed }) => (
                         <ThemedTitleV2
                           collapsed={collapsed}
-                          text="GRID Admin"
+                          text="GRIDGO Admin"
                           icon={<GridLogo size={collapsed ? 28 : 24} />}
                         />
                       )}
@@ -1826,7 +1826,7 @@ export default App;
 cd admin && npm run dev
 ```
 
-Expected: App starts on `http://localhost:5173`, shows login page, mock credentials `admin@grid.ph` / `admin123` should log in and show dashboard + orders.
+Expected: App starts on `http://localhost:5173`, shows login page, mock credentials `admin@gridgo.ph` / `admin123` should log in and show dashboard + orders.
 
 - [ ] **Step 3: Commit**
 
@@ -1854,14 +1854,14 @@ cd admin && npm run dev
 ```
 
 Verify:
-- Login page renders with GRID logo
-- Mock login works (admin@grid.ph / admin123)
+- Login page renders with GRIDGO logo
+- Mock login works (admin@gridgo.ph / admin123)
 - Dashboard shows 5 KPI cards + 2 charts
 - Sidebar has Dashboard and Orders links
 - Orders list shows mock data with tabs and search
 - Clicking an order shows the detail page with specs, price, status history
 - Status dropdown shows valid next statuses
-- Assign Driver button opens modal with available drivers
+- Assign Rider button opens modal with available riders
 - Decline button opens modal with reason field
 
 - [ ] **Step 3: Test build**
@@ -1876,5 +1876,5 @@ Expected: Build succeeds with no errors.
 
 ```bash
 git add -A admin/
-git commit -m "feat(admin): GRID admin dashboard Phase 1 complete"
+git commit -m "feat(admin): GRIDGO admin dashboard Phase 1 complete"
 ```

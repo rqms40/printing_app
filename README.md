@@ -1,4 +1,4 @@
-# GRID
+# GRIDGO
 
 **TAP TO PLOT. Simplified. Printing.**
 
@@ -15,7 +15,7 @@ A premium printing service delivery platform — paper and 3D printing as easy a
 ```mermaid
 graph TB
     subgraph Clients
-        A[Flutter Mobile App<br/>Customer / Driver / Admin]
+        A[Flutter Mobile App<br/>Customer / Rider / Admin]
         AA[Refine Admin Dashboard<br/>React + Ant Design]
         LP[Landing Page<br/>React + Three.js]
     end
@@ -71,12 +71,12 @@ flowchart LR
         A1[Dashboard<br/>KPIs + Charts] --> A2[Order Queue]
         A2 --> A3[File Inspector]
         A3 --> A4[Update Status]
-        A4 --> A5[Assign Driver]
+        A4 --> A5[Assign Rider]
         A6[Slot Templates] --> A2
         A7[Live Chat] --> A8[Reply to Customer]
     end
 
-    subgraph Driver[Driver - Flutter App]
+    subgraph Rider[Rider - Flutter App]
         D1[Receive Assignment] --> D2[Accept/Decline]
         D2 --> D3[Pick Up]
         D3 --> D4[Navigate + GPS]
@@ -107,10 +107,10 @@ stateDiagram-v2
     FinishingMounting --> QualityChecked
     QualityChecked --> ReadyForDispatch
 
-    ReadyForDispatch --> DriverAssigned : Delivery
+    ReadyForDispatch --> RiderAssigned : Delivery
     ReadyForDispatch --> CompletedPickup : Pickup
 
-    DriverAssigned --> PickedUp
+    RiderAssigned --> PickedUp
     PickedUp --> OnTheWay
     OnTheWay --> ArrivedAtDestination
     ArrivedAtDestination --> Delivered
@@ -125,7 +125,7 @@ stateDiagram-v2
 ```
 printing_app/
 ├── apps/
-│   ├── mobile/                        # Flutter app (Customer + Driver + Admin)
+│   ├── mobile/                        # Flutter app (Customer + Rider + Admin)
 │   │   ├── lib/
 │   │   │   ├── config/                # Theme, routes, constants, page transitions
 │   │   │   ├── features/
@@ -135,14 +135,14 @@ printing_app/
 │   │   │   │   │   ├── home/          # Bento grid, Daily Grid, credits chip
 │   │   │   │   │   ├── order/         # Category → specs → upload → checkout
 │   │   │   │   │   ├── orders/        # Active + history with status banner
-│   │   │   │   │   ├── tracking/      # Live driver map, ETA badge, OSRM route
+│   │   │   │   │   ├── tracking/      # Live rider map, ETA badge, OSRM route
 │   │   │   │   │   ├── address/       # Saved addresses + multi-drop assignment
 │   │   │   │   │   ├── chat/          # GridBot AI + admin/rider live chat
 │   │   │   │   │   ├── beta/          # Beta enrollment + testimonial wall
 │   │   │   │   │   ├── notifications/ # In-app inbox + WebSocket updates
 │   │   │   │   │   ├── uploads/       # My Uploads + retention settings
 │   │   │   │   │   └── profile/       # Account, TAM survey, top-up, preferences
-│   │   │   │   ├── driver/            # Deliveries, active delivery, history, earnings
+│   │   │   │   ├── rider/            # Deliveries, active delivery, history, earnings
 │   │   │   │   └── admin/             # Mobile admin queue + dashboard
 │   │   │   ├── shared/                # Widgets, models, providers, services
 │   │   │   └── utils/                 # Formatters, validators, pricing engine
@@ -164,7 +164,7 @@ printing_app/
 │   │   ├── pages/
 │   │   │   ├── dashboard/             # KPIs, charts (operations/orders/users tabs)
 │   │   │   ├── orders/                # Queue, detail, file preview, manual status
-│   │   │   ├── drivers/               # Live GPS map, dispatch queue, roster
+│   │   │   ├── riders/               # Live GPS map, dispatch queue, roster
 │   │   │   ├── users/                 # Customer profiles + order history
 │   │   │   ├── products/              # Dynamic catalog (categories + spec options + addons)
 │   │   │   ├── delivery-slots/        # Weekly templates + today's live board
@@ -190,9 +190,9 @@ printing_app/
 │   │   ├── users/                     # Profile, storage settings, tutorial keys, FCM token
 │   │   ├── orders/                    # CRUD + WebSocket + batch + manual status
 │   │   ├── addresses/                 # Delivery addresses
-│   │   ├── drivers/                   # Assignments, GPS updates, earnings
+│   │   ├── riders/                   # Assignments, GPS updates, earnings
 │   │   ├── delivery-slots/            # Templates, bookings, geo-radius, WS gateway
-│   │   ├── credits/                   # GRID Credits top-up + ledger
+│   │   ├── credits/                   # GRIDGO Credits top-up + ledger
 │   │   ├── chat/                      # Conversations, messages, GridBot OpenRouter, WS gateway
 │   │   ├── beta-mode/                 # Settings, enrollment, per-user limits, testimonial
 │   │   ├── daily-grid/                # Curated carousel cards + WS gateway
@@ -235,7 +235,7 @@ printing_app/
 | **Admin** | React 18 + Refine v4 + Ant Design 5 + Vite 6 | Production admin dashboard |
 | **Admin charts** | Recharts | Area/bar charts |
 | **Admin 3D** | Three.js + @react-three/fiber + @react-three/drei | STL/OBJ/GLB file inspector |
-| **Admin maps** | Leaflet + react-leaflet | Driver tracking + delivery zone config |
+| **Admin maps** | Leaflet + react-leaflet | Rider tracking + delivery zone config |
 | **Landing page** | React 19 + Vite 8 + Tailwind CSS v4 | Marketing site (port 5174) |
 | **Landing 3D** | @react-three/fiber 9 + Three.js | Scroll-driven phone model WebGL scene |
 | **Landing animation** | Framer Motion 12 | Scroll-triggered entry animations |
@@ -318,9 +318,9 @@ npm run dev              # http://localhost:5174
 
 | Role | Email | Password |
 |------|-------|----------|
-| Customer | maria@gridprint.ph | password123 |
-| Driver | juan@gridprint.ph | password123 |
-| Admin | admin@gridprint.ph | password123 |
+| Customer | maria@gridgoprint.ph | password123 |
+| Rider | juan@gridgoprint.ph | password123 |
+| Admin | admin@gridgoprint.ph | password123 |
 
 > The mobile app has dev bypass buttons on the login screen for quick testing without a running server.
 
@@ -328,25 +328,25 @@ npm run dev              # http://localhost:5174
 
 ### Mobile (`apps/mobile/`)
 
-Flutter 3.41.6 app. Single codebase serves three roles (customer, driver, admin) via role-based tab shells. Primary build target is **Flutter Web**; Android APK is also supported and auto-released via CI.
+Flutter 3.41.6 app. Single codebase serves three roles (customer, rider, admin) via role-based tab shells. Primary build target is **Flutter Web**; Android APK is also supported and auto-released via CI.
 
 **Customer experience**
 - **Onboarding** — first-login role-picker slides; staged registration with profiling (occupation, course, printing preferences).
 - **In-app tutorial** — multi-screen guided pipeline walkthrough with auto-positioning coach marks; post-order feature discovery pass for Credits, GridBot, Multi-drop, and live tracking.
-- **Bento home** — Daily Grid carousel (curated catalog, real-time WebSocket updates), Resume-your-Queue card, Recent Orders, GridBot floating chat FAB, GRID Credits chip with animated dropdown.
+- **Bento home** — Daily Grid carousel (curated catalog, real-time WebSocket updates), Resume-your-Queue card, Recent Orders, GridBot floating chat FAB, GRIDGO Credits chip with animated dropdown.
 - **Order pipeline** — Category → Paper/3D specs → Upload → Checkout (6 steps). Paper supports size, color mode, media, sides, binding, copies. 3D supports material, infill %, layer height, supports toggle + printer volume validation.
 - **Upload screen** — file picker, Dio upload progress, instant validation, PDF page preview, draggable ruler overlay (1:1/1:50/1:100/1:200/1:500 scale), CMYK detection warning, paper-size mismatch warning.
 - **Cart-style batch checkout** — multiple items in one transaction, swipe-to-remove, per-copy multi-drop assignment, address picker, delivery slot picker, payment method sheet, price summary.
 - **Delivery options** — single delivery, pickup, or multi-drop (up to 5 destinations with per-stop fees); scheduled delivery slots (weekly templates × geo-radius × real-time capacity).
-- **GRID Credits wallet** — top-up via GCash/Maya proof upload, credits shown in profile ledger, "Pay with GRID Credits" option at checkout.
+- **GRIDGO Credits wallet** — top-up via GCash/Maya proof upload, credits shown in profile ledger, "Pay with GRIDGO Credits" option at checkout.
 - **Live chat** — AI GridBot (OpenRouter, 24/7, markdown rendering) and human admin/rider chat (WebSocket, typing indicator, image attachments, read receipts).
 - **Beta mode** — beta enrollment indicator, post-delivery TAM survey gate, 1-order limit during beta with informational sheet, testimonial photo upload, social share.
 - **My Uploads** — file library, delete, per-user file retention settings (auto-purge via server cron).
-- **Live tracking** — flutter_map + OSRM driving route, driver GPS updates via Socket.IO, ETA badge, swipeable destination cards for multi-drop.
+- **Live tracking** — flutter_map + OSRM driving route, rider GPS updates via Socket.IO, ETA badge, swipeable destination cards for multi-drop.
 - **Notifications** — grouped inbox with day headers, unread badge, mark-as-read, WebSocket real-time delivery.
 - **Profile** — account details, storage settings, top-up screen, TAM survey flows (required + optional), tutorial reset, dark/light theme toggle.
 
-**Driver experience** — assignment dashboard, accept/decline, checkpoint status updates (picked up → on the way → arrived → delivered), live GPS streaming, multi-drop sequential stops, history + earnings.
+**Rider experience** — assignment dashboard, accept/decline, checkpoint status updates (picked up → on the way → arrived → delivered), live GPS streaming, multi-drop sequential stops, history + earnings.
 
 **Admin experience (mobile)** — order queue and dashboard accessible without switching to the web admin panel.
 
@@ -357,9 +357,9 @@ Refine v4 + React 18 + Ant Design 5 web dashboard. ~25 pages with 4 concurrent W
 | Page | Features |
 |------|---------|
 | **Dashboard** | KPI cards (new orders, in-production, ready, revenue), 6-month sales + volume charts, Users analytics tab |
-| **Orders** | Pipeline tabs (New / In Production / Done / All), status dropdown with transition graph enforcement, file preview, manual status bar for 3D orders, decline-with-reason, driver assignment modal, admin notes, CSV export |
+| **Orders** | Pipeline tabs (New / In Production / Done / All), status dropdown with transition graph enforcement, file preview, manual status bar for 3D orders, decline-with-reason, rider assignment modal, admin notes, CSV export |
 | **File Inspector** | PDF page-count extractor + presigned URL + interactive 3D viewer for STL/OBJ/GLB models (Three.js) |
-| **Drivers** | Live map (Leaflet + CARTO dark tiles), real-time GPS, availability toggle, dispatch queue |
+| **Riders** | Live map (Leaflet + CARTO dark tiles), real-time GPS, availability toggle, dispatch queue |
 | **Users** | Customer profiles, role filter, order history, metrics |
 | **Products** | Dynamic catalog management — categories, spec definitions, spec options, addons |
 | **Delivery Slots** | Weekly template editor + today's live capacity board (WebSocket-updated + 5s polling fallback) |
@@ -381,13 +381,13 @@ NestJS 11 backend — REST API + 6 WebSocket namespaces, **59 spec files** (Jest
 | Namespace | Auth | Purpose |
 |---|---|---|
 | `/ws/orders` | JWT | Order status updates, survey-required events |
-| `/ws/location` | None | Real-time driver GPS per delivery assignment |
-| `/ws/chat` | JWT | Customer ↔ admin, customer ↔ GridBot, driver ↔ admin |
+| `/ws/location` | None | Real-time rider GPS per delivery assignment |
+| `/ws/chat` | JWT | Customer ↔ admin, customer ↔ GridBot, rider ↔ admin |
 | `/ws/notifications` | JWT | In-app notifications + credits balance updates |
 | `/ws/daily-grid` | None | Push carousel card changes to all clients |
 | `/ws/delivery-slots` | JWT | Real-time slot availability per date |
 
-**Key modules:** admin · auth · users · orders (batch + delivery destinations + speed tiers) · addresses · drivers · delivery-slots · credits · chat · beta-mode · daily-grid · printer-profile · tam-surveys · files (upload + analysis + purge cron + GLB encoder) · payments (stubbed) · notifications (in-app + FCM + marketing scheduler) · products (dynamic catalog) · firebase · storage · health · common
+**Key modules:** admin · auth · users · orders (batch + delivery destinations + speed tiers) · addresses · riders · delivery-slots · credits · chat · beta-mode · daily-grid · printer-profile · tam-surveys · files (upload + analysis + purge cron + GLB encoder) · payments (stubbed) · notifications (in-app + FCM + marketing scheduler) · products (dynamic catalog) · firebase · storage · health · common
 
 **External integrations:**
 - **Firebase FCM** — live, push notifications to mobile
@@ -495,7 +495,7 @@ PostgreSQL 15 via TypeORM. **30 tables**, **10 migrations**.
 
 **Catalog:** `product_categories` · `product_spec_definitions` · `product_spec_options` · `service_addons`
 
-**Delivery:** `driver_profiles` · `delivery_assignments` · `delivery_settings` · `delivery_slot_templates` · `delivery_slot_bookings`
+**Delivery:** `rider_profiles` · `delivery_assignments` · `delivery_settings` · `delivery_slot_templates` · `delivery_slot_bookings`
 
 **Payments:** `payment_transactions` · `credit_transactions` · `credit_settings`
 
@@ -523,7 +523,7 @@ TypeORM `synchronize: true` in development (schema auto-synced). In production, 
 - [x] Phase 8 — Multi-drop delivery (per-copy assignment, sequential stops, external courier)
 - [x] Phase 9 — Live chat (GridBot AI + human support, WebSocket-backed)
 - [x] Phase 10 — Beta mode (enrollment, post-delivery TAM survey gate, 1-order limit, testimonial wall)
-- [x] Phase 11 — GRID Credits wallet (GCash/Maya proof top-up, ledger, credits payment method)
+- [x] Phase 11 — GRIDGO Credits wallet (GCash/Maya proof top-up, ledger, credits payment method)
 - [x] Phase 12 — File inspector (PDF analysis + STL/OBJ/GLB CAD viewer + ruler overlay)
 - [x] Phase 13 — File retention (per-user storage settings + purge cron)
 - [x] Phase 14 — In-app tutorial (pipeline walkthrough + post-order feature coach marks)
@@ -541,4 +541,4 @@ TypeORM `synchronize: true` in development (schema auto-synced). In production, 
 
 ## License
 
-Proprietary — GRID Print Services
+Proprietary — GRIDGO Print Services

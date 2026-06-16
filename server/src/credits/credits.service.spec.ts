@@ -22,7 +22,7 @@ describe('CreditsService', () => {
   let usersService: jest.Mocked<Partial<UsersService>>;
   let notificationsService: jest.Mocked<Partial<NotificationsService>>;
 
-  const mockUser = { id: 1, email: 'user@grid.ph', credits: 1000 } as User;
+  const mockUser = { id: 1, email: 'user@gridgo.ph', credits: 1000 } as User;
   const mockSettings = { id: 1, conversionRate: 1.0 } as CreditSettings;
   const mockTx = {
     id: 5,

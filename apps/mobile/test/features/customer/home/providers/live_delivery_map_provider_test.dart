@@ -74,20 +74,20 @@ void main() {
     test('idle() uses Davao center and empty route', () {
       final state = LiveDeliveryMapState.idle();
       expect(state.status, LiveMapStatus.idle);
-      expect(state.driverPoint, isNull);
+      expect(state.riderPoint, isNull);
       expect(state.routePoints, isEmpty);
       expect(state.orderId, isNull);
       expect(state.shopPoint.latitude, closeTo(7.1907, 0.001));
     });
 
     test('active() sets all fields', () {
-      const driver = LatLng(7.20, 125.46);
+      const rider = LatLng(7.20, 125.46);
       const shop = LatLng(7.19, 125.45);
       const dest = LatLng(7.21, 125.47);
-      final route = [shop, driver, dest];
+      final route = [shop, rider, dest];
 
       final state = LiveDeliveryMapState.active(
-        driverPoint: driver,
+        riderPoint: rider,
         shopPoint: shop,
         destPoint: dest,
         routePoints: route,
@@ -97,7 +97,7 @@ void main() {
       );
 
       expect(state.status, LiveMapStatus.active);
-      expect(state.driverPoint, driver);
+      expect(state.riderPoint, rider);
       expect(state.shopPoint, shop);
       expect(state.destPoint, dest);
       expect(state.routePoints, route);
@@ -112,13 +112,13 @@ void main() {
     });
 
     test('etaMinutes returns remaining route points count', () {
-      const driver = LatLng(7.20, 125.46);
+      const rider = LatLng(7.20, 125.46);
       const shop = LatLng(7.19, 125.45);
       const dest = LatLng(7.21, 125.47);
       final route = List.generate(30, (i) => LatLng(7.19 + i * 0.001, 125.45));
 
       final state = LiveDeliveryMapState.active(
-        driverPoint: driver,
+        riderPoint: rider,
         shopPoint: shop,
         destPoint: dest,
         routePoints: route,

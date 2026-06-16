@@ -1,22 +1,22 @@
-# GRID Admin Dashboard — Phase 1 Design Spec
+# GRIDGO Admin Dashboard — Phase 1 Design Spec
 
 ## Overview
 
-A web-based admin dashboard for the GRID printing service, built with Refine + Ant Design + Vite. Phase 1 covers project scaffolding, authentication, dashboard KPIs, and full orders management. Lives at `./admin` as a sibling to the Flutter mobile app.
+A web-based admin dashboard for the GRIDGO printing service, built with Refine + Ant Design + Vite. Phase 1 covers project scaffolding, authentication, dashboard KPIs, and full orders management. Lives at `./admin` as a sibling to the Flutter mobile app.
 
 ## Scope
 
 **In scope (Phase 1):**
 - Project scaffolding (Vite + React 18 + TypeScript + Refine + Ant Design 5)
-- GRID dark theme with brand tokens
+- GRIDGO dark theme with brand tokens
 - JWT authentication with admin-only role guard
 - Dashboard page with 5 KPI cards + 2 charts
 - Orders list with filtered tabs, search, server-side pagination
-- Order detail with status updates, driver assignment, decline, ETA, admin notes, audit trail
+- Order detail with status updates, rider assignment, decline, ETA, admin notes, audit trail
 - TypeScript interfaces matching all Dart models
 
 **Out of scope (Phase 2+):**
-- Driver management CRUD
+- Rider management CRUD
 - Product/service management and pricing configuration
 - Analytics deep-dive pages
 - Payment transaction history
@@ -47,7 +47,7 @@ admin/
 │   ├── App.tsx                    # Refine app shell, routes, providers
 │   ├── main.tsx                   # Vite entry point
 │   ├── config/
-│   │   ├── theme.ts               # Ant Design 5 GRID theme tokens
+│   │   ├── theme.ts               # Ant Design 5 GRIDGO theme tokens
 │   │   └── constants.ts           # API_URL, pagination defaults
 │   ├── providers/
 │   │   ├── auth-provider.ts       # JWT auth provider for Refine
@@ -55,7 +55,7 @@ admin/
 │   ├── types/
 │   │   ├── order.ts               # Order, PaperSpecs, ThreeDSpecs interfaces
 │   │   ├── user.ts                # User interface
-│   │   ├── driver.ts              # DriverProfile interface
+│   │   ├── rider.ts              # RiderProfile interface
 │   │   ├── delivery.ts            # DeliveryAssignment, LocationUpdate
 │   │   ├── payment.ts             # PaymentTransaction interface
 │   │   ├── notification.ts        # AppNotification interface
@@ -64,13 +64,13 @@ admin/
 │   ├── components/
 │   │   ├── layout/
 │   │   │   ├── grid-logo.tsx      # 3x3 dot logo SVG component
-│   │   │   ├── sidebar.tsx        # Custom sidebar with GRID branding
+│   │   │   ├── sidebar.tsx        # Custom sidebar with GRIDGO branding
 │   │   │   └── header.tsx         # Top header with admin name + logout
 │   │   ├── status-badge.tsx       # Order status color-coded badge
 │   │   └── kpi-card.tsx           # Dashboard KPI card component
 │   ├── pages/
 │   │   ├── login/
-│   │   │   └── index.tsx          # Login page with GRID branding
+│   │   │   └── index.tsx          # Login page with GRIDGO branding
 │   │   ├── dashboard/
 │   │   │   ├── index.tsx          # Dashboard page with KPIs + charts
 │   │   │   ├── sales-chart.tsx    # 6-month sales trend line chart
@@ -79,12 +79,12 @@ admin/
 │   │       ├── list.tsx           # Orders table with tabs, search, pagination
 │   │       ├── show.tsx           # Order detail view
 │   │       ├── status-picker.tsx  # Status update dropdown + confirm
-│   │       ├── driver-assign-modal.tsx  # Driver selection modal
+│   │       ├── rider-assign-modal.tsx  # Rider selection modal
 │   │       └── status-history.tsx # Audit trail table
 │   └── utils/
 │       └── format.ts              # Currency (PHP), date, status label formatters
 ├── public/
-│   └── favicon.svg                # GRID 3x3 dot logo
+│   └── favicon.svg                # GRIDGO 3x3 dot logo
 ├── index.html
 ├── package.json
 ├── tsconfig.json
@@ -116,8 +116,8 @@ const gridTheme = {
 };
 ```
 
-- Dark mode only (matches GRID black brand)
-- 3x3 dot logo in sidebar header with "GRID Admin" wordmark
+- Dark mode only (matches GRIDGO black brand)
+- 3x3 dot logo in sidebar header with "GRIDGO Admin" wordmark
 - Satoshi font loaded via `@font-face` from local assets or Fontsource
 - Yellow (`#FFDE58`) as the primary action color (buttons, links, active states)
 - Status badge colors: same semantic tokens (success/error/warning/info) as the Flutter app
@@ -126,7 +126,7 @@ const gridTheme = {
 
 ### Login Page
 - Centered card on black background
-- GRID 3x3 dot logo + "GRID Admin" title
+- GRIDGO 3x3 dot logo + "GRIDGO Admin" title
 - Email + password fields
 - "Sign In" button (yellow primary)
 - Error message display for invalid credentials
@@ -229,7 +229,7 @@ Each card: icon, label, large number, subtle background matching its color at 10
 
 **Section 1: Header**
 - Order ID (large), current status badge, category tag
-- Action buttons row: "Update Status" (dropdown), "Assign Driver" (if applicable), "Decline" (danger)
+- Action buttons row: "Update Status" (dropdown), "Assign Rider" (if applicable), "Decline" (danger)
 
 **Section 2: Status Update**
 - Ant Design Select dropdown with all valid next statuses (based on state machine)
@@ -240,12 +240,12 @@ Each card: icon, label, large number, subtle background matching its color at 10
 - DatePicker for `estimated_completion_at`
 - Saves on change
 
-**Section 4: Driver Assignment**
-- Button visible when status is `ready_for_dispatch` or `driver_assigned`
-- Opens modal with table of available drivers (`is_available: true`)
+**Section 4: Rider Assignment**
+- Button visible when status is `ready_for_dispatch` or `rider_assigned`
+- Opens modal with table of available riders (`is_available: true`)
   - Columns: Name, Vehicle Type, Plate Number
   - "Assign" button per row
-- Calls `POST /api/admin/orders/:id/assign` with `{ driverId }`
+- Calls `POST /api/admin/orders/:id/assign` with `{ riderId }`
 
 **Section 5: Decline Order**
 - Danger button, opens modal
@@ -272,12 +272,12 @@ All interfaces use snake_case field names (matching NestJS API JSON). One file p
 ### `src/types/enums.ts`
 
 ```typescript
-export type UserRole = 'customer' | 'driver' | 'admin';
+export type UserRole = 'customer' | 'rider' | 'admin';
 
 export type OrderStatus =
   | 'order_placed' | 'file_verified' | 'file_declined'
   | 'printing_in_progress' | 'finishing_mounting' | 'quality_checked'
-  | 'ready_for_dispatch' | 'driver_assigned'
+  | 'ready_for_dispatch' | 'rider_assigned'
   | 'picked_up' | 'on_the_way' | 'arrived_at_destination'
   | 'delivered' | 'completed_pickup' | 'cancelled';
 
@@ -341,7 +341,7 @@ export interface Order {
   cancelled_at?: string;
   delivery_option: 'pickup' | 'delivery';
   delivery_address_id?: string;
-  assigned_driver_id?: string;
+  assigned_rider_id?: string;
   estimated_completion_at?: string;
   admin_notes?: string;
   tracking_link?: string;
@@ -381,12 +381,12 @@ export interface User {
 }
 ```
 
-### `src/types/driver.ts`
+### `src/types/rider.ts`
 
 ```typescript
 import { VehicleType } from './enums';
 
-export interface DriverProfile {
+export interface RiderProfile {
   id: string;
   user_id: string;
   vehicle_type: VehicleType;
@@ -418,8 +418,8 @@ Follow the same pattern — mirror the Dart model fields in snake_case. Defined 
 | GET | `/api/admin/orders/:id` | Single order detail |
 | PATCH | `/api/admin/orders/:id/status` | Update order status |
 | PATCH | `/api/admin/orders/:id` | Update ETA, admin notes |
-| POST | `/api/admin/orders/:id/assign` | Assign driver |
-| GET | `/api/admin/drivers` | List drivers (for assignment modal) |
+| POST | `/api/admin/orders/:id/assign` | Assign rider |
+| GET | `/api/admin/riders` | List riders (for assignment modal) |
 | GET | `/api/orders/:id/history` | Order status audit trail |
 
 ## Status Badge Colors
@@ -429,7 +429,7 @@ Follow the same pattern — mirror the Dart model fields in snake_case. Defined 
 | New | `order_placed`, `file_verified` | `info` (blue) |
 | Declined | `file_declined` | `error` (red) |
 | Production | `printing_in_progress`, `finishing_mounting`, `quality_checked` | `warning` (amber) |
-| Dispatch | `ready_for_dispatch`, `driver_assigned` | `info` (blue) |
+| Dispatch | `ready_for_dispatch`, `rider_assigned` | `info` (blue) |
 | In Transit | `picked_up`, `on_the_way`, `arrived_at_destination` | `brand` (yellow) |
 | Complete | `delivered`, `completed_pickup` | `success` (green) |
 | Cancelled | `cancelled` | `error` (red) |
@@ -444,14 +444,14 @@ file_verified      → printing_in_progress, cancelled
 printing_in_progress → finishing_mounting
 finishing_mounting  → quality_checked
 quality_checked    → ready_for_dispatch
-ready_for_dispatch → driver_assigned (via assign action)
-driver_assigned    → picked_up
+ready_for_dispatch → rider_assigned (via assign action)
+rider_assigned    → picked_up
 picked_up          → on_the_way
 on_the_way         → arrived_at_destination
 arrived_at_destination → delivered
 ```
 
-Alternative: `ready_for_dispatch` → `completed_pickup` (customer picks up, no driver)
+Alternative: `ready_for_dispatch` → `completed_pickup` (customer picks up, no rider)
 
 ## Backend Dependency Note
 
@@ -464,5 +464,5 @@ When the NestJS backend is ready, the only change needed is removing the mock la
 
 ## Future Phases (out of scope for Phase 1)
 
-**Phase 2:** Drivers management CRUD, product/service management, pricing configuration
+**Phase 2:** Riders management CRUD, product/service management, pricing configuration
 **Phase 3:** Analytics charts page, payment transaction history, user management, notification management, audit log browsing

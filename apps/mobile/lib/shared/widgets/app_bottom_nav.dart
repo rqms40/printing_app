@@ -75,7 +75,7 @@ const kQuickActions = <QuickActionItem>[
 ///
 /// When [showFab] is true (customer), renders 2 items + a 72 px center gap
 /// (where [ScaffoldWithNav] places its floating FAB) + 2 items.
-/// When [showFab] is false (driver / admin), renders all items evenly.
+/// When [showFab] is false (rider / admin), renders all items evenly.
 class AppBottomNav extends StatelessWidget {
   const AppBottomNav({
     super.key,

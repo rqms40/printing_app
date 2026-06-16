@@ -137,23 +137,23 @@
 
 ---
 
-## Task 6: Driver Providers → Real API
+## Task 6: Rider Providers → Real API
 
 **Files:**
-- Modify: `apps/mobile/lib/features/driver/deliveries/providers/deliveries_provider.dart`
-- Modify: `apps/mobile/lib/features/driver/history/providers/earnings_provider.dart`
+- Modify: `apps/mobile/lib/features/rider/deliveries/providers/deliveries_provider.dart`
+- Modify: `apps/mobile/lib/features/rider/history/providers/earnings_provider.dart`
 
-- [ ] **Step 1:** Update `DeliveriesNotifier` to fetch from `GET /api/drivers/assignments`
+- [ ] **Step 1:** Update `DeliveriesNotifier` to fetch from `GET /api/riders/assignments`
 
-- [ ] **Step 2:** Update `acceptAssignment()` → `POST /api/drivers/assignments/:id/accept`
+- [ ] **Step 2:** Update `acceptAssignment()` → `POST /api/riders/assignments/:id/accept`
 
-- [ ] **Step 3:** Update `declineAssignment()` → `POST /api/drivers/assignments/:id/decline`
+- [ ] **Step 3:** Update `declineAssignment()` → `POST /api/riders/assignments/:id/decline`
 
-- [ ] **Step 4:** Update `advanceCheckpoint()` → `PATCH /api/drivers/assignments/:id/status`
+- [ ] **Step 4:** Update `advanceCheckpoint()` → `PATCH /api/riders/assignments/:id/status`
 
-- [ ] **Step 5:** Update `earningsProvider` to fetch from `GET /api/drivers/earnings`
+- [ ] **Step 5:** Update `earningsProvider` to fetch from `GET /api/riders/earnings`
 
-- [ ] **Step 6:** Commit: `feat: driver providers connected to NestJS API`
+- [ ] **Step 6:** Commit: `feat: rider providers connected to NestJS API`
 
 ---
 
@@ -162,7 +162,7 @@
 **Files:**
 - Modify: `apps/mobile/lib/features/admin/dashboard/providers/dashboard_provider.dart`
 - Modify: `apps/mobile/lib/features/admin/queue/providers/queue_provider.dart`
-- Modify: `apps/mobile/lib/features/admin/driver_management/providers/drivers_provider.dart`
+- Modify: `apps/mobile/lib/features/admin/rider_management/providers/riders_provider.dart`
 
 - [ ] **Step 1:** Update `dashboardKpisProvider` → `GET /api/admin/dashboard`
 
@@ -172,9 +172,9 @@
 
 - [ ] **Step 4:** Update `updateOrderStatus()` → `PATCH /api/admin/orders/:id/status`
 
-- [ ] **Step 5:** Update `DriversNotifier` to fetch from `GET /api/admin/drivers`
+- [ ] **Step 5:** Update `RidersNotifier` to fetch from `GET /api/admin/riders`
 
-- [ ] **Step 6:** Update `assignDriver()` → `POST /api/admin/orders/:id/assign`
+- [ ] **Step 6:** Update `assignRider()` → `POST /api/admin/orders/:id/assign`
 
 - [ ] **Step 7:** Commit: `feat: admin providers connected to NestJS API`
 
@@ -208,5 +208,5 @@ After all tasks:
    - Close app, reopen → auto-login works
    - Place order → appears in orders list (from DB)
    - Add address → persisted across sessions
-   - Switch to driver/admin → see real data
+   - Switch to rider/admin → see real data
    - Turn off server → app falls back to mock data gracefully

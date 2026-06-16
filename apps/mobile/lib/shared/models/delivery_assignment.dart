@@ -4,7 +4,7 @@ class DeliveryAssignment {
   const DeliveryAssignment({
     required this.id,
     required this.orderId,
-    required this.driverId,
+    required this.riderId,
     required this.status,
     this.assignedAt,
     this.acceptedAt,
@@ -20,7 +20,7 @@ class DeliveryAssignment {
 
   final String id;
   final String orderId;
-  final String driverId;
+  final String riderId;
   final DeliveryStatus status;
   final DateTime? assignedAt;
   final DateTime? acceptedAt;
@@ -36,7 +36,7 @@ class DeliveryAssignment {
   DeliveryAssignment copyWith({
     String? id,
     String? orderId,
-    String? driverId,
+    String? riderId,
     DeliveryStatus? status,
     DateTime? assignedAt,
     DateTime? acceptedAt,
@@ -52,7 +52,7 @@ class DeliveryAssignment {
     return DeliveryAssignment(
       id: id ?? this.id,
       orderId: orderId ?? this.orderId,
-      driverId: driverId ?? this.driverId,
+      riderId: riderId ?? this.riderId,
       status: status ?? this.status,
       assignedAt: assignedAt ?? this.assignedAt,
       acceptedAt: acceptedAt ?? this.acceptedAt,

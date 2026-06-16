@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add slot-booked batch delivery, multi-destination groups, priority fee, and outside-Davao manual handoff to the GRID printing app.
+**Goal:** Add slot-booked batch delivery, multi-destination groups, priority fee, and outside-Davao manual handoff to the GRIDGO printing app.
 
 **Architecture:** New `delivery-slots` NestJS module owns slot templates, bookings, geo-radius detection, and a WebSocket gateway. Existing `orders` module gains multi-destination + slot-aware fields. Mobile gains three new checkout screens (destination groups, slot picker, external delivery confirm) wired through a new `OrderCheckoutNotifier`. Admin gains four new pages (slot templates editor, today dashboard, external deliveries queue, delivery settings).
 

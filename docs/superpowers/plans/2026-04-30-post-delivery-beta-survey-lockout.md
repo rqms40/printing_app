@@ -1921,12 +1921,12 @@ class _RequiredTamSurveyScreenState
   bool _submitted = false;
 
   static const _questions = [
-    'GRID allows me to manage my printing tasks more efficiently.',
-    'Using GRID simplifies my entire printing process.',
-    'It was easy to learn how to use the GRID app.',
-    'I find the GRID app intuitive and easy to navigate.',
-    'I intend to continue using GRID for my printing needs.',
-    'I would recommend GRID to my peers or colleagues.',
+    'GRIDGO allows me to manage my printing tasks more efficiently.',
+    'Using GRIDGO simplifies my entire printing process.',
+    'It was easy to learn how to use the GRIDGO app.',
+    'I find the GRIDGO app intuitive and easy to navigate.',
+    'I intend to continue using GRIDGO for my printing needs.',
+    'I would recommend GRIDGO to my peers or colleagues.',
     'Accuracy of the prints received compared to your digital order.',
     'Physical condition of the prints (no damage, clean finish).',
     'Speed and punctuality of the delivery/pickup readiness.',
@@ -2236,7 +2236,7 @@ class _OpenFeedbackPage extends StatelessWidget {
           controller: featureController,
           maxLines: 4,
           decoration: const InputDecoration(
-            labelText: 'What feature or service should GRID add?',
+            labelText: 'What feature or service should GRIDGO add?',
             border: OutlineInputBorder(),
           ),
         ),

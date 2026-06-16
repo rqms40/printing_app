@@ -10,7 +10,7 @@ void main() {
         home: Scaffold(
           body: TutorialBubble(
             icon: HugeIcons.strokeRoundedCoins01,
-            title: 'GRID Credits',
+            title: 'GRIDGO Credits',
             body: 'Pay without GCash.',
             step: 1,
             totalSteps: 2,

@@ -70,7 +70,7 @@ export interface Order {
   delivery_option: "pickup" | "delivery";
   delivery_address_id?: string;
   delivery_address?: OrderDestination | null;
-  assigned_driver_id?: string;
+  assigned_rider_id?: string;
   estimated_completion_at?: string;
   admin_notes?: string;
   adminStatusNote?: string | null;

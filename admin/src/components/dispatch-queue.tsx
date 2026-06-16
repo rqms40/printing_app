@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card, Button, List, Typography, Space, Badge } from 'antd';
 import { UserAddOutlined, DropboxOutlined } from '@ant-design/icons';
-import { mockOrders, mockDrivers } from '@/providers/mock-data';
+import { mockOrders, mockRiders } from '@/providers/mock-data';
 
 const { Text } = Typography;
 
@@ -9,8 +9,8 @@ export const DispatchQueue: React.FC = () => {
   const readyOrders = mockOrders.filter(o => o.order_status === 'ready_for_dispatch');
   const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
   
-  // Available drivers only
-  const availableDrivers = mockDrivers.filter(d => d.is_available);
+  // Available riders only
+  const availableRiders = mockRiders.filter(d => d.is_available);
 
   return (
     <Card 
@@ -48,16 +48,16 @@ export const DispatchQueue: React.FC = () => {
                 <Text type="secondary" style={{ fontSize: 12, marginBottom: 8, display: 'block' }}>Select Rider:</Text>
                 <List
                   size="small"
-                  dataSource={availableDrivers}
-                  renderItem={driver => (
+                  dataSource={availableRiders}
+                  renderItem={rider => (
                     <List.Item
                       style={{ cursor: 'pointer', background: '#2E2E2E', borderRadius: 6, marginBottom: 4, border: 'none' }}
                       onClick={() => setAssigningOrderId(null)}
                       className="hover-rider-item"
                     >
                       <Space direction="vertical" size={0}>
-                        <Text style={{ fontSize: 14, color: '#F0F0F0' }}>{driver.full_name}</Text>
-                        <Text type="secondary" style={{ fontSize: 12 }}>{driver.vehicle_type} • {driver.plate_number}</Text>
+                        <Text style={{ fontSize: 14, color: '#F0F0F0' }}>{rider.full_name}</Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>{rider.vehicle_type} • {rider.plate_number}</Text>
                       </Space>
                     </List.Item>
                   )}

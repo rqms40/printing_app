@@ -3,7 +3,7 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 
-/// Editorial-style text field with underline border for GRID.
+/// Editorial-style text field with underline border for GRIDGO.
 class AppTextField extends StatelessWidget {
   const AppTextField({
     super.key,

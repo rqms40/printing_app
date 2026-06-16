@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 // We will create the icons inside the component or just use the named export
 import { DivIcon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { mockDrivers } from '@/providers/mock-data';
+import { mockRiders } from '@/providers/mock-data';
 
 // Configure custom circular icons simulating what admin-web did via lucide/css
 const createIcon = (color: string) => {
@@ -29,7 +29,7 @@ export const MapTracker: React.FC = () => {
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
         />
-        {mockDrivers
+        {mockRiders
           .filter(d => d.last_latitude && d.last_longitude)
           .map(d => (
             <Marker

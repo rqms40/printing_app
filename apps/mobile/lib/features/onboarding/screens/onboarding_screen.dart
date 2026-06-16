@@ -14,9 +14,9 @@ import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart'
 
 /// Role-specific onboarding screen shown every login.
 ///
-/// Displays swipeable pages tailored to the user's role (customer, driver,
+/// Displays swipeable pages tailored to the user's role (customer, rider,
 /// admin) with animated illustrations, dot indicator, and a "Get Started" CTA
-/// on the final page. Customer and Driver get 5 pages; Admin gets 3.
+/// on the final page. Customer and Rider get 5 pages; Admin gets 3.
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -45,8 +45,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     ref.read(tutorialProvider.notifier).markSeen(TutorialKey.onboarding);
     final role = ref.read(authProvider).user?.role ?? 'customer';
     switch (role) {
-      case 'driver':
-        context.go('/driver/deliveries');
+      case 'rider':
+        context.go('/rider/deliveries');
       case 'admin':
         context.go('/admin/dashboard');
       default:

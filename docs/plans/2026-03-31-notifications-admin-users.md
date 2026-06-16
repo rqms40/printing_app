@@ -315,7 +315,7 @@ describe("loadAdminUsers", () => {
   it("returns normalized users from /admin/users", async () => {
     const client = {
       get: vi.fn().mockResolvedValue({
-        data: [{ id: 7, fullName: "Admin User", email: "admin@grid.ph", role: "admin" }],
+        data: [{ id: 7, fullName: "Admin User", email: "admin@gridgo.ph", role: "admin" }],
       }),
     };
 
@@ -325,7 +325,7 @@ describe("loadAdminUsers", () => {
         expect.objectContaining({
           id: 7,
           full_name: "Admin User",
-          email: "admin@grid.ph",
+          email: "admin@gridgo.ph",
         }),
       ],
     });

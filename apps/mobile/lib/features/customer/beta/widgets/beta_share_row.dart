@@ -52,7 +52,7 @@ class _BetaShareRowState extends State<BetaShareRow> {
     final encodedText = Uri.encodeComponent(kBetaShareText);
     final encodedUrl = Uri.encodeComponent(kBetaShareUrl);
     final uri = Uri.parse(
-      'https://twitter.com/intent/tweet?text=$encodedText&url=$encodedUrl&hashtags=GRIDprint,Davao',
+      'https://twitter.com/intent/tweet?text=$encodedText&url=$encodedUrl&hashtags=GRIDGOprint,Davao',
     );
     await _tryLaunch(ctx, uri, 'X (Twitter)');
     widget.onShare?.call();
@@ -68,7 +68,7 @@ class _BetaShareRowState extends State<BetaShareRow> {
   Future<void> _shareNative() async {
     await Share.share(
       '$kBetaShareText $kBetaShareUrl',
-      subject: 'GRID Print',
+      subject: 'GRIDGO Print',
     );
     widget.onShare?.call();
   }

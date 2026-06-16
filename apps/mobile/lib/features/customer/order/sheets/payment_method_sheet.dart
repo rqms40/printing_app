@@ -43,7 +43,7 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
   PaymentMethod? _chosen;
   bool _setDefault = false;
 
-  /// Key used to spotlight the GRID Credits row for the Step B tutorial.
+  /// Key used to spotlight the GRIDGO Credits row for the Step B tutorial.
   final _creditsCoachKey = GlobalKey();
 
   @override
@@ -51,7 +51,7 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
     super.initState();
     _chosen = widget.initial;
 
-    // Step B: fire the GRID Credits coach mark when:
+    // Step B: fire the GRIDGO Credits coach mark when:
     //   • pipeline has been seen (post-pipeline user)
     //   • checkoutFeatures not yet seen (haven't completed the two-step tutorial)
     //   • multidrop Step A was completed this session
@@ -81,7 +81,7 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
         TutorialStep(
           targetKey: _creditsCoachKey,
           icon: HugeIcons.strokeRoundedCoins01,
-          title: 'Pay with GRID Credits',
+          title: 'Pay with GRIDGO Credits',
           body:
               'Top up once and pay instantly — no GCash OTP, no app-switching.',
           align: ContentAlign.top,
@@ -167,7 +167,7 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
               !settingsReady
                   ? 'Checking payment availability'
                   : creditsOnlyMode
-                  ? 'Only GRID Credits is available right now'
+                  ? 'Only GRIDGO Credits is available right now'
                   : 'Pick how you want to pay',
               style: AppTypography.caption.copyWith(
                 color: colors.onSurfaceDim,
@@ -324,7 +324,7 @@ class _MethodRow extends StatelessWidget {
       case PaymentMethod.cod:
         return 'Cash on Delivery';
       case PaymentMethod.gridCredits:
-        return 'GRID Credits';
+        return 'GRIDGO Credits';
     }
   }
 
@@ -345,7 +345,7 @@ class _MethodRow extends StatelessWidget {
       case PaymentMethod.cod:
         return 'Pay cash to the rider';
       case PaymentMethod.gridCredits:
-        return 'Use your GRID balance';
+        return 'Use your GRIDGO balance';
     }
   }
 

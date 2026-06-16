@@ -639,7 +639,7 @@ class OrderDetailScreen extends ConsumerWidget {
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
-                    'Pickup at GRID Print shop',
+                    'Pickup at GRIDGO Print shop',
                     style: AppTypography.body.copyWith(color: colors.onSurface),
                   ),
                 ),

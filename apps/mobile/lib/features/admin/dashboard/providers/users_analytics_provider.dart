@@ -18,18 +18,18 @@ class AnalyticsPoint {
 class RoleCounts {
   const RoleCounts({
     required this.customers,
-    required this.drivers,
+    required this.riders,
     required this.admins,
   });
   final int customers;
-  final int drivers;
+  final int riders;
   final int admins;
 
   factory RoleCounts.fromJson(Map<String, dynamic>? json) {
-    if (json == null) return const RoleCounts(customers: 0, drivers: 0, admins: 0);
+    if (json == null) return const RoleCounts(customers: 0, riders: 0, admins: 0);
     return RoleCounts(
       customers: (json['customers'] as num?)?.toInt() ?? 0,
-      drivers: (json['drivers'] as num?)?.toInt() ?? 0,
+      riders: (json['riders'] as num?)?.toInt() ?? 0,
       admins: (json['admins'] as num?)?.toInt() ?? 0,
     );
   }
@@ -57,7 +57,7 @@ class AnalyticsSummary {
         newCustomers: 0,
         activeCustomers: 0,
         profileCompletionRate: 0.0,
-        roleCounts: RoleCounts(customers: 0, drivers: 0, admins: 0),
+        roleCounts: RoleCounts(customers: 0, riders: 0, admins: 0),
       );
     }
     return AnalyticsSummary(

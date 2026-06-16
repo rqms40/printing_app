@@ -10,8 +10,8 @@ Included:
 - Customer can add multiple configured print jobs to a cart.
 - Each cart item has its own category, specs, file metadata, quantity, page count, and print subtotal.
 - Checkout applies one delivery option, one optional delivery address, one payment method, and one delivery fee to all cart items.
-- Server creates one normal `Order` row per cart item so admin queue, order status, WebSocket order updates, cancellation, file expiry, and driver assignment keep working.
-- GRID Credits are charged for the whole batch total and remain refundable through the existing per-order cancellation path.
+- Server creates one normal `Order` row per cart item so admin queue, order status, WebSocket order updates, cancellation, file expiry, and rider assignment keep working.
+- GRIDGO Credits are charged for the whole batch total and remain refundable through the existing per-order cancellation path.
 - Cart survives app restart until submitted or cleared.
 
 Excluded from Milestone 1:
@@ -27,9 +27,9 @@ The mobile order flow is single-draft and single-file. `OrderFlowState` stores o
 
 The server `Order` entity is already the correct child fulfillment unit. It contains the file, specs, delivery fields, payment fields, status, admin notes, tracking link, and cancellation behavior. Delivery assignment is also one assignment per order.
 
-The recent GRID credit fix must be preserved:
+The recent GRIDGO credit fix must be preserved:
 - Credit payment methods may arrive as `credits`, `gridCredits`, `grid_credits`, or `grid-credits`.
-- Cancelling a cancellable GRID-credit order refunds credits.
+- Cancelling a cancellable GRIDGO-credit order refunds credits.
 - A credit refund emits `creditsUpdate` over notifications WebSocket.
 - Mobile also refreshes profile after cancellation as a fallback.
 
@@ -148,8 +148,8 @@ Creation rules:
 - Validate at least one item.
 - Validate each item has a positive quantity and non-negative total price.
 - Apply the shared delivery fee only to the first child order. All other child orders have `deliveryFee = 0`.
-- Use the batch total for GRID credit deduction.
-- Create the batch row, child orders, child specs, and GRID credit balance update in one TypeORM transaction.
+- Use the batch total for GRIDGO credit deduction.
+- Create the batch row, child orders, child specs, and GRIDGO credit balance update in one TypeORM transaction.
 - If any child order/spec/credit update fails, the transaction rolls back so no child order is persisted and no credits are deducted.
 
 Credit handling:
@@ -168,7 +168,7 @@ Existing single-order behavior must remain green:
 - Existing admin queue still receives normal order records.
 - Existing order WebSocket rooms still receive child order updates.
 - Existing cancellation statuses remain unchanged.
-- Existing GRID credit cancellation/refund tests must keep passing.
+- Existing GRIDGO credit cancellation/refund tests must keep passing.
 
 ## Testing Strategy
 
@@ -176,7 +176,7 @@ Server:
 - DTO validation rejects empty batch and invalid items.
 - Batch checkout creates a batch and child orders with shared checkout fields.
 - Batch checkout stores specs for paper and 3D child orders.
-- GRID Credits batch checkout deducts once for the batch total.
+- GRIDGO Credits batch checkout deducts once for the batch total.
 - Failure during child creation rolls back child orders and credit deduction in the same transaction.
 - Existing credit cancellation refund tests still pass.
 - Existing single-order create/cancel tests still pass.

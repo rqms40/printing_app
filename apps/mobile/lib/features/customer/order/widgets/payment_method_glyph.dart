@@ -4,7 +4,7 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/shared/models/enums.dart';
 
 /// Branded round glyph for each PaymentMethod.
-/// GCash → blue with "G", Maya → green with "M", COD → bill icon, GRID Credits → brand yellow with coin icon.
+/// GCash → blue with "G", Maya → green with "M", COD → bill icon, GRIDGO Credits → brand yellow with coin icon.
 class PaymentMethodGlyph extends StatelessWidget {
   const PaymentMethodGlyph({super.key, required this.method, this.size = 36});
 

@@ -371,7 +371,7 @@ export function MarketingSettings() {
                   }}>
                     <GridLogo size={12} />
                   </div>
-                  <Text type="secondary" style={{ fontSize: "12px", flex: 1 }}>GRID GO</Text>
+                  <Text type="secondary" style={{ fontSize: "12px", flex: 1 }}>GRIDGO</Text>
                   <Text type="secondary" style={{ fontSize: "12px" }}>now</Text>
                 </div>
                 <div>

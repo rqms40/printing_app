@@ -10,7 +10,7 @@ const STATUSES = [
   { title: "Finishing & Mounting", date: "Mar 25, 2026", time: "10:00 AM", progress: 45 },
   { title: "Quality Checked", date: "Mar 25, 2026", time: "3:00 PM", progress: 55 },
   { title: "Ready for Dispatch", date: "Mar 26, 2026", time: "3:00 AM", progress: 65 },
-  { title: "Driver Assigned", date: "Mar 27, 2026", time: "2:00 PM", progress: 75 },
+  { title: "Rider Assigned", date: "Mar 27, 2026", time: "2:00 PM", progress: 75 },
   { title: "Picked Up", date: "Mar 27, 2026", time: "2:20 PM", progress: 80 },
   { title: "On the Way", date: "Mar 27, 2026", time: "2:30 PM", progress: 90, highlight: true },
   { title: "Arrived at Destination", date: "Mar 27, 2026", time: "3:00 PM", progress: 95 },
@@ -56,10 +56,10 @@ export function CustomStatusNotifications() {
 
               <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
                 <Text style={{ fontSize: "12px", color: "#a0a0a0", lineHeight: "1" }}>
-                  GRID
+                  GRIDGO
                 </Text>
                 <Text style={{ fontSize: "14px", color: "#FFDE58", fontWeight: 600, marginTop: "2px", marginBottom: "8px" }}>
-                  GRID GO
+                  GRIDGO
                 </Text>
 
                 <Text style={{ fontSize: "18px", color: "#ffffff", fontWeight: 600, marginBottom: "4px" }}>

@@ -75,7 +75,7 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(milliseconds: 500));
 
-      // Driver Juan's notification should not appear (usr_002)
+      // Rider Juan's notification should not appear (usr_002)
       expect(
         find.text('You have been assigned to deliver ORD-10005 to Quezon City.'),
         findsNothing,

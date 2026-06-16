@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Animation duration & curve tokens for GRID.
+/// Animation duration & curve tokens for GRIDGO.
 class AppMotion {
   const AppMotion._();
 

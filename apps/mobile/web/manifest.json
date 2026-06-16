@@ -1,11 +1,11 @@
 {
-    "name": "GRID",
-    "short_name": "GRID",
+    "name": "GRIDGO",
+    "short_name": "GRIDGO",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#000000",
     "theme_color": "#000000",
-    "description": "GRID - Premium printing service delivery",
+    "description": "GRIDGO - Premium printing service delivery",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

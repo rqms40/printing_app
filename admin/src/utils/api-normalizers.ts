@@ -73,7 +73,7 @@ export interface AdminUserDetailPayload {
   recent_orders: AdminUserRecentOrderRecord[];
 }
 
-export interface AdminDriverRecord {
+export interface AdminRiderRecord {
   id: number;
   user_id: number | null;
   full_name: string | null;
@@ -105,7 +105,7 @@ const ADMIN_USER_DETAIL_ORDER_STATUSES = new Set<OrderStatus>([
   "finishing_mounting",
   "quality_checked",
   "ready_for_dispatch",
-  "driver_assigned",
+  "rider_assigned",
   "picked_up",
   "on_the_way",
   "arrived_at_destination",
@@ -552,10 +552,10 @@ export function normalizeOrder(input: unknown): Order & {
       normalizeOrderDestination(
         read(record, "delivery_address", "deliveryAddress", "destination"),
       ) ?? null,
-    assigned_driver_id: toOptionalString(
+    assigned_rider_id: toOptionalString(
       record,
-      "assigned_driver_id",
-      "assignedDriverId",
+      "assigned_rider_id",
+      "assignedRiderId",
     ),
     estimated_completion_at: toOptionalString(
       record,
@@ -747,7 +747,7 @@ export function normalizeAdminUserDetail(
   };
 }
 
-export function normalizeAdminDriver(input: unknown): AdminDriverRecord {
+export function normalizeAdminRider(input: unknown): AdminRiderRecord {
   const record = asRecord(input);
   const user = asRecord(read(record, "user"));
 
@@ -790,8 +790,8 @@ export function normalizeAdminDriver(input: unknown): AdminDriverRecord {
   };
 }
 
-export function normalizeAdminDrivers(payload: unknown): AdminDriverRecord[] {
-  return Array.isArray(payload) ? payload.map(normalizeAdminDriver) : [];
+export function normalizeAdminRiders(payload: unknown): AdminRiderRecord[] {
+  return Array.isArray(payload) ? payload.map(normalizeAdminRider) : [];
 }
 
 export function normalizeServiceCategory(input: unknown): ServiceCategory {

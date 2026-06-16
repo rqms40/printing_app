@@ -127,27 +127,27 @@ final _tamQuestions = [
   // SURVEY
   TamQuestion(
     category: 'SURVEY',
-    question: 'GRID allows me to manage my printing tasks more efficiently.',
+    question: 'GRIDGO allows me to manage my printing tasks more efficiently.',
   ),
   TamQuestion(
     category: 'SURVEY',
-    question: 'Using GRID simplifies my entire printing process.',
+    question: 'Using GRIDGO simplifies my entire printing process.',
   ),
   TamQuestion(
     category: 'SURVEY',
-    question: 'It was easy to learn how to use the GRID app.',
+    question: 'It was easy to learn how to use the GRIDGO app.',
   ),
   TamQuestion(
     category: 'SURVEY',
-    question: 'I find the GRID app intuitive and easy to navigate.',
+    question: 'I find the GRIDGO app intuitive and easy to navigate.',
   ),
   TamQuestion(
     category: 'SURVEY',
-    question: 'I intend to continue using GRID for my printing needs.',
+    question: 'I intend to continue using GRIDGO for my printing needs.',
   ),
   TamQuestion(
     category: 'SURVEY',
-    question: 'I would recommend GRID to my peers or colleagues.',
+    question: 'I would recommend GRIDGO to my peers or colleagues.',
   ),
   // LOGISTICS & SERVICE
   TamQuestion(
@@ -507,7 +507,7 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Help us improve GRID by sharing your experience.',
+                        'Help us improve GRIDGO by sharing your experience.',
                         style: AppTypography.body.copyWith(
                           color: colors.onSurfaceDim,
                         ),
@@ -889,7 +889,7 @@ class _SubmittedView extends StatelessWidget {
             ).animate().fadeIn(delay: 300.ms, duration: 400.ms),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              'Your feedback helps us improve GRID for everyone.',
+              'Your feedback helps us improve GRIDGO for everyone.',
               textAlign: TextAlign.center,
               style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
             ).animate().fadeIn(delay: 450.ms, duration: 400.ms),
@@ -1940,7 +1940,7 @@ class _OpenForumPageState extends State<_OpenForumPage> {
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   Text(
-                    'What is one feature or service you wish GRID would add in the future?',
+                    'What is one feature or service you wish GRIDGO would add in the future?',
                     textAlign: TextAlign.left,
                     style: AppTypography.body.copyWith(
                       color: textColor,

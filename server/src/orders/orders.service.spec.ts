@@ -19,7 +19,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import {
   DeliveryAssignment,
   DeliveryStatus,
-} from '../drivers/entities/delivery-assignment.entity';
+} from '../riders/entities/delivery-assignment.entity';
 import { Address } from '../addresses/entities/address.entity';
 import { DeliveryDestination } from './entities/delivery-destination.entity';
 import { DeliverySlotsService } from '../delivery-slots/delivery-slots.service';
@@ -436,7 +436,7 @@ describe('OrdersService', () => {
       );
     });
 
-    it('deducts GRID Credits using print subtotal plus delivery fee', async () => {
+    it('deducts GRIDGO Credits using print subtotal plus delivery fee', async () => {
       repo.count.mockResolvedValue(0);
       repo.create.mockReturnValue(mockOrder);
       repo.save.mockResolvedValue(mockOrder);
@@ -615,7 +615,7 @@ describe('OrdersService', () => {
       );
     });
 
-    it('deducts GRID Credits once for subtotal plus deliveryFee', async () => {
+    it('deducts GRIDGO Credits once for subtotal plus deliveryFee', async () => {
       await (service as any).createBatch(1, batchDto);
 
       expect(creditsService.subtractCredits).toHaveBeenCalledTimes(1);
@@ -801,7 +801,7 @@ describe('OrdersService', () => {
   });
 
   describe('cancelOrder', () => {
-    it('refunds GRID Credits before cancelling an eligible credit-paid order', async () => {
+    it('refunds GRIDGO Credits before cancelling an eligible credit-paid order', async () => {
       const creditOrder = {
         ...mockOrder,
         userId: 1,
@@ -826,7 +826,7 @@ describe('OrdersService', () => {
       });
     });
 
-    it('refunds GRID Credits when the stored payment method is snake_case', async () => {
+    it('refunds GRIDGO Credits when the stored payment method is snake_case', async () => {
       const creditOrder = {
         ...mockOrder,
         userId: 1,

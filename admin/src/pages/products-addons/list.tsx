@@ -126,7 +126,7 @@ export function AddonList() {
         </Button>
       </div>
 
-      <div className="drivers-table-section">
+      <div className="riders-table-section">
         <Table
           dataSource={addons}
           rowKey="id"

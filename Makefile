@@ -1,4 +1,4 @@
-# GRID Monorepo — Common Commands
+# GRIDGO Monorepo — Common Commands
 # Usage: make <command>
 
 .PHONY: help mobile-dev mobile-test mobile-analyze server-dev server-test clean

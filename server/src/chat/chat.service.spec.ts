@@ -106,7 +106,7 @@ describe('ChatService', () => {
       orderRepo.findOne.mockResolvedValue({
         id: 42,
         userId: 5,
-        assignedDriverId: 12,
+        assignedRiderId: 12,
       });
       convRepo.findOne.mockResolvedValue(null);
       const built = {
@@ -137,7 +137,7 @@ describe('ChatService', () => {
       orderRepo.findOne.mockResolvedValue({
         id: 42,
         userId: 5,
-        assignedDriverId: null,
+        assignedRiderId: null,
       });
       convRepo.findOne.mockResolvedValue(null);
       convRepo.create.mockReturnValue({
@@ -176,7 +176,7 @@ describe('ChatService', () => {
       orderRepo.findOne.mockResolvedValue({
         id: 42,
         userId: 5,
-        assignedDriverId: 12,
+        assignedRiderId: 12,
       });
       convRepo.findOne.mockResolvedValue(existing);
 
@@ -191,7 +191,7 @@ describe('ChatService', () => {
         id: 42,
         orderId: 'ORD-10005',
         userId: 5,
-        assignedDriverId: null,
+        assignedRiderId: null,
       });
       convRepo.findOne.mockResolvedValue(null);
       convRepo.create.mockReturnValue({
@@ -219,7 +219,7 @@ describe('ChatService', () => {
       orderRepo.findOne.mockResolvedValue({
         id: 42,
         userId: 99,
-        assignedDriverId: 12,
+        assignedRiderId: 12,
       });
 
       await expect(
@@ -228,12 +228,12 @@ describe('ChatService', () => {
     });
   });
 
-  describe('getOrCreateDriverOrderConversation', () => {
-    it('creates a rider conversation for the assigned driver user', async () => {
+  describe('getOrCreateRiderOrderConversation', () => {
+    it('creates a rider conversation for the assigned rider user', async () => {
       orderRepo.findOne.mockResolvedValue({
         id: 42,
         userId: 5,
-        assignedDriverId: 12,
+        assignedRiderId: 12,
       });
       convRepo.findOne.mockResolvedValue(null);
       convRepo.create.mockReturnValue({
@@ -251,7 +251,7 @@ describe('ChatService', () => {
         assignedRiderId: 12,
       });
 
-      const result = await service.getOrCreateDriverOrderConversation(12, 42);
+      const result = await service.getOrCreateRiderOrderConversation(12, 42);
 
       expect(result.id).toBe(11);
       expect(convRepo.create).toHaveBeenCalledWith(
@@ -263,15 +263,15 @@ describe('ChatService', () => {
       );
     });
 
-    it('rejects a driver who is not assigned to the order', async () => {
+    it('rejects a rider who is not assigned to the order', async () => {
       orderRepo.findOne.mockResolvedValue({
         id: 42,
         userId: 5,
-        assignedDriverId: 12,
+        assignedRiderId: 12,
       });
 
       await expect(
-        service.getOrCreateDriverOrderConversation(99, 42),
+        service.getOrCreateRiderOrderConversation(99, 42),
       ).rejects.toThrow('Only the assigned rider can chat about this order');
     });
   });
@@ -321,12 +321,12 @@ describe('ChatService', () => {
       expect(result).toBe('We offer paper and 3D printing!');
     });
 
-    it('uses the GridBot guardrail system prompt that scopes the bot to GRID/printing', () => {
+    it('uses the GridBot guardrail system prompt that scopes the bot to GRIDGO/printing', () => {
       expect(GRIDBOT_SYSTEM_PROMPT).toContain('GridBot');
-      expect(GRIDBOT_SYSTEM_PROMPT).toContain('GRID');
+      expect(GRIDBOT_SYSTEM_PROMPT).toContain('GRIDGO');
       expect(GRIDBOT_SYSTEM_PROMPT).toContain('REFUSAL RULE');
       expect(GRIDBOT_SYSTEM_PROMPT).toContain(GRIDBOT_REFUSAL);
-      expect(GRIDBOT_REFUSAL).toMatch(/only help with questions about GRID/i);
+      expect(GRIDBOT_REFUSAL).toMatch(/only help with questions about GRIDGO/i);
     });
 
     it('maps bot messages to assistant role and reverses DESC history to chronological order', async () => {

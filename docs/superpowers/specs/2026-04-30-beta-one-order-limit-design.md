@@ -92,7 +92,7 @@ class BetaOrderLimitException implements Exception {
 Content:
 
 - Title: **"You've used your beta order"**
-- Body: "Thanks for testing GRID — beta testers can place one order during the beta program. Your earlier order is still on its way / has been delivered. Reach out to the GRID team if you'd like another test run."
+- Body: "Thanks for testing GRIDGO — beta testers can place one order during the beta program. Your earlier order is still on its way / has been delivered. Reach out to the GRIDGO team if you'd like another test run."
 - Single primary button: **"Got it"** → dismisses sheet.
 
 **Cart preservation:** the cart is not cleared. The user remains on the summary/payment screen with all items intact and may continue exploring the flow.

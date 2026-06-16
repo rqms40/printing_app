@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a persistent real-time notification system to the GRID admin dashboard — bell icon, sidebar live badges, full notifications page, delivered via WebSocket and stored per-admin in the DB.
+**Goal:** Add a persistent real-time notification system to the GRIDGO admin dashboard — bell icon, sidebar live badges, full notifications page, delivered via WebSocket and stored per-admin in the DB.
 
 **Architecture:** Extend the existing `notifications` table with a `metadata jsonb` column; add `NotificationsGateway` (`/ws/notifications`) for real-time push; add `createForAllAdmins()` to `NotificationsService`; wire it into order/credit/auth events. On the admin frontend, a `notification-ws` singleton mirrors `live-provider`, a React context holds state, and `GridSider` replaces `ThemedSiderV2` to render live badge pills.
 
@@ -157,7 +157,7 @@ repo = {
 describe('findAllByRole', () => {
   it('returns all users with the given role', async () => {
     const admins = [
-      { id: 1, email: 'admin@grid.ph', role: 'admin' } as User,
+      { id: 1, email: 'admin@gridgo.ph', role: 'admin' } as User,
     ];
     repo.find.mockResolvedValue(admins);
 
@@ -410,7 +410,7 @@ describe('NotificationsService', () => {
     createdAt: new Date(),
   } as Notification;
 
-  const mockAdmin = { id: 10, email: 'admin@grid.ph', role: 'admin' } as User;
+  const mockAdmin = { id: 10, email: 'admin@gridgo.ph', role: 'admin' } as User;
 
   beforeEach(async () => {
     repo = {
@@ -524,7 +524,7 @@ describe('NotificationsService', () => {
 
   describe('createForAllAdmins', () => {
     it('batch-inserts one row per admin and broadcasts', async () => {
-      const admins = [mockAdmin, { id: 11, email: 'admin2@grid.ph', role: 'admin' } as User];
+      const admins = [mockAdmin, { id: 11, email: 'admin2@gridgo.ph', role: 'admin' } as User];
       usersService.findAllByRole.mockResolvedValue(admins);
 
       const row1 = { ...mockNotification, userId: 10 } as Notification;
@@ -805,7 +805,7 @@ import { CreditsService } from '../credits/credits.service';
 ```typescript
 constructor(
   private ordersService: OrdersService,
-  private driversService: DriversService,
+  private ridersService: RidersService,
   private creditsService: CreditsService,        // ADD
   @InjectRepository(Order)
   private ordersRepo: Repository<Order>,
@@ -854,7 +854,7 @@ import { PaperSpec } from '../orders/entities/paper-specs.entity';
 import { ThreeDSpec } from '../orders/entities/three-d-specs.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
 import { OrdersModule } from '../orders/orders.module';
-import { DriversModule } from '../drivers/drivers.module';
+import { RidersModule } from '../riders/riders.module';
 import { CreditsModule } from '../credits/credits.module';
 
 @Module({
@@ -867,7 +867,7 @@ import { CreditsModule } from '../credits/credits.module';
       OrderStatusHistory,
     ]),
     OrdersModule,
-    DriversModule,
+    RidersModule,
     CreditsModule,
   ],
   controllers: [AdminController],
@@ -1103,7 +1103,7 @@ describe('CreditsService', () => {
   let usersService: jest.Mocked<Partial<UsersService>>;
   let notificationsService: jest.Mocked<Partial<NotificationsService>>;
 
-  const mockUser = { id: 1, email: 'user@grid.ph', credits: 1000 } as User;
+  const mockUser = { id: 1, email: 'user@gridgo.ph', credits: 1000 } as User;
   const mockSettings = { id: 1, conversionRate: 1.0 } as CreditSettings;
   const mockTx = {
     id: 5,
@@ -2341,7 +2341,7 @@ const menuItems = [
     icon: null,
     list: "/credit-requests",
   },
-  { key: "/drivers", name: "drivers", label: "Drivers", icon: null, list: "/drivers" },
+  { key: "/riders", name: "riders", label: "Riders", icon: null, list: "/riders" },
 ];
 
 function setupMocks(
@@ -2496,7 +2496,7 @@ export function GridSider({ initialCollapsed = false }: GridSiderProps) {
       <div style={{ padding: collapsed ? "16px 8px" : "16px" }}>
         <ThemedTitleV2
           collapsed={collapsed}
-          text="GRID Admin"
+          text="GRIDGO Admin"
           icon={<GridLogo size={collapsed ? 28 : 24} />}
         />
       </div>
@@ -2906,7 +2906,7 @@ import { LoginPage } from "@/pages/login";
 import { DashboardPage } from "@/pages/dashboard";
 import { OrderList } from "@/pages/orders/list";
 import { OrderShow } from "@/pages/orders/show";
-import { DriverList } from "@/pages/drivers/list";
+import { RiderList } from "@/pages/riders/list";
 import { UserList } from "@/pages/users/list";
 import { ProductList } from "@/pages/products/list";
 import { ProductOptionsPage } from "@/pages/products/options";
@@ -2937,9 +2937,9 @@ function App() {
                 meta: { label: "Orders", icon: <ShoppingCartOutlined /> },
               },
               {
-                name: "drivers",
-                list: "/drivers",
-                meta: { label: "Drivers", icon: <CarOutlined /> },
+                name: "riders",
+                list: "/riders",
+                meta: { label: "Riders", icon: <CarOutlined /> },
               },
               {
                 name: "users",
@@ -2975,7 +2975,7 @@ function App() {
               syncWithLocation: true,
               warnWhenUnsavedChanges: true,
               title: {
-                text: "GRID Admin",
+                text: "GRIDGO Admin",
                 icon: <GridLogo size={24} />,
               },
             }}
@@ -3003,7 +3003,7 @@ function App() {
                   <Route index element={<OrderList />} />
                   <Route path="show/:id" element={<OrderShow />} />
                 </Route>
-                <Route path="/drivers" element={<DriverList />} />
+                <Route path="/riders" element={<RiderList />} />
                 <Route path="/users" element={<UserList />} />
                 <Route path="/products">
                   <Route index element={<ProductList />} />

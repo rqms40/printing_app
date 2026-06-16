@@ -9,7 +9,7 @@ import 'package:printing_app/config/theme/app_typography.dart';
 /// Button variants for [AppButton].
 enum AppButtonVariant { primary, secondary, ghost, brand }
 
-/// Reusable button following the GRID design system.
+/// Reusable button following the GRIDGO design system.
 ///
 /// Four variants:
 /// - **primary** -- solid accent background, contrasting text.

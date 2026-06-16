@@ -2,7 +2,10 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SupportTicket, TicketStatus } from './entities/support-ticket.entity';
-import { CreateSupportTicketDto, ReplySupportTicketDto } from './dto/create-support-ticket.dto';
+import {
+  CreateSupportTicketDto,
+  ReplySupportTicketDto,
+} from './dto/create-support-ticket.dto';
 import * as nodemailer from 'nodemailer';
 import { ConfigService } from '@nestjs/config';
 
@@ -25,7 +28,9 @@ export class SupportTicketsService {
     });
   }
 
-  async create(createSupportTicketDto: CreateSupportTicketDto): Promise<SupportTicket> {
+  async create(
+    createSupportTicketDto: CreateSupportTicketDto,
+  ): Promise<SupportTicket> {
     const ticket = this.ticketRepository.create(createSupportTicketDto);
     return this.ticketRepository.save(ticket);
   }
@@ -44,7 +49,10 @@ export class SupportTicketsService {
     return ticket;
   }
 
-  async reply(id: string, replyDto: ReplySupportTicketDto): Promise<SupportTicket> {
+  async reply(
+    id: string,
+    replyDto: ReplySupportTicketDto,
+  ): Promise<SupportTicket> {
     const ticket = await this.findOne(id);
 
     // Save reply to DB
@@ -82,7 +90,7 @@ export class SupportTicketsService {
                       <td style="width:8px; height:8px; background-color:#6B7280; border-radius:50%;"></td>
                     </tr>
                   </table>
-                  <span style="font-size: 28px; font-weight: 800; color: #ffffff; vertical-align: middle; margin-left: 12px; letter-spacing: 3px;">GRID<span style="color: #FFDE58;">GO</span></span>
+                  <span style="font-size: 28px; font-weight: 800; color: #ffffff; vertical-align: middle; margin-left: 12px; letter-spacing: 3px;">GRIDGO</span>
                 </td>
               </tr>
               <!-- Body Content -->
@@ -130,9 +138,13 @@ export class SupportTicketsService {
           </div>
         `,
       });
-      this.logger.log(`Reply email sent to ${ticket.email} for ticket ${ticket.id}`);
+      this.logger.log(
+        `Reply email sent to ${ticket.email} for ticket ${ticket.id}`,
+      );
     } catch (error) {
-      this.logger.error(`Failed to send reply email to ${ticket.email}: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.error(
+        `Failed to send reply email to ${ticket.email}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
 
     return updatedTicket;

@@ -9,12 +9,12 @@ const { Title, Text, Paragraph } = Typography;
 
 const SURVEY_QUESTIONS = [
   // SURVEY
-  { category: 'SURVEY', question: 'GRID allows me to manage my printing tasks more efficiently.' },
-  { category: 'SURVEY', question: 'Using GRID simplifies my entire printing process.' },
-  { category: 'SURVEY', question: 'It was easy to learn how to use the GRID app.' },
-  { category: 'SURVEY', question: 'I find the GRID app intuitive and easy to navigate.' },
-  { category: 'SURVEY', question: 'I intend to continue using GRID for my printing needs.' },
-  { category: 'SURVEY', question: 'I would recommend GRID to my peers or colleagues.' },
+  { category: 'SURVEY', question: 'GRIDGO allows me to manage my printing tasks more efficiently.' },
+  { category: 'SURVEY', question: 'Using GRIDGO simplifies my entire printing process.' },
+  { category: 'SURVEY', question: 'It was easy to learn how to use the GRIDGO app.' },
+  { category: 'SURVEY', question: 'I find the GRIDGO app intuitive and easy to navigate.' },
+  { category: 'SURVEY', question: 'I intend to continue using GRIDGO for my printing needs.' },
+  { category: 'SURVEY', question: 'I would recommend GRIDGO to my peers or colleagues.' },
   // LOGISTICS & SERVICE
   { category: 'LOGISTICS & SERVICE', question: 'Accuracy of the prints received compared to your digital order.' },
   { category: 'LOGISTICS & SERVICE', question: 'Physical condition of the prints (no damage, clean finish).' },
@@ -148,7 +148,7 @@ export function TamSurveyShow() {
               <Space direction="vertical" size="large" style={{ width: '100%' }}>
                 {parsed.feature && (
                   <div>
-                    <Text type="secondary" style={{ fontSize: 12 }}>WHAT IS ONE FEATURE OR SERVICE YOU WISH GRID WOULD ADD?</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>WHAT IS ONE FEATURE OR SERVICE YOU WISH GRIDGO WOULD ADD?</Text>
                     <Paragraph style={{ margin: 0, marginTop: 4, fontSize: 15, fontStyle: 'italic', color: token.colorPrimary }}>
                       "{parsed.feature}"
                     </Paragraph>

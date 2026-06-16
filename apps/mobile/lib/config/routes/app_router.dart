@@ -58,13 +58,13 @@ import 'package:printing_app/features/customer/chat/screens/chat_select_screen.d
 import 'package:printing_app/features/customer/chat/screens/conversation_screen.dart';
 
 // ---------------------------------------------------------------------------
-// Driver screens
+// Rider screens
 // ---------------------------------------------------------------------------
-import 'package:printing_app/features/driver/deliveries/screens/deliveries_screen.dart';
-import 'package:printing_app/features/driver/deliveries/screens/delivery_detail_screen.dart';
-import 'package:printing_app/features/driver/active_delivery/screens/active_delivery_screen.dart';
-import 'package:printing_app/features/driver/history/screens/delivery_history_screen.dart';
-import 'package:printing_app/features/driver/profile/screens/driver_profile_screen.dart';
+import 'package:printing_app/features/rider/deliveries/screens/deliveries_screen.dart';
+import 'package:printing_app/features/rider/deliveries/screens/delivery_detail_screen.dart';
+import 'package:printing_app/features/rider/active_delivery/screens/active_delivery_screen.dart';
+import 'package:printing_app/features/rider/history/screens/delivery_history_screen.dart';
+import 'package:printing_app/features/rider/profile/screens/rider_profile_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Admin screens
@@ -72,7 +72,7 @@ import 'package:printing_app/features/driver/profile/screens/driver_profile_scre
 import 'package:printing_app/features/admin/dashboard/screens/dashboard_screen.dart';
 import 'package:printing_app/features/admin/queue/screens/queue_screen.dart';
 import 'package:printing_app/features/admin/queue/screens/admin_order_detail_screen.dart';
-import 'package:printing_app/features/admin/driver_management/screens/driver_assignment_screen.dart';
+import 'package:printing_app/features/admin/rider_management/screens/rider_assignment_screen.dart';
 import 'package:printing_app/features/admin/profile/screens/admin_profile_screen.dart';
 
 // ---------------------------------------------------------------------------
@@ -175,7 +175,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         if (seenOnboarding) {
           final role = ref.read(authProvider).user?.role ?? 'customer';
           return switch (role) {
-            'driver' => '/driver/deliveries',
+            'rider' => '/rider/deliveries',
             'admin' => '/admin/dashboard',
             _ => '/customer/home',
           };
@@ -530,7 +530,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       // -----------------------------------------------------------------------
-      // Driver shell (3 tabs: Deliveries, History, Profile)
+      // Rider shell (3 tabs: Deliveries, History, Profile)
       // -----------------------------------------------------------------------
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => ScaffoldWithNav(
@@ -563,7 +563,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/driver/deliveries',
+                path: '/rider/deliveries',
                 builder: (_, _) => const DeliveriesScreen(),
               ),
             ],
@@ -571,7 +571,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/driver/history',
+                path: '/rider/history',
                 builder: (_, _) => const DeliveryHistoryScreen(),
               ),
             ],
@@ -579,8 +579,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/driver/profile',
-                builder: (_, _) => const DriverProfileScreen(),
+                path: '/rider/profile',
+                builder: (_, _) => const RiderProfileScreen(),
               ),
             ],
           ),
@@ -588,22 +588,22 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
 
       // -----------------------------------------------------------------------
-      // Driver stack routes
+      // Rider stack routes
       // -----------------------------------------------------------------------
       GoRoute(
-        path: '/driver/deliveries/:id',
+        path: '/rider/deliveries/:id',
         pageBuilder: (_, state) => slideTransition(
           DeliveryDetailScreen(assignmentId: state.pathParameters['id']!),
           state,
         ),
       ),
       GoRoute(
-        path: '/driver/deliveries/:id/active',
+        path: '/rider/deliveries/:id/active',
         pageBuilder: (_, state) =>
             slideTransition(const ActiveDeliveryScreen(), state),
       ),
       GoRoute(
-        path: '/driver/chat/:id',
+        path: '/rider/chat/:id',
         pageBuilder: (_, state) {
           final id = int.parse(state.pathParameters['id']!);
           final typeStr = state.uri.queryParameters['type'] ?? 'rider';
@@ -622,7 +622,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               subtitleOverride: orderStatus == null
                   ? null
                   : 'Customer · $orderStatus',
-              backFallback: '/driver/deliveries',
+              backFallback: '/rider/deliveries',
             ),
             state,
           );
@@ -698,9 +698,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
-        path: '/admin/drivers',
+        path: '/admin/riders',
         pageBuilder: (_, state) =>
-            scaleTransition(const DriverAssignmentScreen(), state),
+            scaleTransition(const RiderAssignmentScreen(), state),
       ),
 
       // -----------------------------------------------------------------------

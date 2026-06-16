@@ -8,14 +8,14 @@
 
 ## Problem
 
-The home map tile (`MapTrackingTile`) is entirely hardcoded — fake Manila coordinates, always-dark CartoDB tiles, no connection to real order or driver data. The tracking screen (`DeliveryMap`) simulates driver movement with a timer rather than consuming real WebSocket location data. Neither screen is theme-aware. There is no idle state for when no delivery is active.
+The home map tile (`MapTrackingTile`) is entirely hardcoded — fake Manila coordinates, always-dark CartoDB tiles, no connection to real order or rider data. The tracking screen (`DeliveryMap`) simulates rider movement with a timer rather than consuming real WebSocket location data. Neither screen is theme-aware. There is no idle state for when no delivery is active.
 
 ---
 
 ## Goals
 
-1. Home map tile shows real driver position when a delivery is `onTheWay`, and a static Davao City view otherwise.
-2. Both screens share one source of truth for driver location and route — no duplicate state.
+1. Home map tile shows real rider position when a delivery is `onTheWay`, and a static Davao City view otherwise.
+2. Both screens share one source of truth for rider location and route — no duplicate state.
 3. Tracking screen owns the WebSocket connection; home tile reads the cached result.
 4. Both screens switch tile styles with the system theme (CartoDB Dark Matter / Positron).
 5. Tapping the home tile always navigates to `/customer/tracking`.
@@ -29,7 +29,7 @@ The home map tile (`MapTrackingTile`) is entirely hardcoded — fake Manila coor
 A single Riverpod `FutureProvider` (or `StateNotifierProvider`) that:
 
 - Reads `activeOrdersProvider` to find the first order with `OrderStatus.onTheWay`.
-- Reads `locationProvider` for the live driver `LatLng` (emitted by the tracking screen's WS connection).
+- Reads `locationProvider` for the live rider `LatLng` (emitted by the tracking screen's WS connection).
 - Calls `RoutingService.getRoute(shopPoint, destPoint)` to fetch/cache the road-following polyline.
 - Derives `destPoint` from the active order's delivery address lat/lng fields.
 - Derives `shopPoint` from a fixed branch location (configurable constant, Davao City).
@@ -41,7 +41,7 @@ enum LiveMapStatus { loading, active, idle }
 
 class LiveDeliveryMapState {
   final LiveMapStatus status;
-  final LatLng? driverPoint;   // null when idle
+  final LatLng? riderPoint;   // null when idle
   final LatLng shopPoint;
   final LatLng destPoint;
   final List<LatLng> routePoints;
@@ -84,7 +84,7 @@ Becomes a `ConsumerWidget` reading `liveDeliveryMapProvider`.
 └─────────────────────────────────┘
 ```
 
-- Driver marker, shop marker, destination marker via `MapHelpers`.
+- Rider marker, shop marker, destination marker via `MapHelpers`.
 - Route polyline via `MapHelpers.routePolyline()`.
 - `LIVE MAP` badge (yellow, top-left) with pulsing dot.
 - ETA chip (top-right): `~N min` derived from remaining route points.
@@ -121,7 +121,7 @@ Becomes a `ConsumerWidget` reading `liveDeliveryMapProvider`.
 Becomes a `ConsumerStatefulWidget`:
 
 - Reads `liveDeliveryMapProvider` for `shopPoint`, `destPoint`, `routePoints`.
-- Reads `locationProvider` for live `driverPoint` (already a Riverpod provider).
+- Reads `locationProvider` for live `riderPoint` (already a Riverpod provider).
 - On `initState`, calls `WebSocketService.instance.connectLocation(...)` and `subscribeToDelivery(assignmentId)` — this is the **only place** the location WS is connected.
 - Removes the `Timer`-based simulation and the internal `_loadRoute()` call — route comes from the shared provider.
 - Pulse animation on the Live Tracking badge is kept.
@@ -163,8 +163,8 @@ RoutingService ────────┘
 | Case | Behaviour |
 |------|-----------|
 | No active orders | Idle state — Davao static map |
-| Active order but no `onTheWay` status | Idle state (driver not yet assigned/en route) |
-| `locationProvider` returns null | Use `shopPoint` as driver position fallback |
+| Active order but no `onTheWay` status | Idle state (rider not yet assigned/en route) |
+| `locationProvider` returns null | Use `shopPoint` as rider position fallback |
 | `RoutingService` fails / OSRM unreachable | Falls back to `_fallbackRoute` (already implemented) |
 | WS disconnects mid-delivery | Last known `locationProvider` state held; no crash |
 | Delivery address has no lat/lng | Idle state — destPoint cannot be computed |
@@ -174,5 +174,5 @@ RoutingService ────────┘
 ## Out of Scope
 
 - Push notification on delivery status change (separate feature).
-- Driver heading/bearing rotation on the marker.
+- Rider heading/bearing rotation on the marker.
 - Multi-order tracking (only the first `onTheWay` order is shown).

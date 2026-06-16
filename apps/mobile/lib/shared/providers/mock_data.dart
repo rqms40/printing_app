@@ -1,7 +1,7 @@
 import '../models/address.dart';
 import '../models/app_notification.dart';
 import '../models/delivery_assignment.dart';
-import '../models/driver_profile.dart';
+import '../models/rider_profile.dart';
 import '../models/enums.dart';
 import '../models/location_update.dart';
 import '../models/order.dart';
@@ -39,7 +39,7 @@ class MockData {
     updatedAt: _now.subtract(const Duration(days: 2)),
   );
 
-  static final User driverJuan = User(
+  static final User riderJuan = User(
     id: 'usr_002',
     uid: 'firebase_uid_juan',
     email: 'juan.reyes@gmail.com',
@@ -51,7 +51,7 @@ class MockData {
     profileField: 'engineer_contractor',
     organization: 'Grid Logistics',
     printingPreferences: const ['technical_specs'],
-    role: UserRole.driver,
+    role: UserRole.rider,
     isProfileComplete: true,
     isActive: true,
     createdAt: _now.subtract(const Duration(days: 60)),
@@ -61,8 +61,8 @@ class MockData {
   static final User adminUser = User(
     id: 'usr_003',
     uid: 'firebase_uid_admin',
-    email: 'admin@gridprint.ph',
-    fullName: 'Admin GRID',
+    email: 'admin@gridgoprint.ph',
+    fullName: 'Admin GRIDGO',
     phoneNumber: '+639191234567',
     profileCategory: 'professional',
     profileField: 'business_corporate',
@@ -75,7 +75,7 @@ class MockData {
     updatedAt: _now.subtract(const Duration(days: 1)),
   );
 
-  static List<User> get users => [customerMaria, driverJuan, adminUser];
+  static List<User> get users => [customerMaria, riderJuan, adminUser];
 
   // ─── Addresses ──────────────────────────────────────────────────────
 
@@ -130,7 +130,7 @@ class MockData {
     updatedAt: _now.subtract(const Duration(days: 30)),
   );
 
-  /// Davao City delivery address — near the GRID shop, used for live-map testing.
+  /// Davao City delivery address — near the GRIDGO shop, used for live-map testing.
   static final Address addressDavao = Address(
     id: 'addr_004',
     userId: 'usr_001',
@@ -313,8 +313,8 @@ class MockData {
       orderStatus: OrderStatus.onTheWay,
       deliveryOption: 'delivery',
       deliveryAddressId: 'addr_004',
-      assignedDriverId: 'usr_002',
-      trackingLink: 'https://track.gridprint.ph/ORD-10005',
+      assignedRiderId: 'usr_002',
+      trackingLink: 'https://track.gridgoprint.ph/ORD-10005',
       createdAt: _now.subtract(const Duration(days: 3)),
       updatedAt: _now.subtract(const Duration(minutes: 30)),
     ),
@@ -336,7 +336,7 @@ class MockData {
       orderStatus: OrderStatus.delivered,
       deliveryOption: 'delivery',
       deliveryAddressId: 'addr_001',
-      assignedDriverId: 'usr_002',
+      assignedRiderId: 'usr_002',
       createdAt: _now.subtract(const Duration(days: 7)),
       updatedAt: _now.subtract(const Duration(days: 5)),
     ),
@@ -428,9 +428,9 @@ class MockData {
     ),
   ];
 
-  // ─── Driver Profiles ───────────────────────────────────────────────
+  // ─── Rider Profiles ───────────────────────────────────────────────
 
-  static final DriverProfile driverProfileJuan = DriverProfile(
+  static final RiderProfile riderProfileJuan = RiderProfile(
     id: 'dp_001',
     userId: 'usr_002',
     vehicleType: VehicleType.motorcycle,
@@ -444,7 +444,7 @@ class MockData {
     updatedAt: _now.subtract(const Duration(minutes: 5)),
   );
 
-  static final DriverProfile driverProfileCarlos = DriverProfile(
+  static final RiderProfile riderProfileCarlos = RiderProfile(
     id: 'dp_002',
     userId: 'usr_004',
     vehicleType: VehicleType.car,
@@ -458,8 +458,8 @@ class MockData {
     updatedAt: _now.subtract(const Duration(hours: 1)),
   );
 
-  static List<DriverProfile> get driverProfiles =>
-      [driverProfileJuan, driverProfileCarlos];
+  static List<RiderProfile> get riderProfiles =>
+      [riderProfileJuan, riderProfileCarlos];
 
   // ─── Delivery Assignments ──────────────────────────────────────────
 
@@ -468,7 +468,7 @@ class MockData {
     DeliveryAssignment(
       id: 'da_001',
       orderId: 'ord_005',
-      driverId: 'usr_002',
+      riderId: 'usr_002',
       status: DeliveryStatus.onTheWay,
       assignedAt: _now.subtract(const Duration(hours: 1)),
       acceptedAt: _now.subtract(const Duration(minutes: 55)),
@@ -481,7 +481,7 @@ class MockData {
     DeliveryAssignment(
       id: 'da_002',
       orderId: 'ord_006',
-      driverId: 'usr_002',
+      riderId: 'usr_002',
       status: DeliveryStatus.delivered,
       assignedAt: _now.subtract(const Duration(days: 5, hours: 3)),
       acceptedAt: _now.subtract(const Duration(days: 5, hours: 2, minutes: 50)),
@@ -497,7 +497,7 @@ class MockData {
     DeliveryAssignment(
       id: 'da_003',
       orderId: 'ord_004',
-      driverId: 'usr_002',
+      riderId: 'usr_002',
       status: DeliveryStatus.assigned,
       assignedAt: _now.subtract(const Duration(minutes: 10)),
       createdAt: _now.subtract(const Duration(minutes: 10)),
@@ -507,7 +507,7 @@ class MockData {
     DeliveryAssignment(
       id: 'da_004',
       orderId: 'ord_004',
-      driverId: 'usr_004',
+      riderId: 'usr_004',
       status: DeliveryStatus.declined,
       assignedAt: _now.subtract(const Duration(hours: 2)),
       declineReason: 'Too far from current location',
@@ -518,7 +518,7 @@ class MockData {
     DeliveryAssignment(
       id: 'da_005',
       orderId: 'ord_003',
-      driverId: 'usr_002',
+      riderId: 'usr_002',
       status: DeliveryStatus.pickedUp,
       assignedAt: _now.subtract(const Duration(hours: 3)),
       acceptedAt: _now.subtract(const Duration(hours: 2, minutes: 55)),
@@ -532,7 +532,7 @@ class MockData {
 
   static List<LocationUpdate> get locationUpdates {
     // Realistic route along actual Manila roads:
-    // GRID Print Shop (Makati, Ayala Ave) → QC (Katipunan Ave)
+    // GRIDGO Print Shop (Makati, Ayala Ave) → QC (Katipunan Ave)
     // Following: Ayala Ave → EDSA northbound → Ortigas → EDSA → Katipunan
     const routeCoords = [
       (14.5510, 121.0230), // Ayala Ave, Makati (start/shop)
@@ -615,14 +615,14 @@ class MockData {
       id: 'osh_005',
       orderId: 'ord_005',
       fromStatus: OrderStatus.readyForDispatch,
-      toStatus: OrderStatus.driverAssigned,
+      toStatus: OrderStatus.riderAssigned,
       changedByUserId: 'usr_003',
       createdAt: _now.subtract(const Duration(hours: 1)),
     ),
     OrderStatusHistory(
       id: 'osh_006',
       orderId: 'ord_005',
-      fromStatus: OrderStatus.driverAssigned,
+      fromStatus: OrderStatus.riderAssigned,
       toStatus: OrderStatus.pickedUp,
       changedByUserId: 'usr_002',
       createdAt: _now.subtract(const Duration(minutes: 40)),
@@ -726,7 +726,7 @@ class MockData {
       id: 'notif_004',
       userId: 'usr_001',
       orderId: 'ord_005',
-      title: 'Driver On the Way',
+      title: 'Rider On the Way',
       message: 'Juan Reyes is on the way with your order ORD-10005.',
       type: 'delivery_update',
       isRead: false,
@@ -765,7 +765,7 @@ class MockData {
     AppNotification(
       id: 'notif_008',
       userId: 'usr_001',
-      title: 'Welcome to GRID!',
+      title: 'Welcome to GRIDGO!',
       message: 'Start your first order and enjoy premium printing services delivered to your doorstep.',
       type: 'promo',
       isRead: true,
@@ -796,7 +796,7 @@ class MockData {
       userId: 'usr_001',
       orderId: 'ord_004',
       title: 'Ready for Dispatch',
-      message: 'Your order ORD-10004 is ready and a driver will be assigned shortly.',
+      message: 'Your order ORD-10004 is ready and a rider will be assigned shortly.',
       type: 'order_update',
       isRead: false,
       createdAt: _now.subtract(const Duration(hours: 4)),

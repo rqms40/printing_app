@@ -1,6 +1,6 @@
 import type { DashboardKPIs, ChartDataPoint } from "@/types/dashboard";
 import type { Order } from "@/types/order";
-import type { DriverProfile } from "@/types/driver";
+import type { RiderProfile } from "@/types/rider";
 import type { ServiceCategory, SpecOption, ServiceAddon } from "@/types/products";
 
 export const mockKPIs: DashboardKPIs = {
@@ -46,7 +46,7 @@ export const mockOrders: Order[] = [
     user_id: "usr_001",
     category: "paper",
     file_name: "thesis_final.pdf",
-    file_url: "https://storage.grid.ph/files/thesis_final.pdf",
+    file_url: "https://storage.gridgo.ph/files/thesis_final.pdf",
     paper_specs: {
       paper_size: "a4",
       color_mode: "full_color",
@@ -135,7 +135,7 @@ export const mockOrders: Order[] = [
     payment_status: "paid",
     order_status: "delivered",
     delivery_option: "delivery",
-    assigned_driver_id: "drv_001",
+    assigned_rider_id: "rdr_001",
     created_at: "2026-03-20T10:00:00Z",
     updated_at: "2026-03-25T14:00:00Z",
   },
@@ -164,9 +164,9 @@ export const mockOrders: Order[] = [
   },
 ];
 
-export const mockDrivers: DriverProfile[] = [
+export const mockRiders: RiderProfile[] = [
   {
-    id: "drv_001",
+    id: "rdr_001",
     user_id: "usr_010",
     full_name: "Juan Reyes",
     vehicle_type: "motorcycle",
@@ -178,7 +178,7 @@ export const mockDrivers: DriverProfile[] = [
     updated_at: "2026-03-29T10:00:00Z",
   },
   {
-    id: "drv_002",
+    id: "rdr_002",
     user_id: "usr_011",
     full_name: "Marco dela Cruz",
     vehicle_type: "motorcycle",
@@ -190,7 +190,7 @@ export const mockDrivers: DriverProfile[] = [
     updated_at: "2026-03-29T09:00:00Z",
   },
   {
-    id: "drv_003",
+    id: "rdr_003",
     user_id: "usr_012",
     full_name: "Carlos Santos",
     vehicle_type: "car",
@@ -206,7 +206,7 @@ export const mockDrivers: DriverProfile[] = [
 export interface DeliveryAssignment {
   id: string;
   order_id: string;
-  driver_id: string;
+  rider_id: string;
   status: string;
   earnings: number;
   date: string;
@@ -216,7 +216,7 @@ export const mockDeliveries: DeliveryAssignment[] = [
   {
     id: "da_001",
     order_id: "ORD-00147",
-    driver_id: "drv_001",
+    rider_id: "rdr_001",
     status: "On the Way",
     earnings: 120,
     date: "Mar 27, 2026",
@@ -224,7 +224,7 @@ export const mockDeliveries: DeliveryAssignment[] = [
   {
     id: "da_002",
     order_id: "ORD-00148",
-    driver_id: "drv_001",
+    rider_id: "rdr_001",
     status: "Delivered",
     earnings: 150,
     date: "Mar 26, 2026",
@@ -232,7 +232,7 @@ export const mockDeliveries: DeliveryAssignment[] = [
   {
     id: "da_005",
     order_id: "ORD-00149",
-    driver_id: "drv_002",
+    rider_id: "rdr_002",
     status: "Picked Up",
     earnings: 90,
     date: "Mar 27, 2026",
@@ -240,7 +240,7 @@ export const mockDeliveries: DeliveryAssignment[] = [
   {
     id: "da_004",
     order_id: "ORD-00150",
-    driver_id: "drv_003",
+    rider_id: "rdr_003",
     status: "Declined",
     earnings: 0,
     date: "Mar 27, 2026",

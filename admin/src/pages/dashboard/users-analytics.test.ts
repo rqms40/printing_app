@@ -25,7 +25,7 @@ describe("users analytics data", () => {
           profile_completion_rate: 84.5,
           role_counts: {
             customers: 110,
-            drivers: 10,
+            riders: 10,
             admins: 4,
           },
         },
@@ -63,7 +63,7 @@ describe("users analytics data", () => {
         profile_completion_rate: 84.5,
         role_counts: {
           customers: 110,
-          drivers: 10,
+          riders: 10,
           admins: 4,
         },
       },
@@ -160,7 +160,7 @@ describe("users analytics data", () => {
         profile_completion_rate: 45,
         role_counts: {
           customers: 7,
-          drivers: 0,
+          riders: 0,
           admins: 0,
         },
       },
@@ -184,7 +184,7 @@ describe("users analytics data", () => {
           profile_completion_rate: 101,
           role_counts: {
             customers: 110,
-            drivers: 10,
+            riders: 10,
             admins: 4,
           },
         },
@@ -209,7 +209,7 @@ describe("users analytics data", () => {
           profile_completion_rate: 101,
           role_counts: {
             customers: 110,
-            drivers: 10,
+            riders: 10,
             admins: 4,
           },
         },
@@ -261,7 +261,7 @@ describe("users analytics data", () => {
         profile_completion_rate: 84.5,
         role_counts: {
           customers: 110,
-          drivers: 10,
+          riders: 10,
           admins: 4,
         },
       },

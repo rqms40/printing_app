@@ -41,7 +41,7 @@ void main() {
     expect(find.text('GCash'), findsOneWidget);
     expect(find.text('Maya'), findsOneWidget);
     expect(find.text('Cash on Delivery'), findsOneWidget);
-    expect(find.text('GRID Credits'), findsOneWidget);
+    expect(find.text('GRIDGO Credits'), findsOneWidget);
     await tester.tap(find.text('Maya'));
     await tester.pump();
     await tester.tap(find.text('Use this'));
@@ -187,7 +187,7 @@ void main() {
     expect(find.text('GCash'), findsOneWidget);
     expect(find.text('Maya'), findsOneWidget);
     expect(find.text('Cash on Delivery'), findsOneWidget);
-    expect(find.text('GRID Credits'), findsOneWidget);
+    expect(find.text('GRIDGO Credits'), findsOneWidget);
     expect(find.text('Temporarily unavailable'), findsNWidgets(3));
     expect(find.text('Top up'), findsNothing);
 
@@ -198,7 +198,7 @@ void main() {
     expect(picked, isNull);
     expect(find.text('Choose payment'), findsOneWidget);
 
-    await tester.tap(find.text('GRID Credits'));
+    await tester.tap(find.text('GRIDGO Credits'));
     await tester.pump();
     await tester.tap(find.text('Use this'));
     await tester.pumpAndSettle();

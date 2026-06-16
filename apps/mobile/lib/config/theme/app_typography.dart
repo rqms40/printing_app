@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Typography scale for GRID.
+/// Typography scale for GRIDGO.
 ///
 /// [display] uses Poppins ExtraBold for clean, modern brand moments.
 /// All other headings and UI text use Satoshi (geometric sans-serif)

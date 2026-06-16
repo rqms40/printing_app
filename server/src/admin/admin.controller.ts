@@ -13,7 +13,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles, RolesGuard } from '../auth/guards/roles.guard';
 import { OrdersService } from '../orders/orders.service';
-import { DriversService } from '../drivers/drivers.service';
+import { RidersService } from '../riders/riders.service';
 import { UpdateStatusDto } from '../orders/dto/update-status.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
@@ -27,11 +27,11 @@ import {
 } from './user-insights';
 import { TamSurvey } from '../tam-surveys/entities/tam-survey.entity';
 import { TamSurveySettings } from '../tam-surveys/entities/tam-survey-settings.entity';
-import { DriverProfile } from '../drivers/entities/driver-profile.entity';
+import { RiderProfile } from '../riders/entities/rider-profile.entity';
 import {
   DeliveryAssignment,
   DeliveryStatus,
-} from '../drivers/entities/delivery-assignment.entity';
+} from '../riders/entities/delivery-assignment.entity';
 import { DeliveryDestination } from '../orders/entities/delivery-destination.entity';
 
 type AnalyticsPeriod = '7D' | '30D' | '6M';
@@ -61,7 +61,7 @@ const MONTH_LABELS = [
 export class AdminController {
   constructor(
     private ordersService: OrdersService,
-    private driversService: DriversService,
+    private ridersService: RidersService,
     private creditsService: CreditsService,
     @InjectRepository(Order)
     private ordersRepo: Repository<Order>,
@@ -71,8 +71,8 @@ export class AdminController {
     private tamSurveysRepo: Repository<TamSurvey>,
     @InjectRepository(TamSurveySettings)
     private tamSurveySettingsRepo: Repository<TamSurveySettings>,
-    @InjectRepository(DriverProfile)
-    private driverProfilesRepo: Repository<DriverProfile>,
+    @InjectRepository(RiderProfile)
+    private riderProfilesRepo: Repository<RiderProfile>,
     @InjectRepository(DeliveryAssignment)
     private deliveryAssignmentsRepo: Repository<DeliveryAssignment>,
   ) {}
@@ -474,7 +474,7 @@ export class AdminController {
       decline_reason: o.declineReason ?? null,
       cancellation_reason: o.cancellationReason ?? null,
       estimated_completion_at: o.estimatedCompletionAt ?? null,
-      assigned_driver_id: o.assignedDriverId ?? null,
+      assigned_rider_id: o.assignedRiderId ?? null,
       created_at: o.createdAt,
       updated_at: o.updatedAt,
       paper_specs: paperSpecs,
@@ -622,19 +622,19 @@ export class AdminController {
     return { success: true };
   }
 
-  // Assign driver to order
+  // Assign rider to order
   @Post('orders/:id/assign')
-  async assignDriver(
+  async assignRider(
     @Param('id', ParseIntPipe) id: number,
-    @Body('driverId') driverId: number,
+    @Body('riderId') riderId: number,
   ) {
-    const driverProfile = await this.driverProfilesRepo.findOneOrFail({
-      where: { id: driverId },
+    const riderProfile = await this.riderProfilesRepo.findOneOrFail({
+      where: { id: riderId },
     });
 
     await this.ordersRepo.update(id, {
-      assignedDriverId: driverProfile.userId,
-      orderStatus: OrderStatus.DRIVER_ASSIGNED,
+      assignedRiderId: riderProfile.userId,
+      orderStatus: OrderStatus.RIDER_ASSIGNED,
     });
 
     let assignment = await this.deliveryAssignmentsRepo.findOne({
@@ -642,13 +642,13 @@ export class AdminController {
     });
 
     if (assignment) {
-      assignment.driverId = driverProfile.id;
+      assignment.riderId = riderProfile.id;
       assignment.status = DeliveryStatus.ASSIGNED;
       assignment.assignedAt = new Date();
     } else {
       assignment = this.deliveryAssignmentsRepo.create({
         orderId: id,
-        driverId: driverProfile.id,
+        riderId: riderProfile.id,
         status: DeliveryStatus.ASSIGNED,
       });
     }
@@ -657,10 +657,10 @@ export class AdminController {
     return this.ordersRepo.findOneOrFail({ where: { id } });
   }
 
-  // All drivers with user info
-  @Get('drivers')
-  async getAllDrivers() {
-    return this.driversService.getAllDriversWithUser();
+  // All riders with user info
+  @Get('riders')
+  async getAllRiders() {
+    return this.ridersService.getAllRidersWithUser();
   }
 
   // All users

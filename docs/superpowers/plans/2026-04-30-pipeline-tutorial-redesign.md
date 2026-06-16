@@ -525,7 +525,7 @@ void main() {
         home: Scaffold(
           body: TutorialBubble(
             icon: HugeIcons.strokeRoundedCoins01,
-            title: 'GRID Credits',
+            title: 'GRIDGO Credits',
             body: 'Pay without GCash.',
             step: 1,
             totalSteps: 2,
@@ -1182,8 +1182,8 @@ Find the existing `_maybeShowHomeTutorial()` method and replace it (and the subs
         TutorialStep(
           targetKey: _creditsTutorialKey,
           icon: HugeIcons.strokeRoundedCoins01,
-          title: 'GRID Credits',
-          body: 'Top up GRID Credits and pay at checkout — no GCash OTP, no app-switching.',
+          title: 'GRIDGO Credits',
+          body: 'Top up GRIDGO Credits and pay at checkout — no GCash OTP, no app-switching.',
           advanceOnSpotlightTap: false,
         ),
         TutorialStep(
@@ -1797,7 +1797,7 @@ Replace the existing method with this pipeline-aware version:
         TutorialStep(
           targetKey: _paymentKey,
           icon: HugeIcons.strokeRoundedCoins01,
-          title: 'Pay with GRID Credits',
+          title: 'Pay with GRIDGO Credits',
           body: 'No OTP, no app-switching. Top up anytime in Profile → Wallet.',
           advanceOnSpotlightTap: false,
         ),
@@ -2011,7 +2011,7 @@ The build artifact is at `build/web/`. Open in a browser and verify:
 
 2. **Post-pipeline home**: return to home. Credits chip and GridBot FAB coach marks fire (auto-positioned correctly — bubble appears ABOVE the FAB, not behind it). Tap "Got it →" through both. Mark `homeFeatures` seen.
 
-3. **Post-pipeline checkout (standalone)**: enter checkout flow without pipeline active. Multi-drop tab + GRID Credits row coach marks fire. Mark `checkoutFeatures` seen.
+3. **Post-pipeline checkout (standalone)**: enter checkout flow without pipeline active. Multi-drop tab + GRIDGO Credits row coach marks fire. Mark `checkoutFeatures` seen.
 
 4. **Tracking**: navigate to tracking. Coach mark fires. Mark `tracking` seen.
 

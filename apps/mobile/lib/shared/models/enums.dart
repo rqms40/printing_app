@@ -1,15 +1,15 @@
-/// All domain enums for GRID with displayName extensions.
+/// All domain enums for GRIDGO with displayName extensions.
 library;
 
-enum UserRole { customer, driver, admin }
+enum UserRole { customer, rider, admin }
 
 extension UserRoleX on UserRole {
   String get displayName {
     switch (this) {
       case UserRole.customer:
         return 'Customer';
-      case UserRole.driver:
-        return 'Driver';
+      case UserRole.rider:
+        return 'Rider';
       case UserRole.admin:
         return 'Admin';
     }
@@ -24,7 +24,7 @@ enum OrderStatus {
   finishingMounting,
   qualityChecked,
   readyForDispatch,
-  driverAssigned,
+  riderAssigned,
   pickedUp,
   onTheWay,
   arrivedAtDestination,
@@ -50,8 +50,8 @@ extension OrderStatusX on OrderStatus {
         return 'Quality Checked';
       case OrderStatus.readyForDispatch:
         return 'Ready for Dispatch';
-      case OrderStatus.driverAssigned:
-        return 'Driver Assigned';
+      case OrderStatus.riderAssigned:
+        return 'Rider Assigned';
       case OrderStatus.pickedUp:
         return 'Picked Up';
       case OrderStatus.onTheWay:
@@ -103,7 +103,7 @@ extension PaymentMethodX on PaymentMethod {
       case PaymentMethod.cod:
         return 'Cash on Delivery';
       case PaymentMethod.gridCredits:
-        return 'GRID Credits';
+        return 'GRIDGO Credits';
     }
   }
 }

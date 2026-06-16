@@ -1,4 +1,4 @@
-# GRID — Next Steps Implementation Plan (v2)
+# GRIDGO — Next Steps Implementation Plan (v2)
 
 **Date:** 2026-03-28
 **Status:** Phase 1-2 Complete (frontend demo), Phase 3+ Not Started
@@ -12,7 +12,7 @@
 |--------|-------|
 | Dart files | 136 |
 | Lines of code | 19,333 |
-| Screens | 34 (11 customer, 5 driver, 5 admin, 4 auth, 9 order flow) |
+| Screens | 34 (11 customer, 5 rider, 5 admin, 4 auth, 9 order flow) |
 | Tests | 73 passing (12 test files, ~5% coverage) |
 | Providers | 13 Riverpod StateNotifiers (all mock data) |
 | Models | 13 data classes (99% aligned with PRD schema) |
@@ -115,7 +115,7 @@ fields:
   cancelledAt: DateTime?
   deliveryOption: String, default="'pickup'"
   deliveryAddressId: int?
-  assignedDriverId: int?
+  assignedRiderId: int?
   estimatedCompletionAt: DateTime?
   adminNotes: String?
   trackingLink: String?
@@ -178,13 +178,13 @@ class OrderEndpoint extends Endpoint {
 
 - Address CRUD with max 5 per user constraint
 - Admin dashboard aggregation queries
-- Driver assignment logic
+- Rider assignment logic
 - File upload to Serverpod Storage (S3-compatible)
 
-### 3E. Driver & Location Endpoints (Days 10-11)
+### 3E. Rider & Location Endpoints (Days 10-11)
 
 ```dart
-class DriverEndpoint extends Endpoint {
+class RiderEndpoint extends Endpoint {
   Future<DeliveryAssignment> acceptAssignment(Session session, int id) async { ... }
   Future<DeliveryAssignment> updateDeliveryStatus(Session session, int id, String status) async { ... }
   Stream<DeliveryAssignment> streamActiveDelivery(Session session) async* { ... }
@@ -192,7 +192,7 @@ class DriverEndpoint extends Endpoint {
 
 class LocationEndpoint extends Endpoint {
   Future<void> updateLocation(Session session, double lat, double lng) async { ... }
-  Stream<LocationUpdate> streamDriverLocation(Session session, int assignmentId) async* { ... }
+  Stream<LocationUpdate> streamRiderLocation(Session session, int assignmentId) async* { ... }
 }
 ```
 
@@ -267,8 +267,8 @@ await for (final order in stream) {
   // Update UI with new status
 }
 
-// Driver: GPS location streaming
-final locationStream = client.location.streamDriverLocation(assignmentId);
+// Rider: GPS location streaming
+final locationStream = client.location.streamRiderLocation(assignmentId);
 ```
 
 ### 4C. Offline Queue
@@ -284,7 +284,7 @@ final locationStream = client.location.streamDriverLocation(assignmentId);
 ### Security
 - Rate limiting: 5 auth attempts/min/IP
 - PayMongo webhook HMAC signature verification
-- Role-based endpoint guards (customer ≠ admin ≠ driver)
+- Role-based endpoint guards (customer ≠ admin ≠ rider)
 - File upload: MIME whitelist, 50MB paper / 200MB 3D limits
 - Session tokens in `flutter_secure_storage`
 - RA 10173 compliance (Philippine Data Privacy Act)
@@ -307,7 +307,7 @@ final locationStream = client.location.streamDriverLocation(assignmentId);
 - Android: Google Play Store
 - iOS: App Store (requires macOS build machine)
 - PWA: Web deployment with service worker
-- App icon: GRID 3×3 dot logo
+- App icon: GRIDGO 3×3 dot logo
 
 ---
 
@@ -315,10 +315,10 @@ final locationStream = client.location.streamDriverLocation(assignmentId);
 
 | Feature | Priority | Effort |
 |---------|----------|--------|
-| Auto-driver assignment (nearest) | High | 3 days |
+| Auto-rider assignment (nearest) | High | 3 days |
 | Distance-based delivery pricing | High | 2 days |
-| Customer ratings for drivers | Medium | 2 days |
-| In-app chat (customer ↔ driver) | Medium | 4 days |
+| Customer ratings for riders | Medium | 2 days |
+| In-app chat (customer ↔ rider) | Medium | 4 days |
 | Receipt/invoice PDF generation | Medium | 2 days |
 | Multi-language (Filipino/English) | Low | 3 days |
 | Loyalty points / referral codes | Low | 3 days |
@@ -336,7 +336,7 @@ final locationStream = client.location.streamDriverLocation(assignmentId);
 | 🟡 **Next** | Auth endpoints | 2 days | Critical | User management |
 | 🟡 **Next** | Order endpoints | 3 days | Critical | Core business |
 | 🟡 **Next** | File upload endpoint | 1 day | High | Order creation |
-| 🟠 **Soon** | Driver/Location endpoints | 2 days | High | Delivery tracking |
+| 🟠 **Soon** | Rider/Location endpoints | 2 days | High | Delivery tracking |
 | 🟠 **Soon** | PayMongo integration | 2 days | High | Revenue |
 | 🟠 **Soon** | FCM push notifications | 2 days | Medium | Engagement |
 | 🟢 **Later** | Test coverage (60%+) | 3 days | Medium | Quality |

@@ -60,7 +60,7 @@ class _QueueOrderCardState extends State<QueueOrderCard> {
           'Quality Checked',
         );
       case OrderStatus.readyForDispatch:
-      case OrderStatus.driverAssigned:
+      case OrderStatus.riderAssigned:
         return _QueueVisual(
           HugeIcons.strokeRoundedPackage,
           colors.success.withValues(alpha: 0.1),
