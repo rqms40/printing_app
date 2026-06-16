@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import type { ForwardRefExoticComponent, HTMLAttributes, RefAttributes } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PhoneScene } from './components/PhoneScene';
 import { Menu, X, Phone, MessageCircle, Zap, ShieldCheck, ChevronUp } from 'lucide-react';
@@ -130,8 +131,22 @@ function ProcessSection() {
   );
 }
 
-function FeatureCard({ icon: Icon, title, desc }: { icon: any, title: string, desc: string }) {
-  const iconRef = useRef<any>(null);
+type AnimatedIconHandle = {
+  startAnimation: () => void;
+  stopAnimation: () => void;
+};
+
+type AnimatedIconProps = HTMLAttributes<HTMLDivElement> & {
+  size?: number;
+  animateOnHover?: boolean;
+};
+
+type AnimatedIconComponent = ForwardRefExoticComponent<
+  AnimatedIconProps & RefAttributes<AnimatedIconHandle>
+>;
+
+function FeatureCard({ icon: Icon, title, desc }: { icon: AnimatedIconComponent, title: string, desc: string }) {
+  const iconRef = useRef<AnimatedIconHandle>(null);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -459,7 +474,16 @@ function AboutSection() {
   );
 }
 
-function TeamMember({ image, role, name, quote, delay = 0, reverse = false }: any) {
+type TeamMemberProps = {
+  image: string;
+  role: string;
+  name: string;
+  quote: string;
+  delay?: number;
+  reverse?: boolean;
+};
+
+function TeamMember({ image, role, name, quote, delay = 0, reverse = false }: TeamMemberProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 50, filter: 'blur(20px)' }}

@@ -9,7 +9,7 @@ const isMobile = () => window.innerWidth < 768
 
 // ─── GRIDGO text layers (zero-gravity scatter) ───────────────────────────────
 function GridTextLayer({ index }: { index: number }) {
-  const mesh = useRef<any>(null)
+  const mesh = useRef<(THREE.Mesh & { fillOpacity: number; outlineOpacity: number })>(null)
 
   // Each layer has a fixed offset so the stack looks tight at rest
   const baseZ = -(index * 0.18)
@@ -189,12 +189,21 @@ function PhoneRig() {
 }
 
 // ─── Error boundary ─────────────────────────────────────────────────────────
-class ErrorBoundary extends React.Component<any, { hasError: boolean; error: any }> {
-  constructor(props: any) {
+type ErrorBoundaryProps = {
+  children: React.ReactNode
+}
+
+type ErrorBoundaryState = {
+  hasError: boolean
+  error: unknown
+}
+
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
     super(props)
     this.state = { hasError: false, error: null }
   }
-  static getDerivedStateFromError(error: any) {
+  static getDerivedStateFromError(error: unknown): ErrorBoundaryState {
     return { hasError: true, error }
   }
   render() {

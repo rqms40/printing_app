@@ -38,10 +38,10 @@ export function SupportPage() {
 
       setStatus('success');
       setFormData({ name: '', email: '', subject: '', message: '' });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Submission error:', error);
       setStatus('error');
-      setErrorMessage(error.message || 'An error occurred. Please try again.');
+      setErrorMessage(error instanceof Error ? error.message : 'An error occurred. Please try again.');
     }
   };
 
