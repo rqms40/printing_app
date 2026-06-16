@@ -1,11 +1,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// API Configuration — change kDefaultServerUrl to point to your server.
+// API Configuration — do NOT hardcode your IP here.
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// To override at build time without editing this file:
-//   flutter build web --release --dart-define=SERVER_URL=http://192.168.x.x:3000
+// Each developer keeps a local apps/mobile/dart_defines.json (gitignored):
+//   { "SERVER_URL": "http://192.168.x.x:3000" }
 //
-// Otherwise just update the line below.
+// Build / run commands:
+//   flutter build web --release --no-tree-shake-icons --dart-define-from-file=dart_defines.json
+//   flutter run -d chrome --dart-define-from-file=dart_defines.json
+//
+// Copy dart_defines.json.example -> dart_defines.json and set your LAN IP.
 
 const String kDefaultServerUrl = 'http://localhost:3000';
 

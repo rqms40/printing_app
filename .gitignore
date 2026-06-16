@@ -19,6 +19,9 @@ Thumbs.db
 *.ipr
 *.iws
 
+# === Flutter local dev config (each dev keeps their own, never commit) ===
+apps/mobile/dart_defines.json
+
 # === Flutter / Dart (apps/mobile/) ===
 **/doc/api/
 **/ios/Flutter/.last_build_id
