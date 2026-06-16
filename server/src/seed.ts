@@ -192,7 +192,7 @@ async function seed() {
   const app = await NestFactory.createApplicationContext(AppModule);
   const ds = app.get(DataSource);
 
-  console.log('🌱 Seeding GRID database...\n');
+  console.log('🌱 Seeding GRIDGO database...\n');
 
   // Check if database already has data
   const [existingUsers] = await typedQuery<CountRow>(
@@ -208,7 +208,7 @@ async function seed() {
 
   const users = [
     {
-      email: 'maria@gridprint.ph',
+      email: 'maria@gridgoprint.ph',
       password_hash: passwordHash,
       full_name: 'Maria Santos',
       phone_number: '+639171234567',
@@ -226,7 +226,7 @@ async function seed() {
       is_active: true,
     },
     {
-      email: 'juan@gridprint.ph',
+      email: 'juan@gridgoprint.ph',
       password_hash: passwordHash,
       full_name: 'Juan Reyes',
       phone_number: '+639181234567',
@@ -236,12 +236,12 @@ async function seed() {
       course: null,
       organization: 'Grid Logistics',
       printing_preferences: [PrintingPreference.TECHNICAL_SPECS].join(','),
-      role: 'driver',
+      role: 'rider',
       is_profile_complete: true,
       is_active: true,
     },
     {
-      email: 'admin@gridprint.ph',
+      email: 'admin@gridgoprint.ph',
       password_hash: passwordHash,
       full_name: 'Admin User',
       phone_number: '+639191234567',
@@ -265,7 +265,7 @@ async function seed() {
       notifications, payment_transactions, credit_transactions, credit_settings,
       delivery_assignments, order_status_history,
       order_items, orders, batch_orders,
-      addresses, driver_profiles, file_metadata,
+      addresses, rider_profiles, file_metadata,
       beta_mode_settings,
       tam_survey_settings, tam_surveys, tam_survey_requirements,
       daily_grid_cards,
@@ -316,17 +316,17 @@ async function seed() {
       ],
     );
   }
-  console.log('✅ 3 users created (maria/customer, juan/driver, admin)');
+  console.log('✅ 3 users created (maria/customer, juan/rider, admin)');
 
   // Get user IDs
   const [maria] = await typedQuery<IdRow>(
     ds,
-    "SELECT id FROM users WHERE email = 'maria@gridprint.ph'",
+    "SELECT id FROM users WHERE email = 'maria@gridgoprint.ph'",
   );
 
   const [juan] = await typedQuery<IdRow>(
     ds,
-    "SELECT id FROM users WHERE email = 'juan@gridprint.ph'",
+    "SELECT id FROM users WHERE email = 'juan@gridgoprint.ph'",
   );
   const mariaId: number = maria.id;
   const juanId: number = juan.id;
@@ -382,13 +382,13 @@ async function seed() {
   }
   console.log('✅ 2 addresses created for Maria');
 
-  // ─── Driver Profile ─────────────────────────────────────────────────
+  // ─── Rider Profile ─────────────────────────────────────────────────
   await ds.query(
-    `INSERT INTO driver_profiles (user_id, vehicle_type, plate_number, license_number, is_available)
+    `INSERT INTO rider_profiles (user_id, vehicle_type, plate_number, license_number, is_available)
      VALUES ($1, $2, $3, $4, $5)`,
     [juanId, 'motorcycle', 'ABC 1234', 'N01-23-456789', true],
   );
-  console.log('✅ Driver profile created for Juan');
+  console.log('✅ Rider profile created for Juan');
 
   // ─── Orders ─────────────────────────────────────────────────────────
   const orders = [
@@ -508,25 +508,25 @@ async function seed() {
   console.log('✅ Order items added to 6 orders');
 
   // ─── Delivery Assignment ────────────────────────────────────────────
-  // Get driver profile ID (FK references driver_profiles, not users)
-  const [driverProfile] = await typedQuery<IdRow>(
+  // Get rider profile ID (FK references rider_profiles, not users)
+  const [riderProfile] = await typedQuery<IdRow>(
     ds,
-    'SELECT id FROM driver_profiles WHERE user_id = $1',
+    'SELECT id FROM rider_profiles WHERE user_id = $1',
     [juanId],
   );
-  const driverProfileId: number = driverProfile.id;
+  const riderProfileId: number = riderProfile.id;
 
   const onTheWayOrder: OrderRow | undefined = orderRows.find(
     (r: OrderRow) => r.order_id === 'ORD-10004',
   );
   if (onTheWayOrder) {
     await ds.query(
-      `INSERT INTO delivery_assignments (order_id, driver_id, status, accepted_at, picked_up_at, on_the_way_at)
+      `INSERT INTO delivery_assignments (order_id, rider_id, status, accepted_at, picked_up_at, on_the_way_at)
        VALUES ($1, $2, $3, NOW(), NOW(), NOW())`,
-      [onTheWayOrder.id, driverProfileId, 'on_the_way'],
+      [onTheWayOrder.id, riderProfileId, 'on_the_way'],
     );
-    // Update order with assigned driver
-    await ds.query('UPDATE orders SET assigned_driver_id = $1 WHERE id = $2', [
+    // Update order with assigned rider
+    await ds.query('UPDATE orders SET assigned_rider_id = $1 WHERE id = $2', [
       juanId,
       onTheWayOrder.id,
     ]);
@@ -556,7 +556,7 @@ async function seed() {
     {
       user_id: mariaId,
       order_ref: 'ORD-10004' as string | null,
-      title: 'Driver On The Way',
+      title: 'Rider On The Way',
       message: 'Juan is delivering your order ORD-10004.',
       type: 'delivery_update',
       is_read: false,
@@ -580,7 +580,7 @@ async function seed() {
     {
       user_id: mariaId,
       order_ref: null as string | null,
-      title: 'Welcome to GRID!',
+      title: 'Welcome to GRIDGO!',
       message: 'Start your first order and enjoy premium printing.',
       type: 'promo',
       is_read: true,
@@ -1204,7 +1204,7 @@ async function seed() {
         9: 5,
       }),
       open_forum_feedback:
-        'GRID is amazing! It saved me so much time printing my architectural plans. The UI could be slightly better though.',
+        'GRIDGO is amazing! It saved me so much time printing my architectural plans. The UI could be slightly better though.',
     },
     {
       user_id: juanId,
@@ -1375,9 +1375,9 @@ async function seed() {
 
   console.log('\n🎉 Seed complete!\n');
   console.log('Login credentials (all use password: password123):');
-  console.log('  Customer: maria@gridprint.ph');
-  console.log('  Driver:   juan@gridprint.ph');
-  console.log('  Admin:    admin@gridprint.ph');
+  console.log('  Customer: maria@gridgoprint.ph');
+  console.log('  Rider:   juan@gridgoprint.ph');
+  console.log('  Admin:    admin@gridgoprint.ph');
 
   await app.close();
 }

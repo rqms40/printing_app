@@ -265,7 +265,7 @@ class _ThreeDCubePainter extends CustomPainter {
 // ---------------------------------------------------------------------------
 
 /// A stylized delivery route with dotted path, origin, and destination.
-/// Used in driver screens and tracking empty states.
+/// Used in rider screens and tracking empty states.
 class DeliveryIllustration extends StatelessWidget {
   const DeliveryIllustration({
     super.key,

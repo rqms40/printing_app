@@ -1,6 +1,18 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+} from '@nestjs/common';
 import { SupportTicketsService } from './support-tickets.service';
-import { CreateSupportTicketDto, ReplySupportTicketDto } from './dto/create-support-ticket.dto';
+import {
+  CreateSupportTicketDto,
+  ReplySupportTicketDto,
+} from './dto/create-support-ticket.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/guards/roles.guard';
@@ -35,7 +47,6 @@ export class SupportTicketsController {
   reply(@Param('id') id: string, @Body() replyDto: ReplySupportTicketDto) {
     return this.supportTicketsService.reply(id, replyDto);
   }
-
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)

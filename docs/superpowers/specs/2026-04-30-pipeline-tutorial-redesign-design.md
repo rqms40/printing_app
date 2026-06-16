@@ -22,7 +22,7 @@ enum TutorialKey {
   onboarding,        // gates the role onboarding slides (unchanged)
   pipeline,          // multi-screen first-print walkthrough (new)
   homeFeatures,      // Credits chip + GridBot FAB on home (new)
-  checkoutFeatures,  // Multi-drop tab + GRID Credits payment (renamed from checkout)
+  checkoutFeatures,  // Multi-drop tab + GRIDGO Credits payment (renamed from checkout)
   tracking,          // live-map coach mark (unchanged in behavior, gate updated)
 }
 ```
@@ -291,7 +291,7 @@ All gated by `pipeline ∈ seen ∧ <thisKey> ∉ seen`.
 No welcome card. Coach mark sequence directly:
 
 - **Step 1** — Credits chip (top-right header): auto-positions below
-  - Body: `"Top up GRID Credits and pay at checkout — no GCash OTP, no app-switching."`
+  - Body: `"Top up GRIDGO Credits and pay at checkout — no GCash OTP, no app-switching."`
 - **Step 2** — GridBot FAB (bottom-right): auto-positions above (← fixes the chat FAB collision)
   - Shape: `ShapeLightFocus.Circle`
   - Body: `"Need help? GridBot answers anything — order specs, pricing, delivery status. 24/7."`
@@ -302,7 +302,7 @@ No welcome card. Coach mark sequence directly:
 - **Step 1** — Multi-drop tab in `CheckoutSegmented`
   - Body: `"Send prints to different addresses in one order. One rider, all the stops."`
 - **Step 2** — `CheckoutPaymentCard`
-  - Body: `"Pay with GRID Credits — no OTP, no app-switching."`
+  - Body: `"Pay with GRIDGO Credits — no OTP, no app-switching."`
 - On finish → `markSeen(checkoutFeatures)`.
 
 The pipeline walkthrough's checkout steps (5/6/7/8) do NOT touch these specific tabs/rows — they highlight whole sections. So `checkoutFeatures` re-firing on the next visit is not a duplicate.

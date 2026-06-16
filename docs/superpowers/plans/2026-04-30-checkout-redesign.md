@@ -1593,7 +1593,7 @@ void main() {
       container: container,
       child: const MaterialApp(home: Scaffold(body: CheckoutPaymentCard())),
     ));
-    expect(find.textContaining('GRID Credits'), findsOneWidget);
+    expect(find.textContaining('GRIDGO Credits'), findsOneWidget);
     expect(find.text('Change'), findsOneWidget);
   });
 }
@@ -1627,7 +1627,7 @@ String _labelFor(PaymentMethod m) {
     case PaymentMethod.cod:
       return 'Cash on Delivery';
     case PaymentMethod.gridCredits:
-      return 'GRID Credits';
+      return 'GRIDGO Credits';
   }
 }
 
@@ -1923,7 +1923,7 @@ void main() {
     await tester.tap(find.text('Pickup'));
     await tester.pump();
     expect(container.read(checkoutProvider).mode, DeliveryMode.pickup);
-    expect(find.textContaining('GRID Print Shop'), findsOneWidget);
+    expect(find.textContaining('GRIDGO Print Shop'), findsOneWidget);
   });
 }
 ```
@@ -2042,7 +2042,7 @@ class _PickupCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Padding(
       padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
-      child: Text('🏪 GRID Print Shop · 123 Print St, Makati'),
+      child: Text('🏪 GRIDGO Print Shop · 123 Print St, Makati'),
     );
   }
 }
@@ -2572,7 +2572,7 @@ void main() {
     expect(find.text('GCash'), findsOneWidget);
     expect(find.text('Maya'), findsOneWidget);
     expect(find.text('Cash on Delivery'), findsOneWidget);
-    expect(find.text('GRID Credits'), findsOneWidget);
+    expect(find.text('GRIDGO Credits'), findsOneWidget);
     await tester.tap(find.text('Maya'));
     await tester.tap(find.text('Use this'));
     await tester.pumpAndSettle();
@@ -2636,7 +2636,7 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
       case PaymentMethod.cod:
         return 'Cash on Delivery';
       case PaymentMethod.gridCredits:
-        return 'GRID Credits';
+        return 'GRIDGO Credits';
     }
   }
 

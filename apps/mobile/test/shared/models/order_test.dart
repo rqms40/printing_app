@@ -93,7 +93,7 @@ void main() {
       expect(minimalOrder.paperSpecs, isNull);
       expect(minimalOrder.threeDSpecs, isNull);
       expect(minimalOrder.declineReason, isNull);
-      expect(minimalOrder.assignedDriverId, isNull);
+      expect(minimalOrder.assignedRiderId, isNull);
       expect(minimalOrder.deliveryAssignmentId, isNull);
       expect(minimalOrder.lineItems.single.category, 'paper');
       expect(minimalOrder.orderTypeLabel, 'Paper Printing');
@@ -137,12 +137,12 @@ void main() {
     test('copyWith updates specified fields only', () {
       final updated = sampleOrder.copyWith(
         orderStatus: OrderStatus.printingInProgress,
-        assignedDriverId: 'usr_002',
+        assignedRiderId: 'usr_002',
         deliveryAssignmentId: 'da_001',
       );
 
       expect(updated.orderStatus, OrderStatus.printingInProgress);
-      expect(updated.assignedDriverId, 'usr_002');
+      expect(updated.assignedRiderId, 'usr_002');
       expect(updated.deliveryAssignmentId, 'da_001');
       // Unchanged fields remain the same
       expect(updated.id, sampleOrder.id);
@@ -264,7 +264,7 @@ void main() {
     test('provides notifications for all user roles', () {
       final userIds = MockData.notifications.map((n) => n.userId).toSet();
       expect(userIds, contains('usr_001')); // customer
-      expect(userIds, contains('usr_002')); // driver
+      expect(userIds, contains('usr_002')); // rider
       expect(userIds, contains('usr_003')); // admin
     });
   });

@@ -284,7 +284,7 @@ function ReadyState({ analytics }: { analytics: AdminUsersAnalyticsRecord }) {
             <Space direction="vertical" size={24} style={{ width: "100%" }}>
               {[
                 ["Customers", analytics.summary.role_counts.customers],
-                ["Drivers", analytics.summary.role_counts.drivers],
+                ["Riders", analytics.summary.role_counts.riders],
                 ["Admins", analytics.summary.role_counts.admins],
               ].map(([label, value]) => (
                 <div key={label} style={{ display: "flex", justifyContent: "space-between" }}>

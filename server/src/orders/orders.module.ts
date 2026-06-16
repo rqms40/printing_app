@@ -17,7 +17,7 @@ import { CreditsModule } from '../credits/credits.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { FilesModule } from '../files/files.module';
 import { FileMetadata } from '../files/entities/file-metadata.entity';
-import { DeliveryAssignment } from '../drivers/entities/delivery-assignment.entity';
+import { DeliveryAssignment } from '../riders/entities/delivery-assignment.entity';
 import { Address } from '../addresses/entities/address.entity';
 import { DeliverySlotsModule } from '../delivery-slots/delivery-slots.module';
 import { PrinterProfileModule } from '../printer-profile/printer-profile.module';

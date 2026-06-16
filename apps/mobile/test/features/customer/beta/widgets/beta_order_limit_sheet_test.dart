@@ -39,7 +39,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text("You've used your beta order"), findsOneWidget);
 
-    await tester.tap(find.text('Got it'));
+    final gotItButton = find.text('Got it');
+    await tester.ensureVisible(gotItButton);
+    await tester.tap(gotItButton);
     await tester.pumpAndSettle();
 
     expect(find.text("You've used your beta order"), findsNothing);

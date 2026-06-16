@@ -14,7 +14,7 @@ class LiveDeliveryMapState {
     required this.status,
     required this.shopPoint,
     required this.destPoint,
-    this.driverPoint,
+    this.riderPoint,
     this.routePoints = const [],
     this.orderId,
     this.deliveryAssignmentId,
@@ -25,7 +25,7 @@ class LiveDeliveryMapState {
   final LiveMapStatus status;
   final LatLng shopPoint;
   final LatLng destPoint;
-  final LatLng? driverPoint;
+  final LatLng? riderPoint;
   final List<LatLng> routePoints;
   final String? orderId;
   final String? deliveryAssignmentId;
@@ -45,7 +45,7 @@ class LiveDeliveryMapState {
   );
 
   factory LiveDeliveryMapState.active({
-    required LatLng driverPoint,
+    required LatLng riderPoint,
     required LatLng shopPoint,
     required LatLng destPoint,
     required List<LatLng> routePoints,
@@ -57,7 +57,7 @@ class LiveDeliveryMapState {
     status: LiveMapStatus.active,
     shopPoint: shopPoint,
     destPoint: destPoint,
-    driverPoint: driverPoint,
+    riderPoint: riderPoint,
     routePoints: routePoints,
     orderId: orderId,
     deliveryAssignmentId: deliveryAssignmentId,
@@ -65,14 +65,14 @@ class LiveDeliveryMapState {
     assignedSlot: assignedSlot,
   );
 
-  /// Index of the route point nearest to [driverPoint].
+  /// Index of the route point nearest to [riderPoint].
   int get nearestRouteIndex {
-    if (driverPoint == null || routePoints.isEmpty) return 0;
+    if (riderPoint == null || routePoints.isEmpty) return 0;
     const distance = Distance();
     var nearest = 0;
     var minDist = double.infinity;
     for (var i = 0; i < routePoints.length; i++) {
-      final d = distance(driverPoint!, routePoints[i]);
+      final d = distance(riderPoint!, routePoints[i]);
       if (d < minDist) {
         minDist = d;
         nearest = i;
@@ -125,12 +125,12 @@ final liveDeliveryMapProvider =
 
       final destPoint = LatLng(latitude, longitude);
 
-      // Fetch route (cached by RoutingService). driverPoint is resolved by
+      // Fetch route (cached by RoutingService). riderPoint is resolved by
       // consumers watching locationProvider directly.
       final routePoints = await RoutingService.getRoute(_shopPoint, destPoint);
 
       return LiveDeliveryMapState.active(
-        driverPoint: _shopPoint, // placeholder; overridden by consumers
+        riderPoint: _shopPoint, // placeholder; overridden by consumers
         shopPoint: _shopPoint,
         destPoint: destPoint,
         routePoints: routePoints,

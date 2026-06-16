@@ -861,7 +861,7 @@ import { OrdersService } from './orders.service';
 import { Order, OrderStatus } from './entities/order.entity';
 import { PaperSpec } from './entities/paper-specs.entity';
 import { ThreeDSpec } from './entities/three-d-specs.entity';
-import { DeliveryAssignment } from '../drivers/entities/delivery-assignment.entity';
+import { DeliveryAssignment } from '../riders/entities/delivery-assignment.entity';
 import { OrdersGateway } from './orders.gateway';
 import { FirebaseService } from '../firebase/firebase.service';
 import { UsersService } from '../users/users.service';
@@ -1567,7 +1567,7 @@ class _PeriodDropdown extends StatelessWidget {
 
 In `apps/mobile/lib/config/routes/app_router.dart`, add the import for `StorageSettingsScreen` alongside the other profile screen imports.
 
-Then add the route after the `/customer/profile/survey` route (before the Driver shell block):
+Then add the route after the `/customer/profile/survey` route (before the Rider shell block):
 
 ```dart
       GoRoute(

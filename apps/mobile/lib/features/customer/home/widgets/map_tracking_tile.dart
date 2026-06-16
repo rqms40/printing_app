@@ -12,7 +12,7 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/home/providers/live_delivery_map_provider.dart';
 import 'package:printing_app/features/customer/order/models/delivery_slot.dart';
 import 'package:printing_app/features/customer/order/providers/delivery_slot_provider.dart';
-import 'package:printing_app/features/customer/tracking/providers/live_driver_location_provider.dart';
+import 'package:printing_app/features/customer/tracking/providers/live_rider_location_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/location_update.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
@@ -67,7 +67,7 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
     final lng = (payload['longitude'] as num?)?.toDouble();
     if (lat == null || lng == null) return;
 
-    ref.read(liveDriverLocationProvider.notifier).state = LocationUpdate(
+    ref.read(liveRiderLocationProvider.notifier).state = LocationUpdate(
       id: 'home-live',
       deliveryAssignmentId:
           payload['assignmentId']?.toString() ??
@@ -97,7 +97,7 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
     final mapAsync = ref.watch(liveDeliveryMapProvider);
     // Watched directly here so location updates only rebuild markers,
     // not the entire FutureProvider async cycle.
-    final locationUpdate = ref.watch(liveDriverLocationProvider);
+    final locationUpdate = ref.watch(liveRiderLocationProvider);
     final slots = ref.watch(deliverySlotProvider(_today()));
     final brightness = Theme.of(context).brightness;
     final colors = brightness == Brightness.dark
@@ -155,7 +155,7 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
               slots: slots.slots,
               isLoading: slots.isLoading,
               liveState: state,
-              liveDriverPoint: LatLng(locationUpdate.latitude, locationUpdate.longitude),
+              liveRiderPoint: LatLng(locationUpdate.latitude, locationUpdate.longitude),
               onMapTap: () => context.push('/customer/tracking'),
             );
           }
@@ -184,7 +184,7 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
     required this.slots,
     required this.isLoading,
     this.liveState,
-    this.liveDriverPoint,
+    this.liveRiderPoint,
     this.onMapTap,
   });
 
@@ -193,10 +193,10 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
   final List<DeliverySlot> slots;
   final bool isLoading;
   final LiveDeliveryMapState? liveState;
-  final LatLng? liveDriverPoint;
+  final LatLng? liveRiderPoint;
   final VoidCallback? onMapTap;
 
-  bool get _hasLiveMap => liveState != null && liveDriverPoint != null;
+  bool get _hasLiveMap => liveState != null && liveRiderPoint != null;
 
   List<DeliverySlot> get _dailySlots {
     final sorted = [...slots]
@@ -215,7 +215,7 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
             key: const Key('delivery-status-panel'),
             colors: colors,
             liveState: liveState!,
-            liveDriverPoint: liveDriverPoint!,
+            liveRiderPoint: liveRiderPoint!,
             slots: slots,
           )
         : _BatchStatusTile(
@@ -230,7 +230,7 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
       brightness: brightness,
       message: isLoading ? 'Loading delivery status...' : idleMapMessage,
       liveState: liveState,
-      liveDriverPoint: liveDriverPoint,
+      liveRiderPoint: liveRiderPoint,
       onMapTap: onMapTap,
     );
 
@@ -348,7 +348,7 @@ class _DeliveryMapPanel extends StatelessWidget {
     required this.brightness,
     required this.message,
     this.liveState,
-    this.liveDriverPoint,
+    this.liveRiderPoint,
     this.onMapTap,
   });
 
@@ -356,10 +356,10 @@ class _DeliveryMapPanel extends StatelessWidget {
   final Brightness brightness;
   final String message;
   final LiveDeliveryMapState? liveState;
-  final LatLng? liveDriverPoint;
+  final LatLng? liveRiderPoint;
   final VoidCallback? onMapTap;
 
-  bool get _hasLiveMap => liveState != null && liveDriverPoint != null;
+  bool get _hasLiveMap => liveState != null && liveRiderPoint != null;
 
   @override
   Widget build(BuildContext context) {
@@ -367,7 +367,7 @@ class _DeliveryMapPanel extends StatelessWidget {
         ? _ActiveTile(
             state: liveState!,
             brightness: brightness,
-            driverPoint: liveDriverPoint!,
+            riderPoint: liveRiderPoint!,
           )
         : _MapPlaceholder(
             colors: colors,
@@ -519,22 +519,22 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
     super.key,
     required this.colors,
     required this.liveState,
-    required this.liveDriverPoint,
+    required this.liveRiderPoint,
     required this.slots,
   });
 
   final AppColorSet colors;
   final LiveDeliveryMapState liveState;
-  final LatLng liveDriverPoint;
+  final LatLng liveRiderPoint;
   final List<DeliverySlot> slots;
 
-  static double _progressRatio(LatLng driver, List<LatLng> route) {
+  static double _progressRatio(LatLng rider, List<LatLng> route) {
     if (route.length < 2) return 0.0;
     const distance = Distance();
     var nearest = 0;
     var minDist = double.infinity;
     for (var i = 0; i < route.length; i++) {
-      final d = distance(driver, route[i]);
+      final d = distance(rider, route[i]);
       if (d < minDist) {
         minDist = d;
         nearest = i;
@@ -545,7 +545,7 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ratio = _progressRatio(liveDriverPoint, liveState.routePoints);
+    final ratio = _progressRatio(liveRiderPoint, liveState.routePoints);
     final percent = (ratio * 100).round();
 
     final assignedSlot = liveState.assignedSlot;
@@ -753,19 +753,19 @@ class _ActiveTile extends StatelessWidget {
   const _ActiveTile({
     required this.state,
     required this.brightness,
-    required this.driverPoint,
+    required this.riderPoint,
   });
   final LiveDeliveryMapState state;
   final Brightness brightness;
-  final LatLng driverPoint;
+  final LatLng riderPoint;
 
-  static int _etaMinutes(LatLng driver, List<LatLng> route) {
+  static int _etaMinutes(LatLng rider, List<LatLng> route) {
     if (route.isEmpty) return 0;
     const distance = Distance();
     var nearest = 0;
     var minDist = double.infinity;
     for (var i = 0; i < route.length; i++) {
-      final d = distance(driver, route[i]);
+      final d = distance(rider, route[i]);
       if (d < minDist) {
         minDist = d;
         nearest = i;
@@ -776,7 +776,7 @@ class _ActiveTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final eta = _etaMinutes(driverPoint, state.routePoints);
+    final eta = _etaMinutes(riderPoint, state.routePoints);
     final colors = brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
@@ -786,7 +786,7 @@ class _ActiveTile extends StatelessWidget {
       children: [
         FlutterMap(
           options: MapOptions(
-            initialCenter: driverPoint,
+            initialCenter: riderPoint,
             initialZoom: 13.8,
             interactionOptions: const InteractionOptions(
               flags: InteractiveFlag.none,
@@ -800,7 +800,7 @@ class _ActiveTile extends StatelessWidget {
               markers: [
                 MapHelpers.shopMarker(point: state.shopPoint),
                 MapHelpers.destinationMarker(point: state.destPoint),
-                MapHelpers.driverMarker(driverPoint),
+                MapHelpers.riderMarker(riderPoint),
               ],
             ),
           ],

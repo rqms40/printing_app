@@ -34,8 +34,8 @@ async function bootstrap() {
 
   // Swagger docs
   const config = new DocumentBuilder()
-    .setTitle('GRID API')
-    .setDescription('GRID Printing Service API')
+    .setTitle('GRIDGO API')
+    .setDescription('GRIDGO Printing Service API')
     .setVersion('1.0')
     .addBearerAuth()
     .build();
@@ -44,7 +44,7 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3000;
   await app.listen(port, '0.0.0.0');
-  console.log(`🟢 GRID API running on http://0.0.0.0:${port}`);
+  console.log(`🟢 GRIDGO API running on http://0.0.0.0:${port}`);
   console.log(`📚 Swagger docs at http://0.0.0.0:${port}/docs`);
 }
 void bootstrap();

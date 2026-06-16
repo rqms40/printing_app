@@ -8,13 +8,13 @@
 
 ## Goal
 
-Teach new customers the key differentiating features of GRID (multi-drop delivery, live tracking, GRID Credits, GridBot) through contextual, in-app coach marks and feature explanation overlays — similar to GCash's feature discovery patterns. Track which tutorials each user has seen server-side so state survives reinstall and syncs across devices.
+Teach new customers the key differentiating features of GRIDGO (multi-drop delivery, live tracking, GRIDGO Credits, GridBot) through contextual, in-app coach marks and feature explanation overlays — similar to GCash's feature discovery patterns. Track which tutorials each user has seen server-side so state survives reinstall and syncs across devices.
 
 ---
 
 ## Scope
 
-- **Roles covered:** Customers only (drivers and admins are power users).
+- **Roles covered:** Customers only (riders and admins are power users).
 - **Two UI components:** `FeatureOverlayCard` (bottom-sheet intro modal) + `CoachMarkSequence` (spotlight + arrow-bubble callouts via `tutorial_coach_mark` package).
 - **4 tutorial keys covering 6 feature touchpoints:** `home` (welcome + Credits chip + GridBot FAB), `checkout` (intro + Multi-drop tab + Credits payment), `tracking` (live map), `onboarding` (first-login gate).
 - **First-login gate:** Existing `OnboardingScreen` gated to first login only instead of every login.
@@ -271,7 +271,7 @@ void showCoachMark(
 **Trigger:** First landing on `/customer/home` after post-onboarding redirect.
 
 **Step 1 — FeatureOverlayCard**
-- Title: "Welcome to GRID"
+- Title: "Welcome to GRIDGO"
 - Body: "Your prints, delivered."
 - Icon tiles: 🖨️ Order · 🗺️ Track · 💬 Chat
 - CTA: "Show me around" → starts coach marks
@@ -280,7 +280,7 @@ void showCoachMark(
 **Step 2 — Coach mark: Credits chip** (top-right header)
 - Target: `GlobalKey` on `_CreditsWidget`
 - Shape: `ShapeLightFocus.RRect`
-- Title: "GRID Credits"
+- Title: "GRIDGO Credits"
 - Body: "Top up your balance and pay at checkout — no GCash OTP or app-switching needed."
 - Step 1 of 2
 
@@ -311,10 +311,10 @@ void showCoachMark(
 - Body: "Assign each file to a different address. One rider handles all the stops."
 - Step 1 of 2
 
-**Step 3 — Coach mark: GRID Credits payment row**
+**Step 3 — Coach mark: GRIDGO Credits payment row**
 - Target: `GlobalKey` on the `CheckoutPaymentCard` container
 - Shape: `ShapeLightFocus.RRect`
-- Title: "Pay with GRID Credits"
+- Title: "Pay with GRIDGO Credits"
 - Body: "No OTP, no app-switching. Top up anytime in Profile → Wallet."
 - Step 2 of 2 → Done ✓ → markSeen
 
@@ -329,7 +329,7 @@ void showCoachMark(
 **Step 1 — Coach mark: Live map**
 - Target: `GlobalKey` on the `DeliveryMap` widget
 - Shape: `ShapeLightFocus.RRect`
-- Title: "Live Driver Tracking"
+- Title: "Live Rider Tracking"
 - Body: "Your rider's GPS updates in real time. The ETA badge top-right refreshes live."
 - Step 1 of 1 → Done ✓ → markSeen
 
@@ -353,7 +353,7 @@ if (isAuth && isOnAuth) {
 if (isAuth && isOnAuth) {
   final seen = ref.read(tutorialSeenProvider(TutorialKey.onboarding));
   return seen ? _roleHomePath(ref) : '/onboarding';
-  // _roleHomePath: '/customer/home', '/driver/deliveries', or '/admin/dashboard'
+  // _roleHomePath: '/customer/home', '/rider/deliveries', or '/admin/dashboard'
 }
 ```
 

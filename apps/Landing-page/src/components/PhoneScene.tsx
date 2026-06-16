@@ -7,7 +7,7 @@ import { Model as Phone } from './PhoneModel' // Make sure you have this file in
 // ─── helpers ───────────────────────────────────────────────────────────────
 const isMobile = () => window.innerWidth < 768
 
-// ─── GRID text layers (zero-gravity scatter) ───────────────────────────────
+// ─── GRIDGO text layers (zero-gravity scatter) ───────────────────────────────
 function GridTextLayer({ index }: { index: number }) {
   const mesh = useRef<any>(null)
 
@@ -33,7 +33,7 @@ function GridTextLayer({ index }: { index: number }) {
     // ── Viewport-responsive scale ─────────────────────────────────────────
     // Camera z=8, vertical fov=45° → visible height = 6.63 units.
     // Visible WIDTH = 6.63 × aspect, which shrinks dramatically on portrait mobile.
-    // Keep GRID as an oversized backdrop while preserving side breathing room.
+    // Keep GRIDGO as an oversized backdrop while preserving side breathing room.
     const aspect = window.innerWidth / window.innerHeight
     const visibleWidth = 2 * Math.tan(Math.PI / 8) * 8 * aspect
     const targetFill = aspect < 0.75 ? 0.9 : 0.86
@@ -63,7 +63,7 @@ function GridTextLayer({ index }: { index: number }) {
       fillOpacity={baseAlpha}
       position={[0, 0, baseZ]}
     >
-      GRID
+      GRIDGO
     </Text>
   )
 }

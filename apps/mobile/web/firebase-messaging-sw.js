@@ -15,7 +15,7 @@ const messaging = firebase.messaging();
 
 // Background message handler
 messaging.onBackgroundMessage((payload) => {
-  const title = payload.notification?.title || 'GRID';
+  const title = payload.notification?.title || 'GRIDGO';
   const options = {
     body: payload.notification?.body || '',
     icon: '/icons/Icon-192.png',

@@ -7,7 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { OrdersModule } from './orders/orders.module';
 import { AddressesModule } from './addresses/addresses.module';
-import { DriversModule } from './drivers/drivers.module';
+import { RidersModule } from './riders/riders.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { FirebaseModule } from './firebase/firebase.module';
 import { StorageModule } from './storage/storage.module';
@@ -68,7 +68,7 @@ import { SupportTicketsModule } from './support-tickets/support-tickets.module';
     UsersModule,
     OrdersModule,
     AddressesModule,
-    DriversModule,
+    RidersModule,
     NotificationsModule,
     HealthModule,
     PaymentsModule,

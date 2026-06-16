@@ -10,7 +10,7 @@ import 'package:printing_app/features/customer/home/providers/live_delivery_map_
 import 'package:printing_app/features/customer/home/widgets/map_tracking_tile.dart';
 import 'package:printing_app/features/customer/order/models/delivery_slot.dart';
 import 'package:printing_app/features/customer/order/providers/delivery_slot_provider.dart';
-import 'package:printing_app/features/customer/tracking/providers/live_driver_location_provider.dart';
+import 'package:printing_app/features/customer/tracking/providers/live_rider_location_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/location_update.dart';
 import 'package:printing_app/shared/providers/dio_provider.dart';
@@ -68,7 +68,7 @@ _TileHarness _harness({
   container
       .read(deliverySlotProvider(_today()).notifier)
       .debugSeedSlotsForTest(slots);
-  container.read(liveDriverLocationProvider.notifier).state = location;
+  container.read(liveRiderLocationProvider.notifier).state = location;
   addTearDown(keepAlive.close);
   addTearDown(container.dispose);
   return _TileHarness(
@@ -220,7 +220,7 @@ void main() {
     'keeps batch rows when active order has no matching live location',
     (tester) async {
       final active = LiveDeliveryMapState.active(
-        driverPoint: const LatLng(7.20, 125.46),
+        riderPoint: const LatLng(7.20, 125.46),
         shopPoint: const LatLng(7.19, 125.45),
         destPoint: const LatLng(7.21, 125.47),
         routePoints: [const LatLng(7.19, 125.45), const LatLng(7.21, 125.47)],
@@ -251,7 +251,7 @@ void main() {
     'shows LIVE MAP badge in active state with matching live location',
     (tester) async {
       final active = LiveDeliveryMapState.active(
-        driverPoint: const LatLng(7.20, 125.46),
+        riderPoint: const LatLng(7.20, 125.46),
         shopPoint: const LatLng(7.19, 125.45),
         destPoint: const LatLng(7.21, 125.47),
         routePoints: [const LatLng(7.19, 125.45), const LatLng(7.21, 125.47)],
@@ -282,7 +282,7 @@ void main() {
     tester,
   ) async {
     final active = LiveDeliveryMapState.active(
-      driverPoint: const LatLng(7.20, 125.46),
+      riderPoint: const LatLng(7.20, 125.46),
       shopPoint: const LatLng(7.19, 125.45),
       destPoint: const LatLng(7.21, 125.47),
       routePoints: [const LatLng(7.19, 125.45), const LatLng(7.21, 125.47)],
@@ -317,7 +317,7 @@ void main() {
     'uses subscribed assignment when socket payload omits assignment id',
     (tester) async {
       final active = LiveDeliveryMapState.active(
-        driverPoint: const LatLng(7.20, 125.46),
+        riderPoint: const LatLng(7.20, 125.46),
         shopPoint: const LatLng(7.19, 125.45),
         destPoint: const LatLng(7.21, 125.47),
         routePoints: [const LatLng(7.19, 125.45), const LatLng(7.21, 125.47)],
@@ -342,7 +342,7 @@ void main() {
 
   testWidgets('rejects stale socket payload timestamps', (tester) async {
     final active = LiveDeliveryMapState.active(
-      driverPoint: const LatLng(7.20, 125.46),
+      riderPoint: const LatLng(7.20, 125.46),
       shopPoint: const LatLng(7.19, 125.45),
       destPoint: const LatLng(7.21, 125.47),
       routePoints: [const LatLng(7.19, 125.45), const LatLng(7.21, 125.47)],
@@ -372,7 +372,7 @@ void main() {
     tester,
   ) async {
     final active = LiveDeliveryMapState.active(
-      driverPoint: const LatLng(7.20, 125.46),
+      riderPoint: const LatLng(7.20, 125.46),
       shopPoint: const LatLng(7.19, 125.45),
       destPoint: const LatLng(7.21, 125.47),
       routePoints: [const LatLng(7.19, 125.45), const LatLng(7.21, 125.47)],

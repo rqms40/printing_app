@@ -566,7 +566,7 @@ void main() {
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: FeatureOverlayCard(
-            title: 'Welcome to GRID',
+            title: 'Welcome to GRIDGO',
             body: 'Your prints, delivered.',
             iconTiles: const [
               FeatureIconTile(icon: HugeIcons.strokeRoundedPrinter01, label: 'Order'),
@@ -579,7 +579,7 @@ void main() {
           ),
         ),
       ));
-      expect(find.text('Welcome to GRID'), findsOneWidget);
+      expect(find.text('Welcome to GRIDGO'), findsOneWidget);
       expect(find.text('Your prints, delivered.'), findsOneWidget);
       expect(find.text('Order'), findsOneWidget);
       expect(find.text('Track'), findsOneWidget);
@@ -843,7 +843,7 @@ void main() {
         home: Scaffold(
           body: TutorialBubble(
             icon: HugeIcons.strokeRoundedCoins01,
-            title: 'GRID Credits',
+            title: 'GRIDGO Credits',
             body: 'Pay without GCash.',
             step: 1,
             totalSteps: 2,
@@ -1143,7 +1143,7 @@ if (isAuth && isOnAuth) {
   if (seenOnboarding) {
     final role = ref.read(authProvider).user?.role ?? 'customer';
     return switch (role) {
-      'driver' => '/driver/deliveries',
+      'rider' => '/rider/deliveries',
       'admin' => '/admin/dashboard',
       _ => '/customer/home',
     };
@@ -1266,7 +1266,7 @@ Add the method:
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => FeatureOverlayCard(
-        title: 'Welcome to GRID',
+        title: 'Welcome to GRIDGO',
         body: 'Your prints, delivered.',
         iconTiles: const [
           FeatureIconTile(
@@ -1302,7 +1302,7 @@ Add the method:
         TutorialStep(
           targetKey: _creditsTutorialKey,
           icon: HugeIcons.strokeRoundedCoins01,
-          title: 'GRID Credits',
+          title: 'GRIDGO Credits',
           body: 'Top up your balance and pay at checkout — no GCash OTP or app-switching needed.',
         ),
         TutorialStep(
@@ -1463,7 +1463,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         TutorialStep(
           targetKey: _paymentKey,
           icon: HugeIcons.strokeRoundedCoins01,
-          title: 'Pay with GRID Credits',
+          title: 'Pay with GRIDGO Credits',
           body: 'No OTP, no app-switching. Top up anytime in Profile → Wallet.',
         ),
       ],
@@ -1558,7 +1558,7 @@ class _DeliveryTrackingScreenState extends ConsumerState<DeliveryTrackingScreen>
         TutorialStep(
           targetKey: _mapKey,
           icon: HugeIcons.strokeRoundedMapsLocation01,
-          title: 'Live Driver Tracking',
+          title: 'Live Rider Tracking',
           body: "Your rider's GPS updates in real time. The ETA badge top-right refreshes live.",
         ),
       ],
@@ -1594,7 +1594,7 @@ class _DeliveryTrackingScreenState extends ConsumerState<DeliveryTrackingScreen>
           const Padding(
             padding: EdgeInsets.fromLTRB(
               AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
-            child: DriverInfoCard(),
+            child: RiderInfoCard(),
           ).animate()
             .fadeIn(duration: 400.ms, delay: 60.ms, curve: Curves.easeOut)
             .slideY(begin: 0.03, duration: 400.ms, delay: 60.ms, curve: Curves.easeOut),

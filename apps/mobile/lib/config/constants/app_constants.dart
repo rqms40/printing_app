@@ -1,4 +1,4 @@
-/// Application-wide constants for GRID.
+/// Application-wide constants for GRIDGO.
 class AppConstants {
   const AppConstants._();
 

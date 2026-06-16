@@ -136,7 +136,7 @@ class AdminProfileScreen extends ConsumerWidget {
                       curve: Curves.easeOut),
               _InfoRow(
                 icon: HugeIcons.strokeRoundedInformationCircle,
-                label: 'GRID Admin',
+                label: 'GRIDGO Admin',
                 value: 'Version 1.0.0',
                 colors: colors,
               ),

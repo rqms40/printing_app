@@ -9,7 +9,7 @@ void main() {
 
     // Splash screen should show GRIDGO text after initial animation delay
     await tester.pump(const Duration(seconds: 2));
-    expect(find.textContaining('GRID'), findsWidgets);
+    expect(find.textContaining('GRIDGO'), findsWidgets);
 
     // Pump remaining splash animation timers so they don't leak.
     // The splash has ~3.5s of animations total; pump generously.

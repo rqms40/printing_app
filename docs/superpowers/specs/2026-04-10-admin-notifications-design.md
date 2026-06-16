@@ -8,7 +8,7 @@
 
 ## 1. Overview
 
-Add a persistent, real-time notification system to the GRID admin dashboard. Every admin user (role = `admin`) receives in-app notifications for key business events. Notifications survive page refresh, are stored per-admin in the database, and are delivered instantly via WebSocket. Sidebar menu items show live counts of unactioned work items.
+Add a persistent, real-time notification system to the GRIDGO admin dashboard. Every admin user (role = `admin`) receives in-app notifications for key business events. Notifications survive page refresh, are stored per-admin in the database, and are delivered instantly via WebSocket. Sidebar menu items show live counts of unactioned work items.
 
 ---
 
@@ -38,7 +38,7 @@ Add a persistent, real-time notification system to the GRID admin dashboard. Eve
 ### Header
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  GRID Admin                              🔔³  [A] Admin User ▾  │
+│  GRIDGO Admin                              🔔³  [A] Admin User ▾  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 Bell sits LEFT of the Avatar+Name dropdown. Badge shows count (red); shows dot when > 99.
@@ -67,7 +67,7 @@ Shows last 10 notifications from the in-memory list (context holds 50). Empty st
 ┌──────────────────────────┐
 │  ■  Dashboard            │
 │  🛒 Orders           ③   │  ← brand-yellow pill, hidden when 0
-│  🚗 Drivers              │
+│  🚗 Riders              │
 │  👥 Users                │
 │  💳 Top-Up Requests  ①   │  ← hidden when 0
 │  📦 Products             │
@@ -244,7 +244,7 @@ BADGE_MAP = {
 }
 Uses Refine useMenu() + antd Menu rendered manually.
 Badge hidden when count = 0 or sidebar collapsed.
-Brand-yellow Tag (#FFDE58 bg, #141414 text) matches GRID design system.
+Brand-yellow Tag (#FFDE58 bg, #141414 text) matches GRIDGO design system.
 ```
 
 ### `NotificationsProvider` placement

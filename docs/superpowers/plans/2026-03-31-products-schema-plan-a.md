@@ -1982,7 +1982,7 @@ export function ProductOptionsPage() {
         </Text>
       </div>
 
-      <div className="drivers-table-section">
+      <div className="riders-table-section">
         <Tabs
           style={{ padding: '0 4px' }}
           tabBarStyle={{ padding: '0 16px', borderBottom: '1px solid #2E2E2E', marginBottom: 0 }}
@@ -2231,7 +2231,7 @@ export function AddonList() {
         </Button>
       </div>
 
-      <div className="drivers-table-section">
+      <div className="riders-table-section">
         <Table
           dataSource={addons}
           rowKey="id"

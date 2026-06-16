@@ -248,7 +248,7 @@ describe("api normalizers", () => {
     const user = normalizeAdminUser({
       id: 11,
       fullName: "Admin User",
-      email: "admin@gridprint.ph",
+      email: "admin@gridgoprint.ph",
       phoneNumber: null,
       role: "admin",
       isActive: true,

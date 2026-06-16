@@ -40,7 +40,7 @@ class RecentOrdersSection extends ConsumerWidget {
       case OrderStatus.finishingMounting:
       case OrderStatus.qualityChecked:
       case OrderStatus.readyForDispatch:
-      case OrderStatus.driverAssigned:
+      case OrderStatus.riderAssigned:
         return StatusBadgeVariant.warning;
       case OrderStatus.orderPlaced:
       case OrderStatus.fileVerified:

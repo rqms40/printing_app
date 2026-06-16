@@ -22,7 +22,7 @@ String _labelFor(PaymentMethod m) {
     case PaymentMethod.cod:
       return 'Cash on Delivery';
     case PaymentMethod.gridCredits:
-      return 'GRID Credits';
+      return 'GRIDGO Credits';
   }
 }
 
@@ -37,7 +37,7 @@ class CheckoutPaymentCard extends ConsumerStatefulWidget {
   /// Spotlights the whole payment section (kept for compatibility, may be unused).
   final GlobalKey? sectionKey;
 
-  /// Spotlights just the GRID Credits row (post-pipeline checkoutFeatures tutorial).
+  /// Spotlights just the GRIDGO Credits row (post-pipeline checkoutFeatures tutorial).
   final GlobalKey? tutorialKey;
 
   /// Spotlights the actual payment-method selector tile (pipeline tutorial step payment).
@@ -137,7 +137,7 @@ class _CheckoutPaymentCardState extends ConsumerState<CheckoutPaymentCard> {
               if (creditsOnlyMode) ...[
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'GCash, Maya, and Cash on Delivery are unavailable right now. Use GRID Credits for checkout.',
+                  'GCash, Maya, and Cash on Delivery are unavailable right now. Use GRIDGO Credits for checkout.',
                   style: AppTypography.caption.copyWith(
                     color: colors.onSurfaceDim,
                     fontSize: 11,
@@ -232,7 +232,7 @@ class _SelectedPaymentRow extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 method == PaymentMethod.gridCredits
-                    ? 'Pay with your GRID balance'
+                    ? 'Pay with your GRIDGO balance'
                     : 'Tap Change to pick another',
                 style: AppTypography.caption.copyWith(
                   color: colors.onSurfaceDim,

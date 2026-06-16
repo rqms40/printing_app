@@ -35,7 +35,7 @@ class OrderStatusTimeline extends StatelessWidget {
     } else {
       steps.addAll([
         OrderStatus.readyForDispatch,
-        OrderStatus.driverAssigned,
+        OrderStatus.riderAssigned,
         OrderStatus.pickedUp,
         OrderStatus.onTheWay,
         OrderStatus.arrivedAtDestination,

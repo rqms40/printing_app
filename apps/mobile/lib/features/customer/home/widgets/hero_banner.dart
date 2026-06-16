@@ -52,7 +52,7 @@ class HeroBanner extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Real GRID dot-matrix logo, white dots
+                  // Real GRIDGO dot-matrix logo, white dots
                   GridLogo(
                     size: 28,
                     foregroundColor: Colors.white.withValues(alpha: 0.82),
@@ -62,12 +62,12 @@ class HeroBanner extends StatelessWidget {
 
                   const SizedBox(height: AppSpacing.xs),
 
-                  // GRID wordmark
+                  // GRIDGO wordmark
                   Text.rich(
                         const TextSpan(
                           children: [
                             TextSpan(
-                              text: 'GRID',
+                              text: 'GRIDGO',
                               style: TextStyle(color: Colors.white),
                             ),
                             TextSpan(

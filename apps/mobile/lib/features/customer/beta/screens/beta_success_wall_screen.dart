@@ -183,7 +183,7 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text(
-                                  'YOU MADE\nGRID BETTER.',
+                                  'YOU MADE\nGRIDGO BETTER.',
                                   style: TextStyle(
                                     fontFamily: 'Poppins',
                                     fontSize: 38,
@@ -261,7 +261,7 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen>
                                 _SectionLabel('SPREAD THE WORD'),
                                 SizedBox(height: 6),
                                 Text(
-                                  'Tell your crew GRID is coming to Davao.',
+                                  'Tell your crew GRIDGO is coming to Davao.',
                                   style: TextStyle(
                                     fontFamily: 'Satoshi',
                                     fontSize: 13,

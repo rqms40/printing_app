@@ -1,4 +1,4 @@
-# GRID — Product Requirements Document
+# GRIDGO — Product Requirements Document
 ## Phase 1 System Architecture
 **Version:** 1.0  
 **Status:** Active Development  
@@ -9,7 +9,7 @@
 
 ## 1. Product Overview
 
-**GRID** is a digital printing platform designed to make the transition from digital design to physical reality effortless and stress-free. It combines precision technology, high-quality print output, and seamless logistics delivery — targeting professionals and students across the Philippines.
+**GRIDGO** is a digital printing platform designed to make the transition from digital design to physical reality effortless and stress-free. It combines precision technology, high-quality print output, and seamless logistics delivery — targeting professionals and students across the Philippines.
 
 ### Vision
 To be the essential digital printing partner in the global market, making the transition from digital design to physical reality effortless and stress-free for every user.
@@ -41,7 +41,7 @@ Phase 1 is broken into 6 sequential milestones:
 
 ### 3.1 Core Philosophy
 
-The GRID admin dashboard functions as a **pure Operational Engine** — output-based and non-financial by design. Accounting is intentionally decoupled into a separate department.
+The GRIDGO admin dashboard functions as a **pure Operational Engine** — output-based and non-financial by design. Accounting is intentionally decoupled into a separate department.
 
 - The app outputs **raw operational data** (units, distances, counts, statuses)
 - The admin exports this data as **CSV** for use in Excel or third-party accounting software
@@ -136,7 +136,7 @@ The following KPIs are tracked operationally — no monetary values are stored i
 
 ---
 
-## 5. GRID Credit System *(Tentative — Pending Review)*
+## 5. GRIDGO Credit System *(Tentative — Pending Review)*
 
 > ⚠️ The credit system design is still tentative. Major changes are to be discussed in the next team meeting before development begins.
 
@@ -158,7 +158,7 @@ User ← RECEIVE ← Operation ← PRINT (SUBTRACT) ← App
 5. The operation system triggers delivery; user **receives** output
 
 ### Design Note
-- A tentative coin/token visual design exists (GRID-branded coin icon)
+- A tentative coin/token visual design exists (GRIDGO-branded coin icon)
 - The credit currency name, denomination, and conversion rates are TBD
 - All credit system decisions deferred to the next stakeholder meeting
 
@@ -193,11 +193,11 @@ The following are explicitly excluded from the app's codebase in Phase 1:
 | **TAT** | Turnaround Time — order-to-delivery duration |
 | **PoD** | Proof of Delivery — photo or signature confirming receipt |
 | **RBAC** | Role-Based Access Control |
-| **Node** | A remote printing unit connected to the GRID network |
+| **Node** | A remote printing unit connected to the GRIDGO network |
 | **Master CSV** | Full operational data export for accounting use |
 | **Express Job** | A priority print order elevated above the standard queue |
-| **Operational Engine** | The GRID dashboard's core function — tracking ops data, not finances |
+| **Operational Engine** | The GRIDGO dashboard's core function — tracking ops data, not finances |
 
 ---
 
-*This PRD is based on the GRID Phase 1 System Architecture document (v2). For questions or updates, refer to the development team's weekly meeting notes.*
+*This PRD is based on the GRIDGO Phase 1 System Architecture document (v2). For questions or updates, refer to the development team's weekly meeting notes.*

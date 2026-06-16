@@ -5,7 +5,7 @@ import 'package:printing_app/features/customer/chat/models/chat_message.dart';
 import 'package:printing_app/features/customer/chat/widgets/message_bubble.dart';
 
 void main() {
-  testWidgets('treats rider messages as outgoing for driver viewers', (
+  testWidgets('treats rider messages as outgoing for rider viewers', (
     tester,
   ) async {
     final message = ChatMessage(

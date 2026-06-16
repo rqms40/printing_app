@@ -17,7 +17,7 @@ This is a beta-testing completion flow. It is not a general customer survey for 
 ## Current Findings
 
 - Admin order status changes call `OrdersService.updateStatus()` through `PATCH /admin/orders/:id/status`.
-- Driver delivery currently updates order status through `DriversService.updateDeliveryStatus()` and bypasses `OrdersService.updateStatus()`. This design intentionally does not hook driver status changes yet.
+- Rider delivery currently updates order status through `RidersService.updateDeliveryStatus()` and bypasses `OrdersService.updateStatus()`. This design intentionally does not hook rider status changes yet.
 - Existing survey data is stored in `tam_surveys`, tied only to `user_id`.
 - Existing beta mode tracks `isBetaUser`, `betaEnrolledAt`, and `betaCreditsGranted`, but does not enforce access.
 - `users.isActive` already exists and is displayed in admin, but login and JWT validation do not enforce it.
@@ -35,7 +35,7 @@ Create a mandatory survey requirement only when all of these are true:
 
 Do not trigger for:
 
-- Driver checkpoint delivery for now.
+- Rider checkpoint delivery for now.
 - External courier `externalDeliveryStatus`.
 - Cancelled or file-declined orders.
 - Non-beta users.
@@ -325,7 +325,7 @@ WHERE account_hold_reason = 'beta_survey_complete';
 
 ## Out of Scope
 
-- Driver checkpoint delivery trigger.
+- Rider checkpoint delivery trigger.
 - External courier delivery trigger.
 - SMS or email survey prompts.
 - A full-release admin reactivation screen.

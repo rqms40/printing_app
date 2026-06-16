@@ -109,7 +109,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
     if (conv.orderId != null) return 'Order #${conv.orderId}';
     return switch (conv.type) {
       ConversationType.ai => 'Instant help',
-      ConversationType.admin => 'GRID support',
+      ConversationType.admin => 'GRIDGO support',
       ConversationType.rider => 'Delivery support',
     };
   }

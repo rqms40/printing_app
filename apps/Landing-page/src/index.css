@@ -41,7 +41,7 @@ body {
 }
 
 .bg-map {
-  background-image: url('/GRID_BG.png');
+  background-image: url('/GRIDGO_BG.png');
   background-size: cover;
   background-position: center;
   background-attachment: fixed;

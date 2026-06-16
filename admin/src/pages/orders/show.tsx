@@ -43,7 +43,7 @@ import { apiClient } from "@/providers/api-client";
 import { FileInspectorModal } from "@/components/file-inspector/file-inspector-modal";
 import {
   humanizeEnumValue,
-  normalizeAdminDrivers,
+  normalizeAdminRiders,
   normalizeOrder,
 } from "@/utils/api-normalizers";
 import { loadOrderFilePreview, type OrderFilePreview } from "./preview";
@@ -216,7 +216,7 @@ export function OrderShow() {
   const [order, setOrder] = useState<
     (Order & { status_history?: OrderStatusHistory[] }) | null
   >(null);
-  const [availableDrivers, setAvailableDrivers] = useState<
+  const [availableRiders, setAvailableRiders] = useState<
     {
       id: number;
       full_name: string | null;
@@ -227,7 +227,7 @@ export function OrderShow() {
   >([]);
   const [loading, setLoading] = useState(true);
 
-  const [driverModalOpen, setDriverModalOpen] = useState(false);
+  const [riderModalOpen, setRiderModalOpen] = useState(false);
   const [declineModalOpen, setDeclineModalOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
   const [fileInspectorOpen, setFileInspectorOpen] = useState(false);
@@ -242,8 +242,8 @@ export function OrderShow() {
         .then((r) => setOrder(normalizeOrder(r.data)))
         .catch(() => {}),
       apiClient
-        .get("/admin/drivers")
-        .then((r) => setAvailableDrivers(normalizeAdminDrivers(r.data)))
+        .get("/admin/riders")
+        .then((r) => setAvailableRiders(normalizeAdminRiders(r.data)))
         .catch(() => {}),
     ]).finally(() => setLoading(false));
   }, [id]);
@@ -270,9 +270,9 @@ export function OrderShow() {
   const items = getOrderLineItems(order);
   const destinations = getMappableDestinations(order);
   const validNextStatuses = ORDER_STATUS_TRANSITIONS[order.order_status];
-  const canAssignDriver =
+  const canAssignRider =
     order.order_status === "ready_for_dispatch" ||
-    order.order_status === "driver_assigned";
+    order.order_status === "rider_assigned";
 
   const handleStatusChange = (newStatus: OrderStatus) => {
     modal.confirm({
@@ -294,15 +294,15 @@ export function OrderShow() {
     });
   };
 
-  const handleAssignDriver = async (driverId: number) => {
+  const handleAssignRider = async (riderId: number) => {
     try {
-      await apiClient.post(`/admin/orders/${id}/assign`, { driverId });
-      void message.success("Driver assigned");
-      setDriverModalOpen(false);
+      await apiClient.post(`/admin/orders/${id}/assign`, { riderId });
+      void message.success("Rider assigned");
+      setRiderModalOpen(false);
       const res = await apiClient.get(`/admin/orders/${id}`);
       setOrder(normalizeOrder(res.data));
     } catch {
-      void message.error("Failed to assign driver");
+      void message.error("Failed to assign rider");
     }
   };
 
@@ -381,12 +381,12 @@ export function OrderShow() {
                     }))}
                   />
                 )}
-                {canAssignDriver && (
+                {canAssignRider && (
                   <Button
                     icon={<UserSwitchOutlined />}
-                    onClick={() => setDriverModalOpen(true)}
+                    onClick={() => setRiderModalOpen(true)}
                   >
-                    Assign Driver
+                    Assign Rider
                   </Button>
                 )}
                 {order.order_status !== "cancelled" &&
@@ -676,15 +676,15 @@ export function OrderShow() {
         </Card>
       </Space>
 
-      {/* Driver Assignment Modal */}
+      {/* Rider Assignment Modal */}
       <Modal
-        title="Assign Driver"
-        open={driverModalOpen}
-        onCancel={() => setDriverModalOpen(false)}
+        title="Assign Rider"
+        open={riderModalOpen}
+        onCancel={() => setRiderModalOpen(false)}
         footer={null}
       >
         <Table
-          dataSource={availableDrivers}
+          dataSource={availableRiders}
           rowKey="id"
           pagination={false}
           size="small"
@@ -710,7 +710,7 @@ export function OrderShow() {
               <Button
                 type="primary"
                 size="small"
-                onClick={() => handleAssignDriver(record.id)}
+                onClick={() => handleAssignRider(record.id)}
               >
                 Assign
               </Button>

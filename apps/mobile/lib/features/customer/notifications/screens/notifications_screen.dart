@@ -11,7 +11,7 @@ import 'package:printing_app/shared/widgets/empty_state.dart';
 import 'package:printing_app/shared/widgets/skeleton_screens.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/utils/formatters.dart';
-import 'package:printing_app/features/customer/notifications/screens/widgets/grid_go_notification_card.dart';
+import 'package:printing_app/features/customer/notifications/screens/widgets/gridgo_notification_card.dart';
 
 class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});

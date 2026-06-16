@@ -139,7 +139,7 @@ class _HeroTile extends StatelessWidget {
                 children: [
                   Flexible(
                     child: Text(
-                      'GRID',
+                      'GRIDGO',
                       style: AppTypography.display.copyWith(
                         color: Colors.white,
                         height: 1.0,

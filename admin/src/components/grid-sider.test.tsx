@@ -38,7 +38,7 @@ const menuItems = [
     icon: null,
     list: "/credit-requests",
   },
-  { key: "/drivers", name: "drivers", label: "Drivers", icon: null, list: "/drivers" },
+  { key: "/riders", name: "riders", label: "Riders", icon: null, list: "/riders" },
 ];
 
 function setupMocks(badgeCounts = { newOrders: 3, pendingTopUps: 1 }) {

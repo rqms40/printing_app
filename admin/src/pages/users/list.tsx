@@ -14,19 +14,19 @@ const { Text } = Typography;
 
 const ROLE_COLORS: Record<string, string> = {
   customer: "blue",
-  driver: "gold",
+  rider: "gold",
   admin: "red",
 };
 
 const AVATAR_BG: Record<string, string> = {
   customer: "#1A2A3A",
-  driver: "#2A2A1A",
+  rider: "#2A2A1A",
   admin: "#2A1A1A",
 };
 
 const AVATAR_FG: Record<string, string> = {
   customer: "#42A5F5",
-  driver: "#FFDE58",
+  rider: "#FFDE58",
   admin: "#EF5350",
 };
 
@@ -116,7 +116,7 @@ export function UserList() {
               {visibleUsers.filter((u) => u.role === "customer").length} Customers
             </Tag>
             <Tag color="gold" style={{ margin: 0, padding: "2px 10px" }}>
-              {visibleUsers.filter((u) => u.role === "driver").length} Drivers
+              {visibleUsers.filter((u) => u.role === "rider").length} Riders
             </Tag>
             <Tag color="red" style={{ margin: 0, padding: "2px 10px" }}>
               {visibleUsers.filter((u) => u.role === "admin").length} Admins
@@ -240,7 +240,7 @@ export function UserList() {
             )}
             filters={[
               { text: "Customer", value: "customer" },
-              { text: "Driver", value: "driver" },
+              { text: "Rider", value: "rider" },
               { text: "Admin", value: "admin" },
             ]}
             onFilter={(value, record: AdminUserRecord) => record.role === value}

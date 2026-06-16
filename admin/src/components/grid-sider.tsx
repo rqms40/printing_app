@@ -151,7 +151,7 @@ export function GridSider({ initialCollapsed = false }: GridSiderProps) {
                   : "opacity 0.15s 0.12s, max-width 0.2s",
               }}
             >
-              GRID Admin
+              GRIDGO Admin
             </span>
           </div>
 

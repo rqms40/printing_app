@@ -71,7 +71,7 @@
   "user": {
     "id": 7,
     "full_name": "Maria Santos",
-    "email": "maria@gridprint.ph",
+    "email": "maria@gridgoprint.ph",
     "phone_number": "+639171234567",
     "role": "customer",
     "is_active": true,
@@ -119,7 +119,7 @@
     "profile_completion_rate": 82,
     "role_counts": {
       "customers": 124,
-      "drivers": 8,
+      "riders": 8,
       "admins": 2
     }
   },
@@ -165,7 +165,7 @@ describe('buildAdminUserDetailPayload', () => {
     const user = {
       id: 7,
       fullName: 'Maria Santos',
-      email: 'maria@gridprint.ph',
+      email: 'maria@gridgoprint.ph',
       phoneNumber: '+639171234567',
       role: UserRole.CUSTOMER,
       isActive: true,
@@ -255,9 +255,9 @@ describe('buildAdminUsersAnalyticsPayload', () => {
       },
       {
         id: 3,
-        fullName: 'Driver One',
-        email: 'driver.one@example.com',
-        role: UserRole.DRIVER,
+        fullName: 'Rider One',
+        email: 'rider.one@example.com',
+        role: UserRole.RIDER,
         isProfileComplete: true,
         createdAt: new Date('2026-03-01T00:00:00.000Z'),
       },
@@ -300,7 +300,7 @@ describe('buildAdminUsersAnalyticsPayload', () => {
           profile_completion_rate: 50,
           role_counts: {
             customers: 2,
-            drivers: 1,
+            riders: 1,
             admins: 0,
           },
         },
@@ -542,7 +542,7 @@ export function buildAdminUsersAnalyticsPayload(
         : Math.round((completeProfiles / customers.length) * 100),
       role_counts: {
         customers: customers.length,
-        drivers: users.filter((user) => user.role === UserRole.DRIVER).length,
+        riders: users.filter((user) => user.role === UserRole.RIDER).length,
         admins: users.filter((user) => user.role === UserRole.ADMIN).length,
       },
     },
@@ -588,7 +588,7 @@ describe('getUserDetail', () => {
   it('loads one user and only that users orders for the admin show page', async () => {
     usersRepo.findOneOrFail.mockResolvedValue({
       id: 7,
-      email: 'maria@gridprint.ph',
+      email: 'maria@gridgoprint.ph',
       role: 'customer',
       createdAt: new Date('2026-04-10T10:00:00.000Z'),
       updatedAt: new Date('2026-04-17T05:00:00.000Z'),
@@ -696,7 +696,7 @@ it('loads a single admin user detail payload and normalizes nested fields', asyn
       user: {
         id: 7,
         fullName: 'Maria Santos',
-        email: 'maria@gridprint.ph',
+        email: 'maria@gridgoprint.ph',
         phoneNumber: '+639171234567',
         role: 'customer',
         isActive: true,
@@ -916,7 +916,7 @@ vi.mock('@/providers/api-client', () => ({
         {
           id: 7,
           full_name: 'Maria Santos',
-          email: 'maria@gridprint.ph',
+          email: 'maria@gridgoprint.ph',
           role: 'customer',
           is_active: true,
           is_profile_complete: true,
@@ -962,7 +962,7 @@ vi.mock('./data', () => ({
     user: {
       id: 7,
       full_name: 'Maria Santos',
-      email: 'maria@gridprint.ph',
+      email: 'maria@gridgoprint.ph',
       phone_number: '+639171234567',
       role: 'customer',
       is_active: true,
@@ -1236,7 +1236,7 @@ describe('users analytics data', () => {
           new_customers: 1,
           active_customers: 1,
           profile_completion_rate: 50,
-          role_counts: { customers: 2, drivers: 1, admins: 0 },
+          role_counts: { customers: 2, riders: 1, admins: 0 },
         },
         signup_trend: [{ label: 'Apr 17', value: 1 }],
         profile_category_mix: [{ label: 'Student', value: 1 }],
@@ -1265,7 +1265,7 @@ describe('users analytics data', () => {
           new_customers: 1,
           active_customers: 1,
           profile_completion_rate: 50,
-          role_counts: { customers: 2, drivers: 1, admins: 0 },
+          role_counts: { customers: 2, riders: 1, admins: 0 },
         },
         signup_trend: [{ label: 'Apr 17', value: '1' }, { bad: true }],
         profile_category_mix: [{ label: 'Student', value: 1 }],
@@ -1320,7 +1320,7 @@ export interface AdminUsersAnalyticsRecord {
     profile_completion_rate: number;
     role_counts: {
       customers: number;
-      drivers: number;
+      riders: number;
       admins: number;
     };
   };
@@ -1369,7 +1369,7 @@ export function normalizeAdminUsersAnalytics(payload: unknown): AdminUsersAnalyt
       profile_completion_rate: typeof summary.profile_completion_rate === 'number' ? summary.profile_completion_rate : 0,
       role_counts: {
         customers: typeof roleCounts.customers === 'number' ? roleCounts.customers : 0,
-        drivers: typeof roleCounts.drivers === 'number' ? roleCounts.drivers : 0,
+        riders: typeof roleCounts.riders === 'number' ? roleCounts.riders : 0,
         admins: typeof roleCounts.admins === 'number' ? roleCounts.admins : 0,
       },
     },
@@ -1475,7 +1475,7 @@ describe('UsersTab', () => {
         new_customers: 18,
         active_customers: 71,
         profile_completion_rate: 82,
-        role_counts: { customers: 124, drivers: 8, admins: 2 },
+        role_counts: { customers: 124, riders: 8, admins: 2 },
       },
       signup_trend: [{ label: 'Apr 17', value: 4 }],
       profile_category_mix: [{ label: 'Student', value: 80 }],
@@ -1490,7 +1490,7 @@ describe('UsersTab', () => {
 
     expect(await screen.findByText('Total Customers')).toBeInTheDocument();
     expect(screen.getByText('124')).toBeInTheDocument();
-    expect(screen.getByText('Drivers: 8')).toBeInTheDocument();
+    expect(screen.getByText('Riders: 8')).toBeInTheDocument();
     expect(screen.getByText('Admins: 2')).toBeInTheDocument();
   });
 
@@ -1501,7 +1501,7 @@ describe('UsersTab', () => {
         new_customers: 1,
         active_customers: 1,
         profile_completion_rate: 100,
-        role_counts: { customers: 1, drivers: 0, admins: 0 },
+        role_counts: { customers: 1, riders: 0, admins: 0 },
       },
       signup_trend: [],
       profile_category_mix: [],
@@ -1639,7 +1639,7 @@ export function UsersTab() {
         </Col>
         <Col>
           <Space>
-            <Text style={{ color: '#808080' }}>Drivers: {summary.role_counts.drivers}</Text>
+            <Text style={{ color: '#808080' }}>Riders: {summary.role_counts.riders}</Text>
             <Text style={{ color: '#808080' }}>Admins: {summary.role_counts.admins}</Text>
           </Space>
         </Col>
@@ -1948,7 +1948,7 @@ npm run dev
 ```
 
 Expected manual checks:
-- log in as `admin@gridprint.ph`
+- log in as `admin@gridgoprint.ph`
 - open `/users`
 - click `View` on a customer row
 - confirm hero summary, quick metrics, profile summary, and recent orders render
@@ -1966,7 +1966,7 @@ Expected manual checks:
   - dashboard `Users` tab: Tasks 5-6
   - sparse profile placeholders: Task 4
   - no fake analytics fallback: Tasks 5-6
-  - customer-focused metrics with supporting driver/admin counts: Tasks 1 and 6
+  - customer-focused metrics with supporting rider/admin counts: Tasks 1 and 6
 
 - Placeholder scan:
   - no `TODO`, `TBD`, `implement later`, or `similar to Task N` markers remain

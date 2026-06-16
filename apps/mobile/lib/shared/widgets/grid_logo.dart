@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// The GRID brand logo — a 3×3 dot matrix.
+/// The GRIDGO brand logo — a 3×3 dot matrix.
 ///
 /// Matches the brand identity: mostly white/foreground dots with one
 /// yellow (#FFDE58) accent dot and grey (#5B5B5B) secondary dots.
@@ -83,9 +83,9 @@ class GridLogo extends StatelessWidget {
   }
 }
 
-/// GRID wordmark + logo combined.
+/// GRIDGO wordmark + logo combined.
 ///
-/// Displays the dot grid logo above or beside the "GRID" text.
+/// Displays the dot grid logo above or beside the "GRIDGO" text.
 class GridBrandMark extends StatelessWidget {
   const GridBrandMark({
     super.key,
@@ -115,7 +115,7 @@ class GridBrandMark extends StatelessWidget {
     );
 
     final wordmark = Text(
-      'GRID',
+      'GRIDGO',
       style: TextStyle(
         fontFamily: 'Satoshi',
         fontSize: fontSize,

@@ -114,7 +114,7 @@ class UsersDashboardView extends ConsumerWidget {
               ),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
-                child: _buildStatBadge('Drivers', '${roles.drivers}', colors),
+                child: _buildStatBadge('Riders', '${roles.riders}', colors),
               ),
               const SizedBox(width: AppSpacing.sm),
               Expanded(

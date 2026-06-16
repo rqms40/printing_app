@@ -272,10 +272,10 @@ Order _parseOrder(Map<String, dynamic> json) {
       'delivery_address_id',
     )?.toString(),
     deliveryAddress: _parseOrderDeliveryAddress(json),
-    assignedDriverId: _readJsonValue(
+    assignedRiderId: _readJsonValue(
       json,
-      'assignedDriverId',
-      'assigned_driver_id',
+      'assignedRiderId',
+      'assigned_rider_id',
     )?.toString(),
     deliveryAssignmentId: _readJsonValue(
       json,

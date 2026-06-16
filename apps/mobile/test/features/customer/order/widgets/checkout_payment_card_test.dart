@@ -32,7 +32,7 @@ void main() {
         child: const MaterialApp(home: Scaffold(body: CheckoutPaymentCard())),
       ),
     );
-    expect(find.textContaining('GRID Credits'), findsOneWidget);
+    expect(find.textContaining('GRIDGO Credits'), findsOneWidget);
     expect(find.text('Change'), findsOneWidget);
   });
 

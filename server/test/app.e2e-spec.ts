@@ -4,7 +4,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 
-describe('GRID API (e2e)', () => {
+describe('GRIDGO API (e2e)', () => {
   let app: INestApplication<App>;
 
   beforeAll(async () => {

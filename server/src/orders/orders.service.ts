@@ -18,7 +18,7 @@ import { DeliveryDestination } from './entities/delivery-destination.entity';
 import {
   DeliveryAssignment,
   DeliveryStatus,
-} from '../drivers/entities/delivery-assignment.entity';
+} from '../riders/entities/delivery-assignment.entity';
 import { OrdersGateway } from './orders.gateway';
 import { FirebaseService } from '../firebase/firebase.service';
 import { UsersService } from '../users/users.service';
@@ -1292,9 +1292,9 @@ export class OrdersService {
         title: 'Ready for Dispatch',
         body: `Your order ${order.orderId} is ready.`,
       },
-      driver_assigned: {
-        title: 'Driver Assigned',
-        body: `A driver has been assigned to your order ${order.orderId}.`,
+      rider_assigned: {
+        title: 'Rider Assigned',
+        body: `A rider has been assigned to your order ${order.orderId}.`,
       },
       picked_up: {
         title: 'Picked Up',
@@ -1305,7 +1305,7 @@ export class OrdersService {
         body: `Your order ${order.orderId} is on the way!`,
       },
       arrived_at_destination: {
-        title: 'Driver Arrived',
+        title: 'Rider Arrived',
         body: `Your delivery for ${order.orderId} has arrived!`,
       },
       delivered: {

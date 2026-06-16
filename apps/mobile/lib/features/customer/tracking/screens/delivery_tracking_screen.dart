@@ -9,7 +9,7 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/chat/providers/chat_provider.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/features/customer/tracking/widgets/delivery_map.dart';
-import 'package:printing_app/features/customer/tracking/widgets/driver_info_card.dart';
+import 'package:printing_app/features/customer/tracking/widgets/rider_info_card.dart';
 import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
 import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
 import 'package:printing_app/features/tutorial/widgets/coach_mark_sequence.dart';
@@ -63,7 +63,7 @@ class _DeliveryTrackingScreenState
         TutorialStep(
           targetKey: _mapKey,
           icon: HugeIcons.strokeRoundedLocation01,
-          title: 'Live Driver Tracking',
+          title: 'Live Rider Tracking',
           body:
               "Your rider's GPS updates in real time. The ETA badge top-right refreshes live.",
         ),
@@ -82,7 +82,7 @@ class _DeliveryTrackingScreenState
     if (conv == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not open driver chat. Please try again.'),
+          content: Text('Could not open rider chat. Please try again.'),
         ),
       );
       return;
@@ -132,7 +132,7 @@ class _DeliveryTrackingScreenState
               .animate()
               .fadeIn(duration: 400.ms, curve: Curves.easeOut)
               .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
-          // Driver info card at bottom
+          // Rider info card at bottom
           Padding(
                 padding: const EdgeInsets.fromLTRB(
                   AppSpacing.md,
@@ -140,7 +140,7 @@ class _DeliveryTrackingScreenState
                   AppSpacing.md,
                   AppSpacing.md,
                 ),
-                child: DriverInfoCard(
+                child: RiderInfoCard(
                   onChat: order == null ? null : () => _openOrderChat(order),
                 ),
               )

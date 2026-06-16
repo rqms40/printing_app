@@ -166,7 +166,7 @@ class _ProfileTab extends ConsumerWidget {
               .fadeIn(duration: 400.ms, delay: 25.ms, curve: Curves.easeOut),
           _MenuRow(
             icon: HugeIcons.strokeRoundedCoins01,
-            title: 'GRID Credits: ${user?.credits ?? "0.00"}',
+            title: 'GRIDGO Credits: ${user?.credits ?? "0.00"}',
             onTap: () {},
             colors: colors,
           ),

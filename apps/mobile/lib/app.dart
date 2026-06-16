@@ -15,7 +15,7 @@ class App extends ConsumerWidget {
     final themeMode = ref.watch(themeProvider);
 
     return MaterialApp.router(
-      title: 'GRID',
+      title: 'GRIDGO',
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: themeMode,

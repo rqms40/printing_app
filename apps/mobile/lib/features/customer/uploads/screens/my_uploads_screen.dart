@@ -369,7 +369,7 @@ class _Header extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'THE DATA GRID',
+                  'THE DATA GRIDGO',
                   style: AppTypography.overline.copyWith(
                     color: colors.brand,
                     fontSize: 10,

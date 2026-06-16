@@ -220,7 +220,7 @@ class _PickupCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'GRID Print Shop',
+                  'GRIDGO Print Shop',
                   style: AppTypography.bodyBold.copyWith(
                     color: colors.onBackground,
                     fontSize: 14,

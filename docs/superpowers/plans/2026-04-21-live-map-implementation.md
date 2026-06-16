@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the hardcoded fake home map tile and simulated tracking screen with a real shared provider that reads live driver location from the WebSocket and switches map tile styles with the system theme.
+**Goal:** Replace the hardcoded fake home map tile and simulated tracking screen with a real shared provider that reads live rider location from the WebSocket and switches map tile styles with the system theme.
 
 **Architecture:** A new `liveDeliveryMapProvider` reads `activeOrdersProvider`, `addressProvider`, and `locationProvider` to produce a single `LiveDeliveryMapState`. The tracking screen (`DeliveryMap`) owns the WebSocket location connection and feeds `locationProvider`. The home tile (`MapTrackingTile`) and tracking screen both consume the shared state. `MapHelpers` gains a theme-aware `tileLayer(Brightness)` used by both screens.
 
@@ -41,7 +41,7 @@ static TileLayer tileLayer(Brightness brightness) {
       : 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';
   return TileLayer(
     urlTemplate: url,
-    userAgentPackageName: 'com.gridprint.app',
+    userAgentPackageName: 'com.gridgoprint.app',
   );
 }
 ```
@@ -93,7 +93,7 @@ void main() {
     test('idle() uses Davao center and empty route', () {
       final state = LiveDeliveryMapState.idle();
       expect(state.status, LiveMapStatus.idle);
-      expect(state.driverPoint, isNull);
+      expect(state.riderPoint, isNull);
       expect(state.routePoints, isEmpty);
       expect(state.orderId, isNull);
       // Davao City approx
@@ -101,13 +101,13 @@ void main() {
     });
 
     test('active() sets all fields', () {
-      const driver = LatLng(7.20, 125.46);
+      const rider = LatLng(7.20, 125.46);
       const shop = LatLng(7.19, 125.45);
       const dest = LatLng(7.21, 125.47);
-      final route = [shop, driver, dest];
+      final route = [shop, rider, dest];
 
       final state = LiveDeliveryMapState.active(
-        driverPoint: driver,
+        riderPoint: rider,
         shopPoint: shop,
         destPoint: dest,
         routePoints: route,
@@ -116,7 +116,7 @@ void main() {
       );
 
       expect(state.status, LiveMapStatus.active);
-      expect(state.driverPoint, driver);
+      expect(state.riderPoint, rider);
       expect(state.shopPoint, shop);
       expect(state.destPoint, dest);
       expect(state.routePoints, route);
@@ -130,13 +130,13 @@ void main() {
     });
 
     test('etaMinutes returns remaining route points count', () {
-      const driver = LatLng(7.20, 125.46);
+      const rider = LatLng(7.20, 125.46);
       const shop = LatLng(7.19, 125.45);
       const dest = LatLng(7.21, 125.47);
       final route = List.generate(30, (i) => LatLng(7.19 + i * 0.001, 125.45));
 
       final state = LiveDeliveryMapState.active(
-        driverPoint: driver,
+        riderPoint: rider,
         shopPoint: shop,
         destPoint: dest,
         routePoints: route,
@@ -144,7 +144,7 @@ void main() {
         orderStatus: OrderStatus.onTheWay,
       );
 
-      // nearestRouteIndex for driver not in list → returns 0, eta = 30
+      // nearestRouteIndex for rider not in list → returns 0, eta = 30
       expect(state.etaMinutes, greaterThanOrEqualTo(0));
     });
   });
@@ -168,7 +168,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:printing_app/features/customer/address/providers/address_provider.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
-import 'package:printing_app/features/driver/active_delivery/providers/location_provider.dart';
+import 'package:printing_app/features/rider/active_delivery/providers/location_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/services/routing_service.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
@@ -180,7 +180,7 @@ class LiveDeliveryMapState {
     required this.status,
     required this.shopPoint,
     required this.destPoint,
-    this.driverPoint,
+    this.riderPoint,
     this.routePoints = const [],
     this.orderId,
     this.orderStatus,
@@ -189,7 +189,7 @@ class LiveDeliveryMapState {
   final LiveMapStatus status;
   final LatLng shopPoint;
   final LatLng destPoint;
-  final LatLng? driverPoint;
+  final LatLng? riderPoint;
   final List<LatLng> routePoints;
   final String? orderId;
   final OrderStatus? orderStatus;
@@ -207,7 +207,7 @@ class LiveDeliveryMapState {
       );
 
   factory LiveDeliveryMapState.active({
-    required LatLng driverPoint,
+    required LatLng riderPoint,
     required LatLng shopPoint,
     required LatLng destPoint,
     required List<LatLng> routePoints,
@@ -218,20 +218,20 @@ class LiveDeliveryMapState {
         status: LiveMapStatus.active,
         shopPoint: shopPoint,
         destPoint: destPoint,
-        driverPoint: driverPoint,
+        riderPoint: riderPoint,
         routePoints: routePoints,
         orderId: orderId,
         orderStatus: orderStatus,
       );
 
-  /// Index of the route point nearest to [driverPoint].
+  /// Index of the route point nearest to [riderPoint].
   int get nearestRouteIndex {
-    if (driverPoint == null || routePoints.isEmpty) return 0;
+    if (riderPoint == null || routePoints.isEmpty) return 0;
     const distance = Distance();
     var nearest = 0;
     var minDist = double.infinity;
     for (var i = 0; i < routePoints.length; i++) {
-      final d = distance(driverPoint!, routePoints[i]);
+      final d = distance(riderPoint!, routePoints[i]);
       if (d < minDist) {
         minDist = d;
         nearest = i;
@@ -248,7 +248,7 @@ class LiveDeliveryMapState {
 /// Fixed shop/branch location in Davao City.
 const _shopPoint = LatLng(7.0640, 125.6079); // Davao City downtown
 
-/// Shared provider — reads active order + live driver location + OSRM route.
+/// Shared provider — reads active order + live rider location + OSRM route.
 /// Tracking screen owns the WS connection that feeds [locationProvider].
 final liveDeliveryMapProvider =
     FutureProvider.autoDispose<LiveDeliveryMapState>((ref) async {
@@ -274,8 +274,8 @@ final liveDeliveryMapProvider =
 
   final destPoint = LatLng(address.latitude, address.longitude);
 
-  // Driver position — use locationProvider if available, else fall back to shop
-  final driverPoint = locationUpdate != null
+  // Rider position — use locationProvider if available, else fall back to shop
+  final riderPoint = locationUpdate != null
       ? LatLng(locationUpdate.latitude, locationUpdate.longitude)
       : _shopPoint;
 
@@ -283,7 +283,7 @@ final liveDeliveryMapProvider =
   final routePoints = await RoutingService.getRoute(_shopPoint, destPoint);
 
   return LiveDeliveryMapState.active(
-    driverPoint: driverPoint,
+    riderPoint: riderPoint,
     shopPoint: _shopPoint,
     destPoint: destPoint,
     routePoints: routePoints,
@@ -366,7 +366,7 @@ void main() {
 
   testWidgets('shows LIVE MAP badge in active state', (tester) async {
     final active = LiveDeliveryMapState.active(
-      driverPoint: const LatLng(7.20, 125.46),
+      riderPoint: const LatLng(7.20, 125.46),
       shopPoint: const LatLng(7.19, 125.45),
       destPoint: const LatLng(7.21, 125.47),
       routePoints: [const LatLng(7.19, 125.45), const LatLng(7.21, 125.47)],
@@ -507,7 +507,7 @@ class _ActiveTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final driverPoint = state.driverPoint!;
+    final riderPoint = state.riderPoint!;
     final eta = state.etaMinutes;
 
     return Stack(
@@ -515,7 +515,7 @@ class _ActiveTile extends StatelessWidget {
       children: [
         FlutterMap(
           options: MapOptions(
-            initialCenter: driverPoint,
+            initialCenter: riderPoint,
             initialZoom: 13.8,
             interactionOptions: const InteractionOptions(
               flags: InteractiveFlag.none,
@@ -528,7 +528,7 @@ class _ActiveTile extends StatelessWidget {
             MarkerLayer(markers: [
               MapHelpers.shopMarker(point: state.shopPoint),
               MapHelpers.destinationMarker(point: state.destPoint),
-              MapHelpers.driverMarker(driverPoint),
+              MapHelpers.riderMarker(riderPoint),
             ]),
           ],
         ),
@@ -642,7 +642,7 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/home/providers/live_delivery_map_provider.dart';
-import 'package:printing_app/features/driver/active_delivery/providers/location_provider.dart';
+import 'package:printing_app/features/rider/active_delivery/providers/location_provider.dart';
 import 'package:printing_app/shared/models/location_update.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
@@ -734,7 +734,7 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
 
   Widget _mapView(
       LiveDeliveryMapState state, Brightness brightness, AppColorSet colors) {
-    final driverPoint = state.driverPoint!;
+    final riderPoint = state.riderPoint!;
     final eta = state.etaMinutes;
 
     return ClipRRect(
@@ -751,7 +751,7 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
             children: [
               FlutterMap(
                 options: MapOptions(
-                  initialCenter: driverPoint,
+                  initialCenter: riderPoint,
                   initialZoom: 13.5,
                 ),
                 children: [
@@ -761,7 +761,7 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
                   MarkerLayer(markers: [
                     MapHelpers.shopMarker(point: state.shopPoint),
                     MapHelpers.destinationMarker(point: state.destPoint),
-                    MapHelpers.driverMarker(driverPoint),
+                    MapHelpers.riderMarker(riderPoint),
                   ]),
                 ],
               ),

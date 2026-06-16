@@ -34,7 +34,7 @@ void main() {
     await tester.tap(find.text('Pickup'));
     await tester.pump();
     expect(container.read(checkoutProvider).mode, DeliveryMode.pickup);
-    expect(find.textContaining('GRID Print Shop'), findsOneWidget);
+    expect(find.textContaining('GRIDGO Print Shop'), findsOneWidget);
   });
 
   testWidgets(

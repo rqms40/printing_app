@@ -38,7 +38,7 @@ type AdminUserInsightOrderPayload = {
   decline_reason: string | null;
   cancellation_reason: string | null;
   estimated_completion_at: Date | null;
-  assigned_driver_id: number | null;
+  assigned_rider_id: number | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -269,7 +269,7 @@ function mapAdminInsightOrder(order: Order): AdminUserInsightOrderPayload {
     decline_reason: order.declineReason ?? null,
     cancellation_reason: order.cancellationReason ?? null,
     estimated_completion_at: order.estimatedCompletionAt ?? null,
-    assigned_driver_id: order.assignedDriverId ?? null,
+    assigned_rider_id: order.assignedRiderId ?? null,
     created_at: order.createdAt,
     updated_at: order.updatedAt,
   };

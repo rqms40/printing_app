@@ -7,7 +7,7 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/home/providers/live_delivery_map_provider.dart';
-import 'package:printing_app/features/customer/tracking/providers/live_driver_location_provider.dart';
+import 'package:printing_app/features/customer/tracking/providers/live_rider_location_provider.dart';
 import 'package:printing_app/shared/models/location_update.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
@@ -34,7 +34,7 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     )..repeat(reverse: true);
-    ref.read(liveDriverLocationProvider.notifier).state = null;
+    ref.read(liveRiderLocationProvider.notifier).state = null;
     _connectLocationSocket();
   }
 
@@ -49,7 +49,7 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
         final lat = (d['latitude'] as num?)?.toDouble();
         final lng = (d['longitude'] as num?)?.toDouble();
         if (lat == null || lng == null) return;
-        ref.read(liveDriverLocationProvider.notifier).state = LocationUpdate(
+        ref.read(liveRiderLocationProvider.notifier).state = LocationUpdate(
           id: 'live',
           deliveryAssignmentId:
               d['assignmentId']?.toString() ??
@@ -102,10 +102,10 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
         : AppColors.light;
 
     final mapAsync = ref.watch(liveDeliveryMapProvider);
-    final locationUpdate = ref.watch(liveDriverLocationProvider);
+    final locationUpdate = ref.watch(liveRiderLocationProvider);
 
     // Move camera whenever a live location update arrives.
-    ref.listen(liveDriverLocationProvider, (_, next) {
+    ref.listen(liveRiderLocationProvider, (_, next) {
       if (next == null) return;
       _moveCameraTo(LatLng(next.latitude, next.longitude));
     });
@@ -116,10 +116,10 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
       error: (e, st) => _loadingView(colors),
       data: (state) {
         if (state.status != LiveMapStatus.active) return _loadingView(colors);
-        final driverPoint = locationUpdate != null
+        final riderPoint = locationUpdate != null
             ? LatLng(locationUpdate.latitude, locationUpdate.longitude)
             : state.shopPoint;
-        return _mapView(state, driverPoint, brightness, colors);
+        return _mapView(state, riderPoint, brightness, colors);
       },
     );
   }
@@ -138,7 +138,7 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
 
   Widget _mapView(
     LiveDeliveryMapState state,
-    LatLng driverPoint,
+    LatLng riderPoint,
     Brightness brightness,
     AppColorSet colors,
   ) {
@@ -160,11 +160,11 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
               FlutterMap(
                 mapController: _mapController,
                 options: MapOptions(
-                  initialCenter: driverPoint,
+                  initialCenter: riderPoint,
                   initialZoom: 13.5,
                   onMapReady: () {
                     _isMapReady = true;
-                    final latest = ref.read(liveDriverLocationProvider);
+                    final latest = ref.read(liveRiderLocationProvider);
                     if (latest != null) {
                       _moveCameraTo(LatLng(latest.latitude, latest.longitude));
                     }
@@ -178,7 +178,7 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
                     markers: [
                       MapHelpers.shopMarker(point: state.shopPoint),
                       MapHelpers.destinationMarker(point: state.destPoint),
-                      MapHelpers.driverMarker(driverPoint),
+                      MapHelpers.riderMarker(riderPoint),
                     ],
                   ),
                 ],

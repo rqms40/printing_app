@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-31
 **Status:** Approved
-**Scope:** Dynamic product/pricing system for GRID — NestJS backend module + admin Refine UI full CRUD
+**Scope:** Dynamic product/pricing system for GRIDGO — NestJS backend module + admin Refine UI full CRUD
 
 ---
 
@@ -242,7 +242,7 @@ All write endpoints require `JwtAuthGuard` + `@Roles('admin')`.
 
 ### Data fallback
 
-All three pages fall back to current mock data if the API is unreachable, same pattern as orders and drivers pages.
+All three pages fall back to current mock data if the API is unreachable, same pattern as orders and riders pages.
 
 ---
 

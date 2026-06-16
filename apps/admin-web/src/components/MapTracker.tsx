@@ -2,7 +2,7 @@ import React from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { mockDrivers } from '../data/mockDrivers';
+import { mockRiders } from '../data/mockRiders';
 
 // Fix leaflet default icon issue in React
 delete (L.Icon.Default.prototype as L.Icon.Default & { _getIconUrl?: unknown })._getIconUrl;
@@ -41,7 +41,7 @@ export const MapTracker: React.FC = () => {
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
         />
-        {mockDrivers.map(d => (
+        {mockRiders.map(d => (
           <Marker 
             key={d.id} 
             position={[d.lastLatitude, d.lastLongitude]}

@@ -19,7 +19,7 @@ const statusOptions: { label: OrderStatus; icon: LucideIcon }[] = [
   { label: 'Finishing & Mounting', icon: Settings },
   { label: 'Quality Checked', icon: ShieldCheck },
   { label: 'Ready for Dispatch', icon: Package },
-  { label: 'Driver Assigned', icon: IdCard },
+  { label: 'Rider Assigned', icon: IdCard },
   { label: 'Picked Up', icon: Truck },
   { label: 'On the Way', icon: Truck },
   { label: 'Arrived at Destination', icon: MapPin },

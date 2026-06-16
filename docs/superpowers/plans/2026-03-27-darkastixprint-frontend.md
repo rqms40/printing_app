@@ -4,7 +4,7 @@
 
 **Goal:** Build the complete DarkastixPrint frontend (30+ screens, 3 roles) as a presentable demo with mock data and premium greyscale design.
 
-**Architecture:** Feature-first Flutter app with Riverpod state management and GoRouter role-based navigation. Three shells (Customer 4-tab, Driver 3-tab, Admin 3-tab) with shared design system. All data is mock — no backend.
+**Architecture:** Feature-first Flutter app with Riverpod state management and GoRouter role-based navigation. Three shells (Customer 4-tab, Rider 3-tab, Admin 3-tab) with shared design system. All data is mock — no backend.
 
 **Tech Stack:** Flutter 3.41.6, Dart 3.11.4, Riverpod, GoRouter, google_maps_flutter, fl_chart, flutter_animate, shimmer, file_picker, Hive, Iconsax
 
@@ -65,7 +65,7 @@ Phase C (Sequential):  Task 11 (integrates everything)
 
 - [ ] **Step 2:** Download and add font files. Satoshi from fontshare.com, Instrument Serif from Google Fonts. Place in `assets/fonts/Satoshi/` and `assets/fonts/InstrumentSerif/`.
 
-- [ ] **Step 3:** Create full directory structure per PRD Section 6. All feature dirs under `lib/features/` (auth, customer/home, customer/order, customer/orders, customer/notifications, customer/tracking, customer/address, customer/profile, driver/deliveries, driver/active_delivery, driver/history, driver/profile, admin/dashboard, admin/queue, admin/driver_management, admin/profile). Shared dirs: `lib/shared/widgets/`, `lib/shared/models/`, `lib/shared/services/`, `lib/shared/providers/`. Config dirs: `lib/config/theme/`, `lib/config/routes/`, `lib/config/constants/`.
+- [ ] **Step 3:** Create full directory structure per PRD Section 6. All feature dirs under `lib/features/` (auth, customer/home, customer/order, customer/orders, customer/notifications, customer/tracking, customer/address, customer/profile, rider/deliveries, rider/active_delivery, rider/history, rider/profile, admin/dashboard, admin/queue, admin/rider_management, admin/profile). Shared dirs: `lib/shared/widgets/`, `lib/shared/models/`, `lib/shared/services/`, `lib/shared/providers/`. Config dirs: `lib/config/theme/`, `lib/config/routes/`, `lib/config/constants/`.
 
 - [ ] **Step 4:** Update `analysis_options.yaml` with strict Flutter lints.
 
@@ -165,15 +165,15 @@ Phase C (Sequential):  Task 11 (integrates everything)
 - Create: `lib/features/auth/widgets/auth_form.dart`
 - Test: `test/features/auth/screens/login_screen_test.dart`
 
-- [ ] **Step 1:** Write widget test: login screen renders email/password fields and login button; dev bypass buttons for Customer/Driver/Admin are visible.
+- [ ] **Step 1:** Write widget test: login screen renders email/password fields and login button; dev bypass buttons for Customer/Rider/Admin are visible.
 
 - [ ] **Step 2:** Implement `AuthProvider` — mock auth state with `currentUser`, `isAuthenticated`, `login()`, `register()`, `logout()`, `devBypass(role)`. Stores mock user in memory.
 
-- [ ] **Step 3:** Implement `LoginScreen` — Instrument Serif heading "Welcome back", email + password fields (AppTextField), "Sign In" primary button, "Create Account" link, 3 dev bypass buttons at bottom (Customer/Driver/Admin) for quick testing.
+- [ ] **Step 3:** Implement `LoginScreen` — Instrument Serif heading "Welcome back", email + password fields (AppTextField), "Sign In" primary button, "Create Account" link, 3 dev bypass buttons at bottom (Customer/Rider/Admin) for quick testing.
 
 - [ ] **Step 4:** Implement `RegisterScreen` — email, password, confirm password fields, "Create Account" button, "Already have an account?" link.
 
-- [ ] **Step 5:** Implement `ProfileSetupScreen` — full name, phone number, date of birth picker, gender selector (chips: Male/Female/Other), "Complete Profile" button. For driver role: add vehicle type, plate number fields.
+- [ ] **Step 5:** Implement `ProfileSetupScreen` — full name, phone number, date of birth picker, gender selector (chips: Male/Female/Other), "Complete Profile" button. For rider role: add vehicle type, plate number fields.
 
 - [ ] **Step 6:** Run tests. Commit: `feat: auth screens with dev bypass login`
 
@@ -286,7 +286,7 @@ Phase C (Sequential):  Task 11 (integrates everything)
 - Create: `lib/features/customer/notifications/providers/notifications_provider.dart`
 - Create: `lib/features/customer/tracking/screens/delivery_tracking_screen.dart`
 - Create: `lib/features/customer/tracking/widgets/delivery_map.dart`
-- Create: `lib/features/customer/tracking/widgets/driver_info_card.dart`
+- Create: `lib/features/customer/tracking/widgets/rider_info_card.dart`
 - Create: `lib/features/customer/address/screens/address_list_screen.dart`
 - Create: `lib/features/customer/address/screens/address_picker_screen.dart`
 - Create: `lib/features/customer/address/providers/address_provider.dart`
@@ -302,7 +302,7 @@ Phase C (Sequential):  Task 11 (integrates everything)
 
 - [ ] **Step 1:** Implement `NotificationsScreen` — list of notification tiles (icon, title, message, timestamp, read/unread dot indicator), "Mark All Read" action in app bar, empty state.
 
-- [ ] **Step 2:** Implement `DeliveryTrackingScreen` with `DeliveryMap` — Google Maps widget with greyscale map style (silver), driver pin (dark circle with heading indicator), destination pin (accent color), route polyline in onSurface color. If no Maps API key: show styled placeholder with message. `DriverInfoCard` at bottom: driver name, vehicle type, plate number, phone button, ETA.
+- [ ] **Step 2:** Implement `DeliveryTrackingScreen` with `DeliveryMap` — Google Maps widget with greyscale map style (silver), rider pin (dark circle with heading indicator), destination pin (accent color), route polyline in onSurface color. If no Maps API key: show styled placeholder with message. `RiderInfoCard` at bottom: rider name, vehicle type, plate number, phone button, ETA.
 
 - [ ] **Step 3:** Implement `AddressListScreen` — list of saved address cards (label, full address, landmark, default badge), "Add Address" FAB, swipe to delete, max 5 addresses.
 
@@ -316,24 +316,24 @@ Phase C (Sequential):  Task 11 (integrates everything)
 
 ---
 
-## Task 9: Driver Screens
+## Task 9: Rider Screens
 
 **Depends on:** Tasks 1-3
 
 **Files:**
-- Create: `lib/features/driver/deliveries/screens/deliveries_screen.dart`
-- Create: `lib/features/driver/deliveries/screens/delivery_detail_screen.dart`
-- Create: `lib/features/driver/deliveries/providers/deliveries_provider.dart`
-- Create: `lib/features/driver/deliveries/widgets/delivery_card.dart`
-- Create: `lib/features/driver/deliveries/widgets/checkpoint_action.dart`
-- Create: `lib/features/driver/active_delivery/screens/active_delivery_screen.dart`
-- Create: `lib/features/driver/active_delivery/providers/location_provider.dart`
-- Create: `lib/features/driver/active_delivery/widgets/delivery_map_view.dart`
-- Create: `lib/features/driver/active_delivery/widgets/status_action_bar.dart`
-- Create: `lib/features/driver/history/screens/delivery_history_screen.dart`
-- Create: `lib/features/driver/history/providers/earnings_provider.dart`
-- Create: `lib/features/driver/profile/screens/driver_profile_screen.dart`
-- Test: `test/features/driver/deliveries/screens/deliveries_screen_test.dart`
+- Create: `lib/features/rider/deliveries/screens/deliveries_screen.dart`
+- Create: `lib/features/rider/deliveries/screens/delivery_detail_screen.dart`
+- Create: `lib/features/rider/deliveries/providers/deliveries_provider.dart`
+- Create: `lib/features/rider/deliveries/widgets/delivery_card.dart`
+- Create: `lib/features/rider/deliveries/widgets/checkpoint_action.dart`
+- Create: `lib/features/rider/active_delivery/screens/active_delivery_screen.dart`
+- Create: `lib/features/rider/active_delivery/providers/location_provider.dart`
+- Create: `lib/features/rider/active_delivery/widgets/delivery_map_view.dart`
+- Create: `lib/features/rider/active_delivery/widgets/status_action_bar.dart`
+- Create: `lib/features/rider/history/screens/delivery_history_screen.dart`
+- Create: `lib/features/rider/history/providers/earnings_provider.dart`
+- Create: `lib/features/rider/profile/screens/rider_profile_screen.dart`
+- Test: `test/features/rider/deliveries/screens/deliveries_screen_test.dart`
 
 - [ ] **Step 1:** Implement `DeliveriesProvider` — manages list of mock delivery assignments with status filtering. Implements delivery status state machine (assigned→accepted→picked_up→on_the_way→arrived→delivered).
 
@@ -345,9 +345,9 @@ Phase C (Sequential):  Task 11 (integrates everything)
 
 - [ ] **Step 5:** Implement `DeliveryHistoryScreen` — completed deliveries list with date filtering, earnings summary card at top (today/week/month totals in ₱), each history item shows order ID, date, earnings amount.
 
-- [ ] **Step 6:** Implement `DriverProfileScreen` — availability toggle (Online/Offline) prominent at top, profile info (name, email, phone), vehicle info (type, plate number), edit vehicle info, sign out.
+- [ ] **Step 6:** Implement `RiderProfileScreen` — availability toggle (Online/Offline) prominent at top, profile info (name, email, phone), vehicle info (type, plate number), edit vehicle info, sign out.
 
-- [ ] **Step 7:** Run tests. Commit: `feat: driver screens with delivery workflow and GPS tracking`
+- [ ] **Step 7:** Run tests. Commit: `feat: rider screens with delivery workflow and GPS tracking`
 
 ---
 
@@ -366,10 +366,10 @@ Phase C (Sequential):  Task 11 (integrates everything)
 - Create: `lib/features/admin/queue/providers/queue_provider.dart`
 - Create: `lib/features/admin/queue/widgets/queue_order_card.dart`
 - Create: `lib/features/admin/queue/widgets/status_picker.dart`
-- Create: `lib/features/admin/driver_management/screens/driver_assignment_screen.dart`
-- Create: `lib/features/admin/driver_management/providers/drivers_provider.dart`
-- Create: `lib/features/admin/driver_management/widgets/driver_list_tile.dart`
-- Create: `lib/features/admin/driver_management/widgets/assignment_dialog.dart`
+- Create: `lib/features/admin/rider_management/screens/rider_assignment_screen.dart`
+- Create: `lib/features/admin/rider_management/providers/riders_provider.dart`
+- Create: `lib/features/admin/rider_management/widgets/rider_list_tile.dart`
+- Create: `lib/features/admin/rider_management/widgets/assignment_dialog.dart`
 - Create: `lib/features/admin/profile/screens/admin_profile_screen.dart`
 - Test: `test/features/admin/dashboard/screens/dashboard_screen_test.dart`
 
@@ -383,13 +383,13 @@ Phase C (Sequential):  Task 11 (integrates everything)
 
 - [ ] **Step 5:** Implement `QueueScreen` — TabBar filter tabs (New/In Production/Done/All), search bar, list of `QueueOrderCard` widgets. Each card: order ID, status badge with inline `StatusPicker` dropdown, category, quantity × price, customer name, file link, timestamp. Tapping opens admin order detail.
 
-- [ ] **Step 6:** Implement `AdminOrderDetailScreen` — full order view: status dropdown (all 14 statuses), ETA setter (date/time picker), "Decline" button (opens dialog with required reason), "Assign Driver" button (opens driver assignment), file preview area, status history audit trail at bottom showing each change with timestamp + actor.
+- [ ] **Step 6:** Implement `AdminOrderDetailScreen` — full order view: status dropdown (all 14 statuses), ETA setter (date/time picker), "Decline" button (opens dialog with required reason), "Assign Rider" button (opens rider assignment), file preview area, status history audit trail at bottom showing each change with timestamp + actor.
 
-- [ ] **Step 7:** Implement `DriverAssignmentScreen` / `AssignmentDialog` — bottom sheet listing available drivers with `DriverListTile` (name, vehicle type, plate, availability dot, last location label). One-tap assign sends mock notification.
+- [ ] **Step 7:** Implement `RiderAssignmentScreen` / `AssignmentDialog` — bottom sheet listing available riders with `RiderListTile` (name, vehicle type, plate, availability dot, last location label). One-tap assign sends mock notification.
 
 - [ ] **Step 8:** Implement `AdminProfileScreen` — admin info, sign out, app version.
 
-- [ ] **Step 9:** Run tests. Commit: `feat: admin dashboard, order queue, driver assignment`
+- [ ] **Step 9:** Run tests. Commit: `feat: admin dashboard, order queue, rider assignment`
 
 ---
 
@@ -400,25 +400,25 @@ Phase C (Sequential):  Task 11 (integrates everything)
 **Files:**
 - Create: `lib/config/routes/app_router.dart`
 - Create: `lib/config/routes/customer_routes.dart`
-- Create: `lib/config/routes/driver_routes.dart`
+- Create: `lib/config/routes/rider_routes.dart`
 - Create: `lib/config/routes/admin_routes.dart`
 - Create: `lib/shared/widgets/scaffold_with_nav.dart`
 - Modify: `lib/app.dart` (create new)
 - Modify: `lib/main.dart` (replace template)
 - Test: `test/config/routes/app_router_test.dart`
 
-- [ ] **Step 1:** Write test: unauthenticated user redirected to /auth/login, authenticated customer goes to /customer/home, driver to /driver/deliveries, admin to /admin/dashboard.
+- [ ] **Step 1:** Write test: unauthenticated user redirected to /auth/login, authenticated customer goes to /customer/home, rider to /rider/deliveries, admin to /admin/dashboard.
 
-- [ ] **Step 2:** Implement `ScaffoldWithNav` — shell widget with AppBottomNav, accepts child from GoRouter. Configurable for customer (4 tabs: Home, Orders, Notifications, Profile), driver (3 tabs: Deliveries, History, Profile), admin (3 tabs: Dashboard, Queue, Profile).
+- [ ] **Step 2:** Implement `ScaffoldWithNav` — shell widget with AppBottomNav, accepts child from GoRouter. Configurable for customer (4 tabs: Home, Orders, Notifications, Profile), rider (3 tabs: Deliveries, History, Profile), admin (3 tabs: Dashboard, Queue, Profile).
 
 - [ ] **Step 3:** Implement `app_router.dart` with GoRouter:
   - Auth routes: /auth/login, /auth/register, /auth/profile-setup
   - Customer shell (StatefulShellRoute): /customer/home, /customer/orders, /customer/notifications, /customer/profile
   - Customer stack routes: /customer/order/new (full flow), /customer/orders/:id, /customer/orders/:id/track, /customer/addresses, /customer/addresses/new, /customer/profile/account, /customer/profile/support, /customer/profile/terms, /customer/profile/privacy
-  - Driver shell: /driver/deliveries, /driver/history, /driver/profile
-  - Driver stack: /driver/deliveries/:id, /driver/deliveries/:id/active, /driver/history/earnings
+  - Rider shell: /rider/deliveries, /rider/history, /rider/profile
+  - Rider stack: /rider/deliveries/:id, /rider/deliveries/:id/active, /rider/history/earnings
   - Admin shell: /admin/dashboard, /admin/queue, /admin/profile
-  - Admin stack: /admin/queue/:id, /admin/queue/:id/assign-driver, /admin/queue/:id/history
+  - Admin stack: /admin/queue/:id, /admin/queue/:id/assign-rider, /admin/queue/:id/history
   - Redirect logic based on auth state and user role
 
 - [ ] **Step 4:** Implement `app.dart` — MaterialApp.router with GoRouter, AppTheme (light/dark based on theme provider), ProviderScope.
@@ -439,7 +439,7 @@ Phase C (Sequential):  Task 11 (integrates everything)
 - Create: `lib/shared/models/paper_specs.dart`
 - Create: `lib/shared/models/three_d_specs.dart`
 - Create: `lib/shared/models/address.dart`
-- Create: `lib/shared/models/driver_profile.dart`
+- Create: `lib/shared/models/rider_profile.dart`
 - Create: `lib/shared/models/delivery_assignment.dart`
 - Create: `lib/shared/models/location_update.dart`
 - Create: `lib/shared/models/order_status_history.dart`
@@ -462,10 +462,10 @@ Phase C (Sequential):  Task 11 (integrates everything)
 - [ ] **Step 3:** Implement all model classes matching PRD Section 11. Each with factory constructors and copyWith methods.
 
 - [ ] **Step 4:** Implement `MockData` class — static factory methods generating realistic Filipino mock data:
-  - 3 users (customer "Maria Santos", driver "Juan Reyes", admin "Admin")
+  - 3 users (customer "Maria Santos", rider "Juan Reyes", admin "Admin")
   - 8-10 orders across various statuses with paper and 3D specs
   - 3 saved addresses with real Filipino locations (Makati, Quezon City, Cebu) and landmarks
-  - 2 driver profiles
+  - 2 rider profiles
   - 5 delivery assignments at various stages
   - 15+ notifications
   - Mock GPS location stream (list of lat/lng points simulating Manila delivery route)
@@ -488,8 +488,8 @@ After all tasks complete:
 4. Manual verification:
    - Dev bypass login works for all 3 roles
    - Customer: navigate all 4 tabs, complete full order flow, view order detail with timeline
-   - Driver: see deliveries, tap through checkpoints, view map, check earnings
-   - Admin: view dashboard with charts, manage queue, assign driver, view status history
+   - Rider: see deliveries, tap through checkpoints, view map, check earnings
+   - Admin: view dashboard with charts, manage queue, assign rider, view status history
    - Dark mode toggle works throughout
    - Empty states display correctly
    - Skeleton loading appears during transitions

@@ -47,10 +47,10 @@ void main() {
       );
     });
 
-    test('devBypass sets authenticated state for driver', () {
-      notifier.devBypass('driver');
+    test('devBypass sets authenticated state for rider', () {
+      notifier.devBypass('rider');
       expect(notifier.state.status, AuthStatus.authenticated);
-      expect(notifier.state.user!.role, 'driver');
+      expect(notifier.state.user!.role, 'rider');
       expect(notifier.state.user!.fullName, 'Juan Reyes');
       expect(notifier.state.user!.email, 'juan@test.com');
       expect(notifier.state.user!.id, '2');
@@ -104,8 +104,8 @@ void main() {
       notifier.devBypass('customer');
       expect(notifier.state.user!.role, 'customer');
 
-      notifier.devBypass('driver');
-      expect(notifier.state.user!.role, 'driver');
+      notifier.devBypass('rider');
+      expect(notifier.state.user!.role, 'rider');
 
       notifier.devBypass('admin');
       expect(notifier.state.user!.role, 'admin');

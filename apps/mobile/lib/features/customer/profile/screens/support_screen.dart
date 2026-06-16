@@ -64,8 +64,8 @@ class SupportScreen extends StatelessWidget {
             _ContactCard(
               icon: HugeIcons.strokeRoundedMail01,
               title: 'Email',
-              subtitle: 'support@gridprint.ph',
-              onTap: () => _launchUrl('mailto:support@gridprint.ph'),
+              subtitle: 'support@gridgoprint.ph',
+              onTap: () => _launchUrl('mailto:support@gridgoprint.ph'),
             ).animate()
               .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
               .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),
@@ -73,8 +73,8 @@ class SupportScreen extends StatelessWidget {
             _ContactCard(
               icon: HugeIcons.strokeRoundedMessage01,
               title: 'Facebook Messenger',
-              subtitle: '@GRIDPrintPH',
-              onTap: () => _launchUrl('https://m.me/GRIDPrintPH'),
+              subtitle: '@GRIDGOPrintPH',
+              onTap: () => _launchUrl('https://m.me/GRIDGOPrintPH'),
             ).animate()
               .fadeIn(duration: 400.ms, delay: 180.ms, curve: Curves.easeOut)
               .slideY(begin: 0.03, duration: 400.ms, delay: 180.ms, curve: Curves.easeOut),

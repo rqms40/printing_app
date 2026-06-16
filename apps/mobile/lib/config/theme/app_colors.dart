@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// GRID color palette.
+/// GRIDGO color palette.
 ///
 /// Design philosophy: **Greyscale-dominant UI** with yellow (#FFDE58) reserved
 /// strictly for the brand logo dot. The UI accent is monochrome — black in

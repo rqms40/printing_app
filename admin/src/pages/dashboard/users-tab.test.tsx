@@ -53,7 +53,7 @@ describe("UsersTab", () => {
         profile_completion_rate: 84.5,
         role_counts: {
           customers: 110,
-          drivers: 10,
+          riders: 10,
           admins: 4,
         },
       },
@@ -102,7 +102,7 @@ describe("UsersTab", () => {
           profile_completion_rate: 72,
           role_counts: {
             customers: 45,
-            drivers: 3,
+            riders: 3,
             admins: 2,
           },
         },
@@ -136,7 +136,7 @@ describe("UsersTab", () => {
         profile_completion_rate: 84.5,
         role_counts: {
           customers: 110,
-          drivers: 10,
+          riders: 10,
           admins: 4,
         },
       },

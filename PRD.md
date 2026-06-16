@@ -1,16 +1,16 @@
-# GRID - Product Requirements Document (v3)
+# GRIDGO - Product Requirements Document (v3)
 
 **Tagline:** TAP TO PLOT. Simplified. Printing.
 
 ## 1. Executive Summary
 
-GRID is a premium mobile printing service platform built with Flutter that enables customers to order paper printing and 3D model printing services with real-time order tracking, driver-based delivery with live GPS map, multiple payment methods, and a refined, luxury-grade user experience. The platform uses a **greyscale-dominant UI with strategic brand yellow (#FFDE58) reserved for the logo and minimal accent touches** — inspired by the restraint of Uber, Nothing Phone OS, and luxury e-commerce — delivering a UI that feels intentional, premium, and distinctly crafted. The GRID identity is anchored by a 3x3 dot grid logo, where a single yellow dot represents the precision and simplicity of the brand.
+GRIDGO is a premium mobile printing service platform built with Flutter that enables customers to order paper printing and 3D model printing services with real-time order tracking, rider-based delivery with live GPS map, multiple payment methods, and a refined, luxury-grade user experience. The platform uses a **greyscale-dominant UI with strategic brand yellow (#FFDE58) reserved for the logo and minimal accent touches** — inspired by the restraint of Uber, Nothing Phone OS, and luxury e-commerce — delivering a UI that feels intentional, premium, and distinctly crafted. The GRIDGO identity is anchored by a 3x3 dot grid logo, where a single yellow dot represents the precision and simplicity of the brand.
 
-The platform serves three user roles: **customers** who place and track orders, **drivers** who handle delivery assignments with real-time GPS tracking, and **admins** who manage the printing queue, assign drivers, update statuses, and monitor business analytics.
+The platform serves three user roles: **customers** who place and track orders, **riders** who handle delivery assignments with real-time GPS tracking, and **admins** who manage the printing queue, assign riders, update statuses, and monitor business analytics.
 
 The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular architecture that supports multiple applications (mobile app, IoT kiosks, partner APIs), built-in MQTT transport for IoT devices, and massive TypeScript developer ecosystem. PostgreSQL remains the database.
 
-**MVP Goal:** Deliver a polished, premium-feeling mobile app with complete order-to-delivery workflow — including driver assignment, checkpoint-based status updates, and live GPS tracking during delivery — real-time status tracking, file upload, multi-payment support, and an admin dashboard — all powered by a self-hosted NestJS backend with PostgreSQL.
+**MVP Goal:** Deliver a polished, premium-feeling mobile app with complete order-to-delivery workflow — including rider assignment, checkpoint-based status updates, and live GPS tracking during delivery — real-time status tracking, file upload, multi-payment support, and an admin dashboard — all powered by a self-hosted NestJS backend with PostgreSQL.
 
 > **Note:** When developing this app, use the `/frontend-design` skill for all UI work to ensure high design quality with a refined monochrome aesthetic. The first phases focus on building the UI shell; the backend (NestJS) will be developed later in `./server`.
 
@@ -18,7 +18,7 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
 
 ## 2. Mission
 
-**Mission Statement:** TAP TO PLOT. Simplified. Printing. — GRID makes professional printing as easy as ordering food delivery, with coordinated driver delivery, live GPS tracking, and an interface that feels expensive and intentional.
+**Mission Statement:** TAP TO PLOT. Simplified. Printing. — GRIDGO makes professional printing as easy as ordering food delivery, with coordinated rider delivery, live GPS tracking, and an interface that feels expensive and intentional.
 
 ### Core Principles
 
@@ -42,7 +42,7 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
   - Order paper prints (documents, posters, photos) with specific specs
   - Order 3D prints with material/quality customization
   - Track order status in real-time
-  - Watch the driver approach on a live map during delivery
+  - Watch the rider approach on a live map during delivery
   - Pay via GCash, Maya, or Cash on Delivery
 - **Pain Points:**
   - Existing print shops require physical visits
@@ -56,7 +56,7 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
 - **Goals:**
   - View and manage incoming orders efficiently
   - Update order statuses through the production pipeline
-  - Assign drivers to orders ready for dispatch
+  - Assign riders to orders ready for dispatch
   - Set estimated completion times for customer visibility
   - Monitor revenue and order volume trends
   - Preview uploaded customer files
@@ -66,7 +66,7 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
   - Difficulty tracking revenue and production metrics
   - Coordinating deliveries via text/call is error-prone
 
-### Tertiary Persona: Driver
+### Tertiary Persona: Rider
 
 - **Who:** Delivery riders, motorcycle couriers
 - **Location:** Philippines
@@ -106,7 +106,7 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
 - Manage saved delivery addresses (map pin + text with landmark)
 - Cancel orders before printing starts (with cancellation policy)
 - View estimated completion and delivery time
-- View driver location on live map during delivery ("on the way" phase)
+- View rider location on live map during delivery ("on the way" phase)
 - Contact support (basic link/info)
 - Accept terms of service / privacy policy (RA 10173 compliance)
 - Select occupation type at signup — required, minimal UI (Student: Architecture/Engineering/Other, Construction Worker, Office Worker, Others with specify field) — editable in profile
@@ -115,19 +115,19 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
 - Receive automatic CMYK/RGB color mode warning on file upload (PDF, JPG, PNG) — customer-facing warning only, no admin gate
 - Receive automatic file dimension mismatch warning when uploaded file dimensions don't match selected paper size — shows warning, does not block order
 - Use interactive digital ruler overlay on uploaded file preview (draggable, rotatable, scale-togglable triangular scale ruler) to verify print dimensions before submitting
-- Place multi-destination orders — one order, multiple delivery addresses, each with its own delivery fee, one driver handles all stops
+- Place multi-destination orders — one order, multiple delivery addresses, each with its own delivery fee, one rider handles all stops
 - Schedule exact delivery time when placing a delivery order
 - Submit feature requests via "Request a Feature" button in the profile screen
 - Receive transactional email notifications for order status changes (in addition to FCM push)
-- Top up GRID Credits with a custom amount (no expiration) and pay for orders using accumulated credit balance
+- Top up GRIDGO Credits with a custom amount (no expiration) and pay for orders using accumulated credit balance
 - Contact support and request quotes via in-app live chat (dedicated Chat tab)
 
-**Driver Features**
+**Rider Features**
 
 - View assigned deliveries with order details and customer info
 - Accept or decline delivery assignments
 - Checkpoint status updates (picked up from shop, on the way, arrived, delivered)
-- Live GPS tracking during "on the way" phase (customer sees driver on map)
+- Live GPS tracking during "on the way" phase (customer sees rider on map)
 - Navigation to pickup and delivery locations via integrated map
 - View delivery history and earnings
 - Manage availability (online/offline toggle)
@@ -142,15 +142,15 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
 - Status update via dropdown picker per order
 - File preview/download for uploaded customer files
 - Auto-notification to customer on status change
-- Assign drivers to orders ready for dispatch (pick from available drivers list)
-- View driver availability and current location
+- Assign riders to orders ready for dispatch (pick from available riders list)
+- View rider availability and current location
 - Set estimated completion time per order
 - Decline orders with a reason (customer receives notification with explanation)
 - View order status change history / audit trail
 - Send marketing notification blasts — admin-triggered or scheduled automated, users can opt out
 - View funnel drop-off analytics — where users abandon the order flow (per step: category, specs, upload, summary, payment)
 - Set a manual status note per 3D printing order (free text, e.g., "8 hours remaining")
-- Manage GRID Credits: view top-up history per user
+- Manage GRIDGO Credits: view top-up history per user
 
 **Technical**
 
@@ -173,7 +173,7 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
 - Riverpod for client-side state management
 - Go Router for navigation
 - Local persistence with Hive/SharedPreferences for drafts
-- Geolocator for driver GPS tracking (position streaming during delivery)
+- Geolocator for rider GPS tracking (position streaming during delivery)
 - Geocoding for address resolution (coordinates to/from human-readable addresses)
 
 ### Out of Scope (Post-MVP)
@@ -186,8 +186,8 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
 - Gamification (loyalty points, referral codes)
 - Receipt/invoice PDF generation
 - Social login (Google, Apple, Facebook)
-- Auto-assignment algorithm (drivers auto-matched to orders by proximity)
-- Driver self-select / bidding on deliveries
+- Auto-assignment algorithm (riders auto-matched to orders by proximity)
+- Rider self-select / bidding on deliveries
 - Route optimization (multi-stop delivery planning)
 - Google Maps integration (using free OpenStreetMap instead)
 
@@ -231,7 +231,7 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
 11. **As a customer, I want to manage my saved delivery addresses, so that I don't have to retype them every order.**
     - CRUD for saved addresses with label, full address, barangay, city, province, zip code, landmark, and map coordinates
 
-12. **As a customer, I want to pick my delivery location on a map with a landmark field, so that the driver can find me easily.**
+12. **As a customer, I want to pick my delivery location on a map with a landmark field, so that the rider can find me easily.**
     - Map pin picker as primary input, auto-filled address fields that the customer can edit, landmark field always visible
 
 13. **As a customer, I want to cancel my order before printing starts, so that I can get a refund.**
@@ -240,27 +240,27 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
 14. **As a customer, I want to see an estimated completion and delivery time, so that I can plan accordingly.**
     - Admin-set estimated time displayed on the order detail screen, updates reflected in real-time
 
-15. **As a customer, I want to see the driver's live location on a map when my order is out for delivery, so that I know when to expect it.**
-    - Live map view appears during "on the way" phase, driver marker updates in real-time, auto-hides when driver marks "arrived"
+15. **As a customer, I want to see the rider's live location on a map when my order is out for delivery, so that I know when to expect it.**
+    - Live map view appears during "on the way" phase, rider marker updates in real-time, auto-hides when rider marks "arrived"
 
 16. **As a customer, I want to contact support when I have an issue, so that I can get help resolving problems.**
     - Support link/info accessible from order detail and profile screens
 
-### Driver Stories
+### Rider Stories
 
-17. **As a driver, I want to receive delivery assignments with order and customer details, so that I know what to pick up and where to deliver.**
+17. **As a rider, I want to receive delivery assignments with order and customer details, so that I know what to pick up and where to deliver.**
     - Push notification on new assignment, delivery detail screen with order summary, pickup address, and drop-off address with landmark
 
-18. **As a driver, I want to update my delivery status at each checkpoint, so that customers stay informed.**
+18. **As a rider, I want to update my delivery status at each checkpoint, so that customers stay informed.**
     - Status action buttons: Accept, Picked Up, On the Way, Arrived, Delivered — each triggers customer notification
 
-19. **As a driver, I want to see the delivery destination on a map, so that I can navigate efficiently.**
+19. **As a rider, I want to see the delivery destination on a map, so that I can navigate efficiently.**
     - Map view with destination pin, option to open in external navigation app (Google Maps, Waze)
 
-20. **As a driver, I want to view my delivery history and earnings, so that I can track my income.**
+20. **As a rider, I want to view my delivery history and earnings, so that I can track my income.**
     - History tab with completed deliveries, date range filtering, earnings summary
 
-21. **As a driver, I want to toggle my availability, so that I only receive assignments when I'm ready.**
+21. **As a rider, I want to toggle my availability, so that I only receive assignments when I'm ready.**
     - Online/offline toggle on profile tab, offline status prevents admin from assigning new deliveries
 
 ### Admin Stories
@@ -280,8 +280,8 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
 26. **As an admin, I want to see sales and volume trends, so that I can make informed business decisions.**
     - Line charts for 6-month sales (PHP) and order volume
 
-27. **As an admin, I want to assign a driver to an order, so that delivery is coordinated.**
-    - Driver selection from list of available drivers, assignment triggers push notification to driver
+27. **As an admin, I want to assign a rider to an order, so that delivery is coordinated.**
+    - Rider selection from list of available riders, assignment triggers push notification to rider
 
 28. **As an admin, I want to decline an order with a reason, so that the customer knows why their order was not accepted.**
     - Decline action with required reason field, customer receives notification with explanation
@@ -290,9 +290,9 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
     - Time picker or duration input on order detail, value displayed to customer in real-time
 
 30. **As an admin, I want to view the status change history for an order, so that I can resolve disputes.**
-    - Audit trail showing each status change with timestamp, actor (admin/driver/system), and notes
+    - Audit trail showing each status change with timestamp, actor (admin/rider/system), and notes
 
-31. **As a customer, I want to set my occupation type at signup, so that GRID can tailor analytics and future features to my segment.**
+31. **As a customer, I want to set my occupation type at signup, so that GRIDGO can tailor analytics and future features to my segment.**
     - Required step in profile setup — icon-based tap UI (no text forms). Student sub-types: Architecture, Engineering, Other. Options: Student, Construction Worker, Office Worker, Others (with specify field). Editable from profile screen.
 
 32. **As a customer, I want to choose how my file prints on the paper, so that my output matches my intent.**
@@ -311,7 +311,7 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
     - Interactive overlay on the file preview step. Shows a triangular scale ruler that the user can drag, rotate, and scale. Scale unit toggle (1:1, 1:50, 1:100, 1:200, 1:500). Rulers snap to file edges for alignment.
 
 37. **As a customer, I want to send my prints to multiple delivery addresses in one order, so that I can distribute them without placing separate orders.**
-    - Multi-destination toggle in the delivery details step. Add up to 5 destinations per order. Each destination has its own delivery address and delivery fee. One driver handles all stops sequentially.
+    - Multi-destination toggle in the delivery details step. Add up to 5 destinations per order. Each destination has its own delivery address and delivery fee. One rider handles all stops sequentially.
 
 38. **As a customer, I want to schedule an exact delivery time, so that I know when to expect my prints.**
     - Date + time picker in the delivery details step. Minimum advance notice: 2 hours from order placement. Admin sees scheduled time on the order detail.
@@ -322,10 +322,10 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
 40. **As a customer, I want to receive email notifications for important order updates, so that I stay informed even when push notifications are off.**
     - Transactional emails sent on: order confirmed, file declined, ready for pickup/delivery, delivered. Uses the customer's registered email. Opt-out available in notification settings.
 
-41. **As a customer, I want to top up GRID Credits and pay for orders with them, so that I can skip opening GCash each time.**
+41. **As a customer, I want to top up GRIDGO Credits and pay for orders with them, so that I can skip opening GCash each time.**
     - Top-up screen: enter any custom PHP amount → pay via PayMongo GCash checkout → credits added to balance instantly. Credits never expire. Balance shown in profile and on the payment screen. Pay with Credits appears as a payment method when balance ≥ order total.
 
-42. **As an admin, I want to send marketing notifications to all users, so that I can keep GRID top-of-mind.**
+42. **As an admin, I want to send marketing notifications to all users, so that I can keep GRIDGO top-of-mind.**
     - Compose screen in admin panel: title + message + optional image. Send immediately or schedule for a future date/time. Users can opt out via notification settings. Delivery via FCM (push) + email.
 
 43. **As an admin, I want to set a manual status note on 3D printing orders, so that customers know the estimated completion without a fixed time.**
@@ -334,10 +334,10 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
 44. **As a customer, I want to be warned if my 3D model exceeds my chosen printer's build volume, so that I can adjust before printing fails.**
     - Customer manually enters model dimensions (W × H × D in cm) on the 3D specs screen. System checks against printer limits: Bambu A1 (25.6 × 25.6 × 25.6 cm), Bambu A1 Mini (18 × 18 × 18 cm). Non-blocking warning shown if dimensions exceed limits. Live chat link offered for oversized/custom requests.
 
-45. **As a customer, I want to chat with GRID support in-app, so that I can get help without leaving the app.**
+45. **As a customer, I want to chat with GRIDGO support in-app, so that I can get help without leaving the app.**
     - Dedicated Chat tab in customer bottom navigation. Real-time messaging via WebSocket. Admin sees all active conversations in the admin panel (new Chat management screen). Supports text messages. Timestamps and read receipts shown.
 
-46. **As a customer, I want GRID to use Maxim or Grab for delivery outside Davao, so that I can order from anywhere.**
+46. **As a customer, I want GRIDGO to use Maxim or Grab for delivery outside Davao, so that I can order from anywhere.**
     - During order placement, if the customer's delivery address is outside the primary service zone (Davao), the app automatically selects Maxim or Grab Express as the delivery method. Delivery fee calculated via third-party API. Customer sees provider name and fee estimate.
 
 47. **As an admin, I want to see where customers drop off in the order flow, so that I can identify and fix friction points.**
@@ -350,7 +350,7 @@ The backend is a **NestJS** server (TypeScript/Node.js), chosen for its modular 
 ```
 ┌──────────────────────┐                                      ┌─────────────────────────┐
 │   Flutter App        │         REST / WebSocket             │   NestJS Server         │
-│   (Customer/Driver/  │ ◄──────────────────────────────────► │   (TypeScript Backend)  │
+│   (Customer/Rider/  │ ◄──────────────────────────────────► │   (TypeScript Backend)  │
 │    Admin)            │                                      │   Port 3000             │
 │                      │                                      │                         │
 │   - Riverpod         │                                      │   - REST Controllers    │
@@ -379,7 +379,7 @@ External APIs:
 - OpenStreetMap tiles — Free map rendering, no API key
 ```
 
-The Flutter app serves all three roles (Customer, Driver, Admin) within a single codebase, with role-based routing determining which feature set is presented. The NestJS backend handles all business logic, data persistence, real-time communication, and file storage. External services include PostgreSQL for relational data, S3-compatible storage (MinIO / AWS S3) for uploaded files, and Firebase Cloud Messaging (FCM) with Apple Push Notification Service (APNs) for push notifications. OpenStreetMap via flutter_map is used by the Flutter client for map rendering, with OSRM providing free driving route geometry.
+The Flutter app serves all three roles (Customer, Rider, Admin) within a single codebase, with role-based routing determining which feature set is presented. The NestJS backend handles all business logic, data persistence, real-time communication, and file storage. External services include PostgreSQL for relational data, S3-compatible storage (MinIO / AWS S3) for uploaded files, and Firebase Cloud Messaging (FCM) with Apple Push Notification Service (APNs) for push notifications. OpenStreetMap via flutter_map is used by the Flutter client for map rendering, with OSRM providing free driving route geometry.
 
 ### Directory Structure
 
@@ -458,7 +458,7 @@ printing_app/
 │   │   │   │   │   └── delivery_tracking_screen.dart
 │   │   │   │   └── widgets/
 │   │   │   │       ├── delivery_map.dart
-│   │   │   │       └── driver_info_card.dart
+│   │   │   │       └── rider_info_card.dart
 │   │   │   │
 │   │   │   ├── address/
 │   │   │   │   ├── screens/
@@ -477,7 +477,7 @@ printing_app/
 │   │   │       └── providers/
 │   │   │           └── profile_provider.dart
 │   │   │
-│   │   ├── driver/
+│   │   ├── rider/
 │   │   │   ├── deliveries/
 │   │   │   │   ├── screens/
 │   │   │   │   │   ├── deliveries_screen.dart
@@ -505,7 +505,7 @@ printing_app/
 │   │   │   │
 │   │   │   └── profile/
 │   │   │       └── screens/
-│   │   │           └── driver_profile_screen.dart
+│   │   │           └── rider_profile_screen.dart
 │   │   │
 │   │   └── admin/
 │   │       ├── dashboard/
@@ -526,13 +526,13 @@ printing_app/
 │   │       │       ├── queue_order_card.dart
 │   │       │       └── status_picker.dart
 │   │       │
-│   │       ├── driver_management/
+│   │       ├── rider_management/
 │   │       │   ├── screens/
-│   │       │   │   └── driver_assignment_screen.dart
+│   │       │   │   └── rider_assignment_screen.dart
 │   │       │   ├── providers/
-│   │       │   │   └── drivers_provider.dart
+│   │       │   │   └── riders_provider.dart
 │   │       │   └── widgets/
-│   │       │       ├── driver_list_tile.dart
+│   │       │       ├── rider_list_tile.dart
 │   │       │       └── assignment_dialog.dart
 │   │       │
 │   │       └── profile/
@@ -582,10 +582,10 @@ printing_app/
 │   │   │   ├── orders.gateway.ts       # WebSocket for real-time updates
 │   │   │   ├── orders.module.ts
 │   │   │   └── entities/
-│   │   ├── drivers/                    # Driver module
-│   │   │   ├── drivers.controller.ts
-│   │   │   ├── drivers.service.ts
-│   │   │   ├── drivers.module.ts
+│   │   ├── riders/                    # Rider module
+│   │   │   ├── riders.controller.ts
+│   │   │   ├── riders.service.ts
+│   │   │   ├── riders.module.ts
 │   │   │   └── entities/
 │   │   ├── payments/                   # Payment module (PayMongo)
 │   │   │   ├── payments.controller.ts
@@ -632,17 +632,17 @@ printing_app/
 
 ### Key Design Patterns
 
-- **Feature-First Architecture** — Code organized by feature (auth, order, admin, driver), not by type. Each feature directory contains its own screens, providers, and widgets, keeping related code co-located and enabling independent development.
+- **Feature-First Architecture** — Code organized by feature (auth, order, admin, rider), not by type. Each feature directory contains its own screens, providers, and widgets, keeping related code co-located and enabling independent development.
 - **Riverpod State Management** — Compile-safe, testable, no BuildContext dependency. Providers are scoped to features and composed when cross-feature data is needed. AsyncNotifier for server-synced state, StateNotifier for local-only state.
-- **GoRouter Navigation** — Declarative routing with deep link support and auth guards. Role-based redirect logic determines which shell (customer, driver, admin) is presented after authentication.
+- **GoRouter Navigation** — Declarative routing with deep link support and auth guards. Role-based redirect logic determines which shell (customer, rider, admin) is presented after authentication.
 - **REST + WebSocket API** — NestJS controllers expose REST endpoints consumed by Flutter via dio/http. Real-time updates via WebSocket Gateway (@nestjs/websockets). OpenAPI/Swagger docs auto-generated.
-- **Modular Architecture** — NestJS modules allow the backend to serve multiple clients (mobile app, IoT kiosks, partner APIs) from a single codebase. Each domain (orders, drivers, payments) is an independent module.
+- **Modular Architecture** — NestJS modules allow the backend to serve multiple clients (mobile app, IoT kiosks, partner APIs) from a single codebase. Each domain (orders, riders, payments) is an independent module.
 - **IoT Ready** — Built-in MQTT transport for future kiosk integration. Kiosks can publish print jobs and subscribe to status updates via MQTT broker.
 - **Repository Pattern** — Data access abstracted behind repository interfaces. Repositories handle the decision between local cache (Hive) and remote API (dio HTTP client + WebSocket), enabling offline-first behavior and testability.
 - **Offline-First Drafts** — Hive local storage for draft orders, sync queue for pending actions. When connectivity is restored, queued actions are replayed in order. Conflict resolution favors server state.
-- **Location Streaming** — GPS coordinates streamed via WebSocket during active delivery only, with battery-conscious intervals (10-second updates during "on_the_way" phase). Streaming starts when the driver taps "On the Way" and stops when the driver taps "Arrived." No background location tracking outside active deliveries.
-- **Map Integration** — OpenStreetMap via flutter_map for address picking (draggable pin with geocoding), delivery tracking (real-time driver position on customer's screen), and driver navigation (open destination in external maps app). OSRM provides real road routing geometry. Map style uses greyscale tiles to match the monochrome design language.
-- **Checkpoint State Machine** — Driver delivery status follows a strict state machine: `assigned` -> `accepted` -> `picked_up` -> `on_the_way` -> `arrived` -> `delivered`. Each transition is validated server-side. Invalid transitions are rejected. The `declined` state is an alternative exit from `assigned` that triggers admin reassignment.
+- **Location Streaming** — GPS coordinates streamed via WebSocket during active delivery only, with battery-conscious intervals (10-second updates during "on_the_way" phase). Streaming starts when the rider taps "On the Way" and stops when the rider taps "Arrived." No background location tracking outside active deliveries.
+- **Map Integration** — OpenStreetMap via flutter_map for address picking (draggable pin with geocoding), delivery tracking (real-time rider position on customer's screen), and rider navigation (open destination in external maps app). OSRM provides real road routing geometry. Map style uses greyscale tiles to match the monochrome design language.
+- **Checkpoint State Machine** — Rider delivery status follows a strict state machine: `assigned` -> `accepted` -> `picked_up` -> `on_the_way` -> `arrived` -> `delivered`. Each transition is validated server-side. Invalid transitions are rejected. The `declined` state is an alternative exit from `assigned` that triggers admin reassignment.
 
 ---
 
@@ -658,16 +658,16 @@ printing_app/
 - Complete profile (full name, phone, email, DOB, gender)
 - Edit profile details
 - Sign out
-- Role-based routing (customer vs driver vs admin)
+- Role-based routing (customer vs rider vs admin)
 
 **Key Features:**
 - NestJS Passport.js + JWT authentication for session management
 - Profile completeness check before accessing main app
 - Persistent auth session (survives app restart)
-- Developer bypass logins for testing (one per role: customer, driver, admin)
+- Developer bypass logins for testing (one per role: customer, rider, admin)
 - Occupation type selection at profile setup (required for customers) — icon-tap UI, not a form
-- Role detection on login determines which navigation shell is loaded: customers see the customer tab bar, drivers see the driver tab bar, admins see the admin tab bar
-- Driver profile includes additional fields: vehicle type, plate number, and availability toggle
+- Role detection on login determines which navigation shell is loaded: customers see the customer tab bar, riders see the rider tab bar, admins see the admin tab bar
+- Rider profile includes additional fields: vehicle type, plate number, and availability toggle
 
 ### 7.2 Order Creation Flow
 
@@ -740,7 +740,7 @@ printing_app/
 | GCash | PayMongo GCash checkout API (full SDK flow, not deep-link) |
 | Maya | Deep link to Maya app -> fallback to web -> manual confirmation |
 | Cash on Delivery | Mark as pending, collect at pickup/delivery |
-| GRID Credits | Debit from pre-loaded credit balance (no external gateway call) |
+| GRIDGO Credits | Debit from pre-loaded credit balance (no external gateway call) |
 
 **Key Features:**
 - E-wallet deep linking with native app detection
@@ -750,13 +750,13 @@ printing_app/
 
 ### 7.5 Real-Time Order Tracking
 
-**Purpose:** Keep customers informed about order progress with live updates and driver GPS tracking during delivery.
+**Purpose:** Keep customers informed about order progress with live updates and rider GPS tracking during delivery.
 
 **Order Status Pipeline:**
 
 ```
 order_placed -> file_verified -> printing_in_progress -> finishing_mounting
-    -> quality_checked -> ready_for_dispatch -> driver_assigned -> picked_up
+    -> quality_checked -> ready_for_dispatch -> rider_assigned -> picked_up
     -> on_the_way -> arrived_at_destination -> delivered / completed_pickup
 
 Alternative exits:
@@ -770,20 +770,20 @@ Alternative exits:
 - Status badge with greyscale tones + accent for active step
 - Push notification on each status transition
 - Decline reason displayed when applicable
-- During `on_the_way` status, the customer sees a live map with the driver's real-time GPS position. The map displays the driver pin (dark circle with directional indicator), the destination pin (accent-colored), and the route line between them. The map auto-updates as the driver streams location data at 10-second intervals
-- Map view automatically appears when status transitions to `on_the_way` and hides when the driver marks `arrived_at_destination`
+- During `on_the_way` status, the customer sees a live map with the rider's real-time GPS position. The map displays the rider pin (dark circle with directional indicator), the destination pin (accent-colored), and the route line between them. The map auto-updates as the rider streams location data at 10-second intervals
+- Map view automatically appears when status transitions to `on_the_way` and hides when the rider marks `arrived_at_destination`
 
 ### 7.6 Notifications
 
-**Purpose:** Alert customers and drivers about order and delivery updates.
+**Purpose:** Alert customers and riders about order and delivery updates.
 
 **Types:**
 - Order status changed
 - File verified / declined
 - Order ready for pickup
 - Order delivered
-- New delivery assignment (driver)
-- Driver arrived at destination (customer)
+- New delivery assignment (rider)
+- Rider arrived at destination (customer)
 - Estimated completion time updated
 - Order cancelled
 
@@ -796,7 +796,7 @@ Alternative exits:
 - FCM push notifications for background alerts
 - Transactional email notifications via SendGrid for key order events
 - Marketing push + email blasts via admin panel (opt-out available in notification settings)
-- Server-triggered via NestJS when admin updates status or driver updates delivery checkpoint
+- Server-triggered via NestJS when admin updates status or rider updates delivery checkpoint
 
 ### 7.7 Draft Orders (Offline)
 
@@ -840,44 +840,44 @@ Alternative exits:
 - File preview/download capability
 - Search by order ID
 
-### 7.10 Driver Delivery Management
+### 7.10 Rider Delivery Management
 
-**Purpose:** Enable drivers to manage assigned deliveries through a checkpoint-based workflow.
+**Purpose:** Enable riders to manage assigned deliveries through a checkpoint-based workflow.
 
-**Driver Status Pipeline:**
+**Rider Status Pipeline:**
 
 ```
 assigned -> accepted -> picked_up -> on_the_way -> arrived -> delivered
 
-Alternative: declined (driver declines assignment, admin reassigns)
+Alternative: declined (rider declines assignment, admin reassigns)
 ```
 
-Each transition is validated server-side. The driver can only move forward through the pipeline — no skipping steps, no going backward. The `declined` state can only be reached from `assigned`.
+Each transition is validated server-side. The rider can only move forward through the pipeline — no skipping steps, no going backward. The `declined` state can only be reached from `assigned`.
 
 **Key Features:**
 - Push notification on new assignment with order summary and delivery address
 - Delivery detail view with order info (category, specs summary, quantity), customer address with landmark, and map preview showing pickup and destination pins
 - Checkpoint action buttons — large, pill-shaped, thumb-friendly buttons at the bottom of the screen. Only the next valid action is highlighted with the accent color. Previous completed steps shown as greyed-out checkmarks
-- Live GPS streaming during "on_the_way" phase only — 10-second intervals to balance accuracy and battery life. Streaming starts automatically when the driver taps "On the Way" and stops when the driver taps "Arrived." No background location tracking outside active deliveries
+- Live GPS streaming during "on_the_way" phase only — 10-second intervals to balance accuracy and battery life. Streaming starts automatically when the rider taps "On the Way" and stops when the rider taps "Arrived." No background location tracking outside active deliveries
 - Navigation integration — "Navigate" button opens the destination in Google Maps or Waze (user's choice) for turn-by-turn directions
-- Delivery confirmation with optional photo proof — driver can take a photo of the delivered package as proof of delivery, stored server-side
+- Delivery confirmation with optional photo proof — rider can take a photo of the delivered package as proof of delivery, stored server-side
 - "Arrived at destination" triggers a push notification to the customer
-- Availability toggle on the driver profile — when offline, the driver will not appear in the admin's available drivers list
+- Availability toggle on the rider profile — when offline, the rider will not appear in the admin's available riders list
 
-### 7.11 Driver Assignment (Admin)
+### 7.11 Rider Assignment (Admin)
 
-**Purpose:** Allow admins to assign available drivers to orders ready for dispatch.
+**Purpose:** Allow admins to assign available riders to orders ready for dispatch.
 
 **Key Features:**
-- Driver list showing availability status (online/offline) and current assignment status (idle, on delivery, returning). Only online and idle drivers are available for new assignments
-- One-tap assignment from the order detail screen or directly from the queue — opens a bottom sheet with the available drivers list
-- Reassign capability if a driver declines — admin receives a notification when a driver declines, and the order status reverts to `ready_for_dispatch` for reassignment
-- Driver location visible on an admin map view when the driver is online, showing last known position
-- Estimated completion time setter per order — admin can set or update the estimated time when assigning a driver or updating any order status
+- Rider list showing availability status (online/offline) and current assignment status (idle, on delivery, returning). Only online and idle riders are available for new assignments
+- One-tap assignment from the order detail screen or directly from the queue — opens a bottom sheet with the available riders list
+- Reassign capability if a rider declines — admin receives a notification when a rider declines, and the order status reverts to `ready_for_dispatch` for reassignment
+- Rider location visible on an admin map view when the rider is online, showing last known position
+- Estimated completion time setter per order — admin can set or update the estimated time when assigning a rider or updating any order status
 
 ### 7.12 Address Management
 
-**Purpose:** Save and manage delivery addresses with map precision for reliable driver navigation.
+**Purpose:** Save and manage delivery addresses with map precision for reliable rider navigation.
 
 **Key Features:**
 - Map pin picker (OpenStreetMap via flutter_map) as the primary input method — full-screen map with a draggable center pin. As the user moves the map, the address auto-fills below via reverse geocoding
@@ -886,7 +886,7 @@ Each transition is validated server-side. The driver can only move forward throu
 - Save as default address — the default address is pre-selected during order checkout
 - Maximum 5 saved addresses per user — limit keeps the list manageable and reduces storage overhead
 - Address selection during order checkout — saved addresses presented as selectable cards with a "Add new address" option at the bottom
-- GPS coordinates (latitude and longitude) stored alongside text fields for driver navigation — the driver app uses these coordinates for map display and external navigation app launch
+- GPS coordinates (latitude and longitude) stored alongside text fields for rider navigation — the rider app uses these coordinates for map display and external navigation app launch
 
 ### 7.13 Order Cancellation
 
@@ -954,7 +954,7 @@ Each transition is validated server-side. The driver can only move forward throu
 - "Others" shows a short text field to specify
 - Editable from the profile screen at any time
 - Stored server-side for analytics segmentation
-- Not shown to drivers or admins (customer-only field)
+- Not shown to riders or admins (customer-only field)
 
 ### 7.17 File Intelligence
 
@@ -1001,10 +1001,10 @@ Each transition is validated server-side. The driver can only move forward throu
 - Add up to 5 destination addresses per order (saved addresses or new)
 - Each destination has its own delivery fee (calculated independently)
 - Total delivery fee = sum of all destination fees
-- One driver handles all stops sequentially — admin assigns a single driver
-- Driver sees all stop addresses in sequence on the delivery screen
+- One rider handles all stops sequentially — admin assigns a single rider
+- Rider sees all stop addresses in sequence on the delivery screen
 - Each stop has its own checkpoint (picked up → on the way to stop 1 → arrived at stop 1 → on the way to stop 2 → etc.)
-- Customer can track which stop the driver is currently heading to
+- Customer can track which stop the rider is currently heading to
 
 ### 7.19 Scheduled Delivery
 
@@ -1016,23 +1016,23 @@ Each transition is validated server-side. The driver can only move forward throu
 - Maximum advance: 7 days
 - Stored on the order as `scheduledDeliveryAt`
 - Admin sees scheduled time on the order detail and queue card
-- Driver receives scheduled time in their assignment notification
-- System does not auto-dispatch — admin still manually assigns the driver
+- Rider receives scheduled time in their assignment notification
+- System does not auto-dispatch — admin still manually assigns the rider
 - Customer sees scheduled delivery time prominently on the order tracking screen
 
-### 7.20 GRID Credits
+### 7.20 GRIDGO Credits
 
 **Purpose:** Pre-loaded wallet system allowing customers to pay without opening GCash each time.
 
 **Top-Up Flow:**
-1. Customer opens "GRID Credits" in their profile
+1. Customer opens "GRIDGO Credits" in their profile
 2. Enters a custom PHP top-up amount (min ₱50, no maximum)
 3. Taps "Top Up via GCash" → PayMongo GCash checkout opens
 4. On successful payment, credits are added to balance instantly
 5. Balance shown on the profile screen and the payment method selection screen
 
 **Payment Flow:**
-- "Pay with GRID Credits" option appears on the payment screen when `creditBalance ≥ orderTotal`
+- "Pay with GRIDGO Credits" option appears on the payment screen when `creditBalance ≥ orderTotal`
 - On confirmation, balance is debited instantly — no external gateway call needed
 - Transaction logged in `grid_credit_transactions`
 
@@ -1074,7 +1074,7 @@ Each transition is validated server-side. The driver can only move forward throu
 
 ### 7.22 Third-Party Delivery Integration (Maxim / Grab Express)
 
-**Purpose:** Enable delivery outside GRID's primary Davao service zone via Maxim and Grab Express.
+**Purpose:** Enable delivery outside GRIDGO's primary Davao service zone via Maxim and Grab Express.
 
 **Key Features:**
 - Triggered automatically during order placement when the delivery address is outside the Davao service zone
@@ -1152,7 +1152,7 @@ Each transition is validated server-side. The driver can only move forward throu
 - Sent automatically on key order events: order confirmed, file declined, ready for pickup, delivered
 - Uses customer's registered email address
 - Delivered via SendGrid (or compatible SMTP provider)
-- Email templates match GRID brand: greyscale design, logo at top, single CTA button
+- Email templates match GRIDGO brand: greyscale design, logo at top, single CTA button
 - Opt-out link in every email (RA 10173 compliance)
 
 #### 7.26.3 Scheduled Marketing Emails
@@ -1245,7 +1245,7 @@ Key references:
 5. Active order count in home bento grid
 6. Promo discount icon
 
-> **Note:** The accent color inverts between themes: near-black (#1A1A1A) in light mode, near-white (#F0F0F0) in dark mode. The brand color (yellow) is used as punctuation — like the single colored dot in the GRID logo — never as a primary UI color.
+> **Note:** The accent color inverts between themes: near-black (#1A1A1A) in light mode, near-white (#F0F0F0) in dark mode. The brand color (yellow) is used as punctuation — like the single colored dot in the GRIDGO logo — never as a primary UI color.
 
 #### Semantic Status Colors (Desaturated)
 
@@ -1389,15 +1389,15 @@ All interactive elements must have a minimum touch target of **48x48dp** (Materi
 2. **Order Flow** — Minimal step indicator (dots or thin progress bar, greyscale) -> content area with generous whitespace -> sticky bottom CTA button (solid black/white depending on theme)
 3. **Order Cards** — Clean horizontal layout with thin left accent line (greyscale or status color) -> order ID in mono -> status chip -> price -> timestamp in caption
 4. **Status Timeline** — Vertical stepper with thin connecting line. Completed = solid dark circle. Current = outlined circle with subtle pulse animation. Future = faint dotted
-5. **Bottom Navigation** — 4 tabs (customer), 3 tabs (driver/admin), thin line icons. Active = solid fill with label. Inactive = outlined, no label. Minimal visual weight
+5. **Bottom Navigation** — 4 tabs (customer), 3 tabs (rider/admin), thin line icons. Active = solid fill with label. Inactive = outlined, no label. Minimal visual weight
 6. **Empty States** — Centered composition. Line-art illustration + Instrument Serif heading + Satoshi body + ghost-outlined CTA
 7. **Buttons** — Primary: solid black (light) / solid white (dark), full-width at bottom of screens. Secondary: outlined with 1px border. Ghost: text-only
 8. **Inputs** — Bottom-border style (not full box) for a cleaner, editorial feel. Full box only for search fields
 9. **Bottom Sheets** — Subtle drag handle, generous top radius, backdrop blur on dark theme
 10. **Skeleton Loading** — Subtle grey shimmer on grey background — low contrast, almost invisible shimmer for sophistication
-11. **Map Views** — OpenStreetMap via flutter_map with greyscale tile styling to match monochrome aesthetic. OSRM provides real road routing geometry. Driver pin as a dark circle with directional indicator showing heading. Destination as accent-colored pin. Route line rendered in `onSurface` color. Map controls styled to match the app theme
+11. **Map Views** — OpenStreetMap via flutter_map with greyscale tile styling to match monochrome aesthetic. OSRM provides real road routing geometry. Rider pin as a dark circle with directional indicator showing heading. Destination as accent-colored pin. Route line rendered in `onSurface` color. Map controls styled to match the app theme
 12. **Address Picker** — Full-screen OpenStreetMap via flutter_map with a draggable center pin. As the user moves the map, the address auto-fills below the map via reverse geocoding. Editable fields and the landmark input appear in a bottom sheet that the user can expand. Confirm button at the bottom of the sheet
-13. **Driver Status Actions** — Large pill-shaped buttons at the bottom of the screen for checkpoint actions. The current (next) action is highlighted with the accent color. Completed checkpoints shown as greyed-out checkmarks above. Swipe-to-confirm gesture required for "Delivered" to prevent accidental taps
+13. **Rider Status Actions** — Large pill-shaped buttons at the bottom of the screen for checkpoint actions. The current (next) action is highlighted with the accent color. Completed checkpoints shown as greyed-out checkmarks above. Swipe-to-confirm gesture required for "Delivered" to prevent accidental taps
 14. **Cancellation Dialog** — Confirmation bottom sheet with cancellation policy summary at the top, optional reason selector (chip group), and a destructive-styled cancel button using the Error semantic color. A secondary "Keep Order" button uses the standard outlined style
 
 ---
@@ -1514,7 +1514,7 @@ Order Flow (Stack — pushed over tabs):
 Other Screens (Stack):
 ├── Order Detail                 # Full order view with status timeline
 ├── Account Details              # Edit profile information
-├── Delivery Tracking            # Live map with driver location
+├── Delivery Tracking            # Live map with rider location
 ├── Address List                 # Saved addresses management
 ├── Address Picker               # Map + form for new address
 ├── Support / Help               # Contact info + FAQ
@@ -1522,7 +1522,7 @@ Other Screens (Stack):
 └── Privacy Policy               # Legal (RA 10173)
 ```
 
-### Driver Navigation
+### Rider Navigation
 
 ```
 Bottom Tabs (3 tabs):
@@ -1550,8 +1550,8 @@ Bottom Tabs (3 tabs):
 Other Screens (Stack):
 ├── Order Detail                 # Full order view + status update controls
 ├── File Preview                 # View uploaded customer files
-├── Driver Assignment            # Pick driver for an order
-├── Driver List                  # View all drivers + availability
+├── Rider Assignment            # Pick rider for an order
+├── Rider List                  # View all riders + availability
 ├── Order Status History         # Audit trail for an order
 ├── Chat Management              # All active customer chat conversations
 ├── Feature Requests             # Customer-submitted feature ideas
@@ -1572,8 +1572,8 @@ Other Screens (Stack):
 - Not authenticated -> redirect to `/auth/login`
 - Authenticated + incomplete profile -> redirect to `/auth/profile-setup`
 - Customer role + complete profile -> redirect to `/customer/home`
-- Driver role -> redirect to `/driver/deliveries`
-- Driver without vehicle info -> redirect to `/driver/profile-setup`
+- Rider role -> redirect to `/rider/deliveries`
+- Rider without vehicle info -> redirect to `/rider/profile-setup`
 - Admin role -> redirect to `/admin/dashboard`
 ## 11. Data Models
 
@@ -1592,7 +1592,7 @@ class User {
   String? phoneNumber;
   String? gender;                 // 'male', 'female', 'other'
   DateTime? dateOfBirth;
-  String role;                    // 'customer', 'driver', 'admin'
+  String role;                    // 'customer', 'rider', 'admin'
   bool isProfileComplete;
   bool isActive;
   String? occupationType;         // 'student', 'construction_worker', 'office_worker', 'others'
@@ -1606,7 +1606,7 @@ class User {
 
 ### Order (update)
 
-Added delivery fee, delivery option, driver assignment, estimated completion, cancellation fields, and admin notes.
+Added delivery fee, delivery option, rider assignment, estimated completion, cancellation fields, and admin notes.
 
 ```dart
 class Order {
@@ -1629,7 +1629,7 @@ class Order {
   DateTime? cancelledAt;
   String deliveryOption;          // 'pickup', 'delivery'
   int? deliveryAddressId;         // FK to Address
-  int? assignedDriverId;          // FK to User (driver)
+  int? assignedRiderId;          // FK to User (rider)
   DateTime? estimatedCompletionAt;
   String? adminNotes;             // Internal notes
   String? trackingLink;           // External tracking URL (optional)
@@ -1697,14 +1697,14 @@ class Address {
 }
 ```
 
-### DriverProfile (NEW)
+### RiderProfile (NEW)
 
-Extended profile for users with `role='driver'`. Tracks vehicle info, availability status, and last known location.
+Extended profile for users with `role='rider'`. Tracks vehicle info, availability status, and last known location.
 
 ```dart
-class DriverProfile {
+class RiderProfile {
   int? id;
-  int userId;                     // FK to User (role='driver')
+  int userId;                     // FK to User (role='rider')
   String vehicleType;             // 'motorcycle', 'bicycle', 'car'
   String? plateNumber;
   String? licenseNumber;
@@ -1719,13 +1719,13 @@ class DriverProfile {
 
 ### DeliveryAssignment (NEW)
 
-Tracks the lifecycle of a single delivery from assignment through completion. One order may have multiple assignments if a driver declines.
+Tracks the lifecycle of a single delivery from assignment through completion. One order may have multiple assignments if a rider declines.
 
 ```dart
 class DeliveryAssignment {
   int? id;
   int orderId;
-  int driverId;                   // FK to User (driver)
+  int riderId;                   // FK to User (rider)
   String status;                  // 'assigned', 'accepted', 'declined', 'picked_up', 'on_the_way', 'arrived', 'delivered'
   DateTime? assignedAt;
   DateTime? acceptedAt;
@@ -1824,7 +1824,7 @@ class DraftOrder {
 
 ### GridCredit (NEW)
 
-Tracks a customer's GRID Credit balance.
+Tracks a customer's GRIDGO Credit balance.
 
 ```dart
 class GridCredit {
@@ -1942,7 +1942,7 @@ class OrderDestination {
 
 ## 12. API Specification (NestJS REST + WebSocket API)
 
-All endpoints require a valid JWT token in the `Authorization: Bearer <token>` header unless otherwise noted. Role-based guards enforce that customers cannot access admin/driver endpoints and vice versa. Real-time endpoints use NestJS WebSocket Gateway.
+All endpoints require a valid JWT token in the `Authorization: Bearer <token>` header unless otherwise noted. Role-based guards enforce that customers cannot access admin/rider endpoints and vice versa. Real-time endpoints use NestJS WebSocket Gateway.
 
 ### AuthController
 
@@ -1987,32 +1987,32 @@ PATCH  /api/addresses/:id/default → Set as default
 GET    /api/admin/dashboard    → Dashboard KPI stats
 GET    /api/admin/orders       → All orders (with filters)
 PATCH  /api/admin/orders/:id/status → Update order status
-POST   /api/admin/orders/:id/assign → Assign driver
-GET    /api/admin/drivers      → Available drivers
+POST   /api/admin/orders/:id/assign → Assign rider
+GET    /api/admin/riders      → Available riders
 GET    /api/admin/analytics    → Sales analytics
 WS     /ws/admin/queue         → Real-time order queue stream
 ```
 
-### DriversController
+### RidersController
 
 ```
-GET    /api/drivers/profile    → Driver profile
-PUT    /api/drivers/profile    → Update profile
-PATCH  /api/drivers/availability → Set online/offline
-GET    /api/drivers/assignments → Current assignments
-POST   /api/drivers/assignments/:id/accept  → Accept
-POST   /api/drivers/assignments/:id/decline → Decline
-PATCH  /api/drivers/assignments/:id/status  → Update checkpoint
-GET    /api/drivers/history    → Delivery history
-GET    /api/drivers/earnings   → Earnings summary
-WS     /ws/drivers/active      → Active delivery stream
+GET    /api/riders/profile    → Rider profile
+PUT    /api/riders/profile    → Update profile
+PATCH  /api/riders/availability → Set online/offline
+GET    /api/riders/assignments → Current assignments
+POST   /api/riders/assignments/:id/accept  → Accept
+POST   /api/riders/assignments/:id/decline → Decline
+PATCH  /api/riders/assignments/:id/status  → Update checkpoint
+GET    /api/riders/history    → Delivery history
+GET    /api/riders/earnings   → Earnings summary
+WS     /ws/riders/active      → Active delivery stream
 ```
 
 ### LocationController
 
 ```
 POST   /api/location/update    → Push GPS coordinates
-WS     /ws/location/:assignmentId → Stream driver location
+WS     /ws/location/:assignmentId → Stream rider location
 ```
 
 ### FilesController
@@ -2090,7 +2090,7 @@ Complete schema including all original tables (updated) and all new tables.
 ```sql
 -- ============================================================
 -- USERS
--- Updated: role now includes 'driver', added is_active
+-- Updated: role now includes 'rider', added is_active
 -- ============================================================
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
@@ -2101,7 +2101,7 @@ CREATE TABLE users (
     phone_number VARCHAR(20),
     gender VARCHAR(10),
     date_of_birth TIMESTAMP,
-    role VARCHAR(10) NOT NULL DEFAULT 'customer',  -- 'customer', 'driver', 'admin'
+    role VARCHAR(10) NOT NULL DEFAULT 'customer',  -- 'customer', 'rider', 'admin'
     is_profile_complete BOOLEAN NOT NULL DEFAULT false,
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -2129,9 +2129,9 @@ CREATE TABLE addresses (
 );
 
 -- ============================================================
--- DRIVER PROFILES (NEW)
+-- RIDER PROFILES (NEW)
 -- ============================================================
-CREATE TABLE driver_profiles (
+CREATE TABLE rider_profiles (
     id SERIAL PRIMARY KEY,
     user_id INTEGER UNIQUE NOT NULL REFERENCES users(id),
     vehicle_type VARCHAR(20) NOT NULL,        -- 'motorcycle', 'bicycle', 'car'
@@ -2147,7 +2147,7 @@ CREATE TABLE driver_profiles (
 
 -- ============================================================
 -- ORDERS (updated)
--- Added: delivery fields, driver assignment, ETA, cancellation
+-- Added: delivery fields, rider assignment, ETA, cancellation
 -- ============================================================
 CREATE TABLE orders (
     id SERIAL PRIMARY KEY,
@@ -2167,7 +2167,7 @@ CREATE TABLE orders (
     cancelled_at TIMESTAMP,
     delivery_option VARCHAR(10) NOT NULL DEFAULT 'pickup',
     delivery_address_id INTEGER REFERENCES addresses(id),
-    assigned_driver_id INTEGER REFERENCES users(id),
+    assigned_rider_id INTEGER REFERENCES users(id),
     estimated_completion_at TIMESTAMP,
     admin_notes TEXT,
     tracking_link TEXT,
@@ -2209,7 +2209,7 @@ CREATE TABLE three_d_specs (
 CREATE TABLE delivery_assignments (
     id SERIAL PRIMARY KEY,
     order_id INTEGER NOT NULL REFERENCES orders(id),
-    driver_id INTEGER NOT NULL REFERENCES users(id),
+    rider_id INTEGER NOT NULL REFERENCES users(id),
     status VARCHAR(20) NOT NULL DEFAULT 'assigned',
     assigned_at TIMESTAMP NOT NULL DEFAULT NOW(),
     accepted_at TIMESTAMP,
@@ -2280,7 +2280,7 @@ CREATE TABLE notifications (
 );
 
 -- ============================================================
--- GRID CREDITS (NEW)
+-- GRIDGO CREDITS (NEW)
 -- ============================================================
 CREATE TABLE grid_credits (
     id SERIAL PRIMARY KEY,
@@ -2385,18 +2385,18 @@ CREATE INDEX idx_orders_user_id ON orders(user_id);
 CREATE INDEX idx_orders_status ON orders(order_status);
 CREATE INDEX idx_orders_created ON orders(created_at DESC);
 CREATE INDEX idx_orders_user_status ON orders(user_id, order_status);
-CREATE INDEX idx_orders_driver ON orders(assigned_driver_id);
+CREATE INDEX idx_orders_rider ON orders(assigned_rider_id);
 
 -- Addresses
 CREATE INDEX idx_addresses_user_id ON addresses(user_id);
 
--- Driver profiles
-CREATE INDEX idx_driver_profiles_user_id ON driver_profiles(user_id);
-CREATE INDEX idx_driver_profiles_available ON driver_profiles(is_available);
+-- Rider profiles
+CREATE INDEX idx_rider_profiles_user_id ON rider_profiles(user_id);
+CREATE INDEX idx_rider_profiles_available ON rider_profiles(is_available);
 
 -- Delivery assignments
 CREATE INDEX idx_delivery_assignments_order ON delivery_assignments(order_id);
-CREATE INDEX idx_delivery_assignments_driver ON delivery_assignments(driver_id);
+CREATE INDEX idx_delivery_assignments_rider ON delivery_assignments(rider_id);
 CREATE INDEX idx_delivery_assignments_status ON delivery_assignments(status);
 
 -- Location updates
@@ -2453,15 +2453,15 @@ CREATE INDEX idx_order_destinations_order ON order_destinations(order_id);
 
 - **Authentication:** Email/password with JWT tokens via NestJS Passport.js
 - **Session storage:** Tokens stored in `flutter_secure_storage` (not plain Hive or SharedPreferences)
-- **Role-based access control:** Server-side endpoint guards enforce `customer`, `driver`, and `admin` separation -- no client-side-only role checks
+- **Role-based access control:** Server-side endpoint guards enforce `customer`, `rider`, and `admin` separation -- no client-side-only role checks
 - **HTTPS:** All client-server communication over TLS
 - **Input validation:** Server-side validation on all endpoints; client-side validation for UX only
 - **Rate limiting:** Auth endpoints limited to 5 attempts per minute per IP; file upload endpoints rate-limited per user
 - **File upload security:** Server-side MIME type whitelist, filename sanitization, max file size enforcement (50 MB paper, 100 MB 3D)
-- **File access control:** Uploaded files accessible only to the uploading customer, assigned driver, and admins -- no public URLs
+- **File access control:** Uploaded files accessible only to the uploading customer, assigned rider, and admins -- no public URLs
 - **Payment webhook verification:** GCash/Maya HMAC signature validation on all incoming webhooks
-- **Location data access:** GPS tracking data restricted to active delivery participants only (assigned driver, ordering customer, admins)
-- **Driver location scoping:** Driver location updates authenticated and scoped to their assigned deliveries
+- **Location data access:** GPS tracking data restricted to active delivery participants only (assigned rider, ordering customer, admins)
+- **Rider location scoping:** Rider location updates authenticated and scoped to their assigned deliveries
 - **Order status audit trail:** Every status change logged in `order_status_history` with actor and timestamp
 - **Philippine Data Privacy Act (RA 10173) compliance:** Privacy policy, data retention policy, user data export/deletion capability
 
@@ -2471,7 +2471,7 @@ CREATE INDEX idx_order_destinations_order ON order_destinations(order_id);
 - Two-factor authentication (2FA)
 - End-to-end encryption of file contents
 - Geofencing for delivery zones
-- Driver background check integration
+- Rider background check integration
 - SOC 2 or ISO 27001 compliance
 
 ### 14.2 Server Configuration
@@ -2499,7 +2499,7 @@ FIREBASE_SERVICE_ACCOUNT=./firebase-service-account.json
 
 # Email (SendGrid)
 SENDGRID_API_KEY=SG.xxx
-SENDGRID_FROM_EMAIL=noreply@grid.ph
+SENDGRID_FROM_EMAIL=noreply@gridgo.ph
 
 # Maxim API
 MAXIM_API_KEY=xxx
@@ -2570,16 +2570,16 @@ The MVP is successful when:
 3. A customer can upload a file, see the calculated price, and pay
 4. A customer can select delivery with a map-picked address or choose pickup
 5. A customer receives real-time status updates as the admin progresses the order
-6. A customer can see the driver's live location on a map during delivery
+6. A customer can see the rider's live location on a map during delivery
 7. A customer can cancel an order before printing starts
 8. An admin can view the dashboard with live KPIs
 9. An admin can manage the order queue and update statuses
-10. An admin can assign a driver to an order ready for dispatch
-11. A driver can accept assignments, update checkpoints, and complete deliveries
+10. An admin can assign a rider to an order ready for dispatch
+11. A rider can accept assignments, update checkpoints, and complete deliveries
 12. The UI feels premium, refined, and distinctly monochrome -- not a default Flutter app
 13. A customer can select their occupation type at signup with a single tap (no text forms)
 14. A customer receives an automatic warning when a file dimension mismatch or CMYK color mode is detected
-15. A customer can top up GRID Credits via PayMongo and pay for orders using their balance
+15. A customer can top up GRIDGO Credits via PayMongo and pay for orders using their balance
 16. An admin can send a marketing notification blast from the admin panel
 17. A customer can chat with admin support in real time via the Chat tab
 
@@ -2598,12 +2598,12 @@ The MVP is successful when:
 - Address management with map picker and saved addresses
 - Delivery option selection (pickup vs delivery)
 - Estimated completion/delivery time display
-- Driver assignment and delivery workflow
+- Rider assignment and delivery workflow
 - Live GPS tracking during delivery ("on the way" phase)
 - Order status audit trail
 - Admin dashboard with live KPIs and order queue
 - Admin order management with status progression
-- Admin driver assignment for delivery orders
+- Admin rider assignment for delivery orders
 - In-app notifications for status changes
 - Draft order persistence for offline resilience
 - Occupation type capture at signup with icon-tap UI
@@ -2612,7 +2612,7 @@ The MVP is successful when:
 - Interactive digital ruler overlay on file preview
 - Multi-destination order placement with per-destination delivery fees
 - Scheduled delivery time selection (exact date + time, min 2h advance)
-- GRID Credits top-up via PayMongo and credit-based payment at checkout
+- GRIDGO Credits top-up via PayMongo and credit-based payment at checkout
 - In-app live chat between customers and admin
 - Admin marketing notification blasts (push + email)
 - Transactional email notifications via SendGrid
@@ -2632,7 +2632,7 @@ The MVP is successful when:
 - Real-time status updates arrive within 1 second of server-side change
 - Location updates arrive within 3 seconds during active delivery
 - Map renders within 1 second of opening tracking screen
-- Driver GPS battery impact under 5% per hour of active delivery
+- Rider GPS battery impact under 5% per hour of active delivery
 - All text meets WCAG 2.1 AA contrast ratios
 - Offline draft save and restore works reliably across app restarts
 - Zero data loss on network interruption during order placement
@@ -2645,7 +2645,7 @@ The MVP is successful when:
 
 **Goal:** Build the complete visual layer with mock data. Every screen exists, navigates correctly, and looks premium.
 
-> **Completed 2026-03-27.** 34 screens across 3 roles, full design system, GoRouter navigation, skeleton loaders, entry animations, splash screen with animated GRID logo.
+> **Completed 2026-03-27.** 34 screens across 3 roles, full design system, GoRouter navigation, skeleton loaders, entry animations, splash screen with animated GRIDGO logo.
 
 **Deliverables:**
 - Design system: color tokens, typography scale, spacing system, component library
@@ -2667,7 +2667,7 @@ The MVP is successful when:
 - Admin dashboard with mock KPI cards
 - Admin order queue with mock data
 - Admin order detail with status controls
-- Driver screens built with mock data (deliveries list, active delivery map, history, profile)
+- Rider screens built with mock data (deliveries list, active delivery map, history, profile)
 - Bottom navigation and routing for all three roles
 
 ### Phase 2: Order Flow UI & Local Logic -- ✅ 95% COMPLETE
@@ -2704,8 +2704,8 @@ The MVP is successful when:
 - Order CRUD endpoints with status management
 - Address CRUD endpoints
 - File upload endpoint with S3/MinIO storage integration
-- Driver profile and delivery assignment entities
-- Driver endpoints (profile, assignments, status updates)
+- Rider profile and delivery assignment entities
+- Rider endpoints (profile, assignments, status updates)
 - WebSocket Gateway for real-time updates (orders, location, notifications)
 - Order status history logging
 - Payment webhook endpoint with signature verification
@@ -2715,7 +2715,7 @@ The MVP is successful when:
 - @nestjs/schedule for task scheduling
 - OpenAPI/Swagger documentation auto-generated
 - MQTT transport configured for future IoT integration
-- GRID Credits module (balance tracking, PayMongo top-up, credit payments)
+- GRIDGO Credits module (balance tracking, PayMongo top-up, credit payments)
 - Chat module (conversation + message persistence, WebSocket gateway)
 - Funnel event logging endpoint (anonymous + authenticated)
 - Feature requests endpoint
@@ -2743,9 +2743,9 @@ The MVP is successful when:
 - Notifications connected to server stream
 - Admin dashboard connected to live data
 - Admin order queue with real-time updates
-- Driver assignment from admin queue
-- Driver app connected to assignment streams
-- Live GPS tracking connected (driver sends, customer receives)
+- Rider assignment from admin queue
+- Rider app connected to assignment streams
+- Live GPS tracking connected (rider sends, customer receives)
 - Address management connected to server
 - Cancellation flow connected
 - Order status history display
@@ -2778,26 +2778,26 @@ The MVP is successful when:
 
 ### 17.1 Post-MVP Enhancements
 
-- **Auto-Assignment Algorithm** -- Automatically assign nearest available driver based on proximity and current workload
-- **Driver Self-Select** -- Allow drivers to browse and claim available deliveries from a public queue
+- **Auto-Assignment Algorithm** -- Automatically assign nearest available rider based on proximity and current workload
+- **Rider Self-Select** -- Allow riders to browse and claim available deliveries from a public queue
 - **Route Optimization** -- Multi-stop delivery route planning for batch deliveries
 - **Delivery Zones** -- Geofenced service areas with zone-based pricing tiers
 - **Distance-Based Pricing** -- Dynamic delivery fee calculated from shop-to-customer distance
-- **Driver Ratings** -- Customer rates driver after delivery; rating affects assignment priority
+- **Rider Ratings** -- Customer rates rider after delivery; rating affects assignment priority
 - **Delivery Photo Proof** -- Required photo on delivery for verification (basic version in MVP, enhanced post-MVP with AI validation)
 - **Heat Maps** -- Admin view of delivery demand patterns by time and geography
-- **Driver Incentives** -- Bonus system for peak hours, high volume, or perfect rating streaks
-- **Customer-Driver Chat** -- Direct messaging between customer and their assigned driver during active delivery (admin-customer chat is in MVP; driver-customer is post-MVP)
+- **Rider Incentives** -- Bonus system for peak hours, high volume, or perfect rating streaks
+- **Customer-Rider Chat** -- Direct messaging between customer and their assigned rider during active delivery (admin-customer chat is in MVP; rider-customer is post-MVP)
 - **Bulk Orders** -- Business accounts with volume discounts and recurring orders
 - **Order Templates** -- Save frequently used spec combinations for quick reorder
 - **Multi-Language Support** -- Filipino (Tagalog) and Cebuano localization
-- **Advanced Analytics** -- Revenue trends, customer retention, driver utilization dashboards
+- **Advanced Analytics** -- Revenue trends, customer retention, rider utilization dashboards
 
 ### 17.2 Technical Improvements
 
 - **Location Data Archival** -- Move GPS breadcrumbs older than 30 days to cold storage to keep `location_updates` table performant
 - **Map Tile Caching** -- Cache OpenStreetMap tiles for offline use in frequently viewed delivery areas
-- **Background Location Optimization** -- Adaptive GPS interval based on driver speed (slower updates when stationary, faster when moving)
+- **Background Location Optimization** -- Adaptive GPS interval based on rider speed (slower updates when stationary, faster when moving)
 - **CDN for File Storage** -- Move uploaded files behind a CDN for faster downloads and reduced server load
 - **Database Read Replicas** -- Horizontal scaling for read-heavy admin analytics queries
 - **WebSocket Connection Pooling** -- Optimize concurrent real-time connections for scale
@@ -2818,11 +2818,11 @@ The MVP is successful when:
 | **Language boundary (Dart ↔ TypeScript)** | Serialization mismatches between client/server models | Use OpenAPI/Swagger as the contract. Generate TypeScript types from Dart models or vice versa. API-first development with shared schema definitions |
 | **GCash/Maya integration** | Payment API instability or changes | Abstract payment behind interface; webhook verification with fallback to manual admin confirmation |
 | **Single admin bottleneck** | Orders pile up when admin is unavailable | Design admin UI for speed (bulk actions, keyboard shortcuts); post-MVP: auto-accept for repeat customers |
-| **Driver GPS battery drain** | Drivers avoid using the app | 10-second interval during active delivery only; stop tracking on arrive; background-optimized location provider |
+| **Rider GPS battery drain** | Riders avoid using the app | 10-second interval during active delivery only; stop tracking on arrive; background-optimized location provider |
 | **OSRM public server rate limits** | Routing requests may be throttled at scale | Self-host OSRM instance for production; public server sufficient for development and early launch |
-| **Driver no-shows** | Orders stuck in "assigned" state | Auto-timeout: if driver doesn't accept within 10 minutes, auto-reassign; admin notification on timeout |
-| **Inaccurate GPS in urban Philippines** | Driver appears in wrong location on map | Use fused location provider; allow driver to manually mark "arrived"; customer confirmation step |
-| **Address inaccuracy** | Driver can't find customer location | Mandatory landmark field; customer phone visible to driver during delivery; "arrived" notification prompts customer to come out |
+| **Rider no-shows** | Orders stuck in "assigned" state | Auto-timeout: if rider doesn't accept within 10 minutes, auto-reassign; admin notification on timeout |
+| **Inaccurate GPS in urban Philippines** | Rider appears in wrong location on map | Use fused location provider; allow rider to manually mark "arrived"; customer confirmation step |
+| **Address inaccuracy** | Rider can't find customer location | Mandatory landmark field; customer phone visible to rider during delivery; "arrived" notification prompts customer to come out |
 | **Payment webhook failures** | Payments confirmed client-side without server verification | Webhook retry with exponential backoff; manual admin verification fallback; reconciliation endpoint for auditing |
 | **RA 10173 non-compliance** | Legal and regulatory issues in the Philippines | Privacy policy, data retention policy, and user data deletion capability implemented before launch; consult legal counsel |
 | **Location data privacy** | User trust issues and potential complaints | Location only tracked during active delivery; data retained 30 days max; clear disclosure in privacy policy and in-app consent |
@@ -2855,7 +2855,7 @@ The MVP is successful when:
 | [flutter_staggered_grid_view](https://pub.dev/packages/flutter_staggered_grid_view) | Bento grid layouts |
 | [hugeicons](https://pub.dev/packages/hugeicons) | Primary icon package (46K+ stroke-rounded icons) |
 | [flutter_svg](https://pub.dev/packages/flutter_svg) | SVG rendering, required by hugeicons v1.x |
-| [Geolocator](https://pub.dev/packages/geolocator) | GPS location access for driver tracking |
+| [Geolocator](https://pub.dev/packages/geolocator) | GPS location access for rider tracking |
 | [Geocoding](https://pub.dev/packages/geocoding) | Address-to-coordinates and reverse geocoding |
 | [Permission Handler](https://pub.dev/packages/permission_handler) | Runtime permission management (location, camera, storage) |
 | [Flutter Secure Storage](https://pub.dev/packages/flutter_secure_storage) | Encrypted storage for session tokens |
@@ -2904,11 +2904,11 @@ enum OrderStatus {
   printingInProgress,   // Printing has started
   finishingMounting,    // Post-print finishing (binding, mounting, etc.)
   qualityChecked,       // Quality check passed
-  readyForDispatch,     // Ready for driver pickup or customer pickup
-  driverAssigned,       // Driver assigned to deliver (delivery orders only)
-  pickedUp,             // Driver picked up from shop (delivery orders only)
-  onTheWay,             // Driver en route -- live GPS tracking active
-  arrivedAtDestination, // Driver arrived at customer location
+  readyForDispatch,     // Ready for rider pickup or customer pickup
+  riderAssigned,       // Rider assigned to deliver (delivery orders only)
+  pickedUp,             // Rider picked up from shop (delivery orders only)
+  onTheWay,             // Rider en route -- live GPS tracking active
+  arrivedAtDestination, // Rider arrived at customer location
   delivered,            // Delivery confirmed (delivery orders)
   completedPickup,      // Customer picked up from shop (pickup orders)
   cancelled,            // Order cancelled by customer or admin
@@ -2921,12 +2921,12 @@ The lifecycle of a delivery assignment, tracked independently from the order sta
 
 ```dart
 enum DeliveryStatus {
-  assigned,    // Admin assigned driver to the delivery
-  accepted,    // Driver accepted the assignment
-  declined,    // Driver declined (with reason) -- triggers reassignment
-  pickedUp,    // Driver picked up the order from the shop
-  onTheWay,    // Driver en route to customer -- live GPS tracking begins
-  arrived,     // Driver arrived at delivery address -- GPS tracking stops
+  assigned,    // Admin assigned rider to the delivery
+  accepted,    // Rider accepted the assignment
+  declined,    // Rider declined (with reason) -- triggers reassignment
+  pickedUp,    // Rider picked up the order from the shop
+  onTheWay,    // Rider en route to customer -- live GPS tracking begins
+  arrived,     // Rider arrived at delivery address -- GPS tracking stops
   delivered,   // Delivery confirmed complete
 }
 ```
@@ -2954,14 +2954,14 @@ The original PRD scoped a single-item-per-order MVP with three roles. The curren
 
 | Module | Status | Notes |
 |--------|--------|-------|
-| `admin` | ✅ | KPIs, queue, drivers, orders, users analytics endpoints |
+| `admin` | ✅ | KPIs, queue, riders, orders, users analytics endpoints |
 | `auth` | ✅ | JWT + Passport, staged registration, profile setup |
 | `users` | ✅ | Profile, storage settings (file retention), `tutorial_seen_keys text[]`, FCM token |
 | `orders` | ✅ | Single + **batch orders** (multiple items, one transaction), order items, delivery destinations, manual status note, speed tier (express/standard/economy), beta-order-limit error, external-deliveries controller |
 | `addresses` | ✅ | Saved addresses with landmark + map coords |
-| `drivers` | ✅ | Availability, GPS streaming, assignments |
+| `riders` | ✅ | Availability, GPS streaming, assignments |
 | `delivery-slots` | ✅ | **Slot templates** (recurring time windows × capacity), **bookings** (per-day count tracked at template level with row-lock), **delivery settings** (default radius, geo-radius validation), Today's Slots WS broadcast |
-| `credits` | ✅ | **GRID Credits ledger**, top-up via PayMongo, balance check, "Pay with Credits" payment method |
+| `credits` | ✅ | **GRIDGO Credits ledger**, top-up via PayMongo, balance check, "Pay with Credits" payment method |
 | `chat` | ✅ | **Live chat** module — conversations, chat-messages, GridBot system prompt (OpenRouter integration), chat WebSocket gateway, chat-entity-metadata for typing indicators |
 | `beta-mode` | ✅ | **Beta enrollment** settings, per-user 1-order limit while in beta, post-delivery TAM survey lockout enforcement |
 | `daily-grid` | ✅ | **Curated catalog cards** the customer sees on home, real-time WS updates when admin changes them |
@@ -2994,18 +2994,18 @@ Entity columns added beyond v3:
 ### 20.3 Mobile (Flutter) Features Beyond v3
 
 **Onboarding & tutorial layer**
-- ✅ **First-login role-picker onboarding** — visual cards for customer / driver / admin (`features/onboarding/`).
+- ✅ **First-login role-picker onboarding** — visual cards for customer / rider / admin (`features/onboarding/`).
 - ✅ **In-app tutorial system** (`features/tutorial/`):
   - `TutorialKey` enum: `onboarding`, `pipeline`, `homeFeatures`, `checkoutFeatures`, `tracking`
   - Server-synced "seen" set via `PATCH /users/me/tutorials`, locally cached in SharedPreferences
   - Multi-screen **pipeline walkthrough** for first-time printing: welcome bottom sheet → "Start Printing" tile coach mark → Paper Printing card → spec form + Continue button → Upload card + Continue → Checkout (Items, Delivery section, Payment section, Place Order)
   - Auto-positioning bubbles (target Y position decides above/below), pulse-disabled, single-tap advance via `onClickTarget`
-  - Post-pipeline **feature discovery** pass: Credits chip + GridBot FAB on home → Multi-drop tab + GRID Credits row on next checkout → live-map coach mark on first tracking visit
+  - Post-pipeline **feature discovery** pass: Credits chip + GridBot FAB on home → Multi-drop tab + GRIDGO Credits row on next checkout → live-map coach mark on first tracking visit
   - Back-navigation abandons silently and marks `pipeline` seen
   - "Reset Tutorials" row in Profile → Preferences
 
 **Home & catalog**
-- ✅ **Bento home grid** with hero, Resume-your-Queue card, Daily Grid section (real-time WS), Recent Orders, GridBot FAB, GRID Credits chip in header.
+- ✅ **Bento home grid** with hero, Resume-your-Queue card, Daily Grid section (real-time WS), Recent Orders, GridBot FAB, GRIDGO Credits chip in header.
 - ✅ **Daily Grid section** — admin-curated catalog cards visible on customer home, with **real-time updates via `daily_grid` WS gateway** so admin edits propagate without refresh. Mobile widget: `daily_grid_section.dart` + `daily_grid_section_ws_test.dart`.
 - ✅ **Next Batch dialog** — fires at first login on home if a batch session is open, prompting the user to resume.
 
@@ -3014,7 +3014,7 @@ Entity columns added beyond v3:
   - `CheckoutItemsCard` with swipe-to-remove + edit-all-specs sheet
   - `CheckoutDeliveryCard` with single / pickup / **multi-drop** segmented selector (per-copy assignment via `assign_drop_sheet`)
   - `CheckoutSpeedCard` with Express / Standard / Economy speed tiers
-  - `CheckoutPaymentCard` with payment method sheet (GCash / GRID Credits / COD)
+  - `CheckoutPaymentCard` with payment method sheet (GCash / GRIDGO Credits / COD)
   - `CheckoutSummaryCard` (subtotal, delivery, total)
   - `CheckoutFooter` (sticky Place Order button)
   - `CheckoutSegmented` (rounded pill selector for delivery type)
@@ -3027,7 +3027,7 @@ Entity columns added beyond v3:
 - ✅ **Order success screen** with batch summary, "Track this order" CTA, and pipeline-tutorial finish hook.
 
 **Wallet & payments**
-- ✅ **GRID Credits**: top-up custom amount via PayMongo GCash, ledger view in profile, "Pay with GRID Credits" payment row when balance ≥ order total. Beta users get bonus credits.
+- ✅ **GRIDGO Credits**: top-up custom amount via PayMongo GCash, ledger view in profile, "Pay with GRIDGO Credits" payment row when balance ≥ order total. Beta users get bonus credits.
 
 **Live chat**
 - ✅ **Chat tab** in customer bottom navigation. Two backends:
@@ -3045,14 +3045,14 @@ Entity columns added beyond v3:
 - ✅ **Storage settings screen test** — covers the full retention preference UI.
 
 **Tracking**
-- ✅ **Live driver map** — flutter_map + OSRM driving route, ETA badge, multi-drop sequential destinations, swipeable cards.
+- ✅ **Live rider map** — flutter_map + OSRM driving route, ETA badge, multi-drop sequential destinations, swipeable cards.
 
 **Profile**
 - ✅ **Account state provider** — required-survey gating, profile completion check, beta status.
 - ✅ **TAM survey screen** — Likert scale animated face slider, dynamic-price prefill from last order, open forum free-text questions (price, feature, upload, delivery), audio feedback (`assets/audio/` likert sounds), supports both required (cannot dismiss) and optional flows.
 - ✅ **Required TAM survey screen** — disables system pop, submits + logs out on completion.
 - ✅ **Request a Feature** card.
-- ✅ **Profile menu rows** — addresses, payment methods, GRID Credits, storage settings, notification preferences, tutorial reset, dark mode, sign out.
+- ✅ **Profile menu rows** — addresses, payment methods, GRIDGO Credits, storage settings, notification preferences, tutorial reset, dark mode, sign out.
 
 **Admin (mobile)**
 - ✅ Mobile admin queue + dashboard (legacy from earlier phases) coexists with the React admin.
@@ -3062,8 +3062,8 @@ Entity columns added beyond v3:
 | Page | Status | Notes |
 |------|--------|-------|
 | Dashboard (KPIs + charts) | ✅ | + Users analytics tab |
-| Orders list / show | ✅ | Status dropdown, manual status (3D), decline-with-reason, audit timeline, driver assignment, **per-row file preview**, **top-level Inspect File button** |
-| Drivers | ✅ | Availability, GPS, assignment count |
+| Orders list / show | ✅ | Status dropdown, manual status (3D), decline-with-reason, audit timeline, rider assignment, **per-row file preview**, **top-level Inspect File button** |
+| Riders | ✅ | Availability, GPS, assignment count |
 | Users | ✅ | Detail with metrics, recent orders, profile fields |
 | **Delivery Slots → Templates** | ✅ | CRUD for slot templates with capacity + time + geo-radius |
 | **Delivery Slots → Today's Slots** | ✅ | Live booked count via WS, date navigator, week pills |
@@ -3111,7 +3111,7 @@ The server runs **4 Socket.IO gateways**:
 - ❌ **S3 in production** (MinIO used in dev)
 - 🟡 **Funnel drop-off analytics** for the order flow (server logging in place, admin viewer pending)
 - 🟡 **Multi-drop route optimization** (sequential is supported; auto-ordering for shortest route is post-MVP)
-- ❌ **Auto-assignment of drivers by proximity** (admin still picks manually)
+- ❌ **Auto-assignment of riders by proximity** (admin still picks manually)
 - ❌ **i18n / multi-language**
 
 For day-to-day implementation specs and plans for individual features, see `docs/superpowers/specs/` and `docs/superpowers/plans/` — every shipped feature in section 20 has a dated design + plan there.

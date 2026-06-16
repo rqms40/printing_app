@@ -43,7 +43,7 @@ class PrivacyScreen extends StatelessWidget {
             _section(
               colors,
               'Overview',
-              'GRID ("we", "our", or "us") is committed to protecting '
+              'GRIDGO ("we", "our", or "us") is committed to protecting '
                   'your personal data in compliance with Republic Act No. 10173, '
                   'also known as the Data Privacy Act of 2012 of the Philippines, '
                   'and its Implementing Rules and Regulations. This Privacy Policy '
@@ -83,7 +83,7 @@ class PrivacyScreen extends StatelessWidget {
               '3. Data Sharing',
               'We may share your information with:\n\n'
                   'Delivery Partners: Name, phone number, and delivery address are '
-                  'shared with assigned drivers to complete deliveries.\n\n'
+                  'shared with assigned riders to complete deliveries.\n\n'
                   'Payment Processors: Transaction data is shared with GCash and Maya '
                   'for payment processing.\n\n'
                   'We do not sell, rent, or trade your personal data to third parties '
@@ -120,15 +120,15 @@ class PrivacyScreen extends StatelessWidget {
                   'Object: Object to the processing of your data for specific purposes.\n\n'
                   'Portability: Request your data in a structured, machine-readable format.\n\n'
                   'To exercise these rights, contact our Data Protection Officer at '
-                  'privacy@gridprint.ph.',
+                  'privacy@gridgoprint.ph.',
             ),
             _section(
               colors,
               '7. Contact Information',
               'For privacy-related inquiries or concerns, please contact:\n\n'
                   'Data Protection Officer\n'
-                  'GRID\n'
-                  'Email: privacy@gridprint.ph\n'
+                  'GRIDGO\n'
+                  'Email: privacy@gridgoprint.ph\n'
                   'Phone: +63 917 123 4567\n\n'
                   'You may also file a complaint with the National Privacy Commission '
                   'of the Philippines at https://www.privacy.gov.ph.',

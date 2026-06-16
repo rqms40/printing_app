@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task.
 
-**Goal:** Fix 5 critical gaps where Flutter data never reaches the NestJS server — specs, payment, file upload, WebSocket, driver GPS.
+**Goal:** Fix 5 critical gaps where Flutter data never reaches the NestJS server — specs, payment, file upload, WebSocket, rider GPS.
 
 **Architecture:** Each fix connects an existing Flutter provider to its corresponding NestJS endpoint. No new screens or backend modules needed — just wiring the last mile.
 
@@ -112,10 +112,10 @@
 
 ---
 
-## Task 5: Connect driver GPS to real API
+## Task 5: Connect rider GPS to real API
 
 **Files:**
-- Modify: `apps/mobile/lib/features/driver/active_delivery/providers/location_provider.dart`
+- Modify: `apps/mobile/lib/features/rider/active_delivery/providers/location_provider.dart`
 - Modify: `apps/mobile/lib/shared/services/websocket_service.dart`
 
 **What's broken:** LocationProvider emits mock GPS from MockData every 2 seconds. Never uses geolocator or sends to server.
@@ -135,7 +135,7 @@
     // Send to server via WebSocket or REST
   });
   ```
-- [ ] **Step 2:** Send location updates to server via WebSocket (location gateway) or REST fallback (`POST /drivers/location`)
+- [ ] **Step 2:** Send location updates to server via WebSocket (location gateway) or REST fallback (`POST /riders/location`)
 - [ ] **Step 3:** Fallback: if geolocator permission denied or unavailable (desktop/WSL2), use mock data
 - [ ] **Step 4:** Commit: `feat: real GPS tracking via geolocator + server location updates`
 
@@ -162,4 +162,4 @@ After all tasks:
 2. Payment → server receives payment intent ✓
 3. Upload file → server receives file ✓
 4. Change order status (admin) → customer sees update in real-time ✓
-5. Driver starts delivery → customer sees GPS on map ✓
+5. Rider starts delivery → customer sees GPS on map ✓

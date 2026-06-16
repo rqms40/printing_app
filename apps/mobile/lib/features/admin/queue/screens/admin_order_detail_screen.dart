@@ -5,7 +5,7 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
-import 'package:printing_app/features/admin/driver_management/widgets/assignment_dialog.dart';
+import 'package:printing_app/features/admin/rider_management/widgets/assignment_dialog.dart';
 import 'package:printing_app/features/admin/queue/providers/queue_provider.dart';
 import 'package:printing_app/features/admin/queue/widgets/status_picker.dart';
 import 'package:printing_app/shared/models/enums.dart';
@@ -55,9 +55,9 @@ class _AdminOrderDetailScreenState
         MockData.orderStatusHistory.where((h) => h.orderId == order.id).toList()
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-    final showAssignDriver =
+    final showAssignRider =
         order.orderStatus == OrderStatus.readyForDispatch ||
-        order.orderStatus == OrderStatus.driverAssigned;
+        order.orderStatus == OrderStatus.riderAssigned;
     final lineItems = order.lineItems;
 
     return Scaffold(
@@ -126,9 +126,9 @@ class _AdminOrderDetailScreenState
           const SizedBox(height: AppSpacing.md),
 
           // Action buttons
-          if (showAssignDriver) ...[
+          if (showAssignRider) ...[
             AppButton(
-              label: 'Assign Driver',
+              label: 'Assign Rider',
               icon: HugeIcons.strokeRoundedDeliveryTruck02,
               isFullWidth: true,
               onTap: () {

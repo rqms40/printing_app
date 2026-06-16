@@ -7,7 +7,7 @@ export type OrderStatus =
   | 'Finishing & Mounting'
   | 'Quality Checked'
   | 'Ready for Dispatch'
-  | 'Driver Assigned'
+  | 'Rider Assigned'
   | 'Picked Up'
   | 'On the Way'
   | 'Arrived at Destination'
@@ -43,7 +43,7 @@ export interface Order {
   quantity: number;
 }
 
-export interface DriverProfile {
+export interface RiderProfile {
   id: string;
   name: string;
   vehicleType: string;
@@ -56,7 +56,7 @@ export interface DriverProfile {
 export interface DeliveryAssignment {
   id: string;
   orderId: string;
-  driverId: string;
+  riderId: string;
   status: 'Assigned' | 'Accepted' | 'Picked Up' | 'On the Way' | 'Arrived' | 'Delivered' | 'Declined';
   earnings: number;
   date: string;

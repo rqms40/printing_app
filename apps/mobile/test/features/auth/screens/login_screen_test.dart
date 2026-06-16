@@ -40,7 +40,7 @@ void main() {
       expect(find.text('Sign In'), findsOneWidget);
     });
 
-    testWidgets('dev bypass buttons are visible (Customer, Driver, Admin)',
+    testWidgets('dev bypass buttons are visible (Customer, Rider, Admin)',
         (tester) async {
       await tester.pumpWidget(_wrap(const LoginScreen()));
       await tester.pump(const Duration(seconds: 1));
@@ -48,7 +48,7 @@ void main() {
 
       expect(find.text('DEV LOGIN'), findsOneWidget);
       expect(find.text('Customer'), findsOneWidget);
-      expect(find.text('Driver'), findsOneWidget);
+      expect(find.text('Rider'), findsOneWidget);
       expect(find.text('Admin'), findsOneWidget);
     });
 

@@ -9,7 +9,7 @@ export type AdminUsersAnalyticsPoint = {
 
 type AdminUsersAnalyticsRoleCounts = {
   customers: number;
-  drivers: number;
+  riders: number;
   admins: number;
 };
 
@@ -130,7 +130,7 @@ export function normalizeAdminUsersAnalytics(payload: unknown): AdminUsersAnalyt
   const activeCustomers = normalizeCount(summary.active_customers);
   const profileCompletionRate = normalizePercentage(summary.profile_completion_rate);
   const customers = normalizeCount(roleCounts.customers);
-  const drivers = normalizeCount(roleCounts.drivers);
+  const riders = normalizeCount(roleCounts.riders);
   const admins = normalizeCount(roleCounts.admins);
 
   if (
@@ -139,7 +139,7 @@ export function normalizeAdminUsersAnalytics(payload: unknown): AdminUsersAnalyt
     activeCustomers === null ||
     profileCompletionRate === null ||
     customers === null ||
-    drivers === null ||
+    riders === null ||
     admins === null
   ) {
     return null;
@@ -173,7 +173,7 @@ export function normalizeAdminUsersAnalytics(payload: unknown): AdminUsersAnalyt
       profile_completion_rate: profileCompletionRate,
       role_counts: {
         customers,
-        drivers,
+        riders,
         admins,
       },
     },

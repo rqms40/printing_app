@@ -38,7 +38,7 @@ The approved v1 scope is:
 - `User Show + Dashboard Users tab`
 - analytics should include both profile data and order behavior
 - analytics should focus primarily on customers
-- drivers and admins should still appear in high-level role counts
+- riders and admins should still appear in high-level role counts
 - user details should open as a dedicated show page, not a modal or drawer
 
 ### Recommended Approach
@@ -194,7 +194,7 @@ The `Users` tab should use a three-row rhythm.
 - profile completion rate
 - active customers in selected period
 
-Drivers and admins should still appear as supporting totals somewhere in the tab, but not dominate it.
+Riders and admins should still appear as supporting totals somewhere in the tab, but not dominate it.
 
 #### Row 2: Trend + Demographics
 
@@ -218,7 +218,7 @@ Preserve the current admin visual language:
 - blue/green support colors for secondary metrics
 - clean grid layout, not a generic white BI console
 
-The new user surfaces should feel like a natural expansion of the current GRID admin, not a separate design system.
+The new user surfaces should feel like a natural expansion of the current GRIDGO admin, not a separate design system.
 
 ## Backend Design
 
@@ -243,7 +243,7 @@ Response shape:
   "user": {
     "id": 1,
     "full_name": "Maria Santos",
-    "email": "maria@gridprint.ph",
+    "email": "maria@gridgoprint.ph",
     "phone_number": "+639171234567",
     "role": "customer",
     "is_active": true,
@@ -290,7 +290,7 @@ Response shape:
 {
   "totals": {
     "customers": 124,
-    "drivers": 8,
+    "riders": 8,
     "admins": 2,
     "new_customers": 18,
     "profile_completion_rate": 82,
@@ -325,7 +325,7 @@ Response shape:
 
 All demographic and segment breakdowns should be based on `role === customer`.
 
-Drivers and admins should only contribute to high-level totals.
+Riders and admins should only contribute to high-level totals.
 
 #### New Customers
 
@@ -476,7 +476,7 @@ Add controller/service coverage for:
 Verify:
 
 - customer-only analytics focus
-- drivers/admins still included in totals
+- riders/admins still included in totals
 - category aggregation
 - field aggregation
 - segment aggregation
@@ -514,7 +514,7 @@ Do not include in this implementation:
 - export/CSV tooling
 - advanced cohort retention analysis
 - separate `/users/analytics` route
-- driver/admin deep-dive analytics beyond counts
+- rider/admin deep-dive analytics beyond counts
 - full customer timeline/audit trail beyond recent orders
 
 ## Success Criteria

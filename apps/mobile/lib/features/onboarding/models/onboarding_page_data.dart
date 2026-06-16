@@ -38,7 +38,7 @@ class OnboardingPageData {
       heading: 'Know exactly where\nyour print is',
       body:
           'Track your order from production to your doorstep '
-          'with live driver GPS tracking.',
+          'with live rider GPS tracking.',
       illustrationType: OnboardingIllustration.delivery,
     ),
     OnboardingPageData(
@@ -46,14 +46,14 @@ class OnboardingPageData {
       heading: 'One order,\nmultiple stops',
       body:
           'Send your prints to different addresses in a single '
-          'order — one driver handles all deliveries.',
+          'order — one rider handles all deliveries.',
       illustrationType: OnboardingIllustration.multiStop,
     ),
     OnboardingPageData(
       overline: 'FLEXIBLE PAYMENTS',
       heading: 'Pay your way',
       body:
-          'GCash, Maya, Cash on Delivery, or GRID Credits '
+          'GCash, Maya, Cash on Delivery, or GRIDGO Credits '
           '— choose what works for you.',
       illustrationType: OnboardingIllustration.payment,
     ),
@@ -67,8 +67,8 @@ class OnboardingPageData {
     ),
   ];
 
-  /// Driver onboarding: deliveries → checkpoints → location → earnings → notifications.
-  static const List<OnboardingPageData> driver = [
+  /// Rider onboarding: deliveries → checkpoints → location → earnings → notifications.
+  static const List<OnboardingPageData> rider = [
     OnboardingPageData(
       overline: 'DELIVERIES',
       heading: 'Manage your\nassigned pickups',
@@ -130,10 +130,10 @@ class OnboardingPageData {
       illustrationType: OnboardingIllustration.cube3D,
     ),
     OnboardingPageData(
-      overline: 'DRIVER DISPATCH',
-      heading: 'Assign drivers\nwith one tap',
+      overline: 'RIDER DISPATCH',
+      heading: 'Assign riders\nwith one tap',
       body:
-          'View available drivers, assign deliveries, '
+          'View available riders, assign deliveries, '
           'and track them on the map.',
       illustrationType: OnboardingIllustration.delivery,
     ),
@@ -142,8 +142,8 @@ class OnboardingPageData {
   /// Returns the correct page list for the given [role].
   static List<OnboardingPageData> forRole(String role) {
     switch (role) {
-      case 'driver':
-        return driver;
+      case 'rider':
+        return rider;
       case 'admin':
         return admin;
       default:

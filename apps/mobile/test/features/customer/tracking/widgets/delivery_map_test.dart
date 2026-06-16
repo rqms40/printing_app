@@ -36,7 +36,7 @@ void main() {
 
     testWidgets('shows Live Tracking badge in active state', (tester) async {
       final active = LiveDeliveryMapState.active(
-        driverPoint: const LatLng(7.07, 125.61),
+        riderPoint: const LatLng(7.07, 125.61),
         shopPoint: const LatLng(7.064, 125.608),
         destPoint: const LatLng(7.073, 125.613),
         routePoints: [
@@ -54,7 +54,7 @@ void main() {
 
     testWidgets('shows ETA badge in active state', (tester) async {
       final active = LiveDeliveryMapState.active(
-        driverPoint: const LatLng(7.07, 125.61),
+        riderPoint: const LatLng(7.07, 125.61),
         shopPoint: const LatLng(7.064, 125.608),
         destPoint: const LatLng(7.073, 125.613),
         routePoints: List.generate(

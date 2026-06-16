@@ -1,4 +1,4 @@
-# GRID API Types
+# GRIDGO API Types
 
 Shared API type definitions between Flutter client and NestJS server.
 

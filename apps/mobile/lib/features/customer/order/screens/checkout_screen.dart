@@ -212,7 +212,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           icon: HugeIcons.strokeRoundedWallet01,
           title: 'Payment method',
           body:
-              'Choose how you want to pay — tap here to switch between GRID Credits and GCash.',
+              'Choose how you want to pay — tap here to switch between GRIDGO Credits and GCash.',
           align: ContentAlign.bottom,
           advanceOnSpotlightTap: false,
         ),
@@ -280,7 +280,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                "One more thing — tap 'Choose payment method' to see GRID Credits.",
+                "One more thing — tap 'Choose payment method' to see GRIDGO Credits.",
               ),
               duration: Duration(seconds: 4),
             ),

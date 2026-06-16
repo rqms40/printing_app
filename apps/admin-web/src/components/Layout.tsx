@@ -29,7 +29,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           <div className="bg-accent" style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Printer size={20} color="#000" />
           </div>
-          <span style={{ fontSize: '1.25rem', fontWeight: 700, letterSpacing: '-0.5px' }}>GRID Admin</span>
+          <span style={{ fontSize: '1.25rem', fontWeight: 700, letterSpacing: '-0.5px' }}>GRIDGO Admin</span>
         </div>
         
         <nav style={{ flex: 1 }}>
@@ -41,9 +41,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             <Grid size={20} />
             Order Queue
           </Link>
-          <Link to="/drivers" className={`nav-item ${path.startsWith('/drivers') ? 'active' : ''}`}>
+          <Link to="/riders" className={`nav-item ${path.startsWith('/riders') ? 'active' : ''}`}>
             <Users size={20} />
-            Drivers
+            Riders
           </Link>
           <a href="#" className="nav-item">
             <Settings size={20} />
@@ -63,7 +63,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       <main className="main-content">
         <header className="flex justify-between items-center" style={{ marginBottom: '1.5rem' }}>
           <div>
-            <h1 className="text-3xl">{path.startsWith('/queue') ? (path === '/queue' ? 'Order Queue' : '') : path.startsWith('/drivers') ? 'Drivers Panel' : 'Dashboard'}</h1>
+            <h1 className="text-3xl">{path.startsWith('/queue') ? (path === '/queue' ? 'Order Queue' : '') : path.startsWith('/riders') ? 'Riders Panel' : 'Dashboard'}</h1>
             {path === '/' && <p className="text-secondary">Welcome back, Admin</p>}
           </div>
           <div className="flex items-center gap-4">

@@ -40,7 +40,7 @@ import { LoginPage } from "@/pages/login";
 import { DashboardPage } from "@/pages/dashboard";
 import { OrderList } from "@/pages/orders/list";
 import { OrderShow } from "@/pages/orders/show";
-import { DriverList } from "@/pages/drivers/list";
+import { RiderList } from "@/pages/riders/list";
 import { UserList } from "@/pages/users/list";
 import { UserShow } from "@/pages/users/show";
 import { ProductList } from "@/pages/products/list";
@@ -87,9 +87,9 @@ function App() {
                 meta: { label: "Orders", icon: <ShoppingCartOutlined /> },
               },
               {
-                name: "drivers",
-                list: "/drivers",
-                meta: { label: "Drivers", icon: <CarOutlined /> },
+                name: "riders",
+                list: "/riders",
+                meta: { label: "Riders", icon: <CarOutlined /> },
               },
               {
                 name: 'delivery-slots',
@@ -179,7 +179,7 @@ function App() {
               syncWithLocation: true,
               warnWhenUnsavedChanges: true,
               title: {
-                text: "GRID Admin",
+                text: "GRIDGO Admin",
                 icon: <GridLogo size={24} />,
               },
             }}
@@ -207,7 +207,7 @@ function App() {
                   <Route index element={<OrderList />} />
                   <Route path="show/:id" element={<OrderShow />} />
                 </Route>
-                <Route path="/drivers" element={<DriverList />} />
+                <Route path="/riders" element={<RiderList />} />
                 <Route path="/users">
                   <Route index element={<UserList />} />
                   <Route path="show/:id" element={<UserShow />} />

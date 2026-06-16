@@ -46,7 +46,7 @@ function Navbar() {
             <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
             <div className="w-1.5 h-1.5 bg-gray-500 rounded-full"></div>
           </div>
-          <span className="text-xl font-bold tracking-widest uppercase">GRID<span className="text-[var(--color-primary)]">GO</span></span>
+          <span className="text-xl font-bold tracking-widest uppercase">GRIDGO</span>
         </a>
 
         {/* Center Nav */}
@@ -288,7 +288,7 @@ function SupportSection() {
           <p className="text-xs tracking-[0.35em] uppercase text-[var(--color-primary)] mb-3">We're here for you</p>
           <h2 className="text-4xl md:text-5xl font-bold mb-5">Support &amp; Help</h2>
           <p className="text-gray-400 max-w-xl mx-auto">
-            Whether you need a quick answer or live human help, GRID has you covered — 24 hours a day.
+            Whether you need a quick answer or live human help, GRIDGO has you covered — 24 hours a day.
           </p>
         </motion.div>
 
@@ -320,7 +320,7 @@ function SupportSection() {
             <div className="flex flex-col gap-3 mt-auto">
               <div className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3 border border-white/10">
                 <ShieldCheck size={18} className="text-[var(--color-primary)] shrink-0" />
-                <span className="text-sm text-gray-300">Verified GRID support line</span>
+                <span className="text-sm text-gray-300">Verified GRIDGO support line</span>
               </div>
               <div className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3 border border-white/10">
                 <Zap size={18} className="text-[var(--color-primary)] shrink-0" />
@@ -351,7 +351,7 @@ function SupportSection() {
             <div>
               <h3 className="text-2xl font-bold mb-2">Live Chat</h3>
               <p className="text-gray-400 leading-relaxed">
-                Start a conversation instantly — our AI handles common questions in seconds. For anything more complex, a real GRID admin seamlessly takes over the chat.
+                Start a conversation instantly — our AI handles common questions in seconds. For anything more complex, a real GRIDGO admin seamlessly takes over the chat.
               </p>
             </div>
 
@@ -362,7 +362,7 @@ function SupportSection() {
                   <Zap size={12} className="text-[var(--color-primary)]" />
                 </div>
                 <div className="bg-white/10 rounded-xl rounded-tl-none px-3 py-2 text-xs text-gray-300 max-w-[80%]">
-                  Hi! I'm the GRID AI assistant. How can I help you today?
+                  Hi! I'm the GRIDGO AI assistant. How can I help you today?
                 </div>
               </div>
               <div className="flex items-start gap-2 justify-end">
@@ -425,7 +425,7 @@ function AboutSection() {
             viewport={{ once: true, margin: '-100px' }}
             className="w-full flex justify-center h-full"
           >
-            <img src="/office.png" alt="GRID Office" className="w-full h-full object-cover grayscale aspect-[4/5]" />
+            <img src="/office.png" alt="GRIDGO Office" className="w-full h-full object-cover grayscale aspect-[4/5]" />
           </motion.div>
 
           <div className="flex flex-col justify-between h-full py-1">
@@ -533,7 +533,7 @@ function BetaSection() {
             </h2>
 
             <p className="text-gray-200 text-[13px] md:text-[14px] mb-8 max-w-[380px] font-light leading-relaxed">
-              Become a founding member of GRID and have a <span className="text-[var(--color-primary)] font-medium">free printing service</span> delivered to your door step.
+              Become a founding member of GRIDGO and have a <span className="text-[var(--color-primary)] font-medium">free printing service</span> delivered to your door step.
             </p>
 
             <div className="grid grid-cols-2 gap-3 mb-14 w-[95%]">

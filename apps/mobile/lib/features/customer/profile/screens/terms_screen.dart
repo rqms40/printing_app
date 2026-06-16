@@ -43,17 +43,17 @@ class TermsScreen extends StatelessWidget {
             _section(
               colors,
               '1. Acceptance of Terms',
-              'By accessing and using the GRID mobile application '
+              'By accessing and using the GRIDGO mobile application '
                   '("the App"), you agree to be bound by these Terms of Service '
                   '("Terms"). If you do not agree to these Terms, please do not '
-                  'use the App. GRID reserves the right to modify these '
+                  'use the App. GRIDGO reserves the right to modify these '
                   'Terms at any time, and your continued use of the App constitutes '
                   'acceptance of any changes.',
             ),
             _section(
               colors,
               '2. Services Provided',
-              'GRID provides an online platform for ordering printing '
+              'GRIDGO provides an online platform for ordering printing '
                   'services, including but not limited to document printing, poster '
                   'printing, banner printing, and 3D printing. Orders may be '
                   'fulfilled through delivery or in-store pickup at designated '
@@ -83,7 +83,7 @@ class TermsScreen extends StatelessWidget {
               '5. File Upload and Intellectual Property',
               'By uploading files to the App, you represent and warrant that you '
                   'own or have the necessary rights and permissions to reproduce the '
-                  'content. GRID is not responsible for verifying the '
+                  'content. GRIDGO is not responsible for verifying the '
                   'copyright status of uploaded materials. Files are stored securely '
                   'and used solely for order fulfillment.',
             ),
@@ -94,20 +94,20 @@ class TermsScreen extends StatelessWidget {
                   'started, cancellations are no longer accepted. Refunds for '
                   'eligible cancellations will be processed within 3-5 business '
                   'days to the original payment method. Delivery fees are '
-                  'non-refundable once a driver has been assigned.',
+                  'non-refundable once a rider has been assigned.',
             ),
             _section(
               colors,
               '7. Delivery Terms',
               'Delivery is available within serviceable areas in the Philippines. '
                   'Estimated delivery times are provided for reference only and are '
-                  'not guaranteed. GRID is not liable for delays caused by '
+                  'not guaranteed. GRIDGO is not liable for delays caused by '
                   'traffic, weather, or other circumstances beyond our control.',
             ),
             _section(
               colors,
               '8. Limitation of Liability',
-              'GRID shall not be liable for any indirect, incidental, '
+              'GRIDGO shall not be liable for any indirect, incidental, '
                   'special, or consequential damages arising out of or in connection '
                   'with the use of the App or services. Our total liability shall '
                   'not exceed the amount paid by you for the specific order giving '
@@ -124,7 +124,7 @@ class TermsScreen extends StatelessWidget {
               colors,
               '10. Contact Information',
               'For questions or concerns regarding these Terms, please contact us '
-                  'at support@gridprint.ph or call +63 917 123 4567.',
+                  'at support@gridgoprint.ph or call +63 917 123 4567.',
             ),
             const SizedBox(height: AppSpacing.xxl),
           ],

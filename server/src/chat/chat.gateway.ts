@@ -93,7 +93,7 @@ export class ChatGateway implements OnGatewayConnection {
     const senderRole =
       role === 'admin'
         ? SenderRole.ADMIN
-        : role === 'driver'
+        : role === 'rider'
           ? SenderRole.RIDER
           : SenderRole.CUSTOMER;
 
@@ -167,7 +167,7 @@ export class ChatGateway implements OnGatewayConnection {
     const senderRole =
       role === 'admin'
         ? SenderRole.ADMIN
-        : role === 'driver'
+        : role === 'rider'
           ? SenderRole.RIDER
           : SenderRole.CUSTOMER;
     client.to(`conversation:${data.conversationId}`).emit('user-typing', {
@@ -221,7 +221,7 @@ export class ChatGateway implements OnGatewayConnection {
     const canAccess =
       role === 'admin' ||
       conversation.customerId === userId ||
-      (role === 'driver' &&
+      (role === 'rider' &&
         conversation.type === ConversationType.RIDER &&
         conversation.assignedRiderId === userId);
 
