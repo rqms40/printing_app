@@ -25,6 +25,10 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { DeliverySlotsModule } from './delivery-slots/delivery-slots.module';
 import { PrinterProfileModule } from './printer-profile/printer-profile.module';
 import { SupportTicketsModule } from './support-tickets/support-tickets.module';
+import {
+  createTypeOrmOptions,
+  initializeDataSourceWithPreSyncNormalization,
+} from './database/typeorm.config';
 
 @Module({
   imports: [
@@ -42,16 +46,8 @@ import { SupportTicketsModule } from './support-tickets/support-tickets.module';
     // Database
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres' as const,
-        host: config.get<string>('DATABASE_HOST', 'localhost'),
-        port: config.get<number>('DATABASE_PORT', 5432),
-        username: config.get<string>('DATABASE_USER', 'postgres'),
-        password: config.get<string>('DATABASE_PASSWORD', 'postgres'),
-        database: config.get<string>('DATABASE_NAME', 'grid_print'),
-        autoLoadEntities: true,
-        synchronize: config.get<string>('NODE_ENV') !== 'production',
-      }),
+      useFactory: createTypeOrmOptions,
+      dataSourceFactory: initializeDataSourceWithPreSyncNormalization,
     }),
 
     // Firebase (global — push notifications)

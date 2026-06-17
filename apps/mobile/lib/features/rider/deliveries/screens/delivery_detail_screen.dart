@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
@@ -9,24 +8,30 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/chat/providers/chat_provider.dart';
-import 'package:printing_app/shared/services/routing_service.dart';
-import 'package:printing_app/shared/widgets/map_helpers.dart';
 import 'package:printing_app/features/rider/deliveries/providers/deliveries_provider.dart';
-import 'package:printing_app/features/rider/deliveries/widgets/checkpoint_action.dart';
-import 'package:printing_app/shared/models/address.dart';
+import 'package:printing_app/features/rider/shared/rider_delivery_status.dart';
 import 'package:printing_app/shared/models/enums.dart';
-import 'package:printing_app/shared/providers/mock_data.dart';
+import 'package:printing_app/features/rider/shared/widgets/rider_checkpoint_panel.dart';
+import 'package:printing_app/features/rider/shared/widgets/rider_map_view.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/status_badge.dart';
 import 'package:printing_app/utils/formatters.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-/// Detail screen for a single delivery assignment.
-class DeliveryDetailScreen extends ConsumerWidget {
+/// Assignment overview before or after active navigation.
+class DeliveryDetailScreen extends ConsumerStatefulWidget {
   const DeliveryDetailScreen({super.key, required this.assignmentId});
 
   final String assignmentId;
+
+  @override
+  ConsumerState<DeliveryDetailScreen> createState() =>
+      _DeliveryDetailScreenState();
+}
+
+class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
+  bool _isAdvancing = false;
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -36,12 +41,12 @@ class DeliveryDetailScreen extends ConsumerWidget {
 
   Future<void> _openCustomerChat(
     BuildContext context,
-    WidgetRef ref,
-    String orderId,
+    String orderInternalId,
     String orderRef,
-    DeliveryStatus status,
   ) async {
-    final apiOrderRef = int.tryParse(orderId) == null ? orderRef : orderId;
+    final apiOrderRef = int.tryParse(orderInternalId) == null
+        ? orderRef
+        : orderInternalId;
 
     final conv = await ref
         .read(chatProvider.notifier)
@@ -49,192 +54,164 @@ class DeliveryDetailScreen extends ConsumerWidget {
     if (!context.mounted) return;
     if (conv == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not open customer chat. Please try again.'),
+        SnackBar(
+          content: const Text(
+            'Could not open customer chat. Please try again.',
+          ),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.borderMd),
         ),
       );
       return;
     }
 
+    final view = ref.read(deliveriesProvider).viewById(widget.assignmentId);
     final uri = Uri(
       path: '/rider/chat/${conv.id}',
       queryParameters: {
         'type': conv.type.name,
         'orderRef': orderRef,
-        'orderStatus': status.displayName,
+        'orderStatus': view?.status.displayName ?? '',
       },
     );
     context.push(uri.toString());
   }
 
+  Future<void> _callCustomer(String? phone) async {
+    if (phone == null || phone.isEmpty) return;
+    final uri = Uri.parse('tel:$phone');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
+
+  Future<void> _navigateTo(LatLng? destination) async {
+    final lat = destination?.latitude ?? 7.1907;
+    final lng = destination?.longitude ?? 125.4553;
+    final url = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
+    );
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Future<void> _handleAdvance() async {
+    setState(() => _isAdvancing = true);
+    await ref
+        .read(deliveriesProvider.notifier)
+        .advanceCheckpoint(widget.assignmentId);
+    if (!mounted) return;
+    setState(() => _isAdvancing = false);
+
+    final view = ref.read(deliveriesProvider).viewById(widget.assignmentId);
+    if (view?.isInProgress ?? false) {
+      context.pushReplacement(
+        '/rider/deliveries/${widget.assignmentId}/active',
+      );
+    }
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final colors = _colors(context);
-    final deliveriesState = ref.watch(deliveriesProvider);
-    final notifier = ref.read(deliveriesProvider.notifier);
+    final state = ref.watch(deliveriesProvider);
+    final view = state.viewById(widget.assignmentId);
 
-    final assignment = deliveriesState.assignments.firstWhere(
-      (a) => a.id == assignmentId,
-      orElse: () => MockData.deliveryAssignments.first,
-    );
+    if (view == null) {
+      return Scaffold(
+        backgroundColor: colors.background,
+        appBar: AppBar(
+          backgroundColor: colors.surface,
+          title: const Text('Delivery'),
+        ),
+        body: const Center(child: Text('Assignment not found')),
+      );
+    }
 
-    final order = MockData.orders.firstWhere(
-      (o) => o.id == assignment.orderId,
-      orElse: () => MockData.orders.first,
-    );
-
-    final Address? address = order.deliveryAddressId != null
-        ? MockData.addresses.cast<dynamic>().firstWhere(
-            (a) => a.id == order.deliveryAddressId,
-            orElse: () => null,
-          )
-        : null;
+    final visual = riderDeliveryVisual(view.status, colors);
+    final order = view.order;
+    final destination = order.destination;
+    final destLatLng = destination?.latLng;
 
     return Scaffold(
       backgroundColor: colors.background,
-      appBar: AppBar(
-        backgroundColor: colors.surface,
-        title: Text(
-          order.orderId,
-          style: AppTypography.h3.copyWith(color: colors.onBackground),
-        ),
-        elevation: 0,
-        leading: IconButton(
-          icon: HugeIcon(
-            icon: HugeIcons.strokeRoundedArrowLeft01,
-            color: colors.onBackground,
-          ),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ),
       body: Column(
         children: [
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.36,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: RiderMapView(
+                    assignmentId: view.id,
+                    destination: destLatLng,
+                    trackLocation: false,
+                    interactive: true,
+                    showLiveBadge: false,
+                  ),
+                ),
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    child: Row(
+                      children: [
+                        _FloatingIconButton(
+                          icon: HugeIcons.strokeRoundedArrowLeft01,
+                          onTap: () => Navigator.of(context).pop(),
+                        ),
+                        const Spacer(),
+                        StatusBadge(
+                          label: visual.label,
+                          variant: visual.badgeVariant,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(AppSpacing.md),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Status badge
-                  StatusBadge(
-                    label: assignment.status.displayName,
-                    variant: _badgeVariant(assignment.status),
+                  Text(
+                    order.orderRef,
+                    style: AppTypography.h2.copyWith(
+                      color: colors.onBackground,
+                    ),
                   ),
-                  const SizedBox(height: AppSpacing.md),
-
-                  // Order info section
-                  _buildSectionLabel(context, 'ORDER INFO'),
-                  const SizedBox(height: AppSpacing.sm),
-                  AppCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildInfoRow(context, 'Category', order.category),
-                        const SizedBox(height: AppSpacing.sm),
-                        _buildInfoRow(context, 'Quantity', '${order.quantity}'),
-                        const SizedBox(height: AppSpacing.sm),
-                        _buildInfoRow(
-                          context,
-                          'Total',
-                          formatCurrency(order.totalPrice),
-                        ),
-                        if (order.paperSpecs != null) ...[
-                          const SizedBox(height: AppSpacing.sm),
-                          _buildInfoRow(
-                            context,
-                            'Specs',
-                            '${order.paperSpecs!.paperSize.displayName}, '
-                                '${order.paperSpecs!.colorMode.displayName}, '
-                                '${order.paperSpecs!.mediaType.displayName}',
-                          ),
-                        ],
-                      ],
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    destination?.fullAddress ?? 'Address pending',
+                    style: AppTypography.body.copyWith(
+                      color: colors.onSurfaceDim,
                     ),
                   ),
                   const SizedBox(height: AppSpacing.lg),
-
-                  // Customer address section
-                  if (address != null) ...[
-                    _buildSectionLabel(context, 'DELIVERY ADDRESS'),
-                    const SizedBox(height: AppSpacing.sm),
-                    AppCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              HugeIcon(
-                                icon: HugeIcons.strokeRoundedLocation01,
-                                size: 18,
-                                color: colors.onSurface,
-                              ),
-                              const SizedBox(width: AppSpacing.sm),
-                              Expanded(
-                                child: Text(
-                                  address.fullAddress,
-                                  style: AppTypography.body.copyWith(
-                                    color: colors.onSurface,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (address.landmark != null) ...[
-                            const SizedBox(height: AppSpacing.sm),
-                            Padding(
-                              padding: const EdgeInsets.only(left: 26),
-                              child: Text(
-                                address.landmark!,
-                                style: AppTypography.bodyBold.copyWith(
-                                  color: colors.onBackground,
-                                ),
-                              ),
-                            ),
-                          ],
-                          if (address.barangay != null) ...[
-                            const SizedBox(height: AppSpacing.xs),
-                            Padding(
-                              padding: const EdgeInsets.only(left: 26),
-                              child: Text(
-                                'Brgy. ${address.barangay}, ${address.city}',
-                                style: AppTypography.caption.copyWith(
-                                  color: colors.onSurfaceDim,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
+                  Row(
+                    children: [
+                      Expanded(
+                        child: AppButton(
+                          label: 'Navigate',
+                          variant: AppButtonVariant.secondary,
+                          icon: HugeIcons.strokeRoundedRoute01,
+                          onTap: () => _navigateTo(destLatLng),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                  ],
-
-                  // Map preview
-                  _buildSectionLabel(context, 'MAP'),
-                  const SizedBox(height: AppSpacing.sm),
-                  _RouteMapPreview(colors: colors),
-                  const SizedBox(height: AppSpacing.sm),
-
-                  // Navigate button
-                  AppButton(
-                    label: 'Navigate',
-                    variant: AppButtonVariant.secondary,
-                    isFullWidth: true,
-                    icon: HugeIcons.strokeRoundedRoute01,
-                    onTap: () async {
-                      // Open Google Maps with destination coordinates
-                      final lat = address?.latitude ?? 14.6400;
-                      final lng = address?.longitude ?? 121.0530;
-                      final url = Uri.parse(
-                        'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
-                      );
-                      if (await canLaunchUrl(url)) {
-                        await launchUrl(
-                          url,
-                          mode: LaunchMode.externalApplication,
-                        );
-                      }
-                    },
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: AppButton(
+                          label: 'Call',
+                          variant: AppButtonVariant.secondary,
+                          icon: HugeIcons.strokeRoundedCall,
+                          onTap: () => _callCustomer(order.customerPhone),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   AppButton(
@@ -244,152 +221,150 @@ class DeliveryDetailScreen extends ConsumerWidget {
                     icon: HugeIcons.strokeRoundedMessage01,
                     onTap: () => _openCustomerChat(
                       context,
-                      ref,
-                      assignment.orderId,
-                      order.orderId,
-                      assignment.status,
+                      order.orderInternalId,
+                      order.orderRef,
                     ),
                   ),
                   const SizedBox(height: AppSpacing.lg),
+                  Text(
+                    'ORDER DETAILS',
+                    style: AppTypography.overline.copyWith(
+                      color: colors.onSurfaceDim,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  AppCard(
+                    child: Column(
+                      children: [
+                        _InfoRow(
+                          label: 'Customer',
+                          value: order.customerName ?? 'Customer',
+                          colors: colors,
+                        ),
+                        _InfoRow(
+                          label: 'Category',
+                          value: order.category,
+                          colors: colors,
+                        ),
+                        _InfoRow(
+                          label: 'Quantity',
+                          value: '${order.quantity}',
+                          colors: colors,
+                        ),
+                        _InfoRow(
+                          label: 'Delivery fee',
+                          value: formatCurrency(order.deliveryFee),
+                          colors: colors,
+                        ),
+                        if (destination?.landmark != null)
+                          _InfoRow(
+                            label: 'Landmark',
+                            value: destination!.landmark!,
+                            colors: colors,
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (view.isInProgress) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    AppButton(
+                      label: 'Open live delivery map',
+                      isFullWidth: true,
+                      icon: HugeIcons.strokeRoundedNavigation03,
+                      onTap: () =>
+                          context.push('/rider/deliveries/${view.id}/active'),
+                    ),
+                  ],
+                  const SizedBox(height: AppSpacing.xxl),
                 ],
               ),
             ),
           ),
-
-          // Bottom checkpoint action
-          if (assignment.status != DeliveryStatus.delivered &&
-              assignment.status != DeliveryStatus.declined)
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: BoxDecoration(
-                color: colors.surface,
-                border: Border(
-                  top: BorderSide(color: colors.outline, width: 0.5),
-                ),
-              ),
-              child: SafeArea(
-                top: false,
-                child: CheckpointAction(
-                  currentStatus: assignment.status,
-                  onAdvance: () => notifier.advanceCheckpoint(assignmentId),
-                ),
-              ),
-            ),
+          RiderCheckpointPanel(
+            status: view.status,
+            isLoading: _isAdvancing,
+            onAdvance: _handleAdvance,
+            onAccept: () async {
+              setState(() => _isAdvancing = true);
+              await ref
+                  .read(deliveriesProvider.notifier)
+                  .acceptAssignment(view.id);
+              if (!context.mounted) return;
+              setState(() => _isAdvancing = false);
+              context.pushReplacement('/rider/deliveries/${view.id}/active');
+            },
+            onDecline: () => ref
+                .read(deliveriesProvider.notifier)
+                .declineAssignment(view.id),
+          ),
         ],
       ),
     );
   }
-
-  Widget _buildSectionLabel(BuildContext context, String label) {
-    final colors = _colors(context);
-    return Text(
-      label,
-      style: AppTypography.overline.copyWith(color: colors.onSurfaceDim),
-    );
-  }
-
-  Widget _buildInfoRow(BuildContext context, String label, String value) {
-    final colors = _colors(context);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 80,
-          child: Text(
-            label,
-            style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: AppTypography.body.copyWith(color: colors.onBackground),
-          ),
-        ),
-      ],
-    );
-  }
-
-  StatusBadgeVariant _badgeVariant(DeliveryStatus status) {
-    switch (status) {
-      case DeliveryStatus.assigned:
-        return StatusBadgeVariant.warning;
-      case DeliveryStatus.accepted:
-      case DeliveryStatus.pickedUp:
-      case DeliveryStatus.onTheWay:
-      case DeliveryStatus.arrived:
-        return StatusBadgeVariant.info;
-      case DeliveryStatus.delivered:
-        return StatusBadgeVariant.success;
-      case DeliveryStatus.declined:
-        return StatusBadgeVariant.error;
-    }
-  }
 }
 
-/// Static map preview that loads a real OSRM route.
-class _RouteMapPreview extends StatefulWidget {
-  const _RouteMapPreview({required this.colors});
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({
+    required this.label,
+    required this.value,
+    required this.colors,
+  });
+
+  final String label;
+  final String value;
   final AppColorSet colors;
 
   @override
-  State<_RouteMapPreview> createState() => _RouteMapPreviewState();
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 96,
+            child: Text(
+              label,
+              style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: AppTypography.body.copyWith(color: colors.onBackground),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-class _RouteMapPreviewState extends State<_RouteMapPreview> {
-  List<LatLng>? _routePoints;
+class _FloatingIconButton extends StatelessWidget {
+  const _FloatingIconButton({required this.icon, required this.onTap});
 
-  @override
-  void initState() {
-    super.initState();
-    _loadRoute();
-  }
-
-  Future<void> _loadRoute() async {
-    final pts = await RoutingService.getRoute(
-      MapHelpers.shopPoint,
-      MapHelpers.destinationPoint,
-    );
-    if (mounted) setState(() => _routePoints = pts);
-  }
+  final dynamic icon;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: AppRadius.borderMd,
-      child: Container(
-        height: 200,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          border: Border.all(color: widget.colors.outline, width: 0.5),
-          borderRadius: AppRadius.borderMd,
-        ),
-        child: ClipRRect(
-          borderRadius: AppRadius.borderMd,
-          child: _routePoints == null
-              ? Center(
-                  child: CircularProgressIndicator(
-                    color: widget.colors.accent,
-                    strokeWidth: 2,
-                  ),
-                )
-              : FlutterMap(
-                  options: const MapOptions(
-                    initialCenter: MapHelpers.mapCenter,
-                    initialZoom: 12.0,
-                    interactionOptions: InteractionOptions(flags: 0),
-                  ),
-                  children: [
-                    MapHelpers.tileLayer(Theme.of(context).brightness),
-                    MapHelpers.routePolyline(_routePoints!),
-                    MarkerLayer(
-                      markers: [
-                        MapHelpers.shopMarker(),
-                        MapHelpers.destinationMarker(),
-                      ],
-                    ),
-                  ],
-                ),
+    final colors = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
+
+    return Material(
+      color: colors.surface.withValues(alpha: 0.94),
+      shape: const CircleBorder(),
+      elevation: 2,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Center(
+            child: HugeIcon(icon: icon, color: colors.onBackground, size: 20),
+          ),
         ),
       ),
     );

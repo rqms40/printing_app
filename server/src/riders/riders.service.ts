@@ -86,7 +86,10 @@ export class RidersService {
   }
 
   async getProfile(userId: number): Promise<RiderProfile> {
-    const profile = await this.profileRepo.findOne({ where: { userId } });
+    const profile = await this.profileRepo.findOne({
+      where: { userId },
+      relations: ['user'],
+    });
     if (!profile) throw new NotFoundException('Rider profile not found');
     return profile;
   }
@@ -155,6 +158,7 @@ export class RidersService {
       .createQueryBuilder('da')
       .leftJoinAndSelect('da.order', 'order')
       .leftJoinAndSelect('order.destination', 'destination')
+      .leftJoinAndSelect('order.user', 'customer')
       .where('da.riderId = :riderId', { riderId: profile.id })
       .andWhere('da.status NOT IN (:...statuses)', {
         statuses: [DeliveryStatus.DELIVERED, DeliveryStatus.DECLINED],
@@ -319,7 +323,7 @@ export class RidersService {
     const profile = await this.getProfile(userId);
     return this.assignmentRepo.find({
       where: { riderId: profile.id, status: DeliveryStatus.DELIVERED },
-      relations: ['order'],
+      relations: ['order', 'order.destination', 'order.user'],
       order: { deliveredAt: 'DESC' },
     });
   }

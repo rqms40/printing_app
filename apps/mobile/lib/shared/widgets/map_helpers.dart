@@ -11,14 +11,14 @@ const Color kRouteBorderColor = Color(0xFF004D40);
 class MapHelpers {
   MapHelpers._();
 
-  /// Shop pickup (Makati, Ayala Ave).
-  static const shopPoint = LatLng(14.5510, 121.0230);
+  /// GRIDGO shop pickup — Davao (matches server SHOP_LOCATION).
+  static const shopPoint = LatLng(7.064, 125.6079);
 
-  /// Destination (QC, Katipunan Ave).
+  /// Legacy demo destination (Manila) — fallback only.
   static const destinationPoint = LatLng(14.6400, 121.0530);
 
   /// Center between shop and destination.
-  static const mapCenter = LatLng(14.5940, 121.0380);
+  static const mapCenter = LatLng(7.127, 125.531);
 
   /// Davao City center — used for idle state on home map tile.
   static const davaoCenter = LatLng(7.1907, 125.4553);

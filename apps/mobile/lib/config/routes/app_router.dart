@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/routes/page_transitions.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
+import 'package:printing_app/config/theme/app_theme.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/auth/models/registration_draft.dart';
 import 'package:printing_app/features/customer/profile/models/account_state.dart';
@@ -60,10 +61,12 @@ import 'package:printing_app/features/customer/chat/screens/conversation_screen.
 // ---------------------------------------------------------------------------
 // Rider screens
 // ---------------------------------------------------------------------------
+import 'package:printing_app/features/rider/alerts/screens/rider_alerts_screen.dart';
 import 'package:printing_app/features/rider/deliveries/screens/deliveries_screen.dart';
 import 'package:printing_app/features/rider/deliveries/screens/delivery_detail_screen.dart';
 import 'package:printing_app/features/rider/active_delivery/screens/active_delivery_screen.dart';
 import 'package:printing_app/features/rider/history/screens/delivery_history_screen.dart';
+import 'package:printing_app/features/rider/home/screens/rider_home_screen.dart';
 import 'package:printing_app/features/rider/profile/screens/rider_profile_screen.dart';
 
 // ---------------------------------------------------------------------------
@@ -175,7 +178,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         if (seenOnboarding) {
           final role = ref.read(authProvider).user?.role ?? 'customer';
           return switch (role) {
-            'rider' => '/rider/deliveries',
+            'rider' => '/rider/home',
             'admin' => '/admin/dashboard',
             _ => '/customer/home',
           };
@@ -530,36 +533,54 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       // -----------------------------------------------------------------------
-      // Rider shell (3 tabs: Deliveries, History, Profile)
+      // Rider shell (Home, Orders, + FAB, Alerts, Profile) — rider-UI.png
       // -----------------------------------------------------------------------
       StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) => ScaffoldWithNav(
-          currentIndex: navigationShell.currentIndex,
-          showFab: false,
-          onTap: (i) => navigationShell.goBranch(
-            i,
-            initialLocation: i == navigationShell.currentIndex,
+        builder: (context, state, navigationShell) => Theme(
+          data: AppTheme.dark,
+          child: ScaffoldWithNav(
+            currentIndex: navigationShell.currentIndex,
+            showFab: true,
+            navStyle: AppBottomNavStyle.riderCockpit,
+            quickActions: kRiderQuickActions,
+            onTap: (i) => navigationShell.goBranch(
+              i,
+              initialLocation: i == navigationShell.currentIndex,
+            ),
+            items: const [
+              NavItem(
+                icon: HugeIcons.strokeRoundedHome01,
+                activeIcon: HugeIcons.strokeRoundedHome01,
+                label: 'Home',
+              ),
+              NavItem(
+                icon: HugeIcons.strokeRoundedLeftToRightListDash,
+                activeIcon: HugeIcons.strokeRoundedLeftToRightListDash,
+                label: 'Orders',
+              ),
+              NavItem(
+                icon: HugeIcons.strokeRoundedNotification02,
+                activeIcon: HugeIcons.strokeRoundedNotification02,
+                label: 'Alerts',
+              ),
+              NavItem(
+                icon: HugeIcons.strokeRoundedUser,
+                activeIcon: HugeIcons.strokeRoundedUser,
+                label: 'Profile',
+              ),
+            ],
+            child: navigationShell,
           ),
-          items: const [
-            NavItem(
-              icon: HugeIcons.strokeRoundedDeliveryTruck02,
-              activeIcon: HugeIcons.strokeRoundedDeliveryTruck02,
-              label: 'Deliveries',
-            ),
-            NavItem(
-              icon: HugeIcons.strokeRoundedClock01,
-              activeIcon: HugeIcons.strokeRoundedClock01,
-              label: 'History',
-            ),
-            NavItem(
-              icon: HugeIcons.strokeRoundedUser,
-              activeIcon: HugeIcons.strokeRoundedUser,
-              label: 'Profile',
-            ),
-          ],
-          child: navigationShell,
         ),
         branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/rider/home',
+                builder: (_, _) => const RiderHomeScreen(),
+              ),
+            ],
+          ),
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -571,8 +592,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/rider/history',
-                builder: (_, _) => const DeliveryHistoryScreen(),
+                path: '/rider/alerts',
+                builder: (_, _) => const RiderAlertsScreen(),
               ),
             ],
           ),
@@ -599,8 +620,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/rider/deliveries/:id/active',
+        pageBuilder: (_, state) => slideTransition(
+          ActiveDeliveryScreen(assignmentId: state.pathParameters['id']),
+          state,
+        ),
+      ),
+      GoRoute(
+        path: '/rider/history',
         pageBuilder: (_, state) =>
-            slideTransition(const ActiveDeliveryScreen(), state),
+            slideTransition(const DeliveryHistoryScreen(), state),
       ),
       GoRoute(
         path: '/rider/chat/:id',
@@ -622,7 +650,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               subtitleOverride: orderStatus == null
                   ? null
                   : 'Customer · $orderStatus',
-              backFallback: '/rider/deliveries',
+              backFallback: '/rider/home',
             ),
             state,
           );

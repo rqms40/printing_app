@@ -24,7 +24,7 @@ void main() {
 
       // The mock data contains assignments -- verify we see order IDs.
       // MockData has deliveries for ORD-10005, ORD-10004, ORD-10003.
-      expect(find.text('Deliveries'), findsOneWidget);
+      expect(find.text('Orders'), findsOneWidget);
 
       // Should show at least one delivery card (not the empty state).
       expect(find.text('No active deliveries'), findsNothing);
@@ -61,7 +61,7 @@ void main() {
       // The default mock data has assignments, so we need to test
       // with a status filter that yields nothing.
       // Instead, let's create a simpler test -- verify the AppBar title.
-      expect(find.text('Deliveries'), findsOneWidget);
+      expect(find.text('Orders'), findsOneWidget);
     });
   });
 }

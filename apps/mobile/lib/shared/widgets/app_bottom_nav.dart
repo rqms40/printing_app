@@ -41,7 +41,37 @@ class QuickActionItem {
   });
 }
 
+enum AppBottomNavStyle { standard, riderCockpit }
+
 /// Default quick-action list.
+/// Rider FAB quick actions.
+const kRiderQuickActions = <QuickActionItem>[
+  QuickActionItem(
+    label: 'Go Online',
+    icon: HugeIcons.strokeRoundedWifi01,
+    route: '/rider/profile',
+    useGo: true,
+  ),
+  QuickActionItem(
+    label: 'Orders',
+    icon: HugeIcons.strokeRoundedLeftToRightListDash,
+    route: '/rider/deliveries',
+    useGo: true,
+  ),
+  QuickActionItem(
+    label: 'History',
+    icon: HugeIcons.strokeRoundedClock01,
+    route: '/rider/history',
+    useGo: true,
+  ),
+  QuickActionItem(
+    label: 'Navigate',
+    icon: HugeIcons.strokeRoundedNavigation03,
+    route: '/rider/home',
+    useGo: true,
+  ),
+];
+
 const kQuickActions = <QuickActionItem>[
   QuickActionItem(
     label: 'New Order',
@@ -83,6 +113,7 @@ class AppBottomNav extends StatelessWidget {
     required this.currentIndex,
     required this.onTap,
     this.showFab = false,
+    this.style = AppBottomNavStyle.standard,
   });
 
   final List<NavItem> items;
@@ -91,31 +122,38 @@ class AppBottomNav extends StatelessWidget {
 
   /// When true a 72 px gap is left in the centre for the floating FAB.
   final bool showFab;
+  final AppBottomNavStyle style;
 
   AppColorSet _colors(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark
-          ? AppColors.dark
-          : AppColors.light;
+      ? AppColors.dark
+      : AppColors.light;
 
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
     final viewPadding = MediaQuery.of(context).viewPadding;
+    final isRider = style == AppBottomNavStyle.riderCockpit;
 
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(padding: viewPadding),
       child: Container(
         decoration: BoxDecoration(
-          color: colors.surface,
+          color: isRider ? const Color(0xFF101010) : colors.surface,
           border: Border(
-            top: BorderSide(color: colors.outline, width: 0.5),
+            top: BorderSide(
+              color: isRider
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : colors.outline,
+              width: 0.5,
+            ),
           ),
         ),
         child: SafeArea(
           top: false,
           minimum: const EdgeInsets.only(bottom: 4),
           child: Padding(
-            padding: const EdgeInsets.only(top: 6),
+            padding: EdgeInsets.only(top: isRider ? 5 : 6),
             child: showFab ? _buildWithGap(colors) : _buildFlat(colors),
           ),
         ),
@@ -129,14 +167,21 @@ class AppBottomNav extends StatelessWidget {
     final rightItems = items.skip(2).toList();
     return Row(
       children: [
-        ...List.generate(leftItems.length, (i) => _NavItemTile(
-          item: leftItems[i],
-          isActive: i == currentIndex,
-          onTap: () => onTap(i),
-          colors: colors,
-        )),
+        ...List.generate(
+          leftItems.length,
+          (i) => _NavItemTile(
+            item: leftItems[i],
+            isActive: i == currentIndex,
+            onTap: () => onTap(i),
+            colors: colors,
+            style: style,
+          ),
+        ),
         // Empty slot — floating FAB sits here from ScaffoldWithNav's Stack
-        const SizedBox(width: 72, height: 56),
+        SizedBox(
+          width: style == AppBottomNavStyle.riderCockpit ? 62 : 72,
+          height: 56,
+        ),
         ...List.generate(rightItems.length, (i) {
           final globalIndex = i + leftItems.length;
           return _NavItemTile(
@@ -144,6 +189,7 @@ class AppBottomNav extends StatelessWidget {
             isActive: globalIndex == currentIndex,
             onTap: () => onTap(globalIndex),
             colors: colors,
+            style: style,
           );
         }),
       ],
@@ -153,12 +199,16 @@ class AppBottomNav extends StatelessWidget {
   /// All items evenly distributed — no FAB gap.
   Widget _buildFlat(AppColorSet colors) {
     return Row(
-      children: List.generate(items.length, (i) => _NavItemTile(
-        item: items[i],
-        isActive: i == currentIndex,
-        onTap: () => onTap(i),
-        colors: colors,
-      )),
+      children: List.generate(
+        items.length,
+        (i) => _NavItemTile(
+          item: items[i],
+          isActive: i == currentIndex,
+          onTap: () => onTap(i),
+          colors: colors,
+          style: style,
+        ),
+      ),
     );
   }
 }
@@ -173,15 +223,23 @@ class _NavItemTile extends StatelessWidget {
     required this.isActive,
     required this.onTap,
     required this.colors,
+    required this.style,
   });
 
   final NavItem item;
   final bool isActive;
   final VoidCallback onTap;
   final AppColorSet colors;
+  final AppBottomNavStyle style;
 
   @override
   Widget build(BuildContext context) {
+    final isRider = style == AppBottomNavStyle.riderCockpit;
+    final activeColor = isRider ? Colors.white : colors.onBackground;
+    final inactiveColor = isRider
+        ? const Color(0xFF777777)
+        : colors.onSurfaceDim;
+
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
@@ -195,27 +253,38 @@ class _NavItemTile extends StatelessWidget {
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeOut,
                 padding: EdgeInsets.symmetric(
-                  horizontal: isActive ? 16 : 0,
-                  vertical: isActive ? 4 : 0,
+                  horizontal: isActive ? (isRider ? 13 : 16) : 0,
+                  vertical: isActive ? (isRider ? 6 : 4) : 0,
                 ),
                 decoration: BoxDecoration(
                   color: isActive
-                      ? colors.accent.withValues(alpha: 0.1)
+                      ? (isRider
+                            ? const Color(0xFF2B2B2B)
+                            : colors.accent.withValues(alpha: 0.1))
                       : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(isRider ? 18 : 12),
                 ),
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    Builder(builder: (context) {
-                      final iconData = isActive ? item.activeIcon : item.icon;
-                      final color =
-                          isActive ? colors.onBackground : colors.onSurfaceDim;
-                      if (iconData is IconData) {
-                        return Icon(iconData, size: 22, color: color);
-                      }
-                      return HugeIcon(icon: iconData, size: 22, color: color);
-                    }),
+                    Builder(
+                      builder: (context) {
+                        final iconData = isActive ? item.activeIcon : item.icon;
+                        final color = isActive ? activeColor : inactiveColor;
+                        if (iconData is IconData) {
+                          return Icon(
+                            iconData,
+                            size: isRider ? 21 : 22,
+                            color: color,
+                          );
+                        }
+                        return HugeIcon(
+                          icon: iconData,
+                          size: isRider ? 21 : 22,
+                          color: color,
+                        );
+                      },
+                    ),
                     if (item.badge > 0)
                       Positioned(
                         top: -4,
@@ -248,9 +317,9 @@ class _NavItemTile extends StatelessWidget {
               Text(
                 item.label,
                 style: AppTypography.caption.copyWith(
-                  color: isActive ? colors.onBackground : colors.onSurfaceDim,
+                  color: isActive ? activeColor : inactiveColor,
                   fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                  fontSize: 11,
+                  fontSize: isRider ? 10 : 11,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -277,12 +346,14 @@ class QuickActionPanel extends StatelessWidget {
     required this.navBarHeight,
     required this.onActionTap,
     this.ignoring = false,
+    this.actions = kQuickActions,
   });
 
   final Animation<Offset> slideAnim;
   final Animation<double> fadeAnim;
   final double navBarHeight;
   final void Function(QuickActionItem) onActionTap;
+  final List<QuickActionItem> actions;
 
   /// When true the panel is invisible to hit-testing (closed state).
   final bool ignoring;
@@ -299,7 +370,7 @@ class QuickActionPanel extends StatelessWidget {
           position: slideAnim,
           child: FadeTransition(
             opacity: fadeAnim,
-            child: _PanelBody(onActionTap: onActionTap),
+            child: _PanelBody(onActionTap: onActionTap, actions: actions),
           ),
         ),
       ),
@@ -308,9 +379,10 @@ class QuickActionPanel extends StatelessWidget {
 }
 
 class _PanelBody extends StatelessWidget {
-  const _PanelBody({required this.onActionTap});
+  const _PanelBody({required this.onActionTap, required this.actions});
 
   final void Function(QuickActionItem) onActionTap;
+  final List<QuickActionItem> actions;
 
   @override
   Widget build(BuildContext context) {
@@ -356,8 +428,8 @@ class _PanelBody extends StatelessWidget {
             // Action grid
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: List.generate(kQuickActions.length, (i) {
-                final qa = kQuickActions[i];
+              children: List.generate(actions.length, (i) {
+                final qa = actions[i];
                 return TweenAnimationBuilder<double>(
                   key: ValueKey(i),
                   tween: Tween(begin: 0.0, end: 1.0),
@@ -367,10 +439,7 @@ class _PanelBody extends StatelessWidget {
                     scale: v.clamp(0.0, 1.0),
                     child: Opacity(opacity: v.clamp(0.0, 1.0), child: child),
                   ),
-                  child: _ActionItem(
-                    qa: qa,
-                    onTap: () => onActionTap(qa),
-                  ),
+                  child: _ActionItem(qa: qa, onTap: () => onActionTap(qa)),
                 );
               }),
             ),
@@ -436,9 +505,7 @@ class _ActionItemState extends State<_ActionItem> {
                   child: HugeIcon(
                     icon: widget.qa.icon,
                     size: 22,
-                    color: widget.qa.isPrimary
-                        ? colors.brand
-                        : Colors.black,
+                    color: widget.qa.isPrimary ? colors.brand : Colors.black,
                   ),
                 ),
               ),

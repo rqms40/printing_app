@@ -29,6 +29,8 @@ class ScaffoldWithNav extends ConsumerStatefulWidget {
     required this.items,
     required this.onTap,
     this.showFab = false,
+    this.quickActions = kQuickActions,
+    this.navStyle = AppBottomNavStyle.standard,
   });
 
   final Widget child;
@@ -39,6 +41,8 @@ class ScaffoldWithNav extends ConsumerStatefulWidget {
   /// When true the yellow floating FAB, quick-action panel, and backdrop are
   /// rendered. Set false for rider / admin shells.
   final bool showFab;
+  final List<QuickActionItem> quickActions;
+  final AppBottomNavStyle navStyle;
 
   @override
   ConsumerState<ScaffoldWithNav> createState() => _ScaffoldWithNavState();
@@ -62,7 +66,7 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
   static const _navMinBot = 4.0;
   static const _navIntrinsicH = _navContentH + _navTopPad + _navMinBot; // 66
 
-  static const _fabR = 24.0;    // radius of the close-FAB circle (48/2)
+  static const _fabR = 24.0; // radius of the close-FAB circle (48/2)
 
   @override
   void initState() {
@@ -71,17 +75,19 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
       vsync: this,
       duration: const Duration(milliseconds: 380),
     );
-    _fadeAnim =
-        CurvedAnimation(parent: _panelCtrl, curve: Curves.easeOut);
+    _fadeAnim = CurvedAnimation(parent: _panelCtrl, curve: Curves.easeOut);
     _slideAnim = Tween<Offset>(
       begin: const Offset(0, 0.22),
       end: Offset.zero,
-    ).animate(
-        CurvedAnimation(parent: _panelCtrl, curve: Curves.easeOutCubic));
-    _blurAnim = Tween<double>(begin: 0, end: 8).animate(
-        CurvedAnimation(parent: _panelCtrl, curve: Curves.easeOut));
-    _tearScaleAnim = Tween<double>(begin: 0, end: 1).animate(
-        CurvedAnimation(parent: _panelCtrl, curve: Curves.easeOutBack));
+    ).animate(CurvedAnimation(parent: _panelCtrl, curve: Curves.easeOutCubic));
+    _blurAnim = Tween<double>(
+      begin: 0,
+      end: 8,
+    ).animate(CurvedAnimation(parent: _panelCtrl, curve: Curves.easeOut));
+    _tearScaleAnim = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _panelCtrl, curve: Curves.easeOutBack));
   }
 
   @override
@@ -111,7 +117,8 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
               duration: const Duration(seconds: 1),
               margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
           );
         return;
@@ -123,7 +130,7 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
   }
 
   // Floating FAB dimensions
-  static const _openFabSize = 56.0;
+  static const _standardOpenFabSize = 56.0;
 
   @override
   Widget build(BuildContext context) {
@@ -132,6 +139,7 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
+    final isRiderNav = widget.navStyle == AppBottomNavStyle.riderCockpit;
 
     final bottomInset = MediaQuery.of(context).viewPadding.bottom;
 
@@ -140,7 +148,8 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
 
     // Open-FAB: bottom edge sits deeper inside the nav bar so the button
     // is lower — centre is ~6 px below the bar's top edge, still above items.
-    final openFabBottom = navBarHeight - 42;
+    final openFabSize = isRiderNav ? 38.0 : _standardOpenFabSize;
+    final openFabBottom = isRiderNav ? 16.0 + bottomInset : navBarHeight - 42;
 
     // Close-FAB:
     //   Centre from screen bottom = 38 + bottomInset
@@ -174,9 +183,9 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
               Expanded(
                 child: MediaQuery(
                   data: MediaQuery.of(context).copyWith(
-                    padding: MediaQuery.of(context).padding.copyWith(
-                          bottom: navBarHeight,
-                        ),
+                    padding: MediaQuery.of(
+                      context,
+                    ).padding.copyWith(bottom: navBarHeight),
                   ),
                   child: widget.child,
                 ),
@@ -201,7 +210,8 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
                       child: FadeTransition(
                         opacity: _fadeAnim,
                         child: Container(
-                            color: Colors.black.withValues(alpha: 0.32)),
+                          color: Colors.black.withValues(alpha: 0.32),
+                        ),
                       ),
                     ),
                   ),
@@ -217,6 +227,7 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
               navBarHeight: navBarHeight,
               onActionTap: _handleActionTap,
               ignoring: !_isOpen,
+              actions: widget.quickActions,
             ),
 
           // ── Nav bar ──────────────────────────────────────────────────────
@@ -228,6 +239,7 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
               items: widget.items,
               currentIndex: widget.currentIndex,
               showFab: widget.showFab,
+              style: widget.navStyle,
               onTap: (i) {
                 _close();
                 widget.onTap(i);
@@ -241,7 +253,7 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
               bottom: openFabBottom,
               left: 0,
               right: 0,
-              height: _openFabSize,
+              height: openFabSize,
               child: Center(
                 child: AnimatedOpacity(
                   opacity: _isOpen ? 0.0 : 1.0,
@@ -254,18 +266,30 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
                         _onToggle(true);
                       },
                       child: Container(
-                        width: _openFabSize,
-                        height: _openFabSize,
+                        width: openFabSize,
+                        height: openFabSize,
                         decoration: BoxDecoration(
-                          color: colors.brand,
-                          shape: BoxShape.circle,
+                          color: isRiderNav
+                              ? const Color(0xFFFFDE58)
+                              : colors.brand,
+                          shape: isRiderNav
+                              ? BoxShape.rectangle
+                              : BoxShape.circle,
+                          borderRadius: isRiderNav
+                              ? BorderRadius.circular(9)
+                              : null,
                           boxShadow: [
                             BoxShadow(
-                              color: colors.brand
-                                  .withValues(alpha: 0.55),
-                              blurRadius: 18,
+                              color:
+                                  (isRiderNav
+                                          ? const Color(0xFFFFDE58)
+                                          : colors.brand)
+                                      .withValues(
+                                        alpha: isRiderNav ? 0.22 : 0.55,
+                                      ),
+                              blurRadius: isRiderNav ? 10 : 18,
                               spreadRadius: 0,
-                              offset: const Offset(0, 4),
+                              offset: const Offset(0, 3),
                             ),
                             BoxShadow(
                               color: Colors.black.withValues(alpha: 0.14),
@@ -274,9 +298,9 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
                             ),
                           ],
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.add_rounded,
-                          size: 30,
+                          size: isRiderNav ? 30 : 30,
                           color: Colors.black,
                         ),
                       ),
@@ -296,43 +320,44 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
               child: IgnorePointer(
                 ignoring: !_isOpen,
                 child: AnimatedBuilder(
-                animation: _panelCtrl,
-                builder: (context, child) {
-                  return Transform.scale(
-                    scale: _tearScaleAnim.value,
-                    child: FadeTransition(opacity: _fadeAnim, child: child),
-                  );
-                },
-                child: Center(
-                  child: GestureDetector(
-                    onTap: _close,
-                    child: Container(
-                      width: _fabR * 2,
-                      height: _fabR * 2,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFF6B6B), // pastel red
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color:
-                                const Color(0xFFFF6B6B).withValues(alpha: 0.5),
-                            blurRadius: 14,
-                            spreadRadius: 1,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.close_rounded,
-                        size: 24,
-                        color: Colors.white,
+                  animation: _panelCtrl,
+                  builder: (context, child) {
+                    return Transform.scale(
+                      scale: _tearScaleAnim.value,
+                      child: FadeTransition(opacity: _fadeAnim, child: child),
+                    );
+                  },
+                  child: Center(
+                    child: GestureDetector(
+                      onTap: _close,
+                      child: Container(
+                        width: _fabR * 2,
+                        height: _fabR * 2,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF6B6B), // pastel red
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(
+                                0xFFFF6B6B,
+                              ).withValues(alpha: 0.5),
+                              blurRadius: 14,
+                              spreadRadius: 1,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.close_rounded,
+                          size: 24,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );

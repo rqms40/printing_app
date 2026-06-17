@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
@@ -6,94 +7,172 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/config/theme/app_shadows.dart';
-import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
-import 'package:printing_app/shared/providers/mock_data.dart';
+import 'package:printing_app/features/rider/profile/providers/rider_profile_provider.dart';
+import 'package:printing_app/features/rider/shared/rider_theme.dart';
+import 'package:printing_app/features/rider/shared/widgets/rider_page_header.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/app_text_field.dart';
 import 'package:printing_app/shared/widgets/confirmation_dialog.dart';
 
-/// Provider managing the rider's availability toggle state.
-final _riderAvailabilityProvider = StateProvider<bool>(
-  (ref) => MockData.riderProfileJuan.isAvailable,
-);
-
-/// Rider profile screen with body-first h1 layout.
-class RiderProfileScreen extends ConsumerWidget {
+/// Rider profile with live availability and vehicle management.
+class RiderProfileScreen extends ConsumerStatefulWidget {
   const RiderProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final colors = Theme.of(context).brightness == Brightness.dark
+  ConsumerState<RiderProfileScreen> createState() => _RiderProfileScreenState();
+}
+
+class _RiderProfileScreenState extends ConsumerState<RiderProfileScreen> {
+  AppColorSet _colors(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
+  }
+
+  void _showEditVehicleSheet(RiderProfileState profile) {
+    final colors = _colors(context);
+    final vehicleController = TextEditingController(text: profile.vehicleType);
+    final plateController = TextEditingController(text: profile.plateNumber);
+    var isSaving = false;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: AppSpacing.lg,
+                right: AppSpacing.lg,
+                top: AppSpacing.lg,
+                bottom:
+                    MediaQuery.of(context).viewInsets.bottom + AppSpacing.lg,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: colors.disabled,
+                        borderRadius: AppRadius.borderFull,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  Text(
+                    'Edit vehicle info',
+                    style: AppTypography.h3.copyWith(
+                      color: colors.onBackground,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  AppTextField(
+                    label: 'Vehicle type',
+                    hintText: 'e.g. Motorcycle',
+                    controller: vehicleController,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  AppTextField(
+                    label: 'Plate number',
+                    hintText: 'e.g. ABC 1234',
+                    controller: plateController,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  AppButton(
+                    label: 'Save changes',
+                    isFullWidth: true,
+                    isLoading: isSaving,
+                    onTap: isSaving
+                        ? null
+                        : () async {
+                            setSheetState(() => isSaving = true);
+                            final ok = await ref
+                                .read(riderProfileProvider.notifier)
+                                .updateVehicle(
+                                  vehicleType: vehicleController.text.trim(),
+                                  plateNumber: plateController.text.trim(),
+                                );
+                            if (!context.mounted) return;
+                            setSheetState(() => isSaving = false);
+                            if (ok) Navigator.pop(sheetContext);
+                          },
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = _colors(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isAvailable = ref.watch(_riderAvailabilityProvider);
-    final rider = MockData.riderProfileJuan;
-    final user = MockData.riderJuan;
+    final profile = ref.watch(riderProfileProvider);
+
+    if (profile.isLoading) {
+      return ColoredBox(
+        color: colors.background,
+        child: const SafeArea(
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
 
     return ColoredBox(
-      color: colors.background,
+      color: RiderTheme.background,
       child: SafeArea(
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // h1 title
+              const RiderPageHeader(
+                title: 'Profile',
+                subtitle: 'Manage availability and vehicle details',
+              ).animate().fadeIn(duration: 350.ms),
               Padding(
-                padding: const EdgeInsets.only(
-                  left: AppSpacing.xl,
-                  right: AppSpacing.xl,
-                  top: AppSpacing.lg,
-                  bottom: AppSpacing.md,
-                ),
-                child: Text(
-                  'Profile',
-                  style:
-                      AppTypography.h1.copyWith(color: colors.onBackground),
-                ),
-              )
-                  .animate()
-                  .fadeIn(duration: 350.ms, curve: Curves.easeOut)
-                  .slideY(
-                      begin: 0.02,
-                      duration: 350.ms,
-                      curve: Curves.easeOut),
-
-              // Availability toggle card
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
                 child: Container(
                   decoration: BoxDecoration(
                     color: colors.surface,
                     borderRadius: AppRadius.borderMd,
                     boxShadow: isDark ? null : AppShadows.subtle,
-                    border: isDark
-                        ? Border.all(color: colors.outline, width: 0.5)
-                        : null,
+                    border: Border.all(
+                      color: profile.isAvailable
+                          ? colors.success.withValues(alpha: 0.35)
+                          : colors.outline.withValues(alpha: 0.5),
+                    ),
                   ),
                   padding: const EdgeInsets.all(AppSpacing.md),
                   child: Row(
                     children: [
-                      // Status icon
                       Container(
-                        width: 48,
-                        height: 48,
+                        width: 52,
+                        height: 52,
                         decoration: BoxDecoration(
-                          color: isAvailable
-                              ? colors.success.withValues(alpha: 0.1)
+                          color: profile.isAvailable
+                              ? colors.success.withValues(alpha: 0.12)
                               : colors.surfaceVariant,
                           borderRadius: AppRadius.borderMd,
                         ),
                         child: Center(
                           child: HugeIcon(
-                            icon: isAvailable
+                            icon: profile.isAvailable
                                 ? HugeIcons.strokeRoundedWifi01
                                 : HugeIcons.strokeRoundedWifiOff01,
-                            size: 22,
-                            color: isAvailable
+                            size: 24,
+                            color: profile.isAvailable
                                 ? colors.success
                                 : colors.onSurfaceDim,
                           ),
@@ -105,189 +184,96 @@ class RiderProfileScreen extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              isAvailable ? 'Online' : 'Offline',
+                              profile.isAvailable ? 'Online' : 'Offline',
                               style: AppTypography.bodyBold.copyWith(
-                                color: isAvailable
+                                color: profile.isAvailable
                                     ? colors.success
                                     : colors.onSurfaceDim,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              isAvailable
-                                  ? 'You are receiving delivery requests'
-                                  : 'You are not receiving requests',
-                              style: AppTypography.caption
-                                  .copyWith(color: colors.onSurfaceDim),
+                              profile.isAvailable
+                                  ? 'Receiving delivery assignments'
+                                  : 'You will not receive new jobs',
+                              style: AppTypography.caption.copyWith(
+                                color: colors.onSurfaceDim,
+                              ),
                             ),
                           ],
                         ),
                       ),
                       Switch(
-                        value: isAvailable,
-                        onChanged: (value) {
-                          ref
-                              .read(_riderAvailabilityProvider.notifier)
-                              .state = value;
-                        },
+                        value: profile.isAvailable,
+                        onChanged: (value) => ref
+                            .read(riderProfileProvider.notifier)
+                            .setAvailability(value),
                         activeThumbColor: colors.accent,
-                        activeTrackColor:
-                            colors.accent.withValues(alpha: 0.3),
-                        inactiveThumbColor: colors.disabled,
-                        inactiveTrackColor:
-                            colors.disabled.withValues(alpha: 0.3),
+                        activeTrackColor: colors.accent.withValues(alpha: 0.3),
                       ),
                     ],
                   ),
                 ),
-              )
-                  .animate()
-                  .fadeIn(duration: 400.ms, curve: Curves.easeOut)
-                  .slideY(
-                      begin: 0.03,
-                      duration: 400.ms,
-                      curve: Curves.easeOut),
+              ).animate().fadeIn(duration: 400.ms, delay: 40.ms),
               const SizedBox(height: AppSpacing.lg),
-
-              // PROFILE INFO section
-              _SectionHeader(label: 'PROFILE INFO', colors: colors)
-                  .animate()
-                  .fadeIn(
-                      duration: 400.ms,
-                      delay: 60.ms,
-                      curve: Curves.easeOut),
+              _SectionHeader(label: 'PROFILE INFO', colors: colors),
               _InfoRow(
                 icon: HugeIcons.strokeRoundedUser,
                 label: 'Name',
-                value: user.fullName ?? 'Not set',
+                value: profile.fullName ?? 'Not set',
                 colors: colors,
               ),
               _RowDivider(colors: colors),
               _InfoRow(
                 icon: HugeIcons.strokeRoundedMail01,
                 label: 'Email',
-                value: user.email,
+                value: profile.email ?? 'Not set',
                 colors: colors,
               ),
               _RowDivider(colors: colors),
               _InfoRow(
                 icon: HugeIcons.strokeRoundedCall,
                 label: 'Phone',
-                value: user.phoneNumber ?? 'Not set',
+                value: profile.phoneNumber ?? 'Not set',
                 colors: colors,
               ),
-
               const SizedBox(height: AppSpacing.lg),
-
-              // VEHICLE INFO section
-              _SectionHeader(label: 'VEHICLE INFO', colors: colors)
-                  .animate()
-                  .fadeIn(
-                      duration: 400.ms,
-                      delay: 120.ms,
-                      curve: Curves.easeOut),
+              _SectionHeader(label: 'VEHICLE INFO', colors: colors),
               _InfoRow(
                 icon: HugeIcons.strokeRoundedCar01,
-                label: 'Vehicle Type',
-                value: rider.vehicleType.displayName,
+                label: 'Vehicle type',
+                value: profile.vehicleType ?? 'Not set',
                 colors: colors,
               ),
               _RowDivider(colors: colors),
               _InfoRow(
                 icon: HugeIcons.strokeRoundedNote,
-                label: 'Plate Number',
-                value: rider.plateNumber ?? 'Not set',
+                label: 'Plate number',
+                value: profile.plateNumber ?? 'Not set',
                 colors: colors,
               ),
-
               const SizedBox(height: AppSpacing.md),
-
-              // Edit Vehicle Info button
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
                 child: AppButton(
-                  label: 'Edit Vehicle Info',
+                  label: 'Edit vehicle info',
                   variant: AppButtonVariant.secondary,
                   isFullWidth: true,
                   icon: HugeIcons.strokeRoundedEdit02,
-                  onTap: () {
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.vertical(
-                          top: Radius.circular(AppRadius.lg),
-                        ),
-                      ),
-                      builder: (_) => Padding(
-                        padding: EdgeInsets.only(
-                          left: AppSpacing.lg,
-                          right: AppSpacing.lg,
-                          top: AppSpacing.lg,
-                          bottom:
-                              MediaQuery.of(context).viewInsets.bottom +
-                                  AppSpacing.lg,
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // Drag handle
-                            Center(
-                              child: Container(
-                                width: 40,
-                                height: 4,
-                                decoration: BoxDecoration(
-                                  color: colors.disabled,
-                                  borderRadius: AppRadius.borderFull,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: AppSpacing.lg),
-                            Text(
-                              'Edit Vehicle Info',
-                              style: AppTypography.h3
-                                  .copyWith(color: colors.onBackground),
-                            ),
-                            const SizedBox(height: AppSpacing.md),
-                            AppTextField(
-                              label: 'Vehicle Type',
-                              hintText: 'e.g. Motorcycle',
-                              controller: TextEditingController(),
-                            ),
-                            const SizedBox(height: AppSpacing.md),
-                            AppTextField(
-                              label: 'Plate Number',
-                              hintText: 'e.g. ABC 1234',
-                              controller: TextEditingController(),
-                            ),
-                            const SizedBox(height: AppSpacing.lg),
-                            AppButton(
-                              label: 'Save Changes',
-                              onTap: () => Navigator.pop(context),
-                              isFullWidth: true,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
+                  onTap: () => _showEditVehicleSheet(profile),
                 ),
               ),
               const SizedBox(height: AppSpacing.xxl),
-
-              // Sign Out
               _MenuRow(
                 icon: HugeIcons.strokeRoundedLogout01,
-                title: 'Sign Out',
+                title: 'Sign out',
                 isDestructive: true,
                 onTap: () {
                   ConfirmationDialog.show(
                     context,
-                    title: 'Sign Out',
+                    title: 'Sign out',
                     message: 'Are you sure you want to sign out?',
-                    confirmLabel: 'Sign Out',
+                    confirmLabel: 'Sign out',
                     cancelLabel: 'Cancel',
                     onConfirm: () {
                       ref.read(authProvider.notifier).logout();
@@ -298,7 +284,6 @@ class RiderProfileScreen extends ConsumerWidget {
                 },
                 colors: colors,
               ),
-
               const SizedBox(height: AppSpacing.lg),
             ],
           ),
@@ -308,7 +293,6 @@ class RiderProfileScreen extends ConsumerWidget {
   }
 }
 
-/// Overline section header.
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({required this.label, required this.colors});
 
@@ -334,7 +318,6 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-/// Info row: icon + label/value pair.
 class _InfoRow extends StatelessWidget {
   const _InfoRow({
     required this.icon,
@@ -365,14 +348,16 @@ class _InfoRow extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: AppTypography.caption
-                      .copyWith(color: colors.onSurfaceDim),
+                  style: AppTypography.caption.copyWith(
+                    color: colors.onSurfaceDim,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   value,
-                  style: AppTypography.body
-                      .copyWith(color: colors.onBackground),
+                  style: AppTypography.body.copyWith(
+                    color: colors.onBackground,
+                  ),
                 ),
               ],
             ),
@@ -383,7 +368,6 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-/// Clean menu row with icon, label, and chevron.
 class _MenuRow extends StatelessWidget {
   const _MenuRow({
     required this.icon,
@@ -435,7 +419,6 @@ class _MenuRow extends StatelessWidget {
   }
 }
 
-/// Thin horizontal divider.
 class _RowDivider extends StatelessWidget {
   const _RowDivider({required this.colors});
 
@@ -445,10 +428,7 @@ class _RowDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-      child: Container(
-        height: 1,
-        color: colors.outlineVariant,
-      ),
+      child: Container(height: 1, color: colors.outlineVariant),
     );
   }
 }

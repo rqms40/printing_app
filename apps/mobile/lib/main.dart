@@ -17,7 +17,7 @@ void main() async {
   // Initialize Firebase + push notifications
   await NotificationService.init();
 
-  // API base URL — edit lib/config/api_config.dart to change the default.
+  // API base URL — resolved in api_config.dart (web LAN host auto-detected).
   ApiClient.instance.init(baseUrl: '$kServerUrl/api');
 
   // Check if the API server is reachable; app works with mock data if not.

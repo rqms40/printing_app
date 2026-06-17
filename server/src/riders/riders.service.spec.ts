@@ -120,6 +120,7 @@ describe('RidersService', () => {
 
       expect(profileRepo.findOne).toHaveBeenCalledWith({
         where: { userId: 1 },
+        relations: ['user'],
       });
       expect(result).toEqual(mockProfile);
     });

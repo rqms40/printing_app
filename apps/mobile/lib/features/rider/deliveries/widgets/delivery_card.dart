@@ -5,36 +5,29 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_shadows.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
-import 'package:printing_app/shared/models/address.dart';
-import 'package:printing_app/shared/models/delivery_assignment.dart';
+import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
+import 'package:printing_app/features/rider/shared/rider_delivery_status.dart';
 import 'package:printing_app/shared/models/enums.dart';
-import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
+import 'package:printing_app/shared/widgets/status_badge.dart';
 import 'package:printing_app/utils/formatters.dart';
 
-/// Delivery card with horizontal layout matching the OrderCard pattern.
-///
-/// Left: 48px status-tinted icon
-/// Center: Order ID + address summary, status dot + label + date
-/// Right: delivery fee + chevron
-/// Expandable accept/decline buttons for assigned status.
+/// Delivery assignment card for the rider queue.
 class DeliveryCard extends StatefulWidget {
   const DeliveryCard({
     super.key,
-    required this.assignment,
-    required this.order,
-    this.address,
+    required this.view,
     this.onTap,
     this.onAccept,
     this.onDecline,
+    this.showRoutePosition = true,
   });
 
-  final DeliveryAssignment assignment;
-  final Order order;
-  final Address? address;
+  final RiderAssignmentView view;
   final VoidCallback? onTap;
   final VoidCallback? onAccept;
   final VoidCallback? onDecline;
+  final bool showRoutePosition;
 
   @override
   State<DeliveryCard> createState() => _DeliveryCardState();
@@ -49,66 +42,14 @@ class _DeliveryCardState extends State<DeliveryCard> {
         : AppColors.light;
   }
 
-  _DeliveryVisual _visual(AppColorSet colors) {
-    switch (widget.assignment.status) {
-      case DeliveryStatus.assigned:
-        return _DeliveryVisual(
-          HugeIcons.strokeRoundedNotification02,
-          colors.warning.withValues(alpha: 0.1),
-          colors.warning,
-          'Assigned',
-        );
-      case DeliveryStatus.accepted:
-        return _DeliveryVisual(
-          HugeIcons.strokeRoundedCheckmarkCircle02,
-          colors.info.withValues(alpha: 0.1),
-          colors.info,
-          'Accepted',
-        );
-      case DeliveryStatus.pickedUp:
-        return _DeliveryVisual(
-          HugeIcons.strokeRoundedPackage,
-          colors.info.withValues(alpha: 0.1),
-          colors.info,
-          'Picked Up',
-        );
-      case DeliveryStatus.onTheWay:
-        return _DeliveryVisual(
-          HugeIcons.strokeRoundedDeliveryTruck02,
-          colors.info.withValues(alpha: 0.1),
-          colors.info,
-          'On the Way',
-        );
-      case DeliveryStatus.arrived:
-        return _DeliveryVisual(
-          HugeIcons.strokeRoundedLocation01,
-          colors.success.withValues(alpha: 0.1),
-          colors.success,
-          'Arrived',
-        );
-      case DeliveryStatus.delivered:
-        return _DeliveryVisual(
-          HugeIcons.strokeRoundedCheckmarkCircle02,
-          colors.success.withValues(alpha: 0.1),
-          colors.success,
-          'Delivered',
-        );
-      case DeliveryStatus.declined:
-        return _DeliveryVisual(
-          HugeIcons.strokeRoundedCancelCircle,
-          colors.error.withValues(alpha: 0.1),
-          colors.error,
-          'Declined',
-        );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
-    final visual = _visual(colors);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isAssigned = widget.assignment.status == DeliveryStatus.assigned;
+    final visual = riderDeliveryVisual(widget.view.status, colors);
+    final order = widget.view.order;
+    final destination = order.destination;
+    final isAssigned = widget.view.status == DeliveryStatus.assigned;
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -118,8 +59,8 @@ class _DeliveryCardState extends State<DeliveryCard> {
       },
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(
-        scale: _pressed ? 0.98 : 1.0,
-        duration: const Duration(milliseconds: 100),
+        scale: _pressed ? 0.985 : 1,
+        duration: const Duration(milliseconds: 120),
         curve: Curves.easeOut,
         child: Container(
           decoration: BoxDecoration(
@@ -127,80 +68,94 @@ class _DeliveryCardState extends State<DeliveryCard> {
             borderRadius: AppRadius.borderMd,
             boxShadow: isDark ? null : AppShadows.subtle,
             border: Border.all(
-              color: colors.outline.withValues(alpha: 0.5),
-              width: 0.5,
+              color: isAssigned
+                  ? colors.brand.withValues(alpha: 0.35)
+                  : colors.outline.withValues(alpha: 0.5),
+              width: isAssigned ? 1 : 0.5,
             ),
           ),
           child: Column(
             children: [
-              // Main horizontal row
               Padding(
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Status icon with semantic background
                     Container(
-                      width: 48,
-                      height: 48,
+                      width: 52,
+                      height: 52,
                       decoration: BoxDecoration(
-                        color: visual.background,
+                        color: visual.tint.withValues(alpha: 0.12),
                         borderRadius: AppRadius.borderMd,
                       ),
                       child: Center(
                         child: HugeIcon(
                           icon: visual.icon,
-                          size: 22,
-                          color: visual.foreground,
+                          size: 24,
+                          color: visual.tint,
                         ),
                       ),
                     ),
                     const SizedBox(width: AppSpacing.md),
-
-                    // Content
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Order ID + address summary
-                          Text(
-                            widget.order.orderId,
-                            style: AppTypography.bodyBold.copyWith(
-                              color: colors.onBackground,
-                            ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  order.orderRef,
+                                  style: AppTypography.bodyBold.copyWith(
+                                    color: colors.onBackground,
+                                  ),
+                                ),
+                              ),
+                              if (widget.showRoutePosition &&
+                                  widget.view.routePosition != null &&
+                                  widget.view.isInProgress)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: colors.surfaceVariant,
+                                    borderRadius: AppRadius.borderFull,
+                                  ),
+                                  child: Text(
+                                    '#${widget.view.routePosition}',
+                                    style: AppTypography.caption.copyWith(
+                                      color: colors.onSurfaceDim,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
-                          if (widget.address != null) ...[
-                            const SizedBox(height: 2),
+                          if (destination?.fullAddress != null) ...[
+                            const SizedBox(height: 4),
                             Text(
-                              widget.address!.fullAddress,
+                              destination!.fullAddress!,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                               style: AppTypography.caption.copyWith(
                                 color: colors.onSurfaceDim,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
-                          const SizedBox(height: 6),
-
-                          // Status dot + label + date
+                          const SizedBox(height: AppSpacing.sm),
                           Row(
                             children: [
-                              Container(
-                                width: 6,
-                                height: 6,
-                                decoration: BoxDecoration(
-                                  color: visual.foreground,
-                                  shape: BoxShape.circle,
-                                ),
+                              StatusBadge(
+                                label: visual.label,
+                                variant: visual.badgeVariant,
                               ),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  '${visual.statusLabel} \u2022 ${formatDate(widget.assignment.createdAt)}',
-                                  style: AppTypography.caption.copyWith(
-                                    color: colors.onSurfaceDim,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                              const Spacer(),
+                              Text(
+                                formatCurrency(order.deliveryFee),
+                                style: AppTypography.bodyBold.copyWith(
+                                  color: colors.onBackground,
                                 ),
                               ),
                             ],
@@ -208,44 +163,21 @@ class _DeliveryCardState extends State<DeliveryCard> {
                         ],
                       ),
                     ),
-
-                    // Price + chevron
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          formatCurrency(widget.order.deliveryFee),
-                          style: AppTypography.bodyBold.copyWith(
-                            color: colors.onBackground,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        HugeIcon(
-                          icon: HugeIcons.strokeRoundedArrowRight01,
-                          size: 16,
-                          color: colors.disabled,
-                        ),
-                      ],
+                    const SizedBox(width: AppSpacing.xs),
+                    HugeIcon(
+                      icon: HugeIcons.strokeRoundedArrowRight01,
+                      size: 18,
+                      color: colors.disabled,
                     ),
                   ],
                 ),
               ),
-
-              // Accept/Decline buttons for assigned status
               if (isAssigned) ...[
-                Container(
+                Divider(
                   height: 1,
-                  margin:
-                      const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        colors.outline.withValues(alpha: 0.0),
-                        colors.outline.withValues(alpha: 0.4),
-                        colors.outline.withValues(alpha: 0.0),
-                      ],
-                    ),
-                  ),
+                  color: colors.outline.withValues(alpha: 0.4),
+                  indent: AppSpacing.md,
+                  endIndent: AppSpacing.md,
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
@@ -261,7 +193,6 @@ class _DeliveryCardState extends State<DeliveryCard> {
                           label: 'Decline',
                           variant: AppButtonVariant.ghost,
                           onTap: widget.onDecline,
-                          icon: HugeIcons.strokeRoundedCancelCircle,
                         ),
                       ),
                       const SizedBox(width: AppSpacing.sm),
@@ -283,14 +214,4 @@ class _DeliveryCardState extends State<DeliveryCard> {
       ),
     );
   }
-}
-
-class _DeliveryVisual {
-  const _DeliveryVisual(
-      this.icon, this.background, this.foreground, this.statusLabel);
-
-  final dynamic icon;
-  final Color background;
-  final Color foreground;
-  final String statusLabel;
 }

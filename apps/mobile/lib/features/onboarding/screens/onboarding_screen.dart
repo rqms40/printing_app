@@ -46,7 +46,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     final role = ref.read(authProvider).user?.role ?? 'customer';
     switch (role) {
       case 'rider':
-        context.go('/rider/deliveries');
+        context.go('/rider/home');
       case 'admin':
         context.go('/admin/dashboard');
       default:
