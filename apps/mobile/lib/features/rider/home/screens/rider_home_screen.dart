@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
@@ -69,7 +70,9 @@ class RiderHomeScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: AppSpacing.lg),
-                    RiderHomeHeader(firstName: firstName),
+                    RiderHomeHeader(firstName: firstName)
+                        .animate()
+                        .fadeIn(duration: 400.ms, curve: Curves.easeOut),
                     const SizedBox(height: AppSpacing.lg),
 
                     if (active != null) ...[
@@ -149,21 +152,39 @@ class RiderHomeScreen extends ConsumerWidget {
                           ),
                         ],
                       ),
-                    ),
+                    )
+                        .animate()
+                        .fadeIn(
+                          duration: 400.ms,
+                          delay: 100.ms,
+                          curve: Curves.easeOut,
+                        ),
 
                     const SizedBox(height: AppSpacing.lg),
                     RiderTodayRouteSection(
                       stops: routeStops,
                       onTapStop: (v) =>
                           context.push('/rider/deliveries/${v.id}'),
-                    ),
+                    )
+                        .animate()
+                        .fadeIn(
+                          duration: 400.ms,
+                          delay: 200.ms,
+                          curve: Curves.easeOut,
+                        ),
 
                     const SizedBox(height: AppSpacing.lg),
                     RiderRecentDeliveriesSection(
                       completed: state.completedAssignments,
                       onTap: (v) =>
                           context.push('/rider/deliveries/${v.id}'),
-                    ),
+                    )
+                        .animate()
+                        .fadeIn(
+                          duration: 400.ms,
+                          delay: 300.ms,
+                          curve: Curves.easeOut,
+                        ),
 
                     const SizedBox(height: AppSpacing.xxl),
                   ],
