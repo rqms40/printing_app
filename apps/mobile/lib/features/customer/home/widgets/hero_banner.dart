@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -67,7 +66,7 @@ class HeroBanner extends StatelessWidget {
                         const TextSpan(
                           children: [
                             TextSpan(
-                              text: 'GRIDGO',
+                              text: 'GRID',
                               style: TextStyle(color: Colors.white),
                             ),
                             TextSpan(
@@ -101,6 +100,6 @@ class HeroBanner extends StatelessWidget {
           ],
         ),
       ),
-    ).animate().fadeIn(duration: 450.ms, curve: Curves.easeOut);
+    );
   }
 }

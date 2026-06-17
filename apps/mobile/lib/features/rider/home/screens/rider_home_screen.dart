@@ -2,28 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
-import 'package:intl/intl.dart';
-import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/config/theme/app_colors.dart';
+import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/chat/providers/chat_provider.dart';
+import 'package:printing_app/features/customer/home/widgets/hero_banner.dart';
 import 'package:printing_app/features/rider/deliveries/providers/deliveries_provider.dart';
-import 'package:printing_app/features/rider/home/widgets/rider_active_stop_card.dart';
-import 'package:printing_app/features/rider/home/widgets/rider_branding_banner.dart';
-import 'package:printing_app/features/rider/home/widgets/rider_route_map_panel.dart';
+import 'package:printing_app/features/rider/history/providers/earnings_provider.dart';
+import 'package:printing_app/features/rider/home/widgets/rider_bento_tiles.dart';
+import 'package:printing_app/features/rider/home/widgets/rider_home_header.dart';
+import 'package:printing_app/features/rider/home/widgets/rider_recent_deliveries_section.dart';
+import 'package:printing_app/features/rider/home/widgets/rider_resume_active_card.dart';
+import 'package:printing_app/features/rider/home/widgets/rider_route_map_tile.dart';
+import 'package:printing_app/features/rider/home/widgets/rider_today_route_section.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
-import 'package:printing_app/features/rider/shared/rider_theme.dart';
-import 'package:url_launcher/url_launcher.dart';
 
-/// Rider home cockpit — visual target: screenshots-for-agents/rider-UI.png
+/// Rider home — mirrors the customer home layout with rider content.
 class RiderHomeScreen extends ConsumerWidget {
   const RiderHomeScreen({super.key});
-
-  String _greeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  }
 
   Future<void> _openChat(
     BuildContext context,
@@ -34,76 +30,118 @@ class RiderHomeScreen extends ConsumerWidget {
     final apiOrderRef = int.tryParse(order.orderInternalId) == null
         ? order.orderRef
         : order.orderInternalId;
-    final conv = await ref
-        .read(chatProvider.notifier)
-        .openOrderConversation(apiOrderRef);
+    final conv =
+        await ref.read(chatProvider.notifier).openOrderConversation(apiOrderRef);
     if (!context.mounted || conv == null) return;
     context.push(
       '/rider/chat/${conv.id}?type=${conv.type.name}&orderRef=${order.orderRef}',
     );
   }
 
-  Future<void> _call(String? phone) async {
-    if (phone == null || phone.isEmpty) return;
-    final uri = Uri.parse('tel:$phone');
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
     final auth = ref.watch(authProvider);
     final state = ref.watch(deliveriesProvider);
+    final earnings = ref.watch(earningsProvider);
     final firstName = (auth.user?.fullName ?? 'Rider').split(' ').first;
-
+    final active = state.activeDelivery;
     final routeStops = state.routeStops;
 
-    final active = state.activeDelivery;
-    final dateLine = DateFormat(
-      'EEEE, MMMM d',
-    ).format(DateTime.now()).toUpperCase();
+    return Stack(
+      children: [
+        ColoredBox(
+          color: colors.background,
+          child: SafeArea(
+            child: RefreshIndicator(
+              color: colors.brand,
+              backgroundColor: colors.surface,
+              onRefresh:
+                  ref.read(deliveriesProvider.notifier).refreshAssignments,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                clipBehavior: Clip.none,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: AppSpacing.lg),
+                    RiderHomeHeader(firstName: firstName),
+                    const SizedBox(height: AppSpacing.lg),
 
-    return ColoredBox(
-      color: RiderTheme.background,
-      child: SafeArea(
-        bottom: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 14, 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 13),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    if (active != null) ...[
+                      RiderResumeActiveCard(
+                        orderRef: active.order.orderRef,
+                        stopCount: routeStops.length,
+                        onTap: () => context.push(
+                          '/rider/deliveries/${active.id}/active',
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                    ],
+
+                    const HeroBanner(),
+                    const SizedBox(height: AppSpacing.sm + 2),
+
+                    SizedBox(
+                      height: 290,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(
-                            dateLine,
-                            style: AppTypography.overline.copyWith(
-                              color: RiderTheme.textPrimary,
-                              letterSpacing: 0,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
+                          Expanded(
+                            child: RiderRouteMapTile(
+                              stops: routeStops,
+                              activeStop: active,
+                              onTap: () {
+                                if (active != null) {
+                                  context.push(
+                                    '/rider/deliveries/${active.id}/active',
+                                  );
+                                } else {
+                                  context.go('/rider/deliveries');
+                                }
+                              },
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          RichText(
-                            text: TextSpan(
-                              style: AppTypography.h2.copyWith(
-                                color: RiderTheme.textPrimary,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0,
-                              ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                TextSpan(text: '${_greeting()}, '),
-                                TextSpan(
-                                  text: firstName,
-                                  style: const TextStyle(
-                                    color: RiderTheme.yellow,
+                                Expanded(
+                                  flex: 2,
+                                  child: RiderActiveStopTile(
+                                    customerName: active?.order.customerName,
+                                    orderRef: active?.order.orderRef,
+                                    onTap: () {
+                                      if (active != null) {
+                                        context.push(
+                                          '/rider/deliveries/${active.id}/active',
+                                        );
+                                      } else {
+                                        context.go('/rider/deliveries');
+                                      }
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(height: AppSpacing.xs + 2),
+                                Expanded(
+                                  flex: 2,
+                                  child: RiderDeliveriesCountTile(
+                                    count: state.inProgressAssignments.length +
+                                        state.newAssignments.length,
+                                    onTap: () =>
+                                        context.go('/rider/deliveries'),
+                                  ),
+                                ),
+                                const SizedBox(height: AppSpacing.xs + 2),
+                                Expanded(
+                                  flex: 3,
+                                  child: RiderEarningsTile(
+                                    todayAmount: earnings.today,
                                   ),
                                 ),
                               ],
@@ -112,74 +150,55 @@ class RiderHomeScreen extends ConsumerWidget {
                         ],
                       ),
                     ),
-                  ),
-                  _HeaderIconButton(
-                    icon: HugeIcons.strokeRoundedNotification02,
-                    onTap: () => context.go('/rider/alerts'),
-                  ),
-                  const SizedBox(width: 4),
-                  _HeaderIconButton(
-                    icon: HugeIcons.strokeRoundedSettings01,
-                    onTap: () => context.go('/rider/profile'),
-                  ),
-                ],
+
+                    const SizedBox(height: AppSpacing.lg),
+                    RiderTodayRouteSection(
+                      stops: routeStops,
+                      onTapStop: (v) =>
+                          context.push('/rider/deliveries/${v.id}'),
+                    ),
+
+                    const SizedBox(height: AppSpacing.lg),
+                    RiderRecentDeliveriesSection(
+                      completed: state.completedAssignments,
+                      onTap: (v) =>
+                          context.push('/rider/deliveries/${v.id}'),
+                    ),
+
+                    const SizedBox(height: AppSpacing.xxl),
+                  ],
+                ),
               ),
             ),
-
-            const RiderBrandingBanner(),
-            const SizedBox(height: 10),
-
-            RiderRouteMapPanel(stops: routeStops, activeStop: active),
-
-            if (active != null)
-              RiderActiveStopCard(
-                view: active,
-                onTap: () =>
-                    context.push('/rider/deliveries/${active.id}/active'),
-                onCall: () => _call(active.order.customerPhone),
-                onMessage: () => _openChat(context, ref, active),
-              )
-            else
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-                child: Text(
-                  'No active stop — check Orders for new assignments.',
-                  style: AppTypography.caption.copyWith(
-                    color: RiderTheme.textMuted,
+          ),
+        ),
+        if (active != null)
+          Positioned(
+            right: AppSpacing.xl,
+            bottom: 90,
+            child: Material(
+              color: colors.accent,
+              elevation: 6,
+              shape: const CircleBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () => _openChat(context, ref, active),
+                child: SizedBox(
+                  width: 52,
+                  height: 52,
+                  child: Center(
+                    child: HugeIcon(
+                      icon: HugeIcons.strokeRoundedMessage01,
+                      size: 22,
+                      color: colors.accentOnColor,
+                    ),
                   ),
                 ),
               ),
-
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HeaderIconButton extends StatelessWidget {
-  const _HeaderIconButton({required this.icon, required this.onTap});
-
-  final dynamic icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: SizedBox(
-          width: 22,
-          height: 22,
-          child: Center(
-            child: HugeIcon(icon: icon, color: Colors.black, size: 14),
+            ),
           ),
-        ),
-      ),
+      ],
     );
   }
 }
