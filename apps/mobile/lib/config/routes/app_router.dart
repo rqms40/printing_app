@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/routes/page_transitions.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
-import 'package:printing_app/config/theme/app_theme.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/auth/models/registration_draft.dart';
 import 'package:printing_app/features/customer/profile/models/account_state.dart';
@@ -536,12 +535,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Rider shell (Home, Orders, + FAB, Alerts, Profile) — rider-UI.png
       // -----------------------------------------------------------------------
       StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) => Theme(
-          data: AppTheme.dark,
-          child: ScaffoldWithNav(
+        builder: (context, state, navigationShell) => ScaffoldWithNav(
             currentIndex: navigationShell.currentIndex,
             showFab: true,
-            navStyle: AppBottomNavStyle.riderCockpit,
+            navStyle: AppBottomNavStyle.standard,
             quickActions: kRiderQuickActions,
             onTap: (i) => navigationShell.goBranch(
               i,
@@ -571,7 +568,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
             child: navigationShell,
           ),
-        ),
         branches: [
           StatefulShellBranch(
             routes: [
