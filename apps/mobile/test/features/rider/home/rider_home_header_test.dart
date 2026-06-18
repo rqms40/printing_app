@@ -14,5 +14,7 @@ void main() {
     );
     await tester.pump();
     expect(find.textContaining('Juan'), findsOneWidget);
+    expect(find.text('Online'), findsNothing);
+    expect(find.text('Offline'), findsNothing);
   });
 }

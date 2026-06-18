@@ -3,11 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
-import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
-import 'package:printing_app/features/rider/home/widgets/rider_online_pill.dart';
-
-/// Rider home header — date overline + greeting + bell + online pill.
+/// Rider home header — date overline + greeting + bell.
 /// Mirrors the customer home header layout.
 class RiderHomeHeader extends StatelessWidget {
   const RiderHomeHeader({super.key, required this.firstName});
@@ -85,8 +82,6 @@ class RiderHomeHeader extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: AppSpacing.xs),
-        const RiderOnlinePill(),
       ],
     );
   }
