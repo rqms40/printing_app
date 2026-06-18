@@ -1135,9 +1135,16 @@ class _AccountFieldState extends State<_AccountField> {
                 ),
               ),
               if (widget.obscureText)
-                GestureDetector(
-                  onTap: () => setState(() => _obscured = !_obscured),
-                  child: Icon(
+                IconButton(
+                  tooltip: _obscured ? 'Show password' : 'Hide password',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 40,
+                    height: 40,
+                  ),
+                  onPressed: () => setState(() => _obscured = !_obscured),
+                  icon: Icon(
                     _obscured
                         ? Icons.visibility_off_rounded
                         : Icons.visibility_rounded,
@@ -1372,4 +1379,3 @@ class _CategoryCarouselState extends State<_CategoryCarousel> {
     );
   }
 }
-

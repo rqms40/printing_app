@@ -6,10 +6,7 @@ import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_text_field.dart';
 
 class AuthFormSubmission {
-  const AuthFormSubmission({
-    required this.email,
-    required this.password,
-  });
+  const AuthFormSubmission({required this.email, required this.password});
 
   final String email;
   final String password;
@@ -48,6 +45,8 @@ class _AuthFormState extends State<AuthForm> {
   String? _emailError;
   String? _passwordError;
   String? _confirmPasswordError;
+  bool _passwordObscured = true;
+  bool _confirmPasswordObscured = true;
 
   @override
   void dispose() {
@@ -112,6 +111,19 @@ class _AuthFormState extends State<AuthForm> {
     }
   }
 
+  Widget _visibilityButton({
+    required bool obscured,
+    required VoidCallback onPressed,
+  }) {
+    return IconButton(
+      tooltip: obscured ? 'Show password' : 'Hide password',
+      icon: Icon(
+        obscured ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+      ),
+      onPressed: onPressed,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
@@ -135,10 +147,16 @@ class _AuthFormState extends State<AuthForm> {
           controller: _passwordController,
           label: 'Password',
           hintText: 'Enter your password',
-          obscureText: true,
-          textInputAction:
-              widget.isRegister ? TextInputAction.next : TextInputAction.done,
+          obscureText: _passwordObscured,
+          textInputAction: widget.isRegister
+              ? TextInputAction.next
+              : TextInputAction.done,
           errorText: _passwordError,
+          suffixIcon: _visibilityButton(
+            obscured: _passwordObscured,
+            onPressed: () =>
+                setState(() => _passwordObscured = !_passwordObscured),
+          ),
           onSubmitted: widget.isRegister ? null : (_) => _handleSubmit(),
         ),
 
@@ -148,9 +166,9 @@ class _AuthFormState extends State<AuthForm> {
             alignment: Alignment.centerRight,
             child: GestureDetector(
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Coming soon')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('Coming soon')));
               },
               child: Text(
                 'Forgot password?',
@@ -169,9 +187,15 @@ class _AuthFormState extends State<AuthForm> {
             controller: _confirmPasswordController,
             label: 'Confirm Password',
             hintText: 'Re-enter your password',
-            obscureText: true,
+            obscureText: _confirmPasswordObscured,
             textInputAction: TextInputAction.done,
             errorText: _confirmPasswordError,
+            suffixIcon: _visibilityButton(
+              obscured: _confirmPasswordObscured,
+              onPressed: () => setState(
+                () => _confirmPasswordObscured = !_confirmPasswordObscured,
+              ),
+            ),
             onSubmitted: (_) => _handleSubmit(),
           ),
         ],
