@@ -78,6 +78,78 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
     super.dispose();
   }
 
+  List<Marker> _stopMarkers(AppColorSet colors) {
+    final markers = <Marker>[];
+    var n = 1;
+    for (final stop in widget.stops) {
+      final point = stop.order.destination?.latLng;
+      if (point == null) {
+        n++;
+        continue;
+      }
+      markers.add(
+        Marker(
+          point: point,
+          width: 34,
+          height: 44,
+          alignment: Alignment.topCenter,
+          child: _numberBadge(n, colors),
+        ),
+      );
+      n++;
+    }
+    if (markers.isEmpty) {
+      markers.add(
+        Marker(
+          point: _destination,
+          width: 30,
+          height: 30,
+          child: Icon(Icons.location_on_rounded, color: colors.brand, size: 28),
+        ),
+      );
+    }
+    return markers;
+  }
+
+  Widget _numberBadge(int number, AppColorSet colors) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 26,
+          height: 26,
+          decoration: BoxDecoration(
+            color: colors.surface,
+            shape: BoxShape.circle,
+            border: Border.all(color: colors.brand, width: 1.6),
+            boxShadow: const [
+              BoxShadow(color: Color(0x66000000), blurRadius: 6, offset: Offset(0, 2)),
+            ],
+          ),
+          child: Center(
+            child: Text(
+              '$number',
+              style: TextStyle(
+                color: colors.onSurface,
+                fontWeight: FontWeight.w800,
+                fontSize: 11,
+                height: 1,
+              ),
+            ),
+          ),
+        ),
+        Container(
+          width: 2.2,
+          height: 10,
+          decoration: BoxDecoration(
+            color: colors.brand,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
@@ -124,20 +196,7 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
                           ),
                         ],
                       ),
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: _destination,
-                          width: 30,
-                          height: 30,
-                          child: Icon(
-                            Icons.location_on_rounded,
-                            color: colors.brand,
-                            size: 28,
-                          ),
-                        ),
-                      ],
-                    ),
+                    MarkerLayer(markers: _stopMarkers(colors)),
                   ],
                 ),
               Positioned(
