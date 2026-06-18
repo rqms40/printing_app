@@ -7,6 +7,7 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
+import 'package:printing_app/features/rider/shared/providers/rider_location_tracker_provider.dart';
 import 'package:printing_app/shared/services/routing_service.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
@@ -127,6 +128,22 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
     final timeLabel = DateFormat('h:mm a').format(now);
     final dayLabel = DateFormat('EEEE').format(now);
 
+    // Live rider GPS for the active delivery (streamed from geolocator and
+    // broadcast to the backend). Falls back to a synthetic point when there is
+    // no active, trackable delivery.
+    final active = widget.activeStop;
+    final livePoint = active != null
+        ? ref.watch(
+            riderLocationTrackerProvider(
+              RiderLocationTrackerArgs(
+                assignmentId: active.id,
+                enabled: active.shouldTrackLocation,
+              ),
+            ),
+          )
+        : null;
+    final carPoint = livePoint ?? _carPoint;
+
     return GestureDetector(
       onTap: widget.onTap,
       child: ClipRRect(
@@ -142,6 +159,7 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
                   initialCenter: _destination,
                   initialZoom: 12.5,
                   backgroundColor: colors.surfaceDim,
+                  onTap: (_, _) => widget.onTap(),
                   interactionOptions: const InteractionOptions(
                     flags: InteractiveFlag.none,
                   ),
@@ -167,7 +185,7 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
                       ],
                     ),
                   MarkerLayer(
-                    markers: [..._stopMarkers(colors), _carMarker(colors)],
+                    markers: [..._stopMarkers(colors), _carMarker(colors, carPoint)],
                   ),
                 ],
               ),
@@ -295,9 +313,9 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
     );
   }
 
-  Marker _carMarker(AppColorSet colors) {
+  Marker _carMarker(AppColorSet colors, LatLng point) {
     return Marker(
-      point: _carPoint,
+      point: point,
       width: 44,
       height: 44,
       child: Transform.rotate(

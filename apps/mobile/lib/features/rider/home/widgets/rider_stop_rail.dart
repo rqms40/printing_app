@@ -33,7 +33,7 @@ class _RiderStopRailState extends State<RiderStopRail> {
 
     if (_collapsed) {
       return SizedBox(
-        width: 28,
+        width: 34,
         child: Align(
           alignment: Alignment.topCenter,
           child: _handle(colors, expand: true),
@@ -84,11 +84,14 @@ class _RiderStopRailState extends State<RiderStopRail> {
       key: const ValueKey('rider-rail-toggle'),
       onTap: _toggle,
       child: Container(
-        width: expand ? 28 : 36,
-        height: 28,
+        width: 30,
+        height: 30,
         decoration: BoxDecoration(
           color: colors.brand,
-          borderRadius: BorderRadius.circular(8),
+          shape: BoxShape.circle,
+          boxShadow: const [
+            BoxShadow(color: Color(0x66000000), blurRadius: 6, offset: Offset(0, 2)),
+          ],
         ),
         child: Center(
           child: Icon(
