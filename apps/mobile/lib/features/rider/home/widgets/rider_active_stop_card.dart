@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:hugeicons/hugeicons.dart';
+import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
-import 'package:printing_app/features/rider/shared/rider_theme.dart';
 
-/// Active stop card from rider-UI.png.
+/// Active stop card (cockpit bottom): avatar, customer, order summary, ref,
+/// message + call actions. Theme-following.
 class RiderActiveStopCard extends StatelessWidget {
   const RiderActiveStopCard({
     super.key,
@@ -22,14 +23,14 @@ class RiderActiveStopCard extends StatelessWidget {
   String get _orderSummary {
     final category = view.order.category;
     final qty = view.order.quantity;
-    if (category.toLowerCase().contains('3d')) {
-      return '$category, $qty ${qty == 1 ? 'Copy' : 'Copies'}';
-    }
     return '$category, $qty ${qty == 1 ? 'Copy' : 'Copies'}';
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
     final customerName = view.order.customerName ?? 'Customer';
 
     return Padding(
@@ -40,14 +41,14 @@ class RiderActiveStopCard extends StatelessWidget {
           Text(
             'Active Stop',
             style: AppTypography.bodyBold.copyWith(
-              color: RiderTheme.textPrimary,
+              color: colors.onBackground,
               fontSize: 18,
               letterSpacing: 0,
             ),
           ),
           const SizedBox(height: 6),
           Material(
-            color: RiderTheme.surfaceElevated,
+            color: colors.surface,
             borderRadius: BorderRadius.circular(8),
             child: InkWell(
               onTap: onTap,
@@ -56,9 +57,7 @@ class RiderActiveStopCard extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(8, 8, 10, 8),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: RiderTheme.mapLine.withValues(alpha: 0.8),
-                  ),
+                  border: Border.all(color: colors.outline.withValues(alpha: 0.8)),
                 ),
                 child: Row(
                   children: [
@@ -66,13 +65,13 @@ class RiderActiveStopCard extends StatelessWidget {
                       width: 46,
                       height: 46,
                       decoration: BoxDecoration(
-                        color: RiderTheme.surface,
+                        color: colors.surfaceVariant,
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 3),
+                        border: Border.all(color: colors.onSurface, width: 3),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.person_rounded,
-                        color: Colors.white,
+                        color: colors.onSurface,
                         size: 31,
                       ),
                     ),
@@ -84,7 +83,7 @@ class RiderActiveStopCard extends StatelessWidget {
                           Text(
                             customerName,
                             style: AppTypography.bodyBold.copyWith(
-                              color: RiderTheme.yellow,
+                              color: colors.brand,
                               fontSize: 12,
                               letterSpacing: 0,
                             ),
@@ -93,7 +92,7 @@ class RiderActiveStopCard extends StatelessWidget {
                           Text(
                             _orderSummary,
                             style: AppTypography.caption.copyWith(
-                              color: RiderTheme.textPrimary,
+                              color: colors.onSurface,
                               fontSize: 10,
                               height: 1.05,
                             ),
@@ -101,7 +100,7 @@ class RiderActiveStopCard extends StatelessWidget {
                           Text(
                             '#${view.order.orderRef}',
                             style: AppTypography.caption.copyWith(
-                              color: RiderTheme.textPrimary,
+                              color: colors.onSurface,
                               fontSize: 9,
                               fontWeight: FontWeight.w800,
                               height: 1.1,
@@ -113,12 +112,14 @@ class RiderActiveStopCard extends StatelessWidget {
                     _ActionIcon(
                       key: const ValueKey('rider-stop-message'),
                       icon: HugeIcons.strokeRoundedMail01,
+                      colors: colors,
                       onTap: onMessage,
                     ),
                     const SizedBox(width: 6),
                     _ActionIcon(
                       key: const ValueKey('rider-stop-call'),
                       icon: HugeIcons.strokeRoundedCall,
+                      colors: colors,
                       onTap: onCall,
                     ),
                   ],
@@ -133,15 +134,21 @@ class RiderActiveStopCard extends StatelessWidget {
 }
 
 class _ActionIcon extends StatelessWidget {
-  const _ActionIcon({super.key, required this.icon, this.onTap});
+  const _ActionIcon({
+    super.key,
+    required this.icon,
+    required this.colors,
+    this.onTap,
+  });
 
   final dynamic icon;
+  final AppColorSet colors;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: RiderTheme.surface,
+      color: colors.surfaceVariant,
       shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),
@@ -150,11 +157,7 @@ class _ActionIcon extends StatelessWidget {
           width: 28,
           height: 28,
           child: Center(
-            child: HugeIcon(
-              icon: icon,
-              color: RiderTheme.textPrimary,
-              size: 15,
-            ),
+            child: HugeIcon(icon: icon, color: colors.onSurface, size: 15),
           ),
         ),
       ),
