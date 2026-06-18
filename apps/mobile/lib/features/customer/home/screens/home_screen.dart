@@ -239,7 +239,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: 28),
 
                 // ── Header ─────────────────────────────────────────────
                 Row(
@@ -301,7 +301,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       curve: Curves.easeOut,
                     ),
 
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: 28),
 
                 if (cart.items.isNotEmpty) ...[
                   _ResumeQueueCard(colors: colors, cart: cart)
@@ -318,11 +318,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 // ── Hero banner ────────────────────────────────────────
                 const HeroBanner(),
 
-                const SizedBox(height: AppSpacing.sm + 2),
+                const SizedBox(height: AppSpacing.md),
 
                 // ── Two-column: map + right tiles ─────────────────────
                 SizedBox(
-                  height: 290,
+                  height: 324,
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -343,13 +343,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 onTap: () => context.push('/customer/order/new'),
                               ),
                             ),
-                            const SizedBox(height: AppSpacing.xs + 2),
+                            const SizedBox(height: AppSpacing.sm),
                             // 2: The Data Grid (flex 2)
                             Expanded(
                               flex: 2,
                               child: _DataGridTile(colors: colors),
                             ),
-                            const SizedBox(height: AppSpacing.xs + 2),
+                            const SizedBox(height: AppSpacing.sm),
                             // 3: The Feed (flex 3)
                             Expanded(flex: 3, child: _FeedTile(colors: colors)),
                           ],
@@ -363,7 +363,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   curve: Curves.easeOut,
                 ),
 
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: 28),
 
                 // ── Daily Grid ─────────────────────────────────────────
                 const DailyGridSection().animate().fadeIn(
@@ -372,7 +372,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   curve: Curves.easeOut,
                 ),
 
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: 28),
 
                 // ── Recent Orders ──────────────────────────────────────
                 const RecentOrdersSection().animate().fadeIn(
