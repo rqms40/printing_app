@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_active_stop_card.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
-import 'package:printing_app/features/rider/shared/rider_theme.dart';
 import 'package:printing_app/shared/models/delivery_assignment.dart';
 import 'package:printing_app/shared/models/enums.dart';
 
@@ -15,6 +15,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        theme: ThemeData(brightness: Brightness.dark),
         home: Scaffold(
           body: RiderActiveStopCard(
             view: _view(),
@@ -31,7 +32,7 @@ void main() {
     expect(find.text('#ORD-1005'), findsOneWidget);
 
     final name = tester.widget<Text>(find.text('Maria'));
-    expect(name.style?.color, RiderTheme.yellow);
+    expect(name.style?.color, AppColors.dark.brand);
 
     await tester.tap(find.byKey(const ValueKey('rider-stop-message')));
     await tester.tap(find.byKey(const ValueKey('rider-stop-call')));
