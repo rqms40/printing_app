@@ -1,0 +1,60 @@
+const defaultMobileWebPort = '8088';
+const defaultGithubRepo = 'rqms40/printing_app';
+const defaultApkAssetName = 'GRIDGO-latest.apk';
+
+type LocationLike = Pick<
+  Location,
+  'protocol' | 'hostname' | 'port' | 'pathname' | 'search' | 'hash' | 'href'
+>;
+
+export function getMobileWebUrl(
+  location: LocationLike,
+  port = defaultMobileWebPort,
+) {
+  const url = new URL(location.href);
+  url.port = port;
+  url.pathname = '/';
+  url.search = '';
+  url.hash = '';
+  return url.toString();
+}
+
+export function getLatestApkDownloadUrl(
+  repo = defaultGithubRepo,
+  assetName = defaultApkAssetName,
+) {
+  return `https://github.com/${repo}/releases/latest/download/${assetName}`;
+}
+
+export function isMobileUserAgent(userAgent: string) {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    userAgent,
+  );
+}
+
+export function shouldRedirectToMobileWeb(
+  location: LocationLike,
+  userAgent: string,
+  port = defaultMobileWebPort,
+) {
+  const params = new URLSearchParams(location.search);
+  return (
+    isMobileUserAgent(userAgent) &&
+    location.port !== port &&
+    params.get('desktop') !== '1'
+  );
+}
+
+export function landingLinks(location: LocationLike) {
+  const mobileWebPort =
+    import.meta.env.VITE_MOBILE_WEB_PORT || defaultMobileWebPort;
+  const githubRepo = import.meta.env.VITE_GITHUB_REPO || defaultGithubRepo;
+  const apkAssetName =
+    import.meta.env.VITE_APK_ASSET_NAME || defaultApkAssetName;
+
+  return {
+    mobileWebUrl: getMobileWebUrl(location, mobileWebPort),
+    apkDownloadUrl: getLatestApkDownloadUrl(githubRepo, apkAssetName),
+    mobileWebPort,
+  };
+}

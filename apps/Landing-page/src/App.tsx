@@ -5,6 +5,7 @@ import { PhoneScene } from './components/PhoneScene';
 import { Menu, X, Phone, MessageCircle, Zap, ShieldCheck, ChevronUp } from 'lucide-react';
 import { HardDriveUploadIcon, TruckIcon, ListIcon, TimerIcon, MessageCircleIcon } from 'lucide-animated';
 import { Link } from 'react-router-dom';
+import { landingLinks, shouldRedirectToMobileWeb } from './utils/landingLinks';
 
 function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
@@ -47,7 +48,9 @@ function Navbar() {
             <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
             <div className="w-1.5 h-1.5 bg-gray-500 rounded-full"></div>
           </div>
-          <span className="text-xl font-bold tracking-widest uppercase">GRIDGO</span>
+          <span className="text-xl font-bold tracking-widest uppercase">
+            GRID<span className="text-[var(--color-primary)]">GO</span>
+          </span>
         </a>
 
         {/* Center Nav */}
@@ -536,6 +539,8 @@ function TeamSection() {
 }
 
 function BetaSection() {
+  const { mobileWebUrl, apkDownloadUrl } = landingLinks(window.location);
+
   return (
     <section id="download" className="min-h-[100vh] flex items-center justify-center relative z-10 py-20 px-8 overflow-hidden bg-[#050505]">
       {/* Background Glow */}
@@ -561,12 +566,19 @@ function BetaSection() {
             </p>
 
             <div className="grid grid-cols-2 gap-3 mb-14 w-[95%]">
-              <button className="bg-white text-black font-bold py-3 rounded-full hover:bg-gray-200 transition-colors text-[13px] md:text-[14px]">
+              <a
+                href={mobileWebUrl}
+                className="bg-white text-black font-bold py-3 rounded-full hover:bg-gray-200 transition-colors text-[13px] md:text-[14px]"
+              >
                 Access Mobile Web
-              </button>
-              <button className="bg-[var(--color-primary)] text-black font-bold py-3 rounded-full hover:bg-yellow-400 transition-colors text-[13px] md:text-[14px]">
+              </a>
+              <a
+                href={apkDownloadUrl}
+                className="bg-[var(--color-primary)] text-black font-bold py-3 rounded-full hover:bg-yellow-400 transition-colors text-[13px] md:text-[14px]"
+                rel="noopener noreferrer"
+              >
                 Download APK
-              </button>
+              </a>
             </div>
 
             <div className="flex flex-col items-center w-full">
@@ -609,6 +621,18 @@ function App() {
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   useEffect(() => {
+    const { mobileWebPort } = landingLinks(window.location);
+    if (
+      shouldRedirectToMobileWeb(
+        window.location,
+        window.navigator.userAgent,
+        mobileWebPort,
+      )
+    ) {
+      window.location.replace(landingLinks(window.location).mobileWebUrl);
+      return;
+    }
+
     document.body.style.backgroundColor = '#000';
     document.body.style.color = '#fff';
 
