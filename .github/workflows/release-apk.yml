@@ -56,7 +56,9 @@ jobs:
       - name: Rename APK
         env:
           TAG_NAME: ${{ github.ref_name }}
-        run: cp build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/GRIDGO-${TAG_NAME}.apk"
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/GRIDGO-${TAG_NAME}.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/GRIDGO-latest.apk"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
