@@ -10,8 +10,9 @@ import 'package:printing_app/features/rider/shared/models/rider_order_context.da
 import 'package:printing_app/shared/services/routing_service.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
-/// Bento map tile showing the rider's route. Fills its parent (use inside an
-/// Expanded/SizedBox). Mirrors the customer MapTrackingTile slot.
+/// Route map showing the rider's stops as numbered markers. Fills its parent
+/// (use inside an Expanded/SizedBox); the route status section places it below
+/// the Delivery Status panel.
 class RiderRouteMapTile extends ConsumerStatefulWidget {
   const RiderRouteMapTile({
     super.key,
