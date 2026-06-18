@@ -120,7 +120,7 @@ class PrivacyScreen extends StatelessWidget {
                   'Object: Object to the processing of your data for specific purposes.\n\n'
                   'Portability: Request your data in a structured, machine-readable format.\n\n'
                   'To exercise these rights, contact our Data Protection Officer at '
-                  'privacy@gridgoprint.ph.',
+                  'privacy@gridgo.ph.',
             ),
             _section(
               colors,
@@ -128,7 +128,7 @@ class PrivacyScreen extends StatelessWidget {
               'For privacy-related inquiries or concerns, please contact:\n\n'
                   'Data Protection Officer\n'
                   'GRIDGO\n'
-                  'Email: privacy@gridgoprint.ph\n'
+                  'Email: privacy@gridgo.ph\n'
                   'Phone: +63 917 123 4567\n\n'
                   'You may also file a complaint with the National Privacy Commission '
                   'of the Philippines at https://www.privacy.gov.ph.',

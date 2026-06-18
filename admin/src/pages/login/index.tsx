@@ -101,7 +101,7 @@ export function LoginPage() {
             layout="vertical"
             onFinish={onFinish}
             initialValues={{
-              email: "admin@gridgoprint.ph",
+              email: "admin@gridgo.ph",
               password: "password123",
             }}
             requiredMark={false}
@@ -113,7 +113,7 @@ export function LoginPage() {
             >
               <Input
                 prefix={<MailOutlined style={{ color: "#555" }} />}
-                placeholder="admin@gridgoprint.ph"
+                placeholder="admin@gridgo.ph"
                 style={{
                   background: "#141414",
                   border: "1px solid #2E2E2E",

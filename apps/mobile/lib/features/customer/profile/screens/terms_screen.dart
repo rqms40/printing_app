@@ -124,7 +124,7 @@ class TermsScreen extends StatelessWidget {
               colors,
               '10. Contact Information',
               'For questions or concerns regarding these Terms, please contact us '
-                  'at support@gridgoprint.ph or call +63 917 123 4567.',
+                  'at support@gridgo.ph or call +63 917 123 4567.',
             ),
             const SizedBox(height: AppSpacing.xxl),
           ],

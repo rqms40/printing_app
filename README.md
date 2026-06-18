@@ -318,9 +318,9 @@ npm run dev              # http://localhost:5174
 
 | Role | Email | Password |
 |------|-------|----------|
-| Customer | maria@gridgoprint.ph | password123 |
-| Rider | juan@gridgoprint.ph | password123 |
-| Admin | admin@gridgoprint.ph | password123 |
+| Customer | maria@gridgo.ph | password123 |
+| Rider | juan@gridgo.ph | password123 |
+| Admin | admin@gridgo.ph | password123 |
 
 > The mobile app has dev bypass buttons on the login screen for quick testing without a running server.
 

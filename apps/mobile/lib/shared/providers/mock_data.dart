@@ -61,7 +61,7 @@ class MockData {
   static final User adminUser = User(
     id: 'usr_003',
     uid: 'firebase_uid_admin',
-    email: 'admin@gridgoprint.ph',
+    email: 'admin@gridgo.ph',
     fullName: 'Admin GRIDGO',
     phoneNumber: '+639191234567',
     profileCategory: 'professional',

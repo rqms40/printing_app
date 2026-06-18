@@ -64,8 +64,8 @@ class SupportScreen extends StatelessWidget {
             _ContactCard(
               icon: HugeIcons.strokeRoundedMail01,
               title: 'Email',
-              subtitle: 'support@gridgoprint.ph',
-              onTap: () => _launchUrl('mailto:support@gridgoprint.ph'),
+              subtitle: 'support@gridgo.ph',
+              onTap: () => _launchUrl('mailto:support@gridgo.ph'),
             ).animate()
               .fadeIn(duration: 400.ms, delay: 120.ms, curve: Curves.easeOut)
               .slideY(begin: 0.03, duration: 400.ms, delay: 120.ms, curve: Curves.easeOut),

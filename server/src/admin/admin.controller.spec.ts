@@ -474,7 +474,7 @@ describe('AdminController analytics', () => {
         {
           id: 1,
           fullName: 'Maria Santos',
-          email: 'maria@gridgoprint.ph',
+          email: 'maria@gridgo.ph',
           phoneNumber: '+639171234567',
           role: 'customer',
           isActive: true,
@@ -505,7 +505,7 @@ describe('AdminController analytics', () => {
     it('loads one user and only that user orders for the admin show page', async () => {
       const user = {
         id: 42,
-        email: 'maria@gridgoprint.ph',
+        email: 'maria@gridgo.ph',
         createdAt: new Date('2026-03-01T00:00:00.000Z'),
         updatedAt: new Date('2026-03-15T00:00:00.000Z'),
       } as User;
