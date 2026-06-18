@@ -5,17 +5,19 @@ import 'package:go_router/go_router.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
+import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/chat/providers/chat_provider.dart';
 import 'package:printing_app/features/customer/home/widgets/hero_banner.dart';
 import 'package:printing_app/features/rider/deliveries/providers/deliveries_provider.dart';
+import 'package:printing_app/features/rider/home/widgets/rider_active_stop_card.dart';
+import 'package:printing_app/features/rider/home/widgets/rider_cockpit_map.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_home_header.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_recent_deliveries_section.dart';
-import 'package:printing_app/features/rider/home/widgets/rider_resume_active_card.dart';
-import 'package:printing_app/features/rider/home/widgets/rider_route_status_section.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_today_route_section.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/shared/models/enums.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Rider home — mirrors the customer home layout with rider content.
 class RiderHomeScreen extends ConsumerWidget {
@@ -38,6 +40,12 @@ class RiderHomeScreen extends ConsumerWidget {
     );
   }
 
+  Future<void> _call(String? phone) async {
+    if (phone == null || phone.isEmpty) return;
+    final uri = Uri.parse('tel:$phone');
+    if (await canLaunchUrl(uri)) await launchUrl(uri);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = Theme.of(context).brightness == Brightness.dark
@@ -57,6 +65,8 @@ class RiderHomeScreen extends ConsumerWidget {
       ?active,
       ...upcoming,
     ];
+    final completedCount = delivered.length;
+    final currentStopIndex = active != null ? delivered.length + 1 : 0;
 
     return Stack(
       children: [
@@ -82,27 +92,16 @@ class RiderHomeScreen extends ConsumerWidget {
                         .fadeIn(duration: 400.ms, curve: Curves.easeOut),
                     const SizedBox(height: AppSpacing.lg),
 
-                    if (active != null) ...[
-                      RiderResumeActiveCard(
-                        orderRef: active.order.orderRef,
-                        stopCount: routeStops.length,
-                        onTap: () => context.push(
-                          '/rider/deliveries/${active.id}/active',
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                    ],
-
                     const HeroBanner(),
                     const SizedBox(height: AppSpacing.sm + 2),
 
                     SizedBox(
-                      height: 460,
-                      child: RiderRouteStatusSection(
-                        deliveredStops: delivered,
-                        currentStop: active,
-                        upcomingStops: upcoming,
+                      height: 380,
+                      child: RiderCockpitMap(
                         mapStops: mapStops,
+                        activeStop: active,
+                        completedCount: completedCount,
+                        currentStopIndex: currentStopIndex,
                         onMapTap: () {
                           if (active != null) {
                             context.push('/rider/deliveries/${active.id}/active');
@@ -110,13 +109,34 @@ class RiderHomeScreen extends ConsumerWidget {
                             context.go('/rider/deliveries');
                           }
                         },
-                        onTapStop: (v) => context.push('/rider/deliveries/${v.id}'),
                       ),
                     ).animate().fadeIn(
                       duration: 400.ms,
                       delay: 100.ms,
                       curve: Curves.easeOut,
                     ),
+                    const SizedBox(height: AppSpacing.md),
+                    if (active != null)
+                      RiderActiveStopCard(
+                        view: active,
+                        onTap: () =>
+                            context.push('/rider/deliveries/${active.id}/active'),
+                        onMessage: () => _openChat(context, ref, active),
+                        onCall: () => _call(active.order.customerPhone),
+                      )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.xs,
+                          vertical: AppSpacing.sm,
+                        ),
+                        child: Text(
+                          'No active stop — check Orders for assignments.',
+                          style: AppTypography.caption.copyWith(
+                            color: colors.onSurfaceDim,
+                          ),
+                        ),
+                      ),
 
                     const SizedBox(height: AppSpacing.lg),
                     RiderTodayRouteSection(
