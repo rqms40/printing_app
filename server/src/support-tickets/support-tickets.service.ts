@@ -63,7 +63,7 @@ export class SupportTicketsService {
     // Send email to user
     try {
       await this.transporter.sendMail({
-        from: `"GridGOPH" <${this.configService.get<string>('EMAIL_USER', '')}>`,
+        from: `"GridGO Support" <${this.configService.get<string>('EMAIL_USER', '')}>`,
         to: ticket.email,
         subject: `Re: ${ticket.subject} (Ticket #${ticket.id.substring(0, 8)})`,
         text: `Dear ${ticket.name},\n\nRegarding your ticket "${ticket.subject}":\n\n${ticket.message}\n\n---\n\nAdmin Reply:\n${replyDto.replyMessage}\n\nBest regards,\nGrid Support Team`,
