@@ -40,6 +40,9 @@ class _RiderProfileScreenState extends ConsumerState<RiderProfileScreen> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      // Present above the persistent rider nav bar so the Save button isn't
+      // hidden behind it.
+      useRootNavigator: true,
       backgroundColor: colors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
