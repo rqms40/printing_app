@@ -12,7 +12,7 @@ function GridTextLayer({ index }: { index: number }) {
   const mesh = useRef<(THREE.Mesh & { fillOpacity: number; outlineOpacity: number })>(null)
 
   // Each layer has a fixed offset so the stack looks tight at rest
-  const baseZ = -(index * 0.18)
+  const baseZ = -1.2 - (index * 0.18)
   // Staggered opacity — front layer is brightest
   const baseAlpha = 1.0 - index * 0.18
   // Keep the mesh itself moderately sized; per-frame scale handles viewport fit.
@@ -33,11 +33,15 @@ function GridTextLayer({ index }: { index: number }) {
     // ── Viewport-responsive scale ─────────────────────────────────────────
     // Camera z=8, vertical fov=45° → visible height = 6.63 units.
     // Visible WIDTH = 6.63 × aspect, which shrinks dramatically on portrait mobile.
-    // Keep GRIDGO as an oversized backdrop while preserving side breathing room.
+    // Keep GRIDGO as a full, readable backdrop while preserving side breathing room.
+    // Troika text's rendered width is much wider than the raw letter count, so
+    // this uses the measured hero word width rather than the old under-estimate
+    // that clipped the first G and last O on both desktop and mobile.
     const aspect = window.innerWidth / window.innerHeight
     const visibleWidth = 2 * Math.tan(Math.PI / 8) * 8 * aspect
-    const targetFill = aspect < 0.75 ? 0.9 : 0.86
-    const responsiveScale = Math.min(1.0, (visibleWidth * targetFill) / 11.8)
+    const targetFill = aspect < 0.75 ? 0.76 : 0.78
+    const estimatedTextWidth = 18.6
+    const responsiveScale = Math.min(0.64, (visibleWidth * targetFill) / estimatedTextWidth)
 
     const fadeScale = THREE.MathUtils.lerp(1, 0.85, ease)
     mesh.current.scale.setScalar(fadeScale * responsiveScale)
@@ -59,7 +63,7 @@ function GridTextLayer({ index }: { index: number }) {
       letterSpacing={0.28}
       color="white"
       outlineWidth={index === 0 ? 0 : 0.025}
-      outlineColor="rgba(255,255,255,0.85)"
+      outlineColor="#ffffff"
       fillOpacity={baseAlpha}
       position={[0, 0, baseZ]}
     >
@@ -117,7 +121,7 @@ function getPhoneState(vh: number, fromBottomVh: number) {
       : THREE.MathUtils.lerp(1.16, 1.16, t)
 
     return {
-      pos: [x, y, 0] as [number, number, number],
+      pos: [x, y, 0.35] as [number, number, number],
       rot: [HERO_ROT_X, HERO_ROT_Y, HERO_ROT_Z] as [number, number, number],
       scale,
     }
