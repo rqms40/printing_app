@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/rider/deliveries/providers/deliveries_provider.dart';
 import 'package:printing_app/features/rider/home/screens/rider_home_screen.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_home_header.dart';
+import 'package:printing_app/features/rider/home/widgets/rider_route_status_section.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_today_route_section.dart';
 
 void main() {
@@ -44,5 +45,6 @@ void main() {
 
     expect(find.byType(RiderHomeHeader), findsOneWidget);
     expect(find.byType(RiderTodayRouteSection), findsOneWidget);
+    expect(find.byType(RiderRouteStatusSection), findsOneWidget);
   });
 }

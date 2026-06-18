@@ -9,14 +9,13 @@ import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/chat/providers/chat_provider.dart';
 import 'package:printing_app/features/customer/home/widgets/hero_banner.dart';
 import 'package:printing_app/features/rider/deliveries/providers/deliveries_provider.dart';
-import 'package:printing_app/features/rider/history/providers/earnings_provider.dart';
-import 'package:printing_app/features/rider/home/widgets/rider_bento_tiles.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_home_header.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_recent_deliveries_section.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_resume_active_card.dart';
-import 'package:printing_app/features/rider/home/widgets/rider_route_map_tile.dart';
+import 'package:printing_app/features/rider/home/widgets/rider_route_status_section.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_today_route_section.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
+import 'package:printing_app/shared/models/enums.dart';
 
 /// Rider home — mirrors the customer home layout with rider content.
 class RiderHomeScreen extends ConsumerWidget {
@@ -46,10 +45,18 @@ class RiderHomeScreen extends ConsumerWidget {
         : AppColors.light;
     final auth = ref.watch(authProvider);
     final state = ref.watch(deliveriesProvider);
-    final earnings = ref.watch(earningsProvider);
     final firstName = (auth.user?.fullName ?? 'Rider').split(' ').first;
     final active = state.activeDelivery;
     final routeStops = state.routeStops;
+    final delivered = state.completedAssignments
+        .where((v) => v.status == DeliveryStatus.delivered)
+        .toList();
+    final upcoming = routeStops.where((v) => v.id != active?.id).toList();
+    final mapStops = <RiderAssignmentView>[
+      ...delivered,
+      ?active,
+      ...upcoming,
+    ];
 
     return Stack(
       children: [
@@ -90,75 +97,26 @@ class RiderHomeScreen extends ConsumerWidget {
                     const SizedBox(height: AppSpacing.sm + 2),
 
                     SizedBox(
-                      height: 290,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(
-                            child: RiderRouteMapTile(
-                              stops: routeStops,
-                              activeStop: active,
-                              onTap: () {
-                                if (active != null) {
-                                  context.push(
-                                    '/rider/deliveries/${active.id}/active',
-                                  );
-                                } else {
-                                  context.go('/rider/deliveries');
-                                }
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Expanded(
-                                  flex: 2,
-                                  child: RiderActiveStopTile(
-                                    customerName: active?.order.customerName,
-                                    orderRef: active?.order.orderRef,
-                                    onTap: () {
-                                      if (active != null) {
-                                        context.push(
-                                          '/rider/deliveries/${active.id}/active',
-                                        );
-                                      } else {
-                                        context.go('/rider/deliveries');
-                                      }
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(height: AppSpacing.xs + 2),
-                                Expanded(
-                                  flex: 2,
-                                  child: RiderDeliveriesCountTile(
-                                    count: state.inProgressAssignments.length +
-                                        state.newAssignments.length,
-                                    onTap: () =>
-                                        context.go('/rider/deliveries'),
-                                  ),
-                                ),
-                                const SizedBox(height: AppSpacing.xs + 2),
-                                Expanded(
-                                  flex: 3,
-                                  child: RiderEarningsTile(
-                                    todayAmount: earnings.today,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                      height: 460,
+                      child: RiderRouteStatusSection(
+                        deliveredStops: delivered,
+                        currentStop: active,
+                        upcomingStops: upcoming,
+                        mapStops: mapStops,
+                        onMapTap: () {
+                          if (active != null) {
+                            context.push('/rider/deliveries/${active.id}/active');
+                          } else {
+                            context.go('/rider/deliveries');
+                          }
+                        },
+                        onTapStop: (v) => context.push('/rider/deliveries/${v.id}'),
                       ),
-                    )
-                        .animate()
-                        .fadeIn(
-                          duration: 400.ms,
-                          delay: 100.ms,
-                          curve: Curves.easeOut,
-                        ),
+                    ).animate().fadeIn(
+                      duration: 400.ms,
+                      delay: 100.ms,
+                      curve: Curves.easeOut,
+                    ),
 
                     const SizedBox(height: AppSpacing.lg),
                     RiderTodayRouteSection(
