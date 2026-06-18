@@ -25,13 +25,24 @@ class MapHelpers {
 
   /// Returns a CartoDB tile layer matching the system theme.
   /// Dark mode → Dark Matter. Light mode → Positron.
-  static TileLayer tileLayer(Brightness brightness) {
+  ///
+  /// Pass [cachingProvider] (e.g. `const DisabledMapCachingProvider()`) to opt
+  /// out of flutter_map's built-in disk cache, which depends on `path_provider`
+  /// and is unavailable in widget tests. When null, the default built-in cache
+  /// is used.
+  static TileLayer tileLayer(
+    Brightness brightness, {
+    MapCachingProvider? cachingProvider,
+  }) {
     final url = brightness == Brightness.dark
         ? 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
         : 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';
     return TileLayer(
       urlTemplate: url,
       userAgentPackageName: 'com.gridgoprint.app',
+      tileProvider: cachingProvider == null
+          ? null
+          : NetworkTileProvider(cachingProvider: cachingProvider),
     );
   }
 
