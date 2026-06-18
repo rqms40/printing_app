@@ -208,7 +208,7 @@ async function seed() {
 
   const users = [
     {
-      email: 'maria@gridgoprint.ph',
+      email: 'maria@gridgo.ph',
       password_hash: passwordHash,
       full_name: 'Maria Santos',
       phone_number: '+639171234567',
@@ -226,7 +226,7 @@ async function seed() {
       is_active: true,
     },
     {
-      email: 'juan@gridgoprint.ph',
+      email: 'juan@gridgo.ph',
       password_hash: passwordHash,
       full_name: 'Juan Reyes',
       phone_number: '+639181234567',
@@ -241,7 +241,7 @@ async function seed() {
       is_active: true,
     },
     {
-      email: 'admin@gridgoprint.ph',
+      email: 'admin@gridgo.ph',
       password_hash: passwordHash,
       full_name: 'Admin User',
       phone_number: '+639191234567',
@@ -321,12 +321,12 @@ async function seed() {
   // Get user IDs
   const [maria] = await typedQuery<IdRow>(
     ds,
-    "SELECT id FROM users WHERE email = 'maria@gridgoprint.ph'",
+    "SELECT id FROM users WHERE email = 'maria@gridgo.ph'",
   );
 
   const [juan] = await typedQuery<IdRow>(
     ds,
-    "SELECT id FROM users WHERE email = 'juan@gridgoprint.ph'",
+    "SELECT id FROM users WHERE email = 'juan@gridgo.ph'",
   );
   const mariaId: number = maria.id;
   const juanId: number = juan.id;
@@ -1375,9 +1375,9 @@ async function seed() {
 
   console.log('\n🎉 Seed complete!\n');
   console.log('Login credentials (all use password: password123):');
-  console.log('  Customer: maria@gridgoprint.ph');
-  console.log('  Rider:   juan@gridgoprint.ph');
-  console.log('  Admin:    admin@gridgoprint.ph');
+  console.log('  Customer: maria@gridgo.ph');
+  console.log('  Rider:   juan@gridgo.ph');
+  console.log('  Admin:    admin@gridgo.ph');
 
   await app.close();
 }
