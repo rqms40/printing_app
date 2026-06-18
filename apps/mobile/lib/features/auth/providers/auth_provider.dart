@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing_app/features/customer/address/providers/address_provider.dart';
 import 'package:printing_app/features/customer/beta/models/beta_locked_info.dart';
+import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/services/notification_service.dart';
@@ -197,6 +199,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _ref?.read(tutorialProvider.notifier).loadFromPrefs();
       await _ref?.read(accountStateProvider.notifier).refresh();
       _connectNotificationsWs();
+      _resetSessionScopedData();
     } on DioException catch (e) {
       // Handle beta-completed users: 403 with code='beta_held'
       if (e.response?.statusCode == 403 &&
@@ -274,6 +277,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await TutorialRepository().syncFromServer(user.tutorialSeenKeys);
       await _ref?.read(tutorialProvider.notifier).loadFromPrefs();
       await _ref?.read(accountStateProvider.notifier).refresh();
+      _resetSessionScopedData();
     } on DioException catch (e) {
       final message = e.response?.data is Map
           ? (e.response!.data as Map)['message']?.toString() ??
@@ -331,6 +335,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       ),
     };
     state = AuthState(status: AuthStatus.authenticated, user: users[role]!);
+    _ref?.read(checkoutProvider.notifier).reset();
     _ref?.read(accountStateProvider.notifier).clear();
   }
 
@@ -393,9 +398,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// Clears user-scoped order state and reloads addresses for the new session,
+  /// preventing a previous user's selected delivery address from leaking into a
+  /// new account's checkout (which the server rejects as "Invalid delivery
+  /// address").
+  void _resetSessionScopedData() {
+    _ref?.read(checkoutProvider.notifier).reset();
+    _ref?.read(addressProvider.notifier).refreshAddresses();
+  }
+
   Future<void> logout() async {
     await TokenStorage.clearToken();
     WebSocketService.instance.disconnect();
+    _ref?.read(checkoutProvider.notifier).reset();
     _ref?.read(accountStateProvider.notifier).clear();
     _ref?.read(tutorialProvider.notifier).resetStateOnly();
     // Reset session-scoped UI flags so they fire again on next login.
