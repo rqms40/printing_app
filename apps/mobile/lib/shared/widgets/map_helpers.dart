@@ -35,7 +35,7 @@ class MapHelpers {
   /// and is unavailable in widget tests. When null, the default built-in cache
   /// is used.
   static TileLayer tileLayer(
-    Brightness _, {
+    Brightness brightness, {
     MapCachingProvider? cachingProvider,
   }) {
     return TileLayer(
@@ -44,6 +44,28 @@ class MapHelpers {
       tileProvider: cachingProvider == null
           ? null
           : NetworkTileProvider(cachingProvider: cachingProvider),
+      // Theme-following basemap: dark mode applies an invert+hue filter to the
+      // light OSM tiles for a dark map; light mode shows them as-is. Route and
+      // marker layers are drawn separately and keep their full colour.
+      tileBuilder: brightness == Brightness.dark ? _darkTileBuilder : null,
+    );
+  }
+
+  /// Filters the light OSM tiles into a dark basemap (invert + 180° hue
+  /// rotation) so the map matches the app's dark theme.
+  static Widget _darkTileBuilder(
+    BuildContext context,
+    Widget tileWidget,
+    TileImage tile,
+  ) {
+    return ColorFiltered(
+      colorFilter: const ColorFilter.matrix(<double>[
+        0.574, -1.43, -0.144, 0, 255,
+        -0.426, -0.43, -0.144, 0, 255,
+        -0.426, -1.43, 0.856, 0, 255,
+        0, 0, 0, 1, 0,
+      ]),
+      child: tileWidget,
     );
   }
 
