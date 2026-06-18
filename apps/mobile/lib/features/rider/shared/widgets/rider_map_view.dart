@@ -86,6 +86,58 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
     super.dispose();
   }
 
+  /// Shop pickup marker — brand-yellow accented.
+  Marker _shopMarker(LatLng point, AppColorSet colors) => Marker(
+        point: point,
+        width: 44,
+        height: 44,
+        child: Container(
+          decoration: BoxDecoration(
+            color: colors.surface,
+            shape: BoxShape.circle,
+            border: Border.all(color: colors.brand, width: 2.5),
+            boxShadow: const [
+              BoxShadow(color: Color(0x66000000), blurRadius: 6, offset: Offset(0, 2)),
+            ],
+          ),
+          child: Icon(Icons.store_rounded, color: colors.brand, size: 22),
+        ),
+      );
+
+  /// Destination flag marker — brand-yellow with a pin tail.
+  Marker _destMarker(LatLng point, AppColorSet colors) => Marker(
+        point: point,
+        width: 44,
+        height: 54,
+        alignment: Alignment.topCenter,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: colors.brand,
+                shape: BoxShape.circle,
+                border: Border.all(color: colors.surface, width: 2.5),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x66000000), blurRadius: 6, offset: Offset(0, 2)),
+                ],
+              ),
+              child: const Icon(Icons.flag_rounded, color: Colors.black, size: 20),
+            ),
+            Container(
+              width: 3,
+              height: 8,
+              decoration: BoxDecoration(
+                color: colors.brand,
+                borderRadius: AppRadius.borderFull,
+              ),
+            ),
+          ],
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).brightness == Brightness.dark
@@ -105,8 +157,8 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
         : null;
 
     final markers = <Marker>[
-      MapHelpers.shopMarker(point: _shop),
-      MapHelpers.destinationMarker(point: _destination),
+      _shopMarker(_shop, colors),
+      _destMarker(_destination, colors),
       if (riderPoint != null) MapHelpers.riderMarker(riderPoint),
     ];
 
@@ -140,7 +192,20 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
               children: [
                 MapHelpers.tileLayer(Theme.of(context).brightness),
                 if (_routePoints.isNotEmpty)
-                  MapHelpers.routePolyline(_routePoints),
+                  PolylineLayer(
+                    polylines: [
+                      Polyline(
+                        points: _routePoints,
+                        color: Colors.black.withValues(alpha: 0.6),
+                        strokeWidth: 7,
+                      ),
+                      Polyline(
+                        points: _routePoints,
+                        color: colors.brand,
+                        strokeWidth: 4.5,
+                      ),
+                    ],
+                  ),
                 MarkerLayer(markers: markers),
               ],
             ),
@@ -204,8 +269,8 @@ class _LiveBadge extends StatelessWidget {
             child: Container(
               width: 8,
               height: 8,
-              decoration: const BoxDecoration(
-                color: kRouteColor,
+              decoration: BoxDecoration(
+                color: colors.brand,
                 shape: BoxShape.circle,
               ),
             ),

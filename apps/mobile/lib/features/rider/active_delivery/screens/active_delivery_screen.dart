@@ -167,6 +167,28 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
               interactive: true,
             ),
           ),
+          // Top scrim so map place-name labels fade out cleanly behind the
+          // floating header controls.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: Container(
+                height: 150,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      colors.background.withValues(alpha: 0.85),
+                      colors.background.withValues(alpha: 0.0),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(AppSpacing.md),
