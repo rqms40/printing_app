@@ -135,6 +135,24 @@ const _dailySlots = [
   ),
 ];
 
+const _extraDailySlots = [
+  ..._dailySlots,
+  DeliverySlot(
+    templateId: 4,
+    startTime: '20:00:00',
+    endTime: '21:00:00',
+    capacity: 10,
+    bookedCount: 1,
+  ),
+  DeliverySlot(
+    templateId: 5,
+    startTime: '21:00:00',
+    endTime: '22:00:00',
+    capacity: 10,
+    bookedCount: 0,
+  ),
+];
+
 void main() {
   testWidgets('shows CircularProgressIndicator when loading', (tester) async {
     await tester.pumpWidget(_wrap(LiveDeliveryMapState.loading()));
@@ -174,20 +192,14 @@ void main() {
     );
   });
 
-  testWidgets('aligns panels with the right column Data Grid and Feed bands', (
+  testWidgets('compacts idle delivery status so no empty card gap remains', (
     tester,
   ) async {
-    const tileHeight = 290.0;
-    const rightColumnGap = AppSpacing.xs + 2;
-    const rightColumnUnit = (tileHeight - (rightColumnGap * 2)) / 7;
-    const expectedDataGridBottom = (rightColumnUnit * 4) + rightColumnGap;
-    const expectedFeedTop = expectedDataGridBottom + rightColumnGap;
-
     await tester.pumpWidget(
       _wrapConstrained(
         LiveDeliveryMapState.idle(),
         slots: _dailySlots,
-        height: tileHeight,
+        height: 290,
       ),
     );
     await tester.pumpAndSettle();
@@ -202,8 +214,32 @@ void main() {
         tester.getTopLeft(find.byKey(const Key('delivery-map-panel'))).dy -
         tileTop;
 
-    expect(statusBottom, closeTo(expectedDataGridBottom, 0.1));
-    expect(mapTop, closeTo(expectedFeedTop, 0.1));
+    expect(statusBottom, lessThan(150));
+    expect(mapTop, closeTo(statusBottom + AppSpacing.xs + 2, 0.1));
+  });
+
+  testWidgets('offers view more instead of cramming extra delivery slots', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrapConstrained(
+        LiveDeliveryMapState.idle(),
+        slots: _extraDailySlots,
+        height: 290,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('View more'), findsOneWidget);
+    expect(find.text('8:00 - 9:00 PM: 1/10'), findsNothing);
+    expect(find.text('9:00 - 10:00 PM: 0/10'), findsNothing);
+
+    await tester.tap(find.text('View more'));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Today's delivery slots"), findsOneWidget);
+    expect(find.text('8:00 - 9:00 PM: 1/10'), findsOneWidget);
+    expect(find.text('9:00 - 10:00 PM: 0/10'), findsOneWidget);
   });
 
   testWidgets('shows map preview when no batches are scheduled', (
@@ -217,7 +253,7 @@ void main() {
   });
 
   testWidgets(
-    'keeps batch rows when active order has no matching live location',
+    'prioritizes dispatch status when active order has no matching live location',
     (tester) async {
       final active = LiveDeliveryMapState.active(
         riderPoint: const LatLng(7.20, 125.46),
@@ -243,7 +279,9 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('LIVE MAP'), findsNothing);
-      expect(find.text('9:30 - 11:30 AM: 2/10'), findsOneWidget);
+      expect(find.text('Order Dispatched'), findsOneWidget);
+      expect(find.text('Rider is on the way'), findsOneWidget);
+      expect(find.text('9:30 - 11:30 AM: 2/10'), findsNothing);
     },
   );
 
@@ -275,6 +313,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('LIVE MAP'), findsOneWidget);
       expect(find.text('Order Dispatched'), findsOneWidget);
+      expect(find.text('Rider is on the way'), findsOneWidget);
+      expect(find.text('Live map starts after rider dispatch.'), findsNothing);
     },
   );
 
@@ -365,10 +405,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('LIVE MAP'), findsNothing);
-    expect(find.text('9:30 - 11:30 AM: 2/10'), findsOneWidget);
+    expect(find.text('Order Dispatched'), findsOneWidget);
+    expect(find.text('Rider is on the way'), findsOneWidget);
   });
 
-  testWidgets('keeps batch rows when matching live location is stale', (
+  testWidgets('keeps dispatch status when matching live location is stale', (
     tester,
   ) async {
     final active = LiveDeliveryMapState.active(
@@ -395,6 +436,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('LIVE MAP'), findsNothing);
-    expect(find.text('9:30 - 11:30 AM: 2/10'), findsOneWidget);
+    expect(find.text('Order Dispatched'), findsOneWidget);
+    expect(find.text('Rider is on the way'), findsOneWidget);
   });
 }

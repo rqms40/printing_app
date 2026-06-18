@@ -144,21 +144,27 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
         }
 
         if (canShowLiveMap) {
-          final isLocationFresh = locationUpdate != null &&
-              locationUpdate.deliveryAssignmentId == state.deliveryAssignmentId &&
-              DateTime.now().difference(locationUpdate.timestamp) <= _freshLocationWindow;
+          final isLocationFresh =
+              locationUpdate != null &&
+              locationUpdate.deliveryAssignmentId ==
+                  state.deliveryAssignmentId &&
+              DateTime.now().difference(locationUpdate.timestamp) <=
+                  _freshLocationWindow;
+          final liveRiderPoint = isLocationFresh
+              ? LatLng(locationUpdate.latitude, locationUpdate.longitude)
+              : null;
 
-          if (isLocationFresh) {
-            return _DeliveryStatusAndMapLayout(
-              colors: colors,
-              brightness: brightness,
-              slots: slots.slots,
-              isLoading: slots.isLoading,
-              liveState: state,
-              liveRiderPoint: LatLng(locationUpdate.latitude, locationUpdate.longitude),
-              onMapTap: () => context.push('/customer/tracking'),
-            );
-          }
+          return _DeliveryStatusAndMapLayout(
+            colors: colors,
+            brightness: brightness,
+            slots: slots.slots,
+            isLoading: slots.isLoading,
+            liveState: state,
+            liveRiderPoint: liveRiderPoint,
+            onMapTap: liveRiderPoint == null
+                ? null
+                : () => context.push('/customer/tracking'),
+          );
         }
 
         return _DeliveryStatusAndMapLayout(
@@ -196,32 +202,82 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
   final LatLng? liveRiderPoint;
   final VoidCallback? onMapTap;
 
-  bool get _hasLiveMap => liveState != null && liveRiderPoint != null;
+  static const _maxInlineSlots = 3;
+  static const _panelGap = AppSpacing.xs + 2;
+  static const _minMapHeight = 96.0;
 
-  List<DeliverySlot> get _dailySlots {
+  bool get _hasActiveDelivery =>
+      liveState?.status == LiveMapStatus.active &&
+      liveState?.orderStatus == OrderStatus.onTheWay;
+
+  List<DeliverySlot> get _sortedSlots {
     final sorted = [...slots]
       ..sort((a, b) => a.startTime.compareTo(b.startTime));
-    return sorted.take(3).toList();
+    return sorted;
+  }
+
+  static double _idleStatusHeight({
+    required int visibleSlotCount,
+    required bool hasHiddenSlots,
+    required bool isLoading,
+  }) {
+    if (isLoading && visibleSlotCount == 0) return 84;
+    if (visibleSlotCount == 0) return 74;
+
+    const chromeHeight = (AppSpacing.sm * 2) + 20 + AppSpacing.xs;
+    const slotRowHeight = 27.0;
+    const viewMoreHeight = 20.0;
+    return chromeHeight +
+        (slotRowHeight * visibleSlotCount) +
+        (hasHiddenSlots ? viewMoreHeight : 0);
+  }
+
+  double _statusHeight({
+    required double maxHeight,
+    required int visibleSlotCount,
+    required int hiddenSlotCount,
+  }) {
+    final maxStatusHeight = (maxHeight - _panelGap - _minMapHeight)
+        .clamp(0.0, maxHeight)
+        .toDouble();
+    if (maxStatusHeight <= 0) return maxHeight;
+
+    final desiredHeight = _hasActiveDelivery
+        ? ((((maxHeight - (_panelGap * 2)) / 7) * 4) + _panelGap)
+        : _idleStatusHeight(
+            visibleSlotCount: visibleSlotCount,
+            hasHiddenSlots: hiddenSlotCount > 0,
+            isLoading: isLoading,
+          );
+
+    return desiredHeight.clamp(0.0, maxStatusHeight).toDouble();
   }
 
   @override
   Widget build(BuildContext context) {
-    final visibleSlots = _dailySlots;
-    final idleMapMessage = visibleSlots.isEmpty
+    final sortedSlots = _sortedSlots;
+    final visibleSlots = sortedSlots.take(_maxInlineSlots).toList();
+    final hiddenSlotCount = sortedSlots.length - visibleSlots.length;
+    final idleMapMessage = _hasActiveDelivery
+        ? 'Waiting for rider location...'
+        : visibleSlots.isEmpty
         ? 'No batches scheduled today'
         : 'Live map starts after rider dispatch.';
-    final statusPanel = _hasLiveMap
+    final statusPanel = _hasActiveDelivery
         ? _LiveDeliveryStatusTile(
             key: const Key('delivery-status-panel'),
             colors: colors,
             liveState: liveState!,
-            liveRiderPoint: liveRiderPoint!,
-            slots: slots,
+            liveRiderPoint:
+                liveRiderPoint ?? liveState!.riderPoint ?? liveState!.shopPoint,
+            slots: sortedSlots,
           )
         : _BatchStatusTile(
             key: const Key('delivery-status-panel'),
             colors: colors,
             slots: visibleSlots,
+            allSlots: sortedSlots,
+            hiddenSlotCount: hiddenSlotCount,
             isLoading: isLoading,
           );
     final mapPanel = _DeliveryMapPanel(
@@ -236,23 +292,23 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        const rightColumnGap = AppSpacing.xs + 2;
         final maxHeight = constraints.hasBoundedHeight
             ? constraints.maxHeight
             : 290.0;
-        final bandHeight = (maxHeight - (rightColumnGap * 2)).clamp(
-          0.0,
-          double.infinity,
+        final statusHeight = _statusHeight(
+          maxHeight: maxHeight,
+          visibleSlotCount: visibleSlots.length,
+          hiddenSlotCount: hiddenSlotCount,
         );
-        final unit = bandHeight / 7;
-        final statusHeight = (unit * 4) + rightColumnGap;
-        final mapHeight = unit * 3;
+        final mapHeight = (maxHeight - statusHeight - _panelGap)
+            .clamp(0.0, double.infinity)
+            .toDouble();
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(height: statusHeight, child: statusPanel),
-            const SizedBox(height: rightColumnGap),
+            const SizedBox(height: _panelGap),
             SizedBox(height: mapHeight, child: mapPanel),
           ],
         );
@@ -268,12 +324,18 @@ class _BatchStatusTile extends StatelessWidget {
     super.key,
     required this.colors,
     required this.slots,
+    required this.allSlots,
+    required this.hiddenSlotCount,
     required this.isLoading,
   });
 
   final AppColorSet colors;
   final List<DeliverySlot> slots;
+  final List<DeliverySlot> allSlots;
+  final int hiddenSlotCount;
   final bool isLoading;
+
+  bool get _hasHiddenSlots => hiddenSlotCount > 0;
 
   @override
   Widget build(BuildContext context) {
@@ -314,26 +376,136 @@ class _BatchStatusTile extends StatelessWidget {
                 ),
               )
             else if (slots.isEmpty)
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'No active delivery',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.caption.copyWith(
-                      color: colors.onSurfaceDim,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.xs),
+                child: Text(
+                  'No active delivery',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption.copyWith(
+                    color: colors.onSurfaceDim,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               )
-            else
-              for (final slot in slots) ...[
-                _BatchSlotRow(slot: slot, colors: colors),
-                const SizedBox(height: AppSpacing.xs),
+            else ...[
+              for (var i = 0; i < slots.length; i++) ...[
+                _BatchSlotRow(slot: slots[i], colors: colors),
+                if (i != slots.length - 1 || _hasHiddenSlots)
+                  const SizedBox(height: AppSpacing.xs),
               ],
+              if (_hasHiddenSlots)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    key: const Key('delivery-slots-view-more'),
+                    onPressed: () =>
+                        _showDeliverySlotsSheet(context, colors, allSlots),
+                    style: TextButton.styleFrom(
+                      foregroundColor: colors.brand,
+                      minimumSize: Size.zero,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 2,
+                        vertical: 0,
+                      ),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      'View more',
+                      style: AppTypography.caption.copyWith(
+                        color: colors.brand,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _showDeliverySlotsSheet(
+  BuildContext context,
+  AppColorSet colors,
+  List<DeliverySlot> slots,
+) {
+  return showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: colors.surface,
+    barrierColor: Colors.black.withValues(alpha: 0.55),
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (sheetContext) {
+      final sheetColors = Theme.of(sheetContext).brightness == Brightness.dark
+          ? AppColors.dark
+          : AppColors.light;
+      return _DeliverySlotsSheet(colors: sheetColors, slots: slots);
+    },
+  );
+}
+
+class _DeliverySlotsSheet extends StatelessWidget {
+  const _DeliverySlotsSheet({required this.colors, required this.slots});
+
+  final AppColorSet colors;
+  final List<DeliverySlot> slots;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.md,
+          AppSpacing.lg,
+          AppSpacing.lg,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    "Today's delivery slots",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.h3.copyWith(
+                      color: colors.onSurface,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: Icon(Icons.close_rounded, color: colors.onSurface),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: slots.length,
+                separatorBuilder: (_, _) =>
+                    Divider(color: colors.outline.withValues(alpha: 0.45)),
+                itemBuilder: (_, index) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                  child: _BatchSlotRow(slot: slots[index], colors: colors),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -550,7 +722,9 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
 
     final assignedSlot = liveState.assignedSlot;
     final activeSlot = assignedSlot != null
-        ? slots.where((s) => s.templateId == assignedSlot.slotTemplateId).firstOrNull
+        ? slots
+              .where((s) => s.templateId == assignedSlot.slotTemplateId)
+              .firstOrNull
         : null;
 
     final child = ClipRRect(
