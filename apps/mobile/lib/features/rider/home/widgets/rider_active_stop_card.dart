@@ -34,7 +34,7 @@ class RiderActiveStopCard extends StatelessWidget {
     final customerName = view.order.customerName ?? 'Customer';
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

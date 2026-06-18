@@ -181,6 +181,7 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
                   options: MapOptions(
                     initialCenter: _destination,
                     initialZoom: 13,
+                    backgroundColor: colors.surfaceDim,
                     interactionOptions: const InteractionOptions(
                       flags: InteractiveFlag.none,
                     ),
@@ -203,33 +204,41 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
               Positioned(
                 top: 12,
                 left: 12,
-                child: Text(
-                  timeLabel,
-                  style: AppTypography.h1.copyWith(
-                    color: colors.onBackground,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    height: 1,
-                    shadows: [
-                      Shadow(
-                        color: colors.background.withValues(alpha: 0.7),
-                        blurRadius: 8,
-                      ),
-                    ],
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    borderRadius: AppRadius.borderMd,
+                  ),
+                  child: Text(
+                    timeLabel,
+                    style: AppTypography.h1.copyWith(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      height: 1,
+                    ),
                   ),
                 ),
               ),
               Positioned(
                 left: 12,
                 bottom: 10,
-                child: Text(
-                  widget.activeStop == null
-                      ? 'No active route'
-                      : 'Tap to navigate',
-                  style: AppTypography.caption.copyWith(
-                    color: colors.onSurfaceDim,
-                    fontStyle: FontStyle.italic,
-                    fontSize: 10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    borderRadius: AppRadius.borderSm,
+                  ),
+                  child: Text(
+                    widget.activeStop == null
+                        ? 'No active route'
+                        : 'Tap to navigate',
+                    style: AppTypography.caption.copyWith(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      fontStyle: FontStyle.italic,
+                      fontSize: 10,
+                    ),
                   ),
                 ),
               ),

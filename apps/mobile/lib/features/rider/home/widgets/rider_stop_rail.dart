@@ -45,29 +45,36 @@ class _RiderStopRailState extends State<RiderStopRail> {
 
     return SizedBox(
       width: 44,
-      child: Column(
-        children: [
-          _CheckNode(colors: colors, complete: widget.completedCount > 0),
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  for (var i = 1; i <= stops; i++) ...[
-                    Container(width: 2.4, height: 12, color: colors.brand),
-                    _StopNode(
-                      colors: colors,
-                      number: i,
-                      done: i <= widget.completedCount,
-                      current: i == widget.currentStopIndex,
-                    ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.32),
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: Column(
+          children: [
+            _CheckNode(colors: colors, complete: widget.completedCount > 0),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    for (var i = 1; i <= stops; i++) ...[
+                      Container(width: 2.4, height: 12, color: colors.brand),
+                      _StopNode(
+                        colors: colors,
+                        number: i,
+                        done: i <= widget.completedCount,
+                        current: i == widget.currentStopIndex,
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 6),
-          _handle(colors, expand: false),
-        ],
+            const SizedBox(height: 6),
+            _handle(colors, expand: false),
+          ],
+        ),
       ),
     );
   }
