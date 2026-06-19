@@ -1319,6 +1319,27 @@ export class OrdersService {
     };
     const statusMsg = messages[status];
 
+    // Fetch dynamic rider info to pass into notification metadata
+    const dynamicMetadata: Record<string, any> = { orderId: order.id, toStatus: status };
+    if (order.assignedRiderId) {
+      try {
+        const riderUser = await this.usersService.findById(order.assignedRiderId);
+        if (riderUser) {
+          dynamicMetadata.driverName = riderUser.fullName || riderUser.nickname || 'GRIDGO Rider';
+        }
+        const profiles = await this.dataSource.query(
+          `SELECT vehicle_type, plate_number FROM rider_profiles WHERE user_id = $1 LIMIT 1`,
+          [order.assignedRiderId]
+        );
+        if (profiles && profiles.length > 0) {
+          dynamicMetadata.vehicleType = profiles[0].vehicle_type;
+          dynamicMetadata.plateNumber = profiles[0].plate_number;
+        }
+      } catch (e) {
+        this.logger.warn(`Failed to fetch rider metadata for notification: ${e}`);
+      }
+    }
+
     // Send push notification to order owner
     const fcmToken = await this.usersService.getFcmToken(existing.userId);
     if (fcmToken && statusMsg) {
@@ -1329,6 +1350,7 @@ export class OrdersService {
         {
           orderId: order.orderId,
           status: status,
+          ...dynamicMetadata,
         },
       );
     }
@@ -1345,7 +1367,7 @@ export class OrdersService {
           message: statusMsg.body,
           type: `order_${status}`,
           orderRef: order.orderId,
-          metadata: { orderId: order.id, toStatus: status },
+          metadata: dynamicMetadata,
         });
       } catch (err) {
         this.logger.warn(

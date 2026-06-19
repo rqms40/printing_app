@@ -303,7 +303,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                         TextSpan(
                           children: [
                             TextSpan(
-                              text: 'GRIDGO',
+                              text: 'GRID',
                               style: TextStyle(color: Color(0xFF1E1E1E)),
                             ),
                             TextSpan(

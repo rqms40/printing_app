@@ -47,6 +47,7 @@ AppNotification _parseNotification(Map<String, dynamic> json) {
             _readJsonValue(json, 'createdAt', 'created_at') as String,
           )
         : DateTime.now(),
+    metadata: metadata,
   );
 }
 

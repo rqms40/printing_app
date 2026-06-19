@@ -1,21 +1,24 @@
 import { Typography, theme, Row, Col } from "antd";
-import { GridLogo } from "@/components/grid-logo";
+import {
+  ShoppingCartOutlined,
+  PrinterOutlined,
+  CarOutlined,
+  EnvironmentOutlined,
+} from "@ant-design/icons";
 
 const { Text } = Typography;
 
-const STATUSES = [
-  { title: "Order Placed", date: "Mar 24, 2026", time: "3:00 PM", progress: 5 },
-  { title: "File Verified", date: "Mar 24, 2026", time: "5:00 PM", progress: 15 },
-  { title: "Printing in Progress", date: "Mar 24, 2026", time: "7:00 PM", progress: 30 },
-  { title: "Finishing & Mounting", date: "Mar 25, 2026", time: "10:00 AM", progress: 45 },
-  { title: "Quality Checked", date: "Mar 25, 2026", time: "3:00 PM", progress: 55 },
-  { title: "Ready for Dispatch", date: "Mar 26, 2026", time: "3:00 AM", progress: 65 },
-  { title: "Rider Assigned", date: "Mar 27, 2026", time: "2:00 PM", progress: 75 },
-  { title: "Picked Up", date: "Mar 27, 2026", time: "2:20 PM", progress: 80 },
-  { title: "On the Way", date: "Mar 27, 2026", time: "2:30 PM", progress: 90, highlight: true },
-  { title: "Arrived at Destination", date: "Mar 27, 2026", time: "3:00 PM", progress: 95 },
-  { title: "Delivered", date: "Mar 27, 2026", time: "3:15 PM", progress: 100 },
+const STATUS_GROUPS = [
+  { statusGroup: 'order', title: "Order Placed", date: "March 24, 2026 - 5:00 PM" },
+  { statusGroup: 'printing', title: "File Verified", date: "March 24, 2026 - 5:00 PM" },
+  { statusGroup: 'printing', title: "Printing in Progress", date: "March 24, 2026 - 7:00 PM" },
+  { statusGroup: 'printing', title: "Quality Checked", date: "March 25, 2026 - 3:00 PM" },
+  { statusGroup: 'dispatch', title: "Ready for Dispatch", date: "March 26, 2026 - 3:00 AM" },
+  { statusGroup: 'dispatch', title: "Arrive in 30 mins...", date: "March 27, 2026 - 2:30 PM", driverName: "Carlito Jr. Dela Cruz", vehicle: "Motorcycle", plate: "123ABC", window: "9 AM - 11 PM" },
+  { statusGroup: 'delivered', title: "Delivered", date: "March 27, 2026 - 3:15 PM", driverName: "Carlito Jr. Dela Cruz", vehicle: "Motorcycle", plate: "123ABC", window: "9 AM - 11 PM" },
 ];
+
+const STAGES = ['order', 'printing', 'dispatch', 'delivered'];
 
 export function CustomStatusNotifications() {
   const { token } = theme.useToken();
@@ -23,79 +26,117 @@ export function CustomStatusNotifications() {
   return (
     <div style={{ padding: "24px", background: token.colorBgLayout, borderRadius: "8px" }}>
       <Row gutter={[24, 24]}>
-        {STATUSES.map((status, index) => (
-          <Col xs={24} sm={12} lg={8} key={index}>
-            <div
-              style={{
-                background: "#4b4b4b", // Dark background resembling the sample
-                borderRadius: "16px",
-                padding: "16px",
-                width: "100%",
-                boxShadow: token.boxShadowSecondary,
-                display: "flex",
-                alignItems: "flex-start",
-                gap: "16px",
-                fontFamily: "system-ui, -apple-system, sans-serif",
-              }}
-            >
+        {STATUS_GROUPS.map((statusItem, index) => {
+          const currentStageIndex = STAGES.indexOf(statusItem.statusGroup);
+          const showRiderInfo = currentStageIndex >= 2 && statusItem.plate; // Dispatch or Delivered
+
+          return (
+            <Col xs={24} sm={24} lg={12} xl={8} key={index}>
               <div
                 style={{
-                  background: "#000000ff", // Brand yellow
-                  borderRadius: "12px",
-                  width: "48px",
-                  height: "48px",
+                  background: "#1c1c1c", // Dark background resembling the sample
+                  borderRadius: "16px",
+                  padding: "20px",
+                  width: "100%",
+                  boxShadow: token.boxShadowSecondary,
                   display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                  marginTop: "4px",
+                  flexDirection: "column",
+                  gap: "12px",
+                  fontFamily: "system-ui, -apple-system, sans-serif",
+                  border: "1px solid #333",
                 }}
               >
-                <GridLogo size={24} />
-              </div>
+                {/* Header Row */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div>
+                    <Text style={{ fontSize: "16px", color: "#ffffff", fontWeight: 800, letterSpacing: "1px" }}>
+                      GRID<span style={{ color: "#FFDE58" }}>GO</span>
+                    </Text>
+                    <div style={{ marginTop: "4px" }}>
+                      <Text style={{ fontSize: "20px", color: "#FFDE58", fontWeight: 700, display: "block" }}>
+                        {statusItem.title}
+                      </Text>
+                      <Text style={{ fontSize: "12px", color: "#e0e0e0" }}>
+                        {statusItem.date}
+                      </Text>
+                    </div>
+                  </div>
 
-              <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-                <Text style={{ fontSize: "12px", color: "#a0a0a0", lineHeight: "1" }}>
-                  GRIDGO
-                </Text>
-                <Text style={{ fontSize: "14px", color: "#FFDE58", fontWeight: 600, marginTop: "2px", marginBottom: "8px" }}>
-                  GRIDGO
-                </Text>
+                  {/* Rider Info */}
+                  {showRiderInfo && (
+                    <div style={{ textAlign: "right", display: "flex", flexDirection: "column" }}>
+                      <Text style={{ fontSize: "12px", color: "#e0e0e0" }}>{statusItem.vehicle}</Text>
+                      <Text style={{ fontSize: "20px", color: "#FFDE58", fontWeight: 700 }}>{statusItem.plate}</Text>
+                      <Text style={{ fontSize: "12px", color: "#e0e0e0" }}>{statusItem.window}</Text>
+                    </div>
+                  )}
+                </div>
 
-                <Text style={{ fontSize: "18px", color: "#ffffff", fontWeight: 600, marginBottom: "4px" }}>
-                  {status.title}
-                </Text>
+                {/* Optional Bottom Text like driver name if title is driver name */}
+                {statusItem.title.includes("Carlito") && (
+                   <Text style={{ fontSize: "12px", color: "#e0e0e0", fontStyle: "italic", marginTop: "-8px" }}>
+                     OR#10290
+                   </Text>
+                )}
 
-                <Text style={{ fontSize: "14px", color: status.highlight ? "#FFDE58" : "#a0a0a0", marginBottom: "12px" }}>
-                  {status.date} · {status.time}
-                </Text>
+                {/* Progress Bar Area */}
+                <div style={{ position: "relative", marginTop: "24px", marginBottom: "16px" }}>
+                  {/* Background Line */}
+                  <div style={{ position: "absolute", top: "14px", left: "12.5%", width: "75%", height: "4px", background: "#333", zIndex: 0 }} />
+                  
+                  {/* Active Line */}
+                  <div style={{ 
+                    position: "absolute", 
+                    top: "14px", 
+                    left: "12.5%", 
+                    width: `${currentStageIndex * 25}%`, 
+                    height: "4px", 
+                    background: "#FFDE58", 
+                    zIndex: 1,
+                    transition: "width 0.3s ease" 
+                  }} />
 
-                <div style={{ height: "4px", background: "#333", borderRadius: "2px", overflow: "hidden", position: "relative" }}>
-                  <div
-                    style={{
-                      width: `${status.progress}%`,
-                      height: "100%",
-                      background: "#FFDE58",
-                      borderRadius: "2px",
-                    }}
-                  />
-                  {/* Delivery icon at the end of progress */}
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: `calc(${status.progress}% - 8px)`,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      fontSize: "10px"
-                    }}
-                  >
-                    🛵
+                  <div style={{ display: "flex", justifyContent: "space-between", position: "relative", zIndex: 2 }}>
+                    {[
+                      { key: 'order', label: 'Order', icon: <ShoppingCartOutlined /> },
+                      { key: 'printing', label: 'Printing', icon: <PrinterOutlined /> },
+                      { key: 'dispatch', label: 'Dispatch', icon: <CarOutlined /> },
+                      { key: 'delivered', label: 'Delivered', icon: <EnvironmentOutlined /> }
+                    ].map((stage, sIdx) => {
+                      const isActive = sIdx <= currentStageIndex;
+                      const isCurrent = sIdx === currentStageIndex;
+
+                      return (
+                        <div key={stage.key} style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "25%" }}>
+                          <div style={{
+                            width: "32px",
+                            height: "32px",
+                            borderRadius: "50%",
+                            background: isActive ? "#FFDE58" : "#1c1c1c",
+                            border: `3px solid ${isActive ? "#FFDE58" : "#555"}`,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: isActive ? "#000" : "#555",
+                            fontSize: "16px",
+                            boxShadow: isCurrent ? "0 0 15px 5px rgba(255, 222, 88, 0.4)" : "none",
+                            transition: "all 0.3s ease"
+                          }}>
+                            {stage.icon}
+                          </div>
+                          <Text style={{ fontSize: "11px", color: isActive ? "#fff" : "#888", marginTop: "8px", fontWeight: isActive ? 600 : 400 }}>
+                            {stage.label}
+                          </Text>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
+
               </div>
-            </div>
-          </Col>
-        ))}
+            </Col>
+          );
+        })}
       </Row>
     </div>
   );

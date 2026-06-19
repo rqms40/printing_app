@@ -13,14 +13,43 @@ export function SupportPage() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
 
+  // CAPTCHA State
+  const [captchaNum1, setCaptchaNum1] = useState(Math.floor(Math.random() * 10) + 1);
+  const [captchaNum2, setCaptchaNum2] = useState(Math.floor(Math.random() * 10) + 1);
+  const [userCaptchaInput, setUserCaptchaInput] = useState('');
+
+  const generateNewCaptcha = () => {
+    setCaptchaNum1(Math.floor(Math.random() * 10) + 1);
+    setCaptchaNum2(Math.floor(Math.random() * 10) + 1);
+    setUserCaptchaInput('');
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setStatus('loading');
     setErrorMessage('');
+
+    // CAPTCHA Validation
+    if (parseInt(userCaptchaInput) !== captchaNum1 + captchaNum2) {
+      setStatus('error');
+      setErrorMessage('Incorrect CAPTCHA answer. Please try again.');
+      generateNewCaptcha();
+      return;
+    }
+
+    // Rate Limiting
+    const lastSubmission = localStorage.getItem('lastTicketSubmission');
+    if (lastSubmission && Date.now() - parseInt(lastSubmission) < 60000) {
+      setStatus('error');
+      const secondsLeft = Math.ceil((60000 - (Date.now() - parseInt(lastSubmission))) / 1000);
+      setErrorMessage(`You are submitting tickets too fast. Please wait ${secondsLeft} seconds.`);
+      return;
+    }
+
+    setStatus('loading');
 
     try {
       const response = await fetch('http://localhost:3000/api/support-tickets', {
@@ -38,10 +67,13 @@ export function SupportPage() {
 
       setStatus('success');
       setFormData({ name: '', email: '', subject: '', message: '' });
+      generateNewCaptcha();
+      localStorage.setItem('lastTicketSubmission', Date.now().toString());
     } catch (error: unknown) {
       console.error('Submission error:', error);
       setStatus('error');
       setErrorMessage(error instanceof Error ? error.message : 'An error occurred. Please try again.');
+      generateNewCaptcha();
     }
   };
 
@@ -148,6 +180,23 @@ export function SupportPage() {
                   onChange={handleChange}
                   className="bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-all resize-none"
                   placeholder="Please describe your issue or concern in detail..."
+                />
+              </div>
+
+              {/* CAPTCHA Field */}
+              <div className="flex flex-col gap-2">
+                <label htmlFor="captcha" className="text-sm font-medium text-gray-300">
+                  Security Check: What is {captchaNum1} + {captchaNum2}?
+                </label>
+                <input
+                  type="number"
+                  id="captcha"
+                  name="captcha"
+                  required
+                  value={userCaptchaInput}
+                  onChange={(e) => setUserCaptchaInput(e.target.value)}
+                  className="bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-all"
+                  placeholder="Enter the answer..."
                 />
               </div>
 

@@ -310,99 +310,43 @@ function SupportSection() {
           </p>
         </motion.div>
 
-        {/* Cards grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Ticketing Support Box */}
+        <motion.div
+          initial={{ opacity: 0, y: 40, filter: 'blur(20px)' }}
+          whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.9, ease: 'easeOut' }}
+          viewport={{ once: true, margin: '-80px' }}
+          className="relative max-w-4xl mx-auto rounded-3xl border border-[var(--color-primary)]/20 bg-[#0A0A0A] backdrop-blur-md p-10 md:p-16 flex flex-col items-center text-center gap-6 overflow-hidden shadow-2xl"
+        >
+          {/* accent glow */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-[var(--color-primary)]/5 blur-[100px] pointer-events-none" />
 
-          {/* ── Number Hub ── */}
-          <motion.div
-            initial={{ opacity: 0, x: -40, filter: 'blur(20px)' }}
-            whileInView={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
-            transition={{ duration: 0.9, ease: 'easeOut' }}
-            viewport={{ once: true, margin: '-80px' }}
-            className="relative rounded-3xl border border-white/10 bg-white/5 backdrop-blur-md p-10 flex flex-col gap-6 overflow-hidden"
-          >
-            {/* accent glow */}
-            <div className="absolute -top-16 -left-16 w-56 h-56 rounded-full bg-[var(--color-primary)]/10 blur-3xl pointer-events-none" />
+          <div className="w-16 h-16 rounded-2xl bg-[var(--color-primary)]/15 flex items-center justify-center mb-2 border border-[var(--color-primary)]/20 shadow-[0_0_20px_rgba(255,222,88,0.15)] relative z-10">
+            <MessageCircle size={32} className="text-[var(--color-primary)]" strokeWidth={1.5} />
+          </div>
 
-            <div className="w-14 h-14 rounded-2xl bg-[var(--color-primary)]/15 flex items-center justify-center">
-              <Phone size={28} className="text-[var(--color-primary)]" strokeWidth={1.5} />
+          <div className="relative z-10 max-w-2xl">
+            <h3 className="text-3xl md:text-4xl font-bold mb-4 text-white">GRIDGO Ticketing Support</h3>
+            <p className="text-gray-400 leading-relaxed text-lg md:text-xl">
+              Experience seamless, human-led support. Submit a ticket with your order issues, delivery updates, or technical questions, and our dedicated admin team will get back to you with real-time solutions straight to your inbox.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-4 mt-6 w-full sm:w-auto relative z-10">
+            <div className="flex items-center justify-center gap-2 bg-white/5 rounded-full px-6 py-3 border border-white/10">
+              <ShieldCheck size={18} className="text-[var(--color-primary)]" />
+              <span className="text-sm font-medium text-gray-300">Human-led responses</span>
             </div>
-
-            <div>
-              <h3 className="text-2xl font-bold mb-2">Number Hub</h3>
-              <p className="text-gray-400 leading-relaxed">
-                Call or message our dedicated support line directly. Our operators are on standby to handle order issues, delivery updates, and technical questions in real time.
-              </p>
+            <div className="flex items-center justify-center gap-2 bg-white/5 rounded-full px-6 py-3 border border-white/10">
+              <Zap size={18} className="text-[var(--color-primary)]" />
+              <span className="text-sm font-medium text-gray-300">Fast resolution</span>
             </div>
+          </div>
 
-            <div className="flex flex-col gap-3 mt-auto">
-              <div className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3 border border-white/10">
-                <ShieldCheck size={18} className="text-[var(--color-primary)] shrink-0" />
-                <span className="text-sm text-gray-300">Verified GRIDGO support line</span>
-              </div>
-              <div className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3 border border-white/10">
-                <Zap size={18} className="text-[var(--color-primary)] shrink-0" />
-                <span className="text-sm text-gray-300">Instant callback within 5 minutes</span>
-              </div>
-            </div>
-
-            <Link to="/support" className="mt-2 w-full py-3 rounded-full border border-[var(--color-primary)] text-[var(--color-primary)] font-semibold text-sm hover:bg-[var(--color-primary)] hover:text-black transition-all duration-300 flex justify-center items-center">
-              Call Support Hub
-            </Link>
-          </motion.div>
-
-          {/* ── Live Chat ── */}
-          <motion.div
-            initial={{ opacity: 0, x: 40, filter: 'blur(20px)' }}
-            whileInView={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
-            transition={{ duration: 0.9, delay: 0.1, ease: 'easeOut' }}
-            viewport={{ once: true, margin: '-80px' }}
-            className="relative rounded-3xl border border-white/10 bg-white/5 backdrop-blur-md p-10 flex flex-col gap-6 overflow-hidden"
-          >
-            {/* accent glow */}
-            <div className="absolute -bottom-16 -right-16 w-56 h-56 rounded-full bg-[var(--color-primary)]/10 blur-3xl pointer-events-none" />
-
-            <div className="w-14 h-14 rounded-2xl bg-[var(--color-primary)]/15 flex items-center justify-center">
-              <MessageCircle size={28} className="text-[var(--color-primary)]" strokeWidth={1.5} />
-            </div>
-
-            <div>
-              <h3 className="text-2xl font-bold mb-2">Live Chat</h3>
-              <p className="text-gray-400 leading-relaxed">
-                Start a conversation instantly — our AI handles common questions in seconds. For anything more complex, a real GRIDGO admin seamlessly takes over the chat.
-              </p>
-            </div>
-
-            {/* mock chat bubble preview */}
-            <div className="flex flex-col gap-2 bg-black/30 rounded-2xl p-4 border border-white/5">
-              <div className="flex items-start gap-2">
-                <div className="w-7 h-7 rounded-full bg-[var(--color-primary)]/30 flex items-center justify-center shrink-0">
-                  <Zap size={12} className="text-[var(--color-primary)]" />
-                </div>
-                <div className="bg-white/10 rounded-xl rounded-tl-none px-3 py-2 text-xs text-gray-300 max-w-[80%]">
-                  Hi! I'm the GRIDGO AI assistant. How can I help you today?
-                </div>
-              </div>
-              <div className="flex items-start gap-2 justify-end">
-                <div className="bg-[var(--color-primary)]/20 rounded-xl rounded-tr-none px-3 py-2 text-xs text-[var(--color-primary)] max-w-[80%]">
-                  Where's my order?
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <div className="w-7 h-7 rounded-full bg-[var(--color-primary)]/30 flex items-center justify-center shrink-0">
-                  <ShieldCheck size={12} className="text-[var(--color-primary)]" />
-                </div>
-                <div className="bg-white/10 rounded-xl rounded-tl-none px-3 py-2 text-xs text-gray-300 max-w-[80%]">
-                  Your order #1042 is currently out for delivery! ETA: 15 minutes.
-                </div>
-              </div>
-            </div>
-
-            <Link to="/support" className="mt-2 w-full py-3 rounded-full bg-[var(--color-primary)] text-black font-semibold text-sm hover:bg-yellow-400 transition-all duration-300 flex justify-center items-center">
-              Start a Chat
-            </Link>
-          </motion.div>
-        </div>
+          <Link to="/support" className="mt-8 w-full sm:w-auto px-12 py-4 rounded-full bg-[var(--color-primary)] text-black font-bold text-lg hover:bg-[#FFE57F] hover:scale-105 hover:shadow-[0_0_30px_rgba(255,222,88,0.3)] transition-all duration-300 relative z-10">
+            Submit a Ticket Now
+          </Link>
+        </motion.div>
 
         {/* Bottom stat row */}
         <motion.div
