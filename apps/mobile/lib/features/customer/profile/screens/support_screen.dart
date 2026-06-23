@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:hugeicons/hugeicons.dart';
+import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -74,7 +75,9 @@ class SupportScreen extends StatelessWidget {
               icon: HugeIcons.strokeRoundedMessage01,
               title: 'Facebook Messenger',
               subtitle: '@GRIDGOPrintPH',
-              onTap: () => _launchUrl('https://m.me/GRIDGOPrintPH'),
+              onTap: AppConstants.hasCommunityUrl
+                  ? () => _launchUrl(AppConstants.communityUrl)
+                  : null,
             ).animate()
               .fadeIn(duration: 400.ms, delay: 180.ms, curve: Curves.easeOut)
               .slideY(begin: 0.03, duration: 400.ms, delay: 180.ms, curve: Curves.easeOut),

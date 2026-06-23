@@ -562,7 +562,7 @@ function TeamSection() {
 }
 
 function BetaSection() {
-  const { mobileWebUrl, apkDownloadUrl } = landingLinks(window.location);
+  const { mobileWebUrl, apkDownloadUrl, communityUrl } = landingLinks(window.location);
 
   return (
     <section id="download" className="min-h-[100vh] flex items-center justify-center relative z-10 py-20 px-8 overflow-hidden bg-[#050505]">
@@ -588,19 +588,27 @@ function BetaSection() {
               Become a founding member of GRIDGO and have a <span className="text-[var(--color-primary)] font-medium">free printing service</span> delivered to your door step.
             </p>
 
-            <div className="grid grid-cols-2 gap-3 mb-14 w-[95%]">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-10 w-[95%]">
               <a
                 href={mobileWebUrl}
-                className="bg-white text-black font-bold py-3 rounded-full hover:bg-gray-200 transition-colors text-[13px] md:text-[14px]"
+                className="bg-white text-black font-bold py-3 px-3 rounded-full hover:bg-gray-200 transition-colors text-[13px] md:text-[14px]"
               >
                 Access Mobile Web
               </a>
               <a
                 href={apkDownloadUrl}
-                className="bg-[var(--color-primary)] text-black font-bold py-3 rounded-full hover:bg-yellow-400 transition-colors text-[13px] md:text-[14px]"
+                className="bg-[var(--color-primary)] text-black font-bold py-3 px-3 rounded-full hover:bg-yellow-400 transition-colors text-[13px] md:text-[14px]"
                 rel="noopener noreferrer"
               >
                 Download APK
+              </a>
+              <a
+                href={communityUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="border border-[var(--color-primary)] text-[var(--color-primary)] font-bold py-3 px-3 rounded-full hover:bg-[var(--color-primary)] hover:text-black transition-colors text-[13px] md:text-[14px]"
+              >
+                Join GRID Community
               </a>
             </div>
 
