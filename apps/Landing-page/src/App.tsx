@@ -306,14 +306,14 @@ function SupportSection() {
           <p className="text-xs tracking-[0.35em] uppercase text-[var(--color-primary)] mb-3">We're here for you</p>
           <h2 className="text-4xl md:text-5xl font-bold mb-5">Support &amp; Help</h2>
           <p className="text-gray-400 max-w-xl mx-auto">
-            Whether you need a quick answer or live human help, GRIDGO has you covered — 24 hours a day.
+            Get help with orders, delivery updates, account questions, or technical print concerns through one tracked support flow.
           </p>
         </motion.div>
 
         {/* Cards grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
 
-          {/* ── Number Hub ── */}
+          {/* Support center */}
           <motion.div
             initial={{ opacity: 0, x: -40, filter: 'blur(20px)' }}
             whileInView={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
@@ -329,29 +329,29 @@ function SupportSection() {
             </div>
 
             <div>
-              <h3 className="text-2xl font-bold mb-2">Number Hub</h3>
+              <h3 className="text-2xl font-bold mb-2">Support Center</h3>
               <p className="text-gray-400 leading-relaxed">
-                Call or message our dedicated support line directly. Our operators are on standby to handle order issues, delivery updates, and technical questions in real time.
+                Open a support request for order issues, delivery updates, payment concerns, or technical print questions. Your details stay organized so the GRIDGO team can respond with the right next step.
               </p>
             </div>
 
             <div className="flex flex-col gap-3 mt-auto">
               <div className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3 border border-white/10">
                 <ShieldCheck size={18} className="text-[var(--color-primary)] shrink-0" />
-                <span className="text-sm text-gray-300">Verified GRIDGO support line</span>
+                <span className="text-sm text-gray-300">Verified GRIDGO support portal</span>
               </div>
               <div className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3 border border-white/10">
                 <Zap size={18} className="text-[var(--color-primary)] shrink-0" />
-                <span className="text-sm text-gray-300">Instant callback within 5 minutes</span>
+                <span className="text-sm text-gray-300">Tracked ticket response by email</span>
               </div>
             </div>
 
             <Link to="/support" className="mt-2 w-full py-3 rounded-full border border-[var(--color-primary)] text-[var(--color-primary)] font-semibold text-sm hover:bg-[var(--color-primary)] hover:text-black transition-all duration-300 flex justify-center items-center">
-              Call Support Hub
+              Open Support Center
             </Link>
           </motion.div>
 
-          {/* ── Live Chat ── */}
+          {/* Message support */}
           <motion.div
             initial={{ opacity: 0, x: 40, filter: 'blur(20px)' }}
             whileInView={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
@@ -367,25 +367,25 @@ function SupportSection() {
             </div>
 
             <div>
-              <h3 className="text-2xl font-bold mb-2">Live Chat</h3>
+              <h3 className="text-2xl font-bold mb-2">Message Support</h3>
               <p className="text-gray-400 leading-relaxed">
-                Start a conversation instantly — our AI handles common questions in seconds. For anything more complex, a real GRIDGO admin seamlessly takes over the chat.
+                Send the context once through the support portal and a GRIDGO admin will review your ticket. It is the best available path while live chat is being prepared.
               </p>
             </div>
 
-            {/* mock chat bubble preview */}
+            {/* Support ticket preview */}
             <div className="flex flex-col gap-2 bg-black/30 rounded-2xl p-4 border border-white/5">
               <div className="flex items-start gap-2">
                 <div className="w-7 h-7 rounded-full bg-[var(--color-primary)]/30 flex items-center justify-center shrink-0">
                   <Zap size={12} className="text-[var(--color-primary)]" />
                 </div>
                 <div className="bg-white/10 rounded-xl rounded-tl-none px-3 py-2 text-xs text-gray-300 max-w-[80%]">
-                  Hi! I'm the GRIDGO AI assistant. How can I help you today?
+                  Tell us what happened and include your order number if you have one.
                 </div>
               </div>
               <div className="flex items-start gap-2 justify-end">
                 <div className="bg-[var(--color-primary)]/20 rounded-xl rounded-tr-none px-3 py-2 text-xs text-[var(--color-primary)] max-w-[80%]">
-                  Where's my order?
+                  I need help with order #1042.
                 </div>
               </div>
               <div className="flex items-start gap-2">
@@ -393,13 +393,13 @@ function SupportSection() {
                   <ShieldCheck size={12} className="text-[var(--color-primary)]" />
                 </div>
                 <div className="bg-white/10 rounded-xl rounded-tl-none px-3 py-2 text-xs text-gray-300 max-w-[80%]">
-                  Your order #1042 is currently out for delivery! ETA: 15 minutes.
+                  Submit the ticket and our team will reply by email with an update.
                 </div>
               </div>
             </div>
 
             <Link to="/support" className="mt-2 w-full py-3 rounded-full bg-[var(--color-primary)] text-black font-semibold text-sm hover:bg-yellow-400 transition-all duration-300 flex justify-center items-center">
-              Start a Chat
+              Start Support Ticket
             </Link>
           </motion.div>
         </div>
