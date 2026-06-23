@@ -76,7 +76,7 @@ void main() {
     expect(find.text('Maya'), findsOneWidget);
   });
 
-  testWidgets('credits-only mode clears unavailable non-credit selection', (
+  testWidgets('credits-only mode keeps e-wallet selections available', (
     tester,
   ) async {
     final container = ProviderContainer(
@@ -100,10 +100,42 @@ void main() {
     await tester.pump();
     await tester.pump();
 
+    expect(container.read(checkoutProvider).paymentMethod, PaymentMethod.gcash);
+    expect(find.text('GCash'), findsOneWidget);
+    expect(
+      find.textContaining('Cash on Delivery is unavailable'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('credits-only mode clears unavailable COD selection', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [
+        checkoutPaymentSettingsProvider.overrideWith(
+          (_) async => const CheckoutPaymentSettings(creditsOnlyMode: true),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    container
+        .read(checkoutProvider.notifier)
+        .setPaymentMethod(PaymentMethod.cod);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: CheckoutPaymentCard())),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
     expect(container.read(checkoutProvider).paymentMethod, isNull);
     expect(find.text('Choose payment method'), findsOneWidget);
     expect(
-      find.textContaining('GCash, Maya, and Cash on Delivery are unavailable'),
+      find.textContaining('Cash on Delivery is unavailable'),
       findsOneWidget,
     );
   });

@@ -51,25 +51,29 @@ class CheckoutPaymentCard extends ConsumerStatefulWidget {
 class _CheckoutPaymentCardState extends ConsumerState<CheckoutPaymentCard> {
   void _syncCheckoutPayment({
     required PaymentMethod? defaultMethod,
-    required bool creditsOnlyMode,
+    required CheckoutPaymentSettings? paymentSettings,
     required bool settingsReady,
+    required double creditsBalance,
   }) {
     if (!settingsReady) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final current = ref.read(checkoutProvider).paymentMethod;
       final notifier = ref.read(checkoutProvider.notifier);
+      final settings = paymentSettings!;
 
-      if (creditsOnlyMode &&
-          current != null &&
-          current != PaymentMethod.gridCredits) {
+      if (current != null &&
+          !settings.isMethodEnabled(current, creditsBalance: creditsBalance)) {
         notifier.clearPaymentMethod();
         return;
       }
 
       if (current == null &&
           defaultMethod != null &&
-          (!creditsOnlyMode || defaultMethod == PaymentMethod.gridCredits)) {
+          settings.isMethodEnabled(
+            defaultMethod,
+            creditsBalance: creditsBalance,
+          )) {
         notifier.setPaymentMethod(defaultMethod);
       }
     });
@@ -86,12 +90,16 @@ class _CheckoutPaymentCardState extends ConsumerState<CheckoutPaymentCard> {
         ? AppColors.dark
         : AppColors.light;
     final method = state.paymentMethod;
-    final creditsOnlyMode = settings.valueOrNull?.creditsOnlyMode ?? false;
+    final paymentSettings = settings.valueOrNull;
+    final creditsOnlyMode = paymentSettings?.creditsOnlyMode ?? false;
+    final creditsBalance =
+        double.tryParse(ref.watch(authProvider).user?.credits ?? '0') ?? 0.0;
 
     _syncCheckoutPayment(
       defaultMethod: defaultMethod,
-      creditsOnlyMode: creditsOnlyMode,
+      paymentSettings: paymentSettings,
       settingsReady: settings.hasValue,
+      creditsBalance: creditsBalance,
     );
 
     return KeyedSubtree(
@@ -137,7 +145,7 @@ class _CheckoutPaymentCardState extends ConsumerState<CheckoutPaymentCard> {
               if (creditsOnlyMode) ...[
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'GCash, Maya, and Cash on Delivery are unavailable right now. Use GRIDGO Credits for checkout.',
+                  'Cash on Delivery is unavailable right now. Use GCash, Maya, or GRIDGO Credits for checkout.',
                   style: AppTypography.caption.copyWith(
                     color: colors.onSurfaceDim,
                     fontSize: 11,

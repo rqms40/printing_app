@@ -119,11 +119,15 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
         double.tryParse(authState.user?.credits ?? '0') ?? 0.0;
     final settings = ref.watch(checkoutPaymentSettingsProvider);
     final settingsReady = settings.hasValue;
-    final creditsOnlyMode = settings.valueOrNull?.creditsOnlyMode ?? false;
+    final paymentSettings = settings.valueOrNull;
+    final creditsOnlyMode = paymentSettings?.creditsOnlyMode ?? false;
     final effectiveChosen =
         settingsReady &&
             _chosen != null &&
-            _isPaymentMethodEnabled(_chosen!, creditsOnlyMode, creditsBalance)
+            paymentSettings!.isMethodEnabled(
+              _chosen!,
+              creditsBalance: creditsBalance,
+            )
         ? _chosen
         : null;
 
@@ -167,7 +171,7 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
               !settingsReady
                   ? 'Checking payment availability'
                   : creditsOnlyMode
-                  ? 'Only GRIDGO Credits is available right now'
+                  ? 'GCash, Maya, and GRIDGO Credits are available'
                   : 'Pick how you want to pay',
               style: AppTypography.caption.copyWith(
                 color: colors.onSurfaceDim,
@@ -186,9 +190,17 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
                     colors: colors,
                     creditsBalance: creditsBalance,
                     disabledSubtitle: settingsReady
-                        ? null
+                        ? paymentSettings!.disabledSubtitleFor(
+                            PaymentMethod.gridCredits,
+                            creditsBalance: creditsBalance,
+                          )
                         : 'Checking availability',
-                    onTap: !settingsReady || creditsBalance == 0
+                    onTap:
+                        !settingsReady ||
+                            !paymentSettings!.isMethodEnabled(
+                              PaymentMethod.gridCredits,
+                              creditsBalance: creditsBalance,
+                            )
                         ? null
                         : () => setState(
                             () => _chosen = PaymentMethod.gridCredits,
@@ -203,10 +215,16 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
                   creditsBalance: creditsBalance,
                   disabledSubtitle: !settingsReady
                       ? 'Checking availability'
-                      : creditsOnlyMode
-                      ? 'Temporarily unavailable'
-                      : null,
-                  onTap: !settingsReady || creditsOnlyMode
+                      : paymentSettings!.disabledSubtitleFor(
+                          PaymentMethod.values[i],
+                          creditsBalance: creditsBalance,
+                        ),
+                  onTap:
+                      !settingsReady ||
+                          !paymentSettings!.isMethodEnabled(
+                            PaymentMethod.values[i],
+                            creditsBalance: creditsBalance,
+                          )
                       ? null
                       : () => setState(() => _chosen = PaymentMethod.values[i]),
                 ),
@@ -280,18 +298,6 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
         ),
       ),
     );
-  }
-
-  bool _isPaymentMethodEnabled(
-    PaymentMethod method,
-    bool creditsOnlyMode,
-    double creditsBalance,
-  ) {
-    if (creditsOnlyMode && method != PaymentMethod.gridCredits) return false;
-    if (method == PaymentMethod.gridCredits && creditsBalance <= 0) {
-      return false;
-    }
-    return true;
   }
 }
 
