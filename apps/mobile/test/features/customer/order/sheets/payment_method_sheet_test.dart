@@ -135,7 +135,71 @@ void main() {
     );
   });
 
-  testWidgets('credits-only settings disable non-credit payment methods', (
+  testWidgets(
+    'credits-only settings keep e-wallets available but disable COD',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          authProvider.overrideWith(
+            (_) => _SeededAuthNotifier(
+              const AuthState(
+                status: AuthStatus.authenticated,
+                user: AuthUser(
+                  id: '1',
+                  email: 'maria@test.com',
+                  fullName: 'Maria Santos',
+                  role: 'customer',
+                  isProfileComplete: true,
+                  credits: '500',
+                ),
+              ),
+            ),
+          ),
+          checkoutPaymentSettingsProvider.overrideWith(
+            (_) async => const CheckoutPaymentSettings(creditsOnlyMode: true),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      PaymentMethod? picked;
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            home: Builder(
+              builder: (ctx) => Scaffold(
+                body: ElevatedButton(
+                  onPressed: () async {
+                    picked = await PaymentMethodSheet.show(ctx, current: null);
+                  },
+                  child: const Text('Open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('GCash'), findsOneWidget);
+      expect(find.text('Maya'), findsOneWidget);
+      expect(find.text('Cash on Delivery'), findsOneWidget);
+      expect(find.text('GRIDGO Credits'), findsOneWidget);
+      expect(find.text('Temporarily unavailable'), findsOneWidget);
+      expect(find.text('Top up'), findsNothing);
+
+      await tester.tap(find.text('GCash'));
+      await tester.pump();
+      await tester.tap(find.text('Use this'));
+      await tester.pumpAndSettle();
+      expect(picked, PaymentMethod.gcash);
+    },
+  );
+
+  testWidgets('credits-only settings keep Maya selectable for beta checkout', (
     tester,
   ) async {
     final container = ProviderContainer(
@@ -183,27 +247,12 @@ void main() {
 
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
-
-    expect(find.text('GCash'), findsOneWidget);
-    expect(find.text('Maya'), findsOneWidget);
-    expect(find.text('Cash on Delivery'), findsOneWidget);
-    expect(find.text('GRIDGO Credits'), findsOneWidget);
-    expect(find.text('Temporarily unavailable'), findsNWidgets(3));
-    expect(find.text('Top up'), findsNothing);
-
-    await tester.tap(find.text('GCash'));
-    await tester.pump();
-    await tester.tap(find.text('Use this'));
-    await tester.pump();
-    expect(picked, isNull);
-    expect(find.text('Choose payment'), findsOneWidget);
-
-    await tester.tap(find.text('GRIDGO Credits'));
+    await tester.tap(find.text('Maya'));
     await tester.pump();
     await tester.tap(find.text('Use this'));
     await tester.pumpAndSettle();
 
-    expect(picked, PaymentMethod.gridCredits);
+    expect(picked, PaymentMethod.maya);
   });
 }
 

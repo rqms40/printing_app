@@ -64,9 +64,9 @@ export const CreditSettingsCard = () => {
         </Form.Item>
         <Form.Item
           name="creditsOnlyMode"
-          label="Restrict Payments to GRIDGO Credits"
+          label="Restrict Cash on Delivery during beta"
           valuePropName="checked"
-          extra="If enabled, GCash, Maya, and Cash on Delivery will be temporarily disabled in the mobile app."
+          extra="If enabled, Cash on Delivery is temporarily disabled in the mobile app while GCash, Maya, and GRIDGO Credits remain available."
         >
           <Switch />
         </Form.Item>
