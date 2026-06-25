@@ -149,6 +149,7 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
                     trackLocation: false,
                     interactive: true,
                     showLiveBadge: false,
+                    showRoute: view.isInProgress,
                   ),
                 ),
                 SafeArea(

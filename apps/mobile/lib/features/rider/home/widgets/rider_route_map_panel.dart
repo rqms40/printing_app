@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,7 +39,33 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
     _loadRoute();
   }
 
+  @override
+  void didUpdateWidget(covariant RiderRouteMapPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_routeKey(oldWidget.activeStop) != _routeKey(widget.activeStop)) {
+      unawaited(_loadRoute());
+    } else {
+      _fitCamera();
+    }
+  }
+
+  String? _routeKey(RiderAssignmentView? stop) {
+    if (stop == null) return null;
+    final point = stop.order.destination?.latLng;
+    return '${stop.id}:${point?.latitude}:${point?.longitude}';
+  }
+
   Future<void> _loadRoute() async {
+    if (!_hasActiveRoute) {
+      if (!mounted) return;
+      setState(() {
+        _routePoints = const [];
+        _loading = false;
+      });
+      _fitCamera();
+      return;
+    }
+
     final dest = _destination;
     final points = await RoutingService.getRoute(MapHelpers.shopPoint, dest);
     if (!mounted) return;
@@ -59,15 +87,17 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
     return MapHelpers.davaoCenter;
   }
 
+  bool get _hasActiveRoute => widget.activeStop != null;
+
   void _fitCamera() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _routePoints.isEmpty) return;
+      if (!mounted) return;
       _mapController.fitCamera(
         CameraFit.bounds(
           bounds: LatLngBounds.fromPoints([
             MapHelpers.shopPoint,
             _destination,
-            ..._routePoints,
+            if (_hasActiveRoute) ..._routePoints,
           ]),
           padding: const EdgeInsets.all(40),
         ),
@@ -103,9 +133,9 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
               RiderLocationTrackerArgs(assignmentId: active.id, enabled: true),
             ),
           )
-        : (_routePoints.isNotEmpty
+        : (active != null && _routePoints.isNotEmpty
               ? _routePoints[(_routePoints.length * 0.35).round()]
-              : MapHelpers.shopPoint);
+              : null);
 
     final stopMarkers = <Marker>[];
     for (var i = 0; i < widget.stops.length && i < 5; i++) {
@@ -139,8 +169,8 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
                         ),
                         children: [
                           MapHelpers.tileLayer(Brightness.dark),
-                          if (_routePoints.isNotEmpty)
-                            _riderRoutePolyline(_routePoints),
+                          if (_hasActiveRoute && _routePoints.isNotEmpty)
+                            MapHelpers.routePolyline(_routePoints),
                           MarkerLayer(
                             markers: [
                               ...stopMarkers,
@@ -229,7 +259,7 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
             decoration: BoxDecoration(
               color: RiderTheme.surface,
               shape: BoxShape.circle,
-              border: Border.all(color: RiderTheme.yellow, width: 1.4),
+              border: Border.all(color: kRouteColor, width: 1.4),
               boxShadow: const [
                 BoxShadow(
                   color: Color(0x99000000),
@@ -268,7 +298,7 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
             width: 2.4,
             height: 14,
             decoration: BoxDecoration(
-              color: RiderTheme.yellow,
+              color: kRouteColor,
               borderRadius: BorderRadius.circular(4),
             ),
           ),
@@ -286,27 +316,10 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
         angle: -0.65,
         child: const Icon(
           Icons.local_taxi_rounded,
-          color: RiderTheme.yellow,
+          color: kRouteColor,
           size: 34,
         ),
       ),
-    );
-  }
-
-  PolylineLayer _riderRoutePolyline(List<LatLng> points) {
-    return PolylineLayer(
-      polylines: [
-        Polyline(
-          points: points,
-          color: Colors.black.withValues(alpha: 0.65),
-          strokeWidth: 6,
-        ),
-        Polyline(
-          points: points,
-          color: RiderTheme.yellow.withValues(alpha: 0.9),
-          strokeWidth: 3.2,
-        ),
-      ],
     );
   }
 }
