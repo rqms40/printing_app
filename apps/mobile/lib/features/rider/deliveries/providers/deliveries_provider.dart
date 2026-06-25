@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/features/rider/shared/rider_assignment_parser.dart';
@@ -5,6 +7,7 @@ import 'package:printing_app/shared/models/delivery_assignment.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/services/api_client.dart';
+import 'package:printing_app/shared/services/websocket_service.dart';
 
 /// State for the deliveries list.
 class DeliveriesState {
@@ -86,7 +89,26 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
     : super(
         initialState ?? DeliveriesState(views: const [], isLoading: bootstrap),
       ) {
-    if (bootstrap) _fetchAll();
+    if (bootstrap) {
+      _fetchAll();
+      _startRealtime();
+    }
+  }
+
+  void Function()? _removeRiderAssignmentListener;
+
+  void _startRealtime() {
+    unawaited(WebSocketService.instance.connectOrders());
+    _removeRiderAssignmentListener = WebSocketService.instance
+        .listenForRiderAssignments((_) {
+          unawaited(refreshAssignments());
+        });
+  }
+
+  @override
+  void dispose() {
+    _removeRiderAssignmentListener?.call();
+    super.dispose();
   }
 
   Future<void> _fetchAll({bool refreshing = false}) async {

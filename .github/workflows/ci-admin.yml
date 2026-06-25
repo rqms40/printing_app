@@ -3,11 +3,11 @@ name: Admin CI
 on:
   push:
     paths:
-      - 'admin/**'
-      - '.github/workflows/deploy-admin.yml'
+      - "admin/**"
+      - ".github/workflows/ci-admin.yml"
   pull_request:
     paths:
-      - 'admin/**'
+      - "admin/**"
 
 jobs:
   test:
@@ -22,8 +22,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          cache: 'npm'
+          node-version: "24"
+          cache: "npm"
           cache-dependency-path: admin/package-lock.json
 
       - name: Install dependencies
@@ -31,6 +31,9 @@ jobs:
 
       - name: Type check
         run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm test
 
       - name: Build (verify compilation)
         run: npx vite build

@@ -59,6 +59,9 @@ class WebSocketService {
   // Callbacks registered for order updates
   final List<Function(dynamic)> _orderListeners = [];
 
+  // Callbacks registered for rider assignment updates
+  final List<Function(Map<String, dynamic>)> _riderAssignmentListeners = [];
+
   String get _baseUrl => kServerUrl;
 
   Future<void> connectOrders({VoidCallback? onConnect}) async {
@@ -83,6 +86,9 @@ class WebSocketService {
     );
     _ordersSocket!.on('orderUpdate', (data) {
       _dispatchOrderUpdate(data);
+    });
+    _ordersSocket!.on('riderAssignment', (data) {
+      _dispatchRiderAssignment(data);
     });
     _ordersSocket!.on('connect', (_) {
       debugPrint('WS Orders connected');
@@ -114,12 +120,43 @@ class WebSocketService {
     _dispatchOrderUpdate(data);
   }
 
+  void _dispatchRiderAssignment(dynamic data) {
+    final normalized = _normalize(data);
+    if (normalized is! Map<String, dynamic>) return;
+    for (final cb in List.of(_riderAssignmentListeners)) {
+      try {
+        cb(normalized);
+      } catch (e) {
+        debugPrint('WS riderAssignment handler error: $e');
+      }
+    }
+  }
+
+  @visibleForTesting
+  void dispatchRiderAssignmentForTests(dynamic data) {
+    _dispatchRiderAssignment(data);
+  }
+
+  @visibleForTesting
+  int get riderAssignmentListenerCountForTests =>
+      _riderAssignmentListeners.length;
+
   /// Returns a removal handle — call it in dispose() to unregister the callback.
   VoidCallback listenForOrderUpdates(Function(dynamic) callback) {
     if (!_orderListeners.contains(callback)) {
       _orderListeners.add(callback);
     }
     return () => _orderListeners.remove(callback);
+  }
+
+  /// Returns a removal handle — call it in dispose() to unregister the callback.
+  VoidCallback listenForRiderAssignments(
+    Function(Map<String, dynamic>) callback,
+  ) {
+    if (!_riderAssignmentListeners.contains(callback)) {
+      _riderAssignmentListeners.add(callback);
+    }
+    return () => _riderAssignmentListeners.remove(callback);
   }
 
   void subscribeToOrder(String orderId) {
@@ -233,7 +270,9 @@ class WebSocketService {
 
   /// Register a callback for incoming `survey-required` events.
   /// Returns a removal handle — call it to unregister the callback.
-  VoidCallback listenForSurveyRequired(Function(Map<String, dynamic>) callback) {
+  VoidCallback listenForSurveyRequired(
+    Function(Map<String, dynamic>) callback,
+  ) {
     if (!_surveyRequiredListeners.contains(callback)) {
       _surveyRequiredListeners.add(callback);
     }
@@ -516,6 +555,7 @@ class WebSocketService {
     _messagesReadListeners.clear();
     _slotUpdatedListeners.clear();
     _orderListeners.clear();
+    _riderAssignmentListeners.clear();
     _surveyRequiredListeners.clear();
   }
 }
