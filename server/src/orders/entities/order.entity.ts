@@ -148,11 +148,11 @@ export class Order {
   deliveryAddress: Address;
 
   @Column({ name: 'assigned_rider_id', nullable: true })
-  assignedRiderId: number;
+  assignedRiderId: number | null;
 
   @ManyToOne(() => User)
   @JoinColumn({ name: 'assigned_rider_id' })
-  assignedRider: User;
+  assignedRider: User | null;
 
   @Column({ name: 'admin_notes', nullable: true, type: 'text' })
   adminNotes: string;

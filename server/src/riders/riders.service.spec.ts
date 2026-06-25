@@ -8,17 +8,15 @@ import {
   DeliveryAssignment,
   DeliveryStatus,
 } from './entities/delivery-assignment.entity';
-import { Order } from '../orders/entities/order.entity';
 import { LocationGateway } from './location.gateway';
-import { OrdersGateway } from '../orders/orders.gateway';
+import { OrdersService } from '../orders/orders.service';
 
 describe('RidersService', () => {
   let service: RidersService;
   let profileRepo: jest.Mocked<Partial<Repository<RiderProfile>>>;
   let assignmentRepo: jest.Mocked<Partial<Repository<DeliveryAssignment>>>;
-  let orderRepo: jest.Mocked<Partial<Repository<Order>>>;
   let locationGateway: Partial<LocationGateway>;
-  let ordersGateway: Partial<OrdersGateway>;
+  let ordersService: jest.Mocked<Pick<OrdersService, 'updateStatus'>>;
 
   const mockProfile = {
     id: 10,
@@ -84,15 +82,11 @@ describe('RidersService', () => {
       save: jest.fn(),
       createQueryBuilder: jest.fn(),
     };
-    orderRepo = {
-      findOne: jest.fn(),
-      update: jest.fn(),
-    };
     locationGateway = {
       broadcastLocation: jest.fn(),
     };
-    ordersGateway = {
-      notifyOrderUpdate: jest.fn(),
+    ordersService = {
+      updateStatus: jest.fn(),
     };
 
     const module = await Test.createTestingModule({
@@ -103,9 +97,8 @@ describe('RidersService', () => {
           provide: getRepositoryToken(DeliveryAssignment),
           useValue: assignmentRepo,
         },
-        { provide: getRepositoryToken(Order), useValue: orderRepo },
         { provide: LocationGateway, useValue: locationGateway },
-        { provide: OrdersGateway, useValue: ordersGateway },
+        { provide: OrdersService, useValue: ordersService },
       ],
     }).compile();
 
@@ -177,9 +170,31 @@ describe('RidersService', () => {
 
       expect(result.status).toBe(DeliveryStatus.ACCEPTED);
       expect(result.acceptedAt).toBeDefined();
-      expect(orderRepo.update).toHaveBeenCalledWith(1, {
-        orderStatus: 'rider_assigned',
-      });
+      expect(ordersService.updateStatus).toHaveBeenCalledWith(
+        1,
+        'rider_assigned',
+      );
+    });
+
+    it('uses OrdersService status side effects when marking an assignment delivered', async () => {
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.findOne.mockResolvedValue({
+        ...mockAssignment,
+        status: DeliveryStatus.ARRIVED,
+      } as DeliveryAssignment);
+      assignmentRepo.save.mockImplementation(
+        async (a) => a as DeliveryAssignment,
+      );
+
+      const result = await service.updateDeliveryStatus(
+        1,
+        100,
+        DeliveryStatus.DELIVERED,
+      );
+
+      expect(result.status).toBe(DeliveryStatus.DELIVERED);
+      expect(result.deliveredAt).toBeDefined();
+      expect(ordersService.updateStatus).toHaveBeenCalledWith(1, 'delivered');
     });
 
     it('should transition from ASSIGNED to DECLINED', async () => {
@@ -200,6 +215,11 @@ describe('RidersService', () => {
 
       expect(result.status).toBe(DeliveryStatus.DECLINED);
       expect(result.declineReason).toBe('Too far');
+      expect(ordersService.updateStatus).toHaveBeenCalledWith(
+        1,
+        'ready_for_dispatch',
+        { assignedRiderId: null },
+      );
     });
 
     it('should throw BadRequestException on invalid transition ASSIGNED -> DELIVERED', async () => {
@@ -264,22 +284,15 @@ describe('RidersService', () => {
         status: DeliveryStatus.PICKED_UP,
       } as DeliveryAssignment;
       assignmentRepo.findOne.mockResolvedValue(pickedUpAssignment);
-      orderRepo.findOne.mockResolvedValue({
-        id: 1,
-        orderId: 'ORD-10001',
-      } as Order);
       const otw = await service.updateDeliveryStatus(
         1,
         100,
         DeliveryStatus.ON_THE_WAY,
       );
       expect(otw.status).toBe(DeliveryStatus.ON_THE_WAY);
-      expect(orderRepo.update).toHaveBeenLastCalledWith(1, {
-        orderStatus: 'on_the_way',
-      });
-      expect(ordersGateway.notifyOrderUpdate).toHaveBeenLastCalledWith(
-        'ORD-10001',
-        expect.objectContaining({ orderId: 'ORD-10001' }),
+      expect(ordersService.updateStatus).toHaveBeenLastCalledWith(
+        1,
+        'on_the_way',
       );
 
       // ON_THE_WAY -> ARRIVED

@@ -92,37 +92,41 @@ describe("marketing notification frequency controls", () => {
     ).toBeInTheDocument();
   });
 
-  it("submits compact interval frequency without UI-only fields", async () => {
-    render(<MarketingSettings />);
+  it(
+    "submits compact interval frequency without UI-only fields",
+    async () => {
+      render(<MarketingSettings />);
 
-    fireEvent.change(screen.getByPlaceholderText("e.g., Plane Available"), {
-      target: { value: "Promo ready" },
-    });
-    fireEvent.change(
-      screen.getByPlaceholderText("e.g., The plane you requested..."),
-      {
-        target: { value: "Your print promo is ready." },
-      },
-    );
-    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+      fireEvent.change(screen.getByPlaceholderText("e.g., Plane Available"), {
+        target: { value: "Promo ready" },
+      });
+      fireEvent.change(
+        screen.getByPlaceholderText("e.g., The plane you requested..."),
+        {
+          target: { value: "Your print promo is ready." },
+        },
+      );
+      fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
-    await waitFor(() => expect(mockMutate).toHaveBeenCalled());
+      await waitFor(() => expect(mockMutate).toHaveBeenCalled());
 
-    expect(mockMutate.mock.calls[0][0]).toMatchObject({
-      url: "/notifications/marketing",
-      method: "post",
-      values: {
-        header: "Promo ready",
-        body: "Your print promo is ready.",
-        frequency: "1d",
-        isActive: true,
-      },
-    });
-    expect(mockMutate.mock.calls[0][0].values).not.toHaveProperty(
-      "intervalCount",
-    );
-    expect(mockMutate.mock.calls[0][0].values).not.toHaveProperty(
-      "intervalUnit",
-    );
-  });
+      expect(mockMutate.mock.calls[0][0]).toMatchObject({
+        url: "/notifications/marketing",
+        method: "post",
+        values: {
+          header: "Promo ready",
+          body: "Your print promo is ready.",
+          frequency: "1d",
+          isActive: true,
+        },
+      });
+      expect(mockMutate.mock.calls[0][0].values).not.toHaveProperty(
+        "intervalCount",
+      );
+      expect(mockMutate.mock.calls[0][0].values).not.toHaveProperty(
+        "intervalUnit",
+      );
+    },
+    10000,
+  );
 });

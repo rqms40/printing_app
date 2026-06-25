@@ -217,6 +217,7 @@ describe('OrdersService', () => {
       refundCredits: jest.fn().mockResolvedValue(undefined),
     };
     notificationsService = {
+      create: jest.fn().mockResolvedValue(undefined),
       createForAllAdmins: jest.fn().mockResolvedValue(undefined),
     };
     catalogPricingService = {
@@ -789,6 +790,28 @@ describe('OrdersService', () => {
         }),
       );
     });
+
+    it.each([
+      ['file_declined', 'File Declined'],
+      ['finishing_mounting', 'Finishing Started'],
+    ])(
+      'notifies the customer when status becomes %s',
+      async (status, title) => {
+        repo.update.mockResolvedValue(undefined as any);
+        repo.findOneOrFail.mockResolvedValue(mockOrder);
+
+        await service.updateStatus(1, status);
+
+        expect(notificationsService.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            userId: mockOrder.userId,
+            title,
+            type: `order_${status}`,
+            orderRef: mockOrder.orderId,
+          }),
+        );
+      },
+    );
 
     it('does NOT call createForAllAdmins for other statuses', async () => {
       repo.update.mockResolvedValue(undefined as any);

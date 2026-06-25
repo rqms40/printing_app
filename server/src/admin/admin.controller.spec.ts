@@ -1,10 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { BadRequestException } from '@nestjs/common';
 
 import { AdminController } from './admin.controller';
 import { OrdersService } from '../orders/orders.service';
 import { RidersService } from '../riders/riders.service';
+import { OrdersGateway } from '../orders/orders.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import { CreditsService } from '../credits/credits.service';
@@ -32,6 +35,9 @@ describe('AdminController analytics', () => {
   let riderProfilesRepo: jest.Mocked<Partial<Repository<RiderProfile>>>;
   let assignmentsRepo: jest.Mocked<Partial<Repository<DeliveryAssignment>>>;
   let creditsService: jest.Mocked<Partial<CreditsService>>;
+  let ordersService: jest.Mocked<Pick<OrdersService, 'updateStatus'>>;
+  let ordersGateway: jest.Mocked<Partial<OrdersGateway>>;
+  let notificationsService: jest.Mocked<Partial<NotificationsService>>;
 
   beforeEach(async () => {
     ordersRepo = mockRepo();
@@ -45,16 +51,28 @@ describe('AdminController analytics', () => {
       save: jest.fn(),
     };
     creditsService = { getPendingCount: jest.fn() };
+    ordersService = {
+      updateStatus: jest.fn(),
+    };
+    ordersGateway = {
+      notifyOrderUpdate: jest.fn(),
+      notifyRiderAssignment: jest.fn(),
+    };
+    notificationsService = {
+      create: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AdminController],
       providers: [
-        { provide: OrdersService, useValue: { updateStatus: jest.fn() } },
+        { provide: OrdersService, useValue: ordersService },
         {
           provide: RidersService,
           useValue: { getAllRidersWithUser: jest.fn() },
         },
         { provide: CreditsService, useValue: creditsService },
+        { provide: OrdersGateway, useValue: ordersGateway },
+        { provide: NotificationsService, useValue: notificationsService },
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
         { provide: getRepositoryToken(User), useValue: usersRepo },
         {
@@ -425,8 +443,20 @@ describe('AdminController analytics', () => {
     });
   });
 
+  describe('updateOrderStatus', () => {
+    it('rejects rider_assigned without using the rider assignment endpoint', async () => {
+      await expect(
+        controller.updateOrderStatus(42, {
+          status: OrderStatus.RIDER_ASSIGNED,
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(ordersService.updateStatus).not.toHaveBeenCalled();
+    });
+  });
+
   describe('assignRider', () => {
-    it('creates an active delivery assignment and stores the assigned rider user id on the order', async () => {
+    it('creates an active delivery assignment, notifies the rider, and emits realtime updates', async () => {
       const riderProfile = {
         id: 7,
         userId: 70,
@@ -438,7 +468,9 @@ describe('AdminController analytics', () => {
       } as DeliveryAssignment;
       const savedOrder = {
         id: 42,
+        orderId: 'ORD-10042',
         assignedRiderId: 70,
+        orderStatus: OrderStatus.RIDER_ASSIGNED,
       } as Order;
 
       riderProfilesRepo.findOneOrFail.mockResolvedValue(riderProfile);
@@ -448,23 +480,58 @@ describe('AdminController analytics', () => {
         ...assignment,
         id: 99,
       } as DeliveryAssignment);
-      ordersRepo.findOneOrFail.mockResolvedValue(savedOrder);
+      ordersService.updateStatus.mockResolvedValue(savedOrder);
 
       await expect(controller.assignRider(42, 7)).resolves.toBe(savedOrder);
 
       expect(riderProfilesRepo.findOneOrFail).toHaveBeenCalledWith({
         where: { id: 7 },
       });
-      expect(ordersRepo.update).toHaveBeenCalledWith(42, {
-        assignedRiderId: 70,
-        orderStatus: OrderStatus.RIDER_ASSIGNED,
-      });
+      expect(ordersService.updateStatus).toHaveBeenCalledWith(
+        42,
+        OrderStatus.RIDER_ASSIGNED,
+        { assignedRiderId: 70 },
+      );
+      expect(ordersRepo.update).not.toHaveBeenCalled();
       expect(assignmentsRepo.create).toHaveBeenCalledWith({
         orderId: 42,
         riderId: 7,
         status: DeliveryStatus.ASSIGNED,
       });
       expect(assignmentsRepo.save).toHaveBeenCalledWith(assignment);
+      expect(ordersGateway.notifyOrderUpdate).not.toHaveBeenCalled();
+      expect(ordersGateway.notifyRiderAssignment).toHaveBeenCalledWith(70, {
+        assignmentId: 99,
+        orderId: 42,
+        orderRef: 'ORD-10042',
+      });
+      expect(notificationsService.create).toHaveBeenCalledWith({
+        userId: 70,
+        title: 'New delivery assignment',
+        message: "You've been assigned to order ORD-10042.",
+        type: 'rider_assigned',
+        orderRef: 'ORD-10042',
+        metadata: {
+          assignmentId: 99,
+          orderId: 42,
+          orderRef: 'ORD-10042',
+        },
+      });
+    });
+
+    it('rejects unavailable riders', async () => {
+      riderProfilesRepo.findOneOrFail.mockResolvedValue({
+        id: 7,
+        userId: 70,
+        isAvailable: false,
+      } as RiderProfile);
+
+      await expect(controller.assignRider(42, 7)).rejects.toThrow(
+        BadRequestException,
+      );
+
+      expect(ordersService.updateStatus).not.toHaveBeenCalled();
+      expect(assignmentsRepo.save).not.toHaveBeenCalled();
     });
   });
 
