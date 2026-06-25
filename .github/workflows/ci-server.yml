@@ -38,6 +38,12 @@ jobs:
       DATABASE_USER: postgres
       DATABASE_PASSWORD: postgres
       JWT_SECRET: ci-test-secret
+      MINIO_ENDPOINT: localhost
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: grid-print
+      MINIO_USE_SSL: false
       NODE_ENV: test
 
     steps:
@@ -61,6 +67,22 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+      - name: Start MinIO for e2e tests
+        run: |
+          docker run -d --name gridgo-minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio:latest server /data
+          for attempt in {1..30}; do
+            if curl -fsS http://localhost:9000/minio/health/live; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs gridgo-minio
+          exit 1
 
       - name: E2E tests
         run: npm run test:e2e -- --runInBand
