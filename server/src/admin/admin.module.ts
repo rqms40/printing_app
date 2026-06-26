@@ -10,6 +10,7 @@ import { OrderItem } from '../orders/entities/order-item.entity';
 import { OrdersModule } from '../orders/orders.module';
 import { RidersModule } from '../riders/riders.module';
 import { CreditsModule } from '../credits/credits.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { TamSurvey } from '../tam-surveys/entities/tam-survey.entity';
 import { TamSurveySettings } from '../tam-surveys/entities/tam-survey-settings.entity';
 import { RiderProfile } from '../riders/entities/rider-profile.entity';
@@ -32,6 +33,7 @@ import { DeliveryAssignment } from '../riders/entities/delivery-assignment.entit
     OrdersModule,
     RidersModule,
     CreditsModule,
+    NotificationsModule,
   ],
   controllers: [AdminController],
 })

@@ -1280,9 +1280,17 @@ export class OrdersService {
         title: 'File Verified',
         body: `Your order ${order.orderId} file has been verified.`,
       },
+      file_declined: {
+        title: 'File Declined',
+        body: `Your order ${order.orderId} file was declined. Please review the details and upload a replacement.`,
+      },
       printing_in_progress: {
         title: 'Printing Started',
         body: `Your order ${order.orderId} is being printed.`,
+      },
+      finishing_mounting: {
+        title: 'Finishing Started',
+        body: `Your order ${order.orderId} is now in finishing and mounting.`,
       },
       quality_checked: {
         title: 'Quality Checked',

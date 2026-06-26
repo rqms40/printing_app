@@ -10,11 +10,11 @@ import {
   DeliveryAssignment,
   DeliveryStatus,
 } from './entities/delivery-assignment.entity';
-import { Order, OrderStatus } from '../orders/entities/order.entity';
+import { OrderStatus } from '../orders/entities/order.entity';
 import { UpdateRiderProfileDto } from './dto/update-profile.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { LocationGateway } from './location.gateway';
-import { OrdersGateway } from '../orders/orders.gateway';
+import { OrdersService } from '../orders/orders.service';
 
 // Valid state transitions for delivery status
 const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
@@ -54,9 +54,8 @@ export class RidersService {
     private profileRepo: Repository<RiderProfile>,
     @InjectRepository(DeliveryAssignment)
     private assignmentRepo: Repository<DeliveryAssignment>,
-    @InjectRepository(Order) private orderRepo: Repository<Order>,
     private locationGateway: LocationGateway,
-    private ordersGateway: OrdersGateway,
+    private ordersService: OrdersService,
   ) {}
 
   async getAvailableRiders(): Promise<RiderProfile[]> {
@@ -307,13 +306,13 @@ export class RidersService {
 
     const orderStatus = ORDER_STATUS_BY_DELIVERY_STATUS[newStatus];
     if (orderStatus) {
-      await this.orderRepo.update(assignment.orderId, { orderStatus });
-      const order = await this.orderRepo.findOne({
-        where: { id: assignment.orderId },
-      });
-      if (order) {
-        void this.ordersGateway.notifyOrderUpdate(order.orderId, order);
-      }
+      await this.ordersService.updateStatus(assignment.orderId, orderStatus);
+    } else if (newStatus === DeliveryStatus.DECLINED) {
+      await this.ordersService.updateStatus(
+        assignment.orderId,
+        OrderStatus.READY_FOR_DISPATCH,
+        { assignedRiderId: null },
+      );
     }
 
     return this.assignmentRepo.save(assignment);

@@ -24,6 +24,17 @@ class AppConstants {
   static const List<String> threeDTypes = ['stl', 'obj', '3mf', 'glb', 'gltf'];
 
   // ---------------------------------------------------------------------------
+  // Community
+  // ---------------------------------------------------------------------------
+  static const String defaultCommunityUrl = 'https://m.me/GRIDGOPrintPH';
+  static const String communityUrl = String.fromEnvironment(
+    'GRID_COMMUNITY_URL',
+    defaultValue: defaultCommunityUrl,
+  );
+
+  static bool get hasCommunityUrl => communityUrl.trim().isNotEmpty;
+
+  // ---------------------------------------------------------------------------
   // Pricing
   // ---------------------------------------------------------------------------
   static const double paperBaseRate = 2.0;

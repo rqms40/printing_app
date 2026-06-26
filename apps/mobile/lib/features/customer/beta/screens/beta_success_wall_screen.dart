@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/beta/providers/beta_testimonial_provider.dart';
 import 'package:printing_app/features/customer/beta/widgets/beta_hero_illustration.dart';
 import 'package:printing_app/features/customer/beta/widgets/beta_photo_upload_card.dart';
 import 'package:printing_app/features/customer/beta/widgets/beta_share_row.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class BetaSuccessWallScreen extends ConsumerStatefulWidget {
   const BetaSuccessWallScreen({super.key});
@@ -145,6 +147,13 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen>
     if (mounted) context.go('/auth/login');
   }
 
+  Future<void> _openCommunity() async {
+    final uri = Uri.parse(AppConstants.communityUrl);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   bool get _hasPhoto => _photoBytes != null || _photoFile != null;
 
   @override
@@ -255,12 +264,12 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen>
                           // ── Share section ─────────────────────────────────
                           _animated(
                             _fadeShare,
-                            const Column(
+                            Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _SectionLabel('SPREAD THE WORD'),
-                                SizedBox(height: 6),
-                                Text(
+                                const _SectionLabel('SPREAD THE WORD'),
+                                const SizedBox(height: 6),
+                                const Text(
                                   'Tell your crew GRIDGO is coming to Davao.',
                                   style: TextStyle(
                                     fontFamily: 'Satoshi',
@@ -269,8 +278,12 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen>
                                     height: 1.5,
                                   ),
                                 ),
-                                SizedBox(height: 14),
-                                BetaShareRow(),
+                                const SizedBox(height: 14),
+                                const BetaShareRow(),
+                                if (AppConstants.hasCommunityUrl) ...[
+                                  const SizedBox(height: 14),
+                                  _CommunityJoinCard(onTap: _openCommunity),
+                                ],
                               ],
                             ),
                           ),
@@ -349,6 +362,89 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen>
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _CommunityJoinCard extends StatelessWidget {
+  const _CommunityJoinCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFF141414),
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0x22FFDE58)),
+          ),
+          child: const Row(
+            children: [
+              _CommunityIcon(),
+              SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Join GRID Community',
+                      style: TextStyle(
+                        fontFamily: 'Satoshi',
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFFF0F0F0),
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Get updates, feedback, and launch perks with other beta testers.',
+                      style: TextStyle(
+                        fontFamily: 'Satoshi',
+                        fontSize: 12,
+                        color: Color(0xFF8A8A8A),
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_outward_rounded,
+                size: 20,
+                color: Color(0xFFFFDE58),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CommunityIcon extends StatelessWidget {
+  const _CommunityIcon();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFDE58),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: const Icon(
+        Icons.groups_2_rounded,
+        color: Color(0xFF0A0A0A),
+        size: 22,
       ),
     );
   }

@@ -7,6 +7,7 @@ import 'package:printing_app/shared/models/delivery_assignment.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/services/api_client.dart';
+import 'package:printing_app/shared/services/websocket_service.dart';
 
 import '../../../../helpers/test_setup.dart';
 
@@ -21,6 +22,8 @@ void main() {
   setUpAll(() {
     TestSetup.stubSecureStorage();
     TestSetup.initApiClient();
+    WebSocketService.disableOrdersSocketForTests = true;
+    WebSocketService.instance.disconnect();
     riderApiInterceptor = InterceptorsWrapper(
       onRequest: (options, handler) {
         if (options.path == '/riders/assignments' && options.method == 'GET') {
@@ -92,6 +95,8 @@ void main() {
   });
 
   tearDownAll(() {
+    WebSocketService.disableOrdersSocketForTests = false;
+    WebSocketService.instance.disconnect();
     final interceptor = riderApiInterceptor;
     if (interceptor != null) {
       ApiClient.instance.dio.interceptors.remove(interceptor);
@@ -111,6 +116,10 @@ void main() {
       notifier = DeliveriesNotifier();
       // Wait for async _fetchAssignments to complete (falls back to MockData)
       await Future.delayed(const Duration(milliseconds: 200));
+    });
+
+    tearDown(() {
+      notifier.dispose();
     });
 
     test('initializes with MockData assignments (API fallback)', () {
@@ -308,6 +317,7 @@ void main() {
       ];
 
       final apiBackedNotifier = DeliveriesNotifier();
+      addTearDown(apiBackedNotifier.dispose);
       await _waitForBootstrap();
 
       expect(
@@ -322,6 +332,81 @@ void main() {
       expect(
         apiBackedNotifier.state.viewById('active-first')?.status,
         DeliveryStatus.onTheWay,
+      );
+    });
+
+    test(
+      'refreshes assignments when realtime rider assignment event arrives',
+      () async {
+        activeAssignmentsResponse = [
+          _assignmentJson(
+            id: 'assignment-1',
+            status: DeliveryStatus.assigned,
+            updatedAt: '2026-02-01T09:00:00Z',
+          ),
+        ];
+        historyAssignmentsResponse = [];
+
+        final apiBackedNotifier = DeliveriesNotifier();
+        addTearDown(apiBackedNotifier.dispose);
+        await _waitForBootstrap();
+        expect(
+          apiBackedNotifier.state.views.map((view) => view.id),
+          orderedEquals(['assignment-1']),
+        );
+
+        activeAssignmentsResponse = [
+          _assignmentJson(
+            id: 'assignment-1',
+            status: DeliveryStatus.assigned,
+            updatedAt: '2026-02-01T09:00:00Z',
+          ),
+          _assignmentJson(
+            id: 'assignment-2',
+            status: DeliveryStatus.assigned,
+            updatedAt: '2026-02-01T10:00:00Z',
+          ),
+        ];
+
+        WebSocketService.instance.dispatchRiderAssignmentForTests({
+          'assignmentId': 2,
+          'orderId': 42,
+          'orderRef': 'ORD-10042',
+        });
+        await _waitForBootstrap();
+
+        expect(
+          apiBackedNotifier.state.views.map((view) => view.id),
+          orderedEquals(['assignment-1', 'assignment-2']),
+        );
+      },
+    );
+
+    test('disposes realtime rider assignment listener', () async {
+      activeAssignmentsResponse = [
+        _assignmentJson(
+          id: 'assignment-1',
+          status: DeliveryStatus.assigned,
+          updatedAt: '2026-02-01T09:00:00Z',
+        ),
+      ];
+      historyAssignmentsResponse = [];
+
+      final baselineListenerCount =
+          WebSocketService.instance.riderAssignmentListenerCountForTests;
+      final apiBackedNotifier = DeliveriesNotifier();
+      await _waitForBootstrap();
+
+      expect(
+        WebSocketService.instance.riderAssignmentListenerCountForTests,
+        baselineListenerCount + 1,
+      );
+
+      apiBackedNotifier.dispose();
+
+      expect(
+        WebSocketService.instance.riderAssignmentListenerCountForTests,
+        baselineListenerCount,
       );
     });
 

@@ -44,7 +44,7 @@ describe('OrdersGateway', () => {
       expect(client.disconnect).not.toHaveBeenCalled();
     });
 
-    it('does NOT join admin_orders for a non-admin JWT', async () => {
+    it('joins the authenticated user room for non-admin JWTs', async () => {
       (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
         sub: 2,
         role: 'customer',
@@ -53,7 +53,8 @@ describe('OrdersGateway', () => {
 
       await gateway.handleConnection(client as unknown as Socket);
 
-      expect(client.join).not.toHaveBeenCalled();
+      expect(client.join).toHaveBeenCalledWith('user_2');
+      expect(client.join).not.toHaveBeenCalledWith('admin_orders');
       expect(client.disconnect).not.toHaveBeenCalled();
     });
 
@@ -94,7 +95,7 @@ describe('OrdersGateway', () => {
   // ── notifyOrderUpdate ─────────────────────────────────────────────
 
   describe('notifyOrderUpdate', () => {
-    it('broadcasts to per-order room AND admin_orders room', () => {
+    it('broadcasts to per-order, customer, and admin rooms', () => {
       const emitMock = jest.fn();
       const toMock = jest.fn().mockReturnValue({ emit: emitMock });
       gateway.server = { to: toMock } as unknown as Server;
@@ -102,13 +103,15 @@ describe('OrdersGateway', () => {
       const order = {
         id: 7,
         orderId: 'ORD-10007',
+        userId: 11,
         orderStatus: 'printing_in_progress',
       };
       gateway.notifyOrderUpdate('ORD-10007', order);
 
       expect(toMock).toHaveBeenCalledWith('order_ORD-10007');
+      expect(toMock).toHaveBeenCalledWith('user_11');
       expect(toMock).toHaveBeenCalledWith('admin_orders');
-      expect(emitMock).toHaveBeenCalledTimes(2);
+      expect(emitMock).toHaveBeenCalledTimes(3);
       expect(emitMock).toHaveBeenCalledWith('orderUpdate', order);
     });
 
@@ -120,6 +123,24 @@ describe('OrdersGateway', () => {
       gateway.notifyOrderUpdate('ORD-10042', { id: 42 });
 
       expect(toMock).toHaveBeenCalledWith('order_ORD-10042');
+    });
+  });
+
+  describe('notifyRiderAssignment', () => {
+    it('emits riderAssignment to the assigned rider user room', () => {
+      const emitMock = jest.fn();
+      const toMock = jest.fn().mockReturnValue({ emit: emitMock });
+      gateway.server = { to: toMock } as unknown as Server;
+
+      const payload = {
+        assignmentId: 99,
+        orderId: 42,
+        orderRef: 'ORD-10042',
+      };
+      gateway.notifyRiderAssignment(70, payload);
+
+      expect(toMock).toHaveBeenCalledWith('user_70');
+      expect(emitMock).toHaveBeenCalledWith('riderAssignment', payload);
     });
   });
 });

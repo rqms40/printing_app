@@ -8,6 +8,7 @@ import {
   UseGuards,
   ParseIntPipe,
   Query,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -33,6 +34,8 @@ import {
   DeliveryStatus,
 } from '../riders/entities/delivery-assignment.entity';
 import { DeliveryDestination } from '../orders/entities/delivery-destination.entity';
+import { OrdersGateway } from '../orders/orders.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 
 type AnalyticsPeriod = '7D' | '30D' | '6M';
 type AnalyticsPoint = { label: string; value: number };
@@ -63,6 +66,8 @@ export class AdminController {
     private ordersService: OrdersService,
     private ridersService: RidersService,
     private creditsService: CreditsService,
+    private ordersGateway: OrdersGateway,
+    private notificationsService: NotificationsService,
     @InjectRepository(Order)
     private ordersRepo: Repository<Order>,
     @InjectRepository(User)
@@ -609,6 +614,12 @@ export class AdminController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateStatusDto,
   ) {
+    if (dto.status === OrderStatus.RIDER_ASSIGNED) {
+      throw new BadRequestException(
+        'Use the rider assignment endpoint to assign riders',
+      );
+    }
+
     return this.ordersService.updateStatus(id, dto.status);
   }
 
@@ -632,10 +643,9 @@ export class AdminController {
       where: { id: riderId },
     });
 
-    await this.ordersRepo.update(id, {
-      assignedRiderId: riderProfile.userId,
-      orderStatus: OrderStatus.RIDER_ASSIGNED,
-    });
+    if (riderProfile.isAvailable === false) {
+      throw new BadRequestException('Rider is not available for assignment');
+    }
 
     let assignment = await this.deliveryAssignmentsRepo.findOne({
       where: { orderId: id },
@@ -653,8 +663,32 @@ export class AdminController {
       });
     }
 
-    await this.deliveryAssignmentsRepo.save(assignment);
-    return this.ordersRepo.findOneOrFail({ where: { id } });
+    const savedAssignment = await this.deliveryAssignmentsRepo.save(assignment);
+    const order = await this.ordersService.updateStatus(
+      id,
+      OrderStatus.RIDER_ASSIGNED,
+      { assignedRiderId: riderProfile.userId },
+    );
+
+    this.ordersGateway.notifyRiderAssignment(riderProfile.userId, {
+      assignmentId: savedAssignment.id,
+      orderId: order.id,
+      orderRef: order.orderId,
+    });
+    await this.notificationsService.create({
+      userId: riderProfile.userId,
+      title: 'New delivery assignment',
+      message: `You've been assigned to order ${order.orderId}.`,
+      type: 'rider_assigned',
+      orderRef: order.orderId,
+      metadata: {
+        assignmentId: savedAssignment.id,
+        orderId: order.id,
+        orderRef: order.orderId,
+      },
+    });
+
+    return order;
   }
 
   // All riders with user info

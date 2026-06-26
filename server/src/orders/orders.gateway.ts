@@ -23,9 +23,13 @@ export class OrdersGateway implements OnGatewayConnection {
       return;
     }
     try {
-      const payload = await this.jwtService.verifyAsync<{ role?: string }>(
-        token,
-      );
+      const payload = await this.jwtService.verifyAsync<{
+        role?: string;
+        sub?: number;
+      }>(token);
+      if (payload.sub != null) {
+        void client.join(`user_${payload.sub}`);
+      }
       if (payload.role === 'admin') {
         void client.join('admin_orders');
       }
@@ -44,8 +48,11 @@ export class OrdersGateway implements OnGatewayConnection {
   }
 
   // Called by OrdersService when status changes
-  notifyOrderUpdate(orderId: string, order: any) {
+  notifyOrderUpdate(orderId: string, order: { userId?: number | null }) {
     this.server.to(`order_${orderId}`).emit('orderUpdate', order);
+    if (order?.userId != null) {
+      this.server.to(`user_${order.userId}`).emit('orderUpdate', order);
+    }
     this.server.to('admin_orders').emit('orderUpdate', order);
   }
 
@@ -55,5 +62,12 @@ export class OrdersGateway implements OnGatewayConnection {
     payload: { requirementId: number; orderId: number; orderRef: string },
   ) {
     this.server.to(`user_${userId}`).emit('survey-required', payload);
+  }
+
+  notifyRiderAssignment(
+    riderUserId: number,
+    payload: { assignmentId: number; orderId: number; orderRef: string },
+  ) {
+    this.server.to(`user_${riderUserId}`).emit('riderAssignment', payload);
   }
 }

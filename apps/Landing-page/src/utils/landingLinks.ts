@@ -1,6 +1,7 @@
 const defaultMobileWebPort = '8088';
 const defaultGithubRepo = 'rqms40/printing_app';
 const defaultApkAssetName = 'GRIDGO-latest.apk';
+const defaultCommunityUrl = 'https://m.me/GRIDGOPrintPH';
 
 type LocationLike = Pick<
   Location,
@@ -51,10 +52,13 @@ export function landingLinks(location: LocationLike) {
   const githubRepo = import.meta.env.VITE_GITHUB_REPO || defaultGithubRepo;
   const apkAssetName =
     import.meta.env.VITE_APK_ASSET_NAME || defaultApkAssetName;
+  const communityUrl =
+    import.meta.env.VITE_GRID_COMMUNITY_URL?.trim() || defaultCommunityUrl;
 
   return {
     mobileWebUrl: getMobileWebUrl(location, mobileWebPort),
     apkDownloadUrl: getLatestApkDownloadUrl(githubRepo, apkAssetName),
+    communityUrl,
     mobileWebPort,
   };
 }

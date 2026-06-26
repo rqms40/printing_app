@@ -217,6 +217,8 @@ function FeaturesSection() {
 }
 
 function HowItWorksSection() {
+  const [hasVideoError, setHasVideoError] = useState(false);
+
   return (
     <section id="process" className="min-h-screen bg-black py-32 relative z-10 text-white flex flex-col justify-center">
       <div className="max-w-6xl mx-auto px-6 w-full">
@@ -275,15 +277,36 @@ function HowItWorksSection() {
           viewport={{ once: true, margin: '-50px' }}
           className="mt-32 w-full relative rounded-3xl overflow-hidden border border-white/10 shadow-[0_0_50px_rgba(255,222,88,0.05)] aspect-[16/9] bg-white/5"
         >
-          <video 
-            src="/demo.mp4" 
-            autoPlay 
-            loop 
-            muted 
-            controls
-            playsInline
-            className="w-full h-full object-cover"
-          />
+          {hasVideoError ? (
+            <div className="relative w-full h-full">
+              <img
+                src="/GRIDGO WEBSITE.png"
+                alt="GRIDGO app preview"
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-black/65 flex flex-col items-center justify-center text-center px-6">
+                <p className="text-xl md:text-2xl font-bold text-white mb-2">Video preview unavailable</p>
+                <p className="text-sm md:text-base text-gray-300 max-w-md">
+                  The GRIDGO walkthrough could not load. The preview image remains available while the video is retried on refresh.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <video
+              autoPlay
+              loop
+              muted
+              controls
+              playsInline
+              poster="/GRIDGO WEBSITE.png"
+              preload="metadata"
+              onError={() => setHasVideoError(true)}
+              className="w-full h-full object-cover"
+            >
+              <source src="/demo.mp4" type="video/mp4" />
+              Video preview unavailable
+            </video>
+          )}
         </motion.div>
       </div>
     </section>
@@ -306,47 +329,103 @@ function SupportSection() {
           <p className="text-xs tracking-[0.35em] uppercase text-[var(--color-primary)] mb-3">We're here for you</p>
           <h2 className="text-4xl md:text-5xl font-bold mb-5">Support &amp; Help</h2>
           <p className="text-gray-400 max-w-xl mx-auto">
-            Whether you need a quick answer or live human help, GRIDGO has you covered — 24 hours a day.
+            Get help with orders, delivery updates, account questions, or technical print concerns through one tracked support flow.
           </p>
         </motion.div>
 
-        {/* Ticketing Support Box */}
-        <motion.div
-          initial={{ opacity: 0, y: 40, filter: 'blur(20px)' }}
-          whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 0.9, ease: 'easeOut' }}
-          viewport={{ once: true, margin: '-80px' }}
-          className="relative max-w-4xl mx-auto rounded-3xl border border-[var(--color-primary)]/20 bg-[#0A0A0A] backdrop-blur-md p-10 md:p-16 flex flex-col items-center text-center gap-6 overflow-hidden shadow-2xl"
-        >
-          {/* accent glow */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-[var(--color-primary)]/5 blur-[100px] pointer-events-none" />
+        {/* Cards grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
 
-          <div className="w-16 h-16 rounded-2xl bg-[var(--color-primary)]/15 flex items-center justify-center mb-2 border border-[var(--color-primary)]/20 shadow-[0_0_20px_rgba(255,222,88,0.15)] relative z-10">
-            <MessageCircle size={32} className="text-[var(--color-primary)]" strokeWidth={1.5} />
-          </div>
+          {/* Support center */}
+          <motion.div
+            initial={{ opacity: 0, x: -40, filter: 'blur(20px)' }}
+            whileInView={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.9, ease: 'easeOut' }}
+            viewport={{ once: true, margin: '-80px' }}
+            className="relative rounded-3xl border border-white/10 bg-white/5 backdrop-blur-md p-10 flex flex-col gap-6 overflow-hidden"
+          >
+            {/* accent glow */}
+            <div className="absolute -top-16 -left-16 w-56 h-56 rounded-full bg-[var(--color-primary)]/10 blur-3xl pointer-events-none" />
 
-          <div className="relative z-10 max-w-2xl">
-            <h3 className="text-3xl md:text-4xl font-bold mb-4 text-white">GRIDGO Ticketing Support</h3>
-            <p className="text-gray-400 leading-relaxed text-lg md:text-xl">
-              Experience seamless, human-led support. Submit a ticket with your order issues, delivery updates, or technical questions, and our dedicated admin team will get back to you with real-time solutions straight to your inbox.
-            </p>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-4 mt-6 w-full sm:w-auto relative z-10">
-            <div className="flex items-center justify-center gap-2 bg-white/5 rounded-full px-6 py-3 border border-white/10">
-              <ShieldCheck size={18} className="text-[var(--color-primary)]" />
-              <span className="text-sm font-medium text-gray-300">Human-led responses</span>
+            <div className="w-16 h-16 rounded-2xl bg-[var(--color-primary)]/15 flex items-center justify-center mb-2 border border-[var(--color-primary)]/20 shadow-[0_0_20px_rgba(255,222,88,0.15)] relative z-10">
+              <MessageCircle size={32} className="text-[var(--color-primary)]" strokeWidth={1.5} />
             </div>
-            <div className="flex items-center justify-center gap-2 bg-white/5 rounded-full px-6 py-3 border border-white/10">
-              <Zap size={18} className="text-[var(--color-primary)]" />
-              <span className="text-sm font-medium text-gray-300">Fast resolution</span>
-            </div>
-          </div>
 
-          <Link to="/support" className="mt-8 w-full sm:w-auto px-12 py-4 rounded-full bg-[var(--color-primary)] text-black font-bold text-lg hover:bg-[#FFE57F] hover:scale-105 hover:shadow-[0_0_30px_rgba(255,222,88,0.3)] transition-all duration-300 relative z-10">
-            Submit a Ticket Now
-          </Link>
-        </motion.div>
+            <div>
+              <h3 className="text-2xl font-bold mb-2">Support Center</h3>
+              <p className="text-gray-400 leading-relaxed">
+                Open a support request for order issues, delivery updates, payment concerns, or technical print questions. Your details stay organized so the GRIDGO team can respond with the right next step.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3 mt-auto">
+              <div className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3 border border-white/10">
+                <ShieldCheck size={18} className="text-[var(--color-primary)] shrink-0" />
+                <span className="text-sm text-gray-300">Verified GRIDGO support portal</span>
+              </div>
+              <div className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3 border border-white/10">
+                <Zap size={18} className="text-[var(--color-primary)] shrink-0" />
+                <span className="text-sm text-gray-300">Tracked ticket response by email</span>
+              </div>
+            </div>
+
+            <Link to="/support" className="mt-2 w-full py-3 rounded-full border border-[var(--color-primary)] text-[var(--color-primary)] font-semibold text-sm hover:bg-[var(--color-primary)] hover:text-black transition-all duration-300 flex justify-center items-center">
+              Open Support Center
+            </Link>
+          </motion.div>
+
+          {/* Message support */}
+          <motion.div
+            initial={{ opacity: 0, x: 40, filter: 'blur(20px)' }}
+            whileInView={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.9, delay: 0.1, ease: 'easeOut' }}
+            viewport={{ once: true, margin: '-80px' }}
+            className="relative rounded-3xl border border-white/10 bg-white/5 backdrop-blur-md p-10 flex flex-col gap-6 overflow-hidden"
+          >
+            {/* accent glow */}
+            <div className="absolute -bottom-16 -right-16 w-56 h-56 rounded-full bg-[var(--color-primary)]/10 blur-3xl pointer-events-none" />
+
+            <div className="w-14 h-14 rounded-2xl bg-[var(--color-primary)]/15 flex items-center justify-center">
+              <MessageCircle size={28} className="text-[var(--color-primary)]" strokeWidth={1.5} />
+            </div>
+
+            <div>
+              <h3 className="text-2xl font-bold mb-2">Message Support</h3>
+              <p className="text-gray-400 leading-relaxed">
+                Send the context once through the support portal and a GRIDGO admin will review your ticket. It is the best available path while live chat is being prepared.
+              </p>
+            </div>
+
+            {/* Support ticket preview */}
+            <div className="flex flex-col gap-2 bg-black/30 rounded-2xl p-4 border border-white/5">
+              <div className="flex items-start gap-2">
+                <div className="w-7 h-7 rounded-full bg-[var(--color-primary)]/30 flex items-center justify-center shrink-0">
+                  <Zap size={12} className="text-[var(--color-primary)]" />
+                </div>
+                <div className="bg-white/10 rounded-xl rounded-tl-none px-3 py-2 text-xs text-gray-300 max-w-[80%]">
+                  Tell us what happened and include your order number if you have one.
+                </div>
+              </div>
+              <div className="flex items-start gap-2 justify-end">
+                <div className="bg-[var(--color-primary)]/20 rounded-xl rounded-tr-none px-3 py-2 text-xs text-[var(--color-primary)] max-w-[80%]">
+                  I need help with order #1042.
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-7 h-7 rounded-full bg-[var(--color-primary)]/30 flex items-center justify-center shrink-0">
+                  <ShieldCheck size={12} className="text-[var(--color-primary)]" />
+                </div>
+                <div className="bg-white/10 rounded-xl rounded-tl-none px-3 py-2 text-xs text-gray-300 max-w-[80%]">
+                  Submit the ticket and our team will reply by email with an update.
+                </div>
+              </div>
+            </div>
+
+            <Link to="/support" className="mt-2 w-full py-3 rounded-full bg-[var(--color-primary)] text-black font-semibold text-sm hover:bg-yellow-400 transition-all duration-300 flex justify-center items-center">
+              Start Support Ticket
+            </Link>
+          </motion.div>
+        </div>
 
         {/* Bottom stat row */}
         <motion.div
@@ -483,7 +562,7 @@ function TeamSection() {
 }
 
 function BetaSection() {
-  const { mobileWebUrl, apkDownloadUrl } = landingLinks(window.location);
+  const { mobileWebUrl, apkDownloadUrl, communityUrl } = landingLinks(window.location);
 
   return (
     <section id="download" className="min-h-[100vh] flex items-center justify-center relative z-10 py-20 px-8 overflow-hidden bg-[#050505]">
@@ -509,19 +588,27 @@ function BetaSection() {
               Become a founding member of GRIDGO and have a <span className="text-[var(--color-primary)] font-medium">free printing service</span> delivered to your door step.
             </p>
 
-            <div className="grid grid-cols-2 gap-3 mb-14 w-[95%]">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-10 w-[95%]">
               <a
                 href={mobileWebUrl}
-                className="bg-white text-black font-bold py-3 rounded-full hover:bg-gray-200 transition-colors text-[13px] md:text-[14px]"
+                className="bg-white text-black font-bold py-3 px-3 rounded-full hover:bg-gray-200 transition-colors text-[13px] md:text-[14px]"
               >
                 Access Mobile Web
               </a>
               <a
                 href={apkDownloadUrl}
-                className="bg-[var(--color-primary)] text-black font-bold py-3 rounded-full hover:bg-yellow-400 transition-colors text-[13px] md:text-[14px]"
+                className="bg-[var(--color-primary)] text-black font-bold py-3 px-3 rounded-full hover:bg-yellow-400 transition-colors text-[13px] md:text-[14px]"
                 rel="noopener noreferrer"
               >
                 Download APK
+              </a>
+              <a
+                href={communityUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="border border-[var(--color-primary)] text-[var(--color-primary)] font-bold py-3 px-3 rounded-full hover:bg-[var(--color-primary)] hover:text-black transition-colors text-[13px] md:text-[14px]"
+              >
+                Join GRID Community
               </a>
             </div>
 
