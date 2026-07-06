@@ -21,7 +21,10 @@ const makeFile = (overrides: Partial<FileMetadata> = {}) =>
 const makeRequest = (sub: number, role = 'customer') =>
   ({ user: { sub, role, email: 'user@example.com' } }) as RequestWithUser;
 
-const mockFilesService = { findById: jest.fn() };
+const mockFilesService = {
+  findById: jest.fn(),
+  getPresignedUrlForKey: jest.fn(),
+};
 const mockPrinterProfileService = { getProfile: jest.fn() };
 
 describe('FilesController', () => {
@@ -154,5 +157,47 @@ describe('FilesController inspect with 3D bounds', () => {
     } as any);
     expect(out.printerLimits!.fits).toBe(false);
     expect(out.printerLimits!.overflowAxes.sort()).toEqual(['height', 'width']);
+  });
+
+  it('inspect returns a previewGlbUrl for converted 3D previews', async () => {
+    mockFilesService.findById.mockResolvedValue({
+      id: 11,
+      uploadedBy: 1,
+      mimeType: 'model/obj',
+      originalName: 'quad.obj',
+      objectKey: 'uploads/model.obj',
+      previewGlbObjectKey: 'uploads/model.obj.preview.glb',
+      model3dWidthMm: '10.00',
+      model3dDepthMm: '5.00',
+      model3dHeightMm: '2.00',
+      model3dTriangleCount: 2,
+      widthPt: null,
+      heightPt: null,
+      widthPx: null,
+      heightPx: null,
+      colorSpace: null,
+      pageCount: null,
+      dpi: null,
+    });
+    mockFilesService.getPresignedUrlForKey.mockResolvedValue(
+      'https://files/model.obj.preview.glb',
+    );
+    mockPrinterProfileService.getProfile.mockResolvedValue({
+      name: 'Bambu A1 Mini',
+      buildVolumeWidthMm: 180,
+      buildVolumeDepthMm: 180,
+      buildVolumeHeightMm: 180,
+      maxFileSizeMb: 200,
+    });
+
+    const out = await controller.inspect(11, {
+      user: { sub: 1, role: 'customer' },
+    } as any);
+
+    expect(mockFilesService.getPresignedUrlForKey).toHaveBeenCalledWith(
+      'uploads/model.obj.preview.glb',
+      3600,
+    );
+    expect(out.previewGlbUrl).toBe('https://files/model.obj.preview.glb');
   });
 });

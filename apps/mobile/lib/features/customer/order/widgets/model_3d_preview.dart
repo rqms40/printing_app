@@ -347,6 +347,12 @@ class _Placeholder extends StatelessWidget {
             '3D preview not available for this format',
             style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
           ),
+          const SizedBox(height: 4),
+          Text(
+            'You can still continue if file checks pass.',
+            style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
