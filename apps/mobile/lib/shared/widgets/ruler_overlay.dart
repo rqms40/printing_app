@@ -8,6 +8,7 @@ const double _mmPerInch = 25.4;
 const double _rulerHeight = 84;
 const double _rulerLengthFraction = 0.88;
 const double _scaleChipWidth = 132;
+const double _minUsableRulerLength = 320;
 
 @immutable
 class ArchitectScale {
@@ -199,9 +200,19 @@ class _RulerOverlayState extends State<RulerOverlay> {
             ? drawingRect.width
             : size.width;
         final maxViewportLength = math.max(120.0, size.width - 16);
+        final minUsableLength = math.min(
+          _minUsableRulerLength,
+          maxViewportLength,
+        );
         final rulerLengthPx = math
             .min(
-              math.min(availableWidth * _rulerLengthFraction, 980),
+              math.min(
+                math.max(
+                  availableWidth * _rulerLengthFraction,
+                  minUsableLength,
+                ),
+                980,
+              ),
               maxViewportLength,
             )
             .clamp(120.0, maxViewportLength)
@@ -226,14 +237,17 @@ class _RulerOverlayState extends State<RulerOverlay> {
               height: _rulerHeight,
               child: Transform.rotate(
                 angle: _angle,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onScaleStart: (details) {
+                child: _RulerBar(
+                  scale: widget.scale,
+                  pxPerDrawingInch: pxPerDrawingInch,
+                  brand: brand,
+                  onCycleScale: widget.onCycleScale,
+                  onDragStart: (details) {
                     _angleStart = _angle;
                     _centerStart = _center!;
                     _focalPointStart = details.focalPoint;
                   },
-                  onScaleUpdate: (details) {
+                  onDragUpdate: (details) {
                     setState(() {
                       _center = rulerCenterForGesture(
                         startCenter: _centerStart,
@@ -245,7 +259,7 @@ class _RulerOverlayState extends State<RulerOverlay> {
                       _angle = _angleStart + details.rotation;
                     });
                   },
-                  onDoubleTap: () {
+                  onDoubleTapReset: () {
                     setState(() {
                       _angle = 0;
                       _center = clampRulerCenter(
@@ -255,13 +269,17 @@ class _RulerOverlayState extends State<RulerOverlay> {
                       );
                     });
                   },
-                  child: _RulerBar(
-                    scale: widget.scale,
-                    pxPerDrawingInch: pxPerDrawingInch,
-                    brand: brand,
-                    onCycleScale: widget.onCycleScale,
-                    angleDegrees: (_angle * 180 / math.pi).remainder(360.0),
-                  ),
+                  onReset: () {
+                    setState(() {
+                      _angle = 0;
+                      _center = clampRulerCenter(
+                        center: initialCenter,
+                        bounds: size,
+                        rulerSize: rulerSize,
+                      );
+                    });
+                  },
+                  angleDegrees: (_angle * 180 / math.pi).remainder(360.0),
                 ),
               ),
             ),
@@ -278,6 +296,10 @@ class _RulerBar extends StatelessWidget {
     required this.pxPerDrawingInch,
     required this.brand,
     required this.angleDegrees,
+    required this.onReset,
+    required this.onDragStart,
+    required this.onDragUpdate,
+    required this.onDoubleTapReset,
     this.onCycleScale,
   });
 
@@ -285,6 +307,10 @@ class _RulerBar extends StatelessWidget {
   final double pxPerDrawingInch;
   final Color brand;
   final double angleDegrees;
+  final VoidCallback onReset;
+  final GestureScaleStartCallback onDragStart;
+  final GestureScaleUpdateCallback onDragUpdate;
+  final VoidCallback onDoubleTapReset;
   final VoidCallback? onCycleScale;
 
   @override
@@ -309,11 +335,17 @@ class _RulerBar extends StatelessWidget {
         child: Stack(
           children: [
             Positioned.fill(
-              child: CustomPaint(
-                painter: _RulerTicksPainter(
-                  scale: scale,
-                  pxPerDrawingInch: pxPerDrawingInch,
-                  color: brand,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onScaleStart: onDragStart,
+                onScaleUpdate: onDragUpdate,
+                onDoubleTap: onDoubleTapReset,
+                child: CustomPaint(
+                  painter: _RulerTicksPainter(
+                    scale: scale,
+                    pxPerDrawingInch: pxPerDrawingInch,
+                    color: brand,
+                  ),
                 ),
               ),
             ),
@@ -325,6 +357,9 @@ class _RulerBar extends StatelessWidget {
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: onCycleScale,
+                  borderRadius: const BorderRadius.horizontal(
+                    left: Radius.circular(7),
+                  ),
                   child: Container(
                     width: _scaleChipWidth,
                     padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -367,6 +402,34 @@ class _RulerBar extends StatelessWidget {
                             ),
                           ),
                         ),
+                        const SizedBox(height: 3),
+                        Text(
+                          'Document-calibrated',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.caption.copyWith(
+                            color: const Color(
+                              0xFF111111,
+                            ).withValues(alpha: 0.72),
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w800,
+                            height: 1.0,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Tap to change',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.caption.copyWith(
+                            color: const Color(
+                              0xFF111111,
+                            ).withValues(alpha: 0.72),
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w700,
+                            height: 1.0,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -378,34 +441,62 @@ class _RulerBar extends StatelessWidget {
               top: 0,
               bottom: 0,
               child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.65),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: brand.withValues(alpha: 0.4),
-                      width: 1,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.rotate_right_rounded, size: 14, color: brand),
-                      const SizedBox(width: 5),
-                      Text(
-                        angleLabel,
-                        style: AppTypography.caption.copyWith(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Material(
+                      color: Colors.black.withValues(alpha: 0.65),
+                      borderRadius: BorderRadius.circular(8),
+                      child: IconButton(
+                        tooltip: 'Reset ruler',
+                        visualDensity: VisualDensity.compact,
+                        constraints: const BoxConstraints(
+                          minWidth: 40,
+                          minHeight: 40,
+                        ),
+                        onPressed: onReset,
+                        icon: Icon(
+                          Icons.restart_alt_rounded,
+                          size: 18,
                           color: brand,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.65),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: brand.withValues(alpha: 0.4),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.rotate_right_rounded,
+                            size: 14,
+                            color: brand,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            angleLabel,
+                            style: AppTypography.caption.copyWith(
+                              color: brand,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

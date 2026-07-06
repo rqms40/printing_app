@@ -76,16 +76,112 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
 
   ArchitectScale get _rulerScale => kArchitectScales[_rulerScaleIndex];
 
-  void _cycleRulerScale() {
+  Future<void> _openRulerScalePicker() async {
+    final selectedIndex = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      useSafeArea: true,
+      builder: (context) {
+        final colors = _colors(context);
+        return Container(
+          decoration: BoxDecoration(
+            color: colors.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colors.outline.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.lg,
+                    AppSpacing.lg,
+                    AppSpacing.sm,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Architect scale',
+                        style: AppTypography.h3.copyWith(
+                          color: colors.onBackground,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Calibrated to the fitted document preview, not physical screen inches.',
+                        style: AppTypography.caption.copyWith(
+                          color: colors.onSurfaceDim,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: kArchitectScales.length,
+                    itemBuilder: (context, index) {
+                      final scale = kArchitectScales[index];
+                      final selected = index == _rulerScaleIndex;
+                      return ListTile(
+                        minLeadingWidth: 24,
+                        leading: Icon(
+                          selected
+                              ? Icons.radio_button_checked_rounded
+                              : Icons.radio_button_unchecked_rounded,
+                          color: selected ? colors.accent : colors.onSurfaceDim,
+                        ),
+                        title: Text(
+                          scale.label,
+                          style: AppTypography.body.copyWith(
+                            color: colors.onBackground,
+                            fontWeight: selected
+                                ? FontWeight.w800
+                                : FontWeight.w500,
+                          ),
+                        ),
+                        subtitle: Text(
+                          scale.isFullSize
+                              ? 'Full-size inch face with 1/16" marks'
+                              : '${scale.inchesPerFoot}" drawing = 1 real foot',
+                          style: AppTypography.caption.copyWith(
+                            color: colors.onSurfaceDim,
+                          ),
+                        ),
+                        onTap: () => Navigator.of(context).pop(index),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (selectedIndex == null || !mounted) return;
     setState(() {
-      _rulerScaleIndex = (_rulerScaleIndex + 1) % kArchitectScales.length;
+      _rulerScaleIndex = selectedIndex;
     });
   }
 
   AppColorSet _colors(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark
-          ? AppColors.dark
-          : AppColors.light;
+      ? AppColors.dark
+      : AppColors.light;
 
   @override
   void initState() {
@@ -116,8 +212,9 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
     String stage = 'request';
     try {
       stage = 'request';
-      final response =
-          await ApiClient.instance.get('/files/${widget.fileId}/presigned-url');
+      final response = await ApiClient.instance.get(
+        '/files/${widget.fileId}/presigned-url',
+      );
       final url = response.data['url'] as String?;
 
       if (!mounted) return;
@@ -245,8 +342,9 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
               children: [
                 Text(
                   widget.fileName,
-                  style: AppTypography.bodyBold
-                      .copyWith(color: colors.onBackground),
+                  style: AppTypography.bodyBold.copyWith(
+                    color: colors.onBackground,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -254,8 +352,9 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
                   const SizedBox(height: 2),
                   Text(
                     formatFileSize(widget.fileSize!),
-                    style: AppTypography.caption
-                        .copyWith(color: colors.onSurfaceDim),
+                    style: AppTypography.caption.copyWith(
+                      color: colors.onSurfaceDim,
+                    ),
                   ),
                 ],
               ],
@@ -287,16 +386,13 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
                           Icon(
                             Icons.straighten_rounded,
                             size: 18,
-                            color:
-                                _showRuler ? brand : colors.onSurfaceDim,
+                            color: _showRuler ? brand : colors.onSurfaceDim,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             'Ruler',
                             style: AppTypography.caption.copyWith(
-                              color: _showRuler
-                                  ? brand
-                                  : colors.onSurfaceDim,
+                              color: _showRuler ? brand : colors.onSurfaceDim,
                               fontWeight: FontWeight.w700,
                               fontSize: 11,
                               letterSpacing: 0.3,
@@ -352,7 +448,7 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
                 widthMm: _widthMm ?? 210.0,
                 heightMm: _heightMm ?? 297.0,
                 scale: _rulerScale,
-                onCycleScale: _cycleRulerScale,
+                onCycleScale: _openRulerScalePicker,
               ),
             ),
         ],
@@ -383,7 +479,7 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
                 widthMm: _widthMm ?? 210.0,
                 heightMm: _heightMm ?? 297.0,
                 scale: _rulerScale,
-                onCycleScale: _cycleRulerScale,
+                onCycleScale: _openRulerScalePicker,
               ),
             ),
         ],
@@ -462,8 +558,9 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
             const SizedBox(height: AppSpacing.lg),
             Text(
               widget.fileName,
-              style: AppTypography.bodyBold
-                  .copyWith(color: colors.onBackground),
+              style: AppTypography.bodyBold.copyWith(
+                color: colors.onBackground,
+              ),
               maxLines: 2,
               textAlign: TextAlign.center,
               overflow: TextOverflow.ellipsis,
@@ -471,8 +568,7 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
             const SizedBox(height: AppSpacing.sm),
             Text(
               'Preview not available for this file type.',
-              style:
-                  AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+              style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSpacing.xl),
