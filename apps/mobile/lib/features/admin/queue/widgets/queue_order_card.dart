@@ -103,6 +103,9 @@ class _QueueOrderCardState extends State<QueueOrderCard> {
     final visual = _visual(colors);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final itemSummary = _itemSummary(widget.order);
+    final total = formatCurrency(
+      widget.order.totalPrice + widget.order.deliveryFee,
+    );
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -127,109 +130,125 @@ class _QueueOrderCardState extends State<QueueOrderCard> {
           ),
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.md),
-            child: Row(
-              children: [
-                // Status icon with semantic background
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: visual.background,
-                    borderRadius: AppRadius.borderMd,
-                  ),
-                  child: Center(
-                    child: HugeIcon(
-                      icon: visual.icon,
-                      size: 22,
-                      color: visual.foreground,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final compact = constraints.maxWidth < 300;
+                final iconSize = compact ? 42.0 : 48.0;
+                final trailingWidth = compact ? 78.0 : 104.0;
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Status icon with semantic background
+                    Container(
+                      width: iconSize,
+                      height: iconSize,
+                      decoration: BoxDecoration(
+                        color: visual.background,
+                        borderRadius: AppRadius.borderMd,
+                      ),
+                      child: Center(
+                        child: HugeIcon(
+                          icon: visual.icon,
+                          size: compact ? 20 : 22,
+                          color: visual.foreground,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
+                    SizedBox(width: compact ? AppSpacing.sm : AppSpacing.md),
 
-                // Content
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Order ID + customer name
-                      Text(
-                        widget.order.orderId,
-                        style: AppTypography.bodyBold.copyWith(
-                          color: colors.onBackground,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Customer ${widget.order.userId}',
-                        style: AppTypography.caption.copyWith(
-                          color: colors.onSurfaceDim,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (itemSummary.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          itemSummary,
-                          style: AppTypography.caption.copyWith(
-                            color: colors.onSurfaceDim,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                      const SizedBox(height: 6),
-
-                      // Status dot + label + date
-                      Row(
+                    // Content
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: visual.foreground,
-                              shape: BoxShape.circle,
+                          // Order ID + customer name
+                          Text(
+                            widget.order.orderId,
+                            style: AppTypography.bodyBold.copyWith(
+                              color: colors.onBackground,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              '${visual.statusLabel} \u2022 ${formatDate(widget.order.createdAt)}',
+                          const SizedBox(height: 2),
+                          Text(
+                            'Customer ${widget.order.userId}',
+                            style: AppTypography.caption.copyWith(
+                              color: colors.onSurfaceDim,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (itemSummary.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              itemSummary,
                               style: AppTypography.caption.copyWith(
                                 color: colors.onSurfaceDim,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
+                          ],
+                          const SizedBox(height: 6),
+
+                          // Status dot + label + date
+                          Row(
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: visual.foreground,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  '${visual.statusLabel} \u2022 ${formatDate(widget.order.createdAt)}',
+                                  style: AppTypography.caption.copyWith(
+                                    color: colors.onSurfaceDim,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
-
-                // Price + chevron
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      formatCurrency(
-                        widget.order.totalPrice + widget.order.deliveryFee,
-                      ),
-                      style: AppTypography.bodyBold.copyWith(
-                        color: colors.onBackground,
-                      ),
                     ),
-                    const SizedBox(height: 4),
-                    HugeIcon(
-                      icon: HugeIcons.strokeRoundedArrowRight01,
-                      size: 16,
-                      color: colors.disabled,
+                    const SizedBox(width: AppSpacing.sm),
+
+                    // Price + chevron
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: trailingWidth),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            total,
+                            textAlign: TextAlign.end,
+                            style: AppTypography.bodyBold.copyWith(
+                              color: colors.onBackground,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          HugeIcon(
+                            icon: HugeIcons.strokeRoundedArrowRight01,
+                            size: 16,
+                            color: colors.disabled,
+                          ),
+                        ],
+                      ),
                     ),
                   ],
-                ),
-              ],
+                );
+              },
             ),
           ),
         ),

@@ -82,24 +82,42 @@ class _AdminOrderDetailScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Text(
-                      'Status',
-                      style: AppTypography.bodyBold.copyWith(
-                        color: colors.onBackground,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    StatusPicker(
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final picker = StatusPicker(
                       currentStatus: order.orderStatus,
                       onStatusSelected: (newStatus) {
                         ref
                             .read(queueProvider.notifier)
                             .updateOrderStatus(order.id, newStatus);
                       },
-                    ),
-                  ],
+                    );
+                    final label = Text(
+                      'Status',
+                      style: AppTypography.bodyBold.copyWith(
+                        color: colors.onBackground,
+                      ),
+                    );
+
+                    if (constraints.maxWidth < 300) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          label,
+                          const SizedBox(height: AppSpacing.sm),
+                          SizedBox(width: double.infinity, child: picker),
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      children: [
+                        label,
+                        const SizedBox(width: AppSpacing.md),
+                        Flexible(child: picker),
+                      ],
+                    );
+                  },
                 ),
                 if (order.estimatedCompletionAt != null) ...[
                   const SizedBox(height: AppSpacing.sm),

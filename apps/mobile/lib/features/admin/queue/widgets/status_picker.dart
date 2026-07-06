@@ -66,6 +66,7 @@ class StatusPicker extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: AppRadius.borderMd),
       color: colors.surface,
       child: Container(
+        constraints: const BoxConstraints(minHeight: 44),
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.sm,
           vertical: AppSpacing.xs,
@@ -77,12 +78,20 @@ class StatusPicker extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              currentStatus.displayName,
-              style: AppTypography.caption.copyWith(color: colors.onSurface),
+            Flexible(
+              child: Text(
+                currentStatus.displayName,
+                style: AppTypography.caption.copyWith(color: colors.onSurface),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             const SizedBox(width: AppSpacing.xs),
-            HugeIcon(icon: HugeIcons.strokeRoundedArrowDown01, size: 16, color: colors.onSurfaceDim),
+            HugeIcon(
+              icon: HugeIcons.strokeRoundedArrowDown01,
+              size: 16,
+              color: colors.onSurfaceDim,
+            ),
           ],
         ),
       ),
