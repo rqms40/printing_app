@@ -37,7 +37,7 @@ export type MediaType = "glossy" | "matte";
 export type PrintSides = "front_only" | "back_to_back";
 export type Binding = "none" | "spiral" | "staple" | "premium";
 export type Material3D = "pla" | "abs" | "petg";
-export type FileFormat3D = "stl" | "obj" | "three_mf";
+export type FileFormat3D = "stl" | "obj" | "three_mf" | "glb" | "gltf";
 
 export const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   order_placed: ["file_verified", "file_declined", "cancelled"],

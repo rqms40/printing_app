@@ -533,6 +533,10 @@ class OrderDetailScreen extends ConsumerWidget {
         return 'model/obj';
       case '3mf':
         return 'model/3mf';
+      case 'glb':
+        return 'model/gltf-binary';
+      case 'gltf':
+        return 'model/gltf+json';
       default:
         return 'application/octet-stream';
     }

@@ -19,6 +19,7 @@ const UNIT_TO_MM: Record<string, number> = {
   foot: 304.8,
   meter: 1000,
 };
+const NUMBER_RE = String.raw`(-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)`;
 
 @Injectable()
 export class Model3dAnalysisService {
@@ -107,8 +108,12 @@ export class Model3dAnalysisService {
 
   private analyzeStlAscii(buffer: Buffer): Model3dBounds | null {
     const text = buffer.toString('utf8');
-    const re =
-      /vertex\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/g;
+    const re = new RegExp(
+      String.raw`vertex\s+${NUMBER_RE}\s+${NUMBER_RE}\s+${NUMBER_RE}`,
+      'g',
+    );
+    const positions: number[] = [];
+    const indices: number[] = [];
     let minX = Infinity,
       minY = Infinity,
       minZ = Infinity;
@@ -121,6 +126,8 @@ export class Model3dAnalysisService {
       const x = parseFloat(m[1]);
       const y = parseFloat(m[2]);
       const z = parseFloat(m[3]);
+      positions.push(x, y, z);
+      indices.push(count);
       if (x < minX) minX = x;
       if (y < minY) minY = y;
       if (z < minZ) minZ = z;
@@ -130,46 +137,103 @@ export class Model3dAnalysisService {
       count++;
     }
     if (!isFinite(minX)) return null;
+    const triangleCount = Math.floor(count / 3);
+
+    let glbBuffer: Buffer | undefined;
+    if (triangleCount > 0) {
+      try {
+        glbBuffer = encodeGlb({
+          positions: new Float32Array(positions.slice(0, triangleCount * 9)),
+          indices: new Uint32Array(indices.slice(0, triangleCount * 3)),
+        });
+      } catch (err) {
+        this.logger.warn(`ASCII STL → GLB encode failed: ${err}`);
+      }
+    }
+
     return {
       widthMm: maxX - minX,
       depthMm: maxY - minY,
       heightMm: maxZ - minZ,
-      triangleCount: Math.floor(count / 3),
+      triangleCount,
       unit: 'mm',
+      glbBuffer,
     };
   }
 
   private analyzeObj(buffer: Buffer): Model3dBounds | null {
     const text = buffer.toString('utf8');
+    const positions: number[] = [];
+    const faceIndices: number[] = [];
     let minX = Infinity,
       minY = Infinity,
       minZ = Infinity;
     let maxX = -Infinity,
       maxY = -Infinity,
       maxZ = -Infinity;
-    for (const line of text.split('\n')) {
-      if (!line.startsWith('v ')) continue;
-      const parts = line.trim().split(/\s+/);
-      if (parts.length < 4) continue;
-      const x = parseFloat(parts[1]);
-      const y = parseFloat(parts[2]);
-      const z = parseFloat(parts[3]);
-      if (Number.isNaN(x) || Number.isNaN(y) || Number.isNaN(z)) continue;
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (z < minZ) minZ = z;
-      if (x > maxX) maxX = x;
-      if (y > maxY) maxY = y;
-      if (z > maxZ) maxZ = z;
+    for (const rawLine of text.split('\n')) {
+      const line = rawLine.trim();
+      if (line.startsWith('v ')) {
+        const parts = line.split(/\s+/);
+        if (parts.length < 4) continue;
+        const x = parseFloat(parts[1]);
+        const y = parseFloat(parts[2]);
+        const z = parseFloat(parts[3]);
+        if (Number.isNaN(x) || Number.isNaN(y) || Number.isNaN(z)) continue;
+        positions.push(x, y, z);
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (z < minZ) minZ = z;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+        if (z > maxZ) maxZ = z;
+        continue;
+      }
+      if (!line.startsWith('f ')) continue;
+      const parts = line.split(/\s+/).slice(1);
+      if (parts.length < 3) continue;
+      const parsed = parts
+        .map((part) => this.parseObjVertexIndex(part, positions.length / 3))
+        .filter((idx): idx is number => idx != null);
+      if (parsed.length < 3) continue;
+      for (let i = 1; i < parsed.length - 1; i++) {
+        faceIndices.push(parsed[0], parsed[i], parsed[i + 1]);
+      }
     }
     if (!isFinite(minX)) return null;
+
+    let glbBuffer: Buffer | undefined;
+    if (faceIndices.length > 0) {
+      try {
+        glbBuffer = encodeGlb({
+          positions: new Float32Array(positions),
+          indices: new Uint32Array(faceIndices),
+        });
+      } catch (err) {
+        this.logger.warn(`OBJ → GLB encode failed: ${err}`);
+      }
+    }
+
     return {
       widthMm: maxX - minX,
       depthMm: maxY - minY,
       heightMm: maxZ - minZ,
-      triangleCount: null,
+      triangleCount: faceIndices.length > 0 ? faceIndices.length / 3 : null,
       unit: 'mm',
+      glbBuffer,
     };
+  }
+
+  private parseObjVertexIndex(
+    token: string,
+    vertexCount: number,
+  ): number | null {
+    const raw = token.split('/')[0];
+    const parsed = Number.parseInt(raw, 10);
+    if (!Number.isInteger(parsed) || parsed === 0) return null;
+    const zeroBased = parsed > 0 ? parsed - 1 : vertexCount + parsed;
+    if (zeroBased < 0 || zeroBased >= vertexCount) return null;
+    return zeroBased;
   }
 
   private async analyze3mf(buffer: Buffer): Promise<Model3dBounds | null> {
