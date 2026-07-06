@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import type { ForwardRefExoticComponent, HTMLAttributes, RefAttributes } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PhoneScene } from './components/PhoneScene';
-import { Menu, X, Phone, MessageCircle, Zap, ShieldCheck, ChevronUp } from 'lucide-react';
+import { Menu, X, MessageCircle, Zap, ShieldCheck, ChevronUp } from 'lucide-react';
 import { HardDriveUploadIcon, TruckIcon, ListIcon, TimerIcon, MessageCircleIcon } from 'lucide-animated';
 import { Link } from 'react-router-dom';
 import { landingLinks, shouldRedirectToMobileWeb } from './utils/landingLinks';
@@ -217,8 +217,6 @@ function FeaturesSection() {
 }
 
 function HowItWorksSection() {
-  const [hasVideoError, setHasVideoError] = useState(false);
-
   return (
     <section id="process" className="min-h-screen bg-black py-32 relative z-10 text-white flex flex-col justify-center">
       <div className="max-w-6xl mx-auto px-6 w-full">
@@ -277,36 +275,13 @@ function HowItWorksSection() {
           viewport={{ once: true, margin: '-50px' }}
           className="mt-32 w-full relative rounded-3xl overflow-hidden border border-white/10 shadow-[0_0_50px_rgba(255,222,88,0.05)] aspect-[16/9] bg-white/5"
         >
-          {hasVideoError ? (
-            <div className="relative w-full h-full">
-              <img
-                src="/GRIDGO WEBSITE.png"
-                alt="GRIDGO app preview"
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-black/65 flex flex-col items-center justify-center text-center px-6">
-                <p className="text-xl md:text-2xl font-bold text-white mb-2">Video preview unavailable</p>
-                <p className="text-sm md:text-base text-gray-300 max-w-md">
-                  The GRIDGO walkthrough could not load. The preview image remains available while the video is retried on refresh.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <video
-              autoPlay
-              loop
-              muted
-              controls
-              playsInline
-              poster="/GRIDGO WEBSITE.png"
-              preload="metadata"
-              onError={() => setHasVideoError(true)}
-              className="w-full h-full object-cover"
-            >
-              <source src="/demo.mp4" type="video/mp4" />
-              Video preview unavailable
-            </video>
-          )}
+          <iframe
+            src="https://www.youtube.com/embed/67Jrr34StKg?autoplay=1&mute=1&loop=1&playlist=67Jrr34StKg&controls=1&rel=0"
+            title="GRIDGO App Demo Walkthrough"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            className="w-full h-full border-0"
+          />
         </motion.div>
       </div>
     </section>
