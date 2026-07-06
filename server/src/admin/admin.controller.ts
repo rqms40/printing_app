@@ -431,6 +431,111 @@ export class AdminController {
     );
   }
 
+  private assignedRiderContact(o: Order) {
+    const enriched = o as Order & {
+      assignedRiderContact?: Record<string, unknown> | null;
+    };
+    if (enriched.assignedRiderContact) return enriched.assignedRiderContact;
+    if (!o.assignedRiderId && !o.assignedRider) return null;
+
+    return {
+      user_id: o.assignedRider?.id ?? o.assignedRiderId ?? null,
+      display_name:
+        o.assignedRider?.fullName ?? o.assignedRider?.nickname ?? null,
+      full_name: o.assignedRider?.fullName ?? null,
+      nickname: o.assignedRider?.nickname ?? null,
+      phone_number: o.assignedRider?.phoneNumber ?? null,
+    };
+  }
+
+  private assignedRiderContactFromAssignment(
+    assignment: DeliveryAssignment | undefined,
+  ) {
+    if (!assignment?.rider) return null;
+    const rider = assignment.rider;
+    const user = rider.user;
+    return {
+      user_id: rider.userId,
+      rider_profile_id: rider.id,
+      display_name: user?.fullName ?? user?.nickname ?? null,
+      full_name: user?.fullName ?? null,
+      nickname: user?.nickname ?? null,
+      phone_number: user?.phoneNumber ?? null,
+      vehicle_type: rider.vehicleType ?? null,
+      plate_number: rider.plateNumber ?? null,
+      delivery_assignment_id: assignment.id,
+      delivery_status: assignment.status,
+      proof: this.deliveryProofFromAssignment(assignment),
+    };
+  }
+
+  private deliveryProofFromAssignment(
+    assignment: DeliveryAssignment | undefined,
+  ) {
+    if (!assignment?.proofType) return null;
+    return {
+      type: assignment.proofType,
+      fileId: assignment.proofFileId ?? null,
+      objectKey: assignment.proofObjectKey ?? null,
+      signatureData: assignment.proofSignatureData ?? null,
+      capturedAt: assignment.proofCapturedAt ?? null,
+      capturedByRiderId: assignment.proofCapturedByRiderId ?? null,
+    };
+  }
+
+  private async attachDeliveryAssignmentDetails(
+    orders: Order[],
+  ): Promise<Order[]> {
+    const orderIds = orders.map((order) => order.id).filter(Boolean);
+    if (orderIds.length === 0) return orders;
+
+    const assignments = await this.deliveryAssignmentsRepo.find({
+      where: { orderId: In(orderIds) },
+      relations: ['rider', 'rider.user'],
+      order: { createdAt: 'DESC' },
+    });
+    const assignmentByOrderId = new Map<number, DeliveryAssignment>();
+    for (const assignment of assignments) {
+      if (!assignmentByOrderId.has(assignment.orderId)) {
+        assignmentByOrderId.set(assignment.orderId, assignment);
+      }
+    }
+
+    return orders.map((order) => {
+      const assignment = assignmentByOrderId.get(order.id);
+      return Object.assign(order, {
+        assignedRiderContact:
+          this.assignedRiderContactFromAssignment(assignment) ??
+          (
+            order as Order & {
+              assignedRiderContact?: Record<string, unknown> | null;
+            }
+          ).assignedRiderContact,
+        deliveryProof: this.deliveryProofFromAssignment(assignment),
+      });
+    });
+  }
+
+  private deliveryProof(o: Order) {
+    const enriched = o as Order & {
+      deliveryProof?: Record<string, unknown> | null;
+      assignedRiderContact?: { proof?: Record<string, unknown> | null } | null;
+    };
+    const proof =
+      enriched.deliveryProof ?? enriched.assignedRiderContact?.proof;
+    if (!proof) return null;
+
+    return {
+      type: proof.type ?? null,
+      file_id: proof.fileId ?? proof.file_id ?? null,
+      object_key: proof.objectKey ?? proof.object_key ?? null,
+      signature_data: proof.signatureData ?? proof.signature_data ?? null,
+      captured_at: proof.capturedAt ?? proof.captured_at ?? null,
+      captured_by_rider_id:
+        proof.capturedByRiderId ?? proof.captured_by_rider_id ?? null,
+    };
+  }
+
   private mapOrder(o: Order) {
     const firstPaperItem = (o.items ?? []).find(
       (item) => item.category === 'paper',
@@ -480,6 +585,8 @@ export class AdminController {
       cancellation_reason: o.cancellationReason ?? null,
       estimated_completion_at: o.estimatedCompletionAt ?? null,
       assigned_rider_id: o.assignedRiderId ?? null,
+      assigned_rider_contact: this.assignedRiderContact(o),
+      delivery_proof: this.deliveryProof(o),
       created_at: o.createdAt,
       updated_at: o.updatedAt,
       paper_specs: paperSpecs,
@@ -585,9 +692,11 @@ export class AdminController {
         'items.destination',
         'items.specValues',
         'user',
+        'assignedRider',
       ],
     });
-    return orders.map((o) => this.mapOrder(o));
+    const enriched = await this.attachDeliveryAssignmentDetails(orders);
+    return enriched.map((o) => this.mapOrder(o));
   }
 
   // Single order detail
@@ -603,9 +712,11 @@ export class AdminController {
         'items.specValues',
         'statusHistory',
         'user',
+        'assignedRider',
       ],
     });
-    return this.mapOrder(order);
+    const [enriched] = await this.attachDeliveryAssignmentDetails([order]);
+    return this.mapOrder(enriched);
   }
 
   // Update any order's status

@@ -90,7 +90,8 @@ void main() {
 
     expect(find.text('Order #ORD-10007'), findsOneWidget);
     expect(find.text('GCash'), findsOneWidget);
-    expect(find.text('Chat about this order'), findsOneWidget);
+    expect(find.text('Rider pending'), findsOneWidget);
+    expect(find.text('Chat about this order'), findsNothing);
     expect(find.text('Wrong address'), findsNothing);
     expect(find.text('Landmark: Test'), findsOneWidget);
   });

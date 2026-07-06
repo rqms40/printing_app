@@ -9,7 +9,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, MoreThan, Repository } from 'typeorm';
 import { extname } from 'path';
+import { createReadStream } from 'fs';
+import { readFile, unlink } from 'fs/promises';
 import { randomUUID } from 'crypto';
+import type { Readable } from 'stream';
 import { FileMetadata } from './entities/file-metadata.entity';
 import { StorageService } from '../storage/storage.service';
 import { FileAnalysisService } from './file-analysis.service';
@@ -39,89 +42,151 @@ export class FilesService {
     uploadedBy?: number,
     purpose = 'general',
   ): Promise<FileMetadata> {
-    const fileExt = extname(file.originalname).toLowerCase();
-    const mimeOk = ALLOWED_MIME_TYPES.includes(file.mimetype);
-    const extOk =
-      MIME_ALLOWED_EXTENSIONS[file.mimetype]?.includes(fileExt) ?? false;
-    const fileTypeAllowed = mimeOk && extOk;
-    // Match MIME and filename extension. Generic browser fallbacks are still
-    // accepted through MIME_ALLOWED_EXTENSIONS, but only for known extensions.
-    if (!fileTypeAllowed) {
-      throw new BadRequestException('File type not allowed');
-    }
-    const isThreeDFile = THREE_D_EXTENSIONS.includes(fileExt);
-    const maxSizeBytes = isThreeDFile
-      ? THREE_D_MAX_FILE_SIZE_BYTES
-      : PAPER_MAX_FILE_SIZE_BYTES;
-    const maxSizeMb = isThreeDFile
-      ? THREE_D_MAX_FILE_SIZE_MB
-      : PAPER_MAX_FILE_SIZE_MB;
-    if (file.size > maxSizeBytes) {
-      throw new BadRequestException(`File exceeds ${maxSizeMb} MB limit`);
-    }
+    try {
+      const fileExt = extname(file.originalname).toLowerCase();
+      const mimeOk = ALLOWED_MIME_TYPES.includes(file.mimetype);
+      const extOk =
+        MIME_ALLOWED_EXTENSIONS[file.mimetype]?.includes(fileExt) ?? false;
+      const fileTypeAllowed = mimeOk && extOk;
+      // Match MIME and filename extension. Generic browser fallbacks are still
+      // accepted through MIME_ALLOWED_EXTENSIONS, but only for known extensions.
+      if (!fileTypeAllowed) {
+        throw new BadRequestException('File type not allowed');
+      }
+      const isThreeDFile = THREE_D_EXTENSIONS.includes(fileExt);
+      const maxSizeBytes = isThreeDFile
+        ? THREE_D_MAX_FILE_SIZE_BYTES
+        : PAPER_MAX_FILE_SIZE_BYTES;
+      const maxSizeMb = isThreeDFile
+        ? THREE_D_MAX_FILE_SIZE_MB
+        : PAPER_MAX_FILE_SIZE_MB;
+      if (file.size > maxSizeBytes) {
+        throw new BadRequestException(`File exceeds ${maxSizeMb} MB limit`);
+      }
 
-    const now = new Date();
-    const datePath = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
-    const objectKey = `uploads/${purpose}/${datePath}/${randomUUID()}${fileExt}`;
+      const now = new Date();
+      const datePath = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
+      const objectKey = `uploads/${purpose}/${datePath}/${randomUUID()}${fileExt}`;
 
-    // Run the original-file upload concurrently with content analysis.
-    // Analysis only needs the in-memory buffer, not the upload result, so
-    // there's no dependency between them. This roughly halves end-to-end
-    // latency for 3D files where parsing + GLB encoding takes >100 ms.
-    const uploadPromise = this.storageService
-      .upload(file.buffer, objectKey, file.mimetype)
-      .catch((err: unknown) => {
+      // Run the original-file upload concurrently with content analysis.
+      // Disk-backed uploads stream to object storage so large files do not sit
+      // in Multer's heap buffer before the service can process them.
+      const uploadPromise = (
+        this.hasMemoryBuffer(file)
+          ? this.storageService.upload(
+              this.storageSource(file),
+              objectKey,
+              file.mimetype,
+            )
+          : this.storageService.upload(
+              this.storageSource(file),
+              objectKey,
+              file.mimetype,
+              file.size,
+            )
+      ).catch((err: unknown) => {
         this.logger.error('MinIO upload failed', err);
         throw new InternalServerErrorException('File upload failed');
       });
 
-    const analysisPromise = this.analysisService
-      .analyze(file.buffer, file.mimetype, file.originalname)
-      .catch((err: unknown) => {
-        this.logger.warn(`File analysis failed (non-fatal): ${String(err)}`);
-        return null;
-      });
+      const analysisPromise = this.readUploadBuffer(file)
+        .then((buffer) =>
+          this.analysisService.analyze(
+            buffer,
+            file.mimetype,
+            file.originalname,
+          ),
+        )
+        .catch((err: unknown) => {
+          this.logger.warn(`File analysis failed (non-fatal): ${String(err)}`);
+          return null;
+        });
 
-    const [url, analysis] = await Promise.all([uploadPromise, analysisPromise]);
+      const [url, analysis] = await Promise.all([
+        uploadPromise,
+        analysisPromise,
+      ]);
 
-    // For 3D models that produced a GLB preview, kick off the sibling upload
-    // immediately. Failure is non-fatal — the original file is still saved.
-    let previewGlbObjectKey: string | null = null;
-    if (analysis?.glbBuffer && analysis.glbBuffer.length > 0) {
-      const previewKey = `${objectKey}.preview.glb`;
-      try {
-        await this.storageService.upload(
-          analysis.glbBuffer,
-          previewKey,
-          'model/gltf-binary',
-        );
-        previewGlbObjectKey = previewKey;
-      } catch (err) {
-        this.logger.warn(`Preview GLB upload failed for ${objectKey}: ${err}`);
+      // For 3D models that produced a GLB preview, kick off the sibling upload
+      // immediately. Failure is non-fatal — the original file is still saved.
+      let previewGlbObjectKey: string | null = null;
+      if (analysis?.glbBuffer && analysis.glbBuffer.length > 0) {
+        const previewKey = `${objectKey}.preview.glb`;
+        try {
+          await this.storageService.upload(
+            analysis.glbBuffer,
+            previewKey,
+            'model/gltf-binary',
+          );
+          previewGlbObjectKey = previewKey;
+        } catch (err) {
+          this.logger.warn(
+            `Preview GLB upload failed for ${objectKey}: ${err}`,
+          );
+        }
       }
-    }
 
-    const meta = this.fileRepo.create({
-      originalName: file.originalname,
-      mimeType: file.mimetype,
-      size: file.size,
-      url,
-      objectKey,
-      uploadedBy,
-      widthPt: analysis?.widthPt ?? null,
-      heightPt: analysis?.heightPt ?? null,
-      widthPx: analysis?.widthPx ?? null,
-      heightPx: analysis?.heightPx ?? null,
-      colorSpace: analysis?.colorSpace ?? null,
-      pageCount: analysis?.pageCount ?? null,
-      dpi: analysis?.dpi ?? null,
-      model3dWidthMm: analysis?.model3dWidthMm ?? null,
-      model3dDepthMm: analysis?.model3dDepthMm ?? null,
-      model3dHeightMm: analysis?.model3dHeightMm ?? null,
-      model3dTriangleCount: analysis?.model3dTriangleCount ?? null,
-      previewGlbObjectKey,
-    });
-    return this.fileRepo.save(meta);
+      const meta = this.fileRepo.create({
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        url,
+        objectKey,
+        uploadedBy,
+        widthPt: analysis?.widthPt ?? null,
+        heightPt: analysis?.heightPt ?? null,
+        widthPx: analysis?.widthPx ?? null,
+        heightPx: analysis?.heightPx ?? null,
+        colorSpace: analysis?.colorSpace ?? null,
+        pageCount: analysis?.pageCount ?? null,
+        dpi: analysis?.dpi ?? null,
+        model3dWidthMm: analysis?.model3dWidthMm ?? null,
+        model3dDepthMm: analysis?.model3dDepthMm ?? null,
+        model3dHeightMm: analysis?.model3dHeightMm ?? null,
+        model3dTriangleCount: analysis?.model3dTriangleCount ?? null,
+        previewGlbObjectKey,
+      });
+      return this.fileRepo.save(meta);
+    } finally {
+      await this.removeDiskUpload(file);
+    }
+  }
+
+  private hasMemoryBuffer(file: Express.Multer.File): boolean {
+    return Buffer.isBuffer(file.buffer);
+  }
+
+  private storageSource(file: Express.Multer.File): Buffer | Readable {
+    if (this.hasMemoryBuffer(file)) {
+      return file.buffer;
+    }
+    if (file.path) {
+      return createReadStream(file.path);
+    }
+    throw new BadRequestException('Uploaded file is missing content');
+  }
+
+  private readUploadBuffer(file: Express.Multer.File): Promise<Buffer> {
+    if (this.hasMemoryBuffer(file)) {
+      return Promise.resolve(file.buffer);
+    }
+    if (file.path) {
+      return readFile(file.path);
+    }
+    return Promise.reject(
+      new BadRequestException('Uploaded file is missing content'),
+    );
+  }
+
+  private async removeDiskUpload(file: Express.Multer.File): Promise<void> {
+    if (this.hasMemoryBuffer(file) || !file.path) return;
+    try {
+      await unlink(file.path);
+    } catch (err) {
+      this.logger.warn(
+        `Failed to remove temporary upload ${file.path}: ${err}`,
+      );
+    }
   }
 
   async findById(id: number): Promise<FileMetadata> {

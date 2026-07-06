@@ -8,7 +8,6 @@ import 'package:printing_app/features/customer/order/providers/checkout_provider
 import 'package:printing_app/features/customer/order/providers/delivery_slot_provider.dart';
 import 'package:printing_app/features/customer/order/screens/checkout_screen.dart';
 import 'package:printing_app/shared/providers/dio_provider.dart';
-import 'package:printing_app/shared/services/websocket_service.dart';
 
 import '../providers/delivery_slot_provider_test.mocks.dart';
 

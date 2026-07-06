@@ -12,6 +12,7 @@ import 'package:printing_app/features/auth/models/registration_draft.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/auth/widgets/age_range_selector.dart';
 import 'package:printing_app/features/auth/widgets/gender_identity_selector.dart';
+import 'package:printing_app/features/auth/widgets/password_visibility_toggle.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/features/auth/widgets/onboarding_hero.dart';
 import 'package:vector_math/vector_math_64.dart' show Vector3;
@@ -241,31 +242,35 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 left: -150,
                 right: -150,
                 child: IgnorePointer(
-                  child: Container(
-                    height: 500,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          colors.brand.withValues(alpha: 0.50),
-                          colors.brand.withValues(alpha: 0.0),
-                        ],
-                      ),
-                    ),
-                  )
-                      .animate(onPlay: (controller) => controller.repeat(reverse: true))
-                      .slideX(
-                        begin: -0.15,
-                        end: 0.15,
-                        duration: 5000.ms,
-                        curve: Curves.easeInOutSine,
-                      )
-                      .slideY(
-                        begin: -0.05,
-                        end: 0.05,
-                        duration: 7000.ms,
-                        curve: Curves.easeInOutSine,
-                      ),
+                  child:
+                      Container(
+                            height: 500,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: RadialGradient(
+                                colors: [
+                                  colors.brand.withValues(alpha: 0.50),
+                                  colors.brand.withValues(alpha: 0.0),
+                                ],
+                              ),
+                            ),
+                          )
+                          .animate(
+                            onPlay: (controller) =>
+                                controller.repeat(reverse: true),
+                          )
+                          .slideX(
+                            begin: -0.15,
+                            end: 0.15,
+                            duration: 5000.ms,
+                            curve: Curves.easeInOutSine,
+                          )
+                          .slideY(
+                            begin: -0.05,
+                            end: 0.05,
+                            duration: 7000.ms,
+                            curve: Curves.easeInOutSine,
+                          ),
                 ),
               ),
               Padding(
@@ -278,134 +283,161 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                _WizardHeader(
-                      stepIndex: _stepIndex,
-                      stepCount: _RegisterStep.values.length,
-                      onBack: () => _back(context),
-                      canGoBack: true,
-                      colors: colors,
-                    )
-                    .animate()
-                    .fadeIn(duration: 320.ms, curve: Curves.easeOut)
-                    .slideY(
-                      begin: 0.02,
-                      duration: 320.ms,
-                      curve: Curves.easeOut,
-                    ),
-                const SizedBox(height: AppSpacing.xl),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 280),
-                          transitionBuilder: (child, animation) {
-                            return FadeTransition(
-                              opacity: animation,
-                              child: ScaleTransition(
-                                scale: Tween<double>(begin: 0.96, end: 1.0).animate(
-                                  CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-                                ),
-                                child: SlideTransition(
-                                  position: Tween<Offset>(
-                                    begin: const Offset(0.04, 0),
-                                    end: Offset.zero,
-                                  ).animate(
-                                    CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+                    _WizardHeader(
+                          stepIndex: _stepIndex,
+                          stepCount: _RegisterStep.values.length,
+                          onBack: () => _back(context),
+                          canGoBack: true,
+                          colors: colors,
+                        )
+                        .animate()
+                        .fadeIn(duration: 320.ms, curve: Curves.easeOut)
+                        .slideY(
+                          begin: 0.02,
+                          duration: 320.ms,
+                          curve: Curves.easeOut,
+                        ),
+                    const SizedBox(height: AppSpacing.xl),
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          return SingleChildScrollView(
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints.tightFor(
+                                width: constraints.maxWidth,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 280),
+                                    transitionBuilder: (child, animation) {
+                                      return FadeTransition(
+                                        opacity: animation,
+                                        child: ScaleTransition(
+                                          scale:
+                                              Tween<double>(
+                                                begin: 0.96,
+                                                end: 1.0,
+                                              ).animate(
+                                                CurvedAnimation(
+                                                  parent: animation,
+                                                  curve: Curves.easeOutCubic,
+                                                ),
+                                              ),
+                                          child: SlideTransition(
+                                            position:
+                                                Tween<Offset>(
+                                                  begin: const Offset(0.04, 0),
+                                                  end: Offset.zero,
+                                                ).animate(
+                                                  CurvedAnimation(
+                                                    parent: animation,
+                                                    curve: Curves.easeOutCubic,
+                                                  ),
+                                                ),
+                                            child: child,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    child: KeyedSubtree(
+                                      key: ValueKey(_step),
+                                      child: SizedBox(
+                                        width: double.infinity,
+                                        child: _buildStep(
+                                          context,
+                                          colors,
+                                          authState,
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                  child: child,
+                                  if (_stepError != null) ...[
+                                    const SizedBox(height: AppSpacing.md),
+                                    Text(
+                                      _stepError!,
+                                      style: AppTypography.caption.copyWith(
+                                        color: colors.error,
+                                      ),
+                                    ),
+                                  ],
+                                  if (_step == _RegisterStep.account &&
+                                      authState.errorMessage != null) ...[
+                                    const SizedBox(height: AppSpacing.md),
+                                    Text(
+                                      authState.errorMessage!,
+                                      style: AppTypography.caption.copyWith(
+                                        color: colors.error,
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(height: AppSpacing.lg),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    if (_step != _RegisterStep.account)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: AppButton(
+                              label: 'Back',
+                              onTap: () => _back(context),
+                              variant: AppButtonVariant.secondary,
+                              isFullWidth: true,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.md),
+                          Expanded(
+                            child: AppButton(
+                              label: _step == _RegisterStep.privacy
+                                  ? 'Agree & Continue'
+                                  : 'Continue',
+                              onTap: _next,
+                              variant: AppButtonVariant.brand,
+                              isFullWidth: true,
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      AppButton(
+                        label: 'Create Account',
+                        onTap: _submit,
+                        isLoading: authState.isLoading,
+                        variant: AppButtonVariant.brand,
+                        isFullWidth: true,
+                      ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Center(
+                      child: GestureDetector(
+                        onTap: () => context.pop(),
+                        child: Text.rich(
+                          TextSpan(
+                            text: 'Already have an account? ',
+                            style: AppTypography.body.copyWith(
+                              color: colors.onSurfaceDim,
+                            ),
+                            children: [
+                              TextSpan(
+                                text: 'Sign in',
+                                style: AppTypography.bodyBold.copyWith(
+                                  color: colors.brand,
                                 ),
                               ),
-                            );
-                          },
-                          child: KeyedSubtree(
-                            key: ValueKey(_step),
-                            child: _buildStep(context, colors, authState),
+                            ],
                           ),
                         ),
-                        if (_stepError != null) ...[
-                          const SizedBox(height: AppSpacing.md),
-                          Text(
-                            _stepError!,
-                            style: AppTypography.caption.copyWith(
-                              color: colors.error,
-                            ),
-                          ),
-                        ],
-                        if (_step == _RegisterStep.account &&
-                            authState.errorMessage != null) ...[
-                          const SizedBox(height: AppSpacing.md),
-                          Text(
-                            authState.errorMessage!,
-                            style: AppTypography.caption.copyWith(
-                              color: colors.error,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: AppSpacing.lg),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                if (_step != _RegisterStep.account)
-                  Row(
-                    children: [
-                      Expanded(
-                        child: AppButton(
-                          label: 'Back',
-                          onTap: () => _back(context),
-                          variant: AppButtonVariant.secondary,
-                          isFullWidth: true,
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.md),
-                      Expanded(
-                        child: AppButton(
-                          label: _step == _RegisterStep.privacy
-                              ? 'Agree & Continue'
-                              : 'Continue',
-                          onTap: _next,
-                          variant: AppButtonVariant.brand,
-                          isFullWidth: true,
-                        ),
-                      ),
-                    ],
-                  )
-                else
-                  AppButton(
-                    label: 'Create Account',
-                    onTap: _submit,
-                    isLoading: authState.isLoading,
-                    variant: AppButtonVariant.brand,
-                    isFullWidth: true,
-                  ),
-                const SizedBox(height: AppSpacing.lg),
-                Center(
-                  child: GestureDetector(
-                    onTap: () => context.pop(),
-                    child: Text.rich(
-                      TextSpan(
-                        text: 'Already have an account? ',
-                        style: AppTypography.body.copyWith(
-                          color: colors.onSurfaceDim,
-                        ),
-                        children: [
-                          TextSpan(
-                            text: 'Sign in',
-                            style: AppTypography.bodyBold.copyWith(
-                              color: colors.brand,
-                            ),
-                          ),
-                        ],
                       ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
             ],
           ),
         ),
@@ -425,41 +457,60 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           children: [
             const SizedBox(height: 48),
             Center(
-              child: SvgPicture.asset(
-                'assets/animations/undraw_certificate.svg',
-                height: 240,
-              ),
-            )
+                  child: SvgPicture.asset(
+                    'assets/animations/undraw_certificate.svg',
+                    height: 240,
+                  ),
+                )
                 .animate()
                 .fadeIn(duration: 500.ms, curve: Curves.easeOut)
-                .slideY(begin: 0.05, end: 0, duration: 500.ms, curve: Curves.easeOutCubic),
+                .slideY(
+                  begin: 0.05,
+                  end: 0,
+                  duration: 500.ms,
+                  curve: Curves.easeOutCubic,
+                ),
             const SizedBox(height: 64),
             Center(
-              child: Text(
-                'Your data, your rules.',
-                textAlign: TextAlign.center,
-                style: AppTypography.display.copyWith(color: colors.onBackground),
-              ),
-            )
+                  child: Text(
+                    'Your data, your rules.',
+                    textAlign: TextAlign.center,
+                    style: AppTypography.display.copyWith(
+                      color: colors.onBackground,
+                    ),
+                  ),
+                )
                 .animate()
                 .fadeIn(delay: 100.ms, duration: 500.ms, curve: Curves.easeOut)
-                .slideY(begin: 0.05, end: 0, delay: 100.ms, duration: 500.ms, curve: Curves.easeOutCubic),
+                .slideY(
+                  begin: 0.05,
+                  end: 0,
+                  delay: 100.ms,
+                  duration: 500.ms,
+                  curve: Curves.easeOutCubic,
+                ),
             const SizedBox(height: AppSpacing.xl),
             Center(
-              child: GestureDetector(
-                onTap: () => context.push('/customer/profile/terms'),
-                child: Text(
-                  'View Terms & Conditions',
-                  style: AppTypography.body.copyWith(
-                    color: colors.onSurfaceDim,
-                    decoration: TextDecoration.underline,
+                  child: GestureDetector(
+                    onTap: () => context.push('/customer/profile/terms'),
+                    child: Text(
+                      'View Terms & Conditions',
+                      style: AppTypography.body.copyWith(
+                        color: colors.onSurfaceDim,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            )
+                )
                 .animate()
                 .fadeIn(delay: 200.ms, duration: 500.ms, curve: Curves.easeOut)
-                .slideY(begin: 0.05, end: 0, delay: 200.ms, duration: 500.ms, curve: Curves.easeOutCubic),
+                .slideY(
+                  begin: 0.05,
+                  end: 0,
+                  delay: 200.ms,
+                  duration: 500.ms,
+                  curve: Curves.easeOutCubic,
+                ),
           ],
         );
       case _RegisterStep.nickname:
@@ -467,62 +518,81 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Center(
-              child: SizedBox(
-                height: 300,
-                width: 300,
-                child: Stack(
-                  children: [
-                    SvgPicture.asset(
-                      'assets/animations/undraw_friendly-guy-avatar_body.svg',
-                    ),
-                    SvgPicture.asset(
-                      'assets/animations/undraw_friendly-guy-avatar_arm.svg',
-                    )
-                        .animate(onPlay: (controller) => controller.repeat(reverse: true))
-                        .rotate(
-                          begin: 0,
-                          end: 0.05,
-                          alignment: const Alignment(-0.35, 0.35),
-                          duration: 1500.ms,
-                          curve: Curves.easeInOut,
+                  child: SizedBox(
+                    height: 300,
+                    width: 300,
+                    child: Stack(
+                      children: [
+                        SvgPicture.asset(
+                          'assets/animations/undraw_friendly-guy-avatar_body.svg',
                         ),
-                  ],
-                ),
-              ),
-            )
+                        SvgPicture.asset(
+                              'assets/animations/undraw_friendly-guy-avatar_arm.svg',
+                            )
+                            .animate(
+                              onPlay: (controller) =>
+                                  controller.repeat(reverse: true),
+                            )
+                            .rotate(
+                              begin: 0,
+                              end: 0.05,
+                              alignment: const Alignment(-0.35, 0.35),
+                              duration: 1500.ms,
+                              curve: Curves.easeInOut,
+                            ),
+                      ],
+                    ),
+                  ),
+                )
                 .animate()
                 .fadeIn(duration: 500.ms, curve: Curves.easeOut)
-                .slideY(begin: 0.05, end: 0, duration: 500.ms, curve: Curves.easeOutCubic),
+                .slideY(
+                  begin: 0.05,
+                  end: 0,
+                  duration: 500.ms,
+                  curve: Curves.easeOutCubic,
+                ),
             const SizedBox(height: 64),
             Center(
-              child: Text(
-                'What should we call you?',
-                textAlign: TextAlign.center,
-                style: AppTypography.display.copyWith(color: colors.onBackground),
-              ),
-            )
+                  child: Text(
+                    'What should we call you?',
+                    textAlign: TextAlign.center,
+                    style: AppTypography.display.copyWith(
+                      color: colors.onBackground,
+                    ),
+                  ),
+                )
                 .animate()
                 .fadeIn(delay: 100.ms, duration: 500.ms, curve: Curves.easeOut)
-                .slideY(begin: 0.05, end: 0, delay: 100.ms, duration: 500.ms, curve: Curves.easeOutCubic),
+                .slideY(
+                  begin: 0.05,
+                  end: 0,
+                  delay: 100.ms,
+                  duration: 500.ms,
+                  curve: Curves.easeOutCubic,
+                ),
             const SizedBox(height: AppSpacing.sm),
             Center(
-              child: Text(
-                'This is how we\'ll greet you throughout the app.',
-                textAlign: TextAlign.center,
-                style: AppTypography.bodyLarge.copyWith(
-                  color: colors.onSurfaceDim,
-                  height: 1.5,
-                ),
-              ),
-            )
+                  child: Text(
+                    'This is how we\'ll greet you throughout the app.',
+                    textAlign: TextAlign.center,
+                    style: AppTypography.bodyLarge.copyWith(
+                      color: colors.onSurfaceDim,
+                      height: 1.5,
+                    ),
+                  ),
+                )
                 .animate()
                 .fadeIn(delay: 200.ms, duration: 500.ms, curve: Curves.easeOut)
-                .slideY(begin: 0.05, end: 0, delay: 200.ms, duration: 500.ms, curve: Curves.easeOutCubic),
+                .slideY(
+                  begin: 0.05,
+                  end: 0,
+                  delay: 200.ms,
+                  duration: 500.ms,
+                  curve: Curves.easeOutCubic,
+                ),
             const SizedBox(height: AppSpacing.xl),
-            _NicknameInputCard(
-              controller: _nicknameController,
-              colors: colors,
-            ),
+            _NicknameInputCard(controller: _nicknameController, colors: colors),
           ],
         );
       case _RegisterStep.category:
@@ -536,7 +606,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             const SizedBox(height: AppSpacing.sm),
             Text(
               'Pick the lane that fits.',
-              style: AppTypography.bodyLarge.copyWith(color: colors.onSurfaceDim),
+              style: AppTypography.bodyLarge.copyWith(
+                color: colors.onSurfaceDim,
+              ),
             ),
             const SizedBox(height: AppSpacing.xl),
             _CategoryCarousel(
@@ -622,7 +694,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             const SizedBox(height: AppSpacing.sm),
             Text(
               'Swipe to find your range.',
-              style: AppTypography.bodyLarge.copyWith(color: colors.onSurfaceDim),
+              style: AppTypography.bodyLarge.copyWith(
+                color: colors.onSurfaceDim,
+              ),
             ),
             const SizedBox(height: AppSpacing.xl),
             AgeRangeSelector(
@@ -661,7 +735,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             const SizedBox(height: AppSpacing.xs),
             Text(
               'Let\'s create your account.',
-              style: AppTypography.bodyLarge.copyWith(color: colors.onSurfaceDim),
+              style: AppTypography.bodyLarge.copyWith(
+                color: colors.onSurfaceDim,
+              ),
             ),
             const SizedBox(height: AppSpacing.xl),
             _AccountField(
@@ -740,7 +816,7 @@ class _WizardHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           children: [
@@ -830,19 +906,20 @@ class _ChoiceCard extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              SvgPicture.asset(
-                svgAsset,
-                height: 200,
-              ),
+              SvgPicture.asset(svgAsset, height: 200),
               const SizedBox(height: AppSpacing.md),
               Text(
                 title,
-                style: AppTypography.bodyBold.copyWith(color: colors.onBackground),
+                style: AppTypography.bodyBold.copyWith(
+                  color: colors.onBackground,
+                ),
               ),
               const SizedBox(height: AppSpacing.xs),
               Text(
                 subtitle,
-                style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+                style: AppTypography.caption.copyWith(
+                  color: colors.onSurfaceDim,
+                ),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -1069,10 +1146,11 @@ class _AccountFieldState extends State<_AccountField> {
     final hasError = widget.errorText != null && widget.errorText!.isNotEmpty;
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AnimatedContainer(
           duration: const Duration(milliseconds: 200),
+          width: double.infinity,
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md,
             vertical: AppSpacing.sm,
@@ -1084,8 +1162,8 @@ class _AccountFieldState extends State<_AccountField> {
               color: hasError
                   ? colors.error
                   : _isFocused
-                      ? colors.brand
-                      : colors.outline,
+                  ? colors.brand
+                  : colors.outline,
               width: _isFocused || hasError ? 2 : 1,
             ),
           ),
@@ -1124,6 +1202,17 @@ class _AccountFieldState extends State<_AccountField> {
                         hintStyle: AppTypography.body.copyWith(
                           color: colors.onSurfaceDim,
                         ),
+                        suffixIcon: widget.obscureText
+                            ? PasswordVisibilityToggle(
+                                isObscured: _obscured,
+                                onPressed: () =>
+                                    setState(() => _obscured = !_obscured),
+                              )
+                            : null,
+                        suffixIconConstraints: const BoxConstraints(
+                          minWidth: 44,
+                          minHeight: 40,
+                        ),
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
@@ -1134,31 +1223,13 @@ class _AccountFieldState extends State<_AccountField> {
                   ],
                 ),
               ),
-              if (widget.obscureText)
-                IconButton(
-                  tooltip: _obscured ? 'Show password' : 'Hide password',
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 40,
-                    height: 40,
-                  ),
-                  onPressed: () => setState(() => _obscured = !_obscured),
-                  icon: Icon(
-                    _obscured
-                        ? Icons.visibility_off_rounded
-                        : Icons.visibility_rounded,
-                    size: 20,
-                    color: colors.onSurfaceDim,
-                  ),
-                )
-              else if (_isValid && !hasError)
+              if (!widget.obscureText && _isValid && !hasError)
                 Icon(
-                  Icons.check_circle_rounded,
-                  key: const ValueKey('valid'),
-                  size: 20,
-                  color: colors.success,
-                )
+                      Icons.check_circle_rounded,
+                      key: const ValueKey('valid'),
+                      size: 20,
+                      color: colors.success,
+                    )
                     .animate()
                     .fadeIn(duration: 80.ms)
                     .scale(
@@ -1185,10 +1256,7 @@ class _AccountFieldState extends State<_AccountField> {
 }
 
 class _NicknameInputCard extends StatefulWidget {
-  const _NicknameInputCard({
-    required this.controller,
-    required this.colors,
-  });
+  const _NicknameInputCard({required this.controller, required this.colors});
 
   final TextEditingController controller;
   final AppColorSet colors;
@@ -1291,16 +1359,28 @@ class _CategoryCarouselState extends State<_CategoryCarousel> {
   int _currentPage = 0;
 
   static const _categories = [
-    (id: 'student', title: 'Student', subtitle: 'School / uni', svg: 'assets/animations/undraw_learning.svg'),
-    (id: 'professional', title: 'Professional', subtitle: 'Work / client', svg: 'assets/animations/undraw_business-call.svg'),
+    (
+      id: 'student',
+      title: 'Student',
+      subtitle: 'School / uni',
+      svg: 'assets/animations/undraw_learning.svg',
+    ),
+    (
+      id: 'professional',
+      title: 'Professional',
+      subtitle: 'Work / client',
+      svg: 'assets/animations/undraw_business-call.svg',
+    ),
   ];
 
   @override
   void initState() {
     super.initState();
-    _currentPage = _categories.indexWhere((c) => c.id == widget.selectedCategory);
+    _currentPage = _categories.indexWhere(
+      (c) => c.id == widget.selectedCategory,
+    );
     if (_currentPage == -1) _currentPage = 0;
-    
+
     _pageController = PageController(
       initialPage: _currentPage,
       viewportFraction: 0.65,
@@ -1333,17 +1413,18 @@ class _CategoryCarouselState extends State<_CategoryCarousel> {
             animation: _pageController,
             builder: (context, child) {
               double value = 0.0;
-              if (_pageController.hasClients && _pageController.position.haveDimensions) {
+              if (_pageController.hasClients &&
+                  _pageController.position.haveDimensions) {
                 value = _pageController.page! - index;
               } else {
                 value = _currentPage.toDouble() - index;
               }
-              
+
               final clampedValue = value.clamp(-1.0, 1.0);
-              
-              final angle = clampedValue * 0.2; 
-              final scale = 1.0 - (clampedValue.abs() * 0.20); 
-              
+
+              final angle = clampedValue * 0.2;
+              final scale = 1.0 - (clampedValue.abs() * 0.20);
+
               final transform = Matrix4.identity()
                 ..setEntry(3, 2, 0.001)
                 ..rotateY(angle)

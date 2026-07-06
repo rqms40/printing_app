@@ -148,8 +148,12 @@ class MockData {
     updatedAt: _now.subtract(const Duration(days: 10)),
   );
 
-  static List<Address> get addresses =>
-      [addressMakati, addressQC, addressCebu, addressDavao];
+  static List<Address> get addresses => [
+    addressMakati,
+    addressQC,
+    addressCebu,
+    addressDavao,
+  ];
 
   // ─── Paper & 3D Specs ──────────────────────────────────────────────
 
@@ -314,6 +318,18 @@ class MockData {
       deliveryOption: 'delivery',
       deliveryAddressId: 'addr_004',
       assignedRiderId: 'usr_002',
+      deliveryAssignmentId: 'da_001',
+      assignedRider: const AssignedRiderContact(
+        userId: 'usr_002',
+        riderProfileId: 'rider_001',
+        displayName: 'Juan Dela Cruz',
+        fullName: 'Juan Dela Cruz',
+        phoneNumber: '+639171234567',
+        vehicleType: 'motorcycle',
+        plateNumber: 'ABC 1234',
+        deliveryAssignmentId: 'da_001',
+        deliveryStatus: 'on_the_way',
+      ),
       trackingLink: 'https://track.gridgoprint.ph/ORD-10005',
       createdAt: _now.subtract(const Duration(days: 3)),
       updatedAt: _now.subtract(const Duration(minutes: 30)),
@@ -337,6 +353,17 @@ class MockData {
       deliveryOption: 'delivery',
       deliveryAddressId: 'addr_001',
       assignedRiderId: 'usr_002',
+      assignedRider: const AssignedRiderContact(
+        userId: 'usr_002',
+        riderProfileId: 'rider_001',
+        displayName: 'Juan Dela Cruz',
+        fullName: 'Juan Dela Cruz',
+        phoneNumber: '+639171234567',
+        vehicleType: 'motorcycle',
+        plateNumber: 'ABC 1234',
+        deliveryAssignmentId: 'da_002',
+        deliveryStatus: 'delivered',
+      ),
       createdAt: _now.subtract(const Duration(days: 7)),
       updatedAt: _now.subtract(const Duration(days: 5)),
     ),
@@ -377,7 +404,8 @@ class MockData {
       paymentMethod: PaymentMethod.cod,
       paymentStatus: PaymentStatus.pending,
       orderStatus: OrderStatus.fileDeclined,
-      declineReason: 'File has non-manifold geometry. Please repair the mesh and re-upload.',
+      declineReason:
+          'File has non-manifold geometry. Please repair the mesh and re-upload.',
       deliveryOption: 'delivery',
       deliveryAddressId: 'addr_001',
       createdAt: _now.subtract(const Duration(days: 1)),
@@ -458,8 +486,10 @@ class MockData {
     updatedAt: _now.subtract(const Duration(hours: 1)),
   );
 
-  static List<RiderProfile> get riderProfiles =>
-      [riderProfileJuan, riderProfileCarlos];
+  static List<RiderProfile> get riderProfiles => [
+    riderProfileJuan,
+    riderProfileCarlos,
+  ];
 
   // ─── Delivery Assignments ──────────────────────────────────────────
 
@@ -490,6 +520,13 @@ class MockData {
       arrivedAt: _now.subtract(const Duration(days: 5, hours: 1)),
       deliveredAt: _now.subtract(const Duration(days: 5, minutes: 45)),
       proofPhotoUrl: 'https://storage.example.com/proofs/da_002.jpg',
+      proof: DeliveryProof(
+        type: 'photo',
+        fileId: 55,
+        objectKey: 'uploads/proof-of-delivery/da_002.jpg',
+        capturedAt: _now.subtract(const Duration(days: 5, minutes: 45)),
+        capturedByRiderId: 'usr_002',
+      ),
       createdAt: _now.subtract(const Duration(days: 5, hours: 3)),
       updatedAt: _now.subtract(const Duration(days: 5, minutes: 45)),
     ),
@@ -560,15 +597,19 @@ class MockData {
     final updates = <LocationUpdate>[];
     for (var i = 0; i < routeCoords.length; i++) {
       final (lat, lng) = routeCoords[i];
-      updates.add(LocationUpdate(
-        id: 'loc_${i.toString().padLeft(3, '0')}',
-        deliveryAssignmentId: 'da_001',
-        latitude: lat,
-        longitude: lng,
-        speed: 25.0 + (i % 5) * 5.0,
-        heading: 10.0 + (i * 8.0),
-        timestamp: _now.subtract(Duration(minutes: (routeCoords.length - i) * 2)),
-      ));
+      updates.add(
+        LocationUpdate(
+          id: 'loc_${i.toString().padLeft(3, '0')}',
+          deliveryAssignmentId: 'da_001',
+          latitude: lat,
+          longitude: lng,
+          speed: 25.0 + (i % 5) * 5.0,
+          heading: 10.0 + (i * 8.0),
+          timestamp: _now.subtract(
+            Duration(minutes: (routeCoords.length - i) * 2),
+          ),
+        ),
+      );
     }
 
     return updates;
@@ -707,7 +748,8 @@ class MockData {
       userId: 'usr_001',
       orderId: 'ord_002',
       title: 'File Verified',
-      message: 'Your file for ORD-10002 has been verified and approved for printing.',
+      message:
+          'Your file for ORD-10002 has been verified and approved for printing.',
       type: 'order_update',
       isRead: true,
       createdAt: _now.subtract(const Duration(hours: 3)),
@@ -747,7 +789,8 @@ class MockData {
       userId: 'usr_001',
       orderId: 'ord_008',
       title: 'File Declined',
-      message: 'Your file for ORD-10008 was declined. Please check the details and re-upload.',
+      message:
+          'Your file for ORD-10008 was declined. Please check the details and re-upload.',
       type: 'order_update',
       isRead: false,
       createdAt: _now.subtract(const Duration(hours: 8)),
@@ -757,7 +800,8 @@ class MockData {
       userId: 'usr_001',
       orderId: 'ord_009',
       title: 'Refund Processed',
-      message: 'Your refund of P580.00 for ORD-10009 has been processed to your GCash account.',
+      message:
+          'Your refund of P580.00 for ORD-10009 has been processed to your GCash account.',
       type: 'payment',
       isRead: true,
       createdAt: _now.subtract(const Duration(days: 10)),
@@ -766,7 +810,8 @@ class MockData {
       id: 'notif_008',
       userId: 'usr_001',
       title: 'Welcome to GRIDGO!',
-      message: 'Start your first order and enjoy premium printing services delivered to your doorstep.',
+      message:
+          'Start your first order and enjoy premium printing services delivered to your doorstep.',
       type: 'promo',
       isRead: true,
       createdAt: _now.subtract(const Duration(days: 90)),
@@ -796,7 +841,8 @@ class MockData {
       userId: 'usr_001',
       orderId: 'ord_004',
       title: 'Ready for Dispatch',
-      message: 'Your order ORD-10004 is ready and a rider will be assigned shortly.',
+      message:
+          'Your order ORD-10004 is ready and a rider will be assigned shortly.',
       type: 'order_update',
       isRead: false,
       createdAt: _now.subtract(const Duration(hours: 4)),
@@ -806,7 +852,8 @@ class MockData {
       userId: 'usr_001',
       orderId: 'ord_007',
       title: 'Quality Check Passed',
-      message: 'Your 3D print order ORD-10007 has passed quality inspection and is ready for pickup.',
+      message:
+          'Your 3D print order ORD-10007 has passed quality inspection and is ready for pickup.',
       type: 'order_update',
       isRead: false,
       createdAt: _now.subtract(const Duration(hours: 5)),
@@ -816,7 +863,8 @@ class MockData {
       userId: 'usr_003',
       orderId: 'ord_001',
       title: 'New Order Received',
-      message: 'New order ORD-10001 from Maria Santos. Please verify the uploaded file.',
+      message:
+          'New order ORD-10001 from Maria Santos. Please verify the uploaded file.',
       type: 'admin_alert',
       isRead: false,
       createdAt: _now.subtract(const Duration(hours: 2)),
@@ -825,7 +873,8 @@ class MockData {
       id: 'notif_014',
       userId: 'usr_001',
       title: '20% Off This Weekend!',
-      message: 'Enjoy 20% off on all A3 poster prints this weekend. Use code POSTER20.',
+      message:
+          'Enjoy 20% off on all A3 poster prints this weekend. Use code POSTER20.',
       type: 'promo',
       isRead: false,
       createdAt: _now.subtract(const Duration(hours: 12)),

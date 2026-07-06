@@ -17,6 +17,7 @@ void main() {
   List<Map<String, dynamic>>? activeAssignmentsResponse;
   List<Map<String, dynamic>>? historyAssignmentsResponse;
   var failPatchStatus = false;
+  Map<String, dynamic>? lastStatusPatchData;
   Interceptor? riderApiInterceptor;
 
   setUpAll(() {
@@ -67,6 +68,7 @@ void main() {
         if (options.path.startsWith('/riders/assignments/') &&
             options.path.endsWith('/status') &&
             options.method == 'PATCH') {
+          lastStatusPatchData = Map<String, dynamic>.from(options.data as Map);
           if (failPatchStatus) {
             handler.reject(
               DioException(
@@ -107,6 +109,7 @@ void main() {
     activeAssignmentsResponse = null;
     historyAssignmentsResponse = null;
     failPatchStatus = false;
+    lastStatusPatchData = null;
   });
 
   group('DeliveriesNotifier', () {
@@ -248,13 +251,41 @@ void main() {
         DeliveryStatus.arrived,
       );
 
-      // arrived -> delivered
+      // arrived -> delivered requires proof, so the generic checkpoint advance
+      // must stop at arrived.
       await notifier.advanceCheckpoint(id);
+      final arrived = notifier.state.assignments.firstWhere((a) => a.id == id);
+      expect(arrived.status, DeliveryStatus.arrived);
+      expect(arrived.deliveredAt, isNull);
+      expect(
+        notifier.state.errorMessage,
+        'Proof of delivery is required before completing this stop',
+      );
+    });
+
+    test('completeDeliveryWithProof sends signature proof metadata', () async {
+      final id = notifier.state.assignments
+          .firstWhere((a) => a.status == DeliveryStatus.assigned)
+          .id;
+      await notifier.advanceCheckpoint(id);
+      await notifier.advanceCheckpoint(id);
+      await notifier.advanceCheckpoint(id);
+      await notifier.advanceCheckpoint(id);
+
+      await (notifier as dynamic).completeDeliveryWithProof(id, {
+        'type': 'signature',
+        'signatureData': 'svg:path-data',
+      });
+
       final delivered = notifier.state.assignments.firstWhere(
         (a) => a.id == id,
       );
       expect(delivered.status, DeliveryStatus.delivered);
       expect(delivered.deliveredAt, isNotNull);
+      expect(lastStatusPatchData, {
+        'status': 'delivered',
+        'proof': {'type': 'signature', 'signatureData': 'svg:path-data'},
+      });
     });
 
     test('advanceCheckpoint is no-op for delivered status', () async {

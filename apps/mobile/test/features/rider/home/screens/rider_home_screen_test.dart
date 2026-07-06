@@ -12,7 +12,12 @@ void main() {
   testWidgets('rider home renders header and route section without overflow',
       (tester) async {
     final router = GoRouter(
-      routes: [GoRoute(path: '/', builder: (_, __) => const RiderHomeScreen())],
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (context, state) => const RiderHomeScreen(),
+        ),
+      ],
     );
 
     // runAsync lets outstanding futures (network failures, earnings fallback)

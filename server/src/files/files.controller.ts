@@ -15,7 +15,11 @@ import {
   Body,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
+import { diskStorage } from 'multer';
+import { mkdirSync } from 'fs';
+import { tmpdir } from 'os';
+import { extname, join } from 'path';
+import { randomUUID } from 'crypto';
 import { ApiBearerAuth, ApiTags, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FilesService } from './files.service';
@@ -25,6 +29,8 @@ import { PaperSizeValidatorService } from './paper-size-validator.service';
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
 import { PT_TO_MM } from './files.constants';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
+
+const UPLOAD_TMP_DIR = join(tmpdir(), 'gridgo-uploads');
 
 @ApiTags('files')
 @ApiBearerAuth()
@@ -41,9 +47,20 @@ export class FilesController {
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: memoryStorage(),
+      storage: diskStorage({
+        destination: (_req, _file, cb) => {
+          mkdirSync(UPLOAD_TMP_DIR, { recursive: true });
+          cb(null, UPLOAD_TMP_DIR);
+        },
+        filename: (_req, file, cb) => {
+          cb(
+            null,
+            `${randomUUID()}${extname(file.originalname).toLowerCase()}`,
+          );
+        },
+      }),
       // Match the largest allowed type (3D files at 200 MB). Multer
-      // truncates anything larger and surfaces a multer error.
+      // rejects anything larger before it reaches application code.
       limits: { fileSize: 200 * 1024 * 1024 },
     }),
   )

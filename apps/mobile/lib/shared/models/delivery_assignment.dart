@@ -1,5 +1,23 @@
 import 'enums.dart';
 
+class DeliveryProof {
+  const DeliveryProof({
+    required this.type,
+    this.fileId,
+    this.objectKey,
+    this.signatureData,
+    this.capturedAt,
+    this.capturedByRiderId,
+  });
+
+  final String type;
+  final int? fileId;
+  final String? objectKey;
+  final String? signatureData;
+  final DateTime? capturedAt;
+  final String? capturedByRiderId;
+}
+
 class DeliveryAssignment {
   const DeliveryAssignment({
     required this.id,
@@ -14,6 +32,7 @@ class DeliveryAssignment {
     this.deliveredAt,
     this.declineReason,
     this.proofPhotoUrl,
+    this.proof,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -30,6 +49,7 @@ class DeliveryAssignment {
   final DateTime? deliveredAt;
   final String? declineReason;
   final String? proofPhotoUrl;
+  final DeliveryProof? proof;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -46,6 +66,7 @@ class DeliveryAssignment {
     DateTime? deliveredAt,
     String? declineReason,
     String? proofPhotoUrl,
+    DeliveryProof? proof,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -62,12 +83,12 @@ class DeliveryAssignment {
       deliveredAt: deliveredAt ?? this.deliveredAt,
       declineReason: declineReason ?? this.declineReason,
       proofPhotoUrl: proofPhotoUrl ?? this.proofPhotoUrl,
+      proof: proof ?? this.proof,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
   @override
-  String toString() =>
-      'DeliveryAssignment($id, ${status.displayName})';
+  String toString() => 'DeliveryAssignment($id, ${status.displayName})';
 }

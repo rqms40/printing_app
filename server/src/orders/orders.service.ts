@@ -103,6 +103,27 @@ type AssignedSlot = SlotCandidate & {
   bookingId: number;
 };
 
+type AssignedRiderContact = {
+  userId: number;
+  riderProfileId: number;
+  displayName: string | null;
+  fullName: string | null;
+  nickname: string | null;
+  phoneNumber: string | null;
+  vehicleType: string | null;
+  plateNumber: string | null;
+  deliveryAssignmentId: number;
+  deliveryStatus: DeliveryStatus;
+  proof: {
+    type: string | null;
+    fileId: number | null;
+    objectKey: string | null;
+    signatureData: string | null;
+    capturedAt: Date | null;
+    capturedByRiderId: number | null;
+  } | null;
+};
+
 type CreateBatchResult = {
   batchId: string;
   orders: Order[];
@@ -183,12 +204,14 @@ export class OrdersService {
           DeliveryStatus.PICKED_UP,
           DeliveryStatus.ON_THE_WAY,
           DeliveryStatus.ARRIVED,
+          DeliveryStatus.DELIVERED,
         ]),
       },
+      relations: ['rider', 'rider.user'],
     });
 
     const assignmentByOrderId = new Map<number, DeliveryAssignment>();
-    for (const assignment of assignments) {
+    for (const assignment of assignments ?? []) {
       if (!assignmentByOrderId.has(assignment.orderId)) {
         assignmentByOrderId.set(assignment.orderId, assignment);
       }
@@ -197,8 +220,44 @@ export class OrdersService {
     return orders.map((order) =>
       Object.assign(order, {
         deliveryAssignmentId: assignmentByOrderId.get(order.id)?.id ?? null,
+        assignedRiderContact: this.assignedRiderContactFromAssignment(
+          assignmentByOrderId.get(order.id),
+        ),
       }),
     );
+  }
+
+  private assignedRiderContactFromAssignment(
+    assignment: DeliveryAssignment | undefined,
+  ): AssignedRiderContact | null {
+    const rider = assignment?.rider;
+    if (!assignment || !rider) return null;
+
+    const user = rider.user;
+    const fullName = user?.fullName ?? null;
+    const nickname = user?.nickname ?? null;
+    return {
+      userId: rider.userId,
+      riderProfileId: rider.id,
+      displayName: fullName ?? nickname ?? 'Rider',
+      fullName,
+      nickname,
+      phoneNumber: user?.phoneNumber ?? null,
+      vehicleType: rider.vehicleType ?? null,
+      plateNumber: rider.plateNumber ?? null,
+      deliveryAssignmentId: assignment.id,
+      deliveryStatus: assignment.status,
+      proof: assignment.proofType
+        ? {
+            type: assignment.proofType,
+            fileId: assignment.proofFileId ?? null,
+            objectKey: assignment.proofObjectKey ?? null,
+            signatureData: assignment.proofSignatureData ?? null,
+            capturedAt: assignment.proofCapturedAt ?? null,
+            capturedByRiderId: assignment.proofCapturedByRiderId ?? null,
+          }
+        : null,
+    };
   }
 
   async assertBetaOrderLimit(userId: number): Promise<void> {
@@ -261,6 +320,18 @@ export class OrdersService {
         Number(orderData.deliveryAddressId),
         Number(orderData.userId),
       );
+    }
+    if (orderData.fileMetadataId != null) {
+      if (orderData.userId == null) {
+        throw new BadRequestException('Invalid uploaded file reference');
+      }
+      const file = await this.findOwnedFileMetadata(
+        Number(orderData.fileMetadataId),
+        Number(orderData.userId),
+      );
+      orderData.fileMetadataId = file.id;
+      orderData.fileUrl = file.url;
+      orderData.fileName = orderData.fileName ?? file.originalName;
     }
 
     const selectedSpecs = this.selectedSpecsFromLegacy({
@@ -371,6 +442,18 @@ export class OrdersService {
           }
         : undefined,
     }));
+    const fileMetadataById = new Map<number, FileMetadata>();
+    for (const item of normalizedItems) {
+      if (item.fileMetadataId == null) continue;
+      const file = await this.findOwnedFileMetadata(
+        item.fileMetadataId,
+        userId,
+      );
+      item.fileMetadataId = file.id;
+      item.fileUrl = file.url;
+      item.fileName = item.fileName ?? file.originalName;
+      fileMetadataById.set(file.id, file);
+    }
 
     const quote = await this.catalogPricingService.quote({
       items: normalizedItems.map((item) => ({
@@ -511,9 +594,8 @@ export class OrdersService {
     for (const item of normalizedItems) {
       if (item.category !== '3d') continue;
       if (item.fileMetadataId == null) continue;
-      const meta = await this.fileMetadataRepo.findOneOrFail({
-        where: { id: item.fileMetadataId },
-      });
+      const meta = fileMetadataById.get(item.fileMetadataId);
+      if (!meta) continue;
       if (meta.model3dWidthMm == null) continue;
       const w = Number(meta.model3dWidthMm);
       const d = Number(meta.model3dDepthMm);
@@ -957,6 +1039,25 @@ export class OrdersService {
     return address;
   }
 
+  private async findOwnedFileMetadata(
+    fileMetadataId: number,
+    userId: number,
+  ): Promise<FileMetadata> {
+    if (!Number.isInteger(fileMetadataId) || fileMetadataId <= 0) {
+      throw new BadRequestException('Invalid uploaded file reference');
+    }
+
+    const file = await this.fileMetadataRepo.findOne({
+      where: { id: fileMetadataId },
+    });
+
+    if (!file || file.uploadedBy !== userId) {
+      throw new BadRequestException('Invalid uploaded file reference');
+    }
+
+    return file;
+  }
+
   private selectedSpecsFromLegacy(item: {
     category?: string;
     specs?: Record<string, unknown>;
@@ -1186,7 +1287,13 @@ export class OrdersService {
       orderStatus,
       ...updates,
     });
-    const order = await this.ordersRepo.findOneOrFail({ where: { id } });
+    const order = await this.ordersRepo.findOneOrFail({
+      where: { id },
+      relations: OrdersService.ORDER_RELATIONS,
+    });
+    const [orderWithAssignment] = await this.attachDeliveryAssignmentIds([
+      order,
+    ]);
 
     // Stamp file expiry when order reaches either terminal completion status
     if (
@@ -1342,7 +1449,10 @@ export class OrdersService {
     }
 
     // Emit WebSocket order update
-    void this.ordersGateway.notifyOrderUpdate(order.orderId, order);
+    void this.ordersGateway.notifyOrderUpdate(
+      orderWithAssignment.orderId,
+      orderWithAssignment,
+    );
 
     // Create in-app notification for the customer (also emitted via WS)
     if (statusMsg) {
@@ -1412,6 +1522,6 @@ export class OrdersService {
       }
     }
 
-    return order;
+    return orderWithAssignment;
   }
 }

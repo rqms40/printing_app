@@ -111,6 +111,79 @@ describe("api normalizers", () => {
     ]);
   });
 
+  it("preserves assigned rider contact details", () => {
+    const order = normalizeOrder({
+      id: 7,
+      order_id: "ORD-10007",
+      user_id: 1,
+      category: "paper",
+      total_price: 2,
+      delivery_fee: 0,
+      payment_method: "gcash",
+      payment_status: "pending",
+      order_status: "rider_assigned",
+      delivery_option: "delivery",
+      assigned_rider_contact: {
+        user_id: 70,
+        rider_profile_id: 7,
+        display_name: "Maya Santos",
+        phone_number: "+639171234567",
+        vehicle_type: "motorcycle",
+        plate_number: "ABC 1234",
+        delivery_assignment_id: 99,
+        delivery_status: "accepted",
+      },
+      created_at: "2026-05-02T19:00:36.788Z",
+      updated_at: "2026-05-02T19:00:36.788Z",
+    });
+
+    expect(order.assigned_rider_contact).toEqual({
+      user_id: "70",
+      rider_profile_id: "7",
+      display_name: "Maya Santos",
+      full_name: undefined,
+      nickname: undefined,
+      phone_number: "+639171234567",
+      vehicle_type: "motorcycle",
+      plate_number: "ABC 1234",
+      delivery_assignment_id: "99",
+      delivery_status: "accepted",
+    });
+  });
+
+  it("preserves proof of delivery metadata for admin review", () => {
+    const order = normalizeOrder({
+      id: 7,
+      order_id: "ORD-10007",
+      user_id: 1,
+      category: "paper",
+      total_price: 2,
+      delivery_fee: 0,
+      payment_method: "gcash",
+      payment_status: "paid",
+      order_status: "delivered",
+      delivery_option: "delivery",
+      delivery_proof: {
+        type: "photo",
+        file_id: 55,
+        object_key: "uploads/pod/55.jpg",
+        captured_at: "2026-05-02T19:00:36.788Z",
+        captured_by_rider_id: 7,
+      },
+      created_at: "2026-05-02T19:00:36.788Z",
+      updated_at: "2026-05-02T19:00:36.788Z",
+    });
+
+    expect((order as any).delivery_proof).toEqual({
+      type: "photo",
+      file_id: 55,
+      object_key: "uploads/pod/55.jpg",
+      signature_data: undefined,
+      captured_at: "2026-05-02T19:00:36.788Z",
+      captured_by_rider_id: 7,
+    });
+  });
+
   it("maps product category responses and parses allowed extensions", () => {
     const category = normalizeServiceCategory({
       id: 2,
@@ -124,7 +197,7 @@ describe("api normalizers", () => {
       baseRate: "12.5",
       quantityUnit: "page",
       maxFileSizeMb: 25,
-      allowedExtensions: "[\"pdf\",\"png\"]",
+      allowedExtensions: '["pdf","png"]',
       specs: [
         {
           id: 8,

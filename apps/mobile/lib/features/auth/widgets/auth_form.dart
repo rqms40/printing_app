@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/auth/widgets/password_visibility_toggle.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_text_field.dart';
 
@@ -115,13 +116,7 @@ class _AuthFormState extends State<AuthForm> {
     required bool obscured,
     required VoidCallback onPressed,
   }) {
-    return IconButton(
-      tooltip: obscured ? 'Show password' : 'Hide password',
-      icon: Icon(
-        obscured ? Icons.visibility_off_rounded : Icons.visibility_rounded,
-      ),
-      onPressed: onPressed,
-    );
+    return PasswordVisibilityToggle(isObscured: obscured, onPressed: onPressed);
   }
 
   @override

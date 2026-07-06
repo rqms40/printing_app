@@ -131,6 +131,7 @@ void main() {
         expect(find.textContaining('Hi, Kai'), findsOneWidget);
         expect(find.text('Full Name'), findsOneWidget);
         expect(notifier.registerCalls, 0);
+        expect(find.byIcon(Icons.visibility_rounded), findsNWidgets(2));
 
         await tester.enterText(find.byType(TextField).at(0), 'Kai Reyes');
         await tester.enterText(find.byType(TextField).at(1), 'kai@test.com');

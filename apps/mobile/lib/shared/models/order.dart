@@ -40,6 +40,57 @@ class AssignedDeliverySlot {
   final String endTime;
 }
 
+class AssignedRiderContact {
+  const AssignedRiderContact({
+    required this.userId,
+    required this.riderProfileId,
+    required this.displayName,
+    this.fullName,
+    this.nickname,
+    this.phoneNumber,
+    this.vehicleType,
+    this.plateNumber,
+    required this.deliveryAssignmentId,
+    required this.deliveryStatus,
+  });
+
+  final String userId;
+  final String riderProfileId;
+  final String displayName;
+  final String? fullName;
+  final String? nickname;
+  final String? phoneNumber;
+  final String? vehicleType;
+  final String? plateNumber;
+  final String deliveryAssignmentId;
+  final String deliveryStatus;
+
+  factory AssignedRiderContact.fromJson(Map<String, dynamic> json) {
+    String? read(String camel, String snake) {
+      final value = json[camel] ?? json[snake];
+      return value?.toString();
+    }
+
+    return AssignedRiderContact(
+      userId: read('userId', 'user_id') ?? '',
+      riderProfileId: read('riderProfileId', 'rider_profile_id') ?? '',
+      displayName:
+          read('displayName', 'display_name') ??
+          read('fullName', 'full_name') ??
+          read('nickname', 'nickname') ??
+          'Rider',
+      fullName: read('fullName', 'full_name'),
+      nickname: read('nickname', 'nickname'),
+      phoneNumber: read('phoneNumber', 'phone_number'),
+      vehicleType: read('vehicleType', 'vehicle_type'),
+      plateNumber: read('plateNumber', 'plate_number'),
+      deliveryAssignmentId:
+          read('deliveryAssignmentId', 'delivery_assignment_id') ?? '',
+      deliveryStatus: read('deliveryStatus', 'delivery_status') ?? 'assigned',
+    );
+  }
+}
+
 class OrderLineItem {
   const OrderLineItem({
     required this.id,
@@ -101,6 +152,7 @@ class Order {
     this.deliveryAddress,
     this.assignedRiderId,
     this.deliveryAssignmentId,
+    this.assignedRider,
     this.estimatedCompletionAt,
     this.adminStatusNote,
     this.adminStatusSetAt,
@@ -141,6 +193,7 @@ class Order {
   final OrderDeliveryAddress? deliveryAddress;
   final String? assignedRiderId;
   final String? deliveryAssignmentId;
+  final AssignedRiderContact? assignedRider;
   final DateTime? estimatedCompletionAt;
   final String? adminStatusNote;
   final DateTime? adminStatusSetAt;
@@ -231,6 +284,7 @@ class Order {
     OrderDeliveryAddress? deliveryAddress,
     String? assignedRiderId,
     String? deliveryAssignmentId,
+    AssignedRiderContact? assignedRider,
     DateTime? estimatedCompletionAt,
     String? adminStatusNote,
     DateTime? adminStatusSetAt,
@@ -271,6 +325,7 @@ class Order {
       deliveryAddress: deliveryAddress ?? this.deliveryAddress,
       assignedRiderId: assignedRiderId ?? this.assignedRiderId,
       deliveryAssignmentId: deliveryAssignmentId ?? this.deliveryAssignmentId,
+      assignedRider: assignedRider ?? this.assignedRider,
       estimatedCompletionAt:
           estimatedCompletionAt ?? this.estimatedCompletionAt,
       adminStatusNote: adminStatusNote ?? this.adminStatusNote,

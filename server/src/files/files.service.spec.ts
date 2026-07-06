@@ -6,6 +6,9 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
+import { mkdtemp, rm, writeFile } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { FilesService } from './files.service';
 import { FileMetadata } from './entities/file-metadata.entity';
 import { StorageService } from '../storage/storage.service';
@@ -122,6 +125,42 @@ describe('FilesService', () => {
         file.mimetype,
         file.originalname,
       );
+    });
+
+    it('processes disk-backed uploads without requiring an in-memory multer buffer', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'gridgo-test-upload-'));
+      const path = join(dir, 'upload.jpg');
+      await writeFile(path, Buffer.from('disk-backed-image'));
+      const file = makeFile({
+        buffer: undefined as unknown as Buffer,
+        path,
+      });
+      const fakeUrl =
+        'http://localhost:9000/grid-print/uploads/general/2026/04/21/uuid.jpg';
+      mockStorageService.upload.mockResolvedValue(fakeUrl);
+      const savedMeta = makeFileMeta({ url: fakeUrl });
+      mockFileRepo.create.mockReturnValue(savedMeta);
+      mockFileRepo.save.mockResolvedValue(savedMeta);
+
+      try {
+        await service.storeMetadata(file, 42);
+
+        expect(mockStorageService.upload).toHaveBeenCalledWith(
+          expect.objectContaining({ path }),
+          expect.stringMatching(
+            /^uploads\/general\/\d{4}\/\d{2}\/\d{2}\/.+\.jpg$/,
+          ),
+          'image/jpeg',
+          1024,
+        );
+        expect(mockAnalysisService.analyze).toHaveBeenCalledWith(
+          expect.any(Buffer),
+          'image/jpeg',
+          'photo.jpg',
+        );
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
     });
 
     it('throws BadRequestException for disallowed MIME type without calling StorageService', async () => {

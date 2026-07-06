@@ -49,10 +49,60 @@ double? _readDouble(dynamic value) {
 
 String? _readString(dynamic value) => value?.toString();
 
+int? _readInt(dynamic value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value.toString());
+}
+
 Map<String, dynamic>? _asMap(dynamic value) {
   if (value is Map<String, dynamic>) return value;
   if (value is Map) return Map<String, dynamic>.from(value);
   return null;
+}
+
+DeliveryProof? _parseProof(Map<String, dynamic> json) {
+  final proofJson = _asMap(json['proof'] ?? json['delivery_proof']);
+  final source = proofJson ?? json;
+  final type = _readString(
+    source['type'] ?? source['proofType'] ?? source['proof_type'],
+  );
+  if (type == null || type.isEmpty) return null;
+
+  return DeliveryProof(
+    type: type,
+    fileId: _readInt(
+      source['fileId'] ??
+          source['file_id'] ??
+          source['proofFileId'] ??
+          source['proof_file_id'],
+    ),
+    objectKey: _readString(
+      source['objectKey'] ??
+          source['object_key'] ??
+          source['proofObjectKey'] ??
+          source['proof_object_key'],
+    ),
+    signatureData: _readString(
+      source['signatureData'] ??
+          source['signature_data'] ??
+          source['proofSignatureData'] ??
+          source['proof_signature_data'],
+    ),
+    capturedAt: _parseDateNullable(
+      source['capturedAt'] ??
+          source['captured_at'] ??
+          source['proofCapturedAt'] ??
+          source['proof_captured_at'],
+    ),
+    capturedByRiderId: _readString(
+      source['capturedByRiderId'] ??
+          source['captured_by_rider_id'] ??
+          source['proofCapturedByRiderId'] ??
+          source['proof_captured_by_rider_id'],
+    ),
+  );
 }
 
 RiderDestinationContext? _parseDestination(Map<String, dynamic>? json) {
@@ -115,6 +165,7 @@ DeliveryAssignment parseAssignment(Map<String, dynamic> json) {
     proofPhotoUrl: _readString(
       json['proofPhotoUrl'] ?? json['proof_photo_url'],
     ),
+    proof: _parseProof(json),
     createdAt: _parseDate(json['createdAt'] ?? json['created_at']),
     updatedAt: _parseDate(json['updatedAt'] ?? json['updated_at']),
   );

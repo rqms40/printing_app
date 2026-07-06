@@ -352,8 +352,33 @@ export function OrderShow() {
     }
   };
 
+  const openProofPhoto = async () => {
+    const proof = order.delivery_proof;
+    if (!proof?.file_id) return;
+    setPreviewingFileId(`pod:${proof.file_id}`);
+    try {
+      const response = await apiClient.get<{ url: string }>(
+        `/files/${proof.file_id}/presigned-url`,
+      );
+      setPreviewFile({
+        url: response.data.url,
+        name: `proof-of-delivery-${order.order_id}.jpg`,
+        mimeType: "image/jpeg",
+        inspection: null,
+      });
+    } catch {
+      void message.error("Unable to open proof of delivery photo.");
+    } finally {
+      setPreviewingFileId(null);
+    }
+  };
+
   return (
-    <ShowPage title={`Order ${order.order_id}`} backTo="/orders" contentCard={false}>
+    <ShowPage
+      title={`Order ${order.order_id}`}
+      backTo="/orders"
+      contentCard={false}
+    >
       <Space direction="vertical" size="large" style={{ width: "100%" }}>
         {/* Header with actions */}
         <Card>
@@ -479,7 +504,9 @@ export function OrderShow() {
                   >
                     {v}
                   </Button>
-                ) : (v ?? "—")
+                ) : (
+                  (v ?? "—")
+                )
               }
             />
             {destinations.length > 1 && (
@@ -613,6 +640,55 @@ export function OrderShow() {
             <OrderDestinationMap destinations={destinations} />
           </Card>
         )}
+
+        <Card title="Proof of Delivery">
+          {order.delivery_proof ? (
+            <Descriptions column={2} bordered size="small">
+              <Descriptions.Item label="Type">
+                <Tag
+                  color={
+                    order.delivery_proof.type === "photo" ? "blue" : "green"
+                  }
+                >
+                  {humanizeEnumValue(order.delivery_proof.type ?? "unknown")}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Captured At">
+                {order.delivery_proof.captured_at
+                  ? formatDateTime(order.delivery_proof.captured_at)
+                  : "—"}
+              </Descriptions.Item>
+              <Descriptions.Item label="Captured By Rider">
+                {order.delivery_proof.captured_by_rider_id ?? "—"}
+              </Descriptions.Item>
+              <Descriptions.Item label="Proof">
+                {order.delivery_proof.type === "photo" &&
+                order.delivery_proof.file_id ? (
+                  <Button
+                    size="small"
+                    onClick={() => void openProofPhoto()}
+                    loading={
+                      previewingFileId === `pod:${order.delivery_proof.file_id}`
+                    }
+                  >
+                    View photo proof
+                  </Button>
+                ) : order.delivery_proof.type === "signature" ? (
+                  <Text code style={{ whiteSpace: "pre-wrap" }}>
+                    {order.delivery_proof.signature_data ??
+                      "Signature captured"}
+                  </Text>
+                ) : (
+                  "—"
+                )}
+              </Descriptions.Item>
+            </Descriptions>
+          ) : (
+            <Text type="secondary">
+              No proof has been captured for this order.
+            </Text>
+          )}
+        </Card>
 
         {/* Admin Notes */}
         <Card title="Admin Notes">
@@ -771,9 +847,9 @@ export function OrderShow() {
       <FilePreviewModal
         open={!!previewFile}
         onClose={() => setPreviewFile(null)}
-        fileName={previewFile?.name ?? ''}
-        fileUrl={previewFile?.url ?? ''}
-        mimeType={previewFile?.mimeType ?? ''}
+        fileName={previewFile?.name ?? ""}
+        fileUrl={previewFile?.url ?? ""}
+        mimeType={previewFile?.mimeType ?? ""}
         inspection={previewFile?.inspection}
       />
     </ShowPage>

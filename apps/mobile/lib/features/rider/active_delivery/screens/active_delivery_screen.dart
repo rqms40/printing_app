@@ -13,6 +13,7 @@ import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/features/rider/shared/rider_delivery_status.dart';
 import 'package:printing_app/features/rider/shared/widgets/rider_checkpoint_panel.dart';
 import 'package:printing_app/features/rider/shared/widgets/rider_map_view.dart';
+import 'package:printing_app/features/rider/shared/widgets/proof_of_delivery_sheet.dart';
 import 'package:printing_app/shared/widgets/empty_state.dart';
 import 'package:printing_app/shared/widgets/status_badge.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -100,8 +101,30 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
   }
 
   Future<void> _handleAdvance(String assignmentId) async {
-    setState(() => _isAdvancing = true);
-    await ref.read(deliveriesProvider.notifier).advanceCheckpoint(assignmentId);
+    final current = ref.read(deliveriesProvider).viewById(assignmentId);
+    if (current?.status == DeliveryStatus.arrived) {
+      final proof = await showModalBottomSheet<Map<String, dynamic>>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: _colors(context).surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadius.lg),
+          ),
+        ),
+        builder: (_) => ProofOfDeliverySheet(orderRef: current!.order.orderRef),
+      );
+      if (proof == null) return;
+      setState(() => _isAdvancing = true);
+      await ref
+          .read(deliveriesProvider.notifier)
+          .completeDeliveryWithProof(assignmentId, proof);
+    } else {
+      setState(() => _isAdvancing = true);
+      await ref
+          .read(deliveriesProvider.notifier)
+          .advanceCheckpoint(assignmentId);
+    }
     if (!mounted) return;
     setState(() => _isAdvancing = false);
 

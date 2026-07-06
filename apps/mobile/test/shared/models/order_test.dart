@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:printing_app/features/rider/shared/rider_assignment_parser.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/models/paper_specs.dart';
@@ -135,15 +136,28 @@ void main() {
     });
 
     test('copyWith updates specified fields only', () {
+      const rider = AssignedRiderContact(
+        userId: '70',
+        riderProfileId: '7',
+        displayName: 'Maya Santos',
+        fullName: 'Maya Santos',
+        phoneNumber: '+639171234567',
+        vehicleType: 'motorcycle',
+        plateNumber: 'ABC 1234',
+        deliveryAssignmentId: '99',
+        deliveryStatus: 'accepted',
+      );
       final updated = sampleOrder.copyWith(
         orderStatus: OrderStatus.printingInProgress,
         assignedRiderId: 'usr_002',
         deliveryAssignmentId: 'da_001',
+        assignedRider: rider,
       );
 
       expect(updated.orderStatus, OrderStatus.printingInProgress);
       expect(updated.assignedRiderId, 'usr_002');
       expect(updated.deliveryAssignmentId, 'da_001');
+      expect(updated.assignedRider, rider);
       // Unchanged fields remain the same
       expect(updated.id, sampleOrder.id);
       expect(updated.orderId, sampleOrder.orderId);
@@ -151,6 +165,42 @@ void main() {
       expect(updated.items, sampleOrder.items);
       expect(updated.totalPrice, sampleOrder.totalPrice);
       expect(updated.paymentMethod, sampleOrder.paymentMethod);
+    });
+
+    test('AssignedRiderContact parses camelCase and snake_case payloads', () {
+      final camel = AssignedRiderContact.fromJson({
+        'userId': 70,
+        'riderProfileId': 7,
+        'displayName': 'Maya Santos',
+        'fullName': 'Maya Santos',
+        'phoneNumber': '+639171234567',
+        'vehicleType': 'motorcycle',
+        'plateNumber': 'ABC 1234',
+        'deliveryAssignmentId': 99,
+        'deliveryStatus': 'accepted',
+      });
+      final snake = AssignedRiderContact.fromJson({
+        'user_id': 70,
+        'rider_profile_id': 7,
+        'display_name': 'Maya Santos',
+        'full_name': 'Maya Santos',
+        'phone_number': '+639171234567',
+        'vehicle_type': 'motorcycle',
+        'plate_number': 'ABC 1234',
+        'delivery_assignment_id': 99,
+        'delivery_status': 'accepted',
+      });
+
+      for (final rider in [camel, snake]) {
+        expect(rider.userId, '70');
+        expect(rider.riderProfileId, '7');
+        expect(rider.displayName, 'Maya Santos');
+        expect(rider.phoneNumber, '+639171234567');
+        expect(rider.vehicleType, 'motorcycle');
+        expect(rider.plateNumber, 'ABC 1234');
+        expect(rider.deliveryAssignmentId, '99');
+        expect(rider.deliveryStatus, 'accepted');
+      }
     });
 
     test('equality is based on id', () {
@@ -266,6 +316,26 @@ void main() {
       expect(userIds, contains('usr_001')); // customer
       expect(userIds, contains('usr_002')); // rider
       expect(userIds, contains('usr_003')); // admin
+    });
+
+    test('DeliveryAssignment parser preserves proof of delivery metadata', () {
+      final assignment = parseAssignment({
+        'id': 99,
+        'order_id': 7,
+        'rider_id': 3,
+        'status': 'delivered',
+        'proof_type': 'signature',
+        'proof_signature_data': 'svg:path-data',
+        'proof_captured_at': '2026-05-02T19:00:36.788Z',
+        'proof_captured_by_rider_id': 3,
+        'created_at': '2026-05-02T18:00:00.000Z',
+        'updated_at': '2026-05-02T19:00:36.788Z',
+      });
+
+      expect((assignment as dynamic).proof.type, 'signature');
+      expect((assignment as dynamic).proof.signatureData, 'svg:path-data');
+      expect((assignment as dynamic).proof.capturedByRiderId, '3');
+      expect((assignment as dynamic).proof.capturedAt, isNotNull);
     });
   });
 }

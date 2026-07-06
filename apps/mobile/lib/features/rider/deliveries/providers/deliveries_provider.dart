@@ -226,23 +226,54 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
       DeliveryStatus.accepted => DeliveryStatus.pickedUp,
       DeliveryStatus.pickedUp => DeliveryStatus.onTheWay,
       DeliveryStatus.onTheWay => DeliveryStatus.arrived,
-      DeliveryStatus.arrived => DeliveryStatus.delivered,
+      DeliveryStatus.arrived => null,
       DeliveryStatus.delivered || DeliveryStatus.declined => null,
     };
 
     if (nextStatus != null) {
       await _patchStatus(assignmentId, nextStatus);
+    } else if (current.status == DeliveryStatus.arrived) {
+      state = state.copyWith(
+        errorMessage: () =>
+            'Proof of delivery is required before completing this stop',
+      );
     }
+  }
+
+  Future<void> completeDeliveryWithProof(
+    String assignmentId,
+    Map<String, dynamic> proof,
+  ) async {
+    final current = state.viewById(assignmentId)?.assignment;
+    if (current == null || current.status != DeliveryStatus.arrived) return;
+
+    final proofType = proof['type']?.toString();
+    if (proofType == null || proofType.isEmpty) {
+      state = state.copyWith(
+        errorMessage: () =>
+            'Proof of delivery is required before completing this stop',
+      );
+      return;
+    }
+
+    await _patchStatus(assignmentId, DeliveryStatus.delivered, proof: proof);
   }
 
   Future<void> _patchStatus(
     String assignmentId,
-    DeliveryStatus nextStatus,
-  ) async {
+    DeliveryStatus nextStatus, {
+    Map<String, dynamic>? proof,
+  }) async {
     try {
+      final data = <String, dynamic>{
+        'status': serverDeliveryStatus(nextStatus),
+      };
+      if (proof != null) {
+        data['proof'] = proof;
+      }
       await ApiClient.instance.patch(
         '/riders/assignments/$assignmentId/status',
-        data: {'status': serverDeliveryStatus(nextStatus)},
+        data: data,
       );
     } catch (_) {
       state = state.copyWith(
@@ -282,9 +313,20 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
             updatedAt: now,
           );
         case DeliveryStatus.arrived:
+          final capturedAt = now;
           return a.copyWith(
             status: DeliveryStatus.delivered,
             deliveredAt: now,
+            proof: DeliveryProof(
+              type: proof?['type']?.toString() ?? '',
+              fileId: proof?['fileId'] is int
+                  ? proof!['fileId'] as int
+                  : int.tryParse(proof?['fileId']?.toString() ?? ''),
+              objectKey: proof?['objectKey']?.toString(),
+              signatureData: proof?['signatureData']?.toString(),
+              capturedAt: capturedAt,
+              capturedByRiderId: a.riderId,
+            ),
             updatedAt: now,
           );
         case DeliveryStatus.delivered:
