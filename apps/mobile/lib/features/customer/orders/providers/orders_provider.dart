@@ -732,6 +732,8 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
 
   Future<void> refreshOrders() async => _fetchOrders();
 
+  void clear() => state = const [];
+
   /// Add a new order to the top of the list. Returns the created [Order]
   /// (server-assigned fields populated) so callers can use the real DB id.
   Future<Order> addOrder(Order order) async {

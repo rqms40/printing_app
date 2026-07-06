@@ -303,10 +303,15 @@ final routerProvider = Provider<GoRouter>((ref) {
               child: ScaffoldWithNav(
                 currentIndex: navigationShell.currentIndex,
                 showFab: true,
-                onTap: (i) => navigationShell.goBranch(
-                  i,
-                  initialLocation: i == navigationShell.currentIndex,
-                ),
+                onTap: (i) {
+                  if (i == 2) {
+                    ref.read(notificationsProvider.notifier).refreshNotifications();
+                  }
+                  navigationShell.goBranch(
+                    i,
+                    initialLocation: i == navigationShell.currentIndex,
+                  );
+                },
                 items: [
                   const NavItem(
                     icon: HugeIcons.strokeRoundedHome01,

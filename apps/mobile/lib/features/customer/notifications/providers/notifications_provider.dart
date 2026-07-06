@@ -85,6 +85,7 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
   }
 
   void _listenToWsNotifications() {
+    WebSocketService.instance.connectNotifications();
     WebSocketService.instance.listenForNewNotifications((data) {
       final notif = _parseNotification(data);
       // Deduplicate: don't add if already present

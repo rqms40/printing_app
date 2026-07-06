@@ -13,6 +13,8 @@ import 'package:printing_app/shared/services/websocket_service.dart';
 import 'package:printing_app/features/customer/home/widgets/next_batch_session_trigger.dart';
 import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
 import 'package:printing_app/features/tutorial/repository/tutorial_repository.dart';
+import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
+import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 
 // ---------------------------------------------------------------------------
@@ -277,6 +279,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await TutorialRepository().syncFromServer(user.tutorialSeenKeys);
       await _ref?.read(tutorialProvider.notifier).loadFromPrefs();
       await _ref?.read(accountStateProvider.notifier).refresh();
+      _connectNotificationsWs();
       _resetSessionScopedData();
     } on DioException catch (e) {
       final message = e.response?.data is Map
@@ -337,6 +340,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = AuthState(status: AuthStatus.authenticated, user: users[role]!);
     _ref?.read(checkoutProvider.notifier).reset();
     _ref?.read(accountStateProvider.notifier).clear();
+    _connectNotificationsWs();
   }
 
   void setDefaultPaymentMethod(PaymentMethod method) {
@@ -388,6 +392,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
             : AuthStatus.profileIncomplete,
         user: user,
       );
+      if (user.isProfileComplete) {
+        _connectNotificationsWs();
+      }
       return true;
     } catch (e) {
       state = state.copyWith(
@@ -413,6 +420,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _ref?.read(checkoutProvider.notifier).reset();
     _ref?.read(accountStateProvider.notifier).clear();
     _ref?.read(tutorialProvider.notifier).resetStateOnly();
+    try {
+      _ref?.read(notificationsProvider.notifier).clearNotifications();
+    } catch (_) {}
+    try {
+      _ref?.read(ordersProvider.notifier).clear();
+    } catch (_) {}
     // Reset session-scoped UI flags so they fire again on next login.
     _ref?.read(nextBatchShownThisSessionProvider.notifier).state = false;
     // AuthState() clears everything including betaLocked.
@@ -474,6 +487,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
     WebSocketService.instance.listenForSurveyRequired((_) {
       _ref?.read(accountStateProvider.notifier).refresh();
     });
+    // Connect orders WebSocket and refresh active notifications and orders lists
+    try {
+      WebSocketService.instance.connectOrders(
+        onConnect: () {
+          _ref?.read(ordersProvider.notifier).refreshOrders();
+        },
+      );
+    } catch (_) {}
+    try {
+      _ref?.read(notificationsProvider.notifier).refreshNotifications();
+    } catch (_) {}
+    try {
+      _ref?.read(ordersProvider.notifier).refreshOrders();
+    } catch (_) {}
   }
 
   /// Send the current FCM token to the server for targeted push notifications.
