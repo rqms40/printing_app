@@ -12,6 +12,7 @@ import { RiderProfile } from '../src/riders/entities/rider-profile.entity';
 import {
   DeliveryAssignment,
   DeliveryStatus,
+  ProofOfDeliveryType,
 } from '../src/riders/entities/delivery-assignment.entity';
 import { Notification } from '../src/notifications/entities/notification.entity';
 
@@ -235,7 +236,6 @@ describe('Rider dispatch workflow (e2e)', () => {
       [DeliveryStatus.PICKED_UP, OrderStatus.PICKED_UP],
       [DeliveryStatus.ON_THE_WAY, OrderStatus.ON_THE_WAY],
       [DeliveryStatus.ARRIVED, OrderStatus.ARRIVED_AT_DESTINATION],
-      [DeliveryStatus.DELIVERED, OrderStatus.DELIVERED],
     ];
 
     for (const [deliveryStatus, orderStatus] of transitions) {
@@ -252,5 +252,35 @@ describe('Rider dispatch workflow (e2e)', () => {
         ordersRepo.findOneOrFail({ where: { id: order.id } }),
       ).resolves.toMatchObject({ orderStatus });
     }
+
+    await request(app.getHttpServer())
+      .patch(`/api/riders/assignments/${assignment.id}/status`)
+      .set('Authorization', `Bearer ${riderToken}`)
+      .send({ status: DeliveryStatus.DELIVERED })
+      .expect(400)
+      .expect((res) => {
+        expect(res.body.message).toBe('Proof of delivery is required');
+      });
+
+    await request(app.getHttpServer())
+      .patch(`/api/riders/assignments/${assignment.id}/status`)
+      .set('Authorization', `Bearer ${riderToken}`)
+      .send({
+        status: DeliveryStatus.DELIVERED,
+        proof: {
+          type: ProofOfDeliveryType.SIGNATURE,
+          signatureData: 'svg:e2e-signature',
+        },
+      })
+      .expect(200)
+      .expect((res) => {
+        expect(res.body.status).toBe(DeliveryStatus.DELIVERED);
+        expect(res.body.proofType).toBe(ProofOfDeliveryType.SIGNATURE);
+        expect(res.body.proofSignatureData).toBe('svg:e2e-signature');
+      });
+
+    await expect(
+      ordersRepo.findOneOrFail({ where: { id: order.id } }),
+    ).resolves.toMatchObject({ orderStatus: OrderStatus.DELIVERED });
   });
 });

@@ -69,7 +69,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   String _typeLabel(ConversationType type) => switch (type) {
     ConversationType.ai => 'GridBot AI',
     ConversationType.admin => 'Human Support',
-    ConversationType.rider => 'Rider Support',
+    ConversationType.rider => 'Delivery Rider',
   };
 
   Widget _statusChip(ConversationStatus status, AppColorSet colors) {
@@ -110,7 +110,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
     return switch (conv.type) {
       ConversationType.ai => 'Instant help',
       ConversationType.admin => 'GRIDGO support',
-      ConversationType.rider => 'Delivery support',
+      ConversationType.rider => 'Delivery rider conversation',
     };
   }
 
@@ -249,7 +249,9 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                   horizontal: 20,
                   vertical: 12,
                 ),
-                shape: RoundedRectangleBorder(borderRadius: AppRadius.borderFull),
+                shape: RoundedRectangleBorder(
+                  borderRadius: AppRadius.borderFull,
+                ),
                 textStyle: AppTypography.button.copyWith(
                   fontSize: 14,
                   decoration: TextDecoration.none,
@@ -351,9 +353,8 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     TextButton(
-                      onPressed: () => ref
-                          .read(chatProvider.notifier)
-                          .loadConversations(),
+                      onPressed: () =>
+                          ref.read(chatProvider.notifier).loadConversations(),
                       child: Text(
                         'Retry',
                         style: AppTypography.button.copyWith(
@@ -457,11 +458,7 @@ class _IconActionButton extends StatelessWidget {
             width: 40,
             height: 40,
             child: Center(
-              child: HugeIcon(
-                icon: icon,
-                size: 22,
-                color: colors.onBackground,
-              ),
+              child: HugeIcon(icon: icon, size: 22, color: colors.onBackground),
             ),
           ),
         ),

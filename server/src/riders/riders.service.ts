@@ -9,12 +9,14 @@ import { RiderProfile } from './entities/rider-profile.entity';
 import {
   DeliveryAssignment,
   DeliveryStatus,
+  ProofOfDeliveryType,
 } from './entities/delivery-assignment.entity';
 import { OrderStatus } from '../orders/entities/order.entity';
 import { UpdateRiderProfileDto } from './dto/update-profile.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { LocationGateway } from './location.gateway';
 import { OrdersService } from '../orders/orders.service';
+import { ProofOfDeliveryDto } from './dto/update-delivery-status.dto';
 
 // Valid state transitions for delivery status
 const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
@@ -45,6 +47,13 @@ const SHOP_LOCATION = {
 type GeoPoint = {
   latitude: number;
   longitude: number;
+};
+
+type DeliveryProofMetadata = {
+  proofType: ProofOfDeliveryType;
+  proofFileId: number | null;
+  proofObjectKey: string | null;
+  proofSignatureData: string | null;
 };
 
 @Injectable()
@@ -261,6 +270,7 @@ export class RidersService {
     assignmentId: number,
     newStatus: DeliveryStatus,
     declineReason?: string,
+    proof?: ProofOfDeliveryDto,
   ): Promise<DeliveryAssignment> {
     const profile = await this.getProfile(userId);
     const assignment = await this.assignmentRepo.findOne({
@@ -279,10 +289,15 @@ export class RidersService {
       );
     }
 
-    assignment.status = newStatus;
-
     // Set timestamp for the status
     const now = new Date();
+    const proofMetadata =
+      newStatus === DeliveryStatus.DELIVERED
+        ? this.validateProofOfDelivery(proof)
+        : null;
+
+    assignment.status = newStatus;
+
     switch (newStatus) {
       case DeliveryStatus.ACCEPTED:
         assignment.acceptedAt = now;
@@ -301,6 +316,12 @@ export class RidersService {
         break;
       case DeliveryStatus.DELIVERED:
         assignment.deliveredAt = now;
+        assignment.proofType = proofMetadata!.proofType;
+        assignment.proofFileId = proofMetadata!.proofFileId;
+        assignment.proofObjectKey = proofMetadata!.proofObjectKey;
+        assignment.proofSignatureData = proofMetadata!.proofSignatureData;
+        assignment.proofCapturedAt = now;
+        assignment.proofCapturedByRiderId = profile.id;
         break;
     }
 
@@ -316,6 +337,43 @@ export class RidersService {
     }
 
     return this.assignmentRepo.save(assignment);
+  }
+
+  private validateProofOfDelivery(
+    proof?: ProofOfDeliveryDto,
+  ): DeliveryProofMetadata {
+    if (!proof) {
+      throw new BadRequestException('Proof of delivery is required');
+    }
+
+    if (proof.type === ProofOfDeliveryType.PHOTO) {
+      if (proof.fileId == null && !proof.objectKey?.trim()) {
+        throw new BadRequestException(
+          'Photo proof requires a file id or object key',
+        );
+      }
+      return {
+        proofType: ProofOfDeliveryType.PHOTO,
+        proofFileId: proof.fileId ?? null,
+        proofObjectKey: proof.objectKey?.trim() || null,
+        proofSignatureData: null,
+      };
+    }
+
+    if (proof.type === ProofOfDeliveryType.SIGNATURE) {
+      const signatureData = proof.signatureData?.trim();
+      if (!signatureData) {
+        throw new BadRequestException('Signature proof is required');
+      }
+      return {
+        proofType: ProofOfDeliveryType.SIGNATURE,
+        proofFileId: null,
+        proofObjectKey: null,
+        proofSignatureData: signatureData,
+      };
+    }
+
+    throw new BadRequestException('Unsupported proof of delivery type');
   }
 
   async getHistory(userId: number): Promise<DeliveryAssignment[]> {

@@ -22,7 +22,10 @@ import 'package:printing_app/shared/services/websocket_service.dart';
 
 class _MockDio extends Mock implements Dio {}
 
-class _MockWebSocketService extends Mock implements WebSocketService {}
+class _MockWebSocketService extends Mock implements WebSocketService {
+  @override
+  Future<void> connectLocation({Function(dynamic)? onLocationUpdate}) async {}
+}
 
 /// Pre-seeds tutorial state as fully seen so coach marks/welcome sheets don't
 /// intercept tap gestures during widget tests.
@@ -51,10 +54,7 @@ Widget _wrap(
   TextScaler? textScaler,
 }) {
   return ProviderScope(
-    overrides: [
-      ..._baseTestOverrides(),
-      ...overrides,
-    ],
+    overrides: [..._baseTestOverrides(), ...overrides],
     child: MaterialApp(
       theme: ThemeData(brightness: Brightness.light),
       builder: textScaler == null
@@ -81,10 +81,7 @@ Widget _wrapRouter(List<Override> overrides) {
   );
 
   return ProviderScope(
-    overrides: [
-      ..._baseTestOverrides(),
-      ...overrides,
-    ],
+    overrides: [..._baseTestOverrides(), ...overrides],
     child: MaterialApp.router(
       theme: ThemeData(brightness: Brightness.light),
       routerConfig: router,
@@ -305,10 +302,7 @@ void main() {
 
       try {
         await tester.pumpWidget(
-          _wrap(
-            const HomeScreen(),
-            overrides: [_feedOverride()],
-          ),
+          _wrap(const HomeScreen(), overrides: [_feedOverride()]),
         );
         await tester.pump(const Duration(seconds: 1));
         await tester.pump(const Duration(milliseconds: 500));

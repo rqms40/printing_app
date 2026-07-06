@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:google_polyline_algorithm/google_polyline_algorithm.dart';
@@ -14,12 +15,22 @@ class RoutingService {
   static List<LatLng>? _cachedRoute;
   static String? _cachedKey;
 
+  @visibleForTesting
+  static Future<List<LatLng>> Function(LatLng start, LatLng end)?
+  debugRouteFetcher;
+
   /// Fetches a driving route between two points.
   ///
   /// Returns a list of [LatLng] coordinates following real roads.
   /// Falls back to a detailed hardcoded Manila route if the API is unavailable.
   static Future<List<LatLng>> getRoute(LatLng start, LatLng end) async {
-    final key = '${start.latitude},${start.longitude}-${end.latitude},${end.longitude}';
+    final debugFetcher = debugRouteFetcher;
+    if (debugFetcher != null) {
+      return debugFetcher(start, end);
+    }
+
+    final key =
+        '${start.latitude},${start.longitude}-${end.latitude},${end.longitude}';
     if (_cachedRoute != null && _cachedKey == key) {
       return _cachedRoute!;
     }
@@ -32,9 +43,7 @@ class RoutingService {
         '?overview=full&geometries=polyline',
       );
 
-      final response = await http.get(url).timeout(
-        const Duration(seconds: 8),
-      );
+      final response = await http.get(url).timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body) as Map<String, dynamic>;

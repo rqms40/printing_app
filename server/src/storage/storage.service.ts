@@ -1,6 +1,7 @@
 import { Injectable, Inject, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Client } from 'minio';
+import type { Readable } from 'stream';
 import { MINIO_CLIENT, MINIO_PRESIGN_CLIENT } from './storage.constants';
 
 @Injectable()
@@ -28,12 +29,14 @@ export class StorageService implements OnModuleInit {
   }
 
   async upload(
-    buffer: Buffer,
+    data: Buffer | Readable,
     objectKey: string,
     mimeType: string,
+    size?: number,
   ): Promise<string> {
     const bucket = this.config.get<string>('MINIO_BUCKET', 'grid-print');
-    await this.minioClient.putObject(bucket, objectKey, buffer, buffer.length, {
+    const objectSize = Buffer.isBuffer(data) ? data.length : size;
+    await this.minioClient.putObject(bucket, objectKey, data, objectSize, {
       'Content-Type': mimeType,
     });
 

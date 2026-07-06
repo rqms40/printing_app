@@ -55,6 +55,22 @@ Widget _wrap(Widget child, {_TestAuthNotifier? notifier}) {
   );
 }
 
+Future<void> _tapRegisterCategory(WidgetTester tester, String category) async {
+  final label = category == 'student' ? 'Student' : 'Professional';
+  await tester.ensureVisible(find.text(label));
+  await tester.pump(const Duration(milliseconds: 100));
+  await tester.tap(find.text(label));
+  await tester.pump(const Duration(milliseconds: 300));
+}
+
+Future<void> _tapAgeRange(WidgetTester tester, String ageRange) async {
+  final label = ageRange == 'under_18' ? 'Under 18' : '18–24';
+  await tester.ensureVisible(find.text(label));
+  await tester.pump(const Duration(milliseconds: 100));
+  await tester.tap(find.text(label));
+  await tester.pump(const Duration(milliseconds: 300));
+}
+
 void main() {
   group('RegisterScreen', () {
     testWidgets('starts on the privacy step instead of the account form', (
@@ -91,6 +107,67 @@ void main() {
       expect(find.text('Tell us a bit about yourself'), findsNothing);
     });
 
+    testWidgets('requires an explicit category choice before field selection', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_wrap(const RegisterScreen()));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
+
+      await tester.tap(find.text('Agree & Continue'));
+      await tester.pump(const Duration(milliseconds: 600));
+
+      await tester.enterText(find.byType(TextField).first, 'Kai');
+      await tester.tap(find.text('Continue'));
+      await tester.pump(const Duration(milliseconds: 600));
+
+      expect(find.text('Student'), findsOneWidget);
+      expect(find.text('Professional'), findsOneWidget);
+
+      await tester.tap(find.text('Continue'));
+      await tester.pump(const Duration(milliseconds: 600));
+
+      expect(find.text('Choose a category to continue'), findsOneWidget);
+      expect(find.text('What are you studying?'), findsNothing);
+    });
+
+    testWidgets(
+      'requires an explicit age range choice before account details',
+      (tester) async {
+        await tester.pumpWidget(_wrap(const RegisterScreen()));
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(milliseconds: 500));
+
+        await tester.tap(find.text('Agree & Continue'));
+        await tester.pump(const Duration(milliseconds: 600));
+
+        await tester.enterText(find.byType(TextField).first, 'Kai');
+        await tester.tap(find.text('Continue'));
+        await tester.pump(const Duration(milliseconds: 600));
+
+        await _tapRegisterCategory(tester, 'student');
+        await tester.tap(find.text('Continue'));
+        await tester.pump(const Duration(milliseconds: 600));
+
+        await tester.tap(find.text('Architecture'));
+        await tester.tap(find.text('Continue'));
+        await tester.pump(const Duration(milliseconds: 600));
+
+        await tester.ensureVisible(find.text('Prefer not to say'));
+        await tester.tap(find.text('Prefer not to say'));
+        await tester.tap(find.text('Continue'));
+        await tester.pump(const Duration(milliseconds: 600));
+
+        expect(find.text('Under 18'), findsOneWidget);
+
+        await tester.tap(find.text('Continue'));
+        await tester.pump(const Duration(milliseconds: 600));
+
+        expect(find.text('Choose your age range to continue'), findsOneWidget);
+        expect(find.textContaining('Hi, Kai'), findsNothing);
+      },
+    );
+
     testWidgets(
       'submits registration only after completing the onboarding flow',
       (tester) async {
@@ -111,7 +188,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 300));
         await tester.pump(const Duration(milliseconds: 600));
 
-        // postFrameCallback auto-selects 'student' (page 0) on init
+        await _tapRegisterCategory(tester, 'student');
         await tester.tap(find.text('Continue'));
         await tester.pump(const Duration(milliseconds: 600));
 
@@ -124,13 +201,14 @@ void main() {
         await tester.tap(find.text('Continue'));
         await tester.pump(const Duration(milliseconds: 600));
 
-        // postFrameCallback auto-selects 'under_18' (page 0) on init
+        await _tapAgeRange(tester, '18_24');
         await tester.tap(find.text('Continue'));
         await tester.pump(const Duration(milliseconds: 600));
 
         expect(find.textContaining('Hi, Kai'), findsOneWidget);
         expect(find.text('Full Name'), findsOneWidget);
         expect(notifier.registerCalls, 0);
+        expect(find.byIcon(Icons.visibility_rounded), findsNWidgets(2));
 
         await tester.enterText(find.byType(TextField).at(0), 'Kai Reyes');
         await tester.enterText(find.byType(TextField).at(1), 'kai@test.com');
@@ -144,7 +222,7 @@ void main() {
         expect(notifier.registerCalls, 1);
         expect(notifier.lastRegisterPayload, isNotNull);
         expect(notifier.lastRegisterPayload!['nickname'], 'Kai');
-        expect(notifier.lastRegisterPayload!['ageRange'], 'under_18');
+        expect(notifier.lastRegisterPayload!['ageRange'], '18_24');
         expect(notifier.lastRegisterPayload!['profileCategory'], 'student');
         expect(notifier.lastRegisterPayload!['profileField'], 'architecture');
         expect(notifier.lastRegisterPayload!['printingPreferences'], const [

@@ -4,6 +4,7 @@ import { CheckCircleOutlined, ExclamationCircleOutlined } from "@ant-design/icon
 import { PDFViewer } from "./pdf-viewer";
 import { CADViewer } from "./cad-viewer";
 import { apiClient } from "@/providers/api-client";
+import { getFileExtension, resolveCadPreview } from "./preview-support";
 
 const { Text } = Typography;
 
@@ -29,33 +30,32 @@ export function FileInspectorModal({
   const [extractedPageCount, setExtractedPageCount] = useState<number | null>(null);
   const [isValidated, setIsValidated] = useState(false);
   const [presignedUrl, setPresignedUrl] = useState<string | null>(null);
+  const [previewGlbUrl, setPreviewGlbUrl] = useState<string | null>(null);
   const [urlLoading, setUrlLoading] = useState(false);
   const [urlError, setUrlError] = useState<string | null>(null);
 
-  const getExtension = (name: string) => {
-    const parts = name.split(".");
-    return parts.length > 1 ? parts.pop()?.toLowerCase() || "" : "";
-  };
-
-  const extension = getExtension(fileName);
+  const extension = getFileExtension(fileName);
   const isPDF = extension === "pdf";
-  const isCAD = ["stl", "obj", "glb", "gltf"].includes(extension);
 
   // Fetch presigned URL when the modal opens
   useEffect(() => {
     if (!open) return;
 
     setPresignedUrl(null);
+    setPreviewGlbUrl(null);
     setUrlError(null);
     setExtractedPageCount(null);
     setIsValidated(false);
 
     if (fileMetadataId) {
       setUrlLoading(true);
-      apiClient
-        .get(`/files/${fileMetadataId}/presigned-url`)
-        .then((res) => {
-          setPresignedUrl(res.data.url);
+      Promise.all([
+        apiClient.get(`/files/${fileMetadataId}/presigned-url`),
+        apiClient.get(`/files/${fileMetadataId}/inspect`).catch(() => null),
+      ])
+        .then(([urlRes, inspectRes]) => {
+          setPresignedUrl(urlRes.data.url);
+          setPreviewGlbUrl(inspectRes?.data?.previewGlbUrl ?? null);
         })
         .catch((err) => {
           console.error("Failed to get presigned URL:", err);
@@ -83,6 +83,7 @@ export function FileInspectorModal({
     setExtractedPageCount(null);
     setIsValidated(false);
     setPresignedUrl(null);
+    setPreviewGlbUrl(null);
     setUrlError(null);
     onClose();
   };
@@ -155,8 +156,19 @@ export function FileInspectorModal({
       );
     }
 
-    if (isCAD) {
-      return <CADViewer fileUrl={presignedUrl} fileExtension={extension} />;
+    const cadPreview = resolveCadPreview({
+      originalExtension: extension,
+      originalUrl: presignedUrl,
+      previewUrl: previewGlbUrl,
+    });
+
+    if (cadPreview) {
+      return (
+        <CADViewer
+          fileUrl={cadPreview.fileUrl}
+          fileExtension={cadPreview.fileExtension}
+        />
+      );
     }
 
     return (

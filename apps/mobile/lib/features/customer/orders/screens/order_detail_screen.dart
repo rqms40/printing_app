@@ -21,6 +21,7 @@ import 'package:printing_app/shared/widgets/status_badge.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/file_preview_sheet.dart';
 import 'package:printing_app/features/customer/orders/widgets/admin_status_banner.dart';
+import 'package:printing_app/features/customer/tracking/widgets/rider_info_card.dart';
 import 'package:printing_app/utils/formatters.dart';
 
 Order? _findOrderByRouteId(List<Order> orders, String routeId) {
@@ -58,12 +59,18 @@ class OrderDetailScreen extends ConsumerWidget {
 
     final conv = await ref
         .read(chatProvider.notifier)
-        .openOrderConversation(orderRef);
+        .openRiderOrderConversation(
+          orderRef,
+          hasAssignedRider: order.assignedRiderId != null,
+        );
     if (!context.mounted) return;
     if (conv == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not open order chat. Please try again.'),
+        SnackBar(
+          content: Text(
+            ref.read(chatProvider).createError ??
+                'Could not open rider chat. Please try again.',
+          ),
         ),
       );
       return;
@@ -250,15 +257,16 @@ class OrderDetailScreen extends ConsumerWidget {
                 ),
             const SizedBox(height: AppSpacing.lg),
 
-            // --- Action Buttons ---
-            AppButton(
-              label: 'Chat about this order',
-              variant: AppButtonVariant.secondary,
-              onTap: () => _openOrderChat(context, ref, order),
-              isFullWidth: true,
-              icon: HugeIcons.strokeRoundedMessage01,
+            // --- Assigned Rider ---
+            RiderInfoCard(
+              rider: order.assignedRider,
+              onChat: order.assignedRiderId == null
+                  ? null
+                  : () => _openOrderChat(context, ref, order),
             ),
-            const SizedBox(height: AppSpacing.sm),
+            const SizedBox(height: AppSpacing.md),
+
+            // --- Action Buttons ---
             if (isOnTheWay)
               AppButton(
                 label: 'Track Delivery',
@@ -525,6 +533,10 @@ class OrderDetailScreen extends ConsumerWidget {
         return 'model/obj';
       case '3mf':
         return 'model/3mf';
+      case 'glb':
+        return 'model/gltf-binary';
+      case 'gltf':
+        return 'model/gltf+json';
       default:
         return 'application/octet-stream';
     }

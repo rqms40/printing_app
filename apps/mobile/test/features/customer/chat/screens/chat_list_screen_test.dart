@@ -10,10 +10,14 @@ import 'package:printing_app/shared/providers/dio_provider.dart';
 import '../providers/chat_provider_test.mocks.dart';
 
 void main() {
-  Future<void> pumpChatList(WidgetTester tester, MockDio mockDio) async {
+  Future<void> pumpChatList(
+    WidgetTester tester,
+    MockDio mockDio, {
+    List<Map<String, dynamic>> conversations = const [],
+  }) async {
     when(mockDio.get<List<dynamic>>('/chat/conversations')).thenAnswer(
       (_) async => Response(
-        data: [],
+        data: conversations,
         statusCode: 200,
         requestOptions: RequestOptions(path: '/chat/conversations'),
       ),
@@ -67,5 +71,32 @@ void main() {
 
     expect(find.byTooltip('New chat'), findsOneWidget);
     expect(find.text('Conversations'), findsOneWidget);
+  });
+
+  testWidgets('renders rider conversations as delivery rider conversations', (
+    tester,
+  ) async {
+    final mockDio = MockDio();
+
+    await pumpChatList(
+      tester,
+      mockDio,
+      conversations: [
+        {
+          'id': 8,
+          'customerId': 5,
+          'type': 'rider',
+          'orderId': 42,
+          'assignedRiderId': 70,
+          'status': 'open',
+          'createdAt': '2026-04-25T10:00:00.000Z',
+          'updatedAt': '2026-04-25T11:00:00.000Z',
+        },
+      ],
+    );
+
+    expect(find.text('Delivery Rider'), findsOneWidget);
+    expect(find.text('Rider Support'), findsNothing);
+    expect(find.text('Order #42'), findsOneWidget);
   });
 }

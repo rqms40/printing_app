@@ -80,19 +80,29 @@ void main() {
       final passwordField = find.byType(TextField).at(1);
 
       expect(tester.widget<TextField>(passwordField).obscureText, isTrue);
-      expect(find.byIcon(Icons.visibility_off_rounded), findsOneWidget);
-
-      await tester.tap(find.byIcon(Icons.visibility_off_rounded));
-      await tester.pump();
-
-      expect(tester.widget<TextField>(passwordField).obscureText, isFalse);
       expect(find.byIcon(Icons.visibility_rounded), findsOneWidget);
 
-      await tester.tap(find.byIcon(Icons.visibility_rounded));
-      await tester.pump();
+      await tester.tap(
+        find.ancestor(
+          of: find.byIcon(Icons.visibility_rounded),
+          matching: find.byType(InkWell),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(tester.widget<TextField>(passwordField).obscureText, isFalse);
+      expect(find.byIcon(Icons.visibility_off_rounded), findsOneWidget);
+
+      await tester.tap(
+        find.ancestor(
+          of: find.byIcon(Icons.visibility_off_rounded),
+          matching: find.byType(InkWell),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
 
       expect(tester.widget<TextField>(passwordField).obscureText, isTrue);
-      expect(find.byIcon(Icons.visibility_off_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.visibility_rounded), findsOneWidget);
     });
   });
 }

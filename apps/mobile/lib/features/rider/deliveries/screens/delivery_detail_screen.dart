@@ -13,6 +13,7 @@ import 'package:printing_app/features/rider/shared/rider_delivery_status.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/features/rider/shared/widgets/rider_checkpoint_panel.dart';
 import 'package:printing_app/features/rider/shared/widgets/rider_map_view.dart';
+import 'package:printing_app/features/rider/shared/widgets/proof_of_delivery_sheet.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/status_badge.dart';
@@ -97,10 +98,30 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
   }
 
   Future<void> _handleAdvance() async {
-    setState(() => _isAdvancing = true);
-    await ref
-        .read(deliveriesProvider.notifier)
-        .advanceCheckpoint(widget.assignmentId);
+    final current = ref.read(deliveriesProvider).viewById(widget.assignmentId);
+    if (current?.status == DeliveryStatus.arrived) {
+      final proof = await showModalBottomSheet<Map<String, dynamic>>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: _colors(context).surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadius.lg),
+          ),
+        ),
+        builder: (_) => ProofOfDeliverySheet(orderRef: current!.order.orderRef),
+      );
+      if (proof == null) return;
+      setState(() => _isAdvancing = true);
+      await ref
+          .read(deliveriesProvider.notifier)
+          .completeDeliveryWithProof(widget.assignmentId, proof);
+    } else {
+      setState(() => _isAdvancing = true);
+      await ref
+          .read(deliveriesProvider.notifier)
+          .advanceCheckpoint(widget.assignmentId);
+    }
     if (!mounted) return;
     setState(() => _isAdvancing = false);
 
@@ -149,6 +170,7 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
                     trackLocation: false,
                     interactive: true,
                     showLiveBadge: false,
+                    showRoute: view.isInProgress,
                   ),
                 ),
                 SafeArea(

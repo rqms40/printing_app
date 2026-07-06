@@ -77,12 +77,18 @@ class _DeliveryTrackingScreenState
 
     final conv = await ref
         .read(chatProvider.notifier)
-        .openOrderConversation(orderRef);
+        .openRiderOrderConversation(
+          orderRef,
+          hasAssignedRider: order.assignedRiderId != null,
+        );
     if (!mounted) return;
     if (conv == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not open rider chat. Please try again.'),
+        SnackBar(
+          content: Text(
+            ref.read(chatProvider).createError ??
+                'Could not open rider chat. Please try again.',
+          ),
         ),
       );
       return;
@@ -141,7 +147,10 @@ class _DeliveryTrackingScreenState
                   AppSpacing.md,
                 ),
                 child: RiderInfoCard(
-                  onChat: order == null ? null : () => _openOrderChat(order),
+                  rider: order?.assignedRider,
+                  onChat: order?.assignedRiderId == null
+                      ? null
+                      : () => _openOrderChat(order!),
                 ),
               )
               .animate()

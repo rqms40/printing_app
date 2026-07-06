@@ -175,6 +175,22 @@ void main() {
       },
     );
 
+    test(
+      'openRiderOrderConversation explains pre-assignment state locally',
+      () async {
+        final conv = await container
+            .read(chatProvider.notifier)
+            .openRiderOrderConversation('ORD-10005', hasAssignedRider: false);
+
+        expect(conv, isNull);
+        expect(
+          container.read(chatProvider).createError,
+          'A rider has not been assigned to this order yet.',
+        );
+        verifyNever(mockDio.post<Map<String, dynamic>>(any));
+      },
+    );
+
     test('openOrderConversation can use a public order ref', () async {
       when(
         mockDio.post<Map<String, dynamic>>(

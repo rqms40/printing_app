@@ -6,6 +6,8 @@ import type {
   VehicleType,
 } from "@/types/enums";
 import type {
+  AssignedRiderContact,
+  DeliveryProof,
   Order,
   OrderItem,
   OrderStatusHistory,
@@ -392,7 +394,11 @@ function normalizeOrderDestination(value: unknown): Order["delivery_address"] {
   const latitude = latitudeValue == null ? null : Number(latitudeValue);
   const longitude = longitudeValue == null ? null : Number(longitudeValue);
 
-  if (!fullAddress && !Number.isFinite(latitude) && !Number.isFinite(longitude)) {
+  if (
+    !fullAddress &&
+    !Number.isFinite(latitude) &&
+    !Number.isFinite(longitude)
+  ) {
     return undefined;
   }
 
@@ -432,6 +438,58 @@ function normalizeOrderDestinations(value: unknown): Order["destinations"] {
     .filter((item): item is NonNullable<Order["delivery_address"]> =>
       Boolean(item),
     );
+}
+
+function normalizeAssignedRiderContact(
+  value: unknown,
+): AssignedRiderContact | null {
+  const record = asRecord(value);
+  if (Object.keys(record).length === 0) return null;
+
+  return {
+    user_id: toOptionalString(record, "user_id", "userId"),
+    rider_profile_id: toOptionalString(
+      record,
+      "rider_profile_id",
+      "riderProfileId",
+    ),
+    display_name: toOptionalString(record, "display_name", "displayName"),
+    full_name: toOptionalString(record, "full_name", "fullName"),
+    nickname: toOptionalString(record, "nickname"),
+    phone_number: toOptionalString(record, "phone_number", "phoneNumber"),
+    vehicle_type: toOptionalString(record, "vehicle_type", "vehicleType"),
+    plate_number: toOptionalString(record, "plate_number", "plateNumber"),
+    delivery_assignment_id: toOptionalString(
+      record,
+      "delivery_assignment_id",
+      "deliveryAssignmentId",
+    ),
+    delivery_status: toOptionalString(
+      record,
+      "delivery_status",
+      "deliveryStatus",
+    ),
+  };
+}
+
+function normalizeDeliveryProof(value: unknown): DeliveryProof | null {
+  const record = asRecord(value);
+  if (Object.keys(record).length === 0) return null;
+
+  return {
+    type: toOptionalString(record, "type"),
+    file_id:
+      read(record, "file_id", "fileId") == null
+        ? null
+        : toNumberValue(record, 0, "file_id", "fileId"),
+    object_key: toOptionalString(record, "object_key", "objectKey"),
+    signature_data: toOptionalString(record, "signature_data", "signatureData"),
+    captured_at: toOptionalString(record, "captured_at", "capturedAt"),
+    captured_by_rider_id:
+      read(record, "captured_by_rider_id", "capturedByRiderId") == null
+        ? null
+        : toNumberValue(record, 0, "captured_by_rider_id", "capturedByRiderId"),
+  };
 }
 
 function normalizeOrderItems(value: unknown): OrderItem[] | undefined {
@@ -557,6 +615,17 @@ export function normalizeOrder(input: unknown): Order & {
       "assigned_rider_id",
       "assignedRiderId",
     ),
+    assigned_rider_contact: normalizeAssignedRiderContact(
+      read(
+        record,
+        "assigned_rider_contact",
+        "assignedRiderContact",
+        "assignedRider",
+      ),
+    ),
+    delivery_proof: normalizeDeliveryProof(
+      read(record, "delivery_proof", "deliveryProof"),
+    ),
     estimated_completion_at: toOptionalString(
       record,
       "estimated_completion_at",
@@ -602,8 +671,8 @@ export function normalizeOrder(input: unknown): Order & {
       toOptionalString(record, "delivery_type", "deliveryType") === "external"
         ? "external"
         : toOptionalString(record, "delivery_type", "deliveryType") === "local"
-        ? "local"
-        : undefined,
+          ? "local"
+          : undefined,
     extraDestinationFee:
       read(record, "extra_destination_fee", "extraDestinationFee") === undefined
         ? undefined

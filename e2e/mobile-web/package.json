@@ -1,0 +1,14 @@
+{
+  "name": "gridgo-mobile-web-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:web": "cd ../../apps/mobile && fvm flutter build web --release --no-tree-shake-icons",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0"
+  }
+}

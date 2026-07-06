@@ -176,7 +176,21 @@ describe('RidersService', () => {
       );
     });
 
-    it('uses OrdersService status side effects when marking an assignment delivered', async () => {
+    it('rejects marking an assignment delivered without proof of delivery', async () => {
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.findOne.mockResolvedValue({
+        ...mockAssignment,
+        status: DeliveryStatus.ARRIVED,
+      } as DeliveryAssignment);
+
+      await expect(
+        service.updateDeliveryStatus(1, 100, DeliveryStatus.DELIVERED),
+      ).rejects.toThrow('Proof of delivery is required');
+      expect(assignmentRepo.save).not.toHaveBeenCalled();
+      expect(ordersService.updateStatus).not.toHaveBeenCalled();
+    });
+
+    it('uses OrdersService status side effects when marking an assignment delivered with photo proof', async () => {
       profileRepo.findOne.mockResolvedValue(mockProfile);
       assignmentRepo.findOne.mockResolvedValue({
         ...mockAssignment,
@@ -186,15 +200,51 @@ describe('RidersService', () => {
         async (a) => a as DeliveryAssignment,
       );
 
-      const result = await service.updateDeliveryStatus(
+      const result = await (service.updateDeliveryStatus as any)(
         1,
         100,
         DeliveryStatus.DELIVERED,
+        undefined,
+        { type: 'photo', fileId: 55, objectKey: 'uploads/pod/55.jpg' },
       );
 
       expect(result.status).toBe(DeliveryStatus.DELIVERED);
       expect(result.deliveredAt).toBeDefined();
+      expect(result.proofType).toBe('photo');
+      expect(result.proofFileId).toBe(55);
+      expect(result.proofObjectKey).toBe('uploads/pod/55.jpg');
+      expect(result.proofCapturedAt).toBeDefined();
+      expect(result.proofCapturedByRiderId).toBe(mockProfile.id);
+      expect(result.proofSignatureData).toBeNull();
       expect(ordersService.updateStatus).toHaveBeenCalledWith(1, 'delivered');
+    });
+
+    it('marks an assignment delivered with signature proof', async () => {
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.findOne.mockResolvedValue({
+        ...mockAssignment,
+        status: DeliveryStatus.ARRIVED,
+      } as DeliveryAssignment);
+      assignmentRepo.save.mockImplementation(
+        async (a) => a as DeliveryAssignment,
+      );
+
+      const result = await (service.updateDeliveryStatus as any)(
+        1,
+        100,
+        DeliveryStatus.DELIVERED,
+        undefined,
+        { type: 'signature', signatureData: 'svg:path-data' },
+      );
+
+      expect(result.status).toBe(DeliveryStatus.DELIVERED);
+      expect(result.deliveredAt).toBeDefined();
+      expect(result.proofType).toBe('signature');
+      expect(result.proofSignatureData).toBe('svg:path-data');
+      expect(result.proofCapturedAt).toBeDefined();
+      expect(result.proofCapturedByRiderId).toBe(mockProfile.id);
+      expect(result.proofFileId).toBeNull();
+      expect(result.proofObjectKey).toBeNull();
     });
 
     it('should transition from ASSIGNED to DECLINED', async () => {
@@ -314,10 +364,12 @@ describe('RidersService', () => {
         status: DeliveryStatus.ARRIVED,
       } as DeliveryAssignment;
       assignmentRepo.findOne.mockResolvedValue(arrivedAssignment);
-      const delivered = await service.updateDeliveryStatus(
+      const delivered = await (service.updateDeliveryStatus as any)(
         1,
         100,
         DeliveryStatus.DELIVERED,
+        undefined,
+        { type: 'signature', signatureData: 'svg:path-data' },
       );
       expect(delivered.status).toBe(DeliveryStatus.DELIVERED);
       expect(delivered.deliveredAt).toBeDefined();

@@ -85,6 +85,20 @@ class ChatNotifier extends StateNotifier<ChatState> {
     }
   }
 
+  Future<Conversation?> openRiderOrderConversation(
+    Object orderRef, {
+    required bool hasAssignedRider,
+  }) async {
+    if (!hasAssignedRider) {
+      state = state.copyWith(
+        createError: 'A rider has not been assigned to this order yet.',
+      );
+      return null;
+    }
+
+    return openOrderConversation(orderRef);
+  }
+
   List<Conversation> _upsertConversation(Conversation conv) {
     final withoutExisting = state.conversations.where(
       (existing) => existing.id != conv.id,

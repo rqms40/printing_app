@@ -45,6 +45,28 @@ export interface OrderDestination {
   sort_order?: number;
 }
 
+export interface AssignedRiderContact {
+  user_id?: number | string | null;
+  rider_profile_id?: number | string | null;
+  display_name?: string | null;
+  full_name?: string | null;
+  nickname?: string | null;
+  phone_number?: string | null;
+  vehicle_type?: string | null;
+  plate_number?: string | null;
+  delivery_assignment_id?: number | string | null;
+  delivery_status?: string | null;
+}
+
+export interface DeliveryProof {
+  type?: "photo" | "signature" | string | null;
+  file_id?: number | null;
+  object_key?: string | null;
+  signature_data?: string | null;
+  captured_at?: string | null;
+  captured_by_rider_id?: number | string | null;
+}
+
 export interface Order {
   id: string;
   order_id: string;
@@ -71,6 +93,8 @@ export interface Order {
   delivery_address_id?: string;
   delivery_address?: OrderDestination | null;
   assigned_rider_id?: string;
+  assigned_rider_contact?: AssignedRiderContact | null;
+  delivery_proof?: DeliveryProof | null;
   estimated_completion_at?: string;
   admin_notes?: string;
   adminStatusNote?: string | null;

@@ -21,6 +21,11 @@ export enum DeliveryStatus {
   DELIVERED = 'delivered',
 }
 
+export enum ProofOfDeliveryType {
+  PHOTO = 'photo',
+  SIGNATURE = 'signature',
+}
+
 @Entity('delivery_assignments')
 @Index('idx_delivery_assignments_order', ['orderId'])
 @Index('idx_delivery_assignments_rider', ['riderId'])
@@ -67,6 +72,30 @@ export class DeliveryAssignment {
 
   @Column({ name: 'delivered_at', type: 'timestamp', nullable: true })
   deliveredAt: Date;
+
+  @Column({
+    name: 'proof_type',
+    type: 'enum',
+    enum: ProofOfDeliveryType,
+    enumName: 'delivery_proof_type_enum',
+    nullable: true,
+  })
+  proofType: ProofOfDeliveryType | null;
+
+  @Column({ name: 'proof_file_id', type: 'int', nullable: true })
+  proofFileId: number | null;
+
+  @Column({ name: 'proof_object_key', type: 'varchar', nullable: true })
+  proofObjectKey: string | null;
+
+  @Column({ name: 'proof_signature_data', type: 'text', nullable: true })
+  proofSignatureData: string | null;
+
+  @Column({ name: 'proof_captured_at', type: 'timestamp', nullable: true })
+  proofCapturedAt: Date | null;
+
+  @Column({ name: 'proof_captured_by_rider_id', type: 'int', nullable: true })
+  proofCapturedByRiderId: number | null;
 
   @Column({ name: 'decline_reason', nullable: true, type: 'text' })
   declineReason: string;

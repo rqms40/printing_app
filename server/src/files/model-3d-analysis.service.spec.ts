@@ -49,6 +49,26 @@ describe('Model3dAnalysisService', () => {
     expect(out!.unit).toBe('mm');
   });
 
+  it('converts ASCII STL triangles to a GLB preview', async () => {
+    const stl = `
+solid ascii
+  facet normal 0 0 1
+    outer loop
+      vertex 0 0 0
+      vertex 10 0 0
+      vertex 0 5 2
+    endloop
+  endfacet
+endsolid ascii
+`;
+    const out = await svc.analyze(Buffer.from(stl), 'ascii.stl');
+    expect(out!.widthMm).toBe(10);
+    expect(out!.depthMm).toBe(5);
+    expect(out!.heightMm).toBe(2);
+    expect(out!.triangleCount).toBe(1);
+    expect(out!.glbBuffer?.subarray(0, 4).toString('utf8')).toBe('glTF');
+  });
+
   it('returns null on truncated STL', async () => {
     const buf = Buffer.alloc(50);
     expect(await svc.analyze(buf, 'broken.stl')).toBeNull();
@@ -66,6 +86,19 @@ f 1 2 3
     expect(out!.widthMm).toBe(10);
     expect(out!.depthMm).toBe(5);
     expect(out!.heightMm).toBe(2);
+  });
+
+  it('triangulates OBJ faces into a GLB preview', async () => {
+    const obj = `
+v 0 0 0
+v 10 0 0
+v 10 5 2
+v 0 5 2
+f 1 2 3 4
+`;
+    const out = await svc.analyze(Buffer.from(obj), 'quad.obj');
+    expect(out!.triangleCount).toBe(2);
+    expect(out!.glbBuffer?.subarray(0, 4).toString('utf8')).toBe('glTF');
   });
 
   it('parses 3MF and converts inch to mm', async () => {

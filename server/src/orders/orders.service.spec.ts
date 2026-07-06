@@ -1,5 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
-import { ForbiddenException, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Logger,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { FilesService } from '../files/files.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -104,6 +108,7 @@ describe('OrdersService', () => {
   let creditsService: Partial<CreditsService>;
   let notificationsService: Partial<NotificationsService>;
   let catalogPricingService: { quote: jest.Mock };
+  let fileMetadataRepo: jest.Mocked<Partial<Repository<FileMetadata>>>;
 
   const mockOrder = {
     id: 1,
@@ -198,6 +203,18 @@ describe('OrdersService', () => {
     };
     addressRepo = {
       findOne: jest.fn(),
+    };
+    fileMetadataRepo = {
+      findOne: jest.fn().mockImplementation(async ({ where }: any) => ({
+        id: where.id,
+        uploadedBy: 1,
+        url: `https://files/${where.id}`,
+        originalName: `file-${where.id}.pdf`,
+        model3dWidthMm: null,
+        model3dDepthMm: null,
+        model3dHeightMm: null,
+      })),
+      findOneOrFail: jest.fn().mockResolvedValue({ model3dWidthMm: null }),
     };
     addressRepo.findOne.mockResolvedValue({ id: 9, userId: 1 } as Address);
     gateway = {
@@ -327,11 +344,7 @@ describe('OrdersService', () => {
         },
         {
           provide: getRepositoryToken(FileMetadata),
-          useValue: {
-            findOneOrFail: jest
-              .fn()
-              .mockResolvedValue({ model3dWidthMm: null }),
-          },
+          useValue: fileMetadataRepo,
         },
         { provide: OrdersGateway, useValue: gateway },
         { provide: FirebaseService, useValue: firebaseService },
@@ -455,6 +468,26 @@ describe('OrdersService', () => {
         'order_placed',
       );
     });
+
+    it('rejects file metadata that does not belong to the ordering user', async () => {
+      fileMetadataRepo.findOne!.mockResolvedValueOnce({
+        id: 99,
+        uploadedBy: 2,
+        url: 'https://files/other.pdf',
+      } as FileMetadata);
+
+      await expect(
+        service.create({
+          userId: 1,
+          fileMetadataId: 99,
+          fileUrl: 'https://files/other.pdf',
+        } as Partial<Order>),
+      ).rejects.toThrow(
+        new BadRequestException('Invalid uploaded file reference'),
+      );
+
+      expect(repo.save).not.toHaveBeenCalled();
+    });
   });
 
   describe('createBatch', () => {
@@ -551,6 +584,20 @@ describe('OrdersService', () => {
       await expect((service as any).createBatch(1, batchDto)).rejects.toThrow(
         'Invalid delivery address',
       );
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects batch item file metadata that does not belong to the ordering user', async () => {
+      fileMetadataRepo.findOne!.mockResolvedValueOnce({
+        id: 11,
+        uploadedBy: 2,
+        url: 'https://files/other.pdf',
+      } as FileMetadata);
+
+      await expect((service as any).createBatch(1, batchDto)).rejects.toThrow(
+        new BadRequestException('Invalid uploaded file reference'),
+      );
+
       expect(dataSource.transaction).not.toHaveBeenCalled();
     });
 
@@ -712,16 +759,59 @@ describe('OrdersService', () => {
 
       const result = await service.findByUser(1);
 
-      expect(assignmentRepo.find).toHaveBeenCalledWith({
-        where: {
-          orderId: expect.any(Object),
-          status: expect.any(Object),
-        },
-      });
+      expect(assignmentRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            orderId: expect.any(Object),
+            status: expect.any(Object),
+          },
+        }),
+      );
       expect(
         (result[0] as Order & { deliveryAssignmentId?: number })
           .deliveryAssignmentId,
       ).toBe(99);
+    });
+
+    it('attaches assigned rider contact details for customer delivery surfaces', async () => {
+      const orders = [{ ...mockOrder, id: 12 }] as Order[];
+      repo.find.mockResolvedValue(orders);
+      assignmentRepo.find.mockResolvedValue([
+        {
+          id: 99,
+          orderId: 12,
+          riderId: 7,
+          status: DeliveryStatus.ACCEPTED,
+          rider: {
+            id: 7,
+            userId: 70,
+            vehicleType: 'motorcycle',
+            plateNumber: 'ABC 1234',
+            user: {
+              id: 70,
+              fullName: 'Maya Santos',
+              nickname: 'Maya',
+              phoneNumber: '+639171234567',
+            },
+          },
+        } as DeliveryAssignment,
+      ]);
+
+      const result = await service.findByUser(1);
+
+      expect((result[0] as any).assignedRiderContact).toEqual({
+        userId: 70,
+        riderProfileId: 7,
+        displayName: 'Maya Santos',
+        fullName: 'Maya Santos',
+        nickname: 'Maya',
+        phoneNumber: '+639171234567',
+        vehicleType: 'motorcycle',
+        plateNumber: 'ABC 1234',
+        deliveryAssignmentId: 99,
+        deliveryStatus: DeliveryStatus.ACCEPTED,
+        proof: null,
+      });
     });
   });
 
@@ -1081,7 +1171,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         },
         {
           provide: getRepositoryToken(FileMetadata),
-          useValue: { findOneOrFail: jest.fn() },
+          useValue: { findOne: jest.fn(), findOneOrFail: jest.fn() },
         },
         {
           provide: DeliverySlotsService,
@@ -1570,7 +1660,16 @@ describe('createBatch with slot + destinations', () => {
         { provide: DeliverySlotsGateway, useValue: slotsGateway },
         {
           provide: getRepositoryToken(FileMetadata),
-          useValue: { findOneOrFail: jest.fn() },
+          useValue: {
+            findOne: jest.fn().mockImplementation(async ({ where }: any) => ({
+              id: where.id,
+              uploadedBy: 1,
+              url: `https://files/${where.id}`,
+              originalName: `file-${where.id}`,
+              model3dWidthMm: null,
+            })),
+            findOneOrFail: jest.fn(),
+          },
         },
         {
           provide: PrinterProfileService,
@@ -2514,7 +2613,7 @@ describe('cancelBatch', () => {
         },
         {
           provide: getRepositoryToken(FileMetadata),
-          useValue: { findOneOrFail: jest.fn() },
+          useValue: { findOne: jest.fn(), findOneOrFail: jest.fn() },
         },
         { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
         {
@@ -2665,7 +2764,7 @@ describe('updateManualStatus', () => {
         },
         {
           provide: getRepositoryToken(FileMetadata),
-          useValue: { findOneOrFail: jest.fn() },
+          useValue: { findOne: jest.fn(), findOneOrFail: jest.fn() },
         },
         { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
         {
@@ -2772,7 +2871,7 @@ describe('createBatch — 3D bounds enforcement', () => {
     Pick<PrinterProfileService, 'getProfile'>
   >;
   let fileMetadataRepo: jest.Mocked<
-    Pick<Repository<FileMetadata>, 'findOneOrFail'>
+    Pick<Repository<FileMetadata>, 'findOne' | 'findOneOrFail'>
   >;
 
   beforeEach(async () => {
@@ -2783,6 +2882,7 @@ describe('createBatch — 3D bounds enforcement', () => {
     };
 
     fileMetadataRepo = {
+      findOne: jest.fn(),
       findOneOrFail: jest.fn(),
     };
 
@@ -2899,8 +2999,11 @@ describe('createBatch — 3D bounds enforcement', () => {
       name: 'X',
       maxFileSizeMb: 200,
     } as any);
-    fileMetadataRepo.findOneOrFail.mockResolvedValue({
+    fileMetadataRepo.findOne.mockResolvedValue({
       id: 1,
+      uploadedBy: 99,
+      url: 'https://files/model.stl',
+      originalName: 'model.stl',
       model3dWidthMm: '200',
       model3dDepthMm: '50',
       model3dHeightMm: '50',
@@ -2984,7 +3087,7 @@ describe('listExternalDeliveries and updateExternalDeliveryStatus', () => {
         },
         {
           provide: getRepositoryToken(FileMetadata),
-          useValue: { findOneOrFail: jest.fn() },
+          useValue: { findOne: jest.fn(), findOneOrFail: jest.fn() },
         },
         { provide: OrdersGateway, useValue: { notifyOrderUpdate: jest.fn() } },
         {

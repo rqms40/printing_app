@@ -323,6 +323,16 @@ DateTime? _parseDateNullable(dynamic value) {
   return null;
 }
 
+AssignedRiderContact? _parseAssignedRider(Map<String, dynamic> json) {
+  final value =
+      _readJsonValue(json, 'assignedRiderContact', 'assigned_rider_contact') ??
+      _readJsonValue(json, 'assignedRider', 'assigned_rider');
+  if (value is Map) {
+    return AssignedRiderContact.fromJson(Map<String, dynamic>.from(value));
+  }
+  return null;
+}
+
 Order _parseOrder(Map<String, dynamic> json) {
   final batch = _readJsonValue(json, 'batchOrder', 'batch_order');
   final batchJson = batch is Map ? Map<String, dynamic>.from(batch) : null;
@@ -439,6 +449,7 @@ Order _parseOrder(Map<String, dynamic> json) {
       'deliveryAssignmentId',
       'delivery_assignment_id',
     )?.toString(),
+    assignedRider: _parseAssignedRider(json),
     estimatedCompletionAt: _parseDateNullable(
       _readJsonValue(json, 'estimatedCompletionAt', 'estimated_completion_at'),
     ),

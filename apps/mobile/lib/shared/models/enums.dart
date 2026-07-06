@@ -68,7 +68,15 @@ extension OrderStatusX on OrderStatus {
   }
 }
 
-enum DeliveryStatus { assigned, accepted, declined, pickedUp, onTheWay, arrived, delivered }
+enum DeliveryStatus {
+  assigned,
+  accepted,
+  declined,
+  pickedUp,
+  onTheWay,
+  arrived,
+  delivered,
+}
 
 extension DeliveryStatusX on DeliveryStatus {
   String get displayName {
@@ -234,7 +242,7 @@ extension Material3DX on Material3D {
   }
 }
 
-enum FileFormat3D { stl, obj, threeMf }
+enum FileFormat3D { stl, obj, threeMf, glb, gltf }
 
 extension FileFormat3DX on FileFormat3D {
   String get displayName {
@@ -245,6 +253,10 @@ extension FileFormat3DX on FileFormat3D {
         return 'OBJ';
       case FileFormat3D.threeMf:
         return '3MF';
+      case FileFormat3D.glb:
+        return 'GLB';
+      case FileFormat3D.gltf:
+        return 'GLTF';
     }
   }
 }

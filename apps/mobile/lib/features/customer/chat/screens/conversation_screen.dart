@@ -61,7 +61,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       switch (widget.conversationType) {
         ConversationType.ai => 'GridBot AI',
         ConversationType.admin => 'Human Support',
-        ConversationType.rider => 'Rider Support',
+        ConversationType.rider =>
+          widget.currentUserRole == SenderRole.rider
+              ? 'Customer'
+              : 'Delivery Rider',
       };
 
   String get _emptyTitle => switch (widget.conversationType) {

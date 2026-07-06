@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,6 +21,7 @@ class RiderMapView extends ConsumerStatefulWidget {
     required this.trackLocation,
     this.interactive = true,
     this.showLiveBadge = true,
+    this.showRoute = true,
     this.borderRadius,
   });
 
@@ -27,6 +30,7 @@ class RiderMapView extends ConsumerStatefulWidget {
   final bool trackLocation;
   final bool interactive;
   final bool showLiveBadge;
+  final bool showRoute;
   final BorderRadius? borderRadius;
 
   @override
@@ -42,8 +46,7 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
 
   LatLng get _shop => MapHelpers.shopPoint;
 
-  LatLng get _destination =>
-      widget.destination ?? MapHelpers.davaoCenter;
+  LatLng get _destination => widget.destination ?? MapHelpers.davaoCenter;
 
   @override
   void initState() {
@@ -55,7 +58,32 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
     _loadRoute();
   }
 
+  @override
+  void didUpdateWidget(covariant RiderMapView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_routeKey(oldWidget) != _routeKey(widget)) {
+      unawaited(_loadRoute());
+    } else {
+      _fitBounds();
+    }
+  }
+
+  String _routeKey(RiderMapView widget) {
+    final point = widget.destination ?? MapHelpers.davaoCenter;
+    return '${widget.showRoute}:${point.latitude}:${point.longitude}';
+  }
+
   Future<void> _loadRoute() async {
+    if (!widget.showRoute) {
+      if (!mounted) return;
+      setState(() {
+        _routePoints = const [];
+        _isLoading = false;
+      });
+      _fitBounds();
+      return;
+    }
+
     final points = await RoutingService.getRoute(_shop, _destination);
     if (!mounted) return;
     setState(() {
@@ -66,15 +94,15 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
   }
 
   void _fitBounds() {
-    if (_routePoints.isEmpty) return;
-    final bounds = LatLngBounds.fromPoints([_shop, _destination, ..._routePoints]);
+    final bounds = LatLngBounds.fromPoints([
+      _shop,
+      _destination,
+      if (widget.showRoute) ..._routePoints,
+    ]);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _mapController.fitCamera(
-        CameraFit.bounds(
-          bounds: bounds,
-          padding: const EdgeInsets.all(48),
-        ),
+        CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(48)),
       );
     });
   }
@@ -85,58 +113,6 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
     _mapController.dispose();
     super.dispose();
   }
-
-  /// Shop pickup marker — brand-yellow accented.
-  Marker _shopMarker(LatLng point, AppColorSet colors) => Marker(
-        point: point,
-        width: 44,
-        height: 44,
-        child: Container(
-          decoration: BoxDecoration(
-            color: colors.surface,
-            shape: BoxShape.circle,
-            border: Border.all(color: colors.brand, width: 2.5),
-            boxShadow: const [
-              BoxShadow(color: Color(0x66000000), blurRadius: 6, offset: Offset(0, 2)),
-            ],
-          ),
-          child: Icon(Icons.store_rounded, color: colors.brand, size: 22),
-        ),
-      );
-
-  /// Destination flag marker — brand-yellow with a pin tail.
-  Marker _destMarker(LatLng point, AppColorSet colors) => Marker(
-        point: point,
-        width: 44,
-        height: 54,
-        alignment: Alignment.topCenter,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: colors.brand,
-                shape: BoxShape.circle,
-                border: Border.all(color: colors.surface, width: 2.5),
-                boxShadow: const [
-                  BoxShadow(color: Color(0x66000000), blurRadius: 6, offset: Offset(0, 2)),
-                ],
-              ),
-              child: const Icon(Icons.flag_rounded, color: Colors.black, size: 20),
-            ),
-            Container(
-              width: 3,
-              height: 8,
-              decoration: BoxDecoration(
-                color: colors.brand,
-                borderRadius: AppRadius.borderFull,
-              ),
-            ),
-          ],
-        ),
-      );
 
   @override
   Widget build(BuildContext context) {
@@ -157,8 +133,8 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
         : null;
 
     final markers = <Marker>[
-      _shopMarker(_shop, colors),
-      _destMarker(_destination, colors),
+      MapHelpers.shopMarker(point: _shop),
+      MapHelpers.destinationMarker(point: _destination),
       if (riderPoint != null) MapHelpers.riderMarker(riderPoint),
     ];
 
@@ -191,26 +167,15 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
               ),
               children: [
                 MapHelpers.tileLayer(Theme.of(context).brightness),
-                if (_routePoints.isNotEmpty)
-                  PolylineLayer(
-                    polylines: [
-                      Polyline(
-                        points: _routePoints,
-                        color: Colors.black.withValues(alpha: 0.6),
-                        strokeWidth: 7,
-                      ),
-                      Polyline(
-                        points: _routePoints,
-                        color: colors.brand,
-                        strokeWidth: 4.5,
-                      ),
-                    ],
-                  ),
+                if (widget.showRoute && _routePoints.isNotEmpty)
+                  MapHelpers.routePolyline(_routePoints),
                 MarkerLayer(markers: markers),
               ],
             ),
 
-          if (widget.showLiveBadge && widget.trackLocation && riderPoint != null)
+          if (widget.showLiveBadge &&
+              widget.trackLocation &&
+              riderPoint != null)
             Positioned(
               top: AppSpacing.md,
               left: AppSpacing.md,

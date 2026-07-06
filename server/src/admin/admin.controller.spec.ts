@@ -47,6 +47,7 @@ describe('AdminController analytics', () => {
     };
     assignmentsRepo = {
       create: jest.fn(),
+      find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn(),
       save: jest.fn(),
     };
@@ -440,6 +441,49 @@ describe('AdminController analytics', () => {
       ]);
       expect(mapped.delivery_slot_booking_id).toBe(5);
       expect(mapped.extra_destination_fee).toBe(20);
+    });
+
+    it('includes proof of delivery metadata for admin order review', () => {
+      const order = {
+        id: 7,
+        orderId: 'ORD-10007',
+        userId: 1,
+        category: 'paper',
+        quantity: 1,
+        totalPrice: 12,
+        deliveryFee: 0,
+        paymentMethod: 'gcash',
+        paymentStatus: 'paid',
+        orderStatus: OrderStatus.DELIVERED,
+        deliveryOption: 'delivery',
+        assignedRiderId: 70,
+        assignedRiderContact: {
+          deliveryAssignmentId: 99,
+          deliveryStatus: DeliveryStatus.DELIVERED,
+          proof: {
+            type: 'photo',
+            fileId: 55,
+            objectKey: 'uploads/pod/55.jpg',
+            signatureData: null,
+            capturedAt: new Date('2026-05-02T19:00:36.788Z'),
+            capturedByRiderId: 10,
+          },
+        },
+        statusHistory: [],
+        createdAt: new Date('2026-05-02T19:00:36.788Z'),
+        updatedAt: new Date('2026-05-02T19:00:36.788Z'),
+      } as unknown as Order;
+
+      const mapped = (controller as any).mapOrder(order);
+
+      expect(mapped.delivery_proof).toEqual({
+        type: 'photo',
+        file_id: 55,
+        object_key: 'uploads/pod/55.jpg',
+        signature_data: null,
+        captured_at: new Date('2026-05-02T19:00:36.788Z'),
+        captured_by_rider_id: 10,
+      });
     });
   });
 

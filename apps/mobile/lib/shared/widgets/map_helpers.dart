@@ -3,9 +3,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 
-/// Route color — bold teal, visible on any map tile.
-const Color kRouteColor = Color(0xFF00897B);
-const Color kRouteBorderColor = Color(0xFF004D40);
+/// Route colors tuned to match the desktop riders map treatment.
+const Color kRouteColor = Color(0xFFFFDE58);
+const Color kRouteBorderColor = Color(0xFF0A0A0A);
 
 /// Shared map builders for all map screens.
 class MapHelpers {
@@ -23,12 +23,12 @@ class MapHelpers {
   /// Davao City center — used for idle state on home map tile.
   static const davaoCenter = LatLng(7.1907, 125.4553);
 
-  static const openStreetMapTileUrl =
-      'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  static const cartoDarkTileUrl =
+      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 
-  /// Returns the shared OpenStreetMap tile layer used across GRIDGO maps.
-  /// The same stable OSM source is used in both themes to avoid provider-
-  /// specific failures from third-party styled tile endpoints.
+  /// Returns the shared CARTO dark tile layer used across GRIDGO maps.
+  /// This mirrors the Leaflet/CARTO treatment used by the desktop riders map
+  /// and keeps labels, roads, and water detail visible without an extra filter.
   ///
   /// Pass [cachingProvider] (e.g. `const DisabledMapCachingProvider()`) to opt
   /// out of flutter_map's built-in disk cache, which depends on `path_provider`
@@ -39,37 +39,15 @@ class MapHelpers {
     MapCachingProvider? cachingProvider,
   }) {
     return TileLayer(
-      urlTemplate: openStreetMapTileUrl,
+      urlTemplate: cartoDarkTileUrl,
       userAgentPackageName: 'com.gridgoprint.app',
       tileProvider: cachingProvider == null
           ? null
           : NetworkTileProvider(cachingProvider: cachingProvider),
-      // Theme-following basemap: dark mode applies an invert+hue filter to the
-      // light OSM tiles for a dark map; light mode shows them as-is. Route and
-      // marker layers are drawn separately and keep their full colour.
-      tileBuilder: brightness == Brightness.dark ? _darkTileBuilder : null,
     );
   }
 
-  /// Filters the light OSM tiles into a dark basemap (invert + 180° hue
-  /// rotation) so the map matches the app's dark theme.
-  static Widget _darkTileBuilder(
-    BuildContext context,
-    Widget tileWidget,
-    TileImage tile,
-  ) {
-    return ColorFiltered(
-      colorFilter: const ColorFilter.matrix(<double>[
-        0.574, -1.43, -0.144, 0, 255,
-        -0.426, -0.43, -0.144, 0, 255,
-        -0.426, -1.43, 0.856, 0, 255,
-        0, 0, 0, 1, 0,
-      ]),
-      child: tileWidget,
-    );
-  }
-
-  /// Bold route polyline (double-layered: dark border + teal fill).
+  /// Bold route polyline (double-layered: dark border + GRIDGO yellow fill).
   static PolylineLayer routePolyline(List<LatLng> points) {
     return PolylineLayer(
       polylines: [
@@ -81,68 +59,91 @@ class MapHelpers {
 
   /// Shop marker — white circle + store icon + shadow.
   static Marker shopMarker({LatLng? point}) => Marker(
-        point: point ?? shopPoint,
-        width: 44,
-        height: 44,
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-            border: Border.all(color: kRouteBorderColor, width: 2.5),
-            boxShadow: const [
-              BoxShadow(color: Color(0x40000000), blurRadius: 6, offset: Offset(0, 2)),
-            ],
+    point: point ?? shopPoint,
+    width: 44,
+    height: 44,
+    child: Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(color: kRouteColor, width: 2.5),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x40000000),
+            blurRadius: 6,
+            offset: Offset(0, 2),
           ),
-          child: const Icon(Icons.store_rounded, color: kRouteBorderColor, size: 22),
-        ),
-      );
+        ],
+      ),
+      child: const Icon(
+        Icons.store_rounded,
+        color: kRouteBorderColor,
+        size: 22,
+      ),
+    ),
+  );
 
-  /// Destination marker — teal circle + flag + pin tail.
+  /// Destination marker — neutral circle + flag + pin tail.
   static Marker destinationMarker({LatLng? point}) => Marker(
-        point: point ?? destinationPoint,
-        width: 44,
-        height: 54,
-        alignment: Alignment.topCenter,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: kRouteColor,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 2.5),
-                boxShadow: const [
-                  BoxShadow(color: Color(0x40000000), blurRadius: 6, offset: Offset(0, 2)),
-                ],
-              ),
-              child: const Icon(Icons.flag_rounded, color: Colors.white, size: 20),
-            ),
-            Container(
-              width: 3,
-              height: 8,
-              decoration: BoxDecoration(color: kRouteColor, borderRadius: AppRadius.borderFull),
-            ),
-          ],
-        ),
-      );
-
-  /// Rider marker — dark circle + navigation arrow.
-  static Marker riderMarker(LatLng point) => Marker(
-        point: point,
-        width: 44,
-        height: 44,
-        child: Container(
+    point: point ?? destinationPoint,
+    width: 44,
+    height: 54,
+    alignment: Alignment.topCenter,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
+            color: kRouteColor,
             shape: BoxShape.circle,
             border: Border.all(color: Colors.white, width: 2.5),
             boxShadow: const [
-              BoxShadow(color: Color(0x40000000), blurRadius: 8, offset: Offset(0, 2)),
+              BoxShadow(
+                color: Color(0x40000000),
+                blurRadius: 6,
+                offset: Offset(0, 2),
+              ),
             ],
           ),
-          child: const Icon(Icons.navigation_rounded, color: Colors.white, size: 20),
+          child: const Icon(Icons.flag_rounded, color: Colors.white, size: 20),
         ),
-      );
+        Container(
+          width: 3,
+          height: 8,
+          decoration: BoxDecoration(
+            color: kRouteColor,
+            borderRadius: AppRadius.borderFull,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  /// Rider marker — dark circle + navigation arrow.
+  static Marker riderMarker(LatLng point) => Marker(
+    point: point,
+    width: 44,
+    height: 44,
+    child: Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2.5),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x40000000),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: const Icon(
+        Icons.navigation_rounded,
+        color: Colors.white,
+        size: 20,
+      ),
+    ),
+  );
 }
