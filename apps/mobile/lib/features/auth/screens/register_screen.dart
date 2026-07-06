@@ -15,7 +15,6 @@ import 'package:printing_app/features/auth/widgets/gender_identity_selector.dart
 import 'package:printing_app/features/auth/widgets/password_visibility_toggle.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/features/auth/widgets/onboarding_hero.dart';
-import 'package:vector_math/vector_math_64.dart' show Vector3;
 
 enum _RegisterStep {
   privacy,
@@ -611,20 +610,30 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               ),
             ),
             const SizedBox(height: AppSpacing.xl),
-            _CategoryCarousel(
-              selectedCategory: _draft.profileCategory,
-              colors: colors,
-              onChanged: (category) {
-                setState(() {
-                  _draft = _draft.copyWith(
-                    profileCategory: category,
-                    profileField: null,
-                    printingPreferences: const [],
-                  );
-                  _stepError = null;
-                });
-              },
-            ),
+            for (final category in profileCategories) ...[
+              KeyedSubtree(
+                key: ValueKey('register-category-${category.value}'),
+                child: _FieldCard(
+                  icon: category.icon,
+                  title: category.label,
+                  autoSelectsLabel: category.description,
+                  isSelected: _draft.profileCategory == category.value,
+                  colors: colors,
+                  onTap: () {
+                    setState(() {
+                      _draft = _draft.copyWith(
+                        profileCategory: category.value,
+                        profileField: null,
+                        printingPreferences: const [],
+                      );
+                      _stepError = null;
+                    });
+                  },
+                ),
+              ),
+              if (category != profileCategories.last)
+                const SizedBox(height: AppSpacing.md),
+            ],
           ],
         );
       case _RegisterStep.field:
@@ -859,77 +868,6 @@ class _WizardHeader extends StatelessWidget {
   }
 }
 
-class _ChoiceCard extends StatelessWidget {
-  const _ChoiceCard({
-    required this.title,
-    required this.subtitle,
-    required this.svgAsset,
-    required this.isSelected,
-    required this.colors,
-    required this.onTap,
-  });
-
-  final String title;
-  final String subtitle;
-  final String svgAsset;
-  final bool isSelected;
-  final AppColorSet colors;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        width: 260,
-        padding: const EdgeInsets.all(AppSpacing.xl),
-        decoration: BoxDecoration(
-          color: colors.surfaceVariant,
-          borderRadius: AppRadius.borderXl,
-          border: Border.all(
-            color: isSelected ? colors.brand : colors.outline,
-            width: isSelected ? 2 : 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: isSelected
-                  ? colors.brand.withValues(alpha: 0.30)
-                  : Colors.black.withValues(alpha: 0.04),
-              blurRadius: isSelected ? 24 : 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              SvgPicture.asset(svgAsset, height: 200),
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                title,
-                style: AppTypography.bodyBold.copyWith(
-                  color: colors.onBackground,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                subtitle,
-                style: AppTypography.caption.copyWith(
-                  color: colors.onSurfaceDim,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _FieldCard extends StatelessWidget {
   const _FieldCard({
     required this.icon,
@@ -951,6 +889,7 @@ class _FieldCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
+      behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.all(AppSpacing.lg),
@@ -1334,128 +1273,6 @@ class _NicknameInputCardState extends State<_NicknameInputCard> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _CategoryCarousel extends StatefulWidget {
-  const _CategoryCarousel({
-    required this.selectedCategory,
-    required this.colors,
-    required this.onChanged,
-  });
-
-  final String? selectedCategory;
-  final AppColorSet colors;
-  final ValueChanged<String> onChanged;
-
-  @override
-  State<_CategoryCarousel> createState() => _CategoryCarouselState();
-}
-
-class _CategoryCarouselState extends State<_CategoryCarousel> {
-  late PageController _pageController;
-  int _currentPage = 0;
-
-  static const _categories = [
-    (
-      id: 'student',
-      title: 'Student',
-      subtitle: 'School / uni',
-      svg: 'assets/animations/undraw_learning.svg',
-    ),
-    (
-      id: 'professional',
-      title: 'Professional',
-      subtitle: 'Work / client',
-      svg: 'assets/animations/undraw_business-call.svg',
-    ),
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _currentPage = _categories.indexWhere(
-      (c) => c.id == widget.selectedCategory,
-    );
-    if (_currentPage == -1) _currentPage = 0;
-
-    _pageController = PageController(
-      initialPage: _currentPage,
-      viewportFraction: 0.65,
-    );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) widget.onChanged(_categories[_currentPage].id);
-    });
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 380,
-      child: PageView.builder(
-        controller: _pageController,
-        clipBehavior: Clip.none,
-        onPageChanged: (index) {
-          setState(() => _currentPage = index);
-          widget.onChanged(_categories[index].id);
-        },
-        itemCount: _categories.length,
-        itemBuilder: (context, index) {
-          return AnimatedBuilder(
-            animation: _pageController,
-            builder: (context, child) {
-              double value = 0.0;
-              if (_pageController.hasClients &&
-                  _pageController.position.haveDimensions) {
-                value = _pageController.page! - index;
-              } else {
-                value = _currentPage.toDouble() - index;
-              }
-
-              final clampedValue = value.clamp(-1.0, 1.0);
-
-              final angle = clampedValue * 0.2;
-              final scale = 1.0 - (clampedValue.abs() * 0.20);
-
-              final transform = Matrix4.identity()
-                ..setEntry(3, 2, 0.001)
-                ..rotateY(angle)
-                ..scaleByVector3(Vector3(scale, scale, 1.0));
-
-              final cat = _categories[index];
-              final isSelected = widget.selectedCategory == cat.id;
-
-              return Center(
-                child: Transform(
-                  transform: transform,
-                  alignment: Alignment.center,
-                  child: _ChoiceCard(
-                    title: cat.title,
-                    subtitle: cat.subtitle,
-                    svgAsset: cat.svg,
-                    isSelected: isSelected,
-                    colors: widget.colors,
-                    onTap: () {
-                      _pageController.animateToPage(
-                        index,
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeInOut,
-                      );
-                    },
-                  ),
-                ),
-              );
-            },
-          );
-        },
       ),
     );
   }
