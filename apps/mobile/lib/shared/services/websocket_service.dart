@@ -56,6 +56,9 @@ class WebSocketService {
   // Callbacks registered for survey-required events
   final List<Function(Map<String, dynamic>)> _surveyRequiredListeners = [];
 
+  // Callbacks registered for credits updates
+  final List<Function(Map<String, dynamic>)> _creditsUpdateListeners = [];
+
   // Callbacks registered for order updates
   final List<Function(dynamic)> _orderListeners = [];
 
@@ -201,14 +204,17 @@ class WebSocketService {
   }
 
   Future<void> connectNotifications({
-    required Function(Map<String, dynamic>) onCreditsUpdate,
+    Function(Map<String, dynamic>)? onCreditsUpdate,
   }) async {
+    if (onCreditsUpdate != null) {
+      listenForCreditsUpdate(onCreditsUpdate);
+    }
     // Already connected — nothing to do
     if (_notificationsSocket?.connected == true) return;
-    // Socket exists but disconnected — flush pending listeners then reconnect
+    // Socket exists but disconnected — disconnect and recreate to ensure fresh token
     if (_notificationsSocket != null) {
-      _notificationsSocket!.connect();
-      return;
+      _notificationsSocket!.disconnect();
+      _notificationsSocket = null;
     }
     final token = await TokenStorage.getToken();
     _notificationsSocket = io.io(
@@ -219,10 +225,7 @@ class WebSocketService {
           .disableAutoConnect()
           .build(),
     );
-    _notificationsSocket!.on('creditsUpdate', (data) {
-      final d = _normalize(data);
-      if (d is Map<String, dynamic>) onCreditsUpdate(d);
-    });
+    _notificationsSocket!.on('creditsUpdate', _dispatchCreditsUpdate);
     _notificationsSocket!.on('newNotification', _dispatchNotification);
     _notificationsSocket!.on('survey-required', _dispatchSurveyRequired);
     _notificationsSocket!.on(
@@ -236,11 +239,31 @@ class WebSocketService {
     _notificationsSocket!.connect();
   }
 
+  /// Register a callback for incoming `creditsUpdate` events.
+  void listenForCreditsUpdate(Function(Map<String, dynamic>) callback) {
+    if (!_creditsUpdateListeners.contains(callback)) {
+      _creditsUpdateListeners.add(callback);
+    }
+  }
+
   /// Register a callback for incoming `newNotification` events.
   /// Safe to call before [connectNotifications] and across reconnects.
   void listenForNewNotifications(Function(Map<String, dynamic>) callback) {
     if (!_notificationListeners.contains(callback)) {
       _notificationListeners.add(callback);
+    }
+    connectNotifications();
+  }
+
+  void _dispatchCreditsUpdate(dynamic data) {
+    final d = _normalize(data);
+    if (d is! Map<String, dynamic>) return;
+    for (final cb in _creditsUpdateListeners) {
+      try {
+        cb(d);
+      } catch (e) {
+        debugPrint('WS creditsUpdate handler error: $e');
+      }
     }
   }
 

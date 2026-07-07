@@ -11,7 +11,6 @@ import 'package:printing_app/shared/widgets/empty_state.dart';
 import 'package:printing_app/shared/widgets/skeleton_screens.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/utils/formatters.dart';
-import 'package:printing_app/features/customer/notifications/screens/widgets/gridgo_notification_card.dart';
 
 class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
@@ -224,17 +223,10 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
               final index = entry.key;
               final notification = entry.value;
               
-              Widget notificationWidget;
-              if (notification.type.startsWith('order_') && notification.type != 'order_update') {
-                notificationWidget = GridGoNotificationCard(
-                  notification: notification,
-                );
-              } else {
-                notificationWidget = _NotificationItem(
-                  notification: notification,
-                  isLast: index == items.length - 1,
-                );
-              }
+              final notificationWidget = _NotificationItem(
+                notification: notification,
+                isLast: index == items.length - 1,
+              );
 
               return notificationWidget
                   .animate()
@@ -266,6 +258,27 @@ class _NotificationItem extends ConsumerWidget {
 
   /// Returns icon + semantic background color for each notification type.
   _NotificationVisual _visual(String type, AppColorSet colors) {
+    if (type.startsWith('order_')) {
+      if (type.contains('cancel') || type.contains('decline')) {
+        return _NotificationVisual(
+          HugeIcons.strokeRoundedNotification02,
+          colors.error.withValues(alpha: 0.12),
+          colors.error,
+        );
+      }
+      if (type.contains('deliver') || type.contains('complet') || type.contains('ready')) {
+        return _NotificationVisual(
+          HugeIcons.strokeRoundedFile02,
+          colors.success.withValues(alpha: 0.12),
+          colors.success,
+        );
+      }
+      return _NotificationVisual(
+        HugeIcons.strokeRoundedFile02,
+        colors.info.withValues(alpha: 0.12),
+        colors.info,
+      );
+    }
     switch (type) {
       case 'order_update':
         return _NotificationVisual(

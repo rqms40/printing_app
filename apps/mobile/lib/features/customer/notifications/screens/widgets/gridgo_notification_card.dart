@@ -7,7 +7,6 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
 import 'package:printing_app/shared/models/app_notification.dart';
-import 'package:printing_app/shared/widgets/grid_logo.dart';
 
 class GridGoNotificationCard extends ConsumerWidget {
   const GridGoNotificationCard({
@@ -17,38 +16,31 @@ class GridGoNotificationCard extends ConsumerWidget {
 
   final AppNotification notification;
 
-  int _getProgress(String type) {
+  int _getStageIndex(String type) {
     final status = type.replaceFirst('order_', '');
     switch (status) {
       case 'placed':
-        return 5;
+        return 0; // Order
       case 'file_verified':
-        return 15;
       case 'printing_in_progress':
-        return 30;
-      case 'finishing_mounting':
-        return 45;
       case 'quality_checked':
-        return 55;
+      case 'finishing_mounting':
+        return 1; // Printing
       case 'ready_for_dispatch':
-        return 65;
       case 'rider_assigned':
-        return 75;
+      case 'driver_assigned':
       case 'picked_up':
-        return 80;
       case 'on_the_way':
-        return 90;
+        return 2; // Dispatch
       case 'arrived_at_destination':
-        return 95;
       case 'delivered':
-        return 100;
+        return 3; // Delivered
       default:
-        return 50;
+        return 0;
     }
   }
 
   String _formatDate(DateTime date) {
-    // Basic formatting like "Mar 24, 2026"
     final months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
@@ -71,11 +63,20 @@ class GridGoNotificationCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isUnread = !notification.isRead;
-    final progress = _getProgress(notification.type);
+    final stageIndex = _getStageIndex(notification.type);
+    
+    // Derived state for Rider info (Dynamically accurate if provided, fallback to mock)
+    final showRiderInfo = stageIndex >= 2;
+    final metadata = notification.metadata ?? {};
+    final driverName = metadata['driverName'] as String? ?? 'Carlito Jr. Dela Cruz';
+    final vehicle = metadata['vehicleType'] as String? ?? metadata['vehicle'] as String? ?? 'Motorcycle';
+    final plate = metadata['plateNumber'] as String? ?? metadata['plate'] as String? ?? '123ABC';
+    final window = metadata['window'] as String? ?? '9 AM - 11 PM';
+
     
     // Always use dark theme colors for this card to match the "GRIDGO" branding
     const brandYellow = Color(0xFFFFDE58);
-    const cardBg = Color(0xFF2A2A2A);
+    const cardBg = Color(0xFF1C1C1C);
     
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
@@ -111,131 +112,114 @@ class GridGoNotificationCard extends ConsumerWidget {
               vertical: AppSpacing.md,
             ),
             child: Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: cardBg,
                 borderRadius: AppRadius.borderLg,
+                border: Border.all(color: const Color(0xFF333333)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
+                    color: Colors.black.withValues(alpha: 0.2),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
                 ],
               ),
-              child: Row(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Logo container
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: Colors.black,
-                      borderRadius: AppRadius.borderMd,
-                    ),
-                    child: Center(
-                      child: GridLogo(
-                        size: 24,
-                        foregroundColor: Colors.white,
-                        accentColor: brandYellow,
-                        secondaryColor: Colors.white.withValues(alpha: 0.3),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  
-                  // Content
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'GRIDGO',
-                          style: AppTypography.caption.copyWith(
-                            color: Colors.white.withValues(alpha: 0.6),
-                            fontSize: 10,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                        Text(
-                          'GRIDGO',
-                          style: AppTypography.bodyBold.copyWith(
-                            color: brandYellow,
-                            fontSize: 13,
-                            height: 1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          notification.title,
-                          style: AppTypography.h3.copyWith(
-                            color: Colors.white,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${_formatDate(notification.createdAt)} · ${_formatTime(notification.createdAt)}',
-                          style: AppTypography.caption.copyWith(
-                            color: brandYellow,
-                            fontSize: 12,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        
-                        // Progress bar
-                        Stack(
-                          clipBehavior: Clip.none,
-                          alignment: Alignment.centerLeft,
+                  // Header Row
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Left: Title and Time
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              height: 4,
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(2),
+                            Text.rich(
+                              const TextSpan(
+                                children: [
+                                  TextSpan(text: 'GRID', style: TextStyle(color: Colors.white)),
+                                  TextSpan(text: 'GO', style: TextStyle(color: brandYellow)),
+                                ],
+                              ),
+                              style: AppTypography.h3.copyWith(
+                                fontSize: 16,
+                                letterSpacing: 1.0,
+                                fontWeight: FontWeight.w900,
                               ),
                             ),
-                            FractionallySizedBox(
-                              widthFactor: progress / 100,
-                              child: Container(
-                                height: 4,
-                                decoration: BoxDecoration(
-                                  color: brandYellow,
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
+                            const SizedBox(height: 4),
+                            Text(
+                              notification.title,
+                              style: AppTypography.h2.copyWith(
+                                color: brandYellow,
+                                fontSize: 20,
                               ),
                             ),
-                            Positioned(
-                              left: progress == 100 
-                                ? null 
-                                : MediaQuery.of(context).size.width * 0.6 * (progress / 100) - 10, // Approximation for icon position
-                              right: progress == 100 ? -2 : null,
-                              child: Text(
-                                progress == 100 ? '✅' : '🛵',
-                                style: const TextStyle(fontSize: 10),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${_formatDate(notification.createdAt)} - ${_formatTime(notification.createdAt)}',
+                              style: AppTypography.caption.copyWith(
+                                color: const Color(0xFFE0E0E0),
+                                fontSize: 12,
                               ),
                             ),
                           ],
                         ),
-                      ],
-                    ),
+                      ),
+                      
+                      // Right: Rider Info
+                      if (showRiderInfo)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              vehicle,
+                              style: AppTypography.caption.copyWith(
+                                color: const Color(0xFFE0E0E0),
+                                fontSize: 12,
+                              ),
+                            ),
+                            Text(
+                              plate,
+                              style: AppTypography.h2.copyWith(
+                                color: brandYellow,
+                                fontSize: 20,
+                              ),
+                            ),
+                            Text(
+                              window,
+                              style: AppTypography.caption.copyWith(
+                                color: const Color(0xFFE0E0E0),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
                   ),
                   
-                  // Unread dot
-                  if (isUnread)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8, top: 4),
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: colors.accent,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
+                  // Optional Bottom Text (e.g. Driver name under title)
+                  if (notification.title.contains(driverName.split(' ').first))
+                     Padding(
+                       padding: const EdgeInsets.only(top: 4),
+                       child: Text(
+                         'OR#${notification.orderId ?? "10290"}',
+                         style: AppTypography.caption.copyWith(
+                           color: const Color(0xFFE0E0E0),
+                           fontStyle: FontStyle.italic,
+                           fontSize: 12,
+                         ),
+                       ),
+                     ),
+                     
+                  const SizedBox(height: 24),
+                  
+                  // Progress Bar
+                  _buildProgressBar(stageIndex, brandYellow),
                 ],
               ),
             ),
@@ -244,4 +228,106 @@ class GridGoNotificationCard extends ConsumerWidget {
       ),
     );
   }
+
+  Widget _buildProgressBar(int currentStageIndex, Color brandYellow) {
+    final stages = [
+      {'label': 'Order', 'icon': HugeIcons.strokeRoundedShoppingCart01},
+      {'label': 'Printing', 'icon': HugeIcons.strokeRoundedPrinter},
+      {'label': 'Dispatch', 'icon': HugeIcons.strokeRoundedTruck},
+      {'label': 'Delivered', 'icon': HugeIcons.strokeRoundedLocation01},
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double width = constraints.maxWidth;
+        final double lineLeft = width * 0.125;
+        final double lineWidth = width * 0.75;
+        final double activeWidth = (width * 0.25) * currentStageIndex;
+
+        return SizedBox(
+          height: 75,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Background Line
+              Positioned(
+                left: lineLeft,
+                top: 14,
+                child: Container(
+                  width: lineWidth,
+                  height: 4,
+                  color: const Color(0xFF333333),
+                ),
+              ),
+              
+              // Active Line
+              Positioned(
+                left: lineLeft,
+                top: 14,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  width: activeWidth,
+                  height: 4,
+                  color: brandYellow,
+                ),
+              ),
+
+              // Icons Row
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: List.generate(stages.length, (index) {
+                  final isActive = index <= currentStageIndex;
+                  final isCurrent = index == currentStageIndex;
+                  
+                  return Expanded(
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: isActive ? brandYellow : const Color(0xFF1C1C1C),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isActive ? brandYellow : const Color(0xFF555555),
+                              width: 3,
+                            ),
+                            boxShadow: isCurrent ? [
+                              BoxShadow(
+                                color: brandYellow.withValues(alpha: 0.5),
+                                blurRadius: 15,
+                                spreadRadius: 5,
+                              )
+                            ] : null,
+                          ),
+                          child: Center(
+                            child: HugeIcon(
+                              icon: stages[index]['icon'] as dynamic,
+                              size: 16,
+                              color: isActive ? Colors.black : const Color(0xFF555555),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          stages[index]['label'] as String,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isActive ? Colors.white : const Color(0xFF888888),
+                            fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ),
+            ],
+          ),
+        );
+      }
+    );
+  }
 }
+

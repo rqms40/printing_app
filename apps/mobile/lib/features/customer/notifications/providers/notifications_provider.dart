@@ -47,6 +47,7 @@ AppNotification _parseNotification(Map<String, dynamic> json) {
             _readJsonValue(json, 'createdAt', 'created_at') as String,
           )
         : DateTime.now(),
+    metadata: metadata,
   );
 }
 
@@ -84,6 +85,7 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
   }
 
   void _listenToWsNotifications() {
+    WebSocketService.instance.connectNotifications();
     WebSocketService.instance.listenForNewNotifications((data) {
       final notif = _parseNotification(data);
       // Deduplicate: don't add if already present

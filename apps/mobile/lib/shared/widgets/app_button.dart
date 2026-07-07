@@ -158,6 +158,7 @@ class _AppButtonState extends State<AppButton> {
     final textColor = _foregroundColor(colors);
     final textWidget = Text(
       widget.label,
+      textAlign: TextAlign.center,
       style: AppTypography.button.copyWith(color: textColor),
     );
 

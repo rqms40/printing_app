@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, MoreThanOrEqual, Repository } from 'typeorm';
@@ -856,6 +857,46 @@ export class OrdersService {
     // Notify via WebSocket — admin queue sees new orders in real-time
     void this.ordersGateway.notifyOrderUpdate(savedOrder.orderId, savedOrder);
 
+    // Notify customer of new order (in-app + real-time WS)
+    try {
+      await this.notificationsService.create({
+        userId: savedOrder.userId,
+        title: 'Order Placed',
+        message: `Your order ${savedOrder.orderId} has been placed successfully.`,
+        type: 'order_placed',
+        orderRef: savedOrder.orderId,
+        metadata: {
+          orderId: savedOrder.id,
+          amount: Number(savedOrder.totalPrice ?? 0),
+          category: savedOrder.category ?? null,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Customer notification failed for order ${savedOrder.orderId}: ${err}`,
+      );
+    }
+
+    // Send FCM push notification to customer
+    try {
+      const fcmToken = await this.usersService.getFcmToken(savedOrder.userId);
+      if (fcmToken) {
+        await this.firebaseService.sendToDevice(
+          fcmToken,
+          'Order Placed',
+          `Your order ${savedOrder.orderId} has been placed successfully.`,
+          {
+            orderId: savedOrder.orderId,
+            status: 'order_placed',
+          },
+        );
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Customer FCM push failed for order ${savedOrder.orderId}: ${err}`,
+      );
+    }
+
     // Notify admins of new order
     try {
       await this.notificationsService.createForAllAdmins({
@@ -1229,21 +1270,36 @@ export class OrdersService {
   }
 
   async cancelBatch(batchOrderId: number, userId: number): Promise<void> {
-    await this.dataSource.transaction(async (manager) => {
-      const batch = await manager.findOneOrFail(BatchOrder, {
-        where: { id: batchOrderId, userId },
-      });
-      if (batch.slotBookingId) {
-        await this.slotsService.releaseSlot(manager, batch.slotBookingId);
-        batch.slotBookingId = null;
-        await manager.save(batch);
-      }
-      await manager.update(
-        Order,
-        { batchOrderId: batch.id },
-        { orderStatus: OrderStatus.CANCELLED },
-      );
+    const orders = await this.ordersRepo.find({
+      where: { batchOrderId, userId },
     });
+    if (orders.length === 0) {
+      throw new NotFoundException('Batch order not found');
+    }
+    for (const order of orders) {
+      if (!OrdersService.CANCELLABLE_STATUSES.includes(order.orderStatus)) {
+        throw new BadRequestException(
+          `Order ${order.orderId} in status "${order.orderStatus}" cannot be cancelled`,
+        );
+      }
+    }
+    const batch = await this.batchOrdersRepo.findOne({
+      where: { id: batchOrderId, userId },
+    });
+    if (batch?.slotBookingId) {
+      try {
+        await this.dataSource.transaction(async (manager) => {
+          await this.slotsService.releaseSlot(manager, batch.slotBookingId!);
+          batch.slotBookingId = null;
+          await manager.save(batch);
+        });
+      } catch (err) {
+        this.logger.warn(`Failed to release slot for batch ${batchOrderId}: ${err}`);
+      }
+    }
+    for (const order of orders) {
+      await this.cancelOrder(order.id, userId);
+    }
   }
 
   async cancelOrder(id: number, userId: number): Promise<Order> {
@@ -1434,6 +1490,27 @@ export class OrdersService {
     };
     const statusMsg = messages[status];
 
+    // Fetch dynamic rider info to pass into notification metadata
+    const dynamicMetadata: Record<string, any> = { orderId: order.id, toStatus: status };
+    if (order.assignedRiderId) {
+      try {
+        const riderUser = await this.usersService.findById(order.assignedRiderId);
+        if (riderUser) {
+          dynamicMetadata.driverName = riderUser.fullName || riderUser.nickname || 'GRIDGO Rider';
+        }
+        const profiles = await this.dataSource.query(
+          `SELECT vehicle_type, plate_number FROM rider_profiles WHERE user_id = $1 LIMIT 1`,
+          [order.assignedRiderId]
+        );
+        if (profiles && profiles.length > 0) {
+          dynamicMetadata.vehicleType = profiles[0].vehicle_type;
+          dynamicMetadata.plateNumber = profiles[0].plate_number;
+        }
+      } catch (e) {
+        this.logger.warn(`Failed to fetch rider metadata for notification: ${e}`);
+      }
+    }
+
     // Send push notification to order owner
     const fcmToken = await this.usersService.getFcmToken(existing.userId);
     if (fcmToken && statusMsg) {
@@ -1444,6 +1521,7 @@ export class OrdersService {
         {
           orderId: order.orderId,
           status: status,
+          ...dynamicMetadata,
         },
       );
     }
@@ -1463,7 +1541,7 @@ export class OrdersService {
           message: statusMsg.body,
           type: `order_${status}`,
           orderRef: order.orderId,
-          metadata: { orderId: order.id, toStatus: status },
+          metadata: dynamicMetadata,
         });
       } catch (err) {
         this.logger.warn(

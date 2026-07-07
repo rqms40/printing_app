@@ -1182,7 +1182,7 @@ class MockWebSocketService extends _i1.Mock implements _i10.WebSocketService {
 
   @override
   _i8.Future<void> connectNotifications({
-    required dynamic Function(Map<String, dynamic>)? onCreditsUpdate,
+    dynamic Function(Map<String, dynamic>)? onCreditsUpdate,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#connectNotifications, [], {

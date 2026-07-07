@@ -8,6 +8,7 @@ class AppNotification {
     required this.type,
     required this.isRead,
     required this.createdAt,
+    this.metadata,
   });
 
   final String id;
@@ -18,6 +19,7 @@ class AppNotification {
   final String type;
   final bool isRead;
   final DateTime createdAt;
+  final Map<String, dynamic>? metadata;
 
   AppNotification copyWith({
     String? id,
@@ -28,6 +30,7 @@ class AppNotification {
     String? type,
     bool? isRead,
     DateTime? createdAt,
+    Map<String, dynamic>? metadata,
   }) {
     return AppNotification(
       id: id ?? this.id,
@@ -38,6 +41,7 @@ class AppNotification {
       type: type ?? this.type,
       isRead: isRead ?? this.isRead,
       createdAt: createdAt ?? this.createdAt,
+      metadata: metadata ?? this.metadata,
     );
   }
 
