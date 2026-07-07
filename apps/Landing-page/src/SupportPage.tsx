@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { ShieldCheck, ArrowLeft, Send, CheckCircle2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://192.168.40.201:3000/api';
+
 export function SupportPage() {
   const [formData, setFormData] = useState({
     name: '',
@@ -52,7 +54,7 @@ export function SupportPage() {
     setStatus('loading');
 
     try {
-      const response = await fetch('http://localhost:3000/api/support-tickets', {
+      const response = await fetch(`${API_URL}/support-tickets`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

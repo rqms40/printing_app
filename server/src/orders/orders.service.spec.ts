@@ -2540,7 +2540,12 @@ describe('createBatch with slot + destinations', () => {
 describe('cancelBatch', () => {
   let service: OrdersService;
 
-  let batchOrdersRepo: jest.Mocked<Pick<Repository<any>, 'findOneOrFail'>>;
+  let ordersRepo: jest.Mocked<
+    Pick<Repository<Order>, 'find' | 'findOneOrFail' | 'save' | 'update'>
+  >;
+  let batchOrdersRepo: jest.Mocked<
+    Pick<Repository<any>, 'findOne' | 'findOneOrFail'>
+  >;
   let slotsService: jest.Mocked<Pick<DeliverySlotsService, 'releaseSlot'>>;
   let dataSource: Partial<DataSource>;
 
@@ -2548,7 +2553,14 @@ describe('cancelBatch', () => {
     jest.clearAllMocks();
 
     batchOrdersRepo = {
+      findOne: jest.fn(),
       findOneOrFail: jest.fn(),
+    };
+    ordersRepo = {
+      find: jest.fn(),
+      findOneOrFail: jest.fn(),
+      save: jest.fn(async (order: Order) => order),
+      update: jest.fn(),
     };
 
     slotsService = {
@@ -2575,22 +2587,14 @@ describe('cancelBatch', () => {
         OrdersService,
         {
           provide: getRepositoryToken(Order),
-          useValue: {
-            find: jest.fn(),
-            findOne: jest.fn(),
-            findOneOrFail: jest.fn(),
-            create: jest.fn(),
-            save: jest.fn(),
-            update: jest.fn(),
-            count: jest.fn(),
-          },
+          useValue: ordersRepo,
         },
         {
           provide: getRepositoryToken(OrderItem),
           useValue: { create: jest.fn(), save: jest.fn() },
         },
         specValueRepoProvider(),
-        { provide: getRepositoryToken(BatchOrder), useValue: {} },
+        { provide: getRepositoryToken(BatchOrder), useValue: batchOrdersRepo },
         {
           provide: getRepositoryToken(PaperSpec),
           useValue: { create: jest.fn(), save: jest.fn() },
@@ -2634,6 +2638,7 @@ describe('cancelBatch', () => {
         {
           provide: NotificationsService,
           useValue: {
+            create: jest.fn().mockResolvedValue(undefined),
             createForAllAdmins: jest.fn().mockResolvedValue(undefined),
           },
         },
@@ -2678,7 +2683,21 @@ describe('cancelBatch', () => {
 
   it('releases slot and marks orders cancelled when before cutoff', async () => {
     const fakeBatch = { id: 1, userId: 1, slotBookingId: 7 };
+    ordersRepo.find.mockResolvedValue([
+      {
+        id: 11,
+        userId: 1,
+        batchOrderId: 1,
+        orderStatus: OrderStatus.ORDER_PLACED,
+      } as Order,
+    ]);
+    ordersRepo.findOneOrFail.mockResolvedValue({
+      id: 11,
+      userId: 1,
+      orderStatus: OrderStatus.ORDER_PLACED,
+    } as Order);
     batchOrdersRepo.findOneOrFail.mockResolvedValue(fakeBatch as any);
+    batchOrdersRepo.findOne.mockResolvedValue(fakeBatch as any);
     slotsService.releaseSlot.mockResolvedValue(undefined);
 
     await service.cancelBatch(1, 1);
@@ -2688,7 +2707,21 @@ describe('cancelBatch', () => {
 
   it('rejects cancellation past cutoff', async () => {
     const fakeBatch = { id: 1, userId: 1, slotBookingId: 7 };
+    ordersRepo.find.mockResolvedValue([
+      {
+        id: 11,
+        userId: 1,
+        batchOrderId: 1,
+        orderStatus: OrderStatus.ORDER_PLACED,
+      } as Order,
+    ]);
+    ordersRepo.findOneOrFail.mockResolvedValue({
+      id: 11,
+      userId: 1,
+      orderStatus: OrderStatus.ORDER_PLACED,
+    } as Order);
     batchOrdersRepo.findOneOrFail.mockResolvedValue(fakeBatch as any);
+    batchOrdersRepo.findOne.mockResolvedValue(fakeBatch as any);
     slotsService.releaseSlot.mockRejectedValue(
       new CancellationClosedException(),
     );

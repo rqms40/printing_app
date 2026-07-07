@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
+import 'package:printing_app/shared/services/websocket_service.dart';
 
 import '../../../../helpers/test_setup.dart';
 
@@ -27,6 +28,11 @@ void main() {
     TestSetup.stubSecureStorage();
     TestSetup.stubAudioPlayers();
     TestSetup.initApiClient();
+    WebSocketService.disableNotificationsSocketForTests = true;
+  });
+
+  tearDownAll(() {
+    WebSocketService.disableNotificationsSocketForTests = false;
   });
 
   group('NotificationsNotifier', () {

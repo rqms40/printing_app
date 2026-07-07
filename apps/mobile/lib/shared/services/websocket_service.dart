@@ -35,6 +35,11 @@ class WebSocketService {
   @visibleForTesting
   static bool disableOrdersSocketForTests = false;
 
+  /// When true, [connectNotifications] is a no-op. Set in tests that exercise
+  /// notification state without opening a real socket.
+  @visibleForTesting
+  static bool disableNotificationsSocketForTests = false;
+
   io.Socket? _ordersSocket;
   io.Socket? _locationSocket;
   io.Socket? _notificationsSocket;
@@ -206,6 +211,7 @@ class WebSocketService {
   Future<void> connectNotifications({
     Function(Map<String, dynamic>)? onCreditsUpdate,
   }) async {
+    if (disableNotificationsSocketForTests) return;
     if (onCreditsUpdate != null) {
       listenForCreditsUpdate(onCreditsUpdate);
     }

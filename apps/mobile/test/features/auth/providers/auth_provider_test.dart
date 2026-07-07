@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/profile/models/account_state.dart';
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
+import 'package:printing_app/shared/services/websocket_service.dart';
 
 import '../../../helpers/test_setup.dart';
 
@@ -11,7 +12,15 @@ void main() {
 
   setUpAll(() {
     TestSetup.stubSecureStorage();
+    TestSetup.stubAudioPlayers();
     TestSetup.initApiClient();
+    WebSocketService.disableNotificationsSocketForTests = true;
+    WebSocketService.disableOrdersSocketForTests = true;
+  });
+
+  tearDownAll(() {
+    WebSocketService.disableNotificationsSocketForTests = false;
+    WebSocketService.disableOrdersSocketForTests = false;
   });
 
   group('AuthNotifier', () {

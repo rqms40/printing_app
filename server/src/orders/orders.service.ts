@@ -39,7 +39,10 @@ import { DeliverySlotsService } from '../delivery-slots/delivery-slots.service';
 import { DeliverySettingsService } from '../delivery-slots/delivery-settings.service';
 import { DeliverySlotsGateway } from '../delivery-slots/delivery-slots.gateway';
 import { DeliverySlotBooking } from '../delivery-slots/entities/delivery-slot-booking.entity';
-import { SlotFullException } from '../delivery-slots/exceptions';
+import {
+  CancellationClosedException,
+  SlotFullException,
+} from '../delivery-slots/exceptions';
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
 import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 import { CatalogPricingService } from '../products/catalog-pricing.service';
@@ -78,6 +81,11 @@ type NormalizedTemporaryDeliveryAddress = {
   landmark?: string;
   latitude: number;
   longitude: number;
+};
+
+type RiderProfileMetadataRow = {
+  vehicle_type: unknown;
+  plate_number: unknown;
 };
 
 type NormalizedDeliveryDestination = {
@@ -1246,12 +1254,11 @@ export class OrdersService {
         await this.notificationsService.create({
           userId: order.userId,
           title: `Order #ORD-${order.id} update`,
-          body: dto.note ?? '',
           message: dto.note ?? '',
           type: 'order_admin_status',
           orderRef: order.orderId,
           metadata: { orderId: order.id },
-        } as any);
+        });
       } catch (err) {
         this.logger.warn(
           `Manual status notification failed for order ${orderId}: ${err}`,
@@ -1294,7 +1301,12 @@ export class OrdersService {
           await manager.save(batch);
         });
       } catch (err) {
-        this.logger.warn(`Failed to release slot for batch ${batchOrderId}: ${err}`);
+        if (err instanceof CancellationClosedException) {
+          throw err;
+        }
+        this.logger.warn(
+          `Failed to release slot for batch ${batchOrderId}: ${err}`,
+        );
       }
     }
     for (const order of orders) {
@@ -1491,23 +1503,31 @@ export class OrdersService {
     const statusMsg = messages[status];
 
     // Fetch dynamic rider info to pass into notification metadata
-    const dynamicMetadata: Record<string, any> = { orderId: order.id, toStatus: status };
+    const dynamicMetadata: Record<string, unknown> = {
+      orderId: order.id,
+      toStatus: status,
+    };
     if (order.assignedRiderId) {
       try {
-        const riderUser = await this.usersService.findById(order.assignedRiderId);
-        if (riderUser) {
-          dynamicMetadata.driverName = riderUser.fullName || riderUser.nickname || 'GRIDGO Rider';
-        }
-        const profiles = await this.dataSource.query(
-          `SELECT vehicle_type, plate_number FROM rider_profiles WHERE user_id = $1 LIMIT 1`,
-          [order.assignedRiderId]
+        const riderUser = await this.usersService.findById(
+          order.assignedRiderId,
         );
-        if (profiles && profiles.length > 0) {
+        if (riderUser) {
+          dynamicMetadata.driverName =
+            riderUser.fullName || riderUser.nickname || 'GRIDGO Rider';
+        }
+        const profiles = await this.dataSource.query<RiderProfileMetadataRow[]>(
+          `SELECT vehicle_type, plate_number FROM rider_profiles WHERE user_id = $1 LIMIT 1`,
+          [order.assignedRiderId],
+        );
+        if (profiles.length > 0) {
           dynamicMetadata.vehicleType = profiles[0].vehicle_type;
           dynamicMetadata.plateNumber = profiles[0].plate_number;
         }
       } catch (e) {
-        this.logger.warn(`Failed to fetch rider metadata for notification: ${e}`);
+        this.logger.warn(
+          `Failed to fetch rider metadata for notification: ${e}`,
+        );
       }
     }
 

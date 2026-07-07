@@ -13,7 +13,7 @@ class ApiClient {
 
   // Fallback only — main.dart always calls init() with kServerUrl from
   // api_config.dart (web LAN auto-detect or --dart-define=SERVER_URL).
-  static const String _defaultBaseUrl = 'http://localhost:3000/api';
+  static const String _defaultBaseUrl = 'http://192.168.40.201:3000/api';
 
   late final Dio _dio;
   bool _initialized = false;

@@ -110,10 +110,12 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
   Future<void> _fetchNotifications() async {
     try {
       final data = await _api.fetchNotifications();
+      if (!mounted) return;
       _loadedFromApi = true;
       state = data.map(_parseNotification).toList()
         ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     } catch (_) {
+      if (!mounted) return;
       // Offline fallback
       _loadedFromApi = false;
       state =
