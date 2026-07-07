@@ -5,7 +5,7 @@ import { DivIcon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { mockRiders } from '@/providers/mock-data';
 
-// Configure custom circular icons simulating what admin-web did via lucide/css
+// Configure custom circular icons with lucide/css styling.
 const createIcon = (color: string) => {
   return new DivIcon({
     className: 'custom-icon',

@@ -4,6 +4,7 @@ import { ShieldCheck, ArrowLeft, Send, CheckCircle2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://192.168.40.201:3000/api';
+const randomCaptchaNumber = () => Math.floor(Math.random() * 10) + 1;
 
 export function SupportPage() {
   const [formData, setFormData] = useState({
@@ -16,13 +17,13 @@ export function SupportPage() {
   const [errorMessage, setErrorMessage] = useState('');
 
   // CAPTCHA State
-  const [captchaNum1, setCaptchaNum1] = useState(Math.floor(Math.random() * 10) + 1);
-  const [captchaNum2, setCaptchaNum2] = useState(Math.floor(Math.random() * 10) + 1);
+  const [captchaNum1, setCaptchaNum1] = useState(randomCaptchaNumber);
+  const [captchaNum2, setCaptchaNum2] = useState(randomCaptchaNumber);
   const [userCaptchaInput, setUserCaptchaInput] = useState('');
 
   const generateNewCaptcha = () => {
-    setCaptchaNum1(Math.floor(Math.random() * 10) + 1);
-    setCaptchaNum2(Math.floor(Math.random() * 10) + 1);
+    setCaptchaNum1(randomCaptchaNumber());
+    setCaptchaNum2(randomCaptchaNumber());
     setUserCaptchaInput('');
   };
 

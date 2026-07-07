@@ -3114,5 +3114,4 @@ The server runs **4 Socket.IO gateways**:
 - ❌ **Auto-assignment of riders by proximity** (admin still picks manually)
 - ❌ **i18n / multi-language**
 
-For day-to-day implementation specs and plans for individual features, see `docs/superpowers/specs/` and `docs/superpowers/plans/` — every shipped feature in section 20 has a dated design + plan there.
-
+Historical implementation specs and plans have been removed from the runtime repository; section 20 remains the current product completion reference.

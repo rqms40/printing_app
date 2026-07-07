@@ -157,8 +157,6 @@ printing_app/
 │   │   │   └── index.css              # Tailwind v4 theme, bg-map parallax
 │   │   └── public/smartphone.glb      # 3D phone model asset
 │   │
-│   └── admin-web/                     # [DEPRECATED] Early prototype admin UI (React 19, no Refine)
-│
 ├── admin/                             # Production Refine admin dashboard (React 18 + Ant Design)
 │   ├── src/
 │   │   ├── pages/

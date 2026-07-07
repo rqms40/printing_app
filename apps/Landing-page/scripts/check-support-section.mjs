@@ -12,13 +12,13 @@ assert(!app.includes('Call Support Hub'), 'Support CTA should not imply a missin
 assert(!app.includes('GRIDGO AI assistant'), 'Support section should not promise an unavailable AI assistant.');
 assert(!app.includes('AI handles common questions'), 'Support section should not promise unavailable live-chat automation.');
 
-assert(app.includes('Support Center'), 'Support section should use the production Support Center label.');
-assert(app.includes('Message Support'), 'Support section should present messaging as a support-ticket flow.');
-assert(app.includes('Open Support Center'), 'Primary support CTA should open the support center.');
-assert(app.includes('Start Support Ticket'), 'Messaging CTA should start a support ticket.');
+assert(app.includes('GRIDGO Ticketing Support'), 'Support section should use the production ticketing support label.');
+assert(app.includes('Submit a Ticket Now'), 'Support section should route users into the ticket flow.');
+assert(app.includes('Human-led responses'), 'Support section should set expectations for human-led support.');
+assert(app.includes('Fast resolution'), 'Support section should include the current support promise.');
 
 const supportLinks = app.match(/to="\/support"/g) ?? [];
-assert(supportLinks.length >= 2, 'Both support CTAs should route to /support.');
+assert(supportLinks.length >= 1, 'The support CTA should route to /support.');
 assert(
   main.includes('<Route path="/support" element={<SupportPage />} />'),
   'The /support route should render the support ticket page.',
