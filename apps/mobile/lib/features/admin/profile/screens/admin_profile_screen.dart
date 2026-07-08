@@ -6,6 +6,7 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
+import 'package:printing_app/shared/app_version.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/widgets/confirmation_dialog.dart';
 import 'package:printing_app/shared/widgets/status_badge.dart';
@@ -33,84 +34,81 @@ class AdminProfileScreen extends ConsumerWidget {
             children: [
               // h1 title
               Padding(
-                padding: const EdgeInsets.only(
-                  left: AppSpacing.xl,
-                  right: AppSpacing.xl,
-                  top: AppSpacing.lg,
-                  bottom: AppSpacing.md,
-                ),
-                child: Text(
-                  'Profile',
-                  style:
-                      AppTypography.h1.copyWith(color: colors.onBackground),
-                ),
-              )
+                    padding: const EdgeInsets.only(
+                      left: AppSpacing.xl,
+                      right: AppSpacing.xl,
+                      top: AppSpacing.lg,
+                      bottom: AppSpacing.md,
+                    ),
+                    child: Text(
+                      'Profile',
+                      style: AppTypography.h1.copyWith(
+                        color: colors.onBackground,
+                      ),
+                    ),
+                  )
                   .animate()
                   .fadeIn(duration: 350.ms, curve: Curves.easeOut)
-                  .slideY(
-                      begin: 0.02,
-                      duration: 350.ms,
-                      curve: Curves.easeOut),
+                  .slideY(begin: 0.02, duration: 350.ms, curve: Curves.easeOut),
 
               // Avatar + name card
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-                child: Center(
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          color: colors.surfaceVariant,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Text(
-                            initial,
-                            style: AppTypography.h1.copyWith(
-                              color: colors.accent,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.xl,
+                    ),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 72,
+                            height: 72,
+                            decoration: BoxDecoration(
+                              color: colors.surfaceVariant,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text(
+                                initial,
+                                style: AppTypography.h1.copyWith(
+                                  color: colors.accent,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
+                          const SizedBox(height: AppSpacing.md),
+                          Text(
+                            admin.fullName ?? 'Admin',
+                            style: AppTypography.h2.copyWith(
+                              color: colors.onBackground,
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            admin.email,
+                            style: AppTypography.body.copyWith(
+                              color: colors.onSurfaceDim,
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          const StatusBadge(
+                            label: 'Admin',
+                            variant: StatusBadgeVariant.info,
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: AppSpacing.md),
-                      Text(
-                        admin.fullName ?? 'Admin',
-                        style: AppTypography.h2
-                            .copyWith(color: colors.onBackground),
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        admin.email,
-                        style: AppTypography.body
-                            .copyWith(color: colors.onSurfaceDim),
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      const StatusBadge(
-                        label: 'Admin',
-                        variant: StatusBadgeVariant.info,
-                      ),
-                    ],
-                  ),
-                ),
-              )
+                    ),
+                  )
                   .animate()
                   .fadeIn(duration: 400.ms, curve: Curves.easeOut)
-                  .slideY(
-                      begin: 0.03,
-                      duration: 400.ms,
-                      curve: Curves.easeOut),
+                  .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
               const SizedBox(height: AppSpacing.lg),
 
               // CONTACT section
-              _SectionHeader(label: 'CONTACT', colors: colors)
-                  .animate()
-                  .fadeIn(
-                      duration: 400.ms,
-                      delay: 60.ms,
-                      curve: Curves.easeOut),
+              _SectionHeader(label: 'CONTACT', colors: colors).animate().fadeIn(
+                duration: 400.ms,
+                delay: 60.ms,
+                curve: Curves.easeOut,
+              ),
               _InfoRow(
                 icon: HugeIcons.strokeRoundedMail01,
                 label: 'Email',
@@ -128,16 +126,15 @@ class AdminProfileScreen extends ConsumerWidget {
               const SizedBox(height: AppSpacing.lg),
 
               // APP section
-              _SectionHeader(label: 'APP', colors: colors)
-                  .animate()
-                  .fadeIn(
-                      duration: 400.ms,
-                      delay: 120.ms,
-                      curve: Curves.easeOut),
+              _SectionHeader(label: 'APP', colors: colors).animate().fadeIn(
+                duration: 400.ms,
+                delay: 120.ms,
+                curve: Curves.easeOut,
+              ),
               _InfoRow(
                 icon: HugeIcons.strokeRoundedInformationCircle,
                 label: 'GRIDGO Admin',
-                value: 'Version 1.0.0',
+                value: AppVersion.display,
                 colors: colors,
               ),
 
@@ -231,14 +228,16 @@ class _InfoRow extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: AppTypography.caption
-                      .copyWith(color: colors.onSurfaceDim),
+                  style: AppTypography.caption.copyWith(
+                    color: colors.onSurfaceDim,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   value,
-                  style: AppTypography.body
-                      .copyWith(color: colors.onBackground),
+                  style: AppTypography.body.copyWith(
+                    color: colors.onBackground,
+                  ),
                 ),
               ],
             ),
@@ -311,10 +310,7 @@ class _RowDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-      child: Container(
-        height: 1,
-        color: colors.outlineVariant,
-      ),
+      child: Container(height: 1, color: colors.outlineVariant),
     );
   }
 }
