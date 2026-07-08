@@ -9,7 +9,6 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/config/theme/app_shadows.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/rider/profile/providers/rider_profile_provider.dart';
-import 'package:printing_app/features/rider/shared/rider_theme.dart';
 import 'package:printing_app/features/rider/shared/widgets/rider_page_header.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 import 'package:printing_app/shared/widgets/app_text_field.dart';
@@ -61,61 +60,62 @@ class _RiderProfileScreenState extends ConsumerState<RiderProfileScreen> {
                   left: AppSpacing.lg,
                   right: AppSpacing.lg,
                   top: AppSpacing.lg,
-                  bottom: AppSpacing.lg + MediaQuery.of(context).viewPadding.bottom,
+                  bottom:
+                      AppSpacing.lg + MediaQuery.of(context).viewPadding.bottom,
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: colors.disabled,
-                        borderRadius: AppRadius.borderFull,
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: colors.disabled,
+                          borderRadius: AppRadius.borderFull,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  Text(
-                    'Edit vehicle info',
-                    style: AppTypography.h3.copyWith(
-                      color: colors.onBackground,
+                    const SizedBox(height: AppSpacing.lg),
+                    Text(
+                      'Edit vehicle info',
+                      style: AppTypography.h3.copyWith(
+                        color: colors.onBackground,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  AppTextField(
-                    label: 'Vehicle type',
-                    hintText: 'e.g. Motorcycle',
-                    controller: vehicleController,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  AppTextField(
-                    label: 'Plate number',
-                    hintText: 'e.g. ABC 1234',
-                    controller: plateController,
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  AppButton(
-                    label: 'Save changes',
-                    isFullWidth: true,
-                    isLoading: isSaving,
-                    onTap: isSaving
-                        ? null
-                        : () async {
-                            setSheetState(() => isSaving = true);
-                            final ok = await ref
-                                .read(riderProfileProvider.notifier)
-                                .updateVehicle(
-                                  vehicleType: vehicleController.text.trim(),
-                                  plateNumber: plateController.text.trim(),
-                                );
-                            if (!context.mounted) return;
-                            setSheetState(() => isSaving = false);
-                            if (ok) Navigator.pop(sheetContext);
-                          },
-                  ),
+                    const SizedBox(height: AppSpacing.md),
+                    AppTextField(
+                      label: 'Vehicle type',
+                      hintText: 'e.g. Motorcycle',
+                      controller: vehicleController,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    AppTextField(
+                      label: 'Plate number',
+                      hintText: 'e.g. ABC 1234',
+                      controller: plateController,
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    AppButton(
+                      label: 'Save changes',
+                      isFullWidth: true,
+                      isLoading: isSaving,
+                      onTap: isSaving
+                          ? null
+                          : () async {
+                              setSheetState(() => isSaving = true);
+                              final ok = await ref
+                                  .read(riderProfileProvider.notifier)
+                                  .updateVehicle(
+                                    vehicleType: vehicleController.text.trim(),
+                                    plateNumber: plateController.text.trim(),
+                                  );
+                              if (!context.mounted) return;
+                              setSheetState(() => isSaving = false);
+                              if (ok) Navigator.pop(sheetContext);
+                            },
+                    ),
                   ],
                 ),
               ),
@@ -145,7 +145,7 @@ class _RiderProfileScreenState extends ConsumerState<RiderProfileScreen> {
     }
 
     return ColoredBox(
-      color: RiderTheme.background,
+      color: colors.background,
       child: SafeArea(
         child: SingleChildScrollView(
           child: Column(

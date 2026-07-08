@@ -13,7 +13,6 @@ import 'package:printing_app/features/rider/deliveries/widgets/delivery_card.dar
 import 'package:printing_app/features/rider/deliveries/widgets/rider_active_banner.dart';
 import 'package:printing_app/features/rider/history/providers/earnings_provider.dart';
 import 'package:printing_app/features/rider/profile/providers/rider_profile_provider.dart';
-import 'package:printing_app/features/rider/shared/rider_theme.dart';
 import 'package:printing_app/features/rider/shared/widgets/rider_page_header.dart';
 import 'package:printing_app/shared/widgets/empty_state.dart';
 import 'package:printing_app/shared/widgets/pill_tab_bar.dart';
@@ -56,36 +55,39 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
     final tabViews = _tabViews(state);
 
     return ColoredBox(
-      color: RiderTheme.background,
+      color: colors.background,
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             RiderPageHeader(
-              title: 'Orders',
-              subtitle: profile.isAvailable
-                  ? 'You are online and ready for routes'
-                  : 'Go online to receive new assignments',
-              trailing: IconButton(
-                onPressed: state.isRefreshing
-                    ? null
-                    : () => notifier.refreshAssignments(),
-                icon: state.isRefreshing
-                    ? SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: colors.accent,
-                        ),
-                      )
-                    : HugeIcon(
-                        icon: HugeIcons.strokeRoundedRefresh,
-                        color: colors.onBackground,
-                        size: 22,
-                      ),
-              ),
-            ).animate().fadeIn(duration: 350.ms).slideY(begin: 0.02, duration: 350.ms),
+                  title: 'Orders',
+                  subtitle: profile.isAvailable
+                      ? 'You are online and ready for routes'
+                      : 'Go online to receive new assignments',
+                  trailing: IconButton(
+                    onPressed: state.isRefreshing
+                        ? null
+                        : () => notifier.refreshAssignments(),
+                    icon: state.isRefreshing
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: colors.accent,
+                            ),
+                          )
+                        : HugeIcon(
+                            icon: HugeIcons.strokeRoundedRefresh,
+                            color: colors.onBackground,
+                            size: 22,
+                          ),
+                  ),
+                )
+                .animate()
+                .fadeIn(duration: 350.ms)
+                .slideY(begin: 0.02, duration: 350.ms),
 
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
@@ -119,9 +121,8 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
                 child: RiderActiveBanner(
                   view: active,
-                  onTap: () => context.push(
-                    '/rider/deliveries/${active.id}/active',
-                  ),
+                  onTap: () =>
+                      context.push('/rider/deliveries/${active.id}/active'),
                 ),
               ).animate().fadeIn(duration: 400.ms, delay: 80.ms),
             ],
@@ -132,10 +133,7 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
               child: PillTabBar(
                 tabs: [
-                  PillTab(
-                    label: 'New',
-                    count: state.newAssignments.length,
-                  ),
+                  PillTab(label: 'New', count: state.newAssignments.length),
                   PillTab(
                     label: 'In Progress',
                     count: state.inProgressAssignments.length,
@@ -190,7 +188,8 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
                                   icon: switch (_selectedTab) {
                                     0 => HugeIcons.strokeRoundedNotification02,
                                     1 => HugeIcons.strokeRoundedDeliveryTruck02,
-                                    _ => HugeIcons.strokeRoundedCheckmarkCircle02,
+                                    _ =>
+                                      HugeIcons.strokeRoundedCheckmarkCircle02,
                                   },
                                 ),
                               ],
@@ -212,29 +211,30 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
                                         ? AppSpacing.sm
                                         : 0,
                                   ),
-                                  child: DeliveryCard(
-                                    view: view,
-                                    onTap: () {
-                                      final path = view.isInProgress
-                                          ? '/rider/deliveries/${view.id}/active'
-                                          : '/rider/deliveries/${view.id}';
-                                      context.push(path);
-                                    },
-                                    onAccept: () =>
-                                        notifier.acceptAssignment(view.id),
-                                    onDecline: () =>
-                                        notifier.declineAssignment(view.id),
-                                  )
-                                      .animate()
-                                      .fadeIn(
-                                        duration: 350.ms,
-                                        delay: (index * 40).ms,
-                                      )
-                                      .slideY(
-                                        begin: 0.02,
-                                        duration: 350.ms,
-                                        delay: (index * 40).ms,
-                                      ),
+                                  child:
+                                      DeliveryCard(
+                                            view: view,
+                                            onTap: () {
+                                              final path = view.isInProgress
+                                                  ? '/rider/deliveries/${view.id}/active'
+                                                  : '/rider/deliveries/${view.id}';
+                                              context.push(path);
+                                            },
+                                            onAccept: () => notifier
+                                                .acceptAssignment(view.id),
+                                            onDecline: () => notifier
+                                                .declineAssignment(view.id),
+                                          )
+                                          .animate()
+                                          .fadeIn(
+                                            duration: 350.ms,
+                                            delay: (index * 40).ms,
+                                          )
+                                          .slideY(
+                                            begin: 0.02,
+                                            duration: 350.ms,
+                                            delay: (index * 40).ms,
+                                          ),
                                 );
                               },
                             ),

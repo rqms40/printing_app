@@ -281,79 +281,88 @@ class _OptionCard extends StatelessWidget {
         ? colors.accentOnColor.withValues(alpha: 0.78)
         : colors.onSurfaceDim;
 
-    return Material(
-      color: bg,
-      borderRadius: AppRadius.borderMd,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: isDisabled ? null : onTap,
-        splashColor: isPrimary
-            ? colors.accentOnColor.withValues(alpha: 0.08)
-            : colors.accent.withValues(alpha: 0.08),
-        highlightColor: isPrimary
-            ? colors.accentOnColor.withValues(alpha: 0.04)
-            : colors.accent.withValues(alpha: 0.04),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: BoxDecoration(
-            borderRadius: AppRadius.borderMd,
-            border: isPrimary
-                ? null
-                : Border.all(color: colors.outline.withValues(alpha: 0.6)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: isPrimary
-                      ? colors.accentOnColor.withValues(alpha: 0.14)
-                      : colors.surfaceVariant,
-                  borderRadius: AppRadius.borderMd,
-                ),
-                alignment: Alignment.center,
-                child: HugeIcon(
-                  icon: icon,
-                  size: 22,
-                  color: isPrimary ? fg : colors.accent,
-                ),
+    return Semantics(
+      container: true,
+      button: true,
+      enabled: !isDisabled,
+      label: '$title\n$description',
+      onTap: isDisabled ? null : onTap,
+      child: ExcludeSemantics(
+        child: Material(
+          color: bg,
+          borderRadius: AppRadius.borderMd,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: isDisabled ? null : onTap,
+            splashColor: isPrimary
+                ? colors.accentOnColor.withValues(alpha: 0.08)
+                : colors.accent.withValues(alpha: 0.08),
+            highlightColor: isPrimary
+                ? colors.accentOnColor.withValues(alpha: 0.04)
+                : colors.accent.withValues(alpha: 0.04),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                borderRadius: AppRadius.borderMd,
+                border: isPrimary
+                    ? null
+                    : Border.all(color: colors.outline.withValues(alpha: 0.6)),
               ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: AppTypography.bodyBold.copyWith(
-                        color: fg,
-                        fontSize: 15,
-                        decoration: TextDecoration.none,
-                      ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: isPrimary
+                          ? colors.accentOnColor.withValues(alpha: 0.14)
+                          : colors.surfaceVariant,
+                      borderRadius: AppRadius.borderMd,
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.body.copyWith(
-                        color: descColor,
-                        fontSize: 13,
-                        decoration: TextDecoration.none,
-                      ),
+                    alignment: Alignment.center,
+                    child: HugeIcon(
+                      icon: icon,
+                      size: 22,
+                      color: isPrimary ? fg : colors.accent,
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: AppTypography.bodyBold.copyWith(
+                            color: fg,
+                            fontSize: 15,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          description,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.body.copyWith(
+                            color: descColor,
+                            fontSize: 13,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  HugeIcon(
+                    icon: HugeIcons.strokeRoundedArrowRight01,
+                    size: 20,
+                    color: fg.withValues(alpha: 0.55),
+                  ),
+                ],
               ),
-              const SizedBox(width: AppSpacing.sm),
-              HugeIcon(
-                icon: HugeIcons.strokeRoundedArrowRight01,
-                size: 20,
-                color: fg.withValues(alpha: 0.55),
-              ),
-            ],
+            ),
           ),
         ),
       ),

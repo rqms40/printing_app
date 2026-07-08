@@ -49,6 +49,23 @@ describe('seed script', () => {
     expect(seedSource).toContain("label: 'Actual Size'");
   });
 
+  it('wires the active demo delivery to Maria home address coordinates', () => {
+    const seedSource = readFileSync(join(__dirname, 'seed.ts'), 'utf8');
+
+    expect(seedSource).toContain('homeAddressId');
+    expect(seedSource).toMatch(
+      /order_id: 'ORD-10004',[\s\S]*delivery_address_id: homeAddressId/,
+    );
+    expect(seedSource).toContain('INSERT INTO delivery_destinations');
+    expect(seedSource).toContain(
+      'destinationByOrderRef.set(o.order_id, destinationId)',
+    );
+    expect(seedSource).toContain(
+      'delivery_address_id, batch_order_id, destination_id, file_name',
+    );
+    expect(seedSource).toContain('file_name, destination_id');
+  });
+
   it('migrates print scaling out of user profile defaults', () => {
     const migrationSource = readFileSync(
       join(

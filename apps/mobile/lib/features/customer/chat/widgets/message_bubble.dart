@@ -52,6 +52,21 @@ class MessageBubble extends ConsumerWidget {
     return '$h:$m';
   }
 
+  String _senderLabel() => switch (message.senderRole) {
+    SenderRole.customer => 'Customer',
+    SenderRole.admin => 'Human Support',
+    SenderRole.rider => 'Rider',
+    SenderRole.bot => 'GridBot AI',
+  };
+
+  String _semanticLabel() {
+    final parts = <String>[_senderLabel()];
+    if (message.hasContent) parts.add(message.content!);
+    if (message.hasImageAttachment) parts.add('Image attachment');
+    parts.add(_timeLabel());
+    return parts.join('\n');
+  }
+
   Future<void> _onLinkTapped(String? href) async {
     if (href == null || href.isEmpty) return;
     final uri = Uri.tryParse(href);
@@ -248,108 +263,114 @@ class MessageBubble extends ConsumerWidget {
     final hasContent = message.hasContent;
     final imageOnly = hasImage && !hasContent;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final maxBubbleWidth = constraints.maxWidth * 0.78;
+    return Semantics(
+      container: true,
+      label: _semanticLabel(),
+      child: ExcludeSemantics(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final maxBubbleWidth = constraints.maxWidth * 0.78;
 
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 3),
-          child: Row(
-            mainAxisAlignment: isOutgoing
-                ? MainAxisAlignment.end
-                : MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              if (!isOutgoing) ...[
-                ChatAvatar(
-                  icon: chatIconForSender(message.senderRole),
-                  colors: colors,
-                  size: 30,
-                  iconSize: 16,
-                ),
-                const SizedBox(width: AppSpacing.sm),
-              ],
-              Flexible(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-                  child: Column(
-                    crossAxisAlignment: isOutgoing
-                        ? CrossAxisAlignment.end
-                        : CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: imageOnly
-                            ? const EdgeInsets.all(4)
-                            : const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 10,
-                              ),
-                        decoration: BoxDecoration(
-                          color: bgColor,
-                          borderRadius: BorderRadius.only(
-                            topLeft: const Radius.circular(18),
-                            topRight: const Radius.circular(18),
-                            bottomLeft: isOutgoing
-                                ? const Radius.circular(18)
-                                : const Radius.circular(4),
-                            bottomRight: isOutgoing
-                                ? const Radius.circular(4)
-                                : const Radius.circular(18),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (hasImage)
-                              _buildImageAttachment(
-                                context: context,
-                                ref: ref,
-                                colors: colors,
-                              ),
-                            if (hasImage && hasContent)
-                              const SizedBox(height: 8),
-                            if (hasContent)
-                              Padding(
-                                padding: imageOnly
-                                    ? EdgeInsets.zero
-                                    : EdgeInsets.zero,
-                                child: _buildText(
-                                  context: context,
-                                  textColor: textColor,
-                                  colors: colors,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _timeLabel(),
-                              style: AppTypography.caption.copyWith(
-                                color: timeColor,
-                                fontSize: 10,
-                                decoration: TextDecoration.none,
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                mainAxisAlignment: isOutgoing
+                    ? MainAxisAlignment.end
+                    : MainAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (!isOutgoing) ...[
+                    ChatAvatar(
+                      icon: chatIconForSender(message.senderRole),
+                      colors: colors,
+                      size: 30,
+                      iconSize: 16,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                  ],
+                  Flexible(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+                      child: Column(
+                        crossAxisAlignment: isOutgoing
+                            ? CrossAxisAlignment.end
+                            : CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: imageOnly
+                                ? const EdgeInsets.all(4)
+                                : const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 10,
+                                  ),
+                            decoration: BoxDecoration(
+                              color: bgColor,
+                              borderRadius: BorderRadius.only(
+                                topLeft: const Radius.circular(18),
+                                topRight: const Radius.circular(18),
+                                bottomLeft: isOutgoing
+                                    ? const Radius.circular(18)
+                                    : const Radius.circular(4),
+                                bottomRight: isOutgoing
+                                    ? const Radius.circular(4)
+                                    : const Radius.circular(18),
                               ),
                             ),
-                            _buildReadReceipt(colors),
-                          ],
-                        ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (hasImage)
+                                  _buildImageAttachment(
+                                    context: context,
+                                    ref: ref,
+                                    colors: colors,
+                                  ),
+                                if (hasImage && hasContent)
+                                  const SizedBox(height: 8),
+                                if (hasContent)
+                                  Padding(
+                                    padding: imageOnly
+                                        ? EdgeInsets.zero
+                                        : EdgeInsets.zero,
+                                    child: _buildText(
+                                      context: context,
+                                      textColor: textColor,
+                                      colors: colors,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  _timeLabel(),
+                                  style: AppTypography.caption.copyWith(
+                                    color: timeColor,
+                                    fontSize: 10,
+                                    decoration: TextDecoration.none,
+                                  ),
+                                ),
+                                _buildReadReceipt(colors),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                  if (isOutgoing) const SizedBox(width: AppSpacing.xs),
+                ],
               ),
-              if (isOutgoing) const SizedBox(width: AppSpacing.xs),
-            ],
-          ),
-        );
-      },
+            );
+          },
+        ),
+      ),
     );
   }
 }

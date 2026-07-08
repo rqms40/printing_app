@@ -183,6 +183,8 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
   }
 }
 
+const _deliveryStatusTitleGap = AppSpacing.md;
+
 class _DeliveryStatusAndMapLayout extends StatelessWidget {
   const _DeliveryStatusAndMapLayout({
     required this.colors,
@@ -203,12 +205,14 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
   final VoidCallback? onMapTap;
 
   static const _maxInlineSlots = 3;
-  static const _panelGap = AppSpacing.xs + 2;
+  static const _panelGap = AppSpacing.sm;
   static const _minMapHeight = 96.0;
 
   bool get _hasActiveDelivery =>
       liveState?.status == LiveMapStatus.active &&
       liveState?.orderStatus == OrderStatus.onTheWay;
+
+  bool get _shouldShowMapPanel => !_hasActiveDelivery || liveRiderPoint != null;
 
   List<DeliverySlot> get _sortedSlots {
     final sorted = [...slots]
@@ -221,10 +225,10 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
     required bool hasHiddenSlots,
     required bool isLoading,
   }) {
-    if (isLoading && visibleSlotCount == 0) return 84;
-    if (visibleSlotCount == 0) return 74;
+    if (isLoading && visibleSlotCount == 0) return 96;
+    if (visibleSlotCount == 0) return 94;
 
-    const chromeHeight = (AppSpacing.sm * 2) + 20 + AppSpacing.xs;
+    const chromeHeight = (AppSpacing.md * 2) + 20 + _deliveryStatusTitleGap;
     const slotRowHeight = 27.0;
     const viewMoreHeight = 20.0;
     return chromeHeight +
@@ -236,7 +240,10 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
     required double maxHeight,
     required int visibleSlotCount,
     required int hiddenSlotCount,
+    required bool showMapPanel,
   }) {
+    if (!showMapPanel) return maxHeight;
+
     final maxStatusHeight = (maxHeight - _panelGap - _minMapHeight)
         .clamp(0.0, maxHeight)
         .toDouble();
@@ -258,6 +265,7 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
     final sortedSlots = _sortedSlots;
     final visibleSlots = sortedSlots.take(_maxInlineSlots).toList();
     final hiddenSlotCount = sortedSlots.length - visibleSlots.length;
+    final showMapPanel = _shouldShowMapPanel;
     final idleMapMessage = _hasActiveDelivery
         ? 'Waiting for rider location...'
         : visibleSlots.isEmpty
@@ -270,6 +278,7 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
             liveState: liveState!,
             liveRiderPoint:
                 liveRiderPoint ?? liveState!.riderPoint ?? liveState!.shopPoint,
+            hasLiveRiderPoint: liveRiderPoint != null,
             slots: sortedSlots,
           )
         : _BatchStatusTile(
@@ -280,15 +289,17 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
             hiddenSlotCount: hiddenSlotCount,
             isLoading: isLoading,
           );
-    final mapPanel = _DeliveryMapPanel(
-      key: const Key('delivery-map-panel'),
-      colors: colors,
-      brightness: brightness,
-      message: isLoading ? 'Loading delivery status...' : idleMapMessage,
-      liveState: liveState,
-      liveRiderPoint: liveRiderPoint,
-      onMapTap: onMapTap,
-    );
+    final mapPanel = showMapPanel
+        ? _DeliveryMapPanel(
+            key: const Key('delivery-map-panel'),
+            colors: colors,
+            brightness: brightness,
+            message: isLoading ? 'Loading delivery status...' : idleMapMessage,
+            liveState: liveState,
+            liveRiderPoint: liveRiderPoint,
+            onMapTap: onMapTap,
+          )
+        : null;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -299,6 +310,7 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
           maxHeight: maxHeight,
           visibleSlotCount: visibleSlots.length,
           hiddenSlotCount: hiddenSlotCount,
+          showMapPanel: showMapPanel,
         );
         final mapHeight = (maxHeight - statusHeight - _panelGap)
             .clamp(0.0, double.infinity)
@@ -308,8 +320,10 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(height: statusHeight, child: statusPanel),
-            const SizedBox(height: _panelGap),
-            SizedBox(height: mapHeight, child: mapPanel),
+            if (mapPanel != null) ...[
+              const SizedBox(height: _panelGap),
+              SizedBox(height: mapHeight, child: mapPanel),
+            ],
           ],
         );
       },
@@ -342,7 +356,7 @@ class _BatchStatusTile extends StatelessWidget {
     return ClipRRect(
       borderRadius: AppRadius.borderXl,
       child: Container(
-        padding: const EdgeInsets.all(AppSpacing.sm),
+        padding: const EdgeInsets.all(AppSpacing.md),
         decoration: BoxDecoration(color: colors.surface),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -361,7 +375,7 @@ class _BatchStatusTile extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: AppSpacing.xs),
+            const SizedBox(height: _deliveryStatusTitleGap),
             if (isLoading && slots.isEmpty)
               Expanded(
                 child: Center(
@@ -692,32 +706,22 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
     required this.colors,
     required this.liveState,
     required this.liveRiderPoint,
+    required this.hasLiveRiderPoint,
     required this.slots,
   });
 
   final AppColorSet colors;
   final LiveDeliveryMapState liveState;
   final LatLng liveRiderPoint;
+  final bool hasLiveRiderPoint;
   final List<DeliverySlot> slots;
-
-  static double _progressRatio(LatLng rider, List<LatLng> route) {
-    if (route.length < 2) return 0.0;
-    const distance = Distance();
-    var nearest = 0;
-    var minDist = double.infinity;
-    for (var i = 0; i < route.length; i++) {
-      final d = distance(rider, route[i]);
-      if (d < minDist) {
-        minDist = d;
-        nearest = i;
-      }
-    }
-    return (nearest / (route.length - 1)).clamp(0.0, 1.0);
-  }
 
   @override
   Widget build(BuildContext context) {
-    final ratio = _progressRatio(liveRiderPoint, liveState.routePoints);
+    final ratio = routeProgressRatioForPoint(
+      liveRiderPoint,
+      liveState.routePoints,
+    );
     final percent = (ratio * 100).round();
 
     final assignedSlot = liveState.assignedSlot;
@@ -730,7 +734,7 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
     final child = ClipRRect(
       borderRadius: AppRadius.borderXl,
       child: Container(
-        padding: const EdgeInsets.all(AppSpacing.sm),
+        padding: const EdgeInsets.all(AppSpacing.md),
         decoration: BoxDecoration(color: colors.surface),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -745,7 +749,7 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
                 fontWeight: FontWeight.w800,
               ),
             ),
-            const SizedBox(height: AppSpacing.xs),
+            const SizedBox(height: AppSpacing.sm),
             if (activeSlot != null) ...[
               FittedBox(
                 fit: BoxFit.scaleDown,
@@ -800,9 +804,27 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
               colors: colors,
               icon: Icons.electric_moped_rounded,
               title: 'Rider is on the way',
-              subtitle: 'Tracking real-time location',
+              subtitle: hasLiveRiderPoint
+                  ? 'Tracking real-time location'
+                  : 'Awaiting a fresh GPS ping',
               darkIcon: true,
             ),
+            if (!hasLiveRiderPoint) ...[
+              const SizedBox(height: AppSpacing.xs),
+              _StatusLine(
+                colors: colors,
+                icon: Icons.gps_fixed_rounded,
+                title: 'Rider GPS reconnecting',
+                subtitle: 'Live map resumes automatically',
+                darkIcon: true,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Expanded(
+                child: _PendingRoutePreview(colors: colors, state: liveState),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              _OpenTrackingButton(colors: colors),
+            ],
           ],
         ),
       ),
@@ -816,6 +838,118 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
         }
       },
       child: child,
+    );
+  }
+}
+
+class _PendingRoutePreview extends StatelessWidget {
+  const _PendingRoutePreview({required this.colors, required this.state});
+
+  final AppColorSet colors;
+  final LiveDeliveryMapState state;
+
+  LatLng get _center => LatLng(
+    (state.shopPoint.latitude + state.destPoint.latitude) / 2,
+    (state.shopPoint.longitude + state.destPoint.longitude) / 2,
+  );
+
+  List<LatLng> get _routePoints => state.routePoints.isNotEmpty
+      ? state.routePoints
+      : [state.shopPoint, state.destPoint];
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+
+    return ClipRRect(
+      key: const Key('pending-route-preview-map'),
+      borderRadius: AppRadius.borderMd,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          FlutterMap(
+            options: MapOptions(
+              initialCenter: _center,
+              initialZoom: 13.2,
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.none,
+              ),
+            ),
+            children: [
+              MapHelpers.tileLayer(brightness),
+              MapHelpers.routePolyline(_routePoints),
+              MarkerLayer(
+                markers: [
+                  MapHelpers.shopMarker(point: state.shopPoint),
+                  MapHelpers.destinationMarker(point: state.destPoint),
+                ],
+              ),
+            ],
+          ),
+          Container(color: Colors.black.withValues(alpha: 0.22)),
+          Positioned(
+            top: AppSpacing.xs,
+            left: AppSpacing.xs,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm,
+                vertical: 3,
+              ),
+              decoration: BoxDecoration(
+                color: colors.surface.withValues(alpha: 0.92),
+                borderRadius: AppRadius.borderFull,
+                border: Border.all(
+                  color: colors.outline.withValues(alpha: 0.35),
+                ),
+              ),
+              child: Text(
+                'ROUTE PREVIEW',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.overline.copyWith(
+                  color: colors.brand,
+                  fontSize: 7,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OpenTrackingButton extends StatelessWidget {
+  const _OpenTrackingButton({required this.colors});
+
+  final AppColorSet colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => context.push('/customer/tracking'),
+      child: Container(
+        width: double.infinity,
+        height: 34,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: colors.brand,
+          borderRadius: AppRadius.borderFull,
+        ),
+        child: Text(
+          'Open live tracking',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTypography.caption.copyWith(
+            color: Colors.black,
+            fontSize: 10,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -933,24 +1067,9 @@ class _ActiveTile extends StatelessWidget {
   final Brightness brightness;
   final LatLng riderPoint;
 
-  static int _etaMinutes(LatLng rider, List<LatLng> route) {
-    if (route.isEmpty) return 0;
-    const distance = Distance();
-    var nearest = 0;
-    var minDist = double.infinity;
-    for (var i = 0; i < route.length; i++) {
-      final d = distance(rider, route[i]);
-      if (d < minDist) {
-        minDist = d;
-        nearest = i;
-      }
-    }
-    return route.length - nearest;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final eta = _etaMinutes(riderPoint, state.routePoints);
+    final eta = estimateRouteEtaMinutes(riderPoint, state.routePoints);
     final colors = brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;

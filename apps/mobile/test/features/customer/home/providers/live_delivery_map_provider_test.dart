@@ -129,6 +129,39 @@ void main() {
 
       expect(state.etaMinutes, greaterThanOrEqualTo(0));
     });
+
+    test('etaMinutes uses remaining distance instead of route point count', () {
+      const rider = LatLng(7.0640, 125.6079);
+      const dest = LatLng(7.0644, 125.6079);
+      final denseRoute = List.generate(
+        40,
+        (i) => LatLng(7.0640 + (i * 0.00001), 125.6079),
+      );
+
+      final state = LiveDeliveryMapState.active(
+        riderPoint: rider,
+        shopPoint: rider,
+        destPoint: dest,
+        routePoints: denseRoute,
+        orderId: 'ORD-001',
+        deliveryAssignmentId: 'da_001',
+        orderStatus: OrderStatus.onTheWay,
+      );
+
+      expect(state.etaMinutes, 1);
+    });
+
+    test('route helpers clamp completed route progress and ETA', () {
+      const rider = LatLng(7.0731, 125.6128);
+      final route = [
+        const LatLng(7.0640, 125.6079),
+        const LatLng(7.0680, 125.6100),
+        rider,
+      ];
+
+      expect(routeProgressRatioForPoint(rider, route), 1);
+      expect(estimateRouteEtaMinutes(rider, route), 1);
+    });
   });
 
   // ── Provider integration tests ──────────────────────────────────────────────

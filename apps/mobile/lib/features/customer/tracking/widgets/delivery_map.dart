@@ -142,7 +142,7 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
     Brightness brightness,
     AppColorSet colors,
   ) {
-    final eta = state.etaMinutes;
+    final eta = estimateRouteEtaMinutes(riderPoint, state.routePoints);
 
     return ClipRRect(
       key: widget.tutorialKey,

@@ -28,6 +28,26 @@ Order? _findOrderByRouteId(List<Order> orders, String routeId) {
   return null;
 }
 
+@visibleForTesting
+Order? selectDeliveryTrackingOrder(List<Order> orders, String? routeId) {
+  if (routeId != null) return _findOrderByRouteId(orders, routeId);
+
+  for (final order in orders) {
+    if (order.orderStatus == OrderStatus.onTheWay &&
+        (order.assignedRider != null ||
+            order.assignedRiderId != null ||
+            order.deliveryAssignmentId != null)) {
+      return order;
+    }
+  }
+
+  for (final order in orders) {
+    if (order.orderStatus == OrderStatus.onTheWay) return order;
+  }
+
+  return null;
+}
+
 class DeliveryTrackingScreen extends ConsumerStatefulWidget {
   const DeliveryTrackingScreen({super.key, this.orderId});
 
@@ -110,10 +130,10 @@ class _DeliveryTrackingScreenState
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
-    final routeOrderId = widget.orderId;
-    final order = routeOrderId == null
-        ? null
-        : _findOrderByRouteId(ref.watch(ordersProvider), routeOrderId);
+    final order = selectDeliveryTrackingOrder(
+      ref.watch(ordersProvider),
+      widget.orderId,
+    );
 
     return Scaffold(
       backgroundColor: colors.background,

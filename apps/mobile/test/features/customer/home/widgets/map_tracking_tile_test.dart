@@ -214,8 +214,54 @@ void main() {
         tester.getTopLeft(find.byKey(const Key('delivery-map-panel'))).dy -
         tileTop;
 
-    expect(statusBottom, lessThan(150));
-    expect(mapTop, closeTo(statusBottom + AppSpacing.xs + 2, 0.1));
+    expect(statusBottom, lessThan(165));
+    expect(mapTop, closeTo(statusBottom + AppSpacing.sm, 0.1));
+  });
+
+  testWidgets('gives the delivery status panel comfortable interior padding', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrapConstrained(
+        LiveDeliveryMapState.idle(),
+        slots: _dailySlots,
+        height: 290,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final panel = find.byKey(const Key('delivery-status-panel'));
+    final paddedContainer = find.descendant(
+      of: panel,
+      matching: find.byWidgetPredicate(
+        (widget) => widget is Container && widget.padding != null,
+      ),
+    );
+
+    final container = tester.widget<Container>(paddedContainer.first);
+    final padding = container.padding! as EdgeInsets;
+    expect(padding.left, greaterThanOrEqualTo(AppSpacing.md));
+    expect(padding.top, greaterThanOrEqualTo(AppSpacing.md));
+  });
+
+  testWidgets('keeps breathing room between title and first delivery slot', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrapConstrained(
+        LiveDeliveryMapState.idle(),
+        slots: _dailySlots,
+        height: 310,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final titleBottom = tester.getBottomLeft(find.text('Delivery Status')).dy;
+    final firstSlotTop = tester
+        .getTopLeft(find.text('9:30 - 11:30 AM: 2/10'))
+        .dy;
+
+    expect(firstSlotTop - titleBottom, greaterThanOrEqualTo(AppSpacing.md));
   });
 
   testWidgets('offers view more instead of cramming extra delivery slots', (
@@ -286,6 +332,45 @@ void main() {
   );
 
   testWidgets(
+    'uses pending space for a route preview map when GPS is pending',
+    (tester) async {
+      final active = LiveDeliveryMapState.active(
+        riderPoint: const LatLng(7.20, 125.46),
+        shopPoint: const LatLng(7.19, 125.45),
+        destPoint: const LatLng(7.21, 125.47),
+        routePoints: [const LatLng(7.19, 125.45), const LatLng(7.21, 125.47)],
+        orderId: 'ORD-001',
+        deliveryAssignmentId: 'assign-001',
+        orderStatus: OrderStatus.onTheWay,
+      );
+
+      await tester.pumpWidget(
+        _wrapConstrained(active, slots: _dailySlots, height: 290),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('delivery-status-panel')), findsOneWidget);
+      expect(find.byKey(const Key('delivery-map-panel')), findsNothing);
+      expect(
+        find.byKey(const Key('pending-route-preview-map')),
+        findsOneWidget,
+      );
+      expect(find.text('Waiting for rider location...'), findsNothing);
+      expect(find.text('Rider GPS reconnecting'), findsOneWidget);
+      expect(find.text('Open live tracking'), findsOneWidget);
+
+      final tileTop = tester.getTopLeft(find.byType(MapTrackingTile)).dy;
+      final statusBottom =
+          tester
+              .getBottomLeft(find.byKey(const Key('delivery-status-panel')))
+              .dy -
+          tileTop;
+
+      expect(statusBottom, closeTo(290, 0.1));
+    },
+  );
+
+  testWidgets(
     'shows LIVE MAP badge in active state with matching live location',
     (tester) async {
       final active = LiveDeliveryMapState.active(
@@ -317,6 +402,40 @@ void main() {
       expect(find.text('Live map starts after rider dispatch.'), findsNothing);
     },
   );
+
+  testWidgets('shows distance-based ETA for dense live routes', (tester) async {
+    final route = List.generate(
+      40,
+      (i) => LatLng(7.0640 + (i * 0.00001), 125.6079),
+    );
+    final active = LiveDeliveryMapState.active(
+      riderPoint: route.first,
+      shopPoint: route.first,
+      destPoint: route.last,
+      routePoints: route,
+      orderId: 'ORD-001',
+      deliveryAssignmentId: 'assign-001',
+      orderStatus: OrderStatus.onTheWay,
+    );
+
+    await tester.pumpWidget(
+      _wrap(
+        active,
+        slots: _dailySlots,
+        location: LocationUpdate(
+          id: 'live',
+          deliveryAssignmentId: 'assign-001',
+          latitude: route.first.latitude,
+          longitude: route.first.longitude,
+          timestamp: DateTime.now(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('~1 min'), findsOneWidget);
+    expect(find.text('~40 min'), findsNothing);
+  });
 
   testWidgets('subscribes even when a fresh matching location is cached', (
     tester,

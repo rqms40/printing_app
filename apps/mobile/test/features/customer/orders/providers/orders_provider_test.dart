@@ -698,7 +698,7 @@ void main() {
                 'color': 'White',
                 'infillPercentage': '20',
                 'layerHeight': '0.20',
-                'supports': false,
+                'supports': 'false',
               },
             },
           ],
@@ -728,6 +728,7 @@ void main() {
       expect(item.fileMetadataId, 84);
       expect(item.specialInstructions, 'Keep the embossed logo sharp.');
       expect(item.threeDSpecs?.infillPercentage, 20);
+      expect(item.threeDSpecs?.supports, isFalse);
       expect(item.threeDSpecs?.layerHeight, 0.2);
     });
   });

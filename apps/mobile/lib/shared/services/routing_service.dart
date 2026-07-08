@@ -65,66 +65,26 @@ class RoutingService {
       // API unavailable — fall through to hardcoded route
     }
 
-    // Fallback: detailed hardcoded route along Manila roads
-    return _fallbackRoute;
+    // Fallback: keep the route bounded to the requested endpoints. This is
+    // not turn-by-turn geometry, but it avoids drawing a delivery in another
+    // city when the public OSRM service is unavailable.
+    return fallbackRouteBetween(start, end);
   }
 
-  /// Detailed fallback route: Makati (Ayala Ave) → QC (Katipunan Ave)
-  /// Following actual road layout with curves and turns.
-  static const List<LatLng> _fallbackRoute = [
-    // Ayala Ave, Makati
-    LatLng(14.5510, 121.0230),
-    LatLng(14.5520, 121.0248),
-    LatLng(14.5535, 121.0268),
-    LatLng(14.5548, 121.0285),
-    LatLng(14.5560, 121.0298),
-    // Ayala → EDSA junction (curve)
-    LatLng(14.5572, 121.0310),
-    LatLng(14.5580, 121.0322),
-    LatLng(14.5592, 121.0330),
-    // EDSA northbound — Guadalupe
-    LatLng(14.5620, 121.0338),
-    LatLng(14.5648, 121.0345),
-    LatLng(14.5675, 121.0352),
-    // EDSA — Boni / Pioneer
-    LatLng(14.5710, 121.0360),
-    LatLng(14.5740, 121.0368),
-    LatLng(14.5772, 121.0375),
-    // EDSA — Shaw Blvd junction (slight curve)
-    LatLng(14.5800, 121.0380),
-    LatLng(14.5828, 121.0383),
-    LatLng(14.5855, 121.0385),
-    // EDSA — Ortigas (curve westward slightly)
-    LatLng(14.5880, 121.0383),
-    LatLng(14.5910, 121.0380),
-    LatLng(14.5938, 121.0378),
-    // EDSA — Robinson Galleria / Santolan
-    LatLng(14.5968, 121.0375),
-    LatLng(14.5998, 121.0373),
-    LatLng(14.6028, 121.0374),
-    // EDSA — Camp Crame (curves east)
-    LatLng(14.6060, 121.0378),
-    LatLng(14.6088, 121.0382),
-    LatLng(14.6115, 121.0388),
-    // EDSA — Aurora Blvd junction
-    LatLng(14.6140, 121.0392),
-    LatLng(14.6168, 121.0396),
-    LatLng(14.6195, 121.0400),
-    // EDSA — Kamuning / Timog
-    LatLng(14.6222, 121.0405),
-    LatLng(14.6250, 121.0410),
-    LatLng(14.6278, 121.0418),
-    // Turn east toward Katipunan
-    LatLng(14.6300, 121.0428),
-    LatLng(14.6318, 121.0442),
-    LatLng(14.6332, 121.0460),
-    LatLng(14.6345, 121.0478),
-    // Katipunan Ave approach
-    LatLng(14.6358, 121.0495),
-    LatLng(14.6370, 121.0510),
-    LatLng(14.6382, 121.0520),
-    // Katipunan Ave, Loyola Heights (destination)
-    LatLng(14.6395, 121.0528),
-    LatLng(14.6400, 121.0530),
-  ];
+  @visibleForTesting
+  static List<LatLng> fallbackRouteBetween(LatLng start, LatLng end) {
+    if (start == end) return [start];
+
+    const distance = Distance();
+    final meters = distance(start, end);
+    final segments = (meters / 120).ceil().clamp(2, 24).toInt();
+
+    return List.generate(segments + 1, (index) {
+      final progress = index / segments;
+      return LatLng(
+        start.latitude + ((end.latitude - start.latitude) * progress),
+        start.longitude + ((end.longitude - start.longitude) * progress),
+      );
+    });
+  }
 }

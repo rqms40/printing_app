@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/features/rider/deliveries/providers/deliveries_provider.dart';
 import 'package:printing_app/features/rider/deliveries/screens/deliveries_screen.dart';
 
@@ -14,6 +15,10 @@ Widget _wrap(Widget child, {List<Override>? overrides}) {
     ),
   );
 }
+
+List<Override> _stableOverrides() => [
+  deliveriesProvider.overrideWith((_) => DeliveriesNotifier(bootstrap: false)),
+];
 
 void main() {
   group('DeliveriesScreen', () {
@@ -36,14 +41,12 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            deliveriesProvider.overrideWith(
-              (ref) {
-                final notifier = DeliveriesNotifier();
-                // We need to set state to empty -- create a notifier
-                // then filter to a status that has no assignments.
-                return notifier;
-              },
-            ),
+            deliveriesProvider.overrideWith((ref) {
+              final notifier = DeliveriesNotifier();
+              // We need to set state to empty -- create a notifier
+              // then filter to a status that has no assignments.
+              return notifier;
+            }),
           ],
           child: MaterialApp(
             theme: ThemeData(brightness: Brightness.light),
@@ -62,6 +65,25 @@ void main() {
       // with a status filter that yields nothing.
       // Instead, let's create a simpler test -- verify the AppBar title.
       expect(find.text('Orders'), findsOneWidget);
+    });
+
+    testWidgets('uses the light app surface when app theme is light', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _wrap(const DeliveriesScreen(), overrides: _stableOverrides()),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ColoredBox &&
+              widget.color == AppColors.light.background,
+        ),
+        findsOneWidget,
+      );
     });
   });
 }

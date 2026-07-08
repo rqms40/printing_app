@@ -39,4 +39,41 @@ void main() {
       findsWidgets,
     );
   });
+
+  testWidgets('exposes bot message content through semantics', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final message = ChatMessage(
+      id: 2,
+      conversationId: 7,
+      senderRole: SenderRole.bot,
+      senderId: null,
+      content: 'Ask me about paper printing.',
+      isRead: false,
+      createdAt: DateTime(2026, 5, 2, 10),
+    );
+
+    try {
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: MessageBubble(
+                message: message,
+                currentUserRole: SenderRole.customer,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        find.bySemanticsLabel(
+          RegExp(r'GridBot AI[\s\S]*Ask me about paper printing\.'),
+        ),
+        findsOneWidget,
+      );
+    } finally {
+      semantics.dispose();
+    }
+  });
 }

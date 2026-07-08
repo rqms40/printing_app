@@ -7,28 +7,30 @@ import 'package:printing_app/features/customer/tracking/widgets/delivery_map.dar
 import 'package:printing_app/shared/models/enums.dart';
 
 Widget _wrap(LiveDeliveryMapState state) => ProviderScope(
-      overrides: [
-        liveDeliveryMapProvider.overrideWith((_) async => state),
-      ],
-      child: const MaterialApp(home: Scaffold(body: DeliveryMap())),
-    );
+  overrides: [liveDeliveryMapProvider.overrideWith((_) async => state)],
+  child: const MaterialApp(home: Scaffold(body: DeliveryMap())),
+);
 
 /// Pump enough frames for the FutureProvider to resolve without waiting for
 /// the infinite pulse animation to settle (it never would).
 Future<void> _settle(WidgetTester tester) async {
-  await tester.pump();                              // trigger build
+  await tester.pump(); // trigger build
   await tester.pump(const Duration(milliseconds: 50)); // resolve FutureProvider
 }
 
 void main() {
   group('DeliveryMap widget', () {
-    testWidgets('shows loading indicator while provider is loading', (tester) async {
+    testWidgets('shows loading indicator while provider is loading', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap(LiveDeliveryMapState.loading()));
       await _settle(tester);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
 
-    testWidgets('shows loading indicator in idle state (no active delivery)', (tester) async {
+    testWidgets('shows loading indicator in idle state (no active delivery)', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap(LiveDeliveryMapState.idle()));
       await _settle(tester);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
@@ -67,6 +69,29 @@ void main() {
       await tester.pumpWidget(_wrap(active));
       await _settle(tester);
       expect(find.textContaining('min'), findsOneWidget);
+    });
+
+    testWidgets('uses distance-based ETA instead of polyline point count', (
+      tester,
+    ) async {
+      final route = List.generate(
+        40,
+        (i) => LatLng(7.0640 + (i * 0.00001), 125.6079),
+      );
+      final active = LiveDeliveryMapState.active(
+        riderPoint: route.first,
+        shopPoint: route.first,
+        destPoint: route.last,
+        routePoints: route,
+        orderId: 'ORD-TEST-001',
+        orderStatus: OrderStatus.onTheWay,
+      );
+
+      await tester.pumpWidget(_wrap(active));
+      await _settle(tester);
+
+      expect(find.text('~1 min'), findsOneWidget);
+      expect(find.text('~40 min'), findsNothing);
     });
   });
 }

@@ -259,6 +259,46 @@ printing_app/
 
 ## Quick Start
 
+### Option A: One-command Docker dev stack (recommended)
+
+Runs the API, seeded PostgreSQL, MinIO, mobile web, admin dashboard, and landing
+page together. This is the easiest path when testing the Flutter web app from a
+browser at `http://192.168.40.201:8088`.
+
+```bash
+GRIDGO_PUBLIC_HOST=192.168.40.201 docker compose -f docker-compose.dev.yml up --build
+```
+
+| Surface | URL |
+|---------|-----|
+| Mobile web | `http://192.168.40.201:8088` |
+| API / Swagger | `http://192.168.40.201:3000/docs` |
+| Admin dashboard | `http://192.168.40.201:8189` |
+| Landing page | `http://192.168.40.201:8090` |
+| MinIO console | `http://192.168.40.201:9001` |
+
+Use the same command on another server by changing only `GRIDGO_PUBLIC_HOST`.
+For local-only browser testing, use `GRIDGO_PUBLIC_HOST=127.0.0.1`.
+If a default port is already taken, override only that port, for example
+`GRIDGO_ADMIN_PORT=8289`.
+
+The stack seeds demo data only when the database is empty. To stop it:
+
+```bash
+docker compose -f docker-compose.dev.yml down
+```
+
+To reset all Docker dev data and seed fresh demo records:
+
+```bash
+docker compose -f docker-compose.dev.yml down -v
+GRIDGO_PUBLIC_HOST=192.168.40.201 docker compose -f docker-compose.dev.yml up --build
+```
+
+Demo credentials are the same as below; all use password `password123`.
+
+### Option B: Manual local services
+
 ### Prerequisites
 
 - [FVM](https://fvm.app) with Flutter 3.41.6 installed: `fvm install 3.41.6`
@@ -442,10 +482,11 @@ cd admin && npx tsc --noEmit
 ### Local / Development
 
 ```bash
-# Infrastructure (postgres + redis + minio)
-cd server && docker-compose up -d
+# Full Docker dev stack
+GRIDGO_PUBLIC_HOST=192.168.40.201 docker compose -f docker-compose.dev.yml up --build
 
-# API server (runs natively, not in Docker)
+# Or run pieces manually:
+cd server && docker-compose up -d      # postgres + redis + minio
 cd server && npm run start:dev      # port 3000
 
 # Admin dashboard

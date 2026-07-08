@@ -50,6 +50,7 @@ class WebSocketService {
   final List<Function(int)> _botTypingListeners = [];
   final List<Function(int)> _messagesReadListeners = [];
   final List<Function(Map<String, dynamic>)> _slotUpdatedListeners = [];
+  String? _pendingLocationDeliveryId;
 
   bool get isNotificationsConnected => _notificationsSocket?.connected == true;
   bool get isChatConnected => _chatSocket?.connected == true;
@@ -172,12 +173,17 @@ class WebSocketService {
   }
 
   Future<void> connectLocation({Function(dynamic)? onLocationUpdate}) async {
+    _locationSocket?.disconnect();
+    _locationSocket = null;
+
     final token = await TokenStorage.getToken();
     _locationSocket = io.io(
       '$_baseUrl/ws/location',
-      io.OptionBuilder().setTransports(['websocket']).setAuth({
-        'token': token ?? '',
-      }).build(),
+      io.OptionBuilder()
+          .setTransports(['websocket'])
+          .setAuth({'token': token ?? ''})
+          .disableAutoConnect()
+          .build(),
     );
     if (onLocationUpdate != null) {
       _locationSocket!.on('locationUpdate', (data) {
@@ -188,15 +194,25 @@ class WebSocketService {
         }
       });
     }
-    _locationSocket!.on('connect', (_) => debugPrint('WS Location connected'));
+    _locationSocket!.on('connect', (_) {
+      debugPrint('WS Location connected');
+      final deliveryId = _pendingLocationDeliveryId;
+      if (deliveryId != null && deliveryId.isNotEmpty) {
+        _locationSocket?.emit('subscribe', deliveryId);
+      }
+    });
     _locationSocket!.on(
       'connect_error',
       (e) => debugPrint('WS Location error: $e'),
     );
+    _locationSocket!.connect();
   }
 
   void subscribeToDelivery(String assignmentId) {
-    _locationSocket?.emit('subscribe', assignmentId);
+    _pendingLocationDeliveryId = assignmentId;
+    if (_locationSocket?.connected == true) {
+      _locationSocket?.emit('subscribe', assignmentId);
+    }
   }
 
   void sendRiderLocation(Map<String, dynamic> location) {
@@ -206,7 +222,11 @@ class WebSocketService {
   void disconnectLocation() {
     _locationSocket?.disconnect();
     _locationSocket = null;
+    _pendingLocationDeliveryId = null;
   }
+
+  @visibleForTesting
+  String? get pendingLocationDeliveryIdForTests => _pendingLocationDeliveryId;
 
   Future<void> connectNotifications({
     Function(Map<String, dynamic>)? onCreditsUpdate,

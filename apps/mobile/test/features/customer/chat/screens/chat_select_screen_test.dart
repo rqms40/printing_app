@@ -100,6 +100,33 @@ void main() {
     expect(find.text('Rider Support'), findsNothing);
   });
 
+  testWidgets('chat options expose tappable button semantics', (tester) async {
+    final mockDio = MockDio();
+    final semantics = tester.ensureSemantics();
+
+    try {
+      await pumpChatSelect(tester, mockDio);
+
+      expect(
+        tester.getSemantics(
+          find.bySemanticsLabel(
+            'GridBot AI\nInstant answers about printing, pricing, and materials',
+          ),
+        ),
+        matchesSemantics(
+          label:
+              'GridBot AI\nInstant answers about printing, pricing, and materials',
+          isButton: true,
+          hasEnabledState: true,
+          isEnabled: true,
+          hasTapAction: true,
+        ),
+      );
+    } finally {
+      semantics.dispose();
+    }
+  });
+
   testWidgets('create failure shows a friendly retry message', (tester) async {
     final mockDio = MockDio();
     when(

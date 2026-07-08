@@ -764,23 +764,34 @@ class _InputBar extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Material(
-              color: Colors.transparent,
-              shape: const CircleBorder(),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
+            Tooltip(
+              message: 'Attach image',
+              child: Semantics(
+                button: true,
+                enabled: onAttach != null,
+                label: 'Attach image',
                 onTap: onAttach,
-                customBorder: const CircleBorder(),
-                child: SizedBox(
-                  width: 44,
-                  height: 44,
-                  child: Center(
-                    child: HugeIcon(
-                      icon: HugeIcons.strokeRoundedAttachment01,
-                      size: 22,
-                      color: onAttach == null
-                          ? colors.onSurfaceDim
-                          : colors.onBackground,
+                child: ExcludeSemantics(
+                  child: Material(
+                    color: Colors.transparent,
+                    shape: const CircleBorder(),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: onAttach,
+                      customBorder: const CircleBorder(),
+                      child: SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: Center(
+                          child: HugeIcon(
+                            icon: HugeIcons.strokeRoundedAttachment01,
+                            size: 22,
+                            color: onAttach == null
+                                ? colors.onSurfaceDim
+                                : colors.onBackground,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -851,52 +862,68 @@ class _SendButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedScale(
-      scale: canSend ? 1.0 : 0.88,
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOutBack,
-      child: TweenAnimationBuilder<Color?>(
-        duration: const Duration(milliseconds: 200),
-        tween: ColorTween(
-          begin: canSend ? colors.accent : colors.surfaceVariant,
-          end: canSend ? colors.accent : colors.surfaceVariant,
-        ),
-        builder: (context, color, _) => Material(
-          color: color ?? colors.surfaceVariant,
-          shape: const CircleBorder(),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: canSend && !isSending ? onSend : null,
-            child: SizedBox(
-              width: 44,
-              height: 44,
-              child: Center(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 180),
-                  switchInCurve: Curves.easeOut,
-                  switchOutCurve: Curves.easeIn,
-                  transitionBuilder: (child, animation) => ScaleTransition(
-                    scale: animation,
-                    child: FadeTransition(opacity: animation, child: child),
+    final canSubmit = canSend && !isSending;
+    return Tooltip(
+      message: 'Send message',
+      child: Semantics(
+        button: true,
+        enabled: canSubmit,
+        label: 'Send message',
+        onTap: canSubmit ? onSend : null,
+        child: ExcludeSemantics(
+          child: AnimatedScale(
+            scale: canSend ? 1.0 : 0.88,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutBack,
+            child: TweenAnimationBuilder<Color?>(
+              duration: const Duration(milliseconds: 200),
+              tween: ColorTween(
+                begin: canSend ? colors.accent : colors.surfaceVariant,
+                end: canSend ? colors.accent : colors.surfaceVariant,
+              ),
+              builder: (context, color, _) => Material(
+                color: color ?? colors.surfaceVariant,
+                shape: const CircleBorder(),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: canSubmit ? onSend : null,
+                  child: SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: Center(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 180),
+                        switchInCurve: Curves.easeOut,
+                        switchOutCurve: Curves.easeIn,
+                        transitionBuilder: (child, animation) =>
+                            ScaleTransition(
+                              scale: animation,
+                              child: FadeTransition(
+                                opacity: animation,
+                                child: child,
+                              ),
+                            ),
+                        child: isSending
+                            ? SizedBox(
+                                key: const ValueKey('loading'),
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: colors.accentOnColor,
+                                ),
+                              )
+                            : HugeIcon(
+                                key: const ValueKey('send'),
+                                icon: HugeIcons.strokeRoundedSent,
+                                size: 19,
+                                color: canSend
+                                    ? colors.accentOnColor
+                                    : colors.onSurfaceDim,
+                              ),
+                      ),
+                    ),
                   ),
-                  child: isSending
-                      ? SizedBox(
-                          key: const ValueKey('loading'),
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: colors.accentOnColor,
-                          ),
-                        )
-                      : HugeIcon(
-                          key: const ValueKey('send'),
-                          icon: HugeIcons.strokeRoundedSent,
-                          size: 19,
-                          color: canSend
-                              ? colors.accentOnColor
-                              : colors.onSurfaceDim,
-                        ),
                 ),
               ),
             ),

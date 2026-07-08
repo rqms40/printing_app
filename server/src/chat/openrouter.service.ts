@@ -4,15 +4,17 @@ import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class OpenRouterService {
   private readonly logger = new Logger(OpenRouterService.name);
+  private readonly DEFAULT_MODEL = 'nvidia/nemotron-3-nano-30b-a3b:free';
   private readonly FALLBACK_MSG =
-    "I'm having trouble right now. Please try again or chat with our admin support team.";
+    "I'm having trouble reaching GridBot AI right now, but I can still point you in the right direction: ask about paper printing, 3D printing, pricing, delivery, or your order steps here, or start a Human Support chat for urgent help.";
 
   constructor(private readonly config: ConfigService) {}
 
   async complete(
     messages: Array<{ role: string; content: string }>,
   ): Promise<string> {
-    const model = this.config.getOrThrow<string>('OPENROUTER_MODEL');
+    const model =
+      this.config.get<string>('OPENROUTER_MODEL') ?? this.DEFAULT_MODEL;
     try {
       return await this.callOpenRouter(model, messages);
     } catch (primary) {
@@ -33,7 +35,8 @@ export class OpenRouterService {
     model: string,
     messages: Array<{ role: string; content: string }>,
   ): Promise<string> {
-    const apiKey = this.config.getOrThrow<string>('OPENROUTER_API_KEY');
+    const apiKey = this.config.get<string>('OPENROUTER_API_KEY');
+    if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured');
     const baseUrl = this.config.get<string>(
       'OPENROUTER_BASE_URL',
       'https://openrouter.ai/api/v1',

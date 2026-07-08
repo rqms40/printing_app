@@ -39,6 +39,17 @@ double _readDouble(dynamic value, double fallback) {
   return fallback;
 }
 
+bool _readBool(dynamic value, bool fallback) {
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  if (value is String) {
+    final normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y'].contains(normalized)) return true;
+    if (['false', '0', 'no', 'n'].contains(normalized)) return false;
+  }
+  return fallback;
+}
+
 String? _normalizeOptionalText(dynamic value) {
   final text = value?.toString().trim();
   return text == null || text.isEmpty ? null : text;
@@ -133,7 +144,7 @@ ThreeDSpecs? _parseThreeDSpecs(Map<String, dynamic>? json) {
       _readJsonValue(json, 'layerHeight', 'layer_height'),
       0.2,
     ),
-    supports: _readJsonValue(json, 'supports') as bool? ?? false,
+    supports: _readBool(_readJsonValue(json, 'supports'), false),
     notes: _readJsonValue(json, 'notes')?.toString(),
   );
 }

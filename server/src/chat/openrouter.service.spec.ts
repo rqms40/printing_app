@@ -63,6 +63,27 @@ describe('OpenRouterService', () => {
     expect(result).toContain('having trouble');
   });
 
+  it('returns fallback message when provider config is missing', async () => {
+    const configWithoutProvider = {
+      get: (_key: string, def?: string) => def,
+      getOrThrow: (key: string) => {
+        throw new Error(`Missing: ${key}`);
+      },
+    };
+    const module2 = await Test.createTestingModule({
+      providers: [
+        OpenRouterService,
+        { provide: ConfigService, useValue: configWithoutProvider },
+      ],
+    }).compile();
+    const svc2 = module2.get(OpenRouterService);
+
+    const result = await svc2.complete([{ role: 'user', content: 'Hi' }]);
+
+    expect(result).toContain('having trouble');
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   it('returns fallback message on non-ok response', async () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 429 });
     const result = await service.complete([{ role: 'user', content: 'Hi' }]);

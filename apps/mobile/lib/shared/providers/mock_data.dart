@@ -565,33 +565,33 @@ class MockData {
     ),
   ];
 
-  // ─── Location Updates (Manila GPS stream) ──────────────────────────
+  // ─── Location Updates (Davao GPS stream) ───────────────────────────
 
   static List<LocationUpdate> get locationUpdates {
-    // Realistic route along actual Manila roads:
-    // GRIDGO Print Shop (Makati, Ayala Ave) → QC (Katipunan Ave)
-    // Following: Ayala Ave → EDSA northbound → Ortigas → EDSA → Katipunan
+    // GRIDGO shop pickup → customer Davao office.
+    // Used when browser/dev GPS is unavailable so rider simulation still
+    // matches the live-map route and seeded Davao delivery workflow.
     const routeCoords = [
-      (14.5510, 121.0230), // Ayala Ave, Makati (start/shop)
-      (14.5535, 121.0280), // Ayala Ave near Greenbelt
-      (14.5570, 121.0320), // Ayala Ave → EDSA junction
-      (14.5620, 121.0340), // EDSA northbound, Guadalupe
-      (14.5680, 121.0360), // EDSA, Boni
-      (14.5730, 121.0380), // EDSA, Pioneer
-      (14.5790, 121.0390), // EDSA, Shaw Blvd junction
-      (14.5850, 121.0388), // EDSA, near Shangri-La
-      (14.5900, 121.0380), // EDSA, Ortigas Ave junction
-      (14.5960, 121.0375), // EDSA, Robinson Galleria
-      (14.6020, 121.0370), // EDSA, Santolan
-      (14.6080, 121.0380), // EDSA, Camp Crame
-      (14.6130, 121.0395), // EDSA, Aurora Blvd junction
-      (14.6180, 121.0400), // EDSA, GMA Kamuning
-      (14.6230, 121.0405), // EDSA, Timog junction
-      (14.6280, 121.0420), // EDSA, near Trinoma
-      (14.6310, 121.0440), // EDSA → turning east
-      (14.6340, 121.0480), // Approach to Katipunan
-      (14.6370, 121.0510), // Katipunan Ave, near Ateneo
-      (14.6400, 121.0530), // Katipunan Ave, Loyola Heights (destination)
+      (7.0640, 125.6079), // GRIDGO shop pickup
+      (7.0645, 125.6081),
+      (7.0650, 125.6083),
+      (7.0655, 125.6085),
+      (7.0660, 125.6087),
+      (7.0664, 125.6090),
+      (7.0669, 125.6092),
+      (7.0673, 125.6095),
+      (7.0678, 125.6097),
+      (7.0682, 125.6100),
+      (7.0687, 125.6102),
+      (7.0691, 125.6105),
+      (7.0696, 125.6107),
+      (7.0700, 125.6110),
+      (7.0705, 125.6113),
+      (7.0710, 125.6116),
+      (7.0715, 125.6119),
+      (7.0720, 125.6122),
+      (7.0726, 125.6125),
+      (7.0731, 125.6128), // Customer Davao office
     ];
 
     final updates = <LocationUpdate>[];

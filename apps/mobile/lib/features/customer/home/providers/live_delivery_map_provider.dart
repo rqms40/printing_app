@@ -9,6 +9,51 @@ import 'package:printing_app/shared/widgets/map_helpers.dart';
 
 enum LiveMapStatus { loading, active, idle }
 
+const _urbanDeliveryMetersPerMinute = 220.0;
+
+int nearestRouteIndexForPoint(LatLng point, List<LatLng> routePoints) {
+  if (routePoints.isEmpty) return 0;
+  const distance = Distance();
+  var nearest = 0;
+  var minDist = double.infinity;
+  for (var i = 0; i < routePoints.length; i++) {
+    final d = distance(point, routePoints[i]);
+    if (d < minDist) {
+      minDist = d;
+      nearest = i;
+    }
+  }
+  return nearest;
+}
+
+double routeProgressRatioForPoint(LatLng point, List<LatLng> routePoints) {
+  if (routePoints.length < 2) return 0;
+  final nearest = nearestRouteIndexForPoint(point, routePoints);
+  return (nearest / (routePoints.length - 1)).clamp(0.0, 1.0).toDouble();
+}
+
+double remainingRouteDistanceMeters(LatLng point, List<LatLng> routePoints) {
+  if (routePoints.isEmpty) return 0;
+  const distance = Distance();
+  final nearest = nearestRouteIndexForPoint(point, routePoints);
+  var meters = distance(point, routePoints[nearest]);
+  for (var i = nearest; i < routePoints.length - 1; i++) {
+    meters += distance(routePoints[i], routePoints[i + 1]);
+  }
+  return meters;
+}
+
+int estimateRouteEtaMinutes(
+  LatLng point,
+  List<LatLng> routePoints, {
+  double metersPerMinute = _urbanDeliveryMetersPerMinute,
+}) {
+  if (routePoints.isEmpty || metersPerMinute <= 0) return 0;
+  final remainingMeters = remainingRouteDistanceMeters(point, routePoints);
+  if (remainingMeters <= 20) return 1;
+  return (remainingMeters / metersPerMinute).ceil().clamp(1, 99).toInt();
+}
+
 class LiveDeliveryMapState {
   const LiveDeliveryMapState._({
     required this.status,
@@ -68,22 +113,13 @@ class LiveDeliveryMapState {
   /// Index of the route point nearest to [riderPoint].
   int get nearestRouteIndex {
     if (riderPoint == null || routePoints.isEmpty) return 0;
-    const distance = Distance();
-    var nearest = 0;
-    var minDist = double.infinity;
-    for (var i = 0; i < routePoints.length; i++) {
-      final d = distance(riderPoint!, routePoints[i]);
-      if (d < minDist) {
-        minDist = d;
-        nearest = i;
-      }
-    }
-    return nearest;
+    return nearestRouteIndexForPoint(riderPoint!, routePoints);
   }
 
-  /// Estimated minutes remaining (1 point ≈ 1 minute).
-  int get etaMinutes =>
-      routePoints.isEmpty ? 0 : routePoints.length - nearestRouteIndex;
+  /// Estimated minutes remaining based on route distance, not polyline density.
+  int get etaMinutes => riderPoint == null
+      ? 0
+      : estimateRouteEtaMinutes(riderPoint!, routePoints);
 }
 
 /// Fixed shop/branch location in Davao City.

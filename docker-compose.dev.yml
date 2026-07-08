@@ -1,0 +1,136 @@
+name: gridgo-dev
+
+x-api-env: &api-env
+  DATABASE_HOST: postgres
+  DATABASE_PORT: 5432
+  DATABASE_NAME: grid_print
+  DATABASE_USER: postgres
+  DATABASE_PASSWORD: postgres
+  JWT_SECRET: ${JWT_SECRET:-gridgo-dev-secret-change-me}
+  JWT_EXPIRATION: ${JWT_EXPIRATION:-1d}
+  MINIO_ENDPOINT: minio
+  MINIO_PORT: 9000
+  MINIO_ACCESS_KEY: minioadmin
+  MINIO_SECRET_KEY: minioadmin
+  MINIO_BUCKET: grid-print
+  MINIO_USE_SSL: "false"
+  MINIO_PUBLIC_URL: http://${GRIDGO_PUBLIC_HOST:-192.168.40.201}:${GRIDGO_MINIO_PORT:-9000}
+  NODE_ENV: development
+  PORT: 3000
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: grid_print
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "127.0.0.1:${GRIDGO_POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - gridgo_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d grid_print"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "${GRIDGO_BIND_ADDR:-0.0.0.0}:${GRIDGO_MINIO_PORT:-9000}:9000"
+      - "${GRIDGO_BIND_ADDR:-0.0.0.0}:${GRIDGO_MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - gridgo_miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  seed:
+    build:
+      context: .
+      dockerfile: docker/server-dev.Dockerfile
+    command: npm run seed:if-empty
+    env_file:
+      - server/.env
+    environment:
+      <<: *api-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/server-dev.Dockerfile
+    command: npm run start
+    env_file:
+      - server/.env
+    environment:
+      <<: *api-env
+    ports:
+      - "${GRIDGO_BIND_ADDR:-0.0.0.0}:${GRIDGO_API_PORT:-3000}:3000"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  mobile:
+    build:
+      context: .
+      dockerfile: docker/mobile-web.Dockerfile
+      args:
+        FLUTTER_VERSION: ${FLUTTER_VERSION:-3.41.6}
+        SERVER_URL: http://${GRIDGO_PUBLIC_HOST:-192.168.40.201}:${GRIDGO_API_PORT:-3000}
+    ports:
+      - "${GRIDGO_BIND_ADDR:-0.0.0.0}:${GRIDGO_MOBILE_PORT:-8088}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  admin:
+    build:
+      context: .
+      dockerfile: docker/admin-web.Dockerfile
+      args:
+        VITE_API_URL: http://${GRIDGO_PUBLIC_HOST:-192.168.40.201}:${GRIDGO_API_PORT:-3000}/api
+        VITE_WS_URL: http://${GRIDGO_PUBLIC_HOST:-192.168.40.201}:${GRIDGO_API_PORT:-3000}
+    ports:
+      - "${GRIDGO_BIND_ADDR:-0.0.0.0}:${GRIDGO_ADMIN_PORT:-8189}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  landing:
+    build:
+      context: .
+      dockerfile: docker/landing-web.Dockerfile
+      args:
+        VITE_API_URL: http://${GRIDGO_PUBLIC_HOST:-192.168.40.201}:${GRIDGO_API_PORT:-3000}/api
+        VITE_MOBILE_WEB_PORT: "${GRIDGO_MOBILE_PORT:-8088}"
+    ports:
+      - "${GRIDGO_BIND_ADDR:-0.0.0.0}:${GRIDGO_LANDING_PORT:-8090}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  gridgo_pgdata:
+  gridgo_miniodata:

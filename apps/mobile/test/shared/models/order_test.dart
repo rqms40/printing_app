@@ -5,6 +5,7 @@ import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/models/paper_specs.dart';
 import 'package:printing_app/shared/models/three_d_specs.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
+import 'package:printing_app/shared/widgets/map_helpers.dart';
 
 void main() {
   group('Order model', () {
@@ -299,15 +300,32 @@ void main() {
       expect(MockData.addresses.any((a) => a.city == 'Davao City'), isTrue);
     });
 
-    test('provides location updates with Manila coordinates', () {
+    test('provides location updates along the Davao delivery route', () {
       final updates = MockData.locationUpdates;
       expect(updates.length, 20);
-      // All coordinates should be in the greater Manila area
+
+      expect(
+        updates.first.latitude,
+        closeTo(MapHelpers.shopPoint.latitude, 0.01),
+      );
+      expect(
+        updates.first.longitude,
+        closeTo(MapHelpers.shopPoint.longitude, 0.01),
+      );
+      expect(
+        updates.last.latitude,
+        closeTo(MockData.addressDavao.latitude, 0.01),
+      );
+      expect(
+        updates.last.longitude,
+        closeTo(MockData.addressDavao.longitude, 0.01),
+      );
+
       for (final update in updates) {
-        expect(update.latitude, greaterThan(14.0));
-        expect(update.latitude, lessThan(15.0));
-        expect(update.longitude, greaterThan(121.0));
-        expect(update.longitude, lessThan(122.0));
+        expect(update.latitude, greaterThan(7.0));
+        expect(update.latitude, lessThan(7.1));
+        expect(update.longitude, greaterThan(125.55));
+        expect(update.longitude, lessThan(125.65));
       }
     });
 

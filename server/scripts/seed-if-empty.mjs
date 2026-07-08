@@ -1,0 +1,49 @@
+import { spawn } from 'node:child_process';
+import { Client } from 'pg';
+
+const client = new Client({
+  host: process.env.DATABASE_HOST || 'localhost',
+  port: Number(process.env.DATABASE_PORT || 5432),
+  database: process.env.DATABASE_NAME || 'grid_print',
+  user: process.env.DATABASE_USER || 'postgres',
+  password: process.env.DATABASE_PASSWORD || 'postgres',
+});
+
+function runSeed() {
+  return new Promise((resolve, reject) => {
+    const child = spawn('npm', ['run', 'seed'], { stdio: 'inherit' });
+    child.on('error', reject);
+    child.on('exit', (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`Seed exited with code ${code}`));
+    });
+  });
+}
+
+async function main() {
+  await client.connect();
+  try {
+    const table = await client.query(
+      "SELECT to_regclass('public.users') AS table_name",
+    );
+    if (table.rows[0]?.table_name) {
+      const count = await client.query('SELECT count(*)::int AS count FROM users');
+      if (Number(count.rows[0]?.count || 0) > 0) {
+        console.log('GRIDGO seed skipped: users table already has data.');
+        return;
+      }
+    }
+  } finally {
+    await client.end();
+  }
+
+  await runSeed();
+}
+
+main().catch((error) => {
+  console.error('GRIDGO seed-if-empty failed:', error);
+  process.exit(1);
+});
