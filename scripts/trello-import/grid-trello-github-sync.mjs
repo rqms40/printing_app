@@ -216,7 +216,7 @@ function ensureLabels(issueLabelNames, dryRun, knownLabels) {
     try {
       ghApiRaw('POST', `/repos/${CONFIG.repo}/labels`, { name, color, description: `GRID Trello sync label: ${name}` });
       knownLabels.add(name);
-      sleep(800);
+      sleep(1500);
     } catch (error) {
       const message = String(error.message);
       if (message.includes('already_exists') || message.includes('Validation Failed')) {
@@ -237,7 +237,7 @@ function writeIssue(card, existing, dryRun, knownLabels) {
   if (dryRun) {
     return { action: existing ? 'would-update' : 'would-create', title: card.name, labels, trello: card.shortLink };
   }
-  sleep(1200);
+  sleep(3500);
   if (existing) {
     const issue = ghApi('PATCH', `/repos/${CONFIG.repo}/issues/${existing.number}`, payload);
     return { action: 'updated', number: issue.number, title: issue.title, trello: card.shortLink };
