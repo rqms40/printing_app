@@ -37,7 +37,7 @@ class _PreSeenTutorialNotifier extends TutorialNotifier {
 
 List<Override> _baseTestOverrides() => [
   authProvider.overrideWith((_) {
-    final notifier = AuthNotifier();
+    final notifier = AuthNotifier(null, true);
     notifier.devBypass('customer');
     return notifier;
   }),

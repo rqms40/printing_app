@@ -3,6 +3,7 @@ import { Button, Form, Input, Typography } from "antd";
 import { LockOutlined, MailOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { GridLogo } from "@/components/grid-logo";
+import "./index.css";
 
 const { Text } = Typography;
 
@@ -20,28 +21,14 @@ export function LoginPage() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        background: "#000000",
-      }}
-    >
+    <main className="admin-login-page">
       {/* Left panel — branding */}
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          alignItems: "center",
-          background: "#0A0A0A",
-          borderRight: "1px solid #1E1E1E",
-          padding: 40,
-        }}
-      >
-        <GridLogo size={64} />
+      <section className="admin-login-brand-panel" aria-label="GRIDGO Admin">
+        <div className="admin-login-logo">
+          <GridLogo size={64} />
+        </div>
         <Text
+          className="admin-login-brand-name"
           style={{
             color: "#F0F0F0",
             fontWeight: 700,
@@ -53,6 +40,7 @@ export function LoginPage() {
           GRIDGO
         </Text>
         <Text
+          className="admin-login-brand-subtitle"
           style={{
             color: "#555",
             fontSize: 13,
@@ -62,19 +50,11 @@ export function LoginPage() {
         >
           Printing Services
         </Text>
-      </div>
+      </section>
 
       {/* Right panel — form */}
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 40,
-        }}
-      >
-        <div style={{ width: "100%", maxWidth: 340 }}>
+      <section className="admin-login-form-panel">
+        <div className="admin-login-form-container">
           <Text
             style={{
               display: "block",
@@ -100,10 +80,6 @@ export function LoginPage() {
           <Form
             layout="vertical"
             onFinish={onFinish}
-            initialValues={{
-              email: "admin@gridgo.ph",
-              password: "password123",
-            }}
             requiredMark={false}
           >
             <Form.Item
@@ -177,7 +153,7 @@ export function LoginPage() {
             </Form.Item>
           </Form>
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

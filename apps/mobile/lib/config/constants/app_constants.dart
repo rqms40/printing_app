@@ -3,6 +3,14 @@ class AppConstants {
   const AppConstants._();
 
   // ---------------------------------------------------------------------------
+  // Development-only features
+  // ---------------------------------------------------------------------------
+  static const bool enableDevAuth = bool.fromEnvironment(
+    'ENABLE_DEV_AUTH',
+    defaultValue: false,
+  );
+
+  // ---------------------------------------------------------------------------
   // File size limits (in MB)
   // ---------------------------------------------------------------------------
   static const int paperMaxSizeMB = 50;

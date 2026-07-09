@@ -8,6 +8,7 @@ import 'package:hugeicons/hugeicons.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/features/auth/widgets/auth_form.dart';
 import 'package:printing_app/shared/providers/theme_provider.dart';
 
@@ -125,13 +126,22 @@ class LoginScreen extends ConsumerWidget {
                   .animate()
                   .fadeIn(duration: 400.ms, delay: 180.ms, curve: Curves.easeOut),
 
-              const SizedBox(height: AppSpacing.xxxl),
-
-              // Dev bypass section
-              _DevBypassSection(colors: colors)
-                  .animate()
-                  .fadeIn(duration: 400.ms, delay: 240.ms, curve: Curves.easeOut)
-                  .slideY(begin: 0.02, duration: 400.ms, delay: 240.ms, curve: Curves.easeOut),
+              if (AppConstants.enableDevAuth) ...[
+                const SizedBox(height: AppSpacing.xxxl),
+                _DevBypassSection(colors: colors)
+                    .animate()
+                    .fadeIn(
+                      duration: 400.ms,
+                      delay: 240.ms,
+                      curve: Curves.easeOut,
+                    )
+                    .slideY(
+                      begin: 0.02,
+                      duration: 400.ms,
+                      delay: 240.ms,
+                      curve: Curves.easeOut,
+                    ),
+              ],
 
               const SizedBox(height: AppSpacing.xl),
             ],

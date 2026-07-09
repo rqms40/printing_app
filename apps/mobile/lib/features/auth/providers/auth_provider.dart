@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/features/customer/address/providers/address_provider.dart';
 import 'package:printing_app/features/customer/beta/models/beta_locked_info.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
@@ -155,11 +156,14 @@ class AuthState {
 // (Avoids creating a yet-another barrel just for this constant.)
 
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier([this._ref]) : super(AuthState.unauthenticated()) {
+  AuthNotifier([this._ref, bool? devAuthEnabled])
+    : _devAuthEnabled = devAuthEnabled ?? AppConstants.enableDevAuth,
+      super(AuthState.unauthenticated()) {
     _listenToFcmMessages();
   }
 
   final Ref? _ref;
+  final bool _devAuthEnabled;
   StreamSubscription<Map<String, dynamic>>? _fcmSub;
 
   void _listenToFcmMessages() {
@@ -296,6 +300,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   void devBypass(String role) {
+    if (!_devAuthEnabled) {
+      throw UnsupportedError(
+        'Development authentication is disabled. Rebuild with '
+        '--dart-define=ENABLE_DEV_AUTH=true to opt in.',
+      );
+    }
+
     final users = {
       'customer': const AuthUser(
         id: '1',

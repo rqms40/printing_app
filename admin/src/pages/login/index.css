@@ -1,0 +1,77 @@
+.admin-login-page {
+  min-height: 100vh;
+  display: flex;
+  background: #000000;
+}
+
+.admin-login-brand-panel,
+.admin-login-form-panel {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.admin-login-brand-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: #0a0a0a;
+  border-right: 1px solid #1e1e1e;
+  padding: 40px;
+}
+
+.admin-login-form-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+.admin-login-form-container {
+  width: 100%;
+  max-width: 340px;
+}
+
+@media (max-width: 600px) {
+  .admin-login-page {
+    flex-direction: column;
+  }
+
+  .admin-login-brand-panel {
+    flex: 0 0 auto;
+    border-right: 0;
+    border-bottom: 1px solid #1e1e1e;
+    padding: 32px 24px 20px;
+  }
+
+  .admin-login-logo svg {
+    width: 48px;
+    height: 48px;
+  }
+
+  .admin-login-brand-name {
+    font-size: 22px !important;
+    margin-top: 12px !important;
+  }
+
+  .admin-login-brand-subtitle {
+    margin-top: 4px !important;
+  }
+
+  .admin-login-form-panel {
+    flex: 1 1 auto;
+    align-items: flex-start;
+    padding: 32px 24px 24px;
+  }
+}
+
+@media (max-width: 600px) and (max-height: 640px) {
+  .admin-login-brand-panel {
+    padding-top: 20px;
+    padding-bottom: 16px;
+  }
+
+  .admin-login-form-panel {
+    padding-top: 20px;
+  }
+}

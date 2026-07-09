@@ -40,17 +40,15 @@ void main() {
       expect(find.text('Sign In'), findsOneWidget);
     });
 
-    testWidgets('dev bypass buttons are visible (Customer, Rider, Admin)', (
-      tester,
-    ) async {
+    testWidgets('dev bypass controls are hidden by default', (tester) async {
       await tester.pumpWidget(_wrap(const LoginScreen()));
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(milliseconds: 500));
 
-      expect(find.text('DEV LOGIN'), findsOneWidget);
-      expect(find.text('Customer'), findsOneWidget);
-      expect(find.text('Rider'), findsOneWidget);
-      expect(find.text('Admin'), findsOneWidget);
+      expect(find.text('DEV LOGIN'), findsNothing);
+      expect(find.text('Customer'), findsNothing);
+      expect(find.text('Rider'), findsNothing);
+      expect(find.text('Admin'), findsNothing);
     });
 
     testWidgets('renders "Create one" navigation text', (tester) async {

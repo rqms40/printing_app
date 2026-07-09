@@ -250,7 +250,7 @@ function App() {
             </Routes>
 
             <UnsavedChangesNotifier />
-            <DocumentTitleHandler />
+            <DocumentTitleHandler handler={() => "GRIDGO Admin"} />
           </Refine>
         </AntdApp>
       </ConfigProvider>

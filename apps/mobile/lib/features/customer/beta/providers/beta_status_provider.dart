@@ -8,21 +8,27 @@ final betaStatusProvider = FutureProvider.autoDispose<BetaStatus?>((ref) async {
   // Using .select avoids re-triggering on intermediate isLoading:true
   // state changes, which would race-condition the token storage and
   // cause the 401 interceptor to wipe the newly-saved token.
-  ref.watch(authProvider.select((s) => s.status));
+  final authStatus = ref.watch(authProvider.select((s) => s.status));
 
-  try {
-    final response = await ApiClient.instance.get('/beta-mode/me');
-    return BetaStatus.fromJson(response.data as Map<String, dynamic>);
-  } catch (_) {
-    // Unauthenticated or network error — fall back to public global status.
-    // Shows "BETA V1" without a rank number.
+  if (authStatus == AuthStatus.authenticated) {
     try {
-      final response = await ApiClient.instance.get('/beta-mode/status');
-      final isEnabled =
-          (response.data as Map<String, dynamic>)['isEnabled'] as bool;
-      return BetaStatus(globallyEnabled: isEnabled, isBetaUser: false, rank: null);
-    } catch (_) {
-      return null;
-    }
+      final response = await ApiClient.instance.get('/beta-mode/me');
+      return BetaStatus.fromJson(response.data as Map<String, dynamic>);
+    } catch (_) {}
+  }
+
+  // Unauthenticated and failed member requests use the public global status.
+  // This shows "BETA V1" without a rank number and avoids expected 401s.
+  try {
+    final response = await ApiClient.instance.get('/beta-mode/status');
+    final isEnabled =
+        (response.data as Map<String, dynamic>)['isEnabled'] as bool;
+    return BetaStatus(
+      globallyEnabled: isEnabled,
+      isBetaUser: false,
+      rank: null,
+    );
+  } catch (_) {
+    return null;
   }
 });

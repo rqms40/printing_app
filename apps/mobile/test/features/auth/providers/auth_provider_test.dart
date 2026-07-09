@@ -37,52 +37,65 @@ void main() {
       expect(notifier.state.errorMessage, isNull);
     });
 
-    test('devBypass sets authenticated state for customer', () {
-      notifier.devBypass('customer');
-      expect(notifier.state.status, AuthStatus.authenticated);
-      expect(notifier.state.user, isNotNull);
-      expect(notifier.state.user!.role, 'customer');
-      expect(notifier.state.user!.fullName, 'Maria Santos');
-      expect(notifier.state.user!.email, 'maria@test.com');
-      expect(notifier.state.user!.id, '1');
-      expect(notifier.state.user!.isProfileComplete, true);
-      expect(notifier.state.user!.nickname, 'Mia');
-      expect(notifier.state.user!.ageRange, '18_24');
-      expect(notifier.state.user!.profileCategory, 'student');
-      expect(notifier.state.user!.profileField, 'architecture');
+    test('devBypass fails closed when development auth is disabled', () {
       expect(
-        notifier.state.user!.printingPreferences,
+        () => notifier.devBypass('customer'),
+        throwsA(isA<UnsupportedError>()),
+      );
+      expect(notifier.state.status, AuthStatus.unauthenticated);
+      expect(notifier.state.user, isNull);
+    });
+
+    test('devBypass sets authenticated state for customer', () {
+      final devNotifier = AuthNotifier(null, true);
+      devNotifier.devBypass('customer');
+      expect(devNotifier.state.status, AuthStatus.authenticated);
+      expect(devNotifier.state.user, isNotNull);
+      expect(devNotifier.state.user!.role, 'customer');
+      expect(devNotifier.state.user!.fullName, 'Maria Santos');
+      expect(devNotifier.state.user!.email, 'maria@test.com');
+      expect(devNotifier.state.user!.id, '1');
+      expect(devNotifier.state.user!.isProfileComplete, true);
+      expect(devNotifier.state.user!.nickname, 'Mia');
+      expect(devNotifier.state.user!.ageRange, '18_24');
+      expect(devNotifier.state.user!.profileCategory, 'student');
+      expect(devNotifier.state.user!.profileField, 'architecture');
+      expect(
+        devNotifier.state.user!.printingPreferences,
         contains('plotting_blueprints'),
       );
     });
 
     test('devBypass sets authenticated state for rider', () {
-      notifier.devBypass('rider');
-      expect(notifier.state.status, AuthStatus.authenticated);
-      expect(notifier.state.user!.role, 'rider');
-      expect(notifier.state.user!.fullName, 'Juan Reyes');
-      expect(notifier.state.user!.email, 'juan@test.com');
-      expect(notifier.state.user!.id, '2');
+      final devNotifier = AuthNotifier(null, true);
+      devNotifier.devBypass('rider');
+      expect(devNotifier.state.status, AuthStatus.authenticated);
+      expect(devNotifier.state.user!.role, 'rider');
+      expect(devNotifier.state.user!.fullName, 'Juan Reyes');
+      expect(devNotifier.state.user!.email, 'juan@test.com');
+      expect(devNotifier.state.user!.id, '2');
     });
 
     test('devBypass sets authenticated state for admin', () {
-      notifier.devBypass('admin');
-      expect(notifier.state.status, AuthStatus.authenticated);
-      expect(notifier.state.user!.role, 'admin');
-      expect(notifier.state.user!.fullName, 'Admin');
-      expect(notifier.state.user!.email, 'admin@test.com');
-      expect(notifier.state.user!.id, '3');
+      final devNotifier = AuthNotifier(null, true);
+      devNotifier.devBypass('admin');
+      expect(devNotifier.state.status, AuthStatus.authenticated);
+      expect(devNotifier.state.user!.role, 'admin');
+      expect(devNotifier.state.user!.fullName, 'Admin');
+      expect(devNotifier.state.user!.email, 'admin@test.com');
+      expect(devNotifier.state.user!.id, '3');
     });
 
     test('logout resets to unauthenticated', () async {
-      notifier.devBypass('customer');
-      expect(notifier.state.status, AuthStatus.authenticated);
+      final devNotifier = AuthNotifier(null, true);
+      devNotifier.devBypass('customer');
+      expect(devNotifier.state.status, AuthStatus.authenticated);
 
-      await notifier.logout();
+      await devNotifier.logout();
 
-      expect(notifier.state.status, AuthStatus.unauthenticated);
-      expect(notifier.state.user, isNull);
-      expect(notifier.state.isLoading, false);
+      expect(devNotifier.state.status, AuthStatus.unauthenticated);
+      expect(devNotifier.state.user, isNull);
+      expect(devNotifier.state.isLoading, false);
     });
 
     test('login sets error on connection failure (no server)', () async {
@@ -110,19 +123,21 @@ void main() {
     });
 
     test('multiple devBypass calls override previous state', () {
-      notifier.devBypass('customer');
-      expect(notifier.state.user!.role, 'customer');
+      final devNotifier = AuthNotifier(null, true);
+      devNotifier.devBypass('customer');
+      expect(devNotifier.state.user!.role, 'customer');
 
-      notifier.devBypass('rider');
-      expect(notifier.state.user!.role, 'rider');
+      devNotifier.devBypass('rider');
+      expect(devNotifier.state.user!.role, 'rider');
 
-      notifier.devBypass('admin');
-      expect(notifier.state.user!.role, 'admin');
+      devNotifier.devBypass('admin');
+      expect(devNotifier.state.user!.role, 'admin');
     });
 
     test('devBypass clears stale survey gate state', () async {
       final container = ProviderContainer(
         overrides: [
+          authProvider.overrideWith((ref) => AuthNotifier(ref, true)),
           accountStateProvider.overrideWith(
             (ref) => AccountStateNotifier(
               fetchAccountState: () async => {

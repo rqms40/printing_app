@@ -9,7 +9,10 @@ RUN flutter pub get
 COPY apps/mobile ./
 
 ARG SERVER_URL
-RUN flutter build web --release --no-tree-shake-icons --dart-define=SERVER_URL=${SERVER_URL}
+ARG ENABLE_DEV_AUTH=false
+RUN flutter build web --release --no-tree-shake-icons \
+    --dart-define=SERVER_URL=${SERVER_URL} \
+    --dart-define=ENABLE_DEV_AUTH=${ENABLE_DEV_AUTH}
 
 FROM nginx:1.27-alpine
 
