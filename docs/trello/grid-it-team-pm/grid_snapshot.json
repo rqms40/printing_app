@@ -1,0 +1,1736 @@
+{
+  "board": {
+    "id": "Ft1VGSNA",
+    "name": "GRID IT TEAM - PM",
+    "url": "https://trello.com/b/Ft1VGSNA/grid-it-team-pm"
+  },
+  "generatedAt": "2026-07-09T05:43:23Z",
+  "counts": {
+    "lists": 10,
+    "cards": 52,
+    "labels": 14,
+    "members": 3,
+    "checklists": 15,
+    "checkItems": 88,
+    "attachments": 16,
+    "downloadedAttachments": 15
+  },
+  "lists": [
+    {
+      "id": "69e1b489fd2fb202326b958b",
+      "name": "UN-ASSIGNED",
+      "pos": 225672
+    },
+    {
+      "id": "69f1befe2123c7ce68c12f3a",
+      "name": "[For Review] Forced Development (4/27/2026 - 4/29/2026)",
+      "pos": 227157.56854248047
+    },
+    {
+      "id": "69f6170f1202a5c261f7cacd",
+      "name": "[For Review] Forced Development (5/2/2026)",
+      "pos": 227281.3659210205
+    },
+    {
+      "id": "69f65a053ef5ee9dbb235157",
+      "name": "In Progress Forced Development",
+      "pos": 227343.26461029053
+    },
+    {
+      "id": "69ef501d77913e9b7f06df26",
+      "name": "Forced Development (4/27/2026 - 4/29/2026)",
+      "pos": 227405.16329956055
+    },
+    {
+      "id": "6a28cdacbd99eefded55e695",
+      "name": "Rider Module",
+      "pos": 227528.9606781006
+    },
+    {
+      "id": "69e1b60f30c2c8e4dfb1f28c",
+      "name": "QA Testing",
+      "pos": 227590.8593673706
+    },
+    {
+      "id": "69e1b489fd2fb202326b958c",
+      "name": "Sprint Backlog",
+      "pos": 227652.75805664062
+    },
+    {
+      "id": "69e1b489fd2fb202326b958d",
+      "name": "In Progress",
+      "pos": 229633.51611328125
+    },
+    {
+      "id": "69e1b489fd2fb202326b958e",
+      "name": "Sprint (4/17/2026 - 4/21/2026) - Completed",
+      "pos": 237827.0322265625
+    }
+  ],
+  "cards": [
+    {
+      "id": "69e1b489fd2fb202326b95ff",
+      "shortLink": "6lBmSX5R",
+      "name": "Product Owner: JR",
+      "url": "https://trello.com/c/6lBmSX5R/18-product-owner-jr",
+      "list": "UN-ASSIGNED",
+      "labels": [
+        "Module"
+      ],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "",
+      "descriptionRedacted": false,
+      "descriptionLength": 0,
+      "checklists": [],
+      "attachments": [
+        {
+          "id": "69e1b8e0f5e271bba9133c16",
+          "name": "image_2026-04-17_123645905.png",
+          "mimeType": "image/png",
+          "bytes": 10007,
+          "date": "2026-04-17T04:36:48.330Z",
+          "isUpload": true,
+          "download": {
+            "status": "downloaded",
+            "attachmentId": "69e1b8e0f5e271bba9133c16",
+            "cardId": "69e1b489fd2fb202326b95ff",
+            "cardShortLink": "6lBmSX5R",
+            "originalName": "image_2026-04-17_123645905.png",
+            "safeName": "image_2026-04-17_123645905.png",
+            "relativePath": "6lBmSX5R/69e1b8e0f5e271bba9133c16-image_2026-04-17_123645905.png",
+            "storedPath": "/opt/n8n/trello-attachments/grid-it-team-pm/6lBmSX5R/69e1b8e0f5e271bba9133c16-image_2026-04-17_123645905.png",
+            "sha256": "bff80b3be3aebd6f8e271c1464b95ec855f60264078fcb6e05baedc2e5804d87",
+            "mimeType": "image/png",
+            "bytes": 10007,
+            "trelloBytes": 10007,
+            "downloadedAt": "2026-07-09T05:43:18Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "69e1f7115331dd9adcd574cc",
+      "shortLink": "HHSAKJpp",
+      "name": "Admin.FT02: Logistics",
+      "url": "https://trello.com/c/HHSAKJpp/19-adminft02-logistics",
+      "list": "UN-ASSIGNED",
+      "labels": [
+        "Admin"
+      ],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "Dispatch Logic: Auto-assigning jobs to the nearest available rider.\n\nProof of Delivery (PoD): Mandatory photo upload or digital signature upon delivery.",
+      "descriptionRedacted": false,
+      "descriptionLength": 152,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69e1db053cc6c291adf0cac0",
+      "shortLink": "fNR5fALJ",
+      "name": "Integrate real PayMongo payments and webhook-based order reconciliation",
+      "url": "https://trello.com/c/fNR5fALJ/11-integrate-real-paymongo-payments-and-webhook-based-order-reconciliation",
+      "list": "UN-ASSIGNED",
+      "labels": [
+        "Mobile",
+        "API",
+        "Admin"
+      ],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "Replace the current mocked payment flow with a real PayMongo integration for customer checkout. The backend should create real payment sessions/intents with PayMongo, persist the payment transaction state, and update orders only after verified PayMongo events or an approved confirmation flow. This includes secure environment configuration, webhook verification, payment-status reconciliation, refund support for admins, and clear client behavior for successful, failed, cancelled, and pending payments.",
+      "descriptionRedacted": false,
+      "descriptionLength": 504,
+      "checklists": [
+        {
+          "name": "Subtasks",
+          "items": [
+            {
+              "name": "1. Review the current payment flow in mobile and server and identify all mocked behavior, including checkout URL generation, manual confirmation, and webhook assumptions.",
+              "state": "incomplete"
+            },
+            {
+              "name": "2. Decide the final PayMongo payment approach to use for MVP and confirm the current PayMongo API model before implementation.",
+              "state": "incomplete"
+            },
+            {
+              "name": "3. Define the transaction fields that must be persisted, including provider transaction IDs, checkout/session references, webhook references, status, raw payloads, and related order IDs",
+              "state": "incomplete"
+            },
+            {
+              "name": "4. Add the required PayMongo environment variables to the server config and document how they are used locally and in deployment.",
+              "state": "incomplete"
+            },
+            {
+              "name": "5. Implement backend logic to create a real PayMongo payment session or intent and return the data the client needs to continue checkout.",
+              "state": "incomplete"
+            },
+            {
+              "name": "6. Update transaction persistence so newly created payment records store provider references needed for later reconciliation.",
+              "state": "incomplete"
+            },
+            {
+              "name": "7. Implement webhook signature verification and reject invalid or malformed webhook requests.",
+              "state": "incomplete"
+            },
+            {
+              "name": "8. Map PayMongo events into internal payment states such as pending, paid, failed, cancelled, and refunded.",
+              "state": "incomplete"
+            },
+            {
+              "name": "9. Update order payment status only from trusted reconciliation paths, not from optimistic client assumptions alone.",
+              "state": "incomplete"
+            },
+            {
+              "name": "10. Define and implement the client return flow after payment completion, cancellation, or failure.",
+              "state": "incomplete"
+            },
+            {
+              "name": "11. Decide whether the existing manual confirm endpoint remains, is restricted to fallback/admin use, or is removed after webhook reconciliation is in place.",
+              "state": "incomplete"
+            },
+            {
+              "name": "12. Implement real refund handling for admin users, or explicitly scope refund support into a follow-up card if PayMongo refund integration is deferred.",
+              "state": "incomplete"
+            },
+            {
+              "name": "13. Add logging and error handling for provider errors, duplicate webhook delivery, missing references, and out-of-order webhook events",
+              "state": "incomplete"
+            },
+            {
+              "name": "14. Add backend tests for payment creation, verified webhook handling, invalid webhook rejection, duplicate-event idempotency, and refund behavior.",
+              "state": "incomplete"
+            },
+            {
+              "name": "15. Add end-to-end verification steps for successful payment, failed payment, cancelled payment, pending payment, and refund scenarios.",
+              "state": "incomplete"
+            },
+            {
+              "name": "16. Update README and environment documentation with PayMongo setup, webhook configuration, and local testing instructions.",
+              "state": "incomplete"
+            }
+          ]
+        }
+      ],
+      "attachments": []
+    },
+    {
+      "id": "69f2d2b881dfadfdb6b0db5f",
+      "shortLink": "Utdo9cqp",
+      "name": "Rider Logistics Notifications",
+      "url": "https://trello.com/c/Utdo9cqp/32-rider-logistics-notifications",
+      "list": "UN-ASSIGNED",
+      "labels": [
+        "Rider API"
+      ],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "",
+      "descriptionRedacted": false,
+      "descriptionLength": 0,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69ec4555ab6d762a71351f46",
+      "shortLink": "ip7GHQty",
+      "name": "Admin.FT02: Automated Printable Label System",
+      "url": "https://trello.com/c/ip7GHQty/26-adminft02-automated-printable-label-system",
+      "list": "UN-ASSIGNED",
+      "labels": [
+        "API",
+        "Mobile",
+        "Admin"
+      ],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "Can you make an automated printing label system that makes the logistics easy to navigate, I will send the sample draft for this",
+      "descriptionRedacted": false,
+      "descriptionLength": 128,
+      "checklists": [
+        {
+          "name": "Checklist",
+          "items": [
+            {
+              "name": "Sticker Label Design",
+              "state": "incomplete"
+            },
+            {
+              "name": "Admin Automation Printing",
+              "state": "incomplete"
+            }
+          ]
+        }
+      ],
+      "attachments": [
+        {
+          "id": "69ec49dd39eb664b7308c822",
+          "name": "Gemini_Generated_Image_y21563y21563y215.png",
+          "mimeType": "image/png",
+          "bytes": 3665202,
+          "date": "2026-04-25T04:58:05.982Z",
+          "isUpload": true,
+          "download": {
+            "status": "downloaded",
+            "attachmentId": "69ec49dd39eb664b7308c822",
+            "cardId": "69ec4555ab6d762a71351f46",
+            "cardShortLink": "ip7GHQty",
+            "originalName": "Gemini_Generated_Image_y21563y21563y215.png",
+            "safeName": "Gemini_Generated_Image_y21563y21563y215.png",
+            "relativePath": "ip7GHQty/69ec49dd39eb664b7308c822-Gemini_Generated_Image_y21563y21563y215.png",
+            "storedPath": "/opt/n8n/trello-attachments/grid-it-team-pm/ip7GHQty/69ec49dd39eb664b7308c822-Gemini_Generated_Image_y21563y21563y215.png",
+            "sha256": "e53d1893ee32c011983fe241d2701112d59bcab70322e717fa72603139540d0c",
+            "mimeType": "image/png",
+            "bytes": 3665202,
+            "trelloBytes": 3665202,
+            "downloadedAt": "2026-07-09T05:43:19Z"
+          }
+        },
+        {
+          "id": "69ec68405b0e3c082781e4f4",
+          "name": "image_2026-04-25_150744610.png",
+          "mimeType": "image/png",
+          "bytes": 99889,
+          "date": "2026-04-25T07:07:44.502Z",
+          "isUpload": true,
+          "download": {
+            "status": "downloaded",
+            "attachmentId": "69ec68405b0e3c082781e4f4",
+            "cardId": "69ec4555ab6d762a71351f46",
+            "cardShortLink": "ip7GHQty",
+            "originalName": "image_2026-04-25_150744610.png",
+            "safeName": "image_2026-04-25_150744610.png",
+            "relativePath": "ip7GHQty/69ec68405b0e3c082781e4f4-image_2026-04-25_150744610.png",
+            "storedPath": "/opt/n8n/trello-attachments/grid-it-team-pm/ip7GHQty/69ec68405b0e3c082781e4f4-image_2026-04-25_150744610.png",
+            "sha256": "d41fce18c52d588e0fa9177fa6d4b928ed622170b37c914a893535cdeb54ba30",
+            "mimeType": "image/png",
+            "bytes": 99889,
+            "trelloBytes": 99889,
+            "downloadedAt": "2026-07-09T05:43:19Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "69ef5b70bcdc518f5dc77159",
+      "shortLink": "ciV4k84C",
+      "name": "UI.FT04.1: Additional Feature for Beta Test System",
+      "url": "https://trello.com/c/ciV4k84C/28-uift041-additional-feature-for-beta-test-system",
+      "list": "[For Review] Forced Development (4/27/2026 - 4/29/2026)",
+      "labels": [],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "1. **The \"Proof of Delivery\" Catch:** When your rider (or your team) arrives at the student's location, the delivery shouldn't be \"completed\" in the app until the user shows a **\"Feedback Submitted\"** screen.\\\n2. **Mandatory Photo Upload:** Ask testers to take a photo of their printed model/document and upload it to a \"Beta Success\" channel or tag GRID on social media as part of the \"payment\" for the free service.\n3. **In-App Enforcement:** The app will become unavailable to use until the beta test is finished but take note that the app will only be inactive once they received their order and did their feedback. The sample will be below.\n   ![image.webp](https://trello.com/1/cards/69ef5b70bcdc518f5dc77159/attachments/69ef626784dd7a59f8bf5ea7/previews/69ef626884dd7a59f8bf5eb8/download/image.webp)",
+      "descriptionRedacted": false,
+      "descriptionLength": 806,
+      "checklists": [],
+      "attachments": [
+        {
+          "id": "69ef626784dd7a59f8bf5ea7",
+          "name": "image.png",
+          "mimeType": "image/png",
+          "bytes": 181957,
+          "date": "2026-04-27T13:19:35.578Z",
+          "isUpload": true,
+          "download": {
+            "status": "downloaded",
+            "attachmentId": "69ef626784dd7a59f8bf5ea7",
+            "cardId": "69ef5b70bcdc518f5dc77159",
+            "cardShortLink": "ciV4k84C",
+            "originalName": "image.png",
+            "safeName": "image.png",
+            "relativePath": "ciV4k84C/69ef626784dd7a59f8bf5ea7-image.png",
+            "storedPath": "/opt/n8n/trello-attachments/grid-it-team-pm/ciV4k84C/69ef626784dd7a59f8bf5ea7-image.png",
+            "sha256": "f00d734e058336f309185da44c2cc673c8b52f210f48ee331df8e3a662eb450f",
+            "mimeType": "image/png",
+            "bytes": 181957,
+            "trelloBytes": 181957,
+            "downloadedAt": "2026-07-09T05:43:19Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "69ef60ce791f168443c888ca",
+      "shortLink": "BgLu7K8s",
+      "name": "UI.FT05:Onboarding Tutorial for UI",
+      "url": "https://trello.com/c/BgLu7K8s/30-uift05onboarding-tutorial-for-ui",
+      "list": "[For Review] Forced Development (4/27/2026 - 4/29/2026)",
+      "labels": [],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "This is tutorial for the app on how to set your orders. Attached below is the idea for the in-app tutorial. This is will help the user navigate the app in their first use.\n\n![image.webp](https://trello.com/1/cards/69ef60ce791f168443c888ca/attachments/69ef61433bed5e4de5494553/previews/69ef61433bed5e4de5494564/download/image.webp)",
+      "descriptionRedacted": false,
+      "descriptionLength": 330,
+      "checklists": [],
+      "attachments": [
+        {
+          "id": "69ef61433bed5e4de5494553",
+          "name": "image.png",
+          "mimeType": "image/png",
+          "bytes": 276575,
+          "date": "2026-04-27T13:14:43.024Z",
+          "isUpload": true,
+          "download": {
+            "status": "downloaded",
+            "attachmentId": "69ef61433bed5e4de5494553",
+            "cardId": "69ef60ce791f168443c888ca",
+            "cardShortLink": "BgLu7K8s",
+            "originalName": "image.png",
+            "safeName": "image.png",
+            "relativePath": "BgLu7K8s/69ef61433bed5e4de5494553-image.png",
+            "storedPath": "/opt/n8n/trello-attachments/grid-it-team-pm/BgLu7K8s/69ef61433bed5e4de5494553-image.png",
+            "sha256": "b673cd4b5cd7b5f30d9c6f7d4443ec61f4a80df8c9cc6d06be2a02df38b4cdbc",
+            "mimeType": "image/png",
+            "bytes": 276575,
+            "trelloBytes": 276575,
+            "downloadedAt": "2026-07-09T05:43:20Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "69e1f67f8c8f153cedd33e77",
+      "shortLink": "7ZxdyANA",
+      "name": "Admin.FT01: Order & Production Management",
+      "url": "https://trello.com/c/7ZxdyANA/18-adminft01-order-production-management",
+      "list": "[For Review] Forced Development (4/27/2026 - 4/29/2026)",
+      "labels": [
+        "Admin"
+      ],
+      "members": [
+        "venvilph"
+      ],
+      "due": null,
+      "dueComplete": false,
+      "description": "**File Inspector:** Previewer for PDFs and CAD exports with page-count validation.\n\n**Priority Toggle:** Ability to move \"Express\" jobs to the top of the queue.",
+      "descriptionRedacted": false,
+      "descriptionLength": 160,
+      "checklists": [
+        {
+          "name": "Checklist",
+          "items": [
+            {
+              "name": "File Inspector",
+              "state": "complete"
+            },
+            {
+              "name": "Priority Toggle",
+              "state": "complete"
+            }
+          ]
+        }
+      ],
+      "attachments": []
+    },
+    {
+      "id": "69e1c2aec2eb26519a564d0d",
+      "shortLink": "k7sTigWS",
+      "name": "User Profiling",
+      "url": "https://trello.com/c/k7sTigWS/6-user-profiling",
+      "list": "[For Review] Forced Development (4/27/2026 - 4/29/2026)",
+      "labels": [
+        "User"
+      ],
+      "members": [
+        "venvilph"
+      ],
+      "due": null,
+      "dueComplete": false,
+      "description": "## The \"Role Picker\" UX Flow\n\nInstead of a boring dropdown menu, use **Visual Cards** (delivered in a sequential, onboarding-style \"Next\" flow). This makes the app feel premium and reduces the cognitive load of signing up.\n\n### Screen A: Privacy Notice\n\nThis screen informs the user about the data being collected. To ensure good UX, keep the text minimal. It should clearly state what is being collected and include a prominent \"Agree & Continue\" button and view terms and condition if they wish to view.\n\n### Screen B: Tell us about Yourself\n\nAsk about the users nickname (which will be used for the next steps)\n\n### Screen C: High-Level Category\n\n**Heading:** \"Tell us a bit about yourself\"\n\n- **Card 1:** Student\n- **Card 2:** Professional\n\n### Screen D: Niche Selection (Conditional)\n\n- **If Student is selected:**\n  - **Heading:** \"What are you studying?\"\n  - **Options:** * Architecture (Auto-selects: Plotting/Blueprints)\n    - Engineering (Auto-selects: Technical Specs)\n    - Medical/Nursing (Auto-selects: High-Res Color)\n    - Law/Arts/Other\n- **If Professional is selected:**\n  - **Heading:** \"What is your field?\"\n  - **Options:** * Architect / Designer\n    - Engineer / Contractor\n    - Medical Professional\n    - Business / Corporate\n\n### Screen E: Gender Identity\n\nUse a creative layout rather than a list. For example, place a male icon/illustration on the left and a female icon on the right. Include a \"Prefer not to say\" button centered at the bottom to remain inclusive and low-pressure.\n\n### Screen F: Demographic Selection\n\nTo keep the age selection fun and engaging, use a **horizontal scroll wheel** or **interactive sliders** instead of a list.\n\n- **Categories:** Under 18, 18–24, 25–34, 35–44, 45+.\n- **UX Tip:** Use friendly micro-copy like, \"Age is just a number, but it helps us tailor your experience!\"\n\n### Screen G: Account Registration\n\n- Full Name (required)\n- Email (required)\n- Number (required)\n- Password (required)",
+      "descriptionRedacted": false,
+      "descriptionLength": 1955,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69e1bbdac35c726b53fe00fa",
+      "shortLink": "msOXKExY",
+      "name": "Logistics UI - Added Features",
+      "url": "https://trello.com/c/msOXKExY/4-logistics-ui-added-features",
+      "list": "[For Review] Forced Development (4/27/2026 - 4/29/2026)",
+      "labels": [
+        "User"
+      ],
+      "members": [
+        "felycia123"
+      ],
+      "due": null,
+      "dueComplete": false,
+      "description": "1. **Batch Delivery System** - We will use single rider so I want to integrate “batched delivery system” and third party apps for user’s outside Davao.\n2. **The Queue: Multi-Ordering / Add to Cart System** - Some users do not just have a single order and would like to save delivery fees. Some users might order a single A4 print and three pcs of A3 prints with different files. Yes the app can still do multiple orders but it is very annoying to go back to the home page, five or six times just to get multiple orders with the same user and the same delivery time.\n3. **Multi-Destination & Split Ordering** - Some users prefer their print to be sent in different areas.\n4. **Limited Batch Users and Time Tables:**\n   **9:30 AM – 11:30 AM** ; 10 stops\n   **2:00 PM – 4:00 PM** ; 10 stops\n   **9:00 PM – 11:00 PM** ; 10 stops\n   Also incorporate limited slots per batch. Make it live. Example: **9:30 AM – 11:30 AM**: **8/12 Slots Taken**.",
+      "descriptionRedacted": false,
+      "descriptionLength": 938,
+      "checklists": [
+        {
+          "name": "Checklist",
+          "items": [
+            {
+              "name": "Batch Delivery System",
+              "state": "complete"
+            },
+            {
+              "name": "The Queue",
+              "state": "complete"
+            },
+            {
+              "name": "Limited Batch Users and Time Tables",
+              "state": "complete"
+            }
+          ]
+        }
+      ],
+      "attachments": [
+        {
+          "id": "69e1c6f455c5264a2dd34588",
+          "name": "https://canva.link/p28362mmq0gpmdc",
+          "mimeType": "",
+          "bytes": null,
+          "date": "2026-04-17T05:36:52.967Z",
+          "isUpload": false,
+          "download": {
+            "status": "skipped",
+            "reason": "external-link",
+            "safeName": "https_--canva.link-p28362mmq0gpmdc"
+          }
+        }
+      ]
+    },
+    {
+      "id": "69ef5f978027f066562f7470",
+      "shortLink": "Bg2eoGjn",
+      "name": "Additional Survey Questions",
+      "url": "https://trello.com/c/Bg2eoGjn/29-additional-survey-questions",
+      "list": "[For Review] Forced Development (4/27/2026 - 4/29/2026)",
+      "labels": [],
+      "members": [
+        "venvilph"
+      ],
+      "due": null,
+      "dueComplete": false,
+      "description": "ADDITIONAL SURVEY QUESTIONS\n\n1. If this service wasn't free today, would you have paid [Order Price X] for the convenience of not leaving your location?\n\n1. At which point in the upload process did you feel like closing the app?",
+      "descriptionRedacted": false,
+      "descriptionLength": 228,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69e1c793a5d2df69d7de18a3",
+      "shortLink": "fQzsNK06",
+      "name": "Paper Specification Revisions",
+      "url": "https://trello.com/c/fQzsNK06/8-paper-specification-revisions",
+      "list": "[For Review] Forced Development (4/27/2026 - 4/29/2026)",
+      "labels": [
+        "User"
+      ],
+      "members": [
+        "felycia123"
+      ],
+      "due": null,
+      "dueComplete": false,
+      "description": "**File Inspector** - Can you add a feature wherein, the app can check if the file they uploaded is on CMYK or RGB format since this heavily impacts the printouts.\n\n**Logic File Checker** - Check if the file matches its settings, let’s say the user set his file in app setting to a4 but he uploaded an a3 document the app automatically detects that or recommends that his file does not match his settings\n\n**Printing Preferences** - Add a file setting preference for users, some users want their file to be “fit to paper” or in “actual size”.\n\n**File Preview** - When uploading the files, I want the user to see their file preview.\n\n**Architectural Digital Ruler (For File Checking)** - Can you add a digital ruler or some sort of proof to the users that their sizes are in the correct scale or sizes. Floating ruler.",
+      "descriptionRedacted": false,
+      "descriptionLength": 816,
+      "checklists": [
+        {
+          "name": "Checklist",
+          "items": [
+            {
+              "name": "Logic File Checker",
+              "state": "complete"
+            },
+            {
+              "name": "Printing Preferences",
+              "state": "complete"
+            },
+            {
+              "name": "File Inspector",
+              "state": "complete"
+            },
+            {
+              "name": "File Preview",
+              "state": "complete"
+            },
+            {
+              "name": "Digital Ruler",
+              "state": "complete"
+            }
+          ]
+        }
+      ],
+      "attachments": []
+    },
+    {
+      "id": "69e1f55e4306a182fada11bc",
+      "shortLink": "haMElX9J",
+      "name": "UI.FT01: 3D Printing System",
+      "url": "https://trello.com/c/haMElX9J/17-uift01-3d-printing-system",
+      "list": "[For Review] Forced Development (4/27/2026 - 4/29/2026)",
+      "labels": [
+        "Mobile",
+        "API",
+        "Admin"
+      ],
+      "members": [
+        "felycia123"
+      ],
+      "due": null,
+      "dueComplete": false,
+      "description": "**Admin/User Manual Status Bar** - The concept is sometimes 3D Printing is unpredictable so I want to incorporate a temporary printing status that the admin can input (e.g. 8 hours before completion).\n\n**3D Printer Limitations** - I am planning to buy a Bamboo A1 / Bamboo A1 Mini. I want to give warning sign to users that they cannot print bigger than the 3D Printer but offer live chatting so that we can offer personalization requests.\n\n3D File Preview & Limited Access.",
+      "descriptionRedacted": false,
+      "descriptionLength": 474,
+      "checklists": [],
+      "attachments": [
+        {
+          "id": "69ef6a0d5da3865c20ba3719",
+          "name": "APP DESIGN MOCKUPS GRID (1).gif",
+          "mimeType": "image/gif",
+          "bytes": 3521793,
+          "date": "2026-04-27T13:52:13.665Z",
+          "isUpload": true,
+          "download": {
+            "status": "downloaded",
+            "attachmentId": "69ef6a0d5da3865c20ba3719",
+            "cardId": "69e1f55e4306a182fada11bc",
+            "cardShortLink": "haMElX9J",
+            "originalName": "APP DESIGN MOCKUPS GRID (1).gif",
+            "safeName": "APP DESIGN MOCKUPS GRID _1_.gif",
+            "relativePath": "haMElX9J/69ef6a0d5da3865c20ba3719-APP DESIGN MOCKUPS GRID _1_.gif",
+            "storedPath": "/opt/n8n/trello-attachments/grid-it-team-pm/haMElX9J/69ef6a0d5da3865c20ba3719-APP DESIGN MOCKUPS GRID _1_.gif",
+            "sha256": "8487cf818f3c13af0151245530a3f2e84bc801f284f38a1c8a75953b00e0a6bb",
+            "mimeType": "image/gif",
+            "bytes": 3521793,
+            "trelloBytes": 3521793,
+            "downloadedAt": "2026-07-09T05:43:20Z"
+          }
+        },
+        {
+          "id": "69ef6a291372de1ebb7d348e",
+          "name": "APP DESIGN MOCKUPS GRID (1).gif",
+          "mimeType": "image/gif",
+          "bytes": 3521793,
+          "date": "2026-04-27T13:52:41.027Z",
+          "isUpload": true,
+          "download": {
+            "status": "downloaded",
+            "attachmentId": "69ef6a291372de1ebb7d348e",
+            "cardId": "69e1f55e4306a182fada11bc",
+            "cardShortLink": "haMElX9J",
+            "originalName": "APP DESIGN MOCKUPS GRID (1).gif",
+            "safeName": "APP DESIGN MOCKUPS GRID _1_.gif",
+            "relativePath": "haMElX9J/69ef6a291372de1ebb7d348e-APP DESIGN MOCKUPS GRID _1_.gif",
+            "storedPath": "/opt/n8n/trello-attachments/grid-it-team-pm/haMElX9J/69ef6a291372de1ebb7d348e-APP DESIGN MOCKUPS GRID _1_.gif",
+            "sha256": "8487cf818f3c13af0151245530a3f2e84bc801f284f38a1c8a75953b00e0a6bb",
+            "mimeType": "image/gif",
+            "bytes": 3521793,
+            "trelloBytes": 3521793,
+            "downloadedAt": "2026-07-09T05:43:21Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "69f5068a98cc0f3d5cf31714",
+      "shortLink": "XJsu4rU2",
+      "name": "FD17_HOMESCREEN: Idle State UI Replacement",
+      "url": "https://trello.com/c/XJsu4rU2/50-fd17homescreen-idle-state-ui-replacement",
+      "list": "[For Review] Forced Development (5/2/2026)",
+      "labels": [],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "Replace the \"No Active Delivery\" UI feature with revolving in-app feature highlights.",
+      "descriptionRedacted": false,
+      "descriptionLength": 85,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69f505f0b14f929db39ae2e5",
+      "shortLink": "lQlbSlMM",
+      "name": "FD13_DELIVERYTRACKING: In-App Rider Messaging",
+      "url": "https://trello.com/c/lQlbSlMM/46-fd13deliverytracking-in-app-rider-messaging",
+      "list": "[For Review] Forced Development (5/2/2026)",
+      "labels": [
+        "Done"
+      ],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "Add a messaging feature to allow direct communication between the user and the rider.",
+      "descriptionRedacted": false,
+      "descriptionLength": 85,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69f5058b1f2b5ec1811c0c32",
+      "shortLink": "AJ5mHyXe",
+      "name": "FD09_3DPRINTING: Fix Triangular Scale",
+      "url": "https://trello.com/c/AJ5mHyXe/42-fd093dprinting-fix-triangular-scale",
+      "list": "[For Review] Forced Development (5/2/2026)",
+      "labels": [
+        "Done"
+      ],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "Fix the logic and calibration for the triangular scale feature to ensure architectural accuracy.",
+      "descriptionRedacted": false,
+      "descriptionLength": 96,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69f5039accd9814f7b03b6ae",
+      "shortLink": "NL06FAzI",
+      "name": "FD02_CHECKOUT: Pin Location Feature",
+      "url": "https://trello.com/c/NL06FAzI/34-fd02checkout-pin-location-feature",
+      "list": "[For Review] Forced Development (5/2/2026)",
+      "labels": [
+        "Done"
+      ],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "Add a option where user can add temporary address in checkout with \"Pin Location\" map interface for precise delivery addressing.",
+      "descriptionRedacted": false,
+      "descriptionLength": 128,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69f5049be192616ce4723578",
+      "shortLink": "UUNF4waz",
+      "name": "FD04_CHECKOUT: Order Verification Workflow",
+      "url": "https://trello.com/c/UUNF4waz/37-fd04checkout-order-verification-workflow",
+      "list": "[For Review] Forced Development (5/2/2026)",
+      "labels": [
+        "Done"
+      ],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "Create a status update path where the team verifies the order and informs the user that the file is \"Ongoing\".",
+      "descriptionRedacted": false,
+      "descriptionLength": 110,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69f5057a52a996debb875410",
+      "shortLink": "LYX52meq",
+      "name": "FD08_3DPRINTING: Demo File Implementation",
+      "url": "https://trello.com/c/LYX52meq/41-fd083dprinting-demo-file-implementation",
+      "list": "[For Review] Forced Development (5/2/2026)",
+      "labels": [
+        "Done"
+      ],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "Pre-load an existing 3D file into the application for demonstration and testing purposes only.",
+      "descriptionRedacted": false,
+      "descriptionLength": 94,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69f503aa2f477d396612b3f9",
+      "shortLink": "xRa6ZGud",
+      "name": "FD01_CHECKOUT: File Preview Integration",
+      "url": "https://trello.com/c/xRa6ZGud/35-fd01checkout-file-preview-integration",
+      "list": "[For Review] Forced Development (5/2/2026)",
+      "labels": [
+        "Done"
+      ],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "Implement a visual preview for single-item orders during the checkout phase to confirm the correct file selection.",
+      "descriptionRedacted": false,
+      "descriptionLength": 114,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69f5054fd46b248ac0e6506c",
+      "shortLink": "mNgKyu5v",
+      "name": "FD06_PAPERSPECIFICATIONS: Special Instructions Field",
+      "url": "https://trello.com/c/mNgKyu5v/39-fd06paperspecifications-special-instructions-field",
+      "list": "[For Review] Forced Development (5/2/2026)",
+      "labels": [
+        "Done"
+      ],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "Add a text input area for \"Special Instructions / Notes\" regarding specific print requirements.",
+      "descriptionRedacted": false,
+      "descriptionLength": 95,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69f505403084b7d652e6ee68",
+      "shortLink": "04mpWAof",
+      "name": "FD05_PAPERSPECIFICATIONS: Scale Printing Settings",
+      "url": "https://trello.com/c/04mpWAof/38-fd05paperspecifications-scale-printing-settings",
+      "list": "[For Review] Forced Development (5/2/2026)",
+      "labels": [
+        "Done"
+      ],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "Relocate \"Actual Size\" or \"Fit to Scale\" options from general settings into the Paper Specification menu.",
+      "descriptionRedacted": false,
+      "descriptionLength": 105,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69f5055f0e911e0b8b8c145c",
+      "shortLink": "zuDz0wCq",
+      "name": "FD07_ORDERPLACED: Post-Checkout Verification Message",
+      "url": "https://trello.com/c/zuDz0wCq/40-fd07orderplaced-post-checkout-verification-message",
+      "list": "[For Review] Forced Development (5/2/2026)",
+      "labels": [
+        "Done"
+      ],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "Add a message appearing after checkout stating that the order will be verified by the team before printing begins.",
+      "descriptionRedacted": false,
+      "descriptionLength": 114,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69f50698e9801cf360c08081",
+      "shortLink": "mFTBxoLt",
+      "name": "FD18_ADMIN: Flexible Frequency Controls",
+      "url": "https://trello.com/c/mFTBxoLt/51-fd18admin-flexible-frequency-controls",
+      "list": "[For Review] Forced Development (5/2/2026)",
+      "labels": [
+        "Done"
+      ],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "Update admin settings for daily, weekly, and monthly options, and add a manual unit: [unit]/day.",
+      "descriptionRedacted": false,
+      "descriptionLength": 96,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69f2bb028cc140d7e6c84e49",
+      "shortLink": "8ByMxcq4",
+      "name": "WEB.FT01: Landing Page",
+      "url": "https://trello.com/c/8ByMxcq4/31-webft01-landing-page",
+      "list": "[For Review] Forced Development (5/2/2026)",
+      "labels": [],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "",
+      "descriptionRedacted": false,
+      "descriptionLength": 0,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69f4e853eff24f4ca64db0d5",
+      "shortLink": "PDozThR4",
+      "name": "UI.FT06: Dashboard Delivery Status",
+      "url": "https://trello.com/c/PDozThR4/33-uift06-dashboard-delivery-status",
+      "list": "In Progress Forced Development",
+      "labels": [],
+      "members": [],
+      "due": null,
+      "dueComplete": true,
+      "description": "I want here delivery status for their orders that they can also click to view their order. The UI resets if there's no delivery.\n\nAlso, include **route optimization.**",
+      "descriptionRedacted": false,
+      "descriptionLength": 167,
+      "checklists": [],
+      "attachments": [
+        {
+          "id": "69f4e85e74bd13f9f5420654",
+          "name": "APP DESIGN MOCKUPS GRID (2).png",
+          "mimeType": "image/png",
+          "bytes": 244877,
+          "date": "2026-05-01T17:52:30.051Z",
+          "isUpload": true,
+          "download": {
+            "status": "downloaded",
+            "attachmentId": "69f4e85e74bd13f9f5420654",
+            "cardId": "69f4e853eff24f4ca64db0d5",
+            "cardShortLink": "PDozThR4",
+            "originalName": "APP DESIGN MOCKUPS GRID (2).png",
+            "safeName": "APP DESIGN MOCKUPS GRID _2_.png",
+            "relativePath": "PDozThR4/69f4e85e74bd13f9f5420654-APP DESIGN MOCKUPS GRID _2_.png",
+            "storedPath": "/opt/n8n/trello-attachments/grid-it-team-pm/PDozThR4/69f4e85e74bd13f9f5420654-APP DESIGN MOCKUPS GRID _2_.png",
+            "sha256": "30808cb7ce89c59806354e7f80a26f3b9d8257a25318fd6b62006b70f00dd7bb",
+            "mimeType": "image/png",
+            "bytes": 244877,
+            "trelloBytes": 244877,
+            "downloadedAt": "2026-07-09T05:43:21Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "69f504851182a23ee172f5dc",
+      "shortLink": "QOIEKg3v",
+      "name": "FD03_CHECKOUT: Batch Delivery Logic & UI",
+      "url": "https://trello.com/c/QOIEKg3v/36-fd03checkout-batch-delivery-logic-ui",
+      "list": "In Progress Forced Development",
+      "labels": [],
+      "members": [],
+      "due": null,
+      "dueComplete": true,
+      "description": "Show the nearest upcoming scheduled batch and display a notification if a batch is currently ongoing.",
+      "descriptionRedacted": false,
+      "descriptionLength": 101,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69f505f0656a2e81a57d7765",
+      "shortLink": "ZT00fYRt",
+      "name": "FD14_DELIVERYTRACKING: Home Screen Progress Bar",
+      "url": "https://trello.com/c/ZT00fYRt/47-fd14deliverytracking-home-screen-progress-bar",
+      "list": "In Progress Forced Development",
+      "labels": [],
+      "members": [],
+      "due": null,
+      "dueComplete": true,
+      "description": "Develop a dashboard progress bar for the Home Screen to track real-time delivery status.",
+      "descriptionRedacted": false,
+      "descriptionLength": 88,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69e1bbab2d8bb166cd1258bd",
+      "shortLink": "DiEUt1Cv",
+      "name": "Incorporate Notification System",
+      "url": "https://trello.com/c/DiEUt1Cv/3-incorporate-notification-system",
+      "list": "Forced Development (4/27/2026 - 4/29/2026)",
+      "labels": [
+        "User",
+        "Admin"
+      ],
+      "members": [
+        "felycia123",
+        "venvilph"
+      ],
+      "due": null,
+      "dueComplete": false,
+      "description": "**Notification System**\n\n- **Job Order Tracking** - I need the app to notify the user while they scroll through SocMed.\n- **Email Integration Notification** - this will let the users get notified even if they are offline.\n- **Daily Marketing & Regular Updates Notification** - Regular Notification is one way to remind the user of the app.\n- **Admin Customization Options** - Make a notification tab option for admin dashboard. The notification tab option contents will be a customized description with a header, body, frequency (every 6 hours, daily, monthly, etc.). Also add a preview box of the customized notification before saving the changes.",
+      "descriptionRedacted": false,
+      "descriptionLength": 648,
+      "checklists": [
+        {
+          "name": "Checklist",
+          "items": [
+            {
+              "name": "Job Order Tracking",
+              "state": "complete"
+            },
+            {
+              "name": "Email Integration Notification",
+              "state": "complete"
+            },
+            {
+              "name": "Daily Marketing & Regular Updates Notification",
+              "state": "complete"
+            },
+            {
+              "name": "Notification Audio",
+              "state": "complete"
+            },
+            {
+              "name": "Admin Customization Options",
+              "state": "complete"
+            }
+          ]
+        }
+      ],
+      "attachments": []
+    },
+    {
+      "id": "69f5059d96e9b2d50046f031",
+      "shortLink": "Q9zEtD6K",
+      "name": "FD10_FEEDBACKSYSTEM: Feedback Template Design",
+      "url": "https://trello.com/c/Q9zEtD6K/43-fd10feedbacksystem-feedback-template-design",
+      "list": "Forced Development (4/27/2026 - 4/29/2026)",
+      "labels": [],
+      "members": [
+        "jrfrivaldo"
+      ],
+      "due": null,
+      "dueComplete": false,
+      "description": "Design and implement a IG/FB Worthy Photo Template for gathering user feedback.",
+      "descriptionRedacted": false,
+      "descriptionLength": 79,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69f505d0df09475ab43ba889",
+      "shortLink": "vlf7lJKS",
+      "name": "FD11_FEEDBACKSYSTEM: Photo Download Functionality",
+      "url": "https://trello.com/c/vlf7lJKS/44-fd11feedbacksystem-photo-download-functionality",
+      "list": "Forced Development (4/27/2026 - 4/29/2026)",
+      "labels": [],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "Place a dedicated download button for the photo within the feedback system.",
+      "descriptionRedacted": false,
+      "descriptionLength": 75,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69f505dc387a5db57bf06c93",
+      "shortLink": "5f3wXSPv",
+      "name": "FD12_FEEDBACKSYSTEM: Community CTA",
+      "url": "https://trello.com/c/5f3wXSPv/45-fd12feedbacksystem-community-cta",
+      "list": "Forced Development (4/27/2026 - 4/29/2026)",
+      "labels": [],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "Add a Call-to-Action button encouraging users to join the GRID Community.",
+      "descriptionRedacted": false,
+      "descriptionLength": 73,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69f5062d46399b49cfb4d1ae",
+      "shortLink": "UK6InDyy",
+      "name": "FD15_WEBSITE: Human Ticketing Support",
+      "url": "https://trello.com/c/UK6InDyy/48-fd15website-human-ticketing-support",
+      "list": "Forced Development (4/27/2026 - 4/29/2026)",
+      "labels": [],
+      "members": [],
+      "due": null,
+      "dueComplete": true,
+      "description": "Integrate a support system for human-led ticketing and troubleshooting on the website.",
+      "descriptionRedacted": false,
+      "descriptionLength": 86,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69f50642e0c5718b076d0fbf",
+      "shortLink": "WDeT7qUj",
+      "name": "FD16_WEBSITE: App Demo Ad & Support Page",
+      "url": "https://trello.com/c/WDeT7qUj/49-fd16website-app-demo-ad-support-page",
+      "list": "Forced Development (4/27/2026 - 4/29/2026)",
+      "labels": [],
+      "members": [
+        "jrfrivaldo"
+      ],
+      "due": null,
+      "dueComplete": true,
+      "description": "Draft and design an \"About Us\" and App Demo Video section highlighting the startup’s mission and identity.",
+      "descriptionRedacted": false,
+      "descriptionLength": 106,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69f506a5edb26433674c0fff",
+      "shortLink": "iAZ0YOkE",
+      "name": "FD19_GITHUB: GitHub Org Setup",
+      "url": "https://trello.com/c/iAZ0YOkE/52-fd19github-github-org-setup",
+      "list": "Forced Development (4/27/2026 - 4/29/2026)",
+      "labels": [],
+      "members": [],
+      "due": null,
+      "dueComplete": true,
+      "description": "Connect GitHub accounts and set up the official Organization repository for the startup.",
+      "descriptionRedacted": false,
+      "descriptionLength": 88,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69f506b30734be288fde70ff",
+      "shortLink": "I3zE48G7",
+      "name": "FD20_CREDENTIALS: Master Credentials File",
+      "url": "https://trello.com/c/I3zE48G7/53-fd20credentials-master-credentials-file",
+      "list": "Forced Development (4/27/2026 - 4/29/2026)",
+      "labels": [],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "Create a single, secure master file containing all usernames and passwords for the ecosystem.",
+      "descriptionRedacted": false,
+      "descriptionLength": 93,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "6a28d15c1a22254d4d46ac70",
+      "shortLink": "Kq2slEzj",
+      "name": "FD21_DELIVERY: Delivery Status Drop Down",
+      "url": "https://trello.com/c/Kq2slEzj/57-fd21delivery-delivery-status-drop-down",
+      "list": "Forced Development (4/27/2026 - 4/29/2026)",
+      "labels": [],
+      "members": [],
+      "due": null,
+      "dueComplete": true,
+      "description": "Add delivery status drop on home screen to determine if what stop you are in and to determine the status of your print.",
+      "descriptionRedacted": false,
+      "descriptionLength": 119,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "6a28d21dca0d0aaeb26978cf",
+      "shortLink": "oiVV8g8g",
+      "name": "FD22_DELIVERY: Add Rider Information",
+      "url": "https://trello.com/c/oiVV8g8g/58-fd22delivery-add-rider-information",
+      "list": "Forced Development (4/27/2026 - 4/29/2026)",
+      "labels": [],
+      "members": [],
+      "due": null,
+      "dueComplete": true,
+      "description": "We need a rider information system after the delivery has been placed. We need a message, call button, and rider details. This will serve as a contact person for the user to let them know if its their turn or to give a message to the rider.",
+      "descriptionRedacted": false,
+      "descriptionLength": 240,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "6a28d3c8696760dcaf892e8f",
+      "shortLink": "P43H2urx",
+      "name": "FD23_DELIVERY: Temporary Rider Interface",
+      "url": "https://trello.com/c/P43H2urx/59-fd23delivery-temporary-rider-interface",
+      "list": "Forced Development (4/27/2026 - 4/29/2026)",
+      "labels": [],
+      "members": [],
+      "due": null,
+      "dueComplete": true,
+      "description": "This rider interface will serve as a temporary system to guide the rider to its dedicated route.\n\n**Goal:** Messaging and Tracking System for Riders\n\n**The system must have these features:**\n1\\.Efficient Map Route System - to let the rider know which route to take.\n\n2\\.User Tracking System - to message and call the user.\n\n3\\.Message Button to Hub - to call and contact admin.",
+      "descriptionRedacted": false,
+      "descriptionLength": 377,
+      "checklists": [],
+      "attachments": [
+        {
+          "id": "6a28d43fba1a47bbd81ecbab",
+          "name": "image.png",
+          "mimeType": "image/png",
+          "bytes": 224636,
+          "date": "2026-06-10T03:04:31.786Z",
+          "isUpload": true,
+          "download": {
+            "status": "downloaded",
+            "attachmentId": "6a28d43fba1a47bbd81ecbab",
+            "cardId": "6a28d3c8696760dcaf892e8f",
+            "cardShortLink": "P43H2urx",
+            "originalName": "image.png",
+            "safeName": "image.png",
+            "relativePath": "P43H2urx/6a28d43fba1a47bbd81ecbab-image.png",
+            "storedPath": "/opt/n8n/trello-attachments/grid-it-team-pm/P43H2urx/6a28d43fba1a47bbd81ecbab-image.png",
+            "sha256": "18b4cbacbc0232277a1849854f018a3f64590013f9b40e3cccc8e87c010f7136",
+            "mimeType": "image/png",
+            "bytes": 224636,
+            "trelloBytes": 224636,
+            "downloadedAt": "2026-07-09T05:43:22Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "6a28cdcbf62bdebf78eea0da",
+      "shortLink": "SHSA0OLy",
+      "name": "FD21_ADD A RIDER INFO ON ORDER",
+      "url": "https://trello.com/c/SHSA0OLy/54-fd21add-a-rider-info-on-order",
+      "list": "Rider Module",
+      "labels": [],
+      "members": [],
+      "due": null,
+      "dueComplete": true,
+      "description": "",
+      "descriptionRedacted": false,
+      "descriptionLength": 0,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "6a28ce0ec6fd35cd17716946",
+      "shortLink": "YNkmXHXK",
+      "name": "BUG_ORDER CAN'T BE SEEN",
+      "url": "https://trello.com/c/YNkmXHXK/55-bugorder-cant-be-seen",
+      "list": "QA Testing",
+      "labels": [],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "",
+      "descriptionRedacted": false,
+      "descriptionLength": 0,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "6a28ce7ad445390ff71c06d4",
+      "shortLink": "Tnl4rnXs",
+      "name": "CUSTOM NOTIFICATION FOR ALL STATUS",
+      "url": "https://trello.com/c/Tnl4rnXs/56-custom-notification-for-all-status",
+      "list": "QA Testing",
+      "labels": [],
+      "members": [],
+      "due": null,
+      "dueComplete": true,
+      "description": "![image.webp](https://trello.com/1/cards/6a28ce7ad445390ff71c06d4/attachments/6a28cf2269f7c35eeafa5ab1/previews/6a28cf2269f7c35eeafa5ac1/download/image.webp)",
+      "descriptionRedacted": false,
+      "descriptionLength": 157,
+      "checklists": [],
+      "attachments": [
+        {
+          "id": "6a28cf2269f7c35eeafa5ab1",
+          "name": "image.png",
+          "mimeType": "image/png",
+          "bytes": 41958,
+          "date": "2026-06-10T02:42:42.382Z",
+          "isUpload": true,
+          "download": {
+            "status": "downloaded",
+            "attachmentId": "6a28cf2269f7c35eeafa5ab1",
+            "cardId": "6a28ce7ad445390ff71c06d4",
+            "cardShortLink": "Tnl4rnXs",
+            "originalName": "image.png",
+            "safeName": "image.png",
+            "relativePath": "Tnl4rnXs/6a28cf2269f7c35eeafa5ab1-image.png",
+            "storedPath": "/opt/n8n/trello-attachments/grid-it-team-pm/Tnl4rnXs/6a28cf2269f7c35eeafa5ab1-image.png",
+            "sha256": "8cec08f1abf6fe14296cea83f1c01b6567a3cfaec229ad2f9022c5bc5992d95f",
+            "mimeType": "image/png",
+            "bytes": 41958,
+            "trelloBytes": 41958,
+            "downloadedAt": "2026-07-09T05:43:22Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "69e73c1b3402e881d7f2684d",
+      "shortLink": "YEhEWQsg",
+      "name": "Rider.UI.FT01: Build Rider UI",
+      "url": "https://trello.com/c/YEhEWQsg/24-rideruift01-build-rider-ui",
+      "list": "Sprint Backlog",
+      "labels": [
+        "Mobile",
+        "Rider API"
+      ],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "### 1. The \"Active Batch\" Dashboard (Primary View)\n\nInstead of a single delivery card, the main screen should feature a **Stacked Batch Module**.\n\n- **Progress Stepper:** A visual timeline at the top (e.g., _Hub → Drop-off A → Drop-off B → Drop-off C_). This gives the rider a mental map of their current loop.\n- **Dynamic Priority Card:** The \"Bento box\" at the top should automatically update to show the _next_ immediate action. If they are at the printing hub, it shows \"Collect 3 Orders.\" Once collected, it flips to \"Navigate to Drop-off A.\"\n\n### 2. The \"Manifest\" View (The Hub Module)\n\nWhen the rider is at a printing hub, they need a checklist to ensure they don't leave a document behind.\n\n- **Batch Verification:** A module that lists all Order IDs in the current batch.\n- **Quick-Scan Toggle:** As you are tech-focused, adding a QR code scanner module here allows the rider to scan the printed GRID label on each package to \"Check-in\" the item to their bag. This moves the item from \"Pending Pickup\" to \"In Transit.\"\n\n### 3. Integrated Map with Multi-Stop Pinning\n\nRather than jumping in and out of the app, use a **Map Module** that shows the optimized route.\n\n- **Clustered Pins:** Different icons for the Pickup (the Hub) and the Drop-offs (the Customers).\n- **Re-order Logic:** Give riders the ability to manually \"Swap\" stops if they know a shortcut or if a specific street in Davao is currently congested, which then recalculates the batch ETA.\n\n### 4. Batch Earnings Breakdown\n\nYour existing **Earnings** section needs a \"Batch\" layer to stay transparent:\n\n- **Base + Efficiency Bonus:** Show the base fare for the batch plus an \"Efficiency Bonus\" for completing multiple orders in one run. This encourages them to take batch orders over single ones.\n- **Per-Stop Detail:** A breakdown showing which customers tipped or if there were surcharges for \"Over-sized\" prints (like A0 rolls) within that specific batch.\n\n### 5. \"Capacity\" Module (Bento Style)\n\nA visual indicator of how \"full\" the rider is.\n\n- **Load Meter:** Since you’re dealing with physical prints, a module showing \"3/5 Slots Filled\" helps the rider know if they can accept an additional \"On-the-way\" order (Uber Pool style) while they are already en route.\n\n### 6. Checklist Order for Riders\n\nThis is for checking\n\n7\\. **Proof of Delivery (PoD):** Mandatory photo upload or digital signature upon delivery.",
+      "descriptionRedacted": false,
+      "descriptionLength": 2391,
+      "checklists": [],
+      "attachments": [
+        {
+          "id": "69e7456f503f5345711948e0",
+          "name": "image_2026-04-21_173750448.png",
+          "mimeType": "image/png",
+          "bytes": 315000,
+          "date": "2026-04-21T09:37:51.443Z",
+          "isUpload": true,
+          "download": {
+            "status": "downloaded",
+            "attachmentId": "69e7456f503f5345711948e0",
+            "cardId": "69e73c1b3402e881d7f2684d",
+            "cardShortLink": "YEhEWQsg",
+            "originalName": "image_2026-04-21_173750448.png",
+            "safeName": "image_2026-04-21_173750448.png",
+            "relativePath": "YEhEWQsg/69e7456f503f5345711948e0-image_2026-04-21_173750448.png",
+            "storedPath": "/opt/n8n/trello-attachments/grid-it-team-pm/YEhEWQsg/69e7456f503f5345711948e0-image_2026-04-21_173750448.png",
+            "sha256": "5c787e41d3cf1dd9a61d11ecec50cb4f9895e959e344d4d3885295147c373cc7",
+            "mimeType": "image/png",
+            "bytes": 315000,
+            "trelloBytes": 315000,
+            "downloadedAt": "2026-07-09T05:43:22Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "69e72ddfc98814da154fa20e",
+      "shortLink": "okkCDlbN",
+      "name": "UI.FT03: Live Chat System",
+      "url": "https://trello.com/c/okkCDlbN/23-uift03-live-chat-system",
+      "list": "Sprint (4/17/2026 - 4/21/2026) - Completed",
+      "labels": [
+        "Mobile",
+        "API",
+        "Admin",
+        "Rider API"
+      ],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "",
+      "descriptionRedacted": false,
+      "descriptionLength": 0,
+      "checklists": [
+        {
+          "name": "Checklist",
+          "items": [
+            {
+              "name": "AI Frontline (The \"Print Specialist\")",
+              "state": "complete"
+            },
+            {
+              "name": "Human Chat Box",
+              "state": "complete"
+            },
+            {
+              "name": "Photo/Video Proof",
+              "state": "incomplete"
+            }
+          ]
+        }
+      ],
+      "attachments": [
+        {
+          "id": "69e72ef378372db7483ba042",
+          "name": "Microinteractions III - Oleg Frolov.gif",
+          "mimeType": "image/gif",
+          "bytes": 107556,
+          "date": "2026-04-21T08:01:55.097Z",
+          "isUpload": true,
+          "download": {
+            "status": "downloaded",
+            "attachmentId": "69e72ef378372db7483ba042",
+            "cardId": "69e72ddfc98814da154fa20e",
+            "cardShortLink": "okkCDlbN",
+            "originalName": "Microinteractions III - Oleg Frolov.gif",
+            "safeName": "Microinteractions III - Oleg Frolov.gif",
+            "relativePath": "okkCDlbN/69e72ef378372db7483ba042-Microinteractions III - Oleg Frolov.gif",
+            "storedPath": "/opt/n8n/trello-attachments/grid-it-team-pm/okkCDlbN/69e72ef378372db7483ba042-Microinteractions III - Oleg Frolov.gif",
+            "sha256": "728bfa712e8ef9119db006a6dd5845c5450aa3a6fe2d871e112e11409060d556",
+            "mimeType": "image/gif",
+            "bytes": 107556,
+            "trelloBytes": 107556,
+            "downloadedAt": "2026-07-09T05:43:22Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "69ec342c9d1699a454ba9e64",
+      "shortLink": "cO315r4L",
+      "name": "UI.FT04: Beta Test System",
+      "url": "https://trello.com/c/cO315r4L/25-uift04-beta-test-system",
+      "list": "Sprint (4/17/2026 - 4/21/2026) - Completed",
+      "labels": [
+        "API",
+        "Mobile"
+      ],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "",
+      "descriptionRedacted": false,
+      "descriptionLength": 0,
+      "checklists": [
+        {
+          "name": "Checklist",
+          "items": [
+            {
+              "name": "Floating Indicator",
+              "state": "incomplete"
+            },
+            {
+              "name": "Live Waitlist Position / Queue Rank",
+              "state": "incomplete"
+            },
+            {
+              "name": "Mandatory Feedback System",
+              "state": "incomplete"
+            }
+          ]
+        }
+      ],
+      "attachments": []
+    },
+    {
+      "id": "69e1f0cc4d0c5912ef46ac99",
+      "shortLink": "kQ1BknO5",
+      "name": "UI.FT02: The Data Grid - Add uploaded file retention settings with auto-delete and Never option",
+      "url": "https://trello.com/c/kQ1BknO5/15-uift02-the-data-grid-add-uploaded-file-retention-settings-with-auto-delete-and-never-option",
+      "list": "Sprint (4/17/2026 - 4/21/2026) - Completed",
+      "labels": [],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "Add a user setting for uploaded file retention so customers can choose whether their files are automatically deleted after order completion. The setting should live in app settings/ privacy settings and allow the user to choose a retention period such as 24 hours, 7 days, 30 days, or Never. The system should apply the selected rule automatically and clearly show when a file has been purged.",
+      "descriptionRedacted": false,
+      "descriptionLength": 393,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69e1d7a1287b17c1e32c1ca5",
+      "shortLink": "TaqOIfcw",
+      "name": "Make “The Daily Grid” home section admin-configurable and route users into the order flow",
+      "url": "https://trello.com/c/TaqOIfcw/10-make-the-daily-grid-home-section-admin-configurable-and-route-users-into-the-order-flow",
+      "list": "Sprint (4/17/2026 - 4/21/2026) - Completed",
+      "labels": [
+        "Admin",
+        "Mobile",
+        "API"
+      ],
+      "members": [],
+      "due": null,
+      "dueComplete": false,
+      "description": "Replace the hardcoded “The Daily Grid” carousel on the customer home screen with dynamic content managed from the admin panel. Admins should be able to create, edit, activate/deactivate, delete, and reorder Daily Grid cards. Each card should support content such as title, subtitle, image, and a target printing path or format so that when a user taps a card, they are redirected into the correct order flow with the relevant service/category preselected. The redirect should land the user before file upload, so they still go through the proper printing format/spec selection and only upload the file afterward.",
+      "descriptionRedacted": false,
+      "descriptionLength": 612,
+      "checklists": [
+        {
+          "name": "Success Criteria",
+          "items": [
+            {
+              "name": "“The Daily Grid” content is no longer hardcoded in the mobile app.",
+              "state": "incomplete"
+            },
+            {
+              "name": "Admin can manage Daily Grid items through CRUD plus sort order and active/inactive state.",
+              "state": "incomplete"
+            },
+            {
+              "name": "Mobile home screen renders only active Daily Grid items in admin-defined order.",
+              "state": "incomplete"
+            },
+            {
+              "name": "Tapping a Daily Grid item routes the user into the correct printing flow with context preselected.",
+              "state": "incomplete"
+            },
+            {
+              "name": "The user lands before upload, not directly on the upload screen.",
+              "state": "incomplete"
+            },
+            {
+              "name": "Empty, loading, and failure states are handled cleanly.",
+              "state": "incomplete"
+            },
+            {
+              "name": "The feature has backend, admin, and mobile test coverage.",
+              "state": "incomplete"
+            }
+          ]
+        }
+      ],
+      "attachments": []
+    },
+    {
+      "id": "69e1d45da0db916938319d04",
+      "shortLink": "PhNDbpVw",
+      "name": "FH1. Set up MinIO-backed file storage for uploads",
+      "url": "https://trello.com/c/PhNDbpVw/9-fh1-set-up-minio-backed-file-storage-for-uploads",
+      "list": "Sprint (4/17/2026 - 4/21/2026) - Completed",
+      "labels": [
+        "Mobile",
+        "API",
+        "Admin",
+        "Module"
+      ],
+      "members": [
+        "felycia123"
+      ],
+      "due": null,
+      "dueComplete": false,
+      "description": "Replace the current mock upload storage flow with real MinIO-backed object storage for the server upload pipeline. The goal is for uploaded files to be stored in MinIO, with file metadata persisted in the database and returned through the existing upload flow. This should include local development setup, environment configuration, error handling, and basic verification so uploads work reliably in development and are ready for later production hardening.",
+      "descriptionRedacted": false,
+      "descriptionLength": 457,
+      "checklists": [
+        {
+          "name": "Subtasks",
+          "items": [
+            {
+              "name": "1. Review the current upload flow and identify where mock URLs are generated and stored.",
+              "state": "incomplete"
+            },
+            {
+              "name": "2. Add MinIO to local infrastructure and document required env vars and bucket settings.",
+              "state": "incomplete"
+            },
+            {
+              "name": "3. Create a server-side storage service/module for MinIO client setup and bucket initialization.",
+              "state": "incomplete"
+            },
+            {
+              "name": "4. Update the upload handler to send files to MinIO instead of generating mock paths.",
+              "state": "incomplete"
+            },
+            {
+              "name": "5. Persist object key, bucket, URL/access path, MIME type, size, and uploader metadata.",
+              "state": "incomplete"
+            },
+            {
+              "name": "6. Decide and implement the access strategy for uploaded files: public path or presigned URL.",
+              "state": "incomplete"
+            },
+            {
+              "name": "7. Add validation and failure handling for upload errors, invalid files, and MinIO unavailability.",
+              "state": "incomplete"
+            },
+            {
+              "name": "8. Update .env.example, README, and local run instructions for MinIO-based uploads.",
+              "state": "incomplete"
+            },
+            {
+              "name": "9. Add tests for upload success, metadata persistence, and MinIO failure cases.",
+              "state": "incomplete"
+            },
+            {
+              "name": "10. Verify the full local flow: upload file, confirm object exists in MinIO, confirm metadata is returned correctly.",
+              "state": "incomplete"
+            }
+          ]
+        }
+      ],
+      "attachments": []
+    },
+    {
+      "id": "69e1f9db2c5e4bbfdb6be68d",
+      "shortLink": "gKgzF2tU",
+      "name": "Admin Changes",
+      "url": "https://trello.com/c/gKgzF2tU/20-admin-changes",
+      "list": "Sprint (4/17/2026 - 4/21/2026) - Completed",
+      "labels": [],
+      "members": [
+        "venvilph"
+      ],
+      "due": null,
+      "dueComplete": false,
+      "description": "**Drop Down for Order** - I noticed that the admin for order categories is a hassle for the admin. Maintain the drop down within view order and also add a column for the order status because some orders.\n\n**User ID Column** - Add user ID column to recognize which user is which.\n\n**CSV Export - Only Show Delivered Orders** - I need only the delivered orders because I will use that for accounting system.\n\n**Remove Total Revenue/Cost on User Profiles** - /users/show/userID",
+      "descriptionRedacted": false,
+      "descriptionLength": 474,
+      "checklists": [],
+      "attachments": []
+    },
+    {
+      "id": "69e1f3908053ff1ec44362db",
+      "shortLink": "l90dL4Oj",
+      "name": "Replace Promo Card with \"The Feed\" on Main Dashboard",
+      "url": "https://trello.com/c/l90dL4Oj/16-replace-promo-card-with-the-feed-on-main-dashboard",
+      "list": "Sprint (4/17/2026 - 4/21/2026) - Completed",
+      "labels": [
+        "API",
+        "Mobile",
+        "Admin"
+      ],
+      "members": [
+        "venvilph"
+      ],
+      "due": null,
+      "dueComplete": false,
+      "description": "Replace the current promotional image card (\\_AdTile in home\\_screen.dart) on the main dashboard, located in the right-hand column below “The Data Grid,” with a new The Feed - Community Feedback component.\n\nThis new section should display customer feedback in a carousel format instead of a static promo card. The feedback should come from survey results, and admins must be able to choose which comments are approved and shown on the customer home screen. Each feed card should show a modern dark-themed design with a subtle yellow border, a 5-star rating visual, the customer’s name, role, and comment.\n\nIf a comment is too long, it should be truncated with ... in the carousel view. When the user taps the card or comment area, the full feedback should open in a scrollable view, modal, or similar detail display.\n\nThe new component should visually match the surrounding dashboard cards and preserve the current layout balance and responsiveness.",
+      "descriptionRedacted": false,
+      "descriptionLength": 949,
+      "checklists": [
+        {
+          "name": "Subtasks",
+          "items": [
+            {
+              "name": "Remove the existing _AdTile component (\"Large Prints\") and its associated photo background from the home screen layout.",
+              "state": "complete"
+            },
+            {
+              "name": "Create and implement a new _TheFeedTile component showcasing the community testimonial.",
+              "state": "complete"
+            },
+            {
+              "name": "Add admin control so admins can select which survey comments are shown on the home screen.",
+              "state": "complete"
+            },
+            {
+              "name": "Display feedback as a carousel, with smooth switching between comments.",
+              "state": "complete"
+            },
+            {
+              "name": "Show 5-star rating, customer name, role, and testimonial text on each card.",
+              "state": "complete"
+            },
+            {
+              "name": "Truncate long comments in the carousel view with ...",
+              "state": "complete"
+            },
+            {
+              "name": "Allow users to tap and view the full comment in a scrollable detail view.",
+              "state": "complete"
+            },
+            {
+              "name": "Match the intended styling: dark surface, subtle yellow border, correct radius, spacing, and typography.",
+              "state": "complete"
+            },
+            {
+              "name": "Keep column flex/layout balanced so the new card fits cleanly with surrounding dashboard elements.",
+              "state": "complete"
+            },
+            {
+              "name": "Test across multiple screen sizes to prevent clipping, overflow, or broken carousel layout.",
+              "state": "complete"
+            }
+          ]
+        }
+      ],
+      "attachments": [
+        {
+          "id": "69e1f65429fdbbe38fe7813c",
+          "name": "after.png",
+          "mimeType": "image/png",
+          "bytes": 153946,
+          "date": "2026-04-17T08:59:00.760Z",
+          "isUpload": true,
+          "download": {
+            "status": "downloaded",
+            "attachmentId": "69e1f65429fdbbe38fe7813c",
+            "cardId": "69e1f3908053ff1ec44362db",
+            "cardShortLink": "l90dL4Oj",
+            "originalName": "after.png",
+            "safeName": "after.png",
+            "relativePath": "l90dL4Oj/69e1f65429fdbbe38fe7813c-after.png",
+            "storedPath": "/opt/n8n/trello-attachments/grid-it-team-pm/l90dL4Oj/69e1f65429fdbbe38fe7813c-after.png",
+            "sha256": "a9a6d7f65f59df74095baf66c90b84e246ca637cc3e8e2301db6a0e08d6b32bd",
+            "mimeType": "image/png",
+            "bytes": 153946,
+            "trelloBytes": 153946,
+            "downloadedAt": "2026-07-09T05:43:23Z"
+          }
+        },
+        {
+          "id": "69e1f65445818bf13dc8a731",
+          "name": "before.png",
+          "mimeType": "image/png",
+          "bytes": 229693,
+          "date": "2026-04-17T08:59:00.658Z",
+          "isUpload": true,
+          "download": {
+            "status": "downloaded",
+            "attachmentId": "69e1f65445818bf13dc8a731",
+            "cardId": "69e1f3908053ff1ec44362db",
+            "cardShortLink": "l90dL4Oj",
+            "originalName": "before.png",
+            "safeName": "before.png",
+            "relativePath": "l90dL4Oj/69e1f65445818bf13dc8a731-before.png",
+            "storedPath": "/opt/n8n/trello-attachments/grid-it-team-pm/l90dL4Oj/69e1f65445818bf13dc8a731-before.png",
+            "sha256": "01295a309b791adc82dc88aa3ed8711b868c10ba2fb9d8c0f4e8b9c0ebc6e721",
+            "mimeType": "image/png",
+            "bytes": 229693,
+            "trelloBytes": 229693,
+            "downloadedAt": "2026-07-09T05:43:23Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "69e1c42aee78017d968d594a",
+      "shortLink": "10HIudP5",
+      "name": "Payment GRID Credits Integration - UI",
+      "url": "https://trello.com/c/10HIudP5/7-payment-grid-credits-integration-ui",
+      "list": "Sprint (4/17/2026 - 4/21/2026) - Completed",
+      "labels": [],
+      "members": [
+        "venvilph"
+      ],
+      "due": null,
+      "dueComplete": false,
+      "description": "",
+      "descriptionRedacted": false,
+      "descriptionLength": 0,
+      "checklists": [],
+      "attachments": [
+        {
+          "id": "69e1c4afda2b0890fa0b7fc9",
+          "name": "APP DESIGN MOCKUPS GRID (1).png",
+          "mimeType": "image/png",
+          "bytes": 83952,
+          "date": "2026-04-17T05:27:11.828Z",
+          "isUpload": true,
+          "download": {
+            "status": "downloaded",
+            "attachmentId": "69e1c4afda2b0890fa0b7fc9",
+            "cardId": "69e1c42aee78017d968d594a",
+            "cardShortLink": "10HIudP5",
+            "originalName": "APP DESIGN MOCKUPS GRID (1).png",
+            "safeName": "APP DESIGN MOCKUPS GRID _1_.png",
+            "relativePath": "10HIudP5/69e1c4afda2b0890fa0b7fc9-APP DESIGN MOCKUPS GRID _1_.png",
+            "storedPath": "/opt/n8n/trello-attachments/grid-it-team-pm/10HIudP5/69e1c4afda2b0890fa0b7fc9-APP DESIGN MOCKUPS GRID _1_.png",
+            "sha256": "fcad2397153748283e8f5fffe644797b13a60f4fe7c6764a85a0258c810aa945",
+            "mimeType": "image/png",
+            "bytes": 83952,
+            "trelloBytes": 83952,
+            "downloadedAt": "2026-07-09T05:43:23Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "69e1bddf25275e5d1de3406f",
+      "shortLink": "C2zzIJCV",
+      "name": "SaaS (Software as a Service) Survey",
+      "url": "https://trello.com/c/C2zzIJCV/5-saas-software-as-a-service-survey",
+      "list": "Sprint (4/17/2026 - 4/21/2026) - Completed",
+      "labels": [
+        "Admin",
+        "User"
+      ],
+      "members": [
+        "venvilph"
+      ],
+      "due": null,
+      "dueComplete": false,
+      "description": "",
+      "descriptionRedacted": false,
+      "descriptionLength": 0,
+      "checklists": [
+        {
+          "name": "Subtasks",
+          "items": [
+            {
+              "name": "First Task - Add survey questions",
+              "state": "complete"
+            },
+            {
+              "name": "Second Task - change survey emoji expressions for each scale",
+              "state": "complete"
+            },
+            {
+              "name": "Third Task - Web Admin survey tab where the responses would be displayed",
+              "state": "complete"
+            },
+            {
+              "name": "Fourth Task - Add visibility toggle button on the Admin web, where it would be hidden or displayed on the mobile.",
+              "state": "complete"
+            },
+            {
+              "name": "Fifth Task - Add Notifications",
+              "state": "complete"
+            }
+          ]
+        }
+      ],
+      "attachments": []
+    }
+  ]
+}
