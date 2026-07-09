@@ -124,7 +124,7 @@ function attachmentMarkdown(card) {
     if (dl.status === 'downloaded' && dl.relativePath) {
       const repoPath = `${CONFIG.attachmentRoot}/${dl.relativePath}`.replace(/\\/g, '/');
       const urlPath = repoPath.split('/').map(encodeURIComponent).join('/').replace(/%2F/g, '/');
-      const url = `https://github.com/${CONFIG.repo}/blob/${encodeURIComponent(CONFIG.branch)}/${urlPath}`;
+      const url = `https://github.com/${CONFIG.repo}/blob/${CONFIG.branch}/${urlPath}`;
       lines.push(`- [${dl.safeName || attachment.name}](${url}) (${dl.mimeType || attachment.mimeType || 'file'}, ${dl.bytes || attachment.bytes || 0} bytes, sha256: \`${dl.sha256 || 'n/a'}\`)`);
     } else if (attachment.isUpload) {
       lines.push(`- ${attachment.name || attachment.id}: not downloaded (${dl.reason || dl.status || 'unknown'})`);
