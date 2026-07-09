@@ -212,7 +212,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           icon: HugeIcons.strokeRoundedWallet01,
           title: 'Payment method',
           body:
-              'Choose how you want to pay — tap here to switch between GRIDGO Credits and GCash.',
+              'Review the available payment option and your GRIDGO Credits balance.',
           align: ContentAlign.bottom,
           advanceOnSpotlightTap: false,
         ),

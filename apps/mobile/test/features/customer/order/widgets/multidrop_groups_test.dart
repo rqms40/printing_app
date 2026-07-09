@@ -97,7 +97,7 @@ void main() {
 
     await tester.tap(find.text('Pick address'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Pin Location'));
+    await tester.tap(find.text('Pin and save location'));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Full Address *'),
@@ -226,7 +226,7 @@ void main() {
 
     await tester.tap(find.text('Change address'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Pin Location'));
+    await tester.tap(find.text('Pin and save location'));
     await tester.pumpAndSettle();
 
     expect(await _textFieldValue(tester, 'Label'), 'Event booth');

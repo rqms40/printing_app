@@ -13,7 +13,10 @@ import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/order/models/checkout_state.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart'
-    show ordersProvider;
+    show
+        activeOrdersProvider,
+        ordersInitialLoadCompleteProvider,
+        ordersProvider;
 import 'package:printing_app/features/customer/home/providers/tam_surveys_feed_provider.dart';
 import 'package:printing_app/features/customer/home/widgets/daily_grid_section.dart';
 import 'package:printing_app/features/customer/order/providers/delivery_slot_provider.dart';
@@ -30,6 +33,35 @@ import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart'
 import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
 import 'package:printing_app/features/tutorial/widgets/feature_overlay_card.dart';
 import 'package:printing_app/features/tutorial/widgets/coach_mark_sequence.dart';
+import 'package:printing_app/shared/models/enums.dart';
+
+const _activeDeliveryTutorialBlockingStatuses = {
+  OrderStatus.riderAssigned,
+  OrderStatus.pickedUp,
+  OrderStatus.onTheWay,
+  OrderStatus.arrivedAtDestination,
+};
+
+bool shouldDeferHomeTutorial({
+  required bool ordersLoaded,
+  required Iterable<OrderStatus> activeOrderStatuses,
+}) {
+  return !ordersLoaded ||
+      activeOrderStatuses.any(
+        _activeDeliveryTutorialBlockingStatuses.contains,
+      );
+}
+
+final homeTutorialReadyProvider = Provider<bool>((ref) {
+  final ordersLoaded = ref.watch(ordersInitialLoadCompleteProvider);
+  final activeStatuses = ref
+      .watch(activeOrdersProvider)
+      .map((order) => order.orderStatus);
+  return !shouldDeferHomeTutorial(
+    ordersLoaded: ordersLoaded,
+    activeOrderStatuses: activeStatuses,
+  );
+});
 
 /// Customer home screen — editorial redesign.
 class HomeScreen extends ConsumerStatefulWidget {
@@ -43,6 +75,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   final _creditsTutorialKey = GlobalKey();
   final _chatFabTutorialKey = GlobalKey();
   final _startPrintingTutorialKey = GlobalKey();
+  bool _homeTutorialAttempted = false;
 
   @override
   void didChangeDependencies() {
@@ -64,9 +97,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ref.read(deliverySlotProvider(today).notifier).refresh();
       ref.read(deliverySlotProvider(tomStr).notifier).refresh();
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _maybeShowHomeTutorial();
-    });
+    ref.listenManual<bool>(homeTutorialReadyProvider, (_, ready) {
+      if (!ready || !mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _maybeShowHomeTutorial();
+      });
+    }, fireImmediately: true);
   }
 
   AppColorSet _colors(BuildContext context) {
@@ -111,16 +147,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _maybeShowHomeTutorial() {
-    if (!mounted) return;
+    if (!mounted ||
+        _homeTutorialAttempted ||
+        !ref.read(homeTutorialReadyProvider)) {
+      return;
+    }
 
     // First-time pipeline: show welcome card → user taps "Show me how →" to start
     if (!ref.read(tutorialSeenProvider(TutorialKey.pipeline))) {
+      _homeTutorialAttempted = true;
       _showPipelineWelcomeCard();
       return;
     }
 
     // Post-pipeline: home features (Credits + GridBot)
     if (!ref.read(tutorialSeenProvider(TutorialKey.homeFeatures))) {
+      _homeTutorialAttempted = true;
       _startHomeFeaturesCoachMarks();
       return;
     }

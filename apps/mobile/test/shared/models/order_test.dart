@@ -97,6 +97,9 @@ void main() {
       expect(minimalOrder.declineReason, isNull);
       expect(minimalOrder.assignedRiderId, isNull);
       expect(minimalOrder.deliveryAssignmentId, isNull);
+      expect(minimalOrder.deliveryQueuePosition, isNull);
+      expect(minimalOrder.deliveryQueueSize, isNull);
+      expect(minimalOrder.canTrackDelivery, isFalse);
       expect(minimalOrder.lineItems.single.category, 'paper');
       expect(minimalOrder.orderTypeLabel, 'Paper Printing');
     });

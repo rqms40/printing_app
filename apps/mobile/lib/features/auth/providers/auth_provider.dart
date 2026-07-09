@@ -23,6 +23,11 @@ import 'package:printing_app/shared/models/enums.dart';
 // ---------------------------------------------------------------------------
 enum AuthStatus { unauthenticated, authenticated, profileIncomplete }
 
+String? betaHeldAccessTokenFromResponse(Map<dynamic, dynamic> data) {
+  final token = data['access_token']?.toString().trim();
+  return token == null || token.isEmpty ? null : token;
+}
+
 // ---------------------------------------------------------------------------
 // Simple user model (self-contained, no external deps)
 // ---------------------------------------------------------------------------
@@ -211,9 +216,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (e.response?.statusCode == 403 &&
           e.response?.data is Map &&
           (e.response!.data as Map)['code'] == 'beta_held') {
-        final info = BetaLockedInfo.fromJson(
-          e.response!.data as Map<String, dynamic>,
-        );
+        final responseData = e.response!.data as Map<String, dynamic>;
+        final heldToken = betaHeldAccessTokenFromResponse(responseData);
+        if (heldToken != null) {
+          await TokenStorage.saveToken(heldToken);
+        }
+        final info = BetaLockedInfo.fromJson(responseData);
         state = state.copyWith(
           isLoading: false,
           betaLocked: info,
@@ -423,6 +431,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   void _resetSessionScopedData() {
     _ref?.read(checkoutProvider.notifier).reset();
     _ref?.read(addressProvider.notifier).refreshAddresses();
+    _ref?.read(ordersInitialLoadCompleteProvider.notifier).state = false;
+    unawaited(_ref?.read(ordersProvider.notifier).startSession());
   }
 
   Future<void> logout() async {
@@ -437,6 +447,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       _ref?.read(ordersProvider.notifier).clear();
     } catch (_) {}
+    _ref?.read(ordersInitialLoadCompleteProvider.notifier).state = false;
     // Reset session-scoped UI flags so they fire again on next login.
     _ref?.read(nextBatchShownThisSessionProvider.notifier).state = false;
     // AuthState() clears everything including betaLocked.

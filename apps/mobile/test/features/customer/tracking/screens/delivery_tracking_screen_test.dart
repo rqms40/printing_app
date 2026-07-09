@@ -26,6 +26,7 @@ Order _order({
     deliveryOption: 'delivery',
     assignedRiderId: assignedRiderId,
     deliveryAssignmentId: deliveryAssignmentId,
+    canTrackDelivery: deliveryAssignmentId != null,
     assignedRider: rider,
     createdAt: now,
     updatedAt: now,
@@ -83,12 +84,12 @@ void main() {
       expect(selected?.assignedRider?.displayName, 'Juan Reyes');
     });
 
-    test('falls back to an on-the-way order without contact details', () {
+    test('does not select an on-the-way order without tracking access', () {
       final orders = [
         _order(id: '4', orderId: 'ORD-10004', status: OrderStatus.onTheWay),
       ];
 
-      expect(selectDeliveryTrackingOrder(orders, null)?.orderId, 'ORD-10004');
+      expect(selectDeliveryTrackingOrder(orders, null), isNull);
     });
   });
 }

@@ -76,7 +76,7 @@ void main() {
     expect(find.text('Maya'), findsOneWidget);
   });
 
-  testWidgets('credits-only mode keeps e-wallet selections available', (
+  testWidgets('credits-only mode clears an unavailable e-wallet selection', (
     tester,
   ) async {
     final container = ProviderContainer(
@@ -100,12 +100,9 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(container.read(checkoutProvider).paymentMethod, PaymentMethod.gcash);
-    expect(find.text('GCash'), findsOneWidget);
-    expect(
-      find.textContaining('Cash on Delivery is unavailable'),
-      findsOneWidget,
-    );
+    expect(container.read(checkoutProvider).paymentMethod, isNull);
+    expect(find.text('Choose payment method'), findsOneWidget);
+    expect(find.text('Beta orders use GRIDGO Credits only.'), findsOneWidget);
   });
 
   testWidgets('credits-only mode clears unavailable COD selection', (
@@ -134,10 +131,7 @@ void main() {
 
     expect(container.read(checkoutProvider).paymentMethod, isNull);
     expect(find.text('Choose payment method'), findsOneWidget);
-    expect(
-      find.textContaining('Cash on Delivery is unavailable'),
-      findsOneWidget,
-    );
+    expect(find.text('Beta orders use GRIDGO Credits only.'), findsOneWidget);
   });
 }
 

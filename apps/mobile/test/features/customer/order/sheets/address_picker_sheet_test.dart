@@ -19,6 +19,21 @@ Address _addr(String id, String label, String full) => Address(
   updatedAt: DateTime.now(),
 );
 
+class _PersistingAddressNotifier extends AddressNotifier {
+  _PersistingAddressNotifier({required List<Address> initialState})
+    : super(initialState: initialState, skipBootstrap: true);
+
+  @override
+  Future<Address?> addAddress(
+    Address address, {
+    bool addLocallyOnFailure = true,
+  }) async {
+    final saved = address.copyWith(id: '42', userId: 'u1');
+    state = [...state, saved];
+    return saved;
+  }
+}
+
 void main() {
   testWidgets('shows saved addresses, returns chosen one', (tester) async {
     final container = ProviderContainer(
@@ -62,15 +77,14 @@ void main() {
     expect(picked?.id, '2');
   });
 
-  testWidgets('pin location flow returns a temporary checkout address', (
+  testWidgets('pin location flow saves and returns a reusable address', (
     tester,
   ) async {
     final container = ProviderContainer(
       overrides: [
         addressProvider.overrideWith(
-          (ref) => AddressNotifier(
+          (ref) => _PersistingAddressNotifier(
             initialState: [_addr('1', 'Home', '12 Sampaguita St')],
-            skipBootstrap: true,
           ),
         ),
       ],
@@ -101,7 +115,7 @@ void main() {
 
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Pin Location'));
+    await tester.tap(find.text('Pin and save location'));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Full Address *'),
@@ -119,9 +133,9 @@ void main() {
     await tester.tap(useButton);
     await tester.pumpAndSettle();
 
-    expect(picked?.temporaryAddress?.fullAddress, 'Unit 12, Jacinto Extension');
-    expect(picked?.temporaryAddress?.city, 'Davao City');
-    expect(picked?.temporaryAddress?.isValid, isTrue);
+    expect(picked?.savedAddress?.fullAddress, 'Unit 12, Jacinto Extension');
+    expect(picked?.savedAddress?.city, 'Davao City');
+    expect(container.read(addressProvider), hasLength(2));
   });
 
   testWidgets(
@@ -170,7 +184,7 @@ void main() {
 
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Pin Location'));
+    await tester.tap(find.text('Pin and save location'));
       await tester.pumpAndSettle();
 
       expect(await _textFieldValue(tester, 'Label'), 'Event booth');

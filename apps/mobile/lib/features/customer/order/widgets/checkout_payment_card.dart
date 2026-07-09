@@ -145,7 +145,7 @@ class _CheckoutPaymentCardState extends ConsumerState<CheckoutPaymentCard> {
               if (creditsOnlyMode) ...[
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'Cash on Delivery is unavailable right now. Use GCash, Maya, or GRIDGO Credits for checkout.',
+                  'Beta orders use GRIDGO Credits only.',
                   style: AppTypography.caption.copyWith(
                     color: colors.onSurfaceDim,
                     fontSize: 11,

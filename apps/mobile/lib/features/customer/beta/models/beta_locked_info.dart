@@ -15,8 +15,9 @@ class BetaLockedInfo {
 
   factory BetaLockedInfo.fromJson(Map<String, dynamic> json) {
     final userMap = json['user'] as Map<String, dynamic>? ?? const {};
+    final fullName = (userMap['fullName'] as String?)?.trim();
     return BetaLockedInfo(
-      fullName: userMap['fullName'] as String? ?? '',
+      fullName: fullName == null || fullName.isEmpty ? 'Beta Tester' : fullName,
       email: userMap['email'] as String? ?? '',
       betaPhotoUploaded: json['betaPhotoUploaded'] as bool? ?? false,
       betaSharedOnSocial: json['betaSharedOnSocial'] as bool? ?? false,

@@ -17,6 +17,9 @@ Order _makeOrder({
   String? deliveryAddressId = 'addr_test',
   OrderDeliveryAddress? deliveryAddress,
   String? deliveryAssignmentId = 'da_test',
+  int? queuePosition = 1,
+  int? queueSize = 1,
+  bool canTrackDelivery = true,
 }) => Order(
   id: id,
   orderId: orderId,
@@ -32,6 +35,9 @@ Order _makeOrder({
   deliveryAddressId: deliveryAddressId,
   deliveryAddress: deliveryAddress,
   deliveryAssignmentId: deliveryAssignmentId,
+  deliveryQueuePosition: queuePosition,
+  deliveryQueueSize: queueSize,
+  canTrackDelivery: canTrackDelivery,
   createdAt: DateTime(2026, 4, 21),
   updatedAt: DateTime(2026, 4, 21),
 );
@@ -223,6 +229,9 @@ void main() {
         expect(state.status, LiveMapStatus.active);
         expect(state.orderId, 'ORD-TEST-001');
         expect(state.deliveryAssignmentId, 'da_test');
+        expect(state.queuePosition, 1);
+        expect(state.queueSize, 1);
+        expect(state.canTrackDelivery, isTrue);
         expect(state.orderStatus, OrderStatus.onTheWay);
         expect(state.destPoint.latitude, closeTo(7.0731, 0.001));
         expect(state.destPoint.longitude, closeTo(125.6128, 0.001));
@@ -230,6 +239,28 @@ void main() {
         expect(state.routePoints, isNotEmpty);
       },
     );
+
+    test('preserves queued state when assignment tracking id is withheld', () async {
+      container = _container(
+        orders: [
+          _makeOrder(
+            deliveryAssignmentId: null,
+            queuePosition: 2,
+            queueSize: 3,
+            canTrackDelivery: false,
+          ),
+        ],
+        addresses: [_makeDavaoAddress()],
+      );
+
+      final state = await container.read(liveDeliveryMapProvider.future);
+
+      expect(state.status, LiveMapStatus.active);
+      expect(state.deliveryAssignmentId, isNull);
+      expect(state.queuePosition, 2);
+      expect(state.queueSize, 3);
+      expect(state.canTrackDelivery, isFalse);
+    });
 
     test(
       'returns active from temporary delivery address snapshot without saved id',

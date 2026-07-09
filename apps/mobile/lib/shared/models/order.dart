@@ -152,6 +152,9 @@ class Order {
     this.deliveryAddress,
     this.assignedRiderId,
     this.deliveryAssignmentId,
+    this.deliveryQueuePosition,
+    this.deliveryQueueSize,
+    this.canTrackDelivery = false,
     this.assignedRider,
     this.estimatedCompletionAt,
     this.adminStatusNote,
@@ -193,6 +196,9 @@ class Order {
   final OrderDeliveryAddress? deliveryAddress;
   final String? assignedRiderId;
   final String? deliveryAssignmentId;
+  final int? deliveryQueuePosition;
+  final int? deliveryQueueSize;
+  final bool canTrackDelivery;
   final AssignedRiderContact? assignedRider;
   final DateTime? estimatedCompletionAt;
   final String? adminStatusNote;
@@ -284,6 +290,9 @@ class Order {
     OrderDeliveryAddress? deliveryAddress,
     String? assignedRiderId,
     String? deliveryAssignmentId,
+    int? deliveryQueuePosition,
+    int? deliveryQueueSize,
+    bool? canTrackDelivery,
     AssignedRiderContact? assignedRider,
     DateTime? estimatedCompletionAt,
     String? adminStatusNote,
@@ -325,6 +334,10 @@ class Order {
       deliveryAddress: deliveryAddress ?? this.deliveryAddress,
       assignedRiderId: assignedRiderId ?? this.assignedRiderId,
       deliveryAssignmentId: deliveryAssignmentId ?? this.deliveryAssignmentId,
+      deliveryQueuePosition:
+          deliveryQueuePosition ?? this.deliveryQueuePosition,
+      deliveryQueueSize: deliveryQueueSize ?? this.deliveryQueueSize,
+      canTrackDelivery: canTrackDelivery ?? this.canTrackDelivery,
       assignedRider: assignedRider ?? this.assignedRider,
       estimatedCompletionAt:
           estimatedCompletionAt ?? this.estimatedCompletionAt,

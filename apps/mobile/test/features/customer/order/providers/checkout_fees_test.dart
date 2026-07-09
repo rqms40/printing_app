@@ -19,18 +19,18 @@ void main() {
       expect(fees.total, 227);
     });
 
-    test('express tier: 45 delivery fee, no separate surcharge', () {
+    test('express tier includes the configured priority surcharge', () {
       final c = ProviderContainer();
       final n = c.read(checkoutProvider.notifier);
       n.addItem(_item('a', 200));
       n.setSpeedTier(DeliverySpeedTier.priority);
       final fees = c.read(checkoutFeesProvider);
-      expect(fees.deliveryFee, 45);
-      expect(fees.priorityFee, 0);
-      expect(fees.total, 247);
+      expect(fees.deliveryFee, 25);
+      expect(fees.priorityFee, 50);
+      expect(fees.total, 277);
     });
 
-    test('multidrop with 2 drops adds 15 extra-drop fee', () {
+    test('multidrop with 2 drops adds the configured extra-drop fee', () {
       final c = ProviderContainer();
       final n = c.read(checkoutProvider.notifier);
       n.addItem(_item('a', 200));
@@ -39,7 +39,7 @@ void main() {
         const DestinationGroup(id: '2', label: 'B', itemIds: []),
       ]);
       final fees = c.read(checkoutFeesProvider);
-      expect(fees.extraDropFee, 15);
+      expect(fees.extraDropFee, 30);
     });
   });
 }

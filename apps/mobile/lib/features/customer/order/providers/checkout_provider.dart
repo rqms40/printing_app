@@ -190,16 +190,14 @@ class CheckoutFees {
       subtotal + deliveryFee + priorityFee + extraDropFee + serviceFee;
 }
 
-// Delivery fee table: tier IS the fee — no priority surcharge anymore.
 const _kStandardDeliveryFee = 25.0;
-const _kExpressDeliveryFee = 45.0;
-const _kExtraDropFee = 15.0;
+const _kPriorityFee = 50.0;
+const _kExtraDropFee = 30.0;
 const _kServiceFee = 2.0;
 
 double _deliveryFeeForTier(DeliverySpeedTier tier) {
   switch (tier) {
     case DeliverySpeedTier.priority:
-      return _kExpressDeliveryFee;
     case DeliverySpeedTier.standard:
     case DeliverySpeedTier.scheduled:
       return _kStandardDeliveryFee;
@@ -212,12 +210,15 @@ double _deliveryFeeForTier(DeliverySpeedTier tier) {
 final checkoutFeesProvider = Provider<CheckoutFees>((ref) {
   final state = ref.watch(checkoutProvider);
   final extraDrops = state.drops.length > 1 ? state.drops.length - 1 : 0;
+  final isPickup = state.mode == DeliveryMode.pickup;
   return CheckoutFees(
     subtotal: state.subtotal,
-    deliveryFee: _deliveryFeeForTier(state.speedTier),
-    // Express's premium is baked into the fee itself; no separate line.
-    priorityFee: 0,
-    extraDropFee: extraDrops * _kExtraDropFee,
+    deliveryFee: isPickup ? 0 : _deliveryFeeForTier(state.speedTier),
+    priorityFee:
+        !isPickup && state.speedTier == DeliverySpeedTier.priority
+        ? _kPriorityFee
+        : 0,
+    extraDropFee: isPickup ? 0 : extraDrops * _kExtraDropFee,
     serviceFee: _kServiceFee,
   );
 });

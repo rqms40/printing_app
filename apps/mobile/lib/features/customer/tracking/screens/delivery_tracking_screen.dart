@@ -34,15 +34,13 @@ Order? selectDeliveryTrackingOrder(List<Order> orders, String? routeId) {
 
   for (final order in orders) {
     if (order.orderStatus == OrderStatus.onTheWay &&
+        order.canTrackDelivery &&
+        order.deliveryAssignmentId != null &&
         (order.assignedRider != null ||
             order.assignedRiderId != null ||
             order.deliveryAssignmentId != null)) {
       return order;
     }
-  }
-
-  for (final order in orders) {
-    if (order.orderStatus == OrderStatus.onTheWay) return order;
   }
 
   return null;
@@ -134,6 +132,9 @@ class _DeliveryTrackingScreenState
       ref.watch(ordersProvider),
       widget.orderId,
     );
+    final canTrack =
+        order?.canTrackDelivery == true &&
+        order?.deliveryAssignmentId?.isNotEmpty == true;
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -146,7 +147,20 @@ class _DeliveryTrackingScreenState
         elevation: 0,
         iconTheme: IconThemeData(color: colors.onBackground),
       ),
-      body: Column(
+      body: !canTrack
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                child: Text(
+                  'Live tracking is not available for this delivery yet.',
+                  textAlign: TextAlign.center,
+                  style: AppTypography.body.copyWith(
+                    color: colors.onSurfaceDim,
+                  ),
+                ),
+              ),
+            )
+          : Column(
         children: [
           // Map placeholder
           Expanded(

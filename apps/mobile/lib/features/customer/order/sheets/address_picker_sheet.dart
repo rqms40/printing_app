@@ -98,9 +98,9 @@ class _AddressPickerBodyState extends ConsumerState<_AddressPickerBody> {
     super.dispose();
   }
 
-  void _submitTemporaryAddress() {
+  Future<void> _submitTemporaryAddress() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    final address = TemporaryCheckoutAddress(
+    final temporaryAddress = TemporaryCheckoutAddress(
       label: _labelController.text,
       fullAddress: _fullAddressController.text,
       city: _cityController.text,
@@ -108,7 +108,42 @@ class _AddressPickerBodyState extends ConsumerState<_AddressPickerBody> {
       latitude: _selectedPoint.latitude,
       longitude: _selectedPoint.longitude,
     );
-    Navigator.of(context).pop(CheckoutAddressSelection.temporary(address));
+    final now = DateTime.now();
+    final savedAddress = await ref.read(addressProvider.notifier).addAddress(
+      Address(
+        id: 'pending_${now.microsecondsSinceEpoch}',
+        userId: '',
+        label: temporaryAddress.displayLabel,
+        fullAddress: temporaryAddress.fullAddress.trim(),
+        barangay: temporaryAddress.barangay,
+        city: temporaryAddress.city.trim(),
+        province: temporaryAddress.province,
+        zipCode: temporaryAddress.zipCode,
+        landmark: temporaryAddress.landmark,
+        latitude: temporaryAddress.latitude,
+        longitude: temporaryAddress.longitude,
+        isDefault: false,
+        createdAt: now,
+        updatedAt: now,
+      ),
+      addLocallyOnFailure: false,
+    );
+    if (!mounted) return;
+    if (savedAddress != null) {
+      Navigator.of(context).pop(CheckoutAddressSelection.saved(savedAddress));
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'This location will be used for this order but was not saved.',
+        ),
+      ),
+    );
+    Navigator.of(
+      context,
+    ).pop(CheckoutAddressSelection.temporary(temporaryAddress));
   }
 
   @override
@@ -155,8 +190,8 @@ class _AddressPickerBodyState extends ConsumerState<_AddressPickerBody> {
               ),
               child: _SheetActionTile(
                 icon: Icons.add_location_alt_outlined,
-                title: 'Pin Location',
-                subtitle: 'Use a temporary delivery address for this order',
+                title: 'Pin and save location',
+                subtitle: 'Add a reusable delivery address',
                 colors: colors,
                 onTap: () => setState(() => _pinMode = true),
               ),
@@ -205,7 +240,7 @@ class _AddressPickerBodyState extends ConsumerState<_AddressPickerBody> {
           ),
           children: [
             _SheetHeader(
-              title: 'Pin temporary address',
+              title: 'Pin delivery address',
               colors: colors,
               leading: IconButton(
                 onPressed: () => setState(() => _pinMode = false),

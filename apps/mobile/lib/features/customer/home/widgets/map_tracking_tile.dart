@@ -131,6 +131,7 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
         final canShowLiveMap =
             state.status == LiveMapStatus.active &&
             state.orderStatus == OrderStatus.onTheWay &&
+            state.canTrackDelivery &&
             state.deliveryAssignmentId != null;
 
         final deliveryAssignmentId = state.deliveryAssignmentId;
@@ -164,6 +165,16 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
             onMapTap: liveRiderPoint == null
                 ? null
                 : () => context.push('/customer/tracking'),
+          );
+        }
+
+        if (state.status == LiveMapStatus.active) {
+          return _DeliveryStatusAndMapLayout(
+            colors: colors,
+            brightness: brightness,
+            slots: slots.slots,
+            isLoading: slots.isLoading,
+            liveState: state,
           );
         }
 
@@ -271,7 +282,14 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
         : visibleSlots.isEmpty
         ? 'No batches scheduled today'
         : 'Live map starts after rider dispatch.';
-    final statusPanel = _hasActiveDelivery
+    final statusPanel = _hasActiveDelivery &&
+            liveState?.canTrackDelivery == false
+        ? _QueuedDeliveryStatusTile(
+            key: const Key('delivery-status-panel'),
+            colors: colors,
+            liveState: liveState!,
+          )
+        : _hasActiveDelivery
         ? _LiveDeliveryStatusTile(
             key: const Key('delivery-status-panel'),
             colors: colors,
@@ -699,6 +717,75 @@ class _MapPlaceholder extends StatelessWidget {
 }
 
 // ── Live Delivery ────────────────────────────────────────────────────────────
+
+class _QueuedDeliveryStatusTile extends StatelessWidget {
+  const _QueuedDeliveryStatusTile({
+    super.key,
+    required this.colors,
+    required this.liveState,
+  });
+
+  final AppColorSet colors;
+  final LiveDeliveryMapState liveState;
+
+  @override
+  Widget build(BuildContext context) {
+    final position = liveState.queuePosition;
+    final label = position == null
+        ? 'Waiting in delivery queue'
+        : '${_ordinal(position)} in queue';
+    return ClipRRect(
+      borderRadius: AppRadius.borderXl,
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        color: colors.surface,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Delivery Status',
+              maxLines: 1,
+              style: AppTypography.h3.copyWith(
+                color: colors.onSurface,
+                fontSize: 20,
+                height: 1,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            _StatusLine(
+              colors: colors,
+              icon: Icons.format_list_numbered_rounded,
+              title: label,
+              subtitle: 'Live tracking unlocks when you are next',
+              darkIcon: true,
+            ),
+            const Spacer(),
+            Text(
+              'Your position updates after each completed stop.',
+              style: AppTypography.caption.copyWith(
+                color: colors.onSurfaceDim,
+                fontSize: 10,
+                height: 1.2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _ordinal(int value) {
+  final mod100 = value % 100;
+  if (mod100 >= 11 && mod100 <= 13) return '${value}th';
+  return switch (value % 10) {
+    1 => '${value}st',
+    2 => '${value}nd',
+    3 => '${value}rd',
+    _ => '${value}th',
+  };
+}
 
 class _LiveDeliveryStatusTile extends StatelessWidget {
   const _LiveDeliveryStatusTile({

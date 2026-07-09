@@ -60,8 +60,11 @@ class AddressNotifier extends StateNotifier<List<Address>> {
 
   Future<void> refreshAddresses() async => _fetchAddresses();
 
-  Future<void> addAddress(Address address) async {
-    if (!canAddMore) return;
+  Future<Address?> addAddress(
+    Address address, {
+    bool addLocallyOnFailure = true,
+  }) async {
+    if (!canAddMore) return null;
 
     try {
       final response = await ApiClient.instance.post(
@@ -87,13 +90,16 @@ class AddressNotifier extends StateNotifier<List<Address>> {
       } else {
         state = [...state, newAddr];
       }
+      return newAddr;
     } catch (_) {
+      if (!addLocallyOnFailure) return null;
       // Offline: add locally
       if (address.isDefault) {
         state = [for (final a in state) a.copyWith(isDefault: false), address];
       } else {
         state = [...state, address];
       }
+      return null;
     }
   }
 

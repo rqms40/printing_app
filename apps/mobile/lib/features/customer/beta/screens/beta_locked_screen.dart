@@ -103,7 +103,10 @@ class _BetaLockedScreenState extends ConsumerState<BetaLockedScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = isDark ? AppColors.dark : AppColors.light;
     final betaLocked = ref.watch(authProvider).betaLocked;
-    final fullName = betaLocked?.fullName ?? 'Beta Tester';
+    final lockedName = betaLocked?.fullName.trim();
+    final fullName = lockedName == null || lockedName.isEmpty
+        ? 'Beta Tester'
+        : lockedName;
 
     final uploadState = ref.watch(betaTestimonialProvider);
     final isUploading = uploadState.isUploading;

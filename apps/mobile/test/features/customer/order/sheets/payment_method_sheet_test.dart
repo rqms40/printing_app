@@ -136,7 +136,7 @@ void main() {
   });
 
   testWidgets(
-    'credits-only settings keep e-wallets available but disable COD',
+    'credits-only settings disable every non-credit payment method',
     (tester) async {
       final container = ProviderContainer(
         overrides: [
@@ -188,18 +188,22 @@ void main() {
       expect(find.text('Maya'), findsOneWidget);
       expect(find.text('Cash on Delivery'), findsOneWidget);
       expect(find.text('GRIDGO Credits'), findsOneWidget);
-      expect(find.text('Temporarily unavailable'), findsOneWidget);
+      expect(find.text('Only GRIDGO Credits is available during beta testing'), findsOneWidget);
+      expect(find.text('Unavailable during beta testing'), findsNWidgets(3));
       expect(find.text('Top up'), findsNothing);
 
       await tester.tap(find.text('GCash'));
       await tester.pump();
+      expect(picked, isNull);
+      await tester.tap(find.text('GRIDGO Credits'));
+      await tester.pump();
       await tester.tap(find.text('Use this'));
       await tester.pumpAndSettle();
-      expect(picked, PaymentMethod.gcash);
+      expect(picked, PaymentMethod.gridCredits);
     },
   );
 
-  testWidgets('credits-only settings keep Maya selectable for beta checkout', (
+  testWidgets('credits-only settings keep Maya unavailable for beta checkout', (
     tester,
   ) async {
     final container = ProviderContainer(
@@ -249,10 +253,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Maya'));
     await tester.pump();
-    await tester.tap(find.text('Use this'));
-    await tester.pumpAndSettle();
 
-    expect(picked, PaymentMethod.maya);
+    expect(picked, isNull);
+    expect(find.text('Use this'), findsOneWidget);
   });
 }
 

@@ -35,6 +35,19 @@ import 'package:printing_app/shared/widgets/step_indicator.dart';
 import 'package:printing_app/utils/file_helpers.dart';
 import 'package:printing_app/utils/formatters.dart';
 
+bool isUploadedFileReady({
+  required String? fileName,
+  required int? fileMetadataId,
+  required bool isUploading,
+  required String? errorText,
+}) {
+  return fileName != null &&
+      fileMetadataId != null &&
+      fileMetadataId > 0 &&
+      !isUploading &&
+      errorText == null;
+}
+
 /// Step 3/6 -- File upload with real Dio progress.
 class UploadScreen extends ConsumerStatefulWidget {
   const UploadScreen({super.key});
@@ -213,7 +226,6 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
     }
 
     FilePickerResult? result;
-    bool nativeSucceeded = false;
 
     try {
       try {
@@ -230,15 +242,17 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
           withData: true,
         );
       }
-      if (result != null && result.files.isNotEmpty) {
-        nativeSucceeded = true;
+    } catch (error) {
+      debugPrint('[upload_screen] file picker failed: $error');
+      if (mounted) {
+        setState(() {
+          _errorText = 'Could not open the file picker. Please try again.';
+        });
       }
-    } catch (_) {
-      nativeSucceeded = false;
+      return;
     }
 
-    if (!nativeSucceeded || result == null) {
-      _useMockFile();
+    if (result == null || result.files.isEmpty) {
       return;
     }
 
@@ -344,35 +358,6 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
     }
   }
 
-  void _useMockFile() {
-    final category = ref.read(orderFlowProvider).category ?? 'paper';
-    final mockFiles = category == 'paper'
-        ? [
-            ('Project_Report_Final.pdf', 2457600, 'application/pdf'),
-            ('Thesis_Document.pdf', 1843200, 'application/pdf'),
-            ('Event_Poster_A3.png', 5242880, 'image/png'),
-            ('Business_Cards_Layout.pdf', 819200, 'application/pdf'),
-          ]
-        : [
-            ('Prototype_Model_v2.stl', 8388608, 'model/stl'),
-            ('Figurine_Base.obj', 4194304, 'model/obj'),
-            ('Phone_Case_Design.3mf', 3145728, 'model/3mf'),
-          ];
-
-    final mock = mockFiles[DateTime.now().second % mockFiles.length];
-    setState(() {
-      _errorText = null;
-      _fileName = mock.$1;
-      _filePath = null;
-      _fileBytes = null;
-      _fileMimeType = mock.$3;
-      _fileSize = mock.$2;
-      _fileMetadataId = null;
-      _isUploading = false;
-      _uploadProgress = 0;
-    });
-  }
-
   Future<void> _uploadFile(PlatformFile file) async {
     try {
       final MultipartFile multipartFile;
@@ -410,7 +395,19 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
       );
 
       if (mounted) {
-        final fileMetadataId = response.data['id'] as int?;
+        final rawMetadataId = response.data['id'];
+        final fileMetadataId = rawMetadataId is num
+            ? rawMetadataId.toInt()
+            : int.tryParse(rawMetadataId?.toString() ?? '');
+        if (fileMetadataId == null || fileMetadataId <= 0) {
+          setState(() {
+            _isUploading = false;
+            _uploadProgress = 0;
+            _fileMetadataId = null;
+            _errorText = 'Upload did not complete. Please try again.';
+          });
+          return;
+        }
         setState(() {
           _isUploading = false;
           _uploadProgress = 1.0;
@@ -425,25 +422,23 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
             .paperSpecs
             ?.paperSize
             .name;
-        if (fileMetadataId != null) {
-          try {
-            final String inspectUrl;
-            if (category == '3d') {
-              inspectUrl = '/files/$fileMetadataId/inspect';
-            } else if (paperSizeName != null) {
-              inspectUrl =
-                  '/files/$fileMetadataId/inspect?paperSize=$paperSizeName';
-            } else {
-              inspectUrl = '';
+        try {
+          final String inspectUrl;
+          if (category == '3d') {
+            inspectUrl = '/files/$fileMetadataId/inspect';
+          } else if (paperSizeName != null) {
+            inspectUrl =
+                '/files/$fileMetadataId/inspect?paperSize=$paperSizeName';
+          } else {
+            inspectUrl = '';
+          }
+          if (inspectUrl.isNotEmpty) {
+            final res = await ApiClient.instance.get(inspectUrl);
+            if (mounted) {
+              setState(() => _inspection = res.data as Map<String, dynamic>);
             }
-            if (inspectUrl.isNotEmpty) {
-              final res = await ApiClient.instance.get(inspectUrl);
-              if (mounted) {
-                setState(() => _inspection = res.data as Map<String, dynamic>);
-              }
-            }
-          } catch (_) {}
-        }
+          }
+        } catch (_) {}
       }
     } catch (e) {
       // Surface actual cause: DioException type → user-actionable message,
@@ -495,9 +490,12 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
 
   bool get _canContinue =>
       !_isBetaDemo3dUploadActive &&
-      _fileName != null &&
-      !_isUploading &&
-      _errorText == null;
+      isUploadedFileReady(
+        fileName: _fileName,
+        fileMetadataId: _fileMetadataId,
+        isUploading: _isUploading,
+        errorText: _errorText,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -789,6 +787,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
   }
 
   void _onContinue() {
+    if (!_canContinue) return;
     ref
         .read(orderFlowProvider.notifier)
         .setFile(
@@ -810,7 +809,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
       fileName: flow.fileName!,
       filePath: flow.filePath,
       fileSize: flow.fileSize,
-      fileMetadataId: flow.fileMetadataId ?? 0,
+      fileMetadataId: flow.fileMetadataId!,
       specs: flow.specs,
       specDisplayValues: flow.specDisplayValues,
       paperSpecs: flow.category == 'paper' ? flow.paperSpecs : null,

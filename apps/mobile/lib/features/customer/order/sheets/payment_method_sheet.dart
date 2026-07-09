@@ -171,7 +171,7 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
               !settingsReady
                   ? 'Checking payment availability'
                   : creditsOnlyMode
-                  ? 'GCash, Maya, and GRIDGO Credits are available'
+                  ? 'Only GRIDGO Credits is available during beta testing'
                   : 'Pick how you want to pay',
               style: AppTypography.caption.copyWith(
                 color: colors.onSurfaceDim,

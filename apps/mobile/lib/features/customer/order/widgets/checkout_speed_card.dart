@@ -113,10 +113,8 @@ class CheckoutSpeedCard extends ConsumerWidget {
     final hasLiveTodaySlot = _hasLiveTodaySlot(now, today, todaySlots);
     final nextBatchLabel = _nextBatchLabel(now: now, days: previewDays);
 
-    // Express tier preview shows the express fee directly so users see the
-    // real number without selecting it. Standard + Scheduled use the current
-    // computed delivery fee (which depends on the active tier).
-    const expressFeePreview = 45.0;
+    // Preview values mirror the server's default delivery settings.
+    const expressFeePreview = 75.0;
     const standardFeePreview = 25.0;
 
     final tiers = <_TierSpec>[
@@ -125,7 +123,7 @@ class CheckoutSpeedCard extends ConsumerWidget {
         'Express',
         '~15 min · arrives first',
         state.speedTier == DeliverySpeedTier.priority
-            ? fees.deliveryFee
+            ? fees.deliveryFee + fees.priorityFee
             : expressFeePreview,
         HugeIcons.strokeRoundedFlash,
         disabled: !hasLiveTodaySlot,

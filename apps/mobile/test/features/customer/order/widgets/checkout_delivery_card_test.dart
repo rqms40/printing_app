@@ -73,7 +73,7 @@ void main() {
 
       await tester.tap(find.text('Client office'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Pin Location'));
+      await tester.tap(find.text('Pin and save location'));
       await tester.pumpAndSettle();
 
       expect(await _textFieldValue(tester, 'Label'), 'Client office');

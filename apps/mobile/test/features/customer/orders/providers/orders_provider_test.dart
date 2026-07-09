@@ -312,6 +312,30 @@ void main() {
   });
 
   group('OrdersNotifier lifecycle', () {
+    test('reports initial order loading again after a session reset', () async {
+      WebSocketService.disableOrdersSocketForTests = true;
+      addTearDown(() {
+        WebSocketService.disableOrdersSocketForTests = false;
+        WebSocketService.instance.disconnect();
+      });
+      var loadReports = 0;
+      final notifier = OrdersNotifier(
+        skipBootstrap: true,
+        onInitialLoadComplete: () => loadReports++,
+      );
+      addTearDown(notifier.dispose);
+
+      await notifier.refreshOrders();
+      await Future<void>.delayed(Duration.zero);
+      expect(loadReports, 1);
+
+      notifier.clear();
+      await notifier.startSession();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(loadReports, 2);
+    });
+
     test('failed refresh preserves existing real orders', () async {
       failOrdersGet = true;
       final existingOrder = _orderFromJson(

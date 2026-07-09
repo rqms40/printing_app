@@ -53,6 +53,28 @@ void main() {
       expect(notifier.state.last.label, 'Gym');
     });
 
+    test('does not expose an unsaved checkout address as reusable', () async {
+      final initialState = List<Address>.from(notifier.state);
+      final result = await notifier.addAddress(
+        Address(
+          id: 'pending_1',
+          userId: '',
+          label: 'Pinned location',
+          fullAddress: 'Unit 12, Jacinto Extension',
+          city: 'Davao City',
+          latitude: 7.07,
+          longitude: 125.61,
+          isDefault: false,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+        addLocallyOnFailure: false,
+      );
+
+      expect(result, isNull);
+      expect(notifier.state, initialState);
+    });
+
     test('addAddress with isDefault unsets other defaults', () async {
       final defaultAddr = Address(
         id: 'addr_new_default',

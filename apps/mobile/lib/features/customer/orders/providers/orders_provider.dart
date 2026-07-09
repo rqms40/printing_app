@@ -460,6 +460,37 @@ Order _parseOrder(Map<String, dynamic> json) {
       'deliveryAssignmentId',
       'delivery_assignment_id',
     )?.toString(),
+    deliveryQueuePosition:
+        _readJsonValue(
+              json,
+              'deliveryQueuePosition',
+              'delivery_queue_position',
+            ) ==
+            null
+        ? null
+        : _readInt(
+            _readJsonValue(
+              json,
+              'deliveryQueuePosition',
+              'delivery_queue_position',
+            ),
+            0,
+          ),
+    deliveryQueueSize:
+        _readJsonValue(json, 'deliveryQueueSize', 'delivery_queue_size') == null
+        ? null
+        : _readInt(
+            _readJsonValue(
+              json,
+              'deliveryQueueSize',
+              'delivery_queue_size',
+            ),
+            0,
+          ),
+    canTrackDelivery: _readBool(
+      _readJsonValue(json, 'canTrackDelivery', 'can_track_delivery'),
+      false,
+    ),
     assignedRider: _parseAssignedRider(json),
     estimatedCompletionAt: _parseDateNullable(
       _readJsonValue(json, 'estimatedCompletionAt', 'estimated_completion_at'),
@@ -637,6 +668,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     List<Order> initialState = const [],
     bool skipBootstrap = false,
     this.onCompletionUpdate,
+    this.onInitialLoadComplete,
   }) : super(initialState) {
     if (!skipBootstrap) {
       _fetchOrders();
@@ -645,7 +677,10 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   }
 
   final Future<void> Function()? onCompletionUpdate;
+  final VoidCallback? onInitialLoadComplete;
   VoidCallback? _removeOrderUpdateListener;
+  bool _initialLoadReported = false;
+  bool _sessionNeedsStart = false;
 
   Future<void> _connectWebSocket() async {
     try {
@@ -739,11 +774,25 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     }
     // Subscribe to all loaded orders in case socket connected before fetch completed.
     _subscribeToAllOrders();
+    if (!_initialLoadReported) {
+      _initialLoadReported = true;
+      scheduleMicrotask(() => onInitialLoadComplete?.call());
+    }
   }
 
   Future<void> refreshOrders() async => _fetchOrders();
 
-  void clear() => state = const [];
+  void clear() {
+    state = const [];
+    _initialLoadReported = false;
+    _sessionNeedsStart = true;
+  }
+
+  Future<void> startSession() async {
+    if (!_sessionNeedsStart) return;
+    _sessionNeedsStart = false;
+    await Future.wait([_fetchOrders(), _connectWebSocket()]);
+  }
 
   /// Add a new order to the top of the list. Returns the created [Order]
   /// (server-assigned fields populated) so callers can use the real DB id.
@@ -1049,8 +1098,13 @@ final ordersProvider = StateNotifierProvider<OrdersNotifier, List<Order>>((
 ) {
   return OrdersNotifier(
     onCompletionUpdate: () => ref.read(accountStateProvider.notifier).refresh(),
+    onInitialLoadComplete: () {
+      ref.read(ordersInitialLoadCompleteProvider.notifier).state = true;
+    },
   );
 });
+
+final ordersInitialLoadCompleteProvider = StateProvider<bool>((ref) => false);
 
 /// Reactive list of active (non-terminal) orders, sorted newest-updated first.
 /// Widgets that watch this will rebuild automatically on any WS or API update.

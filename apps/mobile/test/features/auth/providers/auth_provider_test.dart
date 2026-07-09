@@ -206,6 +206,17 @@ void main() {
     });
   });
 
+  test('extracts the scoped token returned for a beta-held login', () {
+    expect(
+      betaHeldAccessTokenFromResponse({
+        'code': 'beta_held',
+        'access_token': 'held-token',
+      }),
+      'held-token',
+    );
+    expect(betaHeldAccessTokenFromResponse({'code': 'beta_held'}), isNull);
+  });
+
   group('AuthUser', () {
     test('copyWith creates new instance with overridden fields', () {
       const user = AuthUser(

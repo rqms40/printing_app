@@ -65,6 +65,9 @@ class LiveDeliveryMapState {
     this.deliveryAssignmentId,
     this.orderStatus,
     this.assignedSlot,
+    this.queuePosition,
+    this.queueSize,
+    this.canTrackDelivery = false,
   });
 
   final LiveMapStatus status;
@@ -76,6 +79,9 @@ class LiveDeliveryMapState {
   final String? deliveryAssignmentId;
   final OrderStatus? orderStatus;
   final AssignedDeliverySlot? assignedSlot;
+  final int? queuePosition;
+  final int? queueSize;
+  final bool canTrackDelivery;
 
   factory LiveDeliveryMapState.loading() => const LiveDeliveryMapState._(
     status: LiveMapStatus.loading,
@@ -98,6 +104,9 @@ class LiveDeliveryMapState {
     String? deliveryAssignmentId,
     required OrderStatus orderStatus,
     AssignedDeliverySlot? assignedSlot,
+    int? queuePosition = 1,
+    int? queueSize = 1,
+    bool canTrackDelivery = true,
   }) => LiveDeliveryMapState._(
     status: LiveMapStatus.active,
     shopPoint: shopPoint,
@@ -108,6 +117,9 @@ class LiveDeliveryMapState {
     deliveryAssignmentId: deliveryAssignmentId,
     orderStatus: orderStatus,
     assignedSlot: assignedSlot,
+    queuePosition: queuePosition,
+    queueSize: queueSize,
+    canTrackDelivery: canTrackDelivery,
   );
 
   /// Index of the route point nearest to [riderPoint].
@@ -174,5 +186,8 @@ final liveDeliveryMapProvider =
         deliveryAssignmentId: onTheWayOrder.deliveryAssignmentId,
         orderStatus: onTheWayOrder.orderStatus,
         assignedSlot: onTheWayOrder.assignedSlot,
+        queuePosition: onTheWayOrder.deliveryQueuePosition,
+        queueSize: onTheWayOrder.deliveryQueueSize,
+        canTrackDelivery: onTheWayOrder.canTrackDelivery,
       );
     });

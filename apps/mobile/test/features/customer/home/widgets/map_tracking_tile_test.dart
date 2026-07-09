@@ -331,6 +331,36 @@ void main() {
     },
   );
 
+  testWidgets('later route stop shows queue position without tracking access', (
+    tester,
+  ) async {
+    final queued = LiveDeliveryMapState.active(
+      riderPoint: const LatLng(7.20, 125.46),
+      shopPoint: const LatLng(7.19, 125.45),
+      destPoint: const LatLng(7.21, 125.47),
+      routePoints: const [
+        LatLng(7.19, 125.45),
+        LatLng(7.21, 125.47),
+      ],
+      orderId: 'ORD-SECOND',
+      deliveryAssignmentId: null,
+      orderStatus: OrderStatus.onTheWay,
+      queuePosition: 2,
+      queueSize: 2,
+      canTrackDelivery: false,
+    );
+    final harness = _harness(state: queued, slots: _dailySlots);
+
+    await tester.pumpWidget(harness.widget);
+    await tester.pumpAndSettle();
+
+    expect(find.text('2nd in queue'), findsOneWidget);
+    expect(find.text('Live tracking unlocks when you are next'), findsOneWidget);
+    expect(find.text('Open live tracking'), findsNothing);
+    expect(find.byKey(const Key('pending-route-preview-map')), findsNothing);
+    verifyNever(harness.webSocket.subscribeToDelivery(any));
+  });
+
   testWidgets(
     'uses pending space for a route preview map when GPS is pending',
     (tester) async {
