@@ -14,7 +14,7 @@ type BetaWorkflowStep = {
   expected: string;
 };
 
-type KnownGap = {
+type RegressionIssue = {
   issue: number;
   title: string;
   affectedSteps: number[];
@@ -226,7 +226,7 @@ const betaWorkflowSteps: BetaWorkflowStep[] = [
   },
 ];
 
-const knownGaps: KnownGap[] = [
+const regressionIssues: RegressionIssue[] = [
   {
     issue: 72,
     title: "Mobile web checkout submits mock upload with invalid fileMetadataId",
@@ -293,11 +293,13 @@ test.describe("GRIDGO beta workflow regression contract", () => {
     expect(betaWorkflowSteps[28].expected).toContain("login is blocked");
   });
 
-  test("keeps known audited gaps tied to GitHub issues", () => {
-    expect(knownGaps.map((gap) => gap.issue).sort((a, b) => a - b)).toEqual([
+  test("keeps audited regressions tied to GitHub issues", () => {
+    expect(
+      regressionIssues.map((gap) => gap.issue).sort((a, b) => a - b),
+    ).toEqual([
       72, 73, 74, 75, 76, 77, 78, 79,
     ]);
-    for (const gap of knownGaps) {
+    for (const gap of regressionIssues) {
       expect(gap.title).toBeTruthy();
       expect(gap.affectedSteps.length).toBeGreaterThan(0);
       for (const stepId of gap.affectedSteps) {
@@ -342,8 +344,28 @@ test.describe("opt-in live beta workflow preflight", () => {
       database: "connected",
     });
 
+    const betaStatus = await request.get(`${apiBaseURL}/beta-mode/status`);
+    expect(betaStatus.ok()).toBe(true);
+    expect(await betaStatus.json()).toMatchObject({
+      isEnabled: expect.any(Boolean),
+    });
+
     await page.goto("/");
     await expect(page).toHaveTitle("GRIDGO");
+    await expect(page.getByText("DEV LOGIN", { exact: true })).toHaveCount(0);
+
+    const adminURL =
+      process.env.GRIDGO_ADMIN_URL ?? "http://127.0.0.1:8189";
+    await page.setViewportSize({ width: 393, height: 727 });
+    await page.goto(adminURL);
+    await expect(page).toHaveTitle("GRIDGO Admin");
+    await expect(page.getByPlaceholder("admin@gridgo.ph")).toHaveValue("");
+    await expect(page.getByPlaceholder("Enter password")).toHaveValue("");
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
 
     test.info().annotations.push({
       type: "beta-workflow",
