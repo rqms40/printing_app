@@ -69,6 +69,10 @@ function ghApiRaw(method, endpoint, body) {
   return run('gh', args, body === undefined ? undefined : JSON.stringify(body));
 }
 
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
 function normalizeLabel(value) {
   return String(value || '')
     .trim()
@@ -195,28 +199,45 @@ function listExistingIssues() {
   return map;
 }
 
-function ensureLabels(issueLabelNames, dryRun) {
+function loadRepoLabels() {
+  const labels = ghApi('GET', `/repos/${CONFIG.repo}/labels?per_page=100`) || [];
+  return new Set(labels.map((label) => label.name));
+}
+
+function ensureLabels(issueLabelNames, dryRun, knownLabels) {
   const allLabelNames = new Set([...Object.keys(LABELS), ...issueLabelNames]);
   for (const name of allLabelNames) {
+    if (knownLabels.has(name)) continue;
     const color = LABELS[name] || 'ededed';
-    if (dryRun) continue;
+    if (dryRun) {
+      knownLabels.add(name);
+      continue;
+    }
     try {
       ghApiRaw('POST', `/repos/${CONFIG.repo}/labels`, { name, color, description: `GRID Trello sync label: ${name}` });
+      knownLabels.add(name);
+      sleep(800);
     } catch (error) {
-      if (!String(error.message).includes('already_exists') && !String(error.message).includes('Validation Failed')) throw error;
+      const message = String(error.message);
+      if (message.includes('already_exists') || message.includes('Validation Failed')) {
+        knownLabels.add(name);
+        continue;
+      }
+      throw error;
     }
   }
 }
 
 
-function writeIssue(card, existing, dryRun) {
+function writeIssue(card, existing, dryRun, knownLabels) {
   const body = issueBody(card);
   const labels = issueLabels(card);
-  ensureLabels(labels, dryRun);
+  ensureLabels(labels, dryRun, knownLabels);
   const payload = { title: card.name, body, labels };
   if (dryRun) {
     return { action: existing ? 'would-update' : 'would-create', title: card.name, labels, trello: card.shortLink };
   }
+  sleep(1200);
   if (existing) {
     const issue = ghApi('PATCH', `/repos/${CONFIG.repo}/issues/${existing.number}`, payload);
     return { action: 'updated', number: issue.number, title: issue.title, trello: card.shortLink };
@@ -232,10 +253,11 @@ function main() {
   if (opts.shortLinks.size) cards = cards.filter((card) => opts.shortLinks.has(card.shortLink));
   if (opts.limit) cards = cards.slice(0, opts.limit);
   const existing = listExistingIssues();
+  const knownLabels = loadRepoLabels();
   const results = [];
   for (const card of cards) {
     const found = existing.get(card.id) || existing.get(card.shortLink);
-    results.push(writeIssue(card, found, opts.dryRun));
+    results.push(writeIssue(card, found, opts.dryRun, knownLabels));
   }
   const summary = results.reduce((acc, item) => {
     acc[item.action] = (acc[item.action] || 0) + 1;
