@@ -165,6 +165,28 @@ GRIDGO_PUBLIC_HOST=127.0.0.1 docker compose -f docker-compose.dev.yml up --build
 
 The dev stack starts Postgres, MinIO, seed, API, mobile web, admin, and landing. Keep local secrets in ignored env files or a secret manager, not in committed files.
 
+## Beta Workflow Regression
+
+The canonical beta test flow is stored in `e2e/mobile-web/tests/beta-workflow.spec.ts`. Use it as the shared checklist for customer/admin/rider beta workflow work, especially issues #72-#79.
+
+Run the non-mutating flow contract:
+
+```bash
+cd e2e/mobile-web && npm test -- tests/beta-workflow.spec.ts
+```
+
+Run the opt-in live preflight against the dev compose stack:
+
+```bash
+cd e2e/mobile-web && \
+  GRIDGO_RUN_BETA_FLOW_E2E=1 \
+  MOBILE_WEB_E2E_URL=http://127.0.0.1:8088 \
+  GRIDGO_API_URL=http://127.0.0.1:3000/api \
+  npm test -- tests/beta-workflow.spec.ts
+```
+
+The live preflight assumes `docker-compose.dev.yml` is already running. Do not run destructive customer/rider/admin beta scenarios on shared data unless the issue or user explicitly asks for a live workflow run. When extending the live test, keep Mark, Ven, and Juan as separate role paths and preserve the queue/privacy expectations documented in the test.
+
 ## Surface-Specific Guidance
 
 Mobile:
