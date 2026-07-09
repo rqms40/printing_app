@@ -331,7 +331,12 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
 
   Map<String, String> _decodeOpenForumFeedback(String? comment) {
     if (comment == null || comment.isEmpty) {
-      return {'feature': '', 'delivery': ''};
+      return {
+        'feature': '',
+        'delivery': '',
+        'price_value': '',
+        'upload_friction': '',
+      };
     }
 
     try {
@@ -340,13 +345,20 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
         return {
           'feature': decoded['feature']?.toString() ?? '',
           'delivery': decoded['delivery']?.toString() ?? '',
+          'price_value': decoded['price_value']?.toString() ?? '',
+          'upload_friction': decoded['upload_friction']?.toString() ?? '',
         };
       }
     } catch (_) {
       // Fall through to the legacy single-comment format.
     }
 
-    return {'feature': comment, 'delivery': ''};
+    return {
+      'feature': comment,
+      'delivery': '',
+      'price_value': '',
+      'upload_friction': '',
+    };
   }
 
   @override

@@ -4,6 +4,10 @@ import { useState, useEffect } from "react";
 import { ShowPage } from "@/components/show-page";
 import { apiClient } from "@/providers/api-client";
 import { formatDate } from "@/utils/format";
+import {
+  parseTamSurveyFeedback,
+  TAM_SURVEY_FEEDBACK_FIELDS,
+} from "./feedback";
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -133,35 +137,25 @@ export function TamSurveyShow() {
 
         <Title level={4}>Additional Feedback</Title>
         {(() => {
-          if (!data.open_forum_feedback) {
+          const parsed = parseTamSurveyFeedback(data.open_forum_feedback);
+          const answeredFields = TAM_SURVEY_FEEDBACK_FIELDS.filter(
+            ({ key }) => parsed[key],
+          );
+          if (answeredFields.length === 0) {
             return <Text type="secondary">No additional feedback provided.</Text>;
-          }
-          let parsed;
-          try {
-            parsed = JSON.parse(data.open_forum_feedback);
-          } catch (e) {
-            parsed = { feature: data.open_forum_feedback, delivery: '' };
           }
 
           return (
             <Card style={{ background: token.colorBgLayout, borderColor: token.colorBorder }}>
               <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                {parsed.feature && (
-                  <div>
-                    <Text type="secondary" style={{ fontSize: 12 }}>WHAT IS ONE FEATURE OR SERVICE YOU WISH GRIDGO WOULD ADD?</Text>
+                {answeredFields.map(({ key, label }) => (
+                  <div key={key}>
+                    <Text type="secondary" style={{ fontSize: 12 }}>{label}</Text>
                     <Paragraph style={{ margin: 0, marginTop: 4, fontSize: 15, fontStyle: 'italic', color: token.colorPrimary }}>
-                      "{parsed.feature}"
+                      "{parsed[key]}"
                     </Paragraph>
                   </div>
-                )}
-                {parsed.delivery && (
-                  <div>
-                    <Text type="secondary" style={{ fontSize: 12 }}>ANY ADDITIONAL COMMENTS REGARDING YOUR EXPERIENCE?</Text>
-                    <Paragraph style={{ margin: 0, marginTop: 4, fontSize: 15, fontStyle: 'italic', color: token.colorPrimary }}>
-                      "{parsed.delivery}"
-                    </Paragraph>
-                  </div>
-                )}
+                ))}
               </Space>
             </Card>
           );

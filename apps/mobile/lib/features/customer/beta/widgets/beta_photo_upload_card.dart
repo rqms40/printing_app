@@ -5,8 +5,9 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/shared/widgets/grid_logo.dart';
 
-/// 16:9 photo upload card.
+/// Photo upload card with a compact empty state and a 4:5 social-ready preview.
 ///
 /// Empty state  : dashed border, camera icon + label.
 /// Selected state: thumbnail (web: from [photoBytes]; native: from [photoFile])
@@ -24,10 +25,13 @@ class BetaPhotoUploadCard extends StatelessWidget {
     this.uploadProgress, // 0.0–1.0 while uploading; null otherwise
     this.uploadError,
     this.uploadDone = false,
+    this.shareImageKey,
+    this.isSaving = false,
     // --- callbacks -----------------------------------------------------------
     required this.onPick,
     required this.onReplace,
     this.onRetry,
+    this.onSave,
   }) : assert(
           uploadError == null || onRetry != null,
           'onRetry must be provided when uploadError is set',
@@ -48,9 +52,14 @@ class BetaPhotoUploadCard extends StatelessWidget {
   /// True once upload + submit succeeded.
   final bool uploadDone;
 
+  /// Boundary used to render the branded 4:5 image for saving or sharing.
+  final GlobalKey? shareImageKey;
+
+  final bool isSaving;
   final VoidCallback onPick;
   final VoidCallback onReplace;
   final VoidCallback? onRetry;
+  final VoidCallback? onSave;
 
   bool get _hasPhoto =>
       (kIsWeb ? photoBytes != null : photoFile != null) ||
@@ -63,9 +72,46 @@ class BetaPhotoUploadCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = isDark ? AppColors.dark : AppColors.light;
 
-    return AspectRatio(
-      aspectRatio: 16 / 9,
-      child: _hasPhoto ? _selectedState(colors) : _emptyState(colors),
+    if (!_hasPhoto) {
+      return AspectRatio(aspectRatio: 16 / 9, child: _emptyState(colors));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AspectRatio(aspectRatio: 4 / 5, child: _selectedState(colors)),
+        if (onSave != null) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 48,
+            child: OutlinedButton.icon(
+              key: const ValueKey('beta-photo-save'),
+              onPressed: isSaving || uploadProgress != null ? null : onSave,
+              icon: isSaving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(
+                      kIsWeb ? Icons.download_rounded : Icons.ios_share_rounded,
+                      size: 19,
+                    ),
+              label: const Text(
+                kIsWeb ? 'Download share image' : 'Save / share image',
+                style: AppTypography.button,
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: colors.onBackground,
+                side: BorderSide(color: colors.outline),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -123,16 +169,15 @@ class BetaPhotoUploadCard extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Thumbnail
         ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: _thumbnail(),
+          borderRadius: BorderRadius.circular(8),
+          child: RepaintBoundary(key: shareImageKey, child: _shareTemplate()),
         ),
 
         // Dim overlay while uploading or errored
         if (isUploading || hasError)
           ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
             child: Container(color: Colors.black.withValues(alpha: 0.45)),
           ),
 
@@ -264,6 +309,83 @@ class BetaPhotoUploadCard extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _shareTemplate() {
+    return ColoredBox(
+      color: const Color(0xFF0A0A0A),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  color: const Color(0xFFFFDE58),
+                  child: const Text(
+                    'BETA TESTER',
+                    style: TextStyle(
+                      fontFamily: 'Satoshi',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF0A0A0A),
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                const GridLogo(size: 28, foregroundColor: Color(0xFFF4F4F4)),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: SizedBox.expand(child: _thumbnail()),
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'PRINTED WITH GRIDGO',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFFF4F4F4),
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    "Davao's print delivery, simplified.",
+                    style: TextStyle(
+                      fontFamily: 'Satoshi',
+                      fontSize: 12,
+                      color: Color(0xFF9A9A9A),
+                    ),
+                  ),
+                ),
+                Text(
+                  '#GRIDGOprint',
+                  style: TextStyle(
+                    fontFamily: 'Satoshi',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFFFFDE58),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 

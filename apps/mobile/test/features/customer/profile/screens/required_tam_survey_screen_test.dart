@@ -220,6 +220,20 @@ void main() {
       }
 
       final textFields = find.byType(TextField, skipOffstage: false);
+      await tester.ensureVisible(textFields.at(0));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.enterText(
+        textFields.at(0),
+        'Yes, the delivery convenience is worth the order price.',
+      );
+
+      await tester.ensureVisible(textFields.at(1));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.enterText(
+        textFields.at(1),
+        'I nearly left while waiting for the 3D preview.',
+      );
+
       await tester.ensureVisible(textFields.at(2));
       await tester.pump(const Duration(milliseconds: 300));
       await tester.enterText(textFields.at(2), 'Add saved presets.');
@@ -238,6 +252,9 @@ void main() {
       expect(lastSurveyPayload?['openForumFeedback'], {
         'feature': 'Add saved presets.',
         'delivery': 'Fast delivery and clear updates.',
+        'price_value':
+            'Yes, the delivery convenience is worth the order price.',
+        'upload_friction': 'I nearly left while waiting for the 3D preview.',
       });
 
       final surveyData = lastSurveyPayload?['surveyData'] as Map?;

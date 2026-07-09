@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatDate, formatRelativeTime } from "@/utils/format";
 import { apiClient } from "@/providers/api-client";
+import { summarizeTamSurveyFeedback } from "./feedback";
 
 export function TamSurveyList() {
   const [surveys, setSurveys] = useState<any[]>([]);
@@ -120,13 +121,7 @@ export function TamSurveyList() {
           dataIndex="open_forum_feedback"
           render={(v: any) => {
             if (!v) return <span style={{ color: "#ccc" }}>No feedback</span>;
-            let displayString = v;
-            try {
-              const parsed = JSON.parse(v);
-              displayString = [parsed.feature, parsed.delivery].filter(Boolean).join(" | ");
-            } catch (e) {
-              // Not JSON
-            }
+            const displayString = summarizeTamSurveyFeedback(v);
             if (!displayString) return <span style={{ color: "#ccc" }}>No feedback</span>;
             return (
               <span style={{ fontStyle: "italic", color: "#555" }}>

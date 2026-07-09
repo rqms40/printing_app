@@ -1,0 +1,1 @@
+enum BetaPhotoSaveResult { downloaded, shared }

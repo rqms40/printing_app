@@ -286,7 +286,12 @@ describe('TamSurveysService', () => {
 
     const result = await service.submitRequirement(10, 123, {
       surveyData: fullSurveyData,
-      openForumFeedback: { feature: 'More slots', delivery: 'Good' },
+      openForumFeedback: {
+        feature: 'More slots',
+        delivery: 'Good',
+        price_value: 'Yes, I would pay the quoted price',
+        upload_friction: 'The preview wait was the hardest part',
+      },
     });
 
     expect(surveyRepo.create).toHaveBeenCalledWith(
@@ -298,6 +303,8 @@ describe('TamSurveysService', () => {
         openForumFeedback: JSON.stringify({
           feature: 'More slots',
           delivery: 'Good',
+          price_value: 'Yes, I would pay the quoted price',
+          upload_friction: 'The preview wait was the hardest part',
         }),
       }),
     );

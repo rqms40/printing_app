@@ -1,13 +1,17 @@
 import 'dart:io';
+import 'dart:typed_data' show ByteData, Uint8List;
+import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show kIsWeb, Uint8List;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/beta/providers/beta_testimonial_provider.dart';
+import 'package:printing_app/features/customer/beta/services/beta_photo_save.dart';
 import 'package:printing_app/features/customer/beta/widgets/beta_hero_illustration.dart';
 import 'package:printing_app/features/customer/beta/widgets/beta_photo_upload_card.dart';
 import 'package:printing_app/features/customer/beta/widgets/beta_share_row.dart';
@@ -28,6 +32,8 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen>
   // Web bytes + filename
   Uint8List? _photoBytes;
   String? _photoFileName;
+  final GlobalKey _shareImageKey = GlobalKey();
+  bool _isSavingShareImage = false;
 
   final bool _sharedOnSocial = true;
 
@@ -133,18 +139,70 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen>
       await ref.read(authProvider.notifier).logout();
       if (mounted) context.go('/auth/login');
     } catch (_) {
-      final errMsg =
-          ref.read(betaTestimonialProvider).error ?? 'Upload failed';
+      final errMsg = ref.read(betaTestimonialProvider).error ?? 'Upload failed';
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(errMsg)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(errMsg)));
       }
     }
   }
 
-  Future<void> _skip() async {
-    await ref.read(authProvider.notifier).logout();
-    if (mounted) context.go('/auth/login');
+  Future<void> _saveShareImage() async {
+    if (_isSavingShareImage) return;
+    setState(() => _isSavingShareImage = true);
+
+    try {
+      await WidgetsBinding.instance.endOfFrame;
+      final boundary =
+          _shareImageKey.currentContext?.findRenderObject()
+              as RenderRepaintBoundary?;
+      if (boundary == null || boundary.size.width == 0) {
+        throw StateError('Share image is not ready');
+      }
+
+      final pixelRatio = (1080 / boundary.size.width).clamp(1.0, 4.0);
+      final image = await boundary.toImage(pixelRatio: pixelRatio);
+      final ByteData? byteData;
+      try {
+        byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      } finally {
+        image.dispose();
+      }
+      if (byteData == null) throw StateError('Could not encode share image');
+      if (!mounted) return;
+
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final shareOrigin = renderBox == null
+          ? null
+          : renderBox.localToGlobal(Offset.zero) & renderBox.size;
+      final result = await saveBetaShareImage(
+        byteData.buffer.asUint8List(
+          byteData.offsetInBytes,
+          byteData.lengthInBytes,
+        ),
+        fileName: 'GRIDGO-beta-print.png',
+        sharePositionOrigin: shareOrigin,
+      );
+
+      if (!mounted) return;
+      final message = result == BetaPhotoSaveResult.downloaded
+          ? 'Share image downloaded.'
+          : 'Share sheet opened.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not save the share image. Please try again.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSavingShareImage = false);
+    }
   }
 
   Future<void> _openCommunity() async {
@@ -236,7 +294,7 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen>
                                 const _SectionLabel('YOUR PHOTO'),
                                 const SizedBox(height: 6),
                                 const Text(
-                                  'Add a photo of your prints — we\'ll feature the best ones at launch.',
+                                  'Add a photo of your prints to complete beta testing.',
                                   style: TextStyle(
                                     fontFamily: 'Satoshi',
                                     fontSize: 13,
@@ -248,12 +306,15 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen>
                                 BetaPhotoUploadCard(
                                   photoFile: _photoFile,
                                   photoBytes: _photoBytes,
+                                  shareImageKey: _shareImageKey,
+                                  isSaving: _isSavingShareImage,
                                   uploadProgress: uploadState.uploadProgress,
                                   uploadError: uploadState.error,
                                   uploadDone: uploadState.submitted,
                                   onPick: _pickPhoto,
                                   onReplace: _pickPhoto,
                                   onRetry: _submit,
+                                  onSave: _saveShareImage,
                                 ),
                               ],
                             ),
@@ -318,7 +379,7 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen>
                                                 ),
                                               )
                                             : Text(
-                                                'Submit & complete beta',
+                                                'Upload photo & complete beta',
                                                 style: TextStyle(
                                                   fontFamily: 'Satoshi',
                                                   fontSize: 15,
@@ -329,22 +390,6 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen>
                                                   letterSpacing: 0.3,
                                                 ),
                                               ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 14),
-                                Center(
-                                  child: GestureDetector(
-                                    onTap: isUploading ? null : _skip,
-                                    child: Text(
-                                      'Skip for now',
-                                      style: TextStyle(
-                                        fontFamily: 'Satoshi',
-                                        fontSize: 14,
-                                        color: isUploading
-                                            ? const Color(0xFF2A2A2A)
-                                            : const Color(0xFF555555),
                                       ),
                                     ),
                                   ),
