@@ -35,10 +35,12 @@ describe('AuthService', () => {
     };
     betaModeService = {
       getSettings: jest.fn().mockResolvedValue({ id: 1, isEnabled: true }),
+      enrollUser: jest.fn().mockResolvedValue(undefined),
       reopenCompletedBetaSurveyHolds: jest.fn().mockResolvedValue(undefined),
     };
     usersService = {
       findByEmail: jest.fn(),
+      findById: jest.fn(),
       create: jest.fn(),
     };
     jwtService = {
@@ -162,6 +164,52 @@ describe('AuthService', () => {
         }),
       );
     });
+
+    it('auto-enrolls a new customer and returns the credited user when beta mode is enabled', async () => {
+      const enrolledUser = {
+        ...mockUser,
+        isBetaUser: true,
+        betaCreditsGranted: true,
+        credits: '100',
+      };
+      (usersService.create as jest.Mock).mockResolvedValue(mockUser);
+      (usersService.findById as jest.Mock).mockResolvedValue(enrolledUser);
+
+      const result = await authService.register(
+        'test@example.com',
+        'password123',
+        {
+          profileCategory: 'student',
+          profileField: 'architecture',
+        },
+      );
+
+      expect(betaModeService.enrollUser).toHaveBeenCalledWith(mockUser.id);
+      expect(usersService.findById).toHaveBeenCalledWith(mockUser.id);
+      expect(result.user).toEqual(
+        expect.objectContaining({
+          isBetaUser: true,
+          betaCreditsGranted: true,
+          credits: '100',
+        }),
+      );
+    });
+
+    it('does not auto-enroll a new customer when beta mode is disabled', async () => {
+      (usersService.create as jest.Mock).mockResolvedValue(mockUser);
+      (betaModeService.getSettings as jest.Mock).mockResolvedValue({
+        id: 1,
+        isEnabled: false,
+      });
+
+      await authService.register('test@example.com', 'password123', {
+        profileCategory: 'student',
+        profileField: 'architecture',
+      });
+
+      expect(betaModeService.enrollUser).not.toHaveBeenCalled();
+      expect(usersService.findById).not.toHaveBeenCalled();
+    });
   });
 
   describe('login', () => {
@@ -175,6 +223,29 @@ describe('AuthService', () => {
       expect(result.access_token).toBe('mock-jwt-token');
       expect(result.user).not.toHaveProperty('passwordHash');
       expect(result.user).toHaveProperty('email', 'test@example.com');
+    });
+
+    it('repairs beta enrollment and credits when registration was interrupted', async () => {
+      const hashedPassword = await bcrypt.hash('password123', 10);
+      const partialUser = {
+        ...mockUser,
+        passwordHash: hashedPassword,
+        isActive: true,
+        isBetaUser: true,
+        betaCreditsGranted: false,
+      };
+      const repairedUser = {
+        ...partialUser,
+        betaCreditsGranted: true,
+        credits: 100,
+      };
+      (usersService.findByEmail as jest.Mock).mockResolvedValue(partialUser);
+      (usersService.findById as jest.Mock).mockResolvedValue(repairedUser);
+
+      const result = await authService.login('test@example.com', 'password123');
+
+      expect(betaModeService.enrollUser).toHaveBeenCalledWith(1);
+      expect(result.user).toEqual(expect.objectContaining({ credits: 100 }));
     });
 
     it('should throw UnauthorizedException for wrong password', async () => {
@@ -239,6 +310,7 @@ describe('AuthService', () => {
       expect(body.betaPhotoUploaded).toBe(false);
       expect(body.betaSharedOnSocial).toBe(false);
       expect(body.betaCompletedAt).toBe(betaCompletedAt.toISOString());
+      expect(body.access_token).toBe('mock-jwt-token');
       expect((body.user as Record<string, unknown>).email).toBe(
         'test@example.com',
       );

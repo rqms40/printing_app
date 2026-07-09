@@ -137,10 +137,32 @@ describe('BetaModeService', () => {
 
   it('enrollUser is idempotent — does nothing if already enrolled', async () => {
     userRepo.findOne.mockResolvedValue(
-      makeUser({ isBetaUser: true, betaCreditsGranted: true, credits: 150 }),
+      makeUser({
+        isBetaUser: true,
+        betaEnrolledAt: new Date('2026-07-01T00:00:00Z'),
+        betaCreditsGranted: true,
+        credits: 150,
+      }),
     );
     await service.enrollUser(1);
     expect(userRepo.update).not.toHaveBeenCalled();
+    expect(mockQB.execute).not.toHaveBeenCalled();
+  });
+
+  it('enrollUser recovers an enrolled user whose credit grant was interrupted', async () => {
+    userRepo.findOne.mockResolvedValue(
+      makeUser({
+        isBetaUser: true,
+        betaEnrolledAt: new Date('2026-07-01T00:00:00Z'),
+        betaCreditsGranted: false,
+        credits: 0,
+      }),
+    );
+
+    await service.enrollUser(1);
+
+    expect(userRepo.update).not.toHaveBeenCalled();
+    expect(mockQB.execute).toHaveBeenCalled();
   });
 
   it('enrollUser does not grant credits again if betaCreditsGranted is already true', async () => {
@@ -239,7 +261,11 @@ describe('BetaModeService', () => {
 
   describe('submitTestimonial', () => {
     it('happy path: updates user row and returns { ok: true }', async () => {
-      fileMetadataRepo.findOne.mockResolvedValue({ id: 42, uploadedBy: 1 });
+      fileMetadataRepo.findOne.mockResolvedValue({
+        id: 42,
+        uploadedBy: 1,
+        objectKey: 'uploads/beta_testimonial/2026/07/photo.png',
+      });
 
       const result = await service.submitTestimonial(1, {
         fileId: 42,
@@ -258,7 +284,11 @@ describe('BetaModeService', () => {
     });
 
     it('defaults sharedOnSocial to false when omitted', async () => {
-      fileMetadataRepo.findOne.mockResolvedValue({ id: 42, uploadedBy: 1 });
+      fileMetadataRepo.findOne.mockResolvedValue({
+        id: 42,
+        uploadedBy: 1,
+        objectKey: 'uploads/beta_testimonial/2026/07/photo.png',
+      });
 
       await service.submitTestimonial(1, { fileId: 42 });
 
@@ -278,6 +308,18 @@ describe('BetaModeService', () => {
 
     it('throws ForbiddenException when file belongs to a different user', async () => {
       fileMetadataRepo.findOne.mockResolvedValue({ id: 42, uploadedBy: 99 });
+
+      await expect(
+        service.submitTestimonial(1, { fileId: 42 }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('rejects an ordinary order upload as a beta testimonial', async () => {
+      fileMetadataRepo.findOne.mockResolvedValue({
+        id: 42,
+        uploadedBy: 1,
+        objectKey: 'uploads/general/2026/07/document.pdf',
+      });
 
       await expect(
         service.submitTestimonial(1, { fileId: 42 }),

@@ -106,13 +106,17 @@ export class BetaModeService {
   async enrollUser(userId: number): Promise<void> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException(`User ${userId} not found`);
-    if (user.isBetaUser) return;
 
-    const update: Partial<User> = { isBetaUser: true };
+    const update: Partial<User> = {};
+    if (!user.isBetaUser) {
+      update.isBetaUser = true;
+    }
     if (!user.betaEnrolledAt) {
       update.betaEnrolledAt = new Date();
     }
-    await this.userRepo.update(userId, update);
+    if (Object.keys(update).length > 0) {
+      await this.userRepo.update(userId, update);
+    }
 
     if (!user.betaCreditsGranted) {
       // Atomic increment with DB-level guard prevents double-grant under concurrent requests
@@ -262,6 +266,9 @@ export class BetaModeService {
     }
     if (file.uploadedBy !== userId) {
       throw new ForbiddenException('File does not belong to this user');
+    }
+    if (!file.objectKey?.startsWith('uploads/beta_testimonial/')) {
+      throw new ForbiddenException('A beta testimonial photo is required');
     }
     await this.userRepo.update(userId, {
       betaPhotoFileId: input.fileId,

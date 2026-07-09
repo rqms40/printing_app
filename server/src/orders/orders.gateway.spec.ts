@@ -82,20 +82,15 @@ describe('OrdersGateway', () => {
   // ── handleSubscribe ───────────────────────────────────────────────
 
   describe('handleSubscribe', () => {
-    it('joins the per-order room and returns subscribed ack', () => {
-      const client = makeClient('any-token');
-
-      const result = gateway.handleSubscribe('99', client as unknown as Socket);
-
-      expect(client.join).toHaveBeenCalledWith('order_99');
-      expect(result).toEqual({ event: 'subscribed', data: { orderId: '99' } });
+    it('does not expose an enumerable per-order subscription handler', () => {
+      expect((gateway as any).handleSubscribe).toBeUndefined();
     });
   });
 
   // ── notifyOrderUpdate ─────────────────────────────────────────────
 
   describe('notifyOrderUpdate', () => {
-    it('broadcasts to per-order, customer, and admin rooms', () => {
+    it('broadcasts only to the owning customer and admin rooms', () => {
       const emitMock = jest.fn();
       const toMock = jest.fn().mockReturnValue({ emit: emitMock });
       gateway.server = { to: toMock } as unknown as Server;
@@ -108,21 +103,21 @@ describe('OrdersGateway', () => {
       };
       gateway.notifyOrderUpdate('ORD-10007', order);
 
-      expect(toMock).toHaveBeenCalledWith('order_ORD-10007');
       expect(toMock).toHaveBeenCalledWith('user_11');
       expect(toMock).toHaveBeenCalledWith('admin_orders');
-      expect(emitMock).toHaveBeenCalledTimes(3);
+      expect(emitMock).toHaveBeenCalledTimes(2);
       expect(emitMock).toHaveBeenCalledWith('orderUpdate', order);
     });
 
-    it('emits to the correct per-order room for different order IDs', () => {
+    it('does not create an order room when the owner is unavailable', () => {
       const emitMock = jest.fn();
       const toMock = jest.fn().mockReturnValue({ emit: emitMock });
       gateway.server = { to: toMock } as unknown as Server;
 
       gateway.notifyOrderUpdate('ORD-10042', { id: 42 });
 
-      expect(toMock).toHaveBeenCalledWith('order_ORD-10042');
+      expect(toMock).toHaveBeenCalledTimes(1);
+      expect(toMock).toHaveBeenCalledWith('admin_orders');
     });
   });
 

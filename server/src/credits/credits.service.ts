@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import {
   CreditTransaction,
   CreditTransactionType,
@@ -16,6 +16,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { FirebaseService } from '../firebase/firebase.service';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { RequestTopUpDto, UpdateSettingsDto } from './dto/credits.dto';
+import { User } from '../users/entities/user.entity';
 
 @Injectable()
 export class CreditsService {
@@ -201,7 +202,38 @@ export class CreditsService {
     userId: number,
     amountCredits: number,
     referenceId?: string,
+    manager?: EntityManager,
   ): Promise<CreditTransaction> {
+    if (manager) {
+      const userRepo = manager.getRepository(User);
+      const transactionRepo = manager.getRepository(CreditTransaction);
+      const user = await userRepo.findOne({
+        where: { id: userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!user) throw new NotFoundException('User not found');
+      if (Number(user.credits) < amountCredits) {
+        throw new BadRequestException('Insufficient credits');
+      }
+
+      user.credits = Number(user.credits) - amountCredits;
+      await userRepo.save(user);
+      const transaction = await transactionRepo.save(
+        transactionRepo.create({
+          userId,
+          type: CreditTransactionType.DEDUCTION,
+          amountCredits,
+          status: CreditTransactionStatus.APPROVED,
+          referenceId,
+        }),
+      );
+      this.notificationsService.triggerCreditsUpdate(
+        user.id,
+        Number(user.credits),
+      );
+      return transaction;
+    }
+
     const user = await this.usersService.findById(userId);
     if (!user) throw new NotFoundException('User not found');
 

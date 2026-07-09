@@ -1,9 +1,6 @@
 import {
   WebSocketGateway,
   WebSocketServer,
-  SubscribeMessage,
-  MessageBody,
-  ConnectedSocket,
   OnGatewayConnection,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
@@ -38,18 +35,8 @@ export class OrdersGateway implements OnGatewayConnection {
     }
   }
 
-  @SubscribeMessage('subscribe')
-  handleSubscribe(
-    @MessageBody() orderId: string,
-    @ConnectedSocket() client: Socket,
-  ) {
-    void client.join(`order_${orderId}`);
-    return { event: 'subscribed', data: { orderId } };
-  }
-
   // Called by OrdersService when status changes
-  notifyOrderUpdate(orderId: string, order: { userId?: number | null }) {
-    this.server.to(`order_${orderId}`).emit('orderUpdate', order);
+  notifyOrderUpdate(_orderId: string, order: { userId?: number | null }) {
     if (order?.userId != null) {
       this.server.to(`user_${order.userId}`).emit('orderUpdate', order);
     }

@@ -40,6 +40,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (user.isActive === false && !isBetaTestimonialPending) {
       throw new UnauthorizedException('Account is inactive');
     }
-    return { sub: user.id, email: user.email, role: user.role };
+    return {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      ...(isBetaTestimonialPending ? { betaTestimonialPending: true } : {}),
+    };
   }
 }

@@ -17,6 +17,11 @@ import { UpdateLocationDto } from './dto/update-location.dto';
 import { LocationGateway } from './location.gateway';
 import { OrdersService } from '../orders/orders.service';
 import { ProofOfDeliveryDto } from './dto/update-delivery-status.dto';
+import {
+  orderDeliveryAssignmentsByRoute,
+  SHOP_LOCATION,
+  toGeoPoint,
+} from './delivery-route';
 
 // Valid state transitions for delivery status
 const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
@@ -37,16 +42,6 @@ const ORDER_STATUS_BY_DELIVERY_STATUS: Partial<
   [DeliveryStatus.ON_THE_WAY]: OrderStatus.ON_THE_WAY,
   [DeliveryStatus.ARRIVED]: OrderStatus.ARRIVED_AT_DESTINATION,
   [DeliveryStatus.DELIVERED]: OrderStatus.DELIVERED,
-};
-
-const SHOP_LOCATION = {
-  latitude: 7.064,
-  longitude: 125.6079,
-};
-
-type GeoPoint = {
-  latitude: number;
-  longitude: number;
 };
 
 type DeliveryProofMetadata = {
@@ -130,22 +125,18 @@ export class RidersService {
     profile.lastLocationUpdate = new Date();
     const saved = await this.profileRepo.save(profile);
 
-    // Broadcast location to all active delivery assignments
-    const activeAssignments = await this.assignmentRepo.find({
-      where: { riderId: profile.id },
-    });
-    for (const assignment of activeAssignments) {
-      if (
-        ![DeliveryStatus.DELIVERED, DeliveryStatus.DECLINED].includes(
-          assignment.status,
-        )
-      ) {
-        this.locationGateway.broadcastLocation(String(assignment.id), {
-          latitude: dto.latitude,
-          longitude: dto.longitude,
-          timestamp: profile.lastLocationUpdate,
-        });
-      }
+    const [currentStop] = await this.getActiveAssignments(userId);
+    if (
+      currentStop &&
+      [DeliveryStatus.ON_THE_WAY, DeliveryStatus.ARRIVED].includes(
+        currentStop.status,
+      )
+    ) {
+      this.locationGateway.broadcastLocation(String(currentStop.id), {
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        timestamp: profile.lastLocationUpdate,
+      });
     }
 
     return saved;
@@ -182,87 +173,8 @@ export class RidersService {
     profile: RiderProfile,
   ): DeliveryAssignment[] {
     const startPoint =
-      this.toGeoPoint(profile.lastLatitude, profile.lastLongitude) ??
-      SHOP_LOCATION;
-
-    const routeable = assignments
-      .map((assignment, index) => ({
-        assignment,
-        index,
-        point: this.toGeoPoint(
-          assignment.order?.destination?.latitude,
-          assignment.order?.destination?.longitude,
-        ),
-      }))
-      .filter(
-        (
-          candidate,
-        ): candidate is {
-          assignment: DeliveryAssignment;
-          index: number;
-          point: GeoPoint;
-        } => candidate.point !== null,
-      );
-
-    const missingCoordinates = assignments.filter(
-      (assignment) =>
-        !this.toGeoPoint(
-          assignment.order?.destination?.latitude,
-          assignment.order?.destination?.longitude,
-        ),
-    );
-
-    const ordered: DeliveryAssignment[] = [];
-    let currentPoint = startPoint;
-    const remaining = [...routeable];
-
-    while (remaining.length > 0) {
-      let nearestIndex = 0;
-      let nearestDistance = Number.POSITIVE_INFINITY;
-
-      for (let i = 0; i < remaining.length; i += 1) {
-        const distance = this.distanceKm(currentPoint, remaining[i].point);
-        if (
-          distance < nearestDistance ||
-          (distance === nearestDistance &&
-            remaining[i].index < remaining[nearestIndex].index)
-        ) {
-          nearestIndex = i;
-          nearestDistance = distance;
-        }
-      }
-
-      const [nearest] = remaining.splice(nearestIndex, 1);
-      ordered.push(nearest.assignment);
-      currentPoint = nearest.point;
-    }
-
-    return [...ordered, ...missingCoordinates];
-  }
-
-  private toGeoPoint(
-    latitude: number | string | null | undefined,
-    longitude: number | string | null | undefined,
-  ): GeoPoint | null {
-    if (latitude == null || longitude == null) return null;
-    const lat = Number(latitude);
-    const lng = Number(longitude);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-    if (lat === 0 && lng === 0) return null;
-    return { latitude: lat, longitude: lng };
-  }
-
-  private distanceKm(from: GeoPoint, to: GeoPoint): number {
-    const toRadians = (value: number) => (value * Math.PI) / 180;
-    const earthRadiusKm = 6371;
-    const dLat = toRadians(to.latitude - from.latitude);
-    const dLng = toRadians(to.longitude - from.longitude);
-    const fromLat = toRadians(from.latitude);
-    const toLat = toRadians(to.latitude);
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(fromLat) * Math.cos(toLat) * Math.sin(dLng / 2) ** 2;
-    return 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      toGeoPoint(profile.lastLatitude, profile.lastLongitude) ?? SHOP_LOCATION;
+    return orderDeliveryAssignmentsByRoute(assignments, startPoint);
   }
 
   async updateDeliveryStatus(
@@ -287,6 +199,15 @@ export class RidersService {
       throw new BadRequestException(
         `Cannot transition from '${assignment.status}' to '${newStatus}'`,
       );
+    }
+
+    if (newStatus === DeliveryStatus.ARRIVED) {
+      const [currentStop] = await this.getActiveAssignments(userId);
+      if (currentStop?.id !== assignment.id) {
+        throw new BadRequestException(
+          'Complete the current route stop before advancing this delivery',
+        );
+      }
     }
 
     // Set timestamp for the status

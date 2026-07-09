@@ -109,6 +109,7 @@ describe('OrdersService', () => {
   let notificationsService: Partial<NotificationsService>;
   let catalogPricingService: { quote: jest.Mock };
   let fileMetadataRepo: jest.Mocked<Partial<Repository<FileMetadata>>>;
+  let transactionQuery: jest.Mock;
 
   const mockOrder = {
     id: 1,
@@ -296,9 +297,13 @@ describe('OrdersService', () => {
           ...item,
         }) as OrderItem,
     );
+    transactionQuery = jest
+      .fn()
+      .mockResolvedValue([{ max_batch_ref: 10000, max_order_ref: 10000 }]);
     dataSource = {
       transaction: jest.fn(async (runInTransaction) =>
         runInTransaction({
+          query: transactionQuery,
           getRepository: (entity: { name?: string }) => {
             if (entity?.name === 'Order') return repo;
             if (entity?.name === 'OrderItem') return orderItemsRepo;
@@ -467,6 +472,30 @@ describe('OrdersService', () => {
         280,
         'order_placed',
       );
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ paymentStatus: 'paid' }),
+      );
+    });
+
+    it('rejects non-credit legacy orders for beta customers', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({
+        id: 1,
+        isBetaUser: true,
+        betaEnrolledAt: null,
+      });
+      (dataSource as any).query = jest
+        .fn()
+        .mockResolvedValue([{ is_enabled: true }]);
+
+      await expect(
+        service.create({
+          userId: 1,
+          paymentMethod: 'gcash',
+        } as Partial<Order>),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'beta_credits_only' }),
+      });
+      expect(repo.save).not.toHaveBeenCalled();
     });
 
     it('rejects file metadata that does not belong to the ordering user', async () => {
@@ -610,8 +639,8 @@ describe('OrdersService', () => {
         expect.objectContaining({
           userId: 1,
           subtotal: 420,
-          deliveryFee: 45,
-          totalPrice: 465,
+          deliveryFee: 27,
+          totalPrice: 447,
           paymentMethod: 'gridCredits',
           paymentStatus: 'paid',
           deliveryOption: 'delivery',
@@ -625,7 +654,7 @@ describe('OrdersService', () => {
           category: 'batch',
           userId: 1,
           totalPrice: 420,
-          deliveryFee: 45,
+          deliveryFee: 27,
         }),
       );
       expect(orderItemsRepo.save).toHaveBeenCalledTimes(2);
@@ -659,7 +688,7 @@ describe('OrdersService', () => {
 
       expect(repo.create).toHaveBeenNthCalledWith(
         1,
-        expect.objectContaining({ deliveryFee: 45 }),
+        expect.objectContaining({ deliveryFee: 27 }),
       );
     });
 
@@ -669,9 +698,98 @@ describe('OrdersService', () => {
       expect(creditsService.subtractCredits).toHaveBeenCalledTimes(1);
       expect(creditsService.subtractCredits).toHaveBeenCalledWith(
         1,
-        465,
+        447,
         'order_placed',
+        expect.anything(),
       );
+    });
+
+    it('rejects non-credit payment methods for beta customers while beta mode is enabled', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({
+        id: 1,
+        isBetaUser: true,
+        betaEnrolledAt: null,
+      });
+      (dataSource as any).query = jest
+        .fn()
+        .mockResolvedValue([{ is_enabled: true }]);
+
+      await expect(
+        (service as any).createBatch(1, {
+          ...batchDto,
+          paymentMethod: 'gcash',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'beta_credits_only' }),
+      });
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+    });
+
+    it('records a successful GRIDGO Credits batch payment as paid', async () => {
+      await (service as any).createBatch(1, {
+        ...batchDto,
+        paymentStatus: undefined,
+      });
+
+      expect(batchRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ paymentStatus: 'paid' }),
+      );
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ paymentStatus: 'paid' }),
+      );
+    });
+
+    it('does not trust a client-supplied paid status for non-credit methods', async () => {
+      await (service as any).createBatch(1, {
+        ...batchDto,
+        paymentMethod: 'gcash',
+        paymentStatus: 'paid',
+      });
+
+      expect(batchRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ paymentStatus: 'pending' }),
+      );
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ paymentStatus: 'pending' }),
+      );
+    });
+
+    it('generates batch and order refs after the greatest stored suffix', async () => {
+      transactionQuery.mockResolvedValueOnce([
+        { max_batch_ref: 10006, max_order_ref: 10009 },
+      ]);
+
+      await (service as any).createBatch(1, batchDto);
+
+      expect(batchRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ batchRef: 'BATCH-10007' }),
+      );
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ orderId: 'ORD-10010' }),
+      );
+    });
+
+    it('rechecks the beta order cap after acquiring the transaction lock', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({
+        id: 1,
+        isBetaUser: true,
+        betaEnrolledAt: new Date('2026-07-01T00:00:00Z'),
+      });
+      (dataSource as any).query = jest
+        .fn()
+        .mockResolvedValue([{ is_enabled: true }]);
+      (repo.count as jest.Mock)
+        .mockResolvedValueOnce(0)
+        .mockResolvedValueOnce(1);
+
+      await expect(
+        (service as any).createBatch(1, batchDto),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: BETA_ORDER_LIMIT_REACHED,
+        }),
+      });
+      expect(batchRepo.save).not.toHaveBeenCalled();
     });
 
     it('normalizes numeric strings before creating batch order rows', async () => {
@@ -698,7 +816,7 @@ describe('OrdersService', () => {
         expect.objectContaining({
           quantity: 2,
           totalPrice: 300,
-          deliveryFee: 45,
+          deliveryFee: 27,
           deliveryAddressId: 9,
         }),
       );
@@ -749,13 +867,26 @@ describe('OrdersService', () => {
     it('attaches active deliveryAssignmentId for live tracking subscription', async () => {
       const orders = [{ ...mockOrder, id: 12 }] as Order[];
       repo.find.mockResolvedValue(orders);
-      assignmentRepo.find.mockResolvedValue([
-        {
-          id: 99,
-          orderId: 12,
-          status: DeliveryStatus.ON_THE_WAY,
-        } as DeliveryAssignment,
-      ]);
+      const currentAssignment = {
+        id: 99,
+        orderId: 12,
+        riderId: 5,
+        status: DeliveryStatus.ON_THE_WAY,
+        order: {
+          id: 12,
+          destination: { latitude: 7.065, longitude: 125.609 },
+        },
+        rider: {
+          id: 5,
+          userId: 50,
+          lastLatitude: 7.064,
+          lastLongitude: 125.608,
+          user: { fullName: 'Juan Rider' },
+        },
+      } as DeliveryAssignment;
+      assignmentRepo.find
+        .mockResolvedValueOnce([currentAssignment])
+        .mockResolvedValueOnce([currentAssignment]);
 
       const result = await service.findByUser(1);
 
@@ -767,10 +898,65 @@ describe('OrdersService', () => {
           },
         }),
       );
-      expect(
-        (result[0] as Order & { deliveryAssignmentId?: number })
-          .deliveryAssignmentId,
-      ).toBe(99);
+      expect(result[0]).toEqual(
+        expect.objectContaining({
+          deliveryAssignmentId: 99,
+          deliveryQueuePosition: 1,
+          deliveryQueueSize: 1,
+          canTrackDelivery: true,
+        }),
+      );
+    });
+
+    it('shows queue position but withholds tracking access for a later stop', async () => {
+      const orders = [{ ...mockOrder, id: 12 }] as Order[];
+      repo.find.mockResolvedValue(orders);
+      const rider = {
+        id: 5,
+        userId: 50,
+        lastLatitude: 7.064,
+        lastLongitude: 125.608,
+        user: { fullName: 'Juan Rider' },
+      };
+      const currentAssignment = {
+        id: 98,
+        orderId: 11,
+        riderId: 5,
+        status: DeliveryStatus.ON_THE_WAY,
+        order: {
+          id: 11,
+          destination: { latitude: 7.065, longitude: 125.609 },
+        },
+        rider,
+      } as DeliveryAssignment;
+      const laterAssignment = {
+        id: 99,
+        orderId: 12,
+        riderId: 5,
+        status: DeliveryStatus.ON_THE_WAY,
+        order: {
+          id: 12,
+          destination: { latitude: 7.22, longitude: 125.72 },
+        },
+        rider,
+      } as DeliveryAssignment;
+      assignmentRepo.find
+        .mockResolvedValueOnce([laterAssignment])
+        .mockResolvedValueOnce([laterAssignment, currentAssignment]);
+
+      const result = await service.findByUser(1);
+
+      expect(result[0]).toEqual(
+        expect.objectContaining({
+          deliveryAssignmentId: null,
+          deliveryQueuePosition: 2,
+          deliveryQueueSize: 2,
+          canTrackDelivery: false,
+        }),
+      );
+      expect((result[0] as any).assignedRiderContact).toEqual(
+        expect.objectContaining({ deliveryAssignmentId: null }),
+      );
     });
 
     it('attaches assigned rider contact details for customer delivery surfaces', async () => {
@@ -808,7 +994,7 @@ describe('OrdersService', () => {
         phoneNumber: '+639171234567',
         vehicleType: 'motorcycle',
         plateNumber: 'ABC 1234',
-        deliveryAssignmentId: 99,
+        deliveryAssignmentId: null,
         deliveryStatus: DeliveryStatus.ACCEPTED,
         proof: null,
       });
@@ -1588,6 +1774,11 @@ describe('createBatch with slot + destinations', () => {
     dataSource = {
       transaction: jest.fn(async (cb) =>
         cb({
+          query: jest
+            .fn()
+            .mockResolvedValue([
+              { max_batch_ref: 10000, max_order_ref: 10000 },
+            ]),
           getRepository: (entity: { name?: string }) => {
             if (entity?.name === 'Order') return ordersRepo;
             if (entity?.name === 'OrderItem') return orderItemsRepo;

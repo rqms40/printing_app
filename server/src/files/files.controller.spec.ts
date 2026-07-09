@@ -18,8 +18,14 @@ const makeFile = (overrides: Partial<FileMetadata> = {}) =>
     ...overrides,
   }) as FileMetadata;
 
-const makeRequest = (sub: number, role = 'customer') =>
-  ({ user: { sub, role, email: 'user@example.com' } }) as RequestWithUser;
+const makeRequest = (
+  sub: number,
+  role = 'customer',
+  betaTestimonialPending = false,
+) =>
+  ({
+    user: { sub, role, email: 'user@example.com', betaTestimonialPending },
+  }) as RequestWithUser;
 
 const mockFilesService = {
   findById: jest.fn(),
@@ -29,11 +35,12 @@ const mockPrinterProfileService = { getProfile: jest.fn() };
 
 describe('FilesController', () => {
   let controller: FilesController;
-  let filesService: Pick<FilesService, 'findById'>;
+  let filesService: Pick<FilesService, 'findById' | 'storeMetadata'>;
 
   beforeEach(() => {
     filesService = {
       findById: jest.fn(),
+      storeMetadata: jest.fn(),
     };
     controller = new FilesController(
       filesService as FilesService,
@@ -65,6 +72,25 @@ describe('FilesController', () => {
 
     await expect(controller.getFile(1, makeRequest(42))).rejects.toThrow(
       ForbiddenException,
+    );
+  });
+
+  it('allows beta-held users to upload only testimonial photos', () => {
+    const request = makeRequest(42, 'customer', true);
+
+    expect(() =>
+      controller.uploadFile({} as Express.Multer.File, request, 'general'),
+    ).toThrow(ForbiddenException);
+
+    void controller.uploadFile(
+      {} as Express.Multer.File,
+      request,
+      'beta_testimonial',
+    );
+    expect(filesService.storeMetadata).toHaveBeenCalledWith(
+      expect.anything(),
+      42,
+      'beta_testimonial',
     );
   });
 });

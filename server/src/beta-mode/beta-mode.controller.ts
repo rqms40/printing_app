@@ -13,7 +13,7 @@ import {
   HttpCode,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AllowBetaHeld, JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles, RolesGuard } from '../auth/guards/roles.guard';
 import { BetaModeService } from './beta-mode.service';
 import { UpdateBetaModeSettingsDto } from './dto/beta-mode.dto';
@@ -108,6 +108,7 @@ export class BetaModeController {
 
   @Post('testimonial')
   @UseGuards(JwtAuthGuard)
+  @AllowBetaHeld()
   async submitTestimonial(
     @Req() req: RequestWithUser,
     @Body() dto: SubmitBetaTestimonialDto,

@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { CreditsService } from './credits.service';
 import {
@@ -180,6 +180,41 @@ describe('CreditsService', () => {
           referenceId: 'ORD-10001',
         }),
       );
+    });
+  });
+
+  describe('subtractCredits in an order transaction', () => {
+    it('locks the user and writes the debit through the supplied manager', async () => {
+      const lockedUser = { ...mockUser, credits: 100 } as User;
+      const userRepo = {
+        findOne: jest.fn().mockResolvedValue(lockedUser),
+        save: jest.fn().mockResolvedValue({ ...lockedUser, credits: 60 }),
+      };
+      const managerTxRepo = {
+        create: jest.fn(
+          (value: Partial<CreditTransaction>) => value as CreditTransaction,
+        ),
+        save: jest.fn((value: CreditTransaction) =>
+          Promise.resolve({ id: 9, ...value } as CreditTransaction),
+        ),
+      };
+      const manager = {
+        getRepository: jest.fn((entity) =>
+          entity === User ? userRepo : managerTxRepo,
+        ),
+      } as unknown as EntityManager;
+
+      await service.subtractCredits(1, 40, 'order_placed', manager);
+
+      expect(userRepo.findOne).toHaveBeenCalledWith({
+        where: { id: 1 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      expect(userRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ credits: 60 }),
+      );
+      expect(managerTxRepo.save).toHaveBeenCalled();
+      expect(usersService.updateProfile).not.toHaveBeenCalled();
     });
   });
 });

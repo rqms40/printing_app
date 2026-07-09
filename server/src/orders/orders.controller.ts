@@ -45,8 +45,32 @@ export class OrdersController {
   }
 
   @Post()
-  createOrder(@Request() req: RequestWithUser, @Body() dto: CreateOrderDto) {
-    return this.ordersService.create({ ...dto, userId: req.user.sub });
+  async createOrder(
+    @Request() req: RequestWithUser,
+    @Body() dto: CreateOrderDto,
+  ) {
+    const result = await this.ordersService.createBatch(req.user.sub, {
+      items: [
+        {
+          category: dto.category,
+          quantity: dto.quantity,
+          totalPrice: dto.totalPrice,
+          fileName: dto.fileName,
+          fileUrl: dto.fileUrl,
+          fileMetadataId: dto.fileMetadataId,
+          specialInstructions: dto.specialInstructions,
+          paperSpecs: dto.paperSpecs,
+          threeDSpecs: dto.threeDSpecs,
+          specs: dto.specs,
+          addonIds: dto.addonIds,
+        },
+      ],
+      deliveryFee: dto.deliveryFee,
+      paymentMethod: dto.paymentMethod,
+      deliveryOption: dto.deliveryOption,
+      deliveryAddressId: dto.deliveryAddressId,
+    });
+    return result.orders[0];
   }
 
   @Post('batch')

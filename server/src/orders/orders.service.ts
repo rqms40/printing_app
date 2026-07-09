@@ -6,7 +6,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, MoreThanOrEqual, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  In,
+  MoreThanOrEqual,
+  Repository,
+} from 'typeorm';
 import {
   BETA_ORDER_LIMIT_MESSAGE,
   BETA_ORDER_LIMIT_REACHED,
@@ -46,12 +52,19 @@ import {
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
 import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 import { CatalogPricingService } from '../products/catalog-pricing.service';
+import {
+  orderDeliveryAssignmentsByRoute,
+  SHOP_LOCATION,
+  toGeoPoint,
+} from '../riders/delivery-route';
 
 // Slot definitions live in operator-local time (Asia/Manila, UTC+8). The API
 // server may run in UTC, so we never use server-local Date#getHours/setHours
 // for slot math — we compute against PH wall-clock directly from the UTC clock.
 const PH_OFFSET_MINUTES = 8 * 60;
 const AUTO_SLOT_SEARCH_DAYS = 14;
+const STANDARD_DELIVERY_FEE = 25;
+const SERVICE_FEE = 2;
 
 function phMinutesSinceMidnight(date: Date): number {
   const utcMin = date.getUTCHours() * 60 + date.getUTCMinutes();
@@ -121,7 +134,7 @@ type AssignedRiderContact = {
   phoneNumber: string | null;
   vehicleType: string | null;
   plateNumber: string | null;
-  deliveryAssignmentId: number;
+  deliveryAssignmentId: number | null;
   deliveryStatus: DeliveryStatus;
   proof: {
     type: string | null;
@@ -226,18 +239,75 @@ export class OrdersService {
       }
     }
 
-    return orders.map((order) =>
-      Object.assign(order, {
-        deliveryAssignmentId: assignmentByOrderId.get(order.id)?.id ?? null,
+    const riderIds = [
+      ...new Set(
+        (assignments ?? [])
+          .map((assignment) => assignment.riderId)
+          .filter((id): id is number => id != null),
+      ),
+    ];
+    const activeRouteAssignments =
+      riderIds.length === 0
+        ? []
+        : await this.deliveryAssignmentRepo.find({
+            where: {
+              riderId: In(riderIds),
+              status: In([
+                DeliveryStatus.ASSIGNED,
+                DeliveryStatus.ACCEPTED,
+                DeliveryStatus.PICKED_UP,
+                DeliveryStatus.ON_THE_WAY,
+                DeliveryStatus.ARRIVED,
+              ]),
+            },
+            relations: ['order', 'order.destination', 'rider', 'rider.user'],
+          });
+    const routeByRiderId = new Map<number, DeliveryAssignment[]>();
+    for (const riderId of riderIds) {
+      const riderAssignments = activeRouteAssignments.filter(
+        (assignment) => assignment.riderId === riderId,
+      );
+      const rider = riderAssignments[0]?.rider;
+      const startPoint =
+        toGeoPoint(rider?.lastLatitude, rider?.lastLongitude) ?? SHOP_LOCATION;
+      routeByRiderId.set(
+        riderId,
+        orderDeliveryAssignmentsByRoute(riderAssignments, startPoint),
+      );
+    }
+
+    return orders.map((order) => {
+      const assignment = assignmentByOrderId.get(order.id);
+      const route = assignment?.riderId
+        ? (routeByRiderId.get(assignment.riderId) ?? [])
+        : [];
+      const routeIndex = assignment
+        ? route.findIndex((candidate) => candidate.id === assignment.id)
+        : -1;
+      const queuePosition = routeIndex >= 0 ? routeIndex + 1 : null;
+      const canTrackDelivery =
+        queuePosition === 1 &&
+        assignment != null &&
+        [DeliveryStatus.ON_THE_WAY, DeliveryStatus.ARRIVED].includes(
+          assignment.status,
+        );
+
+      return Object.assign(order, {
+        deliveryAssignmentId: canTrackDelivery ? assignment?.id : null,
+        deliveryQueuePosition: queuePosition,
+        deliveryQueueSize: route.length || null,
+        canTrackDelivery,
         assignedRiderContact: this.assignedRiderContactFromAssignment(
-          assignmentByOrderId.get(order.id),
+          assignment,
+          canTrackDelivery,
         ),
-      }),
-    );
+      });
+    });
   }
 
   private assignedRiderContactFromAssignment(
     assignment: DeliveryAssignment | undefined,
+    includeTrackingId: boolean,
   ): AssignedRiderContact | null {
     const rider = assignment?.rider;
     if (!assignment || !rider) return null;
@@ -254,7 +324,7 @@ export class OrdersService {
       phoneNumber: user?.phoneNumber ?? null,
       vehicleType: rider.vehicleType ?? null,
       plateNumber: rider.plateNumber ?? null,
-      deliveryAssignmentId: assignment.id,
+      deliveryAssignmentId: includeTrackingId ? assignment.id : null,
       deliveryStatus: assignment.status,
       proof: assignment.proofType
         ? {
@@ -269,11 +339,14 @@ export class OrdersService {
     };
   }
 
-  async assertBetaOrderLimit(userId: number): Promise<void> {
+  async assertBetaOrderLimit(
+    userId: number,
+    ordersRepo: Repository<Order> = this.ordersRepo,
+  ): Promise<void> {
     const user = await this.usersService.findById(userId);
     if (!user?.isBetaUser || !user.betaEnrolledAt) return;
 
-    const count = await this.ordersRepo.count({
+    const count = await ordersRepo.count({
       where: {
         userId,
         createdAt: MoreThanOrEqual(user.betaEnrolledAt),
@@ -315,6 +388,10 @@ export class OrdersService {
   ): Promise<Order> {
     if (data.userId != null) {
       await this.assertBetaOrderLimit(Number(data.userId));
+      await this.assertBetaPaymentMethod(
+        Number(data.userId),
+        String(data.paymentMethod ?? ''),
+      );
     }
     const {
       paperSpecs,
@@ -384,6 +461,11 @@ export class OrdersService {
         'order_placed',
       );
     }
+    orderData.paymentStatus = OrdersService.isCreditPaymentMethod(
+      orderData.paymentMethod,
+    )
+      ? 'paid'
+      : 'pending';
 
     const count = await this.ordersRepo.count();
     const orderId = `ORD-${(10001 + count).toString().padStart(5, '0')}`;
@@ -430,6 +512,7 @@ export class OrdersService {
     dto: CreateBatchOrderDto,
   ): Promise<CreateBatchResult> {
     await this.assertBetaOrderLimit(userId);
+    await this.assertBetaPaymentMethod(userId, dto.paymentMethod);
     if (!dto.items || dto.items.length === 0) {
       throw new BadRequestException('Batch order requires at least one item');
     }
@@ -475,7 +558,11 @@ export class OrdersService {
       speedTier: dto.speedTier,
     });
     const subtotal = quote.subtotal;
-    const deliveryFee = Number(dto.deliveryFee ?? 0);
+    // Client totals are display hints only. Checkout charges are authoritative
+    // on the server so a direct request cannot underpay a credit order.
+    const deliveryFee =
+      (dto.deliveryOption === 'delivery' ? STANDARD_DELIVERY_FEE : 0) +
+      SERVICE_FEE;
     const deliveryAddressId =
       dto.deliveryAddressId == null ? undefined : Number(dto.deliveryAddressId);
     const validatedDeliveryAddress =
@@ -649,8 +736,12 @@ export class OrdersService {
       const txSpecValueRepo = manager.getRepository(OrderItemSpecValue);
       const txDestinationRepo = manager.getRepository(DeliveryDestination);
 
-      const batchCount = await batchOrdersRepo.count();
-      const batchRef = `BATCH-${(10001 + batchCount).toString().padStart(5, '0')}`;
+      const { batchRef, orderRef } = await this.nextBatchReferences(manager);
+      await this.assertBetaOrderLimit(userId, txOrdersRepo);
+      const creditPayment = OrdersService.isCreditPaymentMethod(
+        dto.paymentMethod,
+      );
+      const paymentStatus = creditPayment ? 'paid' : 'pending';
       const batch = batchOrdersRepo.create({
         batchRef,
         userId,
@@ -658,7 +749,7 @@ export class OrdersService {
         deliveryFee,
         totalPrice,
         paymentMethod: dto.paymentMethod,
-        paymentStatus: dto.paymentStatus ?? 'pending',
+        paymentStatus,
         deliveryOption: dto.deliveryOption,
         deliveryAddressId: validatedDeliveryAddressId,
       });
@@ -743,8 +834,6 @@ export class OrdersService {
       }
       await batchOrdersRepo.save(savedBatch);
 
-      const orderCount = await txOrdersRepo.count();
-      const orderId = `ORD-${(10001 + orderCount).toString().padStart(5, '0')}`;
       const firstItem = normalizedItems[0];
       // For the aggregate order, wire it to the first item's destination (if any)
       const firstDestId =
@@ -752,13 +841,13 @@ export class OrdersService {
         null;
       const aggregateOrder = txOrdersRepo.create({
         userId,
-        orderId,
+        orderId: orderRef,
         category: normalizedItems.length > 1 ? 'batch' : firstItem.category,
         quantity: normalizedItems.reduce((sum, item) => sum + item.quantity, 0),
         totalPrice: subtotal,
         deliveryFee,
         paymentMethod: dto.paymentMethod,
-        paymentStatus: dto.paymentStatus ?? 'pending',
+        paymentStatus,
         deliveryOption: dto.deliveryOption,
         deliveryAddressId: validatedDeliveryAddressId,
         fileName:
@@ -814,6 +903,7 @@ export class OrdersService {
           userId,
           totalPrice,
           'order_placed',
+          manager,
         );
       }
 
@@ -933,6 +1023,63 @@ export class OrdersService {
   private static isCreditPaymentMethod(paymentMethod?: string): boolean {
     const normalized = paymentMethod?.replace(/[_-]/g, '').toLowerCase();
     return normalized === 'credits' || normalized === 'gridcredits';
+  }
+
+  private async assertBetaPaymentMethod(
+    userId: number,
+    paymentMethod: string,
+  ): Promise<void> {
+    const user = await this.usersService.findById(userId);
+    if (!user?.isBetaUser) return;
+
+    const rows = await this.dataSource.query<Array<{ is_enabled: boolean }>>(
+      'SELECT is_enabled FROM beta_mode_settings ORDER BY id LIMIT 1',
+    );
+    if (
+      rows[0]?.is_enabled &&
+      !OrdersService.isCreditPaymentMethod(paymentMethod)
+    ) {
+      throw new ForbiddenException({
+        code: 'beta_credits_only',
+        message: 'Beta checkout requires GRIDGO Credits.',
+      });
+    }
+  }
+
+  private async nextBatchReferences(manager: EntityManager): Promise<{
+    batchRef: string;
+    orderRef: string;
+  }> {
+    const rows = await manager.query<
+      Array<{ max_batch_ref: string | number; max_order_ref: string | number }>
+    >(`
+      WITH reference_lock AS (
+        SELECT pg_advisory_xact_lock(1196573522)
+      ), batch_max AS (
+        SELECT COALESCE(
+          MAX(substring(batch_ref FROM '^BATCH-([0-9]+)$')::bigint),
+          10000
+        ) AS value
+        FROM batch_orders
+      ), order_max AS (
+        SELECT COALESCE(
+          MAX(substring(order_id FROM '^ORD-([0-9]+)$')::bigint),
+          10000
+        ) AS value
+        FROM orders
+      )
+      SELECT
+        batch_max.value AS max_batch_ref,
+        order_max.value AS max_order_ref
+      FROM reference_lock, batch_max, order_max
+    `);
+    const maxBatchRef = Number(rows[0]?.max_batch_ref ?? 10000);
+    const maxOrderRef = Number(rows[0]?.max_order_ref ?? 10000);
+
+    return {
+      batchRef: `BATCH-${(maxBatchRef + 1).toString().padStart(5, '0')}`,
+      orderRef: `ORD-${(maxOrderRef + 1).toString().padStart(5, '0')}`,
+    };
   }
 
   private async findAutoSlotCandidates(

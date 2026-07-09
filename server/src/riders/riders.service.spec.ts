@@ -351,6 +351,7 @@ describe('RidersService', () => {
         status: DeliveryStatus.ON_THE_WAY,
       } as DeliveryAssignment;
       assignmentRepo.findOne.mockResolvedValue(otwAssignment);
+      mockActiveAssignmentsQuery([otwAssignment]);
       const arrived = await service.updateDeliveryStatus(
         1,
         100,
@@ -373,6 +374,26 @@ describe('RidersService', () => {
       );
       expect(delivered.status).toBe(DeliveryStatus.DELIVERED);
       expect(delivered.deliveredAt).toBeDefined();
+    });
+
+    it('rejects arriving at a later route stop before the current stop', async () => {
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      const current = makeAssignment(1, 14.51, 121.01);
+      current.status = DeliveryStatus.ON_THE_WAY;
+      const later = {
+        ...makeAssignment(2, 15.5, 122.0),
+        id: 100,
+        status: DeliveryStatus.ON_THE_WAY,
+      } as DeliveryAssignment;
+      assignmentRepo.findOne.mockResolvedValue(later);
+      mockActiveAssignmentsQuery([later, current]);
+
+      await expect(
+        service.updateDeliveryStatus(1, 100, DeliveryStatus.ARRIVED),
+      ).rejects.toThrow(
+        'Complete the current route stop before advancing this delivery',
+      );
+      expect(assignmentRepo.save).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException if assignment not found', async () => {

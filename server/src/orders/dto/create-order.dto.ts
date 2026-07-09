@@ -68,6 +68,7 @@ export class CreateOrderDto {
   @ApiProperty({ example: 0 })
   @Type(() => Number)
   @IsNumber()
+  @Min(0)
   deliveryFee: number;
 
   @ApiProperty({ example: 'gcash', enum: ['gcash', 'maya', 'cod'] })
@@ -273,6 +274,7 @@ export class CreateBatchOrderDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @Min(0)
   deliveryFee?: number;
 
   @ApiProperty({ example: 'gcash', enum: ['gcash', 'maya', 'cod'] })

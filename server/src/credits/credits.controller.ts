@@ -13,6 +13,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CreditsService } from './credits.service';
 import { RequestTopUpDto, UpdateSettingsDto } from './dto/credits.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Roles, RolesGuard } from '../auth/guards/roles.guard';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
 
 @ApiTags('credits')
@@ -28,8 +29,9 @@ export class CreditsController {
   }
 
   @Put('settings')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
   updateSettings(@Body() updateSettingsDto: UpdateSettingsDto) {
-    // Note: In a real app we would add @Roles(UserRole.ADMIN) guard here
     return this.creditsService.updateSettings(updateSettingsDto);
   }
 
@@ -42,20 +44,23 @@ export class CreditsController {
   }
 
   @Get('requests/pending')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
   getPendingRequests() {
-    // Note: In a real app we would add @Roles(UserRole.ADMIN) guard here
     return this.creditsService.getPendingRequests();
   }
 
   @Post('approve/:id')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
   approveTopUp(@Param('id', ParseIntPipe) id: number) {
-    // Note: In a real app we would add @Roles(UserRole.ADMIN) guard here
     return this.creditsService.approveTopUp(id);
   }
 
   @Post('reject/:id')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
   rejectTopUp(@Param('id', ParseIntPipe) id: number) {
-    // Note: In a real app we would add @Roles(UserRole.ADMIN) guard here
     return this.creditsService.rejectTopUp(id);
   }
 }

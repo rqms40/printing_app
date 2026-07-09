@@ -45,6 +45,25 @@ describe('JwtStrategy account status enforcement', () => {
     ).rejects.toThrow(UnauthorizedException);
   });
 
+  it('marks beta-held users for endpoint-level restriction', async () => {
+    usersService.findById.mockResolvedValue({
+      id: 1,
+      email: 'held@test.com',
+      role: 'customer',
+      isActive: false,
+      accountHoldReason: 'beta_survey_complete',
+    });
+
+    await expect(
+      strategy.validate({ sub: 1, email: 'held@test.com', role: 'customer' }),
+    ).resolves.toEqual({
+      sub: 1,
+      email: 'held@test.com',
+      role: 'customer',
+      betaTestimonialPending: true,
+    });
+  });
+
   it('rejects tokens for missing users', async () => {
     usersService.findById.mockResolvedValue(null);
 

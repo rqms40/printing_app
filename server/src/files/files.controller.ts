@@ -21,7 +21,7 @@ import { tmpdir } from 'os';
 import { extname, join } from 'path';
 import { randomUUID } from 'crypto';
 import { ApiBearerAuth, ApiTags, ApiConsumes } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AllowBetaHeld, JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FilesService } from './files.service';
 import { PresignedUrlResponseDto } from './dto/presigned-url.dto';
 import { FileInspectionDto } from './dto/file-inspection.dto';
@@ -44,6 +44,7 @@ export class FilesController {
   ) {}
 
   @Post('upload')
+  @AllowBetaHeld()
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -69,6 +70,11 @@ export class FilesController {
     @Request() req: RequestWithUser,
     @Body('purpose') purpose?: string,
   ) {
+    if (req.user.betaTestimonialPending && purpose !== 'beta_testimonial') {
+      throw new ForbiddenException(
+        'Only a beta testimonial photo may be uploaded',
+      );
+    }
     return this.filesService.storeMetadata(file, req.user?.sub, purpose);
   }
 

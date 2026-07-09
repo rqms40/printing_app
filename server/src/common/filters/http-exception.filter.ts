@@ -36,11 +36,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (typeof raw === 'string') {
       responseBody.message = raw;
     } else if (raw && typeof raw === 'object') {
-      // Forward structured exception payloads (message + optional code etc.)
+      // Structured HttpException payloads are authored by server code. Keep
+      // their domain fields while reserving transport metadata for this filter.
       const r = raw as Record<string, unknown>;
+      for (const [key, value] of Object.entries(r)) {
+        if (['statusCode', 'timestamp', 'path'].includes(key)) continue;
+        responseBody[key] = value;
+      }
       responseBody.message = r.message ?? 'Error';
-      if (r.code !== undefined) responseBody.code = r.code;
-      if (r.error !== undefined) responseBody.error = r.error;
     } else {
       responseBody.message = 'Error';
     }
