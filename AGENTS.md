@@ -175,6 +175,12 @@ Run the non-mutating flow contract:
 cd e2e/mobile-web && npm test -- tests/beta-workflow.spec.ts
 ```
 
+Run the same contract without starting a local web server, as CI does:
+
+```bash
+cd e2e/mobile-web && MOBILE_WEB_E2E_NO_SERVER=1 npm test -- tests/beta-workflow.spec.ts
+```
+
 Run the opt-in live preflight against the dev compose stack:
 
 ```bash

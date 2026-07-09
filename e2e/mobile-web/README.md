@@ -22,6 +22,12 @@ Run the non-mutating contract checks:
 npm test -- tests/beta-workflow.spec.ts
 ```
 
+Run the CI-style contract checks without starting a local web server:
+
+```sh
+MOBILE_WEB_E2E_NO_SERVER=1 npm test -- tests/beta-workflow.spec.ts
+```
+
 Run the opt-in live preflight against the dev compose stack:
 
 ```sh

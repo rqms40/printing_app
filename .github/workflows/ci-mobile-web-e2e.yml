@@ -1,0 +1,38 @@
+name: Mobile Web E2E
+
+on:
+  push:
+    paths:
+      - "e2e/mobile-web/**"
+      - "AGENTS.md"
+      - ".github/workflows/ci-mobile-web-e2e.yml"
+  pull_request:
+    paths:
+      - "e2e/mobile-web/**"
+      - "AGENTS.md"
+      - ".github/workflows/ci-mobile-web-e2e.yml"
+
+jobs:
+  beta-workflow-contract:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: e2e/mobile-web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: e2e/mobile-web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Beta workflow contract
+        env:
+          MOBILE_WEB_E2E_NO_SERVER: "1"
+        run: npm test -- tests/beta-workflow.spec.ts

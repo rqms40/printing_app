@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 const port = Number(process.env.MOBILE_WEB_E2E_PORT ?? 8091);
 const baseURL = process.env.MOBILE_WEB_E2E_URL ?? `http://127.0.0.1:${port}`;
+const startWebServer = process.env.MOBILE_WEB_E2E_NO_SERVER !== "1";
 
 export default defineConfig({
   testDir: "./tests",
@@ -17,12 +18,14 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
   },
-  webServer: {
-    command: `python3 -m http.server ${port} --bind 127.0.0.1 --directory ../../apps/mobile/build/web`,
-    url: baseURL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 10_000,
-  },
+  webServer: startWebServer
+    ? {
+        command: `python3 -m http.server ${port} --bind 127.0.0.1 --directory ../../apps/mobile/build/web`,
+        url: baseURL,
+        reuseExistingServer: !process.env.CI,
+        timeout: 10_000,
+      }
+    : undefined,
   projects: [
     {
       name: "chromium-desktop",
