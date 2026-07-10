@@ -9,6 +9,8 @@ import {
   ParseIntPipe,
   Query,
   BadRequestException,
+  Logger,
+  Request,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -28,14 +30,11 @@ import {
 } from './user-insights';
 import { TamSurvey } from '../tam-surveys/entities/tam-survey.entity';
 import { TamSurveySettings } from '../tam-surveys/entities/tam-survey-settings.entity';
-import { RiderProfile } from '../riders/entities/rider-profile.entity';
-import {
-  DeliveryAssignment,
-  DeliveryStatus,
-} from '../riders/entities/delivery-assignment.entity';
+import { DeliveryAssignment } from '../riders/entities/delivery-assignment.entity';
 import { DeliveryDestination } from '../orders/entities/delivery-destination.entity';
 import { OrdersGateway } from '../orders/orders.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
+import type { RequestWithUser } from '../common/interfaces/request-with-user';
 
 type AnalyticsPeriod = '7D' | '30D' | '6M';
 type AnalyticsPoint = { label: string; value: number };
@@ -62,6 +61,8 @@ const MONTH_LABELS = [
 @Roles('admin')
 @Controller('admin')
 export class AdminController {
+  private readonly logger = new Logger(AdminController.name);
+
   constructor(
     private ordersService: OrdersService,
     private ridersService: RidersService,
@@ -76,8 +77,6 @@ export class AdminController {
     private tamSurveysRepo: Repository<TamSurvey>,
     @InjectRepository(TamSurveySettings)
     private tamSurveySettingsRepo: Repository<TamSurveySettings>,
-    @InjectRepository(RiderProfile)
-    private riderProfilesRepo: Repository<RiderProfile>,
     @InjectRepository(DeliveryAssignment)
     private deliveryAssignmentsRepo: Repository<DeliveryAssignment>,
   ) {}
@@ -490,7 +489,7 @@ export class AdminController {
     if (orderIds.length === 0) return orders;
 
     const assignments = await this.deliveryAssignmentsRepo.find({
-      where: { orderId: In(orderIds) },
+      where: { orderId: In(orderIds), isCurrent: true },
       relations: ['rider', 'rider.user'],
       order: { createdAt: 'DESC' },
     });
@@ -724,6 +723,7 @@ export class AdminController {
   async updateOrderStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateStatusDto,
+    @Request() req: RequestWithUser,
   ) {
     if (dto.status === OrderStatus.RIDER_ASSIGNED) {
       throw new BadRequestException(
@@ -731,7 +731,15 @@ export class AdminController {
       );
     }
 
-    return this.ordersService.updateStatus(id, dto.status);
+    return this.ordersService.updateStatus(
+      id,
+      dto.status,
+      {},
+      {
+        actorUserId: req.user.sub,
+        reason: dto.notes?.trim() || 'Admin status update',
+      },
+    );
   }
 
   // Update admin notes
@@ -749,55 +757,45 @@ export class AdminController {
   async assignRider(
     @Param('id', ParseIntPipe) id: number,
     @Body('riderId') riderId: number,
+    @Request() req: RequestWithUser,
   ) {
-    const riderProfile = await this.riderProfilesRepo.findOneOrFail({
-      where: { id: riderId },
-    });
+    const {
+      order,
+      assignment: savedAssignment,
+      riderProfile,
+    } = await this.ridersService.assignOrderToRider(id, riderId, req.user.sub);
 
-    if (riderProfile.isAvailable === false) {
-      throw new BadRequestException('Rider is not available for assignment');
+    try {
+      await Promise.resolve(
+        this.ordersGateway.notifyRiderAssignment(riderProfile.userId, {
+          assignmentId: savedAssignment.id,
+          orderId: order.id,
+          orderRef: order.orderId,
+        }),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Rider assignment WS notification failed for order ${order.id}: ${error}`,
+      );
     }
-
-    let assignment = await this.deliveryAssignmentsRepo.findOne({
-      where: { orderId: id },
-    });
-
-    if (assignment) {
-      assignment.riderId = riderProfile.id;
-      assignment.status = DeliveryStatus.ASSIGNED;
-      assignment.assignedAt = new Date();
-    } else {
-      assignment = this.deliveryAssignmentsRepo.create({
-        orderId: id,
-        riderId: riderProfile.id,
-        status: DeliveryStatus.ASSIGNED,
-      });
-    }
-
-    const savedAssignment = await this.deliveryAssignmentsRepo.save(assignment);
-    const order = await this.ordersService.updateStatus(
-      id,
-      OrderStatus.RIDER_ASSIGNED,
-      { assignedRiderId: riderProfile.userId },
-    );
-
-    this.ordersGateway.notifyRiderAssignment(riderProfile.userId, {
-      assignmentId: savedAssignment.id,
-      orderId: order.id,
-      orderRef: order.orderId,
-    });
-    await this.notificationsService.create({
-      userId: riderProfile.userId,
-      title: 'New delivery assignment',
-      message: `You've been assigned to order ${order.orderId}.`,
-      type: 'rider_assigned',
-      orderRef: order.orderId,
-      metadata: {
-        assignmentId: savedAssignment.id,
-        orderId: order.id,
+    try {
+      await this.notificationsService.create({
+        userId: riderProfile.userId,
+        title: 'New delivery assignment',
+        message: `You've been assigned to order ${order.orderId}.`,
+        type: 'rider_assigned',
         orderRef: order.orderId,
-      },
-    });
+        metadata: {
+          assignmentId: savedAssignment.id,
+          orderId: order.id,
+          orderRef: order.orderId,
+        },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Rider assignment notification failed for order ${order.id}: ${error}`,
+      );
+    }
 
     return order;
   }

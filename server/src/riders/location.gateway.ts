@@ -70,7 +70,7 @@ export class LocationGateway implements OnGatewayConnection {
     }
 
     const assignment = await this.assignmentRepo.findOne({
-      where: { id: numericId },
+      where: { id: numericId, isCurrent: true },
       relations: ['order', 'order.destination', 'rider'],
     });
     if (!assignment) throw new WsException('Delivery not found');
@@ -89,6 +89,7 @@ export class LocationGateway implements OnGatewayConnection {
       const active = await this.assignmentRepo.find({
         where: {
           riderId: assignment.riderId,
+          isCurrent: true,
           status: In([
             DeliveryStatus.ASSIGNED,
             DeliveryStatus.ACCEPTED,

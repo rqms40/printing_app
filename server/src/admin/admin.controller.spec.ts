@@ -36,6 +36,10 @@ describe('AdminController analytics', () => {
   let assignmentsRepo: jest.Mocked<Partial<Repository<DeliveryAssignment>>>;
   let creditsService: jest.Mocked<Partial<CreditsService>>;
   let ordersService: jest.Mocked<Pick<OrdersService, 'updateStatus'>>;
+  let ridersService: {
+    getAllRidersWithUser: jest.Mock;
+    assignOrderToRider: jest.Mock;
+  };
   let ordersGateway: jest.Mocked<Partial<OrdersGateway>>;
   let notificationsService: jest.Mocked<Partial<NotificationsService>>;
 
@@ -55,6 +59,10 @@ describe('AdminController analytics', () => {
     ordersService = {
       updateStatus: jest.fn(),
     };
+    ridersService = {
+      getAllRidersWithUser: jest.fn(),
+      assignOrderToRider: jest.fn(),
+    };
     ordersGateway = {
       notifyOrderUpdate: jest.fn(),
       notifyRiderAssignment: jest.fn(),
@@ -69,7 +77,7 @@ describe('AdminController analytics', () => {
         { provide: OrdersService, useValue: ordersService },
         {
           provide: RidersService,
-          useValue: { getAllRidersWithUser: jest.fn() },
+          useValue: ridersService,
         },
         { provide: CreditsService, useValue: creditsService },
         { provide: OrdersGateway, useValue: ordersGateway },
@@ -488,6 +496,50 @@ describe('AdminController analytics', () => {
   });
 
   describe('updateOrderStatus', () => {
+    it('records an admin-provided status reason without accepting an actor id', async () => {
+      const savedOrder = { id: 42 } as Order;
+      const dto = {
+        status: OrderStatus.FILE_DECLINED,
+        notes: 'Customer file is corrupted',
+      };
+      ordersService.updateStatus.mockResolvedValue(savedOrder);
+
+      await controller.updateOrderStatus(42, dto, { user: { sub: 31 } });
+
+      expect(ordersService.updateStatus).toHaveBeenCalledWith(
+        42,
+        OrderStatus.FILE_DECLINED,
+        {},
+        {
+          actorUserId: 31,
+          reason: 'Customer file is corrupted',
+        },
+      );
+    });
+
+    it('uses the authenticated admin as the status history actor', async () => {
+      const savedOrder = { id: 42 } as Order;
+      ordersService.updateStatus.mockResolvedValue(savedOrder);
+
+      await expect(
+        controller.updateOrderStatus(
+          42,
+          { status: OrderStatus.FILE_VERIFIED },
+          { user: { sub: 31 } },
+        ),
+      ).resolves.toBe(savedOrder);
+
+      expect(ordersService.updateStatus).toHaveBeenCalledWith(
+        42,
+        OrderStatus.FILE_VERIFIED,
+        {},
+        {
+          actorUserId: 31,
+          reason: 'Admin status update',
+        },
+      );
+    });
+
     it('rejects rider_assigned without using the rider assignment endpoint', async () => {
       await expect(
         controller.updateOrderStatus(42, {
@@ -500,12 +552,36 @@ describe('AdminController analytics', () => {
   });
 
   describe('assignRider', () => {
+    it('delegates transactional assignment with the authenticated admin actor', async () => {
+      const riderProfile = { id: 7, userId: 70 } as RiderProfile;
+      const assignment = { id: 99 } as DeliveryAssignment;
+      const order = {
+        id: 42,
+        orderId: 'ORD-10042',
+        orderStatus: OrderStatus.RIDER_ASSIGNED,
+      } as Order;
+      ridersService.assignOrderToRider.mockResolvedValue({
+        order,
+        assignment,
+        riderProfile,
+      });
+
+      await expect(
+        controller.assignRider(42, 7, { user: { sub: 31 } }),
+      ).resolves.toBe(order);
+
+      expect(ridersService.assignOrderToRider).toHaveBeenCalledWith(42, 7, 31);
+      expect(assignmentsRepo.save).not.toHaveBeenCalled();
+      expect(ordersService.updateStatus).not.toHaveBeenCalled();
+    });
+
     it('creates an active delivery assignment, notifies the rider, and emits realtime updates', async () => {
       const riderProfile = {
         id: 7,
         userId: 70,
       } as RiderProfile;
       const assignment = {
+        id: 99,
         orderId: 42,
         riderId: 7,
         status: DeliveryStatus.ASSIGNED,
@@ -517,32 +593,18 @@ describe('AdminController analytics', () => {
         orderStatus: OrderStatus.RIDER_ASSIGNED,
       } as Order;
 
-      riderProfilesRepo.findOneOrFail.mockResolvedValue(riderProfile);
-      assignmentsRepo.findOne.mockResolvedValue(null);
-      assignmentsRepo.create.mockReturnValue(assignment);
-      assignmentsRepo.save.mockResolvedValue({
-        ...assignment,
-        id: 99,
-      } as DeliveryAssignment);
-      ordersService.updateStatus.mockResolvedValue(savedOrder);
-
-      await expect(controller.assignRider(42, 7)).resolves.toBe(savedOrder);
-
-      expect(riderProfilesRepo.findOneOrFail).toHaveBeenCalledWith({
-        where: { id: 7 },
+      ridersService.assignOrderToRider.mockResolvedValue({
+        order: savedOrder,
+        assignment,
+        riderProfile,
       });
-      expect(ordersService.updateStatus).toHaveBeenCalledWith(
-        42,
-        OrderStatus.RIDER_ASSIGNED,
-        { assignedRiderId: 70 },
-      );
+
+      await expect(
+        controller.assignRider(42, 7, { user: { sub: 31 } }),
+      ).resolves.toBe(savedOrder);
+
+      expect(ridersService.assignOrderToRider).toHaveBeenCalledWith(42, 7, 31);
       expect(ordersRepo.update).not.toHaveBeenCalled();
-      expect(assignmentsRepo.create).toHaveBeenCalledWith({
-        orderId: 42,
-        riderId: 7,
-        status: DeliveryStatus.ASSIGNED,
-      });
-      expect(assignmentsRepo.save).toHaveBeenCalledWith(assignment);
       expect(ordersGateway.notifyOrderUpdate).not.toHaveBeenCalled();
       expect(ordersGateway.notifyRiderAssignment).toHaveBeenCalledWith(70, {
         assignmentId: 99,
@@ -563,19 +625,45 @@ describe('AdminController analytics', () => {
       });
     });
 
-    it('rejects unavailable riders', async () => {
-      riderProfilesRepo.findOneOrFail.mockResolvedValue({
-        id: 7,
-        userId: 70,
-        isAvailable: false,
-      } as RiderProfile);
-
-      await expect(controller.assignRider(42, 7)).rejects.toThrow(
-        BadRequestException,
+    it('returns the committed order when rider post-commit effects fail independently', async () => {
+      const riderProfile = { id: 7, userId: 70 } as RiderProfile;
+      const assignment = { id: 99 } as DeliveryAssignment;
+      const order = {
+        id: 42,
+        orderId: 'ORD-10042',
+        orderStatus: OrderStatus.RIDER_ASSIGNED,
+      } as Order;
+      ridersService.assignOrderToRider.mockResolvedValue({
+        order,
+        assignment,
+        riderProfile,
+      });
+      ordersGateway.notifyRiderAssignment.mockImplementation(() => {
+        throw new Error('WS unavailable');
+      });
+      notificationsService.create.mockRejectedValue(
+        new Error('Notification unavailable'),
       );
 
-      expect(ordersService.updateStatus).not.toHaveBeenCalled();
-      expect(assignmentsRepo.save).not.toHaveBeenCalled();
+      await expect(
+        controller.assignRider(42, 7, { user: { sub: 31 } }),
+      ).resolves.toBe(order);
+
+      expect(ordersGateway.notifyRiderAssignment).toHaveBeenCalledTimes(1);
+      expect(notificationsService.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects unavailable riders', async () => {
+      ridersService.assignOrderToRider.mockRejectedValue(
+        new BadRequestException('Rider is not available for assignment'),
+      );
+
+      await expect(
+        controller.assignRider(42, 7, { user: { sub: 31 } }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(ridersService.assignOrderToRider).toHaveBeenCalledWith(42, 7, 31);
+      expect(ordersGateway.notifyRiderAssignment).not.toHaveBeenCalled();
     });
   });
 

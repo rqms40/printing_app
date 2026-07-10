@@ -18,6 +18,7 @@ import {
   BETA_ORDER_LIMIT_REACHED,
 } from './dto/beta-order-limit.error';
 import { Order, OrderStatus } from './entities/order.entity';
+import { OrderStatusHistory } from './entities/order-status-history.entity';
 import { BatchOrder } from './entities/batch-order.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { OrderItemSpecValue } from './entities/order-item-spec-value.entity';
@@ -60,6 +61,10 @@ import {
   SHOP_LOCATION,
   toGeoPoint,
 } from '../riders/delivery-route';
+import {
+  assertOrderStatusTransition,
+  parseOrderStatus,
+} from './order-status-transition';
 
 // Slot definitions live in operator-local time (Asia/Manila, UTC+8). The API
 // server may run in UTC, so we never use server-local Date#getHours/setHours
@@ -68,6 +73,13 @@ const PH_OFFSET_MINUTES = 8 * 60;
 const AUTO_SLOT_SEARCH_DAYS = 14;
 const STANDARD_DELIVERY_FEE = 25;
 const SERVICE_FEE = 2;
+const RIDER_ASSIGNMENT_WORKFLOW_STATUSES = new Set<OrderStatus>([
+  OrderStatus.RIDER_ASSIGNED,
+  OrderStatus.PICKED_UP,
+  OrderStatus.ON_THE_WAY,
+  OrderStatus.ARRIVED_AT_DESTINATION,
+  OrderStatus.DELIVERED,
+]);
 
 function phMinutesSinceMidnight(date: Date): number {
   const utcMin = date.getUTCHours() * 60 + date.getUTCMinutes();
@@ -163,6 +175,11 @@ export type ChargeComponents = {
   deliveryFee?: ChargeComponent;
   priorityFee?: ChargeComponent;
   extraDestinationFee?: ChargeComponent;
+};
+
+export type OrderStatusChangeContext = {
+  actorUserId: number;
+  reason: string;
 };
 
 function numericChargeComponent(
@@ -261,6 +278,7 @@ export class OrdersService {
     const assignments = await this.deliveryAssignmentRepo.find({
       where: {
         orderId: In(orderIds),
+        isCurrent: true,
         status: In([
           DeliveryStatus.ASSIGNED,
           DeliveryStatus.ACCEPTED,
@@ -293,6 +311,7 @@ export class OrdersService {
         : await this.deliveryAssignmentRepo.find({
             where: {
               riderId: In(riderIds),
+              isCurrent: true,
               status: In([
                 DeliveryStatus.ASSIGNED,
                 DeliveryStatus.ACCEPTED,
@@ -1562,6 +1581,15 @@ export class OrdersService {
       if (updateResult?.affected != null && updateResult.affected !== 1) {
         throw new BadRequestException('Order changed during cancellation');
       }
+      if (!alreadyCancelled) {
+        await manager.getRepository(OrderStatusHistory).insert({
+          orderId: order.id,
+          fromStatus: order.orderStatus,
+          toStatus: OrderStatus.CANCELLED,
+          changedByUserId: userId,
+          notes: 'Customer cancelled order',
+        });
+      }
       return {
         previous: alreadyCancelled ? null : order,
         creditMutation,
@@ -1673,6 +1701,17 @@ export class OrdersService {
       ) {
         throw new BadRequestException('Batch changed during cancellation');
       }
+      if (pending.length > 0) {
+        await manager.getRepository(OrderStatusHistory).insert(
+          pending.map((order) => ({
+            orderId: order.id,
+            fromStatus: order.orderStatus,
+            toStatus: OrderStatus.CANCELLED,
+            changedByUserId: userId,
+            notes: 'Customer cancelled batch',
+          })),
+        );
+      }
       return {
         previousOrders: pending,
         creditMutation,
@@ -1685,8 +1724,9 @@ export class OrdersService {
     id: number,
     status: string,
     updates: Partial<Order> = {},
+    context?: OrderStatusChangeContext,
   ): Promise<Order> {
-    const orderStatus = status as OrderStatus;
+    const orderStatus = parseOrderStatus(status);
     const candidate = await this.ordersRepo.findOneOrFail({ where: { id } });
     const existing = await this.dataSource.transaction(async (manager) => {
       if (candidate.batchOrderId != null) {
@@ -1705,7 +1745,25 @@ export class OrdersService {
       }
       if (locked.orderStatus === OrderStatus.CANCELLED) {
         if (orderStatus === OrderStatus.CANCELLED) return null;
-        throw new BadRequestException('Cancelled orders are terminal');
+      }
+      if (
+        RIDER_ASSIGNMENT_WORKFLOW_STATUSES.has(orderStatus) ||
+        (locked.orderStatus === OrderStatus.RIDER_ASSIGNED &&
+          orderStatus === OrderStatus.READY_FOR_DISPATCH)
+      ) {
+        throw new BadRequestException('Use the rider assignment workflow');
+      }
+      assertOrderStatusTransition(locked.orderStatus, orderStatus);
+      if (locked.orderStatus === orderStatus) return null;
+      if (
+        !Number.isInteger(context?.actorUserId) ||
+        context!.actorUserId <= 0
+      ) {
+        throw new BadRequestException('Status change actor is required');
+      }
+      const reason = context?.reason?.trim();
+      if (!reason) {
+        throw new BadRequestException('Status change reason is required');
       }
       const updateResult = await transactionOrdersRepo.update(
         { id, orderStatus: locked.orderStatus },
@@ -1717,6 +1775,13 @@ export class OrdersService {
       if (updateResult?.affected != null && updateResult.affected !== 1) {
         throw new BadRequestException('Order changed during status update');
       }
+      await manager.getRepository(OrderStatusHistory).insert({
+        orderId: id,
+        fromStatus: locked.orderStatus,
+        toStatus: orderStatus,
+        changedByUserId: context!.actorUserId,
+        notes: reason,
+      });
       return locked;
     });
     if (!existing) {
@@ -1727,7 +1792,7 @@ export class OrdersService {
     return this.publishStatusUpdate(existing, id, status);
   }
 
-  private async publishStatusUpdate(
+  async publishStatusUpdate(
     existing: Order,
     id: number,
     status: string,
@@ -1910,25 +1975,35 @@ export class OrdersService {
     }
 
     // Send push notification to order owner
-    const fcmToken = await this.usersService.getFcmToken(existing.userId);
-    if (fcmToken && statusMsg) {
-      await this.firebaseService.sendToDevice(
-        fcmToken,
-        statusMsg.title,
-        statusMsg.body,
-        {
-          orderId: order.orderId,
-          status: status,
-          ...dynamicMetadata,
-        },
-      );
+    try {
+      const fcmToken = await this.usersService.getFcmToken(existing.userId);
+      if (fcmToken && statusMsg) {
+        await this.firebaseService.sendToDevice(
+          fcmToken,
+          statusMsg.title,
+          statusMsg.body,
+          {
+            orderId: order.orderId,
+            status: status,
+            ...dynamicMetadata,
+          },
+        );
+      }
+    } catch (err) {
+      this.logger.warn(`Customer FCM push failed for status ${status}: ${err}`);
     }
 
     // Emit WebSocket order update
-    void this.ordersGateway.notifyOrderUpdate(
-      orderWithAssignment.orderId,
-      orderWithAssignment,
-    );
+    try {
+      await Promise.resolve(
+        this.ordersGateway.notifyOrderUpdate(
+          orderWithAssignment.orderId,
+          orderWithAssignment,
+        ),
+      );
+    } catch (err) {
+      this.logger.warn(`Customer order WS update failed: ${err}`);
+    }
 
     // Create in-app notification for the customer (also emitted via WS)
     if (statusMsg) {

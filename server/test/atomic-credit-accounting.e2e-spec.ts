@@ -422,21 +422,34 @@ describe('atomic credit accounting (e2e)', () => {
         `SELECT id FROM orders WHERE batch_order_id = $1 ORDER BY id LIMIT 1`,
         [fixture.batchId],
       );
+      const service = makeOrdersService(
+        dataSource,
+        makeCreditsService(dataSource),
+        40,
+      );
+      await service.updateStatus(
+        order.id,
+        OrderStatus.FILE_VERIFIED,
+        {},
+        {
+          actorUserId: fixture.userId,
+          reason: 'Prepare status race',
+        },
+      );
       const blocker = dataSource.createQueryRunner();
       await blocker.connect();
       await blocker.startTransaction();
       await blocker.query(`SELECT id FROM orders WHERE id = $1 FOR UPDATE`, [
         order.id,
       ]);
-      const service = makeOrdersService(
-        dataSource,
-        makeCreditsService(dataSource),
-        40,
-      );
-
       const statusAttempt = service.updateStatus(
         order.id,
         OrderStatus.PRINTING_IN_PROGRESS,
+        {},
+        {
+          actorUserId: fixture.userId,
+          reason: 'Status race',
+        },
       );
       await waitForOrderLockWaiters(dataSource, 1);
       const cancelAttempt = service.cancelBatch(
@@ -486,18 +499,26 @@ describe('atomic credit accounting (e2e)', () => {
         `SELECT id FROM orders WHERE batch_order_id = $1 ORDER BY id LIMIT 1`,
         [fixture.batchId],
       );
+      const service = makeOrdersService(
+        dataSource,
+        makeCreditsService(dataSource),
+        40,
+      );
+      await service.updateStatus(
+        order.id,
+        OrderStatus.FILE_VERIFIED,
+        {},
+        {
+          actorUserId: fixture.userId,
+          reason: 'Prepare status race',
+        },
+      );
       const blocker = dataSource.createQueryRunner();
       await blocker.connect();
       await blocker.startTransaction();
       await blocker.query(`SELECT id FROM orders WHERE id = $1 FOR UPDATE`, [
         order.id,
       ]);
-      const service = makeOrdersService(
-        dataSource,
-        makeCreditsService(dataSource),
-        40,
-      );
-
       const cancelAttempt = service.cancelBatch(
         fixture.batchId,
         fixture.userId,
@@ -506,6 +527,11 @@ describe('atomic credit accounting (e2e)', () => {
       const statusAttempt = service.updateStatus(
         order.id,
         OrderStatus.PRINTING_IN_PROGRESS,
+        {},
+        {
+          actorUserId: fixture.userId,
+          reason: 'Status race',
+        },
       );
       await waitForOrderLockWaiters(dataSource, 2);
       await blocker.commitTransaction();

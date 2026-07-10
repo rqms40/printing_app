@@ -7,7 +7,7 @@ import {
   JoinColumn,
   Index,
 } from 'typeorm';
-import { Order } from './order.entity';
+import { Order, type OrderStatus } from './order.entity';
 
 @Entity('order_status_history')
 @Index('idx_order_status_history_order', ['orderId'])
@@ -22,11 +22,11 @@ export class OrderStatusHistory {
   @JoinColumn({ name: 'order_id' })
   order: Order;
 
-  @Column({ name: 'from_status', length: 30 })
-  fromStatus: string;
+  @Column({ name: 'from_status', type: 'varchar', length: 30 })
+  fromStatus: OrderStatus;
 
-  @Column({ name: 'to_status', length: 30 })
-  toStatus: string;
+  @Column({ name: 'to_status', type: 'varchar', length: 30 })
+  toStatus: OrderStatus;
 
   @Column({ name: 'changed_by_user_id' })
   changedByUserId: number;

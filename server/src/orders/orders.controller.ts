@@ -113,8 +113,20 @@ export class OrdersController {
   @Patch(':id/status')
   @Roles('admin')
   @UseGuards(RolesGuard)
-  updateStatus(@Param('id') id: number, @Body() dto: UpdateStatusDto) {
-    return this.ordersService.updateStatus(id, dto.status);
+  updateStatus(
+    @Request() req: RequestWithUser,
+    @Param('id') id: number,
+    @Body() dto: UpdateStatusDto,
+  ) {
+    return this.ordersService.updateStatus(
+      id,
+      dto.status,
+      {},
+      {
+        actorUserId: req.user.sub,
+        reason: dto.notes?.trim() || 'Admin status update',
+      },
+    );
   }
 
   @Patch('admin/orders/:id/manual-status')

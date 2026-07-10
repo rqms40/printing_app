@@ -348,6 +348,120 @@ describe('production migration lifecycle (e2e)', () => {
     }
   });
 
+  it('preserves legacy assignment audit rows while enforcing one current assignment', async () => {
+    const database = await createDatabase('assignment_integrity_adoption');
+    await createSynchronizedFixture(database, false);
+    const dataSource = await initializeMigrationDataSource(database);
+
+    try {
+      await dataSource.query(
+        `DROP INDEX IF EXISTS uq_delivery_assignments_current_order`,
+      );
+      const users = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO users (email, password_hash, role, is_active)
+         VALUES
+           ($1, 'not-used', 'customer', true),
+           ($2, 'not-used', 'rider', true),
+           ($3, 'not-used', 'rider', true),
+           ($4, 'not-used', 'rider', true)
+         RETURNING id`,
+        [
+          `assignment-customer-${database}@example.test`,
+          `assignment-rider-a-${database}@example.test`,
+          `assignment-rider-b-${database}@example.test`,
+          `assignment-rider-c-${database}@example.test`,
+        ],
+      );
+      const [order] = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO orders
+           (order_id, user_id, category, total_price, delivery_fee,
+            payment_method, order_status)
+         VALUES ($1, $2, 'paper', 10, 0, 'cash', 'delivered')
+         RETURNING id`,
+        [`ASSIGNMENT-${database}`, users[0].id],
+      );
+      const riders = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO rider_profiles
+           (user_id, vehicle_type, is_available)
+         VALUES ($1, 'bike', true), ($2, 'bike', true), ($3, 'bike', true)
+         RETURNING id`,
+        [users[1].id, users[2].id, users[3].id],
+      );
+      await dataSource.query(
+        `UPDATE orders SET assigned_rider_id = $1 WHERE id = $2`,
+        [users[3].id, order.id],
+      );
+      await dataSource.query(
+        `INSERT INTO delivery_assignments
+           (order_id, rider_id, status, is_current, assigned_at,
+            proof_type, proof_signature_data)
+         VALUES
+           ($1, $2, 'declined', true, '2026-01-01T00:00:00Z', NULL, NULL),
+           ($1, $3, 'assigned', true, '2026-01-02T00:00:00Z', NULL, NULL),
+           ($1, $4, 'delivered', true, '2026-01-03T00:00:00Z',
+            'signature', 'legacy-proof')`,
+        [order.id, riders[0].id, riders[1].id, riders[2].id],
+      );
+
+      await dataSource.runMigrations();
+
+      await expect(
+        dataSource.query(
+          `SELECT status::text AS status, is_current, proof_signature_data
+           FROM delivery_assignments
+           WHERE order_id = $1
+           ORDER BY assigned_at`,
+          [order.id],
+        ),
+      ).resolves.toEqual([
+        {
+          status: 'declined',
+          is_current: false,
+          proof_signature_data: null,
+        },
+        {
+          status: 'assigned',
+          is_current: false,
+          proof_signature_data: null,
+        },
+        {
+          status: 'delivered',
+          is_current: true,
+          proof_signature_data: 'legacy-proof',
+        },
+      ]);
+      await expect(
+        dataSource.query(
+          `INSERT INTO delivery_assignments
+             (order_id, rider_id, status, is_current)
+           VALUES ($1, $2, 'assigned', true)`,
+          [order.id, riders[0].id],
+        ),
+      ).rejects.toMatchObject({ code: '23505' });
+      await expect(
+        dataSource.query(
+          `INSERT INTO delivery_assignments
+             (order_id, rider_id, status, is_current)
+           VALUES ($1, $2, 'declined', false)`,
+          [order.id, riders[0].id],
+        ),
+      ).resolves.toBeDefined();
+
+      await dataSource.undoLastMigration();
+      await expect(
+        dataSource.query(
+          `SELECT to_regclass(
+             'public.uq_delivery_assignments_current_order'
+           ) AS index_name`,
+        ),
+      ).resolves.toEqual([
+        { index_name: 'uq_delivery_assignments_current_order' },
+      ]);
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
   it('commits exactly one beta enrollment ledger grant under concurrent service calls', async () => {
     const database = await createDatabase('beta_ledger_concurrency');
     const dataSource = await initializeMigrationDataSource(database);
@@ -601,7 +715,7 @@ describe('production migration lifecycle (e2e)', () => {
     await staleMigration.connect();
     await staleMigration.query(
       `DELETE FROM migrations WHERE timestamp = $1 AND name = $2`,
-      ['1777853500000', 'AtomicCreditAccounting1777853500000'],
+      ['1777853600000', 'OrderHistoryAndAssignmentIntegrity1777853600000'],
     );
     await staleMigration.end();
 

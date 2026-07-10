@@ -38,10 +38,8 @@ type AccountState = {
   holds: Array<{ requirementId: number; orderId: number }>;
 };
 
-const apiBaseURL =
-  process.env.GRIDGO_API_URL ?? "http://127.0.0.1:3000/api";
-const destructiveEnabled =
-  process.env.GRIDGO_RUN_BETA_FLOW_DESTRUCTIVE === "1";
+const apiBaseURL = process.env.GRIDGO_API_URL ?? "http://127.0.0.1:3000/api";
+const destructiveEnabled = process.env.GRIDGO_RUN_BETA_FLOW_DESTRUCTIVE === "1";
 
 const printTestPng = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
@@ -463,13 +461,21 @@ test.describe("destructive GRIDGO beta workflow", () => {
     }
 
     for (const order of [markOrder, venOrder]) {
-      await responseJson(
-        await request.patch(`${apiBaseURL}/admin/orders/${order.id}/status`, {
-          headers: authHeaders(admin.access_token),
-          data: { status: "ready_for_dispatch" },
-        }),
-        `prepare ${order.orderId} for dispatch`,
-      );
+      for (const status of [
+        "file_verified",
+        "printing_in_progress",
+        "finishing_mounting",
+        "quality_checked",
+        "ready_for_dispatch",
+      ]) {
+        await responseJson(
+          await request.patch(`${apiBaseURL}/admin/orders/${order.id}/status`, {
+            headers: authHeaders(admin.access_token),
+            data: { status },
+          }),
+          `move ${order.orderId} to ${status}`,
+        );
+      }
       await responseJson(
         await request.post(`${apiBaseURL}/admin/orders/${order.id}/assign`, {
           headers: authHeaders(admin.access_token),
@@ -621,7 +627,10 @@ test.describe("destructive GRIDGO beta workflow", () => {
     });
     expect(heldOrders.status()).toBe(401);
 
-    const testimonialFile = await responseJson<{ id: number; objectKey: string }>(
+    const testimonialFile = await responseJson<{
+      id: number;
+      objectKey: string;
+    }>(
       await request.post(`${apiBaseURL}/files/upload`, {
         headers: authHeaders(mark.auth.access_token),
         multipart: {

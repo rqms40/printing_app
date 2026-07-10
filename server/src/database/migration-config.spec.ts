@@ -30,13 +30,15 @@ describe('createTypeOrmOptions migration configuration', () => {
     expect(optedInOptions.synchronize).toBe(true);
   });
 
-  it('requires the beta credit ledger migration before seeding', () => {
+  it('requires the latest order integrity migration before seeding', () => {
     const seedGuard = readFileSync(
       join(process.cwd(), 'scripts', 'seed-if-empty.mjs'),
       'utf8',
     );
 
-    expect(seedGuard).toContain("timestamp: '1777853500000'");
-    expect(seedGuard).toContain("name: 'AtomicCreditAccounting1777853500000'");
+    expect(seedGuard).toContain("timestamp: '1777853600000'");
+    expect(seedGuard).toContain(
+      "name: 'OrderHistoryAndAssignmentIntegrity1777853600000'",
+    );
   });
 });

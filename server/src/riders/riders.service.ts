@@ -2,16 +2,22 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { RiderProfile } from './entities/rider-profile.entity';
 import {
   DeliveryAssignment,
   DeliveryStatus,
   ProofOfDeliveryType,
 } from './entities/delivery-assignment.entity';
-import { OrderStatus } from '../orders/entities/order.entity';
+import { Order, OrderStatus } from '../orders/entities/order.entity';
+import { BatchOrder } from '../orders/entities/batch-order.entity';
+import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
+import { assertOrderStatusTransition } from '../orders/order-status-transition';
+import { User, UserRole } from '../users/entities/user.entity';
 import { UpdateRiderProfileDto } from './dto/update-profile.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { LocationGateway } from './location.gateway';
@@ -51,8 +57,25 @@ type DeliveryProofMetadata = {
   proofSignatureData: string | null;
 };
 
+export type RiderAssignmentResult = {
+  order: Order;
+  assignment: DeliveryAssignment;
+  riderProfile: RiderProfile;
+};
+
+function isCurrentAssignmentUniqueViolation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const databaseError = error as { code?: unknown; constraint?: unknown };
+  return (
+    databaseError.code === '23505' &&
+    databaseError.constraint === 'uq_delivery_assignments_current_order'
+  );
+}
+
 @Injectable()
 export class RidersService {
+  private readonly logger = new Logger(RidersService.name);
+
   constructor(
     @InjectRepository(RiderProfile)
     private profileRepo: Repository<RiderProfile>,
@@ -60,7 +83,135 @@ export class RidersService {
     private assignmentRepo: Repository<DeliveryAssignment>,
     private locationGateway: LocationGateway,
     private ordersService: OrdersService,
+    private dataSource: DataSource,
   ) {}
+
+  async assignOrderToRider(
+    orderId: number,
+    riderId: number,
+    adminUserId: number,
+  ): Promise<RiderAssignmentResult> {
+    const candidate = await this.dataSource
+      .getRepository(Order)
+      .findOneOrFail({ where: { id: orderId } });
+
+    let assignmentResult: {
+      assignment: DeliveryAssignment;
+      riderProfile: RiderProfile;
+      previous: Order;
+    };
+    try {
+      assignmentResult = await this.dataSource.transaction(async (manager) => {
+        if (candidate.batchOrderId != null) {
+          await manager.getRepository(BatchOrder).findOneOrFail({
+            where: { id: candidate.batchOrderId },
+            lock: { mode: 'pessimistic_write' },
+          });
+        }
+        const order = await manager.getRepository(Order).findOneOrFail({
+          where: { id: orderId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (order.batchOrderId !== candidate.batchOrderId) {
+          throw new BadRequestException(
+            'Order batch changed during rider assignment',
+          );
+        }
+        const assignmentRepo = manager.getRepository(DeliveryAssignment);
+        const existing = await assignmentRepo.findOne({
+          where: { orderId, isCurrent: true },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (existing) {
+          throw new ConflictException('Order already has an assignment');
+        }
+        if (order.orderStatus !== OrderStatus.READY_FOR_DISPATCH) {
+          throw new BadRequestException('Order is not ready for dispatch');
+        }
+
+        const riderProfile = await manager.getRepository(RiderProfile).findOne({
+          where: { id: riderId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!riderProfile) {
+          throw new NotFoundException('Rider profile not found');
+        }
+        const riderUser = await manager.getRepository(User).findOne({
+          where: { id: riderProfile.userId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (
+          !riderProfile.isAvailable ||
+          !riderUser?.isActive ||
+          riderUser.role !== UserRole.RIDER
+        ) {
+          throw new BadRequestException(
+            'Rider is not available for assignment',
+          );
+        }
+        riderProfile.user = riderUser;
+        const assignment = assignmentRepo.create({
+          orderId,
+          riderId,
+          status: DeliveryStatus.ASSIGNED,
+          isCurrent: true,
+        });
+        const savedAssignment = await assignmentRepo.save(assignment);
+
+        assertOrderStatusTransition(
+          order.orderStatus,
+          OrderStatus.RIDER_ASSIGNED,
+        );
+        const updateResult = await manager.getRepository(Order).update(
+          { id: orderId, orderStatus: order.orderStatus },
+          {
+            assignedRiderId: riderProfile.userId,
+            orderStatus: OrderStatus.RIDER_ASSIGNED,
+          },
+        );
+        if (updateResult?.affected != null && updateResult.affected !== 1) {
+          throw new BadRequestException(
+            'Order changed during rider assignment',
+          );
+        }
+        await manager.getRepository(OrderStatusHistory).insert({
+          orderId,
+          fromStatus: order.orderStatus,
+          toStatus: OrderStatus.RIDER_ASSIGNED,
+          changedByUserId: adminUserId,
+          notes: `Admin assigned rider ${riderId}`,
+        });
+
+        return { assignment: savedAssignment, riderProfile, previous: order };
+      });
+    } catch (error) {
+      if (isCurrentAssignmentUniqueViolation(error)) {
+        throw new ConflictException('Order already has an assignment');
+      }
+      throw error;
+    }
+
+    let order: Order;
+    try {
+      order = await this.ordersService.publishStatusUpdate(
+        assignmentResult.previous,
+        orderId,
+        OrderStatus.RIDER_ASSIGNED,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Post-commit assignment publication failed for order ${orderId}: ${error}`,
+      );
+      order = await this.dataSource
+        .getRepository(Order)
+        .findOneOrFail({ where: { id: orderId } });
+    }
+    return {
+      order,
+      assignment: assignmentResult.assignment,
+      riderProfile: assignmentResult.riderProfile,
+    };
+  }
 
   async getAvailableRiders(): Promise<RiderProfile[]> {
     return this.profileRepo.find({ where: { isAvailable: true } });
@@ -159,6 +310,7 @@ export class RidersService {
       .leftJoinAndSelect('order.destination', 'destination')
       .leftJoinAndSelect('order.user', 'customer')
       .where('da.riderId = :riderId', { riderId: profile.id })
+      .andWhere('da.isCurrent = true')
       .andWhere('da.status NOT IN (:...statuses)', {
         statuses: [DeliveryStatus.DELIVERED, DeliveryStatus.DECLINED],
       })
@@ -185,79 +337,172 @@ export class RidersService {
     proof?: ProofOfDeliveryDto,
   ): Promise<DeliveryAssignment> {
     const profile = await this.getProfile(userId);
-    const assignment = await this.assignmentRepo.findOne({
-      where: { id: assignmentId, riderId: profile.id },
+    const candidateAssignment = await this.assignmentRepo.findOne({
+      where: { id: assignmentId, riderId: profile.id, isCurrent: true },
     });
-
-    if (!assignment) {
+    if (!candidateAssignment) {
       throw new NotFoundException('Assignment not found');
     }
+    const candidateOrder = await this.dataSource
+      .getRepository(Order)
+      .findOneOrFail({ where: { id: candidateAssignment.orderId } });
 
-    // Validate state machine transition
-    const allowedNext = VALID_TRANSITIONS[assignment.status];
-    if (!allowedNext.includes(newStatus)) {
-      throw new BadRequestException(
-        `Cannot transition from '${assignment.status}' to '${newStatus}'`,
-      );
-    }
-
-    if (newStatus === DeliveryStatus.ARRIVED) {
-      const [currentStop] = await this.getActiveAssignments(userId);
-      if (currentStop?.id !== assignment.id) {
+    const result = await this.dataSource.transaction(async (manager) => {
+      if (candidateOrder.batchOrderId != null) {
+        await manager.getRepository(BatchOrder).findOneOrFail({
+          where: { id: candidateOrder.batchOrderId },
+          lock: { mode: 'pessimistic_write' },
+        });
+      }
+      const order = await manager.getRepository(Order).findOneOrFail({
+        where: { id: candidateAssignment.orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (order.batchOrderId !== candidateOrder.batchOrderId) {
         throw new BadRequestException(
-          'Complete the current route stop before advancing this delivery',
+          'Order batch changed during rider update',
+        );
+      }
+      const assignment = await manager
+        .getRepository(DeliveryAssignment)
+        .findOne({
+          where: { id: assignmentId, riderId: profile.id, isCurrent: true },
+          lock: { mode: 'pessimistic_write' },
+        });
+      if (!assignment) {
+        throw new NotFoundException('Assignment not found');
+      }
+      const lockedProfile = await manager.getRepository(RiderProfile).findOne({
+        where: { id: profile.id, userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!lockedProfile) {
+        throw new NotFoundException('Rider profile not found');
+      }
+
+      const allowedNext = VALID_TRANSITIONS[assignment.status];
+      if (!allowedNext.includes(newStatus)) {
+        throw new BadRequestException(
+          `Cannot transition from '${assignment.status}' to '${newStatus}'`,
+        );
+      }
+
+      if (newStatus === DeliveryStatus.ARRIVED) {
+        const [currentStop] = await this.getActiveAssignments(userId);
+        if (currentStop?.id !== assignment.id) {
+          throw new BadRequestException(
+            'Complete the current route stop before advancing this delivery',
+          );
+        }
+      }
+
+      const now = new Date();
+      const proofMetadata =
+        newStatus === DeliveryStatus.DELIVERED
+          ? this.validateProofOfDelivery(proof)
+          : null;
+
+      assignment.status = newStatus;
+
+      switch (newStatus) {
+        case DeliveryStatus.ACCEPTED:
+          assignment.acceptedAt = now;
+          break;
+        case DeliveryStatus.DECLINED:
+          assignment.declineReason = declineReason || '';
+          assignment.isCurrent = false;
+          break;
+        case DeliveryStatus.PICKED_UP:
+          assignment.pickedUpAt = now;
+          break;
+        case DeliveryStatus.ON_THE_WAY:
+          assignment.onTheWayAt = now;
+          break;
+        case DeliveryStatus.ARRIVED:
+          assignment.arrivedAt = now;
+          break;
+        case DeliveryStatus.DELIVERED:
+          assignment.deliveredAt = now;
+          assignment.proofType = proofMetadata!.proofType;
+          assignment.proofFileId = proofMetadata!.proofFileId;
+          assignment.proofObjectKey = proofMetadata!.proofObjectKey;
+          assignment.proofSignatureData = proofMetadata!.proofSignatureData;
+          assignment.proofCapturedAt = now;
+          assignment.proofCapturedByRiderId = profile.id;
+          break;
+      }
+
+      const savedAssignment = await manager
+        .getRepository(DeliveryAssignment)
+        .save(assignment);
+      const orderStatus =
+        ORDER_STATUS_BY_DELIVERY_STATUS[newStatus] ??
+        (newStatus === DeliveryStatus.DECLINED
+          ? OrderStatus.READY_FOR_DISPATCH
+          : undefined);
+      const previous = orderStatus
+        ? await this.applyOrderStatusChange(
+            manager,
+            order,
+            orderStatus,
+            userId,
+            newStatus === DeliveryStatus.DECLINED
+              ? `Rider declined assignment: ${declineReason?.trim() || 'No reason provided'}`
+              : `Rider updated delivery to ${newStatus}`,
+            newStatus === DeliveryStatus.DECLINED
+              ? { assignedRiderId: null }
+              : {},
+          )
+        : null;
+
+      return { savedAssignment, orderStatus, previous };
+    });
+
+    if (result.orderStatus && result.previous) {
+      try {
+        await this.ordersService.publishStatusUpdate(
+          result.previous,
+          result.previous.id,
+          result.orderStatus,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Post-commit delivery publication failed for order ${result.previous.id}: ${error}`,
         );
       }
     }
 
-    // Set timestamp for the status
-    const now = new Date();
-    const proofMetadata =
-      newStatus === DeliveryStatus.DELIVERED
-        ? this.validateProofOfDelivery(proof)
-        : null;
+    return result.savedAssignment;
+  }
 
-    assignment.status = newStatus;
+  private async applyOrderStatusChange(
+    manager: EntityManager,
+    order: Order,
+    toStatus: OrderStatus,
+    actorUserId: number,
+    reason: string,
+    updates: Partial<Order>,
+  ): Promise<Order | null> {
+    assertOrderStatusTransition(order.orderStatus, toStatus);
+    if (order.orderStatus === toStatus) return null;
 
-    switch (newStatus) {
-      case DeliveryStatus.ACCEPTED:
-        assignment.acceptedAt = now;
-        break;
-      case DeliveryStatus.DECLINED:
-        assignment.declineReason = declineReason || '';
-        break;
-      case DeliveryStatus.PICKED_UP:
-        assignment.pickedUpAt = now;
-        break;
-      case DeliveryStatus.ON_THE_WAY:
-        assignment.onTheWayAt = now;
-        break;
-      case DeliveryStatus.ARRIVED:
-        assignment.arrivedAt = now;
-        break;
-      case DeliveryStatus.DELIVERED:
-        assignment.deliveredAt = now;
-        assignment.proofType = proofMetadata!.proofType;
-        assignment.proofFileId = proofMetadata!.proofFileId;
-        assignment.proofObjectKey = proofMetadata!.proofObjectKey;
-        assignment.proofSignatureData = proofMetadata!.proofSignatureData;
-        assignment.proofCapturedAt = now;
-        assignment.proofCapturedByRiderId = profile.id;
-        break;
-    }
-
-    const orderStatus = ORDER_STATUS_BY_DELIVERY_STATUS[newStatus];
-    if (orderStatus) {
-      await this.ordersService.updateStatus(assignment.orderId, orderStatus);
-    } else if (newStatus === DeliveryStatus.DECLINED) {
-      await this.ordersService.updateStatus(
-        assignment.orderId,
-        OrderStatus.READY_FOR_DISPATCH,
-        { assignedRiderId: null },
+    const updateResult = await manager
+      .getRepository(Order)
+      .update(
+        { id: order.id, orderStatus: order.orderStatus },
+        { ...updates, orderStatus: toStatus },
       );
+    if (updateResult?.affected != null && updateResult.affected !== 1) {
+      throw new BadRequestException('Order changed during rider update');
     }
-
-    return this.assignmentRepo.save(assignment);
+    await manager.getRepository(OrderStatusHistory).insert({
+      orderId: order.id,
+      fromStatus: order.orderStatus,
+      toStatus,
+      changedByUserId: actorUserId,
+      notes: reason,
+    });
+    return order;
   }
 
   private validateProofOfDelivery(
