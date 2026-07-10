@@ -336,9 +336,8 @@ export class FilesService {
     requestingUserId: number,
     isAdmin: boolean,
   ): Promise<void> {
-    let plan: FileDeletionPlan;
     try {
-      plan = await this.dataSource.transaction((manager) =>
+      await this.dataSource.transaction((manager) =>
         this.lockAndDeleteMetadata(manager, fileId, {
           requestingUserId,
           isAdmin,
@@ -350,7 +349,6 @@ export class FilesService {
       }
       throw error;
     }
-    await this.deleteStoredObjects(plan);
   }
 
   async getMyUploads(userId: number): Promise<FileMetadata[]> {
@@ -378,6 +376,7 @@ export class FilesService {
   async deleteExpired(): Promise<{
     found: number;
     deleted: number;
+    failed: number;
     skipped: number;
   }> {
     const now = new Date();
@@ -388,15 +387,15 @@ export class FilesService {
       .getMany();
 
     let deleted = 0;
+    let failed = 0;
     let skipped = 0;
 
     for (const file of expired) {
       try {
-        const plan = await this.dataSource.transaction((manager) =>
+        await this.dataSource.transaction((manager) =>
           this.lockAndDeleteMetadata(manager, file.id, { expiredAt: now }),
         );
         deleted++;
-        await this.deleteStoredObjects(plan);
       } catch (error) {
         if (
           error instanceof ConflictException ||
@@ -406,11 +405,14 @@ export class FilesService {
           skipped++;
           continue;
         }
-        throw error;
+        failed++;
+        this.logger.error(
+          `Expired file deletion failed; retained for retry (${this.errorLabel(error)})`,
+        );
       }
     }
 
-    return { found: expired.length, deleted, skipped };
+    return { found: expired.length, deleted, failed, skipped };
   }
 
   private async lockAndDeleteMetadata(
@@ -419,7 +421,7 @@ export class FilesService {
     options:
       | { requestingUserId: number; isAdmin: boolean }
       | { expiredAt: Date },
-  ): Promise<FileDeletionPlan> {
+  ): Promise<void> {
     const repo = manager.getRepository(FileMetadata);
     const file = await repo.findOne({
       where: { id: fileId },
@@ -435,44 +437,101 @@ export class FilesService {
       ) {
         throw new ForbiddenException();
       }
-    } else if (!file.expiresAt || file.expiresAt > options.expiredAt) {
-      throw new ConflictException('File is no longer expired');
+    } else {
+      if (!file.expiresAt || file.expiresAt > options.expiredAt) {
+        throw new ConflictException('File is no longer expired');
+      }
+      if (
+        file.purpose !== FilePurpose.GENERAL &&
+        file.purpose !== FilePurpose.PAPER
+      ) {
+        throw new ConflictException('Evidence files are retained');
+      }
     }
 
-    const [{ referenced = false } = {}] = await manager.query<
-      Array<{ referenced: boolean }>
-    >(
-      `SELECT EXISTS (
-         SELECT 1 FROM delivery_assignments WHERE proof_file_id = $1
-         UNION ALL
-         SELECT 1 FROM users WHERE beta_photo_file_id = $1
-         UNION ALL
-         SELECT 1 FROM orders WHERE file_metadata_id = $1
-         UNION ALL
-         SELECT 1 FROM order_items WHERE file_metadata_id = $1
-       ) AS referenced`,
+    const [references = {}] = await manager.query<Array<FileReferenceState>>(
+      `SELECT
+         EXISTS (
+           SELECT 1 FROM delivery_assignments WHERE proof_file_id = $1
+         ) AS "deliveryProofReferenced",
+         EXISTS (
+           SELECT 1 FROM users WHERE beta_photo_file_id = $1
+         ) AS "testimonialReferenced",
+         EXISTS (
+           SELECT 1 FROM orders WHERE file_metadata_id = $1
+         ) AS "orderReferenced",
+         EXISTS (
+           SELECT 1 FROM order_items WHERE file_metadata_id = $1
+         ) AS "orderItemReferenced"`,
       [fileId],
     );
-    if (referenced) {
+    const hasSpecificReference =
+      !!references.deliveryProofReferenced ||
+      !!references.testimonialReferenced ||
+      !!references.orderReferenced ||
+      !!references.orderItemReferenced;
+    const referenced = references.referenced ?? hasSpecificReference;
+    const hasUnknownReference = referenced && !hasSpecificReference;
+    const hasProtectedEvidenceReference =
+      !!references.deliveryProofReferenced ||
+      !!references.testimonialReferenced ||
+      hasUnknownReference;
+    const isExpirySweep = 'expiredAt' in options;
+    if (hasProtectedEvidenceReference || (!isExpirySweep && referenced)) {
       throw new ConflictException('Referenced files cannot be deleted');
     }
 
-    await repo.delete(fileId);
-    return {
-      objectKey: file.objectKey,
-      previewGlbObjectKey: file.previewGlbObjectKey,
-    };
+    if (isExpirySweep && references.orderReferenced) {
+      await manager.query(
+        `UPDATE "orders"
+         SET "file_metadata_id" = NULL
+         WHERE "file_metadata_id" = $1`,
+        [fileId],
+      );
+    }
+    if (isExpirySweep && references.orderItemReferenced) {
+      await manager.query(
+        `UPDATE "order_items"
+         SET "file_metadata_id" = NULL
+         WHERE "file_metadata_id" = $1`,
+        [fileId],
+      );
+    }
+
+    await this.deleteStoredObjects(file);
+    try {
+      await repo.delete(fileId);
+    } catch (error) {
+      if (this.isForeignKeyViolation(error)) throw error;
+      this.logger.error(
+        `File metadata finalization failed after object cleanup; retry required (${this.errorLabel(error)})`,
+      );
+      throw new MetadataDeletionRetryException();
+    }
   }
 
-  private async deleteStoredObjects(plan: FileDeletionPlan): Promise<void> {
-    for (const key of [plan.objectKey, plan.previewGlbObjectKey]) {
+  private async deleteStoredObjects(file: FileMetadata): Promise<void> {
+    for (const key of [file.objectKey, file.previewGlbObjectKey]) {
       if (!key) continue;
       try {
         await this.storageService.delete(key);
-      } catch {
-        this.logger.error('Failed to remove stored file object after commit');
+      } catch (error) {
+        this.logger.error(
+          `Stored file cleanup failed; metadata retained for retry (${this.errorLabel(error)})`,
+        );
+        throw new StorageDeletionRetryException();
       }
     }
+  }
+
+  private errorLabel(error: unknown): string {
+    const details =
+      typeof error === 'object' && error !== null
+        ? (error as Record<string, unknown>)
+        : {};
+    if (typeof details.code === 'string') return details.code;
+    if (typeof details.name === 'string') return details.name;
+    return 'unknown';
   }
 
   private isForeignKeyViolation(error: unknown): boolean {
@@ -485,7 +544,22 @@ export class FilesService {
   }
 }
 
-interface FileDeletionPlan {
-  objectKey: string | null;
-  previewGlbObjectKey: string | null;
+interface FileReferenceState {
+  referenced?: boolean;
+  deliveryProofReferenced?: boolean;
+  testimonialReferenced?: boolean;
+  orderReferenced?: boolean;
+  orderItemReferenced?: boolean;
+}
+
+class StorageDeletionRetryException extends InternalServerErrorException {
+  constructor() {
+    super('Could not delete stored file; retry later');
+  }
+}
+
+class MetadataDeletionRetryException extends InternalServerErrorException {
+  constructor() {
+    super('Could not finalize file deletion; retry later');
+  }
 }

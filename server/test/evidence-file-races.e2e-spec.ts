@@ -9,6 +9,8 @@ import { DataSource, Repository } from 'typeorm';
 import { AppModule } from '../src/app.module';
 import { databaseOptionsFromEnv } from '../src/database/data-source';
 import { FileMetadata } from '../src/files/entities/file-metadata.entity';
+import { FilesService } from '../src/files/files.service';
+import { OrderItem } from '../src/orders/entities/order-item.entity';
 import { Order, OrderStatus } from '../src/orders/entities/order.entity';
 import {
   DeliveryAssignment,
@@ -26,8 +28,10 @@ describe('Evidence file deletion races (e2e)', () => {
   let dataSource: DataSource;
   let jwtService: JwtService;
   let storageService: StorageService;
+  let filesService: FilesService;
   let usersRepo: Repository<User>;
   let ordersRepo: Repository<Order>;
+  let orderItemsRepo: Repository<OrderItem>;
   let profilesRepo: Repository<RiderProfile>;
   let assignmentsRepo: Repository<DeliveryAssignment>;
   let filesRepo: Repository<FileMetadata>;
@@ -79,8 +83,10 @@ describe('Evidence file deletion races (e2e)', () => {
     dataSource = app.get(DataSource);
     jwtService = app.get(JwtService);
     storageService = app.get(StorageService);
+    filesService = app.get(FilesService);
     usersRepo = dataSource.getRepository(User);
     ordersRepo = dataSource.getRepository(Order);
+    orderItemsRepo = dataSource.getRepository(OrderItem);
     profilesRepo = dataSource.getRepository(RiderProfile);
     assignmentsRepo = dataSource.getRepository(DeliveryAssignment);
     filesRepo = dataSource.getRepository(FileMetadata);
@@ -260,26 +266,150 @@ describe('Evidence file deletion races (e2e)', () => {
     ).resolves.toMatchObject({ betaPhotoFileId: testimonial.id });
   });
 
-  it('keeps metadata audit and storage evidence when deletion rolls back', async () => {
-    const proof = await uploadEvidence(rider, 'proof_of_delivery');
-    const functionName = `reject_delete_${runId}`;
-    const triggerName = `trigger_reject_delete_${runId}`;
+  it('auto-deletes an expired completed-order input while preserving order audit fields', async () => {
+    const input = await uploadEvidence(customer, 'general');
+    const { order, item } = await createCompletedOrderWithFileAudit(
+      'purge_completed_input',
+      input.id,
+    );
+    await filesRepo.update(input.id, {
+      expiresAt: new Date(Date.now() - 60_000),
+    });
+
+    await expect(filesService.deleteExpired()).resolves.toEqual({
+      found: 1,
+      deleted: 1,
+      failed: 0,
+      skipped: 0,
+    });
+
+    await expect(filesRepo.findOneBy({ id: input.id })).resolves.toBeNull();
+    await expect(storageService.objectExists(input.objectKey)).resolves.toBe(
+      false,
+    );
+    await expect(
+      ordersRepo.findOneByOrFail({ id: order.id }),
+    ).resolves.toMatchObject({
+      fileMetadataId: null,
+      fileName: 'completed-order-audit.pdf',
+      fileUrl: 'https://audit/completed-order.pdf',
+    });
+    await expect(
+      orderItemsRepo.findOneByOrFail({ id: item.id }),
+    ).resolves.toMatchObject({
+      fileMetadataId: null,
+      fileName: 'completed-item-audit.pdf',
+      fileUrl: 'https://audit/completed-item.pdf',
+    });
+  });
+
+  it('returns failure with metadata and object intact, then retries real MinIO cleanup', async () => {
+    const input = await uploadEvidence(customer, 'general');
+    const realDelete = storageService.delete.bind(storageService);
+    const deleteSpy = jest
+      .spyOn(storageService, 'delete')
+      .mockRejectedValueOnce(new Error('forced MinIO availability failure'))
+      .mockImplementation((key) => realDelete(key));
+
+    try {
+      const failed = await deleteFile(input.id, customer);
+      expect(failed.status).toBe(500);
+      expect(failed.body.message).toBe(
+        'Could not delete stored file; retry later',
+      );
+      await expect(
+        filesRepo.findOneByOrFail({ id: input.id }),
+      ).resolves.toMatchObject({ objectKey: input.objectKey });
+      await expect(storageService.objectExists(input.objectKey)).resolves.toBe(
+        true,
+      );
+
+      const retried = await deleteFile(input.id, customer);
+      expect(retried.status).toBe(204);
+      await expect(filesRepo.findOneBy({ id: input.id })).resolves.toBeNull();
+      await expect(storageService.objectExists(input.objectKey)).resolves.toBe(
+        false,
+      );
+    } finally {
+      deleteSpy.mockRestore();
+    }
+  });
+
+  it('retries missing-object cleanup after a post-storage database rollback', async () => {
+    const input = await uploadEvidence(customer, 'general');
+    const { order, item } = await createCompletedOrderWithFileAudit(
+      'purge_db_retry',
+      input.id,
+    );
+    await filesRepo.update(input.id, {
+      expiresAt: new Date(Date.now() - 60_000),
+    });
+    const sequenceName = `reject_delete_once_${runId}`;
+    const functionName = `reject_delete_once_${runId}`;
+    const triggerName = `trigger_reject_delete_once_${runId}`;
     await dataSource.query(`
+      CREATE SEQUENCE "${sequenceName}" START 1;
       CREATE FUNCTION "${functionName}"() RETURNS trigger
       LANGUAGE plpgsql AS $$
       BEGIN
-        RAISE EXCEPTION 'forced metadata delete rollback';
+        IF nextval('"${sequenceName}"'::regclass) = 1 THEN
+          RAISE EXCEPTION 'forced metadata delete rollback';
+        END IF;
+        RETURN OLD;
       END
       $$;
       CREATE TRIGGER "${triggerName}"
       BEFORE DELETE ON "file_metadata"
-      FOR EACH ROW WHEN (OLD.id = ${proof.id})
+      FOR EACH ROW WHEN (OLD.id = ${input.id})
       EXECUTE FUNCTION "${functionName}"()
     `);
 
-    const response = await deleteFile(proof.id, rider);
+    await expect(filesService.deleteExpired()).resolves.toEqual({
+      found: 1,
+      deleted: 0,
+      failed: 1,
+      skipped: 0,
+    });
+    await expect(filesRepo.findOneBy({ id: input.id })).resolves.not.toBeNull();
+    await expect(storageService.objectExists(input.objectKey)).resolves.toBe(
+      false,
+    );
+    await expect(
+      ordersRepo.findOneByOrFail({ id: order.id }),
+    ).resolves.toMatchObject({ fileMetadataId: input.id });
+    await expect(
+      orderItemsRepo.findOneByOrFail({ id: item.id }),
+    ).resolves.toMatchObject({ fileMetadataId: input.id });
 
-    expect(response.status).toBe(500);
+    await expect(filesService.deleteExpired()).resolves.toEqual({
+      found: 1,
+      deleted: 1,
+      failed: 0,
+      skipped: 0,
+    });
+    await expect(filesRepo.findOneBy({ id: input.id })).resolves.toBeNull();
+    await expect(
+      ordersRepo.findOneByOrFail({ id: order.id }),
+    ).resolves.toMatchObject({ fileMetadataId: null });
+    await expect(
+      orderItemsRepo.findOneByOrFail({ id: item.id }),
+    ).resolves.toMatchObject({ fileMetadataId: null });
+  });
+
+  it('retains expired proof and testimonial evidence during purge', async () => {
+    const proof = await uploadEvidence(rider, 'proof_of_delivery');
+    const testimonial = await uploadEvidence(customer, 'beta_testimonial');
+    await filesRepo.update([proof.id, testimonial.id], {
+      expiresAt: new Date(Date.now() - 60_000),
+    });
+
+    await expect(filesService.deleteExpired()).resolves.toEqual({
+      found: 2,
+      deleted: 0,
+      failed: 0,
+      skipped: 2,
+    });
+
     await expect(
       filesRepo.findOneByOrFail({ id: proof.id }),
     ).resolves.toMatchObject({
@@ -290,6 +420,12 @@ describe('Evidence file deletion races (e2e)', () => {
     await expect(storageService.objectExists(proof.objectKey)).resolves.toBe(
       true,
     );
+    await expect(
+      filesRepo.findOneByOrFail({ id: testimonial.id }),
+    ).resolves.toMatchObject({ purpose: 'beta_testimonial' });
+    await expect(
+      storageService.objectExists(testimonial.objectKey),
+    ).resolves.toBe(true);
   });
 
   async function createArrivedAssignment(label: string) {
@@ -324,7 +460,7 @@ describe('Evidence file deletion races (e2e)', () => {
 
   async function uploadEvidence(
     owner: User,
-    purpose: 'proof_of_delivery' | 'beta_testimonial',
+    purpose: 'general' | 'proof_of_delivery' | 'beta_testimonial',
   ): Promise<{ id: number; objectKey: string }> {
     const response = await request(app.getHttpServer())
       .post('/api/files/upload')
@@ -338,6 +474,41 @@ describe('Evidence file deletion races (e2e)', () => {
     const file = response.body as { id: number; objectKey: string };
     storageObjectKeys.add(file.objectKey);
     return file;
+  }
+
+  async function createCompletedOrderWithFileAudit(
+    label: string,
+    fileMetadataId: number,
+  ): Promise<{ order: Order; item: OrderItem }> {
+    const order = await ordersRepo.save(
+      ordersRepo.create({
+        orderId: `RACE-${label}-${runId}`,
+        userId: customer.id,
+        category: 'paper',
+        fileMetadataId,
+        fileName: 'completed-order-audit.pdf',
+        fileUrl: 'https://audit/completed-order.pdf',
+        quantity: 1,
+        totalPrice: 10,
+        deliveryFee: 0,
+        paymentMethod: 'cash',
+        paymentStatus: 'paid',
+        deliveryOption: 'pickup',
+        orderStatus: OrderStatus.COMPLETED_PICKUP,
+      }),
+    );
+    const item = await orderItemsRepo.save(
+      orderItemsRepo.create({
+        orderId: order.id,
+        category: 'paper',
+        fileMetadataId,
+        fileName: 'completed-item-audit.pdf',
+        fileUrl: 'https://audit/completed-item.pdf',
+        quantity: 1,
+        totalPrice: 10,
+      }),
+    );
+    return { order, item };
   }
 
   function deleteFile(fileId: number, owner: User): Promise<Response> {
