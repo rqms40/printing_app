@@ -1065,17 +1065,6 @@ describe('OrdersService', () => {
         lastLongitude: 125.608,
         user: { fullName: 'Juan Rider' },
       };
-      const currentAssignment = {
-        id: 98,
-        orderId: 11,
-        riderId: 5,
-        status: DeliveryStatus.ON_THE_WAY,
-        order: {
-          id: 11,
-          destination: { latitude: 7.065, longitude: 125.609 },
-        },
-        rider,
-      } as DeliveryAssignment;
       const laterAssignment = {
         id: 99,
         orderId: 12,

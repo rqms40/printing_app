@@ -85,8 +85,7 @@ describe('DispatchPlanService', () => {
       find: jest.fn(),
       findOne: jest.fn(async (options) => {
         const id = (options?.where as { id?: number })?.id;
-        return ([mark, ven].find((assignment) => assignment.id === id) ??
-          null) as DeliveryAssignment | null;
+        return [mark, ven].find((assignment) => assignment.id === id) ?? null;
       }),
     };
     profileRepo = { findOne: jest.fn() };
@@ -169,12 +168,16 @@ describe('DispatchPlanService', () => {
           return planRepo as Repository<DispatchPlan>;
         if (entity === DispatchPlanStop)
           return stopRepo as Repository<DispatchPlanStop>;
-        throw new Error(`Unexpected repository ${String(entity)}`);
+        const entityName =
+          typeof entity === 'function' ? entity.name : 'unknown entity';
+        throw new Error(`Unexpected repository ${entityName}`);
       }),
     };
     dataSource = {
-      transaction: jest.fn(async (callback) =>
-        callback(manager as EntityManager),
+      transaction: jest.fn(
+        async (
+          callback: (transactionManager: EntityManager) => Promise<unknown>,
+        ) => await callback(manager as EntityManager),
       ),
     };
     service = new DispatchPlanService(
@@ -195,10 +198,12 @@ describe('DispatchPlanService', () => {
   it('persists Ven then Mark in one stable versioned plan', async () => {
     const plan = await service.createPlan(rider.id, [mark.id, ven.id]);
 
-    expect(provider.getRoute).toHaveBeenCalledWith([
-      { latitude: 7.064, longitude: 125.6079 },
-      { latitude: 7.0645, longitude: 125.6079 },
-      { latitude: 7.074, longitude: 125.6079 },
+    expect(provider.getRoute.mock.calls).toContainEqual([
+      [
+        { latitude: 7.064, longitude: 125.6079 },
+        { latitude: 7.0645, longitude: 125.6079 },
+        { latitude: 7.074, longitude: 125.6079 },
+      ],
     ]);
     expect(plan.version).toBe(1);
     expect(plan.provider).toBe('osrm');
@@ -226,7 +231,7 @@ describe('DispatchPlanService', () => {
       ven.id,
       mark.id,
     ]);
-    expect(provider.getMatrix).not.toHaveBeenCalled();
+    expect(provider.getMatrix.mock.calls).toHaveLength(0);
   });
 
   it('creates nothing and returns routing_unavailable for an initial provider failure', async () => {
@@ -239,8 +244,8 @@ describe('DispatchPlanService', () => {
     ).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'routing_unavailable' }),
     });
-    expect(dataSource.transaction).not.toHaveBeenCalled();
-    expect(planRepo.save).not.toHaveBeenCalled();
+    expect(dataSource.transaction!.mock.calls).toHaveLength(0);
+    expect(planRepo.save!.mock.calls).toHaveLength(0);
   });
 
   it('rejects a destination change during transactional revalidation', async () => {
@@ -255,7 +260,7 @@ describe('DispatchPlanService', () => {
     await expect(
       service.createPlan(rider.id, [mark.id, ven.id]),
     ).rejects.toBeInstanceOf(ConflictException);
-    expect(planRepo.save).not.toHaveBeenCalled();
+    expect(planRepo.save!.mock.calls).toHaveLength(0);
   });
 
   it('asserts and idempotently advances only the first pending stop', async () => {
@@ -305,7 +310,7 @@ describe('DispatchPlanService', () => {
       await expect(service.createPlan(rider.id, ids)).rejects.toBeInstanceOf(
         BadRequestException,
       );
-      expect(provider.getMatrix).not.toHaveBeenCalled();
+      expect(provider.getMatrix.mock.calls).toHaveLength(0);
     },
   );
 
@@ -314,7 +319,7 @@ describe('DispatchPlanService', () => {
     await expect(
       service.createPlan(rider.id, [mark.id, ven.id]),
     ).rejects.toBeInstanceOf(BadRequestException);
-    expect(provider.getMatrix).not.toHaveBeenCalled();
+    expect(provider.getMatrix.mock.calls).toHaveLength(0);
   });
 
   it('rejects missing destination coordinates before calling routing', async () => {
@@ -331,7 +336,7 @@ describe('DispatchPlanService', () => {
     await expect(
       service.createPlan(rider.id, [mark.id, ven.id]),
     ).rejects.toBeInstanceOf(BadRequestException);
-    expect(provider.getMatrix).not.toHaveBeenCalled();
+    expect(provider.getMatrix.mock.calls).toHaveLength(0);
   });
 
   it('supersedes the old plan and creates version two without deleting history', async () => {
@@ -357,7 +362,7 @@ describe('DispatchPlanService', () => {
     expect(active.status).toBe(DispatchPlanStatus.SUPERSEDED);
     expect(active.supersededAt).toBeInstanceOf(Date);
     expect(result.version).toBe(2);
-    expect(planRepo.save).toHaveBeenCalledWith(active);
+    expect(planRepo.save!.mock.calls).toContainEqual([active]);
   });
 
   it('retains an active plan and marks routing stale after failed re-optimization', async () => {
@@ -377,10 +382,10 @@ describe('DispatchPlanService', () => {
     await expect(
       service.reoptimizePlan(rider.id, [mark.id, ven.id]),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
-    expect(planRepo.update).toHaveBeenCalledWith(
+    expect(planRepo.update!.mock.calls).toContainEqual([
       { id: active.id, status: DispatchPlanStatus.ACTIVE },
       { routingDataStale: true },
-    );
+    ]);
     expect(active.status).toBe(DispatchPlanStatus.ACTIVE);
   });
 
@@ -392,15 +397,15 @@ describe('DispatchPlanService', () => {
       dataSource.transaction!.mock.invocationCallOrder[0];
     expect(matrixOrder).toBeLessThan(transactionOrder);
     expect(routeOrder).toBeLessThan(transactionOrder);
-    expect(profileRepo.findOne).toHaveBeenCalledWith(
+    expect(profileRepo.findOne!.mock.calls).toContainEqual([
       expect.objectContaining({ lock: { mode: 'pessimistic_write' } }),
-    );
-    expect(orderRepo.findOneOrFail).toHaveBeenCalledWith(
+    ]);
+    expect(orderRepo.findOneOrFail!.mock.calls).toContainEqual([
       expect.objectContaining({ lock: { mode: 'pessimistic_write' } }),
-    );
-    expect(assignmentRepo.findOne).toHaveBeenCalledWith(
+    ]);
+    expect(assignmentRepo.findOne!.mock.calls).toContainEqual([
       expect.objectContaining({ lock: { mode: 'pessimistic_write' } }),
-    );
+    ]);
   });
 
   it('fails a second initial create after the rider lock reveals an active plan', async () => {
@@ -413,7 +418,7 @@ describe('DispatchPlanService', () => {
     await expect(
       service.createPlan(rider.id, [mark.id, ven.id]),
     ).rejects.toBeInstanceOf(ConflictException);
-    expect(stopRepo.save).not.toHaveBeenCalled();
+    expect(stopRepo.save!.mock.calls).toHaveLength(0);
   });
 
   it('fails closed when delivery advancement has no active plan', async () => {
@@ -453,7 +458,7 @@ describe('DispatchPlanService', () => {
         DispatchStopStatus.COMPLETED,
       ),
     ).resolves.toBeUndefined();
-    expect(stopRepo.save).not.toHaveBeenCalled();
+    expect(stopRepo.save!.mock.calls).toHaveLength(0);
   });
 
   it('allows a pre-plan decline and skips a planned later stop without reordering', async () => {

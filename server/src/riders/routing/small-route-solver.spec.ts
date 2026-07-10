@@ -29,7 +29,10 @@ describe('solveOpenRoute', () => {
       ],
     ],
     ['non-square matrices', [[0, 1], [1]]],
-    ['more than five stops', Array.from({ length: 7 }, () => Array(7).fill(1))],
+    [
+      'more than five stops',
+      Array.from({ length: 7 }, () => Array.from({ length: 7 }, () => 1)),
+    ],
   ])('rejects %s', (_label, matrix) => {
     expect(() => solveOpenRoute(matrix)).toThrow();
   });

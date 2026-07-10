@@ -1323,14 +1323,22 @@ describe('RidersService', () => {
       mockActiveAssignmentsQuery([missingCoordinates, routeable]);
 
       const result = await service.getActiveAssignments(1);
+      const views = result as Array<
+        DeliveryAssignment & {
+          dispatchPlanState: string;
+          routePosition: number | null;
+        }
+      >;
 
       expect(result.map((assignment) => assignment.id)).toEqual([1, 2]);
-      expect(
-        result.map((assignment) => (assignment as any).dispatchPlanState),
-      ).toEqual(['unplanned', 'unplanned']);
-      expect(
-        result.map((assignment) => (assignment as any).routePosition),
-      ).toEqual([null, null]);
+      expect(views.map((assignment) => assignment.dispatchPlanState)).toEqual([
+        'unplanned',
+        'unplanned',
+      ]);
+      expect(views.map((assignment) => assignment.routePosition)).toEqual([
+        null,
+        null,
+      ]);
     });
 
     it('keeps newly assigned unplanned work after planned stops', async () => {
