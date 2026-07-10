@@ -1743,8 +1743,9 @@ export class OrdersService {
       if (locked.batchOrderId !== candidate.batchOrderId) {
         throw new BadRequestException('Order batch changed during update');
       }
-      if (locked.orderStatus === OrderStatus.CANCELLED) {
-        if (orderStatus === OrderStatus.CANCELLED) return null;
+      if (locked.orderStatus === orderStatus) return null;
+      if (orderStatus === OrderStatus.CANCELLED) {
+        throw new BadRequestException('Use the cancellation workflow');
       }
       if (
         RIDER_ASSIGNMENT_WORKFLOW_STATUSES.has(orderStatus) ||
@@ -1753,8 +1754,15 @@ export class OrdersService {
       ) {
         throw new BadRequestException('Use the rider assignment workflow');
       }
+      if (
+        orderStatus === OrderStatus.COMPLETED_PICKUP &&
+        locked.deliveryOption !== 'pickup'
+      ) {
+        throw new BadRequestException(
+          'Completed pickup requires a pickup order',
+        );
+      }
       assertOrderStatusTransition(locked.orderStatus, orderStatus);
-      if (locked.orderStatus === orderStatus) return null;
       if (
         !Number.isInteger(context?.actorUserId) ||
         context!.actorUserId <= 0

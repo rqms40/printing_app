@@ -25,42 +25,64 @@ export class OrderHistoryAndAssignmentIntegrity1777853600000 implements Migratio
     await queryRunner.query(
       canUseOwningOrder
         ? `
-          WITH ranked_current_assignments AS (
+          WITH current_assignment_candidates AS (
             SELECT assignment.id,
-                   ROW_NUMBER() OVER (
-                     PARTITION BY assignment.order_id
-                     ORDER BY
-                       CASE
-                         WHEN rider.user_id = owning_order.assigned_rider_id
-                          AND (
-                            (owning_order.order_status::text = 'rider_assigned'
-                              AND assignment.status::text IN ('assigned', 'accepted'))
-                            OR (owning_order.order_status::text = 'picked_up'
-                              AND assignment.status::text = 'picked_up')
-                            OR (owning_order.order_status::text = 'on_the_way'
-                              AND assignment.status::text = 'on_the_way')
-                            OR (owning_order.order_status::text = 'arrived_at_destination'
-                              AND assignment.status::text = 'arrived')
-                            OR (owning_order.order_status::text = 'delivered'
-                              AND assignment.status::text = 'delivered')
-                          ) THEN 0
-                         ELSE 1
-                       END,
-                       assignment.assigned_at DESC,
-                       assignment.id DESC
-                   ) AS occurrence
+                   assignment.order_id,
+                   assignment.assigned_at,
+                   owning_order.id IS NULL
+                     OR owning_order.order_status::text IN (
+                       'rider_assigned', 'picked_up', 'on_the_way',
+                       'arrived_at_destination', 'delivered'
+                     ) AS should_have_current,
+                   CASE
+                     WHEN (
+                       (owning_order.order_status::text = 'rider_assigned'
+                         AND assignment.status::text IN ('assigned', 'accepted'))
+                       OR (owning_order.order_status::text = 'picked_up'
+                         AND assignment.status::text = 'picked_up')
+                       OR (owning_order.order_status::text = 'on_the_way'
+                         AND assignment.status::text = 'on_the_way')
+                       OR (owning_order.order_status::text = 'arrived_at_destination'
+                         AND assignment.status::text = 'arrived')
+                       OR (owning_order.order_status::text = 'delivered'
+                         AND assignment.status::text = 'delivered')
+                     ) THEN 0
+                     ELSE 1
+                   END AS compatibility_rank,
+                   CASE
+                     WHEN owning_order.assigned_rider_id IS NOT NULL
+                      AND rider.user_id = owning_order.assigned_rider_id
+                       THEN 0
+                     ELSE 1
+                   END AS rider_rank
             FROM delivery_assignments AS assignment
             LEFT JOIN orders AS owning_order
               ON owning_order.id = assignment.order_id
             LEFT JOIN rider_profiles AS rider
               ON rider.id = assignment.rider_id
             WHERE assignment.is_current = true
+          ),
+          ranked_current_assignments AS (
+            SELECT id,
+                   should_have_current,
+                   ROW_NUMBER() OVER (
+                     PARTITION BY order_id
+                     ORDER BY
+                       compatibility_rank,
+                       rider_rank,
+                       assigned_at DESC,
+                       id DESC
+                   ) AS occurrence
+            FROM current_assignment_candidates
           )
           UPDATE delivery_assignments AS assignment
           SET is_current = false
           FROM ranked_current_assignments AS ranked
           WHERE assignment.id = ranked.id
-            AND ranked.occurrence > 1
+            AND (
+              NOT ranked.should_have_current
+              OR ranked.occurrence > 1
+            )
         `
         : `
           WITH ranked_current_assignments AS (

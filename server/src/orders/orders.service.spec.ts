@@ -1125,6 +1125,93 @@ describe('OrdersService', () => {
   });
 
   describe('updateStatus', () => {
+    it('rejects generic cancellation before credit, batch, and slot accounting can be bypassed', async () => {
+      repo.findOneOrFail.mockResolvedValue({
+        ...mockOrder,
+        orderStatus: OrderStatus.ORDER_PLACED,
+      } as Order);
+
+      await expect(
+        service.updateStatus(1, OrderStatus.CANCELLED, {}, statusContext),
+      ).rejects.toThrow('Use the cancellation workflow');
+
+      expect(repo.update).not.toHaveBeenCalled();
+      expect(historyRepo.insert).not.toHaveBeenCalled();
+      expect(gateway.notifyOrderUpdate).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      OrderStatus.RIDER_ASSIGNED,
+      OrderStatus.PICKED_UP,
+      OrderStatus.DELIVERED,
+      OrderStatus.CANCELLED,
+      OrderStatus.FILE_VERIFIED,
+    ])('treats a repeated %s status as an event-free no-op', async (status) => {
+      const current = { ...mockOrder, orderStatus: status } as Order;
+      repo.findOneOrFail.mockResolvedValue(current);
+      repo.findOne.mockResolvedValue(current);
+
+      await expect(
+        service.updateStatus(1, status, {}, statusContext),
+      ).resolves.toEqual(current);
+
+      expect(repo.update).not.toHaveBeenCalled();
+      expect(historyRepo.insert).not.toHaveBeenCalled();
+      expect(gateway.notifyOrderUpdate).not.toHaveBeenCalled();
+    });
+
+    it('rejects an unknown status instead of treating it as a retry', async () => {
+      await expect(
+        service.updateStatus(1, 'not-a-real-status', {}, statusContext),
+      ).rejects.toThrow('Unknown order status: not-a-real-status');
+
+      expect(repo.findOneOrFail).not.toHaveBeenCalled();
+      expect(repo.update).not.toHaveBeenCalled();
+    });
+
+    it.each(['delivery', null, 'legacy-option'])(
+      'rejects completed pickup for non-pickup delivery option %s',
+      async (deliveryOption) => {
+        repo.findOneOrFail.mockResolvedValue({
+          ...mockOrder,
+          orderStatus: OrderStatus.READY_FOR_DISPATCH,
+          deliveryOption,
+        } as Order);
+
+        await expect(
+          service.updateStatus(
+            1,
+            OrderStatus.COMPLETED_PICKUP,
+            {},
+            statusContext,
+          ),
+        ).rejects.toThrow('Completed pickup requires a pickup order');
+
+        expect(repo.update).not.toHaveBeenCalled();
+        expect(historyRepo.insert).not.toHaveBeenCalled();
+      },
+    );
+
+    it('allows completed pickup for an explicit pickup order', async () => {
+      repo.findOneOrFail.mockResolvedValue({
+        ...mockOrder,
+        orderStatus: OrderStatus.READY_FOR_DISPATCH,
+        deliveryOption: 'pickup',
+      } as Order);
+
+      await service.updateStatus(
+        1,
+        OrderStatus.COMPLETED_PICKUP,
+        {},
+        statusContext,
+      );
+
+      expect(repo.update).toHaveBeenCalledWith(
+        { id: 1, orderStatus: OrderStatus.READY_FOR_DISPATCH },
+        { orderStatus: OrderStatus.COMPLETED_PICKUP },
+      );
+    });
+
     it.each([
       [OrderStatus.READY_FOR_DISPATCH, OrderStatus.RIDER_ASSIGNED],
       [OrderStatus.RIDER_ASSIGNED, OrderStatus.READY_FOR_DISPATCH],
@@ -1232,22 +1319,6 @@ describe('OrdersService', () => {
       expect(gateway.notifyOrderUpdate).not.toHaveBeenCalled();
     });
 
-    it('treats a repeated cancelled status as an event-free no-op', async () => {
-      const cancelled = {
-        ...mockOrder,
-        orderStatus: OrderStatus.CANCELLED,
-      } as Order;
-      repo.findOneOrFail.mockResolvedValue(cancelled);
-      repo.findOne.mockResolvedValue(cancelled);
-
-      await expect(
-        service.updateStatus(1, OrderStatus.CANCELLED),
-      ).resolves.toEqual(cancelled);
-
-      expect(repo.update).not.toHaveBeenCalled();
-      expect(gateway.notifyOrderUpdate).not.toHaveBeenCalled();
-    });
-
     it('rejects a status write when the expected row was not affected', async () => {
       repo.findOneOrFail.mockResolvedValue(mockOrder);
       repo.update.mockResolvedValue({ affected: 0 } as any);
@@ -1285,16 +1356,22 @@ describe('OrdersService', () => {
       );
     });
 
-    it('notifies admins when status becomes cancelled', async () => {
+    it('notifies admins when the complete cancellation workflow succeeds', async () => {
+      const placedOrder = {
+        ...mockOrder,
+        userId: 1,
+        paymentMethod: 'gcash',
+        orderStatus: OrderStatus.ORDER_PLACED,
+      } as Order;
       repo.update.mockResolvedValue(undefined as any);
-      repo.findOneOrFail.mockResolvedValue(mockOrder);
+      repo.findOneOrFail.mockResolvedValue(placedOrder);
 
-      await service.updateStatus(1, OrderStatus.CANCELLED, {}, statusContext);
+      await service.cancelOrder(1, placedOrder.userId);
 
       expect(notificationsService.createForAllAdmins).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'order_cancelled',
-          orderRef: mockOrder.orderId,
+          orderRef: placedOrder.orderId,
         }),
       );
     });

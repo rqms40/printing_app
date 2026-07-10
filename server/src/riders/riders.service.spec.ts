@@ -215,6 +215,7 @@ describe('RidersService', () => {
         id: 1,
         orderId: 'ORD-1',
         batchOrderId: null,
+        deliveryOption: 'delivery',
         orderStatus: OrderStatus.READY_FOR_DISPATCH,
       } as Order;
       const rider = {
@@ -285,6 +286,7 @@ describe('RidersService', () => {
         id: 1,
         orderId: 'ORD-1',
         batchOrderId: null,
+        deliveryOption: 'delivery',
         orderStatus: OrderStatus.READY_FOR_DISPATCH,
       } as Order;
       const committedOrder = {
@@ -347,6 +349,7 @@ describe('RidersService', () => {
       const readyOrder = {
         id: 1,
         batchOrderId: null,
+        deliveryOption: 'delivery',
         orderStatus: OrderStatus.READY_FOR_DISPATCH,
       } as Order;
       orderRepo.findOneOrFail.mockResolvedValue(readyOrder);
@@ -384,6 +387,7 @@ describe('RidersService', () => {
         const readyOrder = {
           id: 1,
           batchOrderId: null,
+          deliveryOption: 'delivery',
           orderStatus: OrderStatus.READY_FOR_DISPATCH,
         } as Order;
         orderRepo.findOneOrFail.mockResolvedValue(readyOrder);
@@ -409,6 +413,29 @@ describe('RidersService', () => {
 
         expect(assignmentRepo.save).not.toHaveBeenCalled();
         expect(orderRepo.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['pickup', null, 'legacy-option'])(
+      'rejects rider assignment for non-delivery option %s',
+      async (deliveryOption) => {
+        const readyOrder = {
+          id: 1,
+          batchOrderId: null,
+          deliveryOption,
+          orderStatus: OrderStatus.READY_FOR_DISPATCH,
+        } as Order;
+        orderRepo.findOneOrFail.mockResolvedValue(readyOrder);
+        assignmentRepo.findOne.mockResolvedValue(null);
+
+        await expect(service.assignOrderToRider(1, 10, 7)).rejects.toThrow(
+          'Rider assignment requires a delivery order',
+        );
+
+        expect(profileRepo.findOne).not.toHaveBeenCalled();
+        expect(assignmentRepo.save).not.toHaveBeenCalled();
+        expect(orderRepo.update).not.toHaveBeenCalled();
+        expect(historyRepo.insert).not.toHaveBeenCalled();
       },
     );
   });

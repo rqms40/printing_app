@@ -549,6 +549,16 @@ describe('AdminController analytics', () => {
 
       expect(ordersService.updateStatus).not.toHaveBeenCalled();
     });
+
+    it('rejects cancellation in favor of the complete cancellation workflow', async () => {
+      await expect(
+        controller.updateOrderStatus(42, {
+          status: OrderStatus.CANCELLED,
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(ordersService.updateStatus).not.toHaveBeenCalled();
+    });
   });
 
   describe('assignRider', () => {

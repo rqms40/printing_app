@@ -725,6 +725,9 @@ export class AdminController {
     @Body() dto: UpdateStatusDto,
     @Request() req: RequestWithUser,
   ) {
+    if (dto.status === OrderStatus.CANCELLED) {
+      throw new BadRequestException('Use the cancellation workflow');
+    }
     if (dto.status === OrderStatus.RIDER_ASSIGNED) {
       throw new BadRequestException(
         'Use the rider assignment endpoint to assign riders',
@@ -756,7 +759,7 @@ export class AdminController {
   @Post('orders/:id/assign')
   async assignRider(
     @Param('id', ParseIntPipe) id: number,
-    @Body('riderId') riderId: number,
+    @Body('riderId', ParseIntPipe) riderId: number,
     @Request() req: RequestWithUser,
   ) {
     const {

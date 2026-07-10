@@ -549,6 +549,120 @@ describe('Rider dispatch workflow (e2e)', () => {
     }
   });
 
+  it('enforces pickup and delivery modes at the dispatch boundary', async () => {
+    const suffix = `${runId}-delivery-mode`;
+    const [customer, admin, rider] = await usersRepo.save([
+      usersRepo.create({
+        email: `customer-${suffix}@example.com`,
+        passwordHash: 'not-used',
+        role: UserRole.CUSTOMER,
+        isActive: true,
+      }),
+      usersRepo.create({
+        email: `admin-${suffix}@example.com`,
+        passwordHash: 'not-used',
+        role: UserRole.ADMIN,
+        isActive: true,
+      }),
+      usersRepo.create({
+        email: `rider-${suffix}@example.com`,
+        passwordHash: 'not-used',
+        role: UserRole.RIDER,
+        isActive: true,
+      }),
+    ]);
+    const riderProfile = await riderProfilesRepo.save(
+      riderProfilesRepo.create({
+        userId: rider.id,
+        vehicleType: 'bike',
+        isAvailable: true,
+      }),
+    );
+    const [deliveryOrder, pickupOrder] = await ordersRepo.save([
+      ordersRepo.create({
+        orderId: `D${runId.slice(-8)}`,
+        userId: customer.id,
+        category: 'paper',
+        quantity: 1,
+        totalPrice: 20,
+        deliveryFee: 25,
+        paymentMethod: 'cod',
+        deliveryOption: 'delivery',
+        orderStatus: OrderStatus.READY_FOR_DISPATCH,
+      }),
+      ordersRepo.create({
+        orderId: `P${runId.slice(-8)}`,
+        userId: customer.id,
+        category: 'paper',
+        quantity: 1,
+        totalPrice: 20,
+        deliveryFee: 0,
+        paymentMethod: 'cod',
+        deliveryOption: 'pickup',
+        orderStatus: OrderStatus.READY_FOR_DISPATCH,
+      }),
+    ]);
+    const adminToken = jwtService.sign({
+      sub: admin.id,
+      email: admin.email,
+      role: admin.role,
+    });
+
+    await request(app.getHttpServer())
+      .post(`/api/admin/orders/${deliveryOrder.id}/assign`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ riderId: 'not-a-rider-id' })
+      .expect(400);
+    await request(app.getHttpServer())
+      .patch('/api/riders/assignments/not-an-assignment-id/status')
+      .set(
+        'Authorization',
+        `Bearer ${jwtService.sign({
+          sub: rider.id,
+          email: rider.email,
+          role: rider.role,
+        })}`,
+      )
+      .send({ status: DeliveryStatus.ACCEPTED })
+      .expect(400);
+
+    await request(app.getHttpServer())
+      .patch(`/api/admin/orders/${deliveryOrder.id}/status`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: OrderStatus.COMPLETED_PICKUP })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post(`/api/admin/orders/${pickupOrder.id}/assign`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ riderId: riderProfile.id })
+      .expect(400);
+
+    await expect(
+      ordersRepo.findBy({ id: In([deliveryOrder.id, pickupOrder.id]) }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: deliveryOrder.id,
+          orderStatus: OrderStatus.READY_FOR_DISPATCH,
+        }),
+        expect.objectContaining({
+          id: pickupOrder.id,
+          orderStatus: OrderStatus.READY_FOR_DISPATCH,
+        }),
+      ]),
+    );
+    await expect(
+      assignmentsRepo.countBy({
+        orderId: In([deliveryOrder.id, pickupOrder.id]),
+      }),
+    ).resolves.toBe(0);
+    await expect(
+      statusHistoryRepo.countBy({
+        orderId: In([deliveryOrder.id, pickupOrder.id]),
+      }),
+    ).resolves.toBe(0);
+  });
+
   it('rolls back the order update when status history insertion fails', async () => {
     const suffix = `${runId}-rollback`;
     const [customer, admin] = await usersRepo.save([

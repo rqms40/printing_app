@@ -462,6 +462,258 @@ describe('production migration lifecycle (e2e)', () => {
     }
   });
 
+  it('reconciles legacy current assignments from owning order state', async () => {
+    const database = await createDatabase('assignment_state_reconciliation');
+    await createSynchronizedFixture(database, false);
+    const dataSource = await initializeMigrationDataSource(database);
+
+    try {
+      await dataSource.query(
+        `DROP INDEX IF EXISTS uq_delivery_assignments_current_order`,
+      );
+      const users = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO users (email, password_hash, role, is_active)
+         VALUES
+           ($1, 'not-used', 'customer', true),
+           ($2, 'not-used', 'rider', true),
+           ($3, 'not-used', 'rider', true),
+           ($4, 'not-used', 'rider', true)
+         RETURNING id`,
+        [
+          `state-customer-${database}@example.test`,
+          `state-rider-a-${database}@example.test`,
+          `state-rider-b-${database}@example.test`,
+          `state-rider-c-${database}@example.test`,
+        ],
+      );
+      const riders = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO rider_profiles
+           (user_id, vehicle_type, is_available)
+         VALUES ($1, 'bike', true), ($2, 'bike', true), ($3, 'bike', true)
+         RETURNING id`,
+        [users[1].id, users[2].id, users[3].id],
+      );
+      const insertOrder = async (
+        reference: string,
+        status: string,
+        assignedRiderId: number | null = null,
+      ): Promise<number> => {
+        const [order] = await dataSource.query<Array<{ id: number }>>(
+          `INSERT INTO orders
+             (order_id, user_id, category, total_price, delivery_fee,
+              payment_method, delivery_option, order_status,
+              assigned_rider_id)
+           VALUES ($1, $2, 'paper', 10, 0, 'cash', 'delivery', $3, $4)
+           RETURNING id`,
+          [reference, users[0].id, status, assignedRiderId],
+        );
+        return order.id;
+      };
+      const insertAssignment = async (
+        orderId: number,
+        riderId: number,
+        status: string,
+        assignedAt: string,
+        proofSignatureData: string | null = null,
+      ): Promise<void> => {
+        await dataSource.query(
+          `INSERT INTO delivery_assignments
+             (order_id, rider_id, status, is_current, assigned_at,
+              proof_type, proof_signature_data)
+           VALUES ($1, $2, $3, true, $4,
+             CASE WHEN $5::text IS NULL THEN NULL
+                  ELSE 'signature'::delivery_proof_type_enum END,
+             $5)`,
+          [orderId, riderId, status, assignedAt, proofSignatureData],
+        );
+      };
+
+      const orderIds = {
+        ready: await insertOrder('STATE-READY', 'ready_for_dispatch'),
+        cancelled: await insertOrder('STATE-CANCELLED', 'cancelled'),
+        declined: await insertOrder('STATE-DECLINED', 'file_declined'),
+        pickup: await insertOrder('STATE-PICKUP', 'completed_pickup'),
+        delivered: await insertOrder('STATE-DELIVERED', 'delivered'),
+        compatible: await insertOrder(
+          'STATE-COMPATIBLE',
+          'picked_up',
+          users[1].id,
+        ),
+        exact: await insertOrder('STATE-EXACT', 'on_the_way', users[3].id),
+      };
+
+      await insertAssignment(
+        orderIds.ready,
+        riders[0].id,
+        'assigned',
+        '2026-01-01T00:00:00Z',
+      );
+      await insertAssignment(
+        orderIds.cancelled,
+        riders[0].id,
+        'accepted',
+        '2026-01-01T00:00:00Z',
+      );
+      await insertAssignment(
+        orderIds.declined,
+        riders[0].id,
+        'picked_up',
+        '2026-01-01T00:00:00Z',
+      );
+      await insertAssignment(
+        orderIds.pickup,
+        riders[0].id,
+        'delivered',
+        '2026-01-01T00:00:00Z',
+        'pickup-proof',
+      );
+      await insertAssignment(
+        orderIds.delivered,
+        riders[0].id,
+        'delivered',
+        '2026-01-01T00:00:00Z',
+        'delivered-proof',
+      );
+      await insertAssignment(
+        orderIds.delivered,
+        riders[1].id,
+        'assigned',
+        '2026-01-02T00:00:00Z',
+      );
+      await insertAssignment(
+        orderIds.compatible,
+        riders[1].id,
+        'picked_up',
+        '2026-01-01T00:00:00Z',
+      );
+      await insertAssignment(
+        orderIds.compatible,
+        riders[0].id,
+        'assigned',
+        '2026-01-02T00:00:00Z',
+      );
+      await insertAssignment(
+        orderIds.exact,
+        riders[2].id,
+        'on_the_way',
+        '2026-01-01T00:00:00Z',
+      );
+      await insertAssignment(
+        orderIds.exact,
+        riders[0].id,
+        'on_the_way',
+        '2026-01-02T00:00:00Z',
+      );
+
+      await dataSource.runMigrations();
+
+      await expect(
+        dataSource.query(
+          `SELECT owning_order.order_id,
+                  assignment.status::text AS status,
+                  assignment.is_current,
+                  rider.user_id AS rider_user_id,
+                  assignment.proof_signature_data
+           FROM delivery_assignments AS assignment
+           JOIN orders AS owning_order ON owning_order.id = assignment.order_id
+           JOIN rider_profiles AS rider ON rider.id = assignment.rider_id
+           WHERE owning_order.order_id LIKE 'STATE-%'
+           ORDER BY owning_order.order_id, assignment.assigned_at`,
+        ),
+      ).resolves.toEqual([
+        {
+          order_id: 'STATE-CANCELLED',
+          status: 'accepted',
+          is_current: false,
+          rider_user_id: users[1].id,
+          proof_signature_data: null,
+        },
+        {
+          order_id: 'STATE-COMPATIBLE',
+          status: 'picked_up',
+          is_current: true,
+          rider_user_id: users[2].id,
+          proof_signature_data: null,
+        },
+        {
+          order_id: 'STATE-COMPATIBLE',
+          status: 'assigned',
+          is_current: false,
+          rider_user_id: users[1].id,
+          proof_signature_data: null,
+        },
+        {
+          order_id: 'STATE-DECLINED',
+          status: 'picked_up',
+          is_current: false,
+          rider_user_id: users[1].id,
+          proof_signature_data: null,
+        },
+        {
+          order_id: 'STATE-DELIVERED',
+          status: 'delivered',
+          is_current: true,
+          rider_user_id: users[1].id,
+          proof_signature_data: 'delivered-proof',
+        },
+        {
+          order_id: 'STATE-DELIVERED',
+          status: 'assigned',
+          is_current: false,
+          rider_user_id: users[2].id,
+          proof_signature_data: null,
+        },
+        {
+          order_id: 'STATE-EXACT',
+          status: 'on_the_way',
+          is_current: true,
+          rider_user_id: users[3].id,
+          proof_signature_data: null,
+        },
+        {
+          order_id: 'STATE-EXACT',
+          status: 'on_the_way',
+          is_current: false,
+          rider_user_id: users[1].id,
+          proof_signature_data: null,
+        },
+        {
+          order_id: 'STATE-PICKUP',
+          status: 'delivered',
+          is_current: false,
+          rider_user_id: users[1].id,
+          proof_signature_data: 'pickup-proof',
+        },
+        {
+          order_id: 'STATE-READY',
+          status: 'assigned',
+          is_current: false,
+          rider_user_id: users[1].id,
+          proof_signature_data: null,
+        },
+      ]);
+
+      await expect(
+        dataSource.query(
+          `INSERT INTO delivery_assignments
+             (order_id, rider_id, status, is_current)
+           VALUES ($1, $2, 'assigned', true)`,
+          [orderIds.ready, riders[0].id],
+        ),
+      ).resolves.toBeDefined();
+      await expect(
+        dataSource.query(
+          `SELECT COUNT(*)::int AS count
+           FROM delivery_assignments
+           WHERE order_id = ANY($1::int[])`,
+          [Object.values(orderIds)],
+        ),
+      ).resolves.toEqual([{ count: 11 }]);
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
   it('commits exactly one beta enrollment ledger grant under concurrent service calls', async () => {
     const database = await createDatabase('beta_ledger_concurrency');
     const dataSource = await initializeMigrationDataSource(database);
