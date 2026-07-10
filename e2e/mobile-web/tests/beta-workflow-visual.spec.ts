@@ -460,6 +460,13 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
       ),
     ).toThrow();
   });
+
+  test("reactivates Flutter semantics after both full customer home navigations", () => {
+    const source = readFileSync(fileURLToPath(import.meta.url), "utf8");
+    expect(source).toMatch(
+      /await actors\.ven\.page\.goto\(`\$\{mobileURL\}\/customer\/home`\);\s*await enableFlutterSemantics\(actors\.ven\.page\);\s*await actors\.mark\.page\.goto\(`\$\{mobileURL\}\/customer\/home`\);\s*await enableFlutterSemantics\(actors\.mark\.page\);/,
+    );
+  });
 });
 
 type AuthPayload = {
@@ -1672,7 +1679,9 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         venAssignmentId: ven.assignmentId,
       });
       await actors.ven.page.goto(`${mobileURL}/customer/home`);
+      await enableFlutterSemantics(actors.ven.page);
       await actors.mark.page.goto(`${mobileURL}/customer/home`);
+      await enableFlutterSemantics(actors.mark.page);
       const markDocumentMarker = `mark-document-${runLabel}`;
       await actors.mark.page.evaluate((marker) => {
         Object.defineProperty(window, "__gridgoBetaDocumentMarker", {
