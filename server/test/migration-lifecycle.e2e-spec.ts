@@ -1364,9 +1364,24 @@ describe('production migration lifecycle (e2e)', () => {
     const database = await createDatabase('dispatch_wrong_index');
     const dataSource = await initializeMigrationDataSource(database);
     await dataSource.runMigrations();
-    await dataSource.query(
-      `INSERT INTO users (email, password_hash) VALUES ($1, 'not-used')`,
+    const [riderUser] = await dataSource.query<Array<{ id: number }>>(
+      `INSERT INTO users (email, password_hash, role)
+       VALUES ($1, 'not-used', 'rider') RETURNING id`,
       [`dispatch-index-preserved-${database}@example.test`],
+    );
+    const [riderProfile] = await dataSource.query<Array<{ id: number }>>(
+      `INSERT INTO rider_profiles (user_id, vehicle_type, is_available)
+       VALUES ($1, 'bike', true) RETURNING id`,
+      [riderUser.id],
+    );
+    await dataSource.query(
+      `INSERT INTO dispatch_plans
+         (rider_id, version, status, origin_latitude, origin_longitude,
+          provider, profile, total_duration_seconds, total_distance_meters,
+          routing_data_stale, planned_at)
+       VALUES ($1, 1, 'active', 7.064, 125.6079,
+               'preserved-provider', 'driving', 10, 100, false, NOW())`,
+      [riderProfile.id],
     );
     await dataSource.query(`DROP INDEX "uq_dispatch_plans_active_rider"`);
     await dataSource.query(`
@@ -1388,6 +1403,12 @@ describe('production migration lifecycle (e2e)', () => {
         [`dispatch-index-preserved-${database}@example.test`],
       ),
     ).resolves.toEqual([{ count: 1 }]);
+    await expect(
+      dataSource.query<Array<{ provider: string; version: number }>>(
+        `SELECT provider, version FROM dispatch_plans WHERE rider_id = $1`,
+        [riderProfile.id],
+      ),
+    ).resolves.toEqual([{ provider: 'preserved-provider', version: 1 }]);
     await expect(
       dataSource.query<Array<{ predicate: string }>>(`
         SELECT pg_get_expr(indexprs.indpred, indexprs.indrelid) AS predicate
