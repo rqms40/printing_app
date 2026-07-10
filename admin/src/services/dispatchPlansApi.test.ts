@@ -93,6 +93,16 @@ describe("dispatchPlansApi", () => {
     expect(mockGet).toHaveBeenCalledAfter(mockPost);
   });
 
+  it("does not report create success when the persisted plan cannot be refetched", async () => {
+    mockPost.mockResolvedValue({ data: { id: 12 } });
+    mockGet.mockResolvedValue({ data: null });
+
+    await expect(createDispatchPlan(10, [201, 202])).rejects.toMatchObject({
+      code: "dispatch_plan_missing",
+      preservedPlan: null,
+    });
+  });
+
   it("surfaces an initial routing_unavailable without fabricating a plan", async () => {
     mockPost.mockRejectedValue({
       response: {
@@ -155,5 +165,15 @@ describe("dispatchPlansApi", () => {
       {},
     );
     expect(mockGet).toHaveBeenCalledAfter(mockPost);
+  });
+
+  it("does not report re-optimization success when the new persisted version is missing", async () => {
+    mockPost.mockResolvedValue({ data: { version: 2 } });
+    mockGet.mockResolvedValue({ data: null });
+
+    await expect(reoptimizeDispatchPlan(10)).rejects.toMatchObject({
+      code: "dispatch_plan_missing",
+      preservedPlan: null,
+    });
   });
 });

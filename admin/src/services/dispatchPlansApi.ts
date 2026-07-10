@@ -40,6 +40,17 @@ export class DispatchPlanApiError extends Error {
   }
 }
 
+function missingPersistedPlan(): DispatchPlanApiError {
+  return new DispatchPlanApiError({
+    response: {
+      data: {
+        code: "dispatch_plan_missing",
+        message: "Persisted dispatch plan was not returned",
+      },
+    },
+  });
+}
+
 export async function getDispatchPlan(
   riderProfileId: number,
 ): Promise<DispatchPlan | null> {
@@ -52,7 +63,7 @@ export async function getDispatchPlan(
 export async function createDispatchPlan(
   riderProfileId: number,
   assignmentIds: number[],
-): Promise<DispatchPlan | null> {
+): Promise<DispatchPlan> {
   try {
     await apiClient.post(`/admin/riders/${riderProfileId}/dispatch-plan`, {
       assignmentIds,
@@ -60,13 +71,15 @@ export async function createDispatchPlan(
   } catch (cause) {
     throw new DispatchPlanApiError(cause);
   }
-  return getDispatchPlan(riderProfileId);
+  const plan = await getDispatchPlan(riderProfileId);
+  if (!plan) throw missingPersistedPlan();
+  return plan;
 }
 
 export async function reoptimizeDispatchPlan(
   riderProfileId: number,
   assignmentIds?: number[],
-): Promise<DispatchPlan | null> {
+): Promise<DispatchPlan> {
   try {
     await apiClient.post(
       `/admin/riders/${riderProfileId}/dispatch-plan/re-optimize`,
@@ -81,5 +94,7 @@ export async function reoptimizeDispatchPlan(
     }
     throw new DispatchPlanApiError(cause, preservedPlan);
   }
-  return getDispatchPlan(riderProfileId);
+  const plan = await getDispatchPlan(riderProfileId);
+  if (!plan) throw missingPersistedPlan();
+  return plan;
 }

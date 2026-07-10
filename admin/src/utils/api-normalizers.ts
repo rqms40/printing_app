@@ -278,6 +278,18 @@ function requiredDispatchString(
   return value;
 }
 
+function requiredBoolean(
+  record: ApiRecord,
+  label: string,
+  ...keys: string[]
+): boolean {
+  const value = read(record, ...keys);
+  if (typeof value !== "boolean") {
+    throw new Error(`Invalid dispatch ${label}`);
+  }
+  return value;
+}
+
 function normalizeLineString(value: unknown): LineStringGeometry {
   const record = asRecord(value);
   if (record.type !== "LineString") {
@@ -463,9 +475,9 @@ export function normalizeDispatchPlan(input: unknown): DispatchPlan | null {
     profile: requiredDispatchString(record, "profile", "profile"),
     total_duration_seconds: duration,
     total_distance_meters: distance,
-    routing_data_stale: toBooleanValue(
+    routing_data_stale: requiredBoolean(
       record,
-      false,
+      "routing stale flag",
       "routing_data_stale",
       "routingDataStale",
     ),

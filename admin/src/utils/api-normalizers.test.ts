@@ -182,6 +182,13 @@ describe("api normalizers", () => {
   ])("rejects invalid persisted dispatch invariants %#", (payload, message) => {
     expect(() => normalizeDispatchPlan(payload)).toThrow(message);
   });
+
+  it.each([
+    validDispatchPlan({ routingDataStale: undefined }),
+    validDispatchPlan({ routingDataStale: "unknown" }),
+  ])("requires an explicit persisted routing stale flag", (payload) => {
+    expect(() => normalizeDispatchPlan(payload)).toThrow("stale");
+  });
   it("maps camelCase admin orders into the snake_case UI shape", () => {
     const order = normalizeOrder({
       id: 7,
