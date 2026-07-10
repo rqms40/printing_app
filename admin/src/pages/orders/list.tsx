@@ -11,6 +11,7 @@ import {
   Button,
   App,
   Alert,
+  Modal,
 } from "antd";
 import {
   SearchOutlined,
@@ -22,7 +23,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Order, OrderItem } from "@/types/order";
 import type { OrderStatus, PaymentStatus } from "@/types/enums";
-import { ORDER_STATUS_LABELS, ORDER_STATUS_TRANSITIONS } from "@/types/enums";
+import { ORDER_STATUS_LABELS } from "@/types/enums";
 import { StatusBadge } from "@/components/status-badge";
 import {
   formatCurrency,
@@ -155,6 +156,8 @@ export function OrderList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [declineTarget, setDeclineTarget] = useState<Order | null>(null);
+  const [declineReason, setDeclineReason] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -186,31 +189,56 @@ export function OrderList() {
     });
   }, []);
 
-  const handleStatusChange = (orderId: string, newStatus: OrderStatus) => {
+  const replaceOrder = (updated: Order) => {
+    setOrders((prev) => {
+      const idx = prev.findIndex((order) => order.id === updated.id);
+      if (idx === -1) return [updated, ...prev];
+      const next = [...prev];
+      next[idx] = updated;
+      return next;
+    });
+  };
+
+  const handleStatusChange = (order: Order, newStatus: OrderStatus) => {
+    if (newStatus === "file_declined") {
+      setDeclineTarget(order);
+      setDeclineReason("");
+      return;
+    }
     modal.confirm({
       title: "Update Status",
       icon: <ExclamationCircleOutlined />,
       content: `Change status to "${statusLabel(newStatus)}"?`,
       onOk: async () => {
         try {
-          await apiClient.patch(`/admin/orders/${orderId}/status`, {
+          await apiClient.patch(`/admin/orders/${order.id}/status`, {
             status: newStatus,
           });
           void message.success(`Status updated to ${statusLabel(newStatus)}`);
-          const res = await apiClient.get(`/admin/orders/${orderId}`);
-          const updated = normalizeOrder(res.data);
-          setOrders((prev) => {
-            const idx = prev.findIndex((o) => o.id === updated.id);
-            if (idx === -1) return [updated, ...prev];
-            const next = [...prev];
-            next[idx] = updated;
-            return next;
-          });
+          const res = await apiClient.get(`/admin/orders/${order.id}`);
+          replaceOrder(normalizeOrder(res.data));
         } catch {
           void message.error("Failed to update status");
         }
       },
     });
+  };
+
+  const declineOrder = async () => {
+    if (!declineTarget || !declineReason.trim()) return;
+    try {
+      await apiClient.patch(`/admin/orders/${declineTarget.id}/status`, {
+        status: "file_declined",
+        notes: declineReason.trim(),
+      });
+      const response = await apiClient.get(`/admin/orders/${declineTarget.id}`);
+      replaceOrder(normalizeOrder(response.data));
+      setDeclineTarget(null);
+      setDeclineReason("");
+      void message.success("File declined");
+    } catch {
+      void message.error("Failed to decline file");
+    }
   };
 
   let filtered = orders;
@@ -488,17 +516,17 @@ export function OrderList() {
             key="action"
             width={180}
             render={(_v: unknown, record: Order) => {
-              const validNextStatuses =
-                ORDER_STATUS_TRANSITIONS[record.order_status] || [];
+              const validNextStatuses = record.allowed_next_statuses ?? [];
               if (validNextStatuses.length === 0) return null;
 
               return (
                 <Select
                   placeholder="Update Status"
+                  aria-label={`Update status for ${record.order_id}`}
                   style={{ width: 160 }}
                   onClick={(e) => e.stopPropagation()}
                   onChange={(val: OrderStatus) =>
-                    handleStatusChange(record.id, val)
+                    handleStatusChange(record, val)
                   }
                   value={undefined}
                   options={validNextStatuses.map((s) => ({
@@ -525,6 +553,24 @@ export function OrderList() {
             )}
           />
         </Table>
+        <Modal
+          title={`Decline ${declineTarget?.order_id ?? "file"}`}
+          open={declineTarget != null}
+          onCancel={() => {
+            setDeclineTarget(null);
+            setDeclineReason("");
+          }}
+          onOk={() => void declineOrder()}
+          okText="Decline file"
+          okButtonProps={{ danger: true, disabled: !declineReason.trim() }}
+        >
+          <Input.TextArea
+            aria-label="File decline reason"
+            value={declineReason}
+            onChange={(event) => setDeclineReason(event.target.value)}
+            placeholder="Reason shown to the customer"
+          />
+        </Modal>
       </Space>
     </List>
   );

@@ -42,6 +42,24 @@ const { Text, Title } = Typography;
 
 const BRAND = '#FFD700';
 
+export function betaModeConfirmation(checked: boolean) {
+  return checked
+    ? {
+        title: 'Enable Beta Mode?',
+        content:
+          'New customer accounts are auto-enrolled in order and receive a one-time 100 GRID Credits grant. Beta checkout accepts GRID Credits only. After delivery, the mandatory 14-question feedback survey is shown; completed beta accounts are held from login until beta mode is disabled. Enrollment and credit history is retained.',
+        okText: 'Enable',
+        okButtonProps: { danger: false },
+      }
+    : {
+        title: 'Disable Beta Mode?',
+        content:
+          'Disabling beta mode immediately restores held beta accounts. Existing enrollment, rank, credit-grant, order, and feedback history is retained; beta auto-enrollment and credits-only checkout stop while beta mode is disabled.',
+        okText: 'Disable',
+        okButtonProps: { danger: true },
+      };
+}
+
 interface AdminUser {
   id: number;
   email: string;
@@ -155,12 +173,7 @@ export function BetaModePage() {
 
   const handleSettingsToggle = (checked: boolean) => {
     modal.confirm({
-      title: checked ? 'Enable Beta Mode?' : 'Disable Beta Mode?',
-      content: checked
-        ? 'Beta indicators become visible to all enrolled users.'
-        : 'Beta indicators are hidden from all users.',
-      okText: checked ? 'Enable' : 'Disable',
-      okButtonProps: { danger: !checked },
+      ...betaModeConfirmation(checked),
       onOk: () => doToggleSettings(checked),
     });
   };
@@ -515,10 +528,16 @@ export function BetaModePage() {
               Beta Mode
             </Title>
             <Text style={{ color: '#666', fontSize: 13 }}>
-              Controls visibility of beta indicators on customer devices.
+              Auto-enrolls new customers in rank order, grants one-time 100
+              GRID Credits, and limits beta checkout to GRID Credits. Delivery
+              completion requires the 14-question feedback survey and then
+              holds completed accounts until beta mode is disabled. Disabling
+              restores access immediately while retaining enrollment, credit,
+              order, and feedback history.
             </Text>
           </div>
           <Switch
+            aria-label="Beta mode"
             checked={settings?.isEnabled ?? false}
             onChange={(checked) => handleSettingsToggle(checked)}
             loading={toggleLoading}

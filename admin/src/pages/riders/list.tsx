@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {
   Table, Tag, Avatar, Space, Typography, Input, Tooltip,
-  Card, Badge, Button, Row, Col, Segmented, Statistic, App,
+  Card, Badge, Button, Row, Col, Segmented, Statistic, App, Alert,
 } from "antd";
 import {
   SearchOutlined, EnvironmentOutlined, CarOutlined,
@@ -12,13 +12,14 @@ import {
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L, { DivIcon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { mockDeliveries } from "@/providers/mock-data";
 import { formatDateTime, formatRelativeTime } from "@/utils/format";
 import { apiClient } from "@/providers/api-client";
 import {
   normalizeAdminRiders,
   normalizeOrders,
 } from "@/utils/api-normalizers";
+import type { Order } from "@/types/order";
+import { DispatchPlanPanel } from "./dispatch-plan-panel";
 
 const { Text, Title } = Typography;
 
@@ -31,6 +32,7 @@ interface ApiRider {
   vehicle_type: string;
   plate_number: string | null;
   is_available: boolean;
+  assignment_eligible: boolean;
   last_latitude: number | null;
   last_longitude: number | null;
   last_location_update: string | null;
@@ -111,18 +113,31 @@ export function RiderList() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'offline'>('all');
   const [mapExpanded, setMapExpanded] = useState(false);
   const [riders, setRiders] = useState<ApiRider[]>([]);
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loadingRiders, setLoadingRiders] = useState(true);
+  const [riderError, setRiderError] = useState<string | null>(null);
+  const [orderError, setOrderError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [selectedRiderId, setSelectedRiderId] = useState<number | null>(null);
 
   useEffect(() => {
+    setLoadingRiders(true);
+    setRiderError(null);
+    setOrderError(null);
     void apiClient.get("/admin/riders")
       .then((r) => setRiders(normalizeAdminRiders(r.data) as ApiRider[]))
-      .catch(() => {})
+      .catch((cause: unknown) => {
+        setRiders([]);
+        setRiderError(cause instanceof Error ? cause.message : "Unable to load riders");
+      })
       .finally(() => setLoadingRiders(false));
     void apiClient.get("/admin/orders")
       .then((r) => setOrders(normalizeOrders(r.data)))
-      .catch(() => {});
-  }, []);
+      .catch((cause: unknown) => {
+        setOrders([]);
+        setOrderError(cause instanceof Error ? cause.message : "Unable to load orders");
+      });
+  }, [reloadKey]);
 
   const handleAssignRider = async (orderId: number | string, riderId: number) => {
     try {
@@ -137,11 +152,37 @@ export function RiderList() {
 
   const onlineCount  = riders.filter(d => d.is_available).length;
   const offlineCount = riders.length - onlineCount;
-  const totalDeliveries = mockDeliveries.length;
-  const activeTrips  = mockDeliveries.filter(d =>
-    ['Assigned', 'Accepted', 'Picked Up', 'On the Way'].includes(d.status)
-  ).length;
-  const readyOrders  = orders.filter(o => o.order_status === 'ready_for_dispatch');
+  const activeTrips = orders.filter((order) => {
+    const status = order.assigned_rider_contact?.delivery_status;
+    return status != null && !["declined", "delivered"].includes(status);
+  }).length;
+  const readyOrders = orders.filter(
+    (order) =>
+      order.order_status === "ready_for_dispatch" &&
+      order.delivery_option === "delivery",
+  );
+  const selectedRider = riders.find((rider) => rider.id === selectedRiderId);
+  const selectedAssignments = selectedRider
+    ? orders.flatMap((order) => {
+        const contact = order.assigned_rider_contact;
+        const riderProfileId = Number(contact?.rider_profile_id);
+        const assignmentId = Number(contact?.delivery_assignment_id);
+        if (
+          riderProfileId !== selectedRider.id ||
+          !Number.isInteger(assignmentId) ||
+          assignmentId <= 0 ||
+          contact?.delivery_status === "declined" ||
+          contact?.delivery_status === "delivered"
+        ) {
+          return [];
+        }
+        return [{
+          assignmentId,
+          orderRef: order.order_id,
+          customerName: order.customer_name ?? null,
+        }];
+      })
+    : [];
 
   const filtered = riders.filter(d => {
     const matchesSearch = !search ||
@@ -159,6 +200,31 @@ export function RiderList() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 40 }}>
 
+      {riderError ? (
+        <Alert
+          type="error"
+          showIcon
+          message={riderError}
+          action={
+            <Button aria-label="Retry riders" onClick={() => setReloadKey((value) => value + 1)}>
+              Retry
+            </Button>
+          }
+        />
+      ) : null}
+      {orderError ? (
+        <Alert
+          type="error"
+          showIcon
+          message={orderError}
+          action={
+            <Button aria-label="Retry orders" onClick={() => setReloadKey((value) => value + 1)}>
+              Retry
+            </Button>
+          }
+        />
+      ) : null}
+
       {/* ── Header Row ─────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
         <div>
@@ -174,7 +240,7 @@ export function RiderList() {
 
       {/* ── Metric Strip ───────────────────────────────────────── */}
       <Row gutter={[12, 12]}>
-        <Col xs={12} sm={6}>
+        <Col xs={12} sm={8}>
           <Card style={S.card} styles={{ body: { padding: '16px 20px' } }}>
             <Statistic
               title={<span style={S.metricLabel}>Total Riders</span>}
@@ -184,7 +250,7 @@ export function RiderList() {
             />
           </Card>
         </Col>
-        <Col xs={12} sm={6}>
+        <Col xs={12} sm={8}>
           <Card style={S.card} styles={{ body: { padding: '16px 20px' } }}>
             <Statistic
               title={<span style={S.metricLabel}>Active Trips</span>}
@@ -194,17 +260,7 @@ export function RiderList() {
             />
           </Card>
         </Col>
-        <Col xs={12} sm={6}>
-          <Card style={S.card} styles={{ body: { padding: '16px 20px' } }}>
-            <Statistic
-              title={<span style={S.metricLabel}>Total Deliveries</span>}
-              value={totalDeliveries}
-              prefix={<DropboxOutlined style={{ color: '#34d399', fontSize: 16, marginRight: 4 }} />}
-              valueStyle={{ ...S.metricValue, color: '#34d399' }}
-            />
-          </Card>
-        </Col>
-        <Col xs={12} sm={6}>
+        <Col xs={12} sm={8}>
           <Card style={S.card} styles={{ body: { padding: '16px 20px' } }}>
             <Statistic
               title={<span style={S.metricLabel}>Awaiting Dispatch</span>}
@@ -303,7 +359,7 @@ export function RiderList() {
           <Col xs={24} lg={8}>
             <DispatchPanel
               readyOrders={readyOrders}
-              availRiders={riders.filter(d => d.is_available)}
+              availRiders={riders.filter(d => d.assignment_eligible)}
               onAssign={handleAssignRider}
             />
           </Col>
@@ -419,15 +475,15 @@ export function RiderList() {
           />
 
           <Table.Column
-            title="Deliveries"
-            width={100}
+            title="Assignments"
+            width={110}
             render={(_: unknown, record: ApiRider) => {
-              const count = mockDeliveries.filter(d => d.rider_id === String(record.id)).length;
-              return (
-                <div style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-                  <Text style={{ color: '#F0F0F0', fontSize: 13, fontWeight: 500 }}>{count} trips</Text>
-                </div>
-              );
+              const count = orders.filter(
+                (order) =>
+                  Number(order.assigned_rider_contact?.rider_profile_id) ===
+                  record.id,
+              ).length;
+              return <Text>{count}</Text>;
             }}
           />
 
@@ -450,15 +506,42 @@ export function RiderList() {
               )
             }
           />
+          <Table.Column
+            title="Route"
+            width={130}
+            render={(_: unknown, record: ApiRider) => (
+              <Button
+                size="small"
+                aria-label={`Dispatch plan for ${record.full_name ?? record.email ?? record.id}`}
+                onClick={() => setSelectedRiderId(record.id)}
+              >
+                Dispatch plan
+              </Button>
+            )}
+          />
         </Table>
       </div>
+
+      {selectedRider ? (
+        <DispatchPlanPanel
+          rider={{
+            id: selectedRider.id,
+            fullName:
+              selectedRider.full_name ??
+              selectedRider.email ??
+              `Rider ${selectedRider.id}`,
+            assignmentEligible: selectedRider.assignment_eligible,
+          }}
+          assignments={selectedAssignments}
+        />
+      ) : null}
     </div>
   );
 }
 
 /* ─── Dispatch Panel ─────────────────────────────────────────────── */
 const DispatchPanel: React.FC<{
-  readyOrders: any[];
+  readyOrders: Order[];
   availRiders: ApiRider[];
   onAssign: (orderId: number | string, riderId: number) => Promise<void>;
 }> = ({ readyOrders, availRiders, onAssign }) => {
@@ -541,10 +624,14 @@ const DispatchPanel: React.FC<{
                     Select rider:
                   </Text>
                   {availRiders.map(rider => (
-                    <div
+                    <button
+                      type="button"
                       key={rider.id}
+                      aria-label={`Assign ${order.order_id} to ${rider.full_name ?? rider.email ?? rider.id}`}
                       onClick={() => !assigningInProgress && void handleRiderselect(order.id ?? order.order_id, rider.id)}
                       style={{
+                        width: '100%',
+                        textAlign: 'left',
                         cursor: assigningInProgress ? 'not-allowed' : 'pointer',
                         background: '#222',
                         borderRadius: 8,
@@ -563,7 +650,7 @@ const DispatchPanel: React.FC<{
                       <Text style={{ fontSize: 11, color: '#666' }}>
                         {rider.vehicle_type} &middot; {rider.plate_number}
                       </Text>
-                    </div>
+                    </button>
                   ))}
                   <Button
                     type="text"
@@ -582,6 +669,7 @@ const DispatchPanel: React.FC<{
                   ghost
                   size="small"
                   icon={<UserAddOutlined />}
+                  aria-label={`Assign rider for ${order.order_id}`}
                   onClick={() => setAssigning(order.order_id ?? order.id)}
                   style={{
                     borderColor: '#333',

@@ -1,14 +1,15 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 
 import { OrderList } from "./list";
 
-const { mockGet, mockSubscribeToOrderUpdates } = vi.hoisted(() => ({
+const { mockGet, mockPatch, mockSubscribeToOrderUpdates } = vi.hoisted(() => ({
   mockGet: vi.fn(),
+  mockPatch: vi.fn(),
   mockSubscribeToOrderUpdates: vi.fn(() => vi.fn()),
 }));
 
@@ -24,7 +25,7 @@ vi.mock("@refinedev/antd", () => ({
 vi.mock("@/providers/api-client", () => ({
   apiClient: {
     get: mockGet,
-    patch: vi.fn(),
+    patch: mockPatch,
   },
 }));
 
@@ -64,5 +65,102 @@ describe("OrderList", () => {
     expect(await screen.findByText("Request failed")).toBeInTheDocument();
     expect(screen.queryByText("ORD-00147")).not.toBeInTheDocument();
     expect(screen.queryByText("thesis_final.pdf")).not.toBeInTheDocument();
+  });
+
+  it("renders only the server-provided order status actions", async () => {
+    mockGet.mockResolvedValue({
+      data: [{
+        id: 42,
+        order_id: "ORD-MARK",
+        user_id: 1,
+        customer_name: "Mark",
+        category: "paper",
+        quantity: 1,
+        total_price: 20,
+        delivery_fee: 0,
+        payment_method: "grid_credits",
+        payment_status: "paid",
+        order_status: "order_placed",
+        allowed_next_statuses: ["file_verified", "file_declined"],
+        delivery_option: "delivery",
+        created_at: "2026-07-10T10:00:00.000Z",
+        updated_at: "2026-07-10T10:00:00.000Z",
+      }],
+    });
+
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <OrderList />
+      </MemoryRouter>,
+    );
+
+    const action = await screen.findByRole("combobox", {
+      name: "Update status for ORD-MARK",
+    });
+    fireEvent.mouseDown(action);
+
+    expect(await screen.findByText("File Verified")).toBeInTheDocument();
+    expect(screen.getByText("File Declined")).toBeInTheDocument();
+    expect(screen.queryByText("Cancelled")).not.toBeInTheDocument();
+    expect(screen.queryByText("Rider Assigned")).not.toBeInTheDocument();
+  });
+
+  it("requires a trimmed reason before submitting a server-provided file decline", async () => {
+    const order = {
+      id: 42,
+      order_id: "ORD-MARK",
+      user_id: 1,
+      customer_name: "Mark",
+      category: "paper",
+      quantity: 1,
+      total_price: 20,
+      delivery_fee: 0,
+      payment_method: "grid_credits",
+      payment_status: "paid",
+      order_status: "order_placed",
+      allowed_next_statuses: ["file_verified", "file_declined"],
+      delivery_option: "delivery",
+      created_at: "2026-07-10T10:00:00.000Z",
+      updated_at: "2026-07-10T10:00:00.000Z",
+    };
+    mockPatch.mockResolvedValue({ data: {} });
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({
+        data:
+          url === "/admin/orders"
+            ? [order]
+            : { ...order, order_status: "file_declined", allowed_next_statuses: [] },
+      }),
+    );
+
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <OrderList />
+      </MemoryRouter>,
+    );
+
+    fireEvent.mouseDown(
+      await screen.findByRole("combobox", {
+        name: "Update status for ORD-MARK",
+      }),
+    );
+    fireEvent.click(await screen.findByText("File Declined"));
+
+    const submit = await screen.findByRole("button", { name: "Decline file" });
+    const reason = screen.getByLabelText("File decline reason");
+    expect(submit).toBeDisabled();
+    fireEvent.change(reason, { target: { value: "   " } });
+    expect(submit).toBeDisabled();
+    fireEvent.change(reason, { target: { value: "  Corrupted PDF  " } });
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+
+    await waitFor(() => {
+      expect(mockPatch).toHaveBeenCalledWith("/admin/orders/42/status", {
+        status: "file_declined",
+        notes: "Corrupted PDF",
+      });
+      expect(mockGet).toHaveBeenCalledWith("/admin/orders/42");
+    });
   });
 });

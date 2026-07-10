@@ -39,23 +39,6 @@ export type Binding = "none" | "spiral" | "staple" | "premium";
 export type Material3D = "pla" | "abs" | "petg";
 export type FileFormat3D = "stl" | "obj" | "three_mf" | "glb" | "gltf";
 
-export const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-  order_placed: ["file_verified", "file_declined", "cancelled"],
-  file_verified: ["printing_in_progress", "cancelled"],
-  file_declined: [],
-  printing_in_progress: ["finishing_mounting"],
-  finishing_mounting: ["quality_checked"],
-  quality_checked: ["ready_for_dispatch"],
-  ready_for_dispatch: ["rider_assigned", "completed_pickup"],
-  rider_assigned: ["picked_up"],
-  picked_up: ["on_the_way"],
-  on_the_way: ["arrived_at_destination"],
-  arrived_at_destination: ["delivered"],
-  delivered: [],
-  completed_pickup: [],
-  cancelled: [],
-};
-
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   order_placed: "Order Placed",
   file_verified: "File Verified",
