@@ -10,24 +10,8 @@ import 'package:printing_app/features/rider/shared/models/rider_order_context.da
 import 'package:printing_app/shared/models/delivery_assignment.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/route_geometry.dart';
-import 'package:printing_app/shared/services/routing_service.dart';
 
 void main() {
-  setUp(() {
-    RoutingService.debugRouteFetcher = (start, end) async => [
-      start,
-      LatLng(
-        start.latitude + (end.latitude - start.latitude) / 2,
-        start.longitude + (end.longitude - start.longitude) / 2,
-      ),
-      end,
-    ];
-  });
-
-  tearDown(() {
-    RoutingService.debugRouteFetcher = null;
-  });
-
   testWidgets('overlays the stop rail on the route map without overflow', (
     tester,
   ) async {

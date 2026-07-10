@@ -278,6 +278,10 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
       );
       return;
     }
+    if (realFlow) {
+      await refreshAssignments();
+      return;
+    }
     _updateAssignment(assignmentId, (a) {
       if (a.status != DeliveryStatus.assigned) return a;
       return a.copyWith(
@@ -350,6 +354,11 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
       state = state.copyWith(
         errorMessage: () => 'Unable to update delivery status',
       );
+      return;
+    }
+
+    if (realFlow && nextStatus == DeliveryStatus.delivered) {
+      await refreshAssignments();
       return;
     }
 

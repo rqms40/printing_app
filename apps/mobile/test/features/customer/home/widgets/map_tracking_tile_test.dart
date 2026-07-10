@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -477,6 +479,40 @@ void main() {
     expect(find.text('~40 min'), findsNothing);
   });
 
+  testWidgets('malformed live route does not display a computed ETA', (
+    tester,
+  ) async {
+    final active = LiveDeliveryMapState.active(
+      shopPoint: const LatLng(7.19, 125.45),
+      destPoint: const LatLng(7.21, 125.47),
+      routePoints: const [],
+      orderId: 'ORD-001',
+      deliveryAssignmentId: 'assign-001',
+      orderStatus: OrderStatus.onTheWay,
+      routingHealth: RoutingHealth.malformed,
+      legDurationSeconds: 120,
+    );
+
+    await tester.pumpWidget(
+      _wrap(
+        active,
+        slots: _dailySlots,
+        location: LocationUpdate(
+          id: 'live',
+          deliveryAssignmentId: 'assign-001',
+          planVersion: 1,
+          latitude: 7.20,
+          longitude: 125.46,
+          timestamp: DateTime.now(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Route geometry degraded'), findsOneWidget);
+    expect(find.textContaining(' min'), findsNothing);
+  });
+
   testWidgets('subscribes even when a fresh matching location is cached', (
     tester,
   ) async {
@@ -513,6 +549,69 @@ void main() {
     verify(
       harness.webSocket.subscribeToDeliveryPlan('assign-001', 1),
     ).called(1);
+  });
+
+  testWidgets('connect completion subscribes the newest map identity', (
+    tester,
+  ) async {
+    final first = LiveDeliveryMapState.active(
+      shopPoint: const LatLng(7.19, 125.45),
+      destPoint: const LatLng(7.21, 125.47),
+      routePoints: const [LatLng(7.19, 125.45), LatLng(7.21, 125.47)],
+      orderId: 'ORD-001',
+      deliveryAssignmentId: 'assign-001',
+      planVersion: 1,
+      orderStatus: OrderStatus.onTheWay,
+    );
+    final second = LiveDeliveryMapState.active(
+      shopPoint: const LatLng(7.19, 125.45),
+      destPoint: const LatLng(7.22, 125.48),
+      routePoints: const [LatLng(7.19, 125.45), LatLng(7.22, 125.48)],
+      orderId: 'ORD-002',
+      deliveryAssignmentId: 'assign-002',
+      planVersion: 2,
+      orderStatus: OrderStatus.onTheWay,
+    );
+    final desiredMapState = StateProvider<LiveDeliveryMapState>((_) => first);
+    final connectGate = Completer<void>();
+    final socket = MockWebSocketService();
+    when(
+      socket.connectLocation(onLocationUpdate: anyNamed('onLocationUpdate')),
+    ).thenAnswer((_) => connectGate.future);
+    when(socket.listenForLocationHealth(any)).thenAnswer((invocation) {
+      final callback =
+          invocation.positionalArguments.first
+              as Function(LocationSocketHealth);
+      callback(LocationSocketHealth.connecting);
+    });
+    final container = ProviderContainer(
+      overrides: [
+        dioProvider.overrideWithValue(MockDio()),
+        webSocketServiceProvider.overrideWithValue(socket),
+        liveDeliveryMapProvider.overrideWith(
+          (ref) async => ref.watch(desiredMapState),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(routerConfig: _router()),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    container.read(desiredMapState.notifier).state = second;
+    await tester.pump();
+    await tester.pump();
+    connectGate.complete();
+    await tester.pumpAndSettle();
+
+    verify(socket.subscribeToDeliveryPlan('assign-002', 2)).called(1);
+    verifyNever(socket.subscribeToDeliveryPlan('assign-001', 1));
   });
 
   testWidgets('discards socket payload when assignment identity is missing', (

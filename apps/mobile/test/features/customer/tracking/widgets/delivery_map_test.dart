@@ -77,19 +77,23 @@ Future<void> _settle(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 50));
 }
 
-LiveDeliveryMapState _active() => LiveDeliveryMapState.active(
-  shopPoint: const LatLng(7.064, 125.608),
-  destPoint: const LatLng(7.073, 125.613),
-  routePoints: const [
+LiveDeliveryMapState _active({
+  RoutingHealth routingHealth = RoutingHealth.current,
+  List<LatLng> routePoints = const [
     LatLng(7.064, 125.608),
     LatLng(7.068, 125.610),
     LatLng(7.073, 125.613),
   ],
+}) => LiveDeliveryMapState.active(
+  shopPoint: const LatLng(7.064, 125.608),
+  destPoint: const LatLng(7.073, 125.613),
+  routePoints: routePoints,
   orderId: 'ORD-TEST-001',
   deliveryAssignmentId: '101',
   planVersion: 4,
   orderStatus: OrderStatus.onTheWay,
   legDurationSeconds: 120,
+  routingHealth: routingHealth,
 );
 
 LocationUpdate _location(Duration age, DateTime now) => LocationUpdate(
@@ -172,6 +176,34 @@ void main() {
 
       expect(find.text('GPS offline'), findsOneWidget);
       expect(find.byType(FlutterMap), findsOneWidget);
+    });
+
+    testWidgets('independently surfaces stale routing data', (tester) async {
+      final harness = _harness(
+        _active(routingHealth: RoutingHealth.stale),
+        locationAge: Duration.zero,
+      );
+      await tester.pumpWidget(harness.widget);
+      await _settle(tester);
+
+      expect(find.text('Route data stale'), findsOneWidget);
+      expect(find.byType(FlutterMap), findsOneWidget);
+    });
+
+    testWidgets('malformed geometry never displays a route ETA', (
+      tester,
+    ) async {
+      final harness = _harness(
+        _active(routingHealth: RoutingHealth.malformed, routePoints: const []),
+        locationAge: Duration.zero,
+      );
+      await tester.pumpWidget(harness.widget);
+      await _settle(tester);
+
+      expect(find.text('Route geometry degraded'), findsOneWidget);
+      expect(find.text('~2 min'), findsNothing);
+      expect(find.textContaining(' min'), findsNothing);
+      expect(find.byType(PolylineLayer), findsNothing);
     });
   });
 }

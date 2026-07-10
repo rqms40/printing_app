@@ -58,6 +58,38 @@ int? _readInt(dynamic value) {
   return int.tryParse(value.toString());
 }
 
+int? _readStrictInt(dynamic value, {required int minimum}) {
+  final parsed = value is int
+      ? value
+      : value is num && value.isFinite && value == value.roundToDouble()
+      ? value.toInt()
+      : value is String
+      ? int.tryParse(value)
+      : null;
+  return parsed != null && parsed >= minimum ? parsed : null;
+}
+
+String _readPlanAssignmentId(dynamic value) {
+  if (value is int) return value > 0 ? value.toString() : '';
+  if (value is num) {
+    if (!value.isFinite || value <= 0 || value != value.roundToDouble()) {
+      return '';
+    }
+    return value.toInt().toString();
+  }
+  if (value is! String) return '';
+  final text = value.trim();
+  if (text.isEmpty) return '';
+  final numeric = num.tryParse(text);
+  if (numeric != null &&
+      (!numeric.isFinite ||
+          numeric <= 0 ||
+          numeric != numeric.roundToDouble())) {
+    return '';
+  }
+  return text;
+}
+
 Map<String, dynamic>? _asMap(dynamic value) {
   if (value is Map<String, dynamic>) return value;
   if (value is Map) return Map<String, dynamic>.from(value);
@@ -203,9 +235,13 @@ RiderAssignmentView parseAssignmentView(
     order: order,
     routePosition:
         routePosition ??
-        _readInt(json['routePosition'] ?? json['route_position']),
-    planVersion: _readInt(
+        _readStrictInt(
+          json['routePosition'] ?? json['route_position'],
+          minimum: 1,
+        ),
+    planVersion: _readStrictInt(
       json['dispatchPlanVersion'] ?? json['dispatch_plan_version'],
+      minimum: 1,
     ),
     planState:
         _readString(json['dispatchPlanState'] ?? json['dispatch_plan_state']) ??
@@ -275,7 +311,10 @@ List<RiderAssignmentView> parseAssignmentViews(
     final json = Map<String, dynamic>.from(entry.value as Map);
     return parseAssignmentView(
       json,
-      routePosition: _readInt(json['routePosition'] ?? json['route_position']),
+      routePosition: _readStrictInt(
+        json['routePosition'] ?? json['route_position'],
+        minimum: 1,
+      ),
       allowMockFallback: allowMockFallback,
     );
   }).toList();
@@ -284,7 +323,7 @@ List<RiderAssignmentView> parseAssignmentViews(
 RiderDispatchPlan? parseRiderDispatchPlan(dynamic value) {
   if (value is! Map) return null;
   final json = Map<String, dynamic>.from(value);
-  final version = _readInt(json['version']);
+  final version = _readStrictInt(json['version'], minimum: 1);
   final originLatitude = _readDouble(
     json['originLatitude'] ?? json['origin_latitude'],
   );
@@ -292,7 +331,7 @@ RiderDispatchPlan? parseRiderDispatchPlan(dynamic value) {
     json['originLongitude'] ?? json['origin_longitude'],
   );
   final rawStops = json['stops'];
-  if (version == null || version <= 0) return null;
+  if (version == null) return null;
   if (!_validCoordinate(originLatitude, originLongitude)) return null;
   if (rawStops is! List) return null;
 
@@ -326,30 +365,32 @@ RiderDispatchPlanStop? _parsePlanStop(
   String? fallbackAssignmentId,
 }) {
   if (json == null) return null;
-  final assignmentId = _readId(
+  final assignmentId = _readPlanAssignmentId(
     json['assignmentId'] ?? json['assignment_id'] ?? fallbackAssignmentId,
   );
-  final sequence = _readInt(json['sequence']);
+  final sequence = _readStrictInt(json['sequence'], minimum: 1);
   final latitude = _readDouble(
     json['destinationLatitude'] ?? json['destination_latitude'],
   );
   final longitude = _readDouble(
     json['destinationLongitude'] ?? json['destination_longitude'],
   );
-  final duration = _readInt(
+  final duration = _readStrictInt(
     json['legDurationSeconds'] ?? json['leg_duration_seconds'],
+    minimum: 0,
   );
-  final distance = _readInt(
+  final distance = _readStrictInt(
     json['legDistanceMeters'] ?? json['leg_distance_meters'],
+    minimum: 0,
   );
   final statusValue = _readString(json['status']);
   final status = RiderDispatchStopStatus.values.firstWhere(
     (candidate) => candidate.name == statusValue,
     orElse: () => RiderDispatchStopStatus.pending,
   );
-  if (assignmentId.isEmpty || sequence == null || sequence <= 0) return null;
+  if (assignmentId.isEmpty || sequence == null) return null;
   if (!_validCoordinate(latitude, longitude)) return null;
-  if (duration == null || duration < 0 || distance == null || distance < 0) {
+  if (duration == null || distance == null) {
     return null;
   }
   if (statusValue == null ||
@@ -369,7 +410,7 @@ RiderDispatchPlanStop? _parsePlanStop(
     legDurationSeconds: duration,
     legDistanceMeters: distance,
     geometry: geometry,
-    geometryMalformed: rawGeometry != null && geometry == null,
+    geometryMalformed: geometry == null,
   );
 }
 
@@ -411,7 +452,12 @@ List<RiderAssignmentView> mergeRiderAssignmentViewsWithPlan({
     plannedIds.add(stop.assignmentId);
     final isPending = stop.status == RiderDispatchStopStatus.pending;
     if (isPending) remainingPosition++;
-    final source = byId[stop.assignmentId] ?? _placeholderView(stop);
+    final source = byId[stop.assignmentId];
+    if (source == null) {
+      throw FormatException(
+        'Dispatch stop ${stop.assignmentId} has no assignment snapshot',
+      );
+    }
     planned.add(
       RiderAssignmentView(
         assignment: source.assignment,
@@ -433,34 +479,4 @@ List<RiderAssignmentView> mergeRiderAssignmentViewsWithPlan({
     }
   }
   return [...planned, ...unplanned];
-}
-
-RiderAssignmentView _placeholderView(RiderDispatchPlanStop stop) {
-  final now = DateTime.now();
-  return RiderAssignmentView(
-    assignment: DeliveryAssignment(
-      id: stop.assignmentId,
-      orderId: 'planned-${stop.assignmentId}',
-      riderId: '',
-      status: stop.status == RiderDispatchStopStatus.completed
-          ? DeliveryStatus.delivered
-          : stop.status == RiderDispatchStopStatus.skipped
-          ? DeliveryStatus.declined
-          : DeliveryStatus.assigned,
-      createdAt: now,
-      updatedAt: now,
-    ),
-    order: RiderOrderContext(
-      orderRef: 'Planned stop ${stop.sequence}',
-      orderInternalId: 'planned-${stop.assignmentId}',
-      category: 'print',
-      quantity: 1,
-      totalPrice: 0,
-      deliveryFee: 0,
-      destination: RiderDestinationContext(
-        latitude: stop.destinationLatitude,
-        longitude: stop.destinationLongitude,
-      ),
-    ),
-  );
 }

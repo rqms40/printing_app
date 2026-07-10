@@ -19,6 +19,38 @@ dynamic _normalize(dynamic data) {
   return data;
 }
 
+int? _readStrictPositiveInt(dynamic value) {
+  final parsed = value is int
+      ? value
+      : value is num && value.isFinite && value == value.roundToDouble()
+      ? value.toInt()
+      : value is String
+      ? int.tryParse(value)
+      : null;
+  return parsed != null && parsed > 0 ? parsed : null;
+}
+
+String? _readLocationAssignmentId(dynamic value) {
+  if (value is int) return value > 0 ? value.toString() : null;
+  if (value is num) {
+    if (!value.isFinite || value <= 0 || value != value.roundToDouble()) {
+      return null;
+    }
+    return value.toInt().toString();
+  }
+  if (value is! String) return null;
+  final text = value.trim();
+  if (text.isEmpty) return null;
+  final numeric = num.tryParse(text);
+  if (numeric != null &&
+      (!numeric.isFinite ||
+          numeric <= 0 ||
+          numeric != numeric.roundToDouble())) {
+    return null;
+  }
+  return text;
+}
+
 enum LocationSocketHealth { disconnected, connecting, subscribing, connected }
 
 /// Centralized WebSocket service for real-time order and location updates.
@@ -42,8 +74,14 @@ class WebSocketService {
   @visibleForTesting
   static bool disableNotificationsSocketForTests = false;
 
+  /// Prevents real network I/O while retaining token/connect lifecycle logic.
+  @visibleForTesting
+  static bool disableLocationSocketForTests = false;
+
   io.Socket? _ordersSocket;
   io.Socket? _locationSocket;
+  Future<void>? _locationConnectFuture;
+  int _locationConnectionGeneration = 0;
   io.Socket? _notificationsSocket;
   io.Socket? _dailyGridSocket;
   io.Socket? _chatSocket;
@@ -218,9 +256,32 @@ class WebSocketService {
       return;
     }
 
-    final token = await TokenStorage.getToken();
+    final inFlight = _locationConnectFuture;
+    if (inFlight != null) {
+      await inFlight;
+      return;
+    }
+
     _setLocationHealth(LocationSocketHealth.connecting);
-    _locationSocket = io.io(
+    final generation = _locationConnectionGeneration;
+    final connection = _connectLocationSocket(generation);
+    _locationConnectFuture = connection;
+    try {
+      await connection;
+    } finally {
+      if (identical(_locationConnectFuture, connection)) {
+        _locationConnectFuture = null;
+      }
+    }
+  }
+
+  Future<void> _connectLocationSocket(int generation) async {
+    final token = await TokenStorage.getToken();
+    if (generation != _locationConnectionGeneration) return;
+    if (disableLocationSocketForTests) return;
+
+    late final io.Socket socket;
+    socket = io.io(
       '$_baseUrl/ws/location',
       io.OptionBuilder()
           .setTransports(['websocket'])
@@ -232,31 +293,41 @@ class WebSocketService {
           .disableAutoConnect()
           .build(),
     );
-    _locationSocket!.on('locationUpdate', _dispatchLocationUpdate);
-    _locationSocket!.on('subscribed', _dispatchLocationSubscribed);
-    _locationSocket!.on('connect', (_) {
+    if (generation != _locationConnectionGeneration) {
+      socket.dispose();
+      return;
+    }
+    _locationSocket = socket;
+    socket.on('locationUpdate', _dispatchLocationUpdate);
+    socket.on('subscribed', _dispatchLocationSubscribed);
+    socket.on('connect', (_) {
+      if (!identical(_locationSocket, socket)) return;
       debugPrint('WS Location connected');
       _emitPendingLocationSubscription();
     });
-    _locationSocket!.on('disconnect', (_) {
+    socket.on('disconnect', (_) {
+      if (!identical(_locationSocket, socket)) return;
       _clearAcknowledgedLocationIdentity();
       _setLocationHealth(LocationSocketHealth.disconnected);
     });
-    _locationSocket!.on('connect_error', (e) {
+    socket.on('connect_error', (e) {
+      if (!identical(_locationSocket, socket)) return;
       debugPrint('WS Location error: $e');
       _clearAcknowledgedLocationIdentity();
       _setLocationHealth(LocationSocketHealth.disconnected);
     });
-    _locationSocket!.on('reconnect_attempt', (_) {
+    socket.on('reconnect_attempt', (_) {
+      if (!identical(_locationSocket, socket)) return;
       _setLocationHealth(LocationSocketHealth.connecting);
     });
-    _locationSocket!.on('reconnect_failed', (_) {
+    socket.on('reconnect_failed', (_) {
+      if (!identical(_locationSocket, socket)) return;
       _pendingLocationDeliveryId = null;
       _pendingLocationPlanVersion = null;
       _clearAcknowledgedLocationIdentity();
       _setLocationHealth(LocationSocketHealth.disconnected);
     });
-    _locationSocket!.connect();
+    socket.connect();
   }
 
   void subscribeToDelivery(String assignmentId) {
@@ -268,7 +339,12 @@ class WebSocketService {
   }
 
   void _subscribeToDelivery(String assignmentId, {required int? planVersion}) {
-    if (assignmentId.isEmpty) return;
+    final normalizedAssignmentId = _readLocationAssignmentId(assignmentId);
+    if (normalizedAssignmentId == null ||
+        (planVersion != null && planVersion <= 0)) {
+      return;
+    }
+    assignmentId = normalizedAssignmentId;
     final previousAssignment = _pendingLocationDeliveryId;
     final previousPlanVersion = _pendingLocationPlanVersion;
     _pendingLocationDeliveryId = assignmentId;
@@ -278,6 +354,8 @@ class WebSocketService {
       _locationSocketRecreateRequestsForTests++;
       final previousSocket = _locationSocket;
       if (previousSocket != null) {
+        _locationConnectionGeneration++;
+        _locationConnectFuture = null;
         _locationSocket = null;
         previousSocket.disconnect();
         unawaited(connectLocation());
@@ -333,15 +411,11 @@ class WebSocketService {
   void _dispatchLocationSubscribed(dynamic data) {
     final normalized = _normalize(data);
     if (normalized is! Map<String, dynamic>) return;
-    final assignmentId = normalized['assignmentId']?.toString();
-    final versionValue = normalized['planVersion'];
-    final planVersion = versionValue is num
-        ? versionValue.toInt()
-        : int.tryParse(versionValue?.toString() ?? '');
+    final assignmentId = _readLocationAssignmentId(normalized['assignmentId']);
+    final planVersion = _readStrictPositiveInt(normalized['planVersion']);
     if (assignmentId == null ||
         assignmentId != _pendingLocationDeliveryId ||
         planVersion == null ||
-        planVersion <= 0 ||
         (_pendingLocationPlanVersion != null &&
             planVersion != _pendingLocationPlanVersion)) {
       return;
@@ -354,11 +428,8 @@ class WebSocketService {
   void _dispatchLocationUpdate(dynamic data) {
     final normalized = _normalize(data);
     if (normalized is! Map<String, dynamic>) return;
-    final assignmentId = normalized['assignmentId']?.toString();
-    final versionValue = normalized['planVersion'];
-    final planVersion = versionValue is num
-        ? versionValue.toInt()
-        : int.tryParse(versionValue?.toString() ?? '');
+    final assignmentId = _readLocationAssignmentId(normalized['assignmentId']);
+    final planVersion = _readStrictPositiveInt(normalized['planVersion']);
     if (assignmentId != _subscribedLocationAssignmentId ||
         planVersion != _subscribedLocationPlanVersion) {
       return;
@@ -405,16 +476,30 @@ class WebSocketService {
   }
 
   void disconnectLocation() {
-    _locationSocket?.disconnect();
+    _resetLocationSocket(clearListeners: true, resetTestCounters: true);
+  }
+
+  void _resetLocationSocket({
+    required bool clearListeners,
+    required bool resetTestCounters,
+  }) {
+    _locationConnectionGeneration++;
+    _locationConnectFuture = null;
+    final socket = _locationSocket;
     _locationSocket = null;
+    socket?.disconnect();
     _pendingLocationDeliveryId = null;
     _pendingLocationPlanVersion = null;
     _clearAcknowledgedLocationIdentity();
-    _locationListeners.clear();
-    _locationHealthListeners.clear();
+    if (clearListeners) {
+      _locationListeners.clear();
+      _locationHealthListeners.clear();
+    }
     _locationHealth = LocationSocketHealth.disconnected;
-    _locationSubscribeEmitCountForTests = 0;
-    _locationSocketRecreateRequestsForTests = 0;
+    if (resetTestCounters) {
+      _locationSubscribeEmitCountForTests = 0;
+      _locationSocketRecreateRequestsForTests = 0;
+    }
   }
 
   @visibleForTesting
@@ -835,7 +920,7 @@ class WebSocketService {
 
   void disconnect() {
     _ordersSocket?.disconnect();
-    _locationSocket?.disconnect();
+    _resetLocationSocket(clearListeners: true, resetTestCounters: true);
     _notificationsSocket?.disconnect();
     _dailyGridSocket?.disconnect();
     _chatSocket?.disconnect();
@@ -847,7 +932,6 @@ class WebSocketService {
     _notificationsSocket = null;
     _ordersSocket = null;
     _dailyGridSocket = null;
-    _locationSocket = null;
     _chatMessageListeners.clear();
     _botTypingListeners.clear();
     _messagesReadListeners.clear();

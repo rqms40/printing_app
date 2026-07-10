@@ -15,6 +15,17 @@ import 'package:printing_app/shared/models/location_update.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
+int? _readStrictPlanVersion(dynamic value) {
+  final parsed = value is int
+      ? value
+      : value is num && value.isFinite && value == value.roundToDouble()
+      ? value.toInt()
+      : value is String
+      ? int.tryParse(value)
+      : null;
+  return parsed != null && parsed > 0 ? parsed : null;
+}
+
 class DeliveryMap extends ConsumerStatefulWidget {
   const DeliveryMap({super.key, this.tutorialKey});
 
@@ -89,10 +100,7 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
     final latitude = (payload['latitude'] as num?)?.toDouble();
     final longitude = (payload['longitude'] as num?)?.toDouble();
     final assignmentId = payload['assignmentId']?.toString();
-    final rawPlanVersion = payload['planVersion'];
-    final planVersion = rawPlanVersion is num
-        ? rawPlanVersion.toInt()
-        : int.tryParse(rawPlanVersion?.toString() ?? '');
+    final planVersion = _readStrictPlanVersion(payload['planVersion']);
     final timestamp = payload['timestamp'] is String
         ? DateTime.tryParse(payload['timestamp'] as String)
         : null;
@@ -194,8 +202,16 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
     Brightness brightness,
     AppColorSet colors,
   ) {
-    final eta = riderPoint == null
-        ? ((state.legDurationSeconds ?? 0) / 60).ceil()
+    final canShowRouteEta =
+        state.routePoints.length >= 2 &&
+        (state.routingHealth == RoutingHealth.current ||
+            state.routingHealth == RoutingHealth.stale);
+    final eta = !canShowRouteEta
+        ? null
+        : riderPoint == null
+        ? state.legDurationSeconds == null
+              ? null
+              : (state.legDurationSeconds! / 60).ceil()
         : estimateRouteEtaMinutes(riderPoint, state.routePoints);
 
     return ClipRRect(
@@ -236,7 +252,9 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
                         MapHelpers.riderMarker(riderPoint),
                     ],
                   ),
-                  MapHelpers.attribution(includeRouting: true),
+                  MapHelpers.attribution(
+                    includeRouting: state.routePoints.isNotEmpty,
+                  ),
                 ],
               ),
 
@@ -295,36 +313,66 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
                 ),
               ),
 
-              // ETA badge — top right
-              Positioned(
-                top: AppSpacing.sm,
-                right: AppSpacing.sm,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.sm,
-                    vertical: AppSpacing.xs,
-                  ),
-                  decoration: BoxDecoration(
-                    color: colors.surface.withValues(alpha: 0.95),
-                    borderRadius: AppRadius.borderFull,
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x20000000),
-                        blurRadius: 8,
-                        offset: Offset(0, 2),
+              if (state.routingHealth != RoutingHealth.current)
+                Positioned(
+                  top: 48,
+                  left: AppSpacing.sm,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm,
+                      vertical: AppSpacing.xs,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.surface.withValues(alpha: 0.95),
+                      borderRadius: AppRadius.borderFull,
+                    ),
+                    child: Text(
+                      switch (state.routingHealth) {
+                        RoutingHealth.stale => 'Route data stale',
+                        RoutingHealth.malformed => 'Route geometry degraded',
+                        RoutingHealth.unavailable => 'Route unavailable',
+                        RoutingHealth.current => '',
+                      },
+                      style: AppTypography.caption.copyWith(
+                        color: colors.onSurface,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
                       ),
-                    ],
-                  ),
-                  child: Text(
-                    '~$eta min',
-                    style: AppTypography.caption.copyWith(
-                      color: colors.onSurface,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 11,
                     ),
                   ),
                 ),
-              ),
+
+              // ETA badge — top right
+              if (eta != null)
+                Positioned(
+                  top: AppSpacing.sm,
+                  right: AppSpacing.sm,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm,
+                      vertical: AppSpacing.xs,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.surface.withValues(alpha: 0.95),
+                      borderRadius: AppRadius.borderFull,
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x20000000),
+                          blurRadius: 8,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      '~$eta min',
+                      style: AppTypography.caption.copyWith(
+                        color: colors.onSurface,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

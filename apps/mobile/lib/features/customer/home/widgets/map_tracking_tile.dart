@@ -18,6 +18,17 @@ import 'package:printing_app/shared/models/location_update.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
+int? _readStrictPlanVersion(dynamic value) {
+  final parsed = value is int
+      ? value
+      : value is num && value.isFinite && value == value.roundToDouble()
+      ? value.toInt()
+      : value is String
+      ? int.tryParse(value)
+      : null;
+  return parsed != null && parsed > 0 ? parsed : null;
+}
+
 class MapTrackingTile extends ConsumerStatefulWidget {
   const MapTrackingTile({super.key});
 
@@ -28,6 +39,8 @@ class MapTrackingTile extends ConsumerStatefulWidget {
 class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
   String? _subscribedAssignmentId;
   int? _subscribedPlanVersion;
+  String? _desiredAssignmentId;
+  int? _desiredPlanVersion;
   bool _isConnecting = false;
   late final WebSocketService _ws;
   Timer? _healthRefreshTimer;
@@ -54,18 +67,23 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
     String assignmentId,
     int planVersion,
   ) async {
-    if ((_subscribedAssignmentId == assignmentId &&
-            _subscribedPlanVersion == planVersion) ||
-        _isConnecting) {
+    _desiredAssignmentId = assignmentId;
+    _desiredPlanVersion = planVersion;
+    if (_subscribedAssignmentId == assignmentId &&
+        _subscribedPlanVersion == planVersion) {
       return;
     }
+    if (_isConnecting) return;
     _isConnecting = true;
     try {
       await _ws.connectLocation(onLocationUpdate: _handleLocationUpdate);
       if (!mounted) return;
-      _ws.subscribeToDeliveryPlan(assignmentId, planVersion);
-      _subscribedAssignmentId = assignmentId;
-      _subscribedPlanVersion = planVersion;
+      final desiredAssignmentId = _desiredAssignmentId;
+      final desiredPlanVersion = _desiredPlanVersion;
+      if (desiredAssignmentId == null || desiredPlanVersion == null) return;
+      _ws.subscribeToDeliveryPlan(desiredAssignmentId, desiredPlanVersion);
+      _subscribedAssignmentId = desiredAssignmentId;
+      _subscribedPlanVersion = desiredPlanVersion;
     } finally {
       _isConnecting = false;
     }
@@ -84,10 +102,7 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
     final lat = (payload['latitude'] as num?)?.toDouble();
     final lng = (payload['longitude'] as num?)?.toDouble();
     final assignmentId = payload['assignmentId']?.toString();
-    final rawPlanVersion = payload['planVersion'];
-    final planVersion = rawPlanVersion is num
-        ? rawPlanVersion.toInt()
-        : int.tryParse(rawPlanVersion?.toString() ?? '');
+    final planVersion = _readStrictPlanVersion(payload['planVersion']);
     final mapState = ref.read(liveDeliveryMapProvider).asData?.value;
     if (lat == null ||
         lng == null ||
@@ -1224,7 +1239,13 @@ class _ActiveTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final eta = estimateRouteEtaMinutes(riderPoint, state.routePoints);
+    final canShowRouteEta =
+        state.routePoints.length >= 2 &&
+        (state.routingHealth == RoutingHealth.current ||
+            state.routingHealth == RoutingHealth.stale);
+    final eta = canShowRouteEta
+        ? estimateRouteEtaMinutes(riderPoint, state.routePoints)
+        : null;
     final colors = brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
@@ -1251,7 +1272,9 @@ class _ActiveTile extends StatelessWidget {
                 MapHelpers.riderMarker(riderPoint),
               ],
             ),
-            MapHelpers.attribution(includeRouting: true),
+            MapHelpers.attribution(
+              includeRouting: state.routePoints.isNotEmpty,
+            ),
           ],
         ),
 
@@ -1299,28 +1322,29 @@ class _ActiveTile extends StatelessWidget {
         ),
 
         // ETA badge — top right
-        Positioned(
-          top: AppSpacing.sm,
-          right: AppSpacing.sm,
-          child: Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.sm,
-              vertical: 3,
-            ),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.65),
-              borderRadius: AppRadius.borderFull,
-            ),
-            child: Text(
-              '~$eta min',
-              style: AppTypography.overline.copyWith(
-                color: Colors.white,
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
+        if (eta != null)
+          Positioned(
+            top: AppSpacing.sm,
+            right: AppSpacing.sm,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm,
+                vertical: 3,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.65),
+                borderRadius: AppRadius.borderFull,
+              ),
+              child: Text(
+                '~$eta min',
+                style: AppTypography.overline.copyWith(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ),
-        ),
       ],
     );
   }

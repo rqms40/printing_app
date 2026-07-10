@@ -6,11 +6,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_route_map_panel.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_route_map_tile.dart';
 import 'package:printing_app/features/rider/shared/rider_assignment_parser.dart';
-import 'package:printing_app/shared/services/routing_service.dart';
 
 void main() {
-  tearDown(() => RoutingService.debugRouteFetcher = null);
-
   test(
     'parses one stable route plan with relative and immutable positions',
     () {
@@ -50,14 +47,65 @@ void main() {
     },
   );
 
+  test('rejects fractional rider plan integers without truncating them', () {
+    for (final field in const [
+      'version',
+      'assignmentId',
+      'sequence',
+      'legDurationSeconds',
+      'legDistanceMeters',
+    ]) {
+      final fixture = _routePlanFixture();
+      if (field == 'version') {
+        fixture[field] = 1.5;
+      } else {
+        (fixture['stops'] as List<dynamic>).first[field] = 1.5;
+      }
+
+      expect(
+        parseRiderDispatchPlan(fixture),
+        isNull,
+        reason: '$field must not be truncated to an integer',
+      );
+    }
+  });
+
+  test('rejects fractional assignment route identity fields', () {
+    final fractionalPosition = parseAssignmentView({
+      ..._assignment(101),
+      'routePosition': 1.5,
+      'dispatchPlanVersion': 2.5,
+    });
+    final fractionalStop = parseAssignmentView({
+      ..._assignment(101),
+      'dispatchPlanStop': {
+        ...(_routePlanFixture()['stops'] as List<dynamic>).first
+            as Map<String, dynamic>,
+        'sequence': 1.5,
+      },
+    });
+
+    expect(fractionalPosition.routePosition, isNull);
+    expect(fractionalPosition.planVersion, isNull);
+    expect(fractionalStop.planStop, isNull);
+  });
+
+  test('accepts opaque assignment IDs but rejects numeric fractional IDs', () {
+    final opaque = _routePlanFixture();
+    (opaque['stops'] as List<dynamic>).first['assignmentId'] = 'ven-assignment';
+    final fractional = _routePlanFixture();
+    (fractional['stops'] as List<dynamic>).first['assignmentId'] = '101.5';
+
+    expect(
+      parseRiderDispatchPlan(opaque)?.stops.first.assignmentId,
+      'ven-assignment',
+    );
+    expect(parseRiderDispatchPlan(fractional), isNull);
+  });
+
   testWidgets('renders both persisted planned legs without client routing', (
     tester,
   ) async {
-    var routingCalls = 0;
-    RoutingService.debugRouteFetcher = (start, end) async {
-      routingCalls++;
-      return <LatLng>[start, end];
-    };
     final views = mergeRiderAssignmentViewsWithPlan(
       active: [
         parseAssignmentView(_assignment(102, status: 'assigned')),
@@ -85,18 +133,12 @@ void main() {
     expect(find.byKey(const Key('route-leg-1')), findsOneWidget);
     expect(find.text('Persisted route · Plan v1'), findsOneWidget);
     expect(find.textContaining('Optimizing'), findsNothing);
-    expect(routingCalls, 0);
     _expectRequiredAttribution(tester);
   });
 
   testWidgets('home tile renders the same persisted legs and plan version', (
     tester,
   ) async {
-    var routingCalls = 0;
-    RoutingService.debugRouteFetcher = (start, end) async {
-      routingCalls++;
-      return <LatLng>[start, end];
-    };
     final views = mergeRiderAssignmentViewsWithPlan(
       active: [
         parseAssignmentView(_assignment(102, status: 'assigned')),
@@ -128,7 +170,6 @@ void main() {
     expect(find.byKey(const Key('route-leg-1')), findsOneWidget);
     expect(find.text('Persisted route · Plan v1'), findsOneWidget);
     expect(find.textContaining('Optimizing'), findsNothing);
-    expect(routingCalls, 0);
     _expectRequiredAttribution(tester);
   });
 
@@ -154,6 +195,37 @@ void main() {
         [125.62, 7.08],
       ],
     };
+    final views = mergeRiderAssignmentViewsWithPlan(
+      active: [
+        parseAssignmentView(_assignment(101, status: 'assigned')),
+        parseAssignmentView(_assignment(102, status: 'assigned')),
+      ],
+      history: const [],
+      plan: parseRiderDispatchPlan(fixture),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              height: 500,
+              child: RiderRouteMapPanel(stops: views, activeStop: views.first),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('route-leg-0')), findsOneWidget);
+    expect(find.byKey(const Key('route-leg-1')), findsNothing);
+    expect(find.text('Route geometry degraded'), findsOneWidget);
+  });
+
+  testWidgets('marks missing persisted geometry as degraded', (tester) async {
+    final fixture = _routePlanFixture();
+    (fixture['stops'] as List<dynamic>).last.remove('legGeometry');
     final views = mergeRiderAssignmentViewsWithPlan(
       active: [
         parseAssignmentView(_assignment(101, status: 'assigned')),

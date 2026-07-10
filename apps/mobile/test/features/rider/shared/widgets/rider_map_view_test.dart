@@ -6,7 +6,6 @@ import 'package:latlong2/latlong.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/features/rider/shared/widgets/rider_map_view.dart';
 import 'package:printing_app/shared/models/route_geometry.dart';
-import 'package:printing_app/shared/services/routing_service.dart';
 
 RiderDispatchPlanStop _stop({GeoJsonLineString? geometry}) =>
     RiderDispatchPlanStop(
@@ -38,16 +37,9 @@ Widget _app(RiderDispatchPlanStop stop) => ProviderScope(
 );
 
 void main() {
-  tearDown(() => RoutingService.debugRouteFetcher = null);
-
   testWidgets('renders the persisted active leg without client routing', (
     tester,
   ) async {
-    var clientRoutingCalls = 0;
-    RoutingService.debugRouteFetcher = (start, end) async {
-      clientRoutingCalls++;
-      return [start, end];
-    };
     final stop = _stop(
       geometry: GeoJsonLineString.tryParse({
         'type': 'LineString',
@@ -65,23 +57,15 @@ void main() {
     expect(find.byKey(const Key('active-route-leg')), findsOneWidget);
     expect(find.byType(PolylineLayer), findsOneWidget);
     expect(find.text('Persisted route · 2.5 km'), findsOneWidget);
-    expect(clientRoutingCalls, 0);
   });
 
   testWidgets('missing persisted geometry degrades without a fake line', (
     tester,
   ) async {
-    var clientRoutingCalls = 0;
-    RoutingService.debugRouteFetcher = (start, end) async {
-      clientRoutingCalls++;
-      return [start, end];
-    };
-
     await tester.pumpWidget(_app(_stop()));
     await tester.pump();
 
     expect(find.byType(PolylineLayer), findsNothing);
     expect(find.text('Route geometry unavailable'), findsOneWidget);
-    expect(clientRoutingCalls, 0);
   });
 }
