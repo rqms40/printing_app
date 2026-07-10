@@ -3,7 +3,12 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BetaModePage, betaModeConfirmation } from "./index";
+import {
+  BetaModePage,
+  betaModeConfirmation,
+  betaSurveyExemptionConfirmation,
+  eligibleBetaEnrollUsers,
+} from "./index";
 
 const { mockConfirm, mockGetSettings, mockSearch } = vi.hoisted(() => ({
   mockConfirm: vi.fn(),
@@ -76,5 +81,29 @@ describe("BetaModePage", () => {
     expect(mockConfirm).toHaveBeenCalledWith(
       expect.objectContaining(confirmation),
     );
+  });
+
+  it("describes survey exemption without claiming it restores an existing account hold", () => {
+    const confirmation = betaSurveyExemptionConfirmation({
+      email: "mark@example.test",
+      fullName: "Mark",
+    });
+
+    expect(confirmation.content).toContain("future beta deliveries");
+    expect(confirmation.content).toContain("does not reopen an account already held");
+    expect(confirmation.content).toContain("Disable beta mode");
+    expect(JSON.stringify(confirmation)).not.toMatch(/re-login|log back in/i);
+  });
+
+  it("offers manual beta enrollment only to customer identities", () => {
+    expect(
+      eligibleBetaEnrollUsers([
+        { id: 1, email: "mark@example.test", full_name: "Mark", role: "customer" },
+        { id: 2, email: "juan@example.test", full_name: "Juan", role: "rider" },
+        { id: 3, email: "admin@example.test", full_name: "Admin", role: "admin" },
+      ]),
+    ).toEqual([
+      { id: 1, email: "mark@example.test", full_name: "Mark", role: "customer" },
+    ]);
   });
 });

@@ -64,6 +64,22 @@ interface AdminUser {
   id: number;
   email: string;
   full_name: string | null;
+  role: string;
+}
+
+export function eligibleBetaEnrollUsers<T extends { role?: string }>(users: T[]): T[] {
+  return users.filter((user) => user.role === 'customer');
+}
+
+export function betaSurveyExemptionConfirmation(member: {
+  email: string;
+  fullName?: string | null;
+}) {
+  return {
+    title: 'Exempt future beta delivery surveys?',
+    content: `${member.fullName ?? member.email} will skip the mandatory post-delivery survey requirement for future beta deliveries. This does not reopen an account already held after beta completion. Disable beta mode to restore an existing held account.`,
+    okText: 'Enable survey exemption',
+  };
 }
 
 const S = {
@@ -184,22 +200,7 @@ export function BetaModePage() {
     if (next) {
       const ok = await new Promise<boolean>((resolve) => {
         modal.confirm({
-          title: 'Allow re-login after TAM survey?',
-          content: (
-            <div>
-              <p style={{ margin: 0 }}>
-                <strong>{row.fullName ?? row.email}</strong> will be allowed to
-                log back in even when beta mode is on and they have pending
-                survey holds.
-              </p>
-              <p style={{ marginTop: 12, color: '#999' }}>
-                Default: beta members are signed out after submitting the
-                post-delivery TAM survey and can't sign back in until the next
-                requirement clears. This override lifts that lock.
-              </p>
-            </div>
-          ),
-          okText: 'Allow re-login',
+          ...betaSurveyExemptionConfirmation(row),
           cancelText: 'Cancel',
           okButtonProps: {
             style: { background: BRAND, color: '#111', borderColor: BRAND },
@@ -221,8 +222,8 @@ export function BetaModePage() {
       await setBetaSurveyExempt(row.id, next);
       void message.success(
         next
-          ? `${row.fullName ?? row.email} can now re-login`
-          : `Default lock restored for ${row.fullName ?? row.email}`,
+          ? `Survey exemption enabled for ${row.fullName ?? row.email}`
+          : `Mandatory future surveys restored for ${row.fullName ?? row.email}`,
       );
     } catch {
       setRows((rs) =>
@@ -283,7 +284,7 @@ export function BetaModePage() {
         apiClient.get<AdminUser[]>('/admin/users'),
         getBetaUsers(),
       ]);
-      setAllUsers(users.data);
+      setAllUsers(eligibleBetaEnrollUsers(users.data));
       setEnrolledIds(new Set(enrolled.map((u) => u.id)));
     } catch {
       void message.error('Failed to load users.');
@@ -416,8 +417,8 @@ export function BetaModePage() {
       {
         title: (
           <span>
-            Re-login allowed{' '}
-            <Tooltip title="When ON, this member skips the post-survey lockout and can sign in repeatedly even with pending TAM holds.">
+            Survey exempt{' '}
+            <Tooltip title="When ON, future beta deliveries skip the mandatory feedback requirement. Existing completed-account holds remain until beta mode is disabled.">
               <span
                 style={{ color: '#666', cursor: 'help', fontSize: 11 }}
               >
@@ -568,8 +569,8 @@ export function BetaModePage() {
               Beta Members
             </Title>
             <Text style={{ color: '#666', fontSize: 12 }}>
-              {total} total · toggle <strong>Re-login allowed</strong> to lift
-              the post-survey lockout for a member.
+              {total} total · toggle <strong>Survey exempt</strong> only when a
+              member should skip mandatory feedback on future beta deliveries.
             </Text>
           </div>
           <Space>
