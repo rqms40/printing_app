@@ -319,6 +319,16 @@ export class DispatchPlanService {
     if (stop.status !== DispatchStopStatus.PENDING) {
       throw new BadRequestException('Dispatch stop is already closed');
     }
+    const current = await stopRepo.findOne({
+      where: { planId: plan.id, status: DispatchStopStatus.PENDING },
+      order: { sequence: 'ASC' },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (current?.id !== stop.id) {
+      throw new BadRequestException(
+        'Complete the current route stop before advancing this delivery',
+      );
+    }
     const now = new Date();
     stop.status = DispatchStopStatus.SKIPPED;
     stop.skippedAt = now;
@@ -328,11 +338,12 @@ export class DispatchPlanService {
       order: { sequence: 'ASC' },
       lock: { mode: 'pessimistic_write' },
     });
+    plan.routingDataStale = true;
     if (!next) {
       plan.status = DispatchPlanStatus.COMPLETED;
       plan.completedAt = now;
-      await planRepo.save(plan);
     }
+    await planRepo.save(plan);
   }
 
   private async loadPlanningAssignments(

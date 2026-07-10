@@ -43,6 +43,10 @@ import {
   DispatchPlanStop,
   DispatchStopStatus,
 } from '../src/riders/entities/dispatch-plan-stop.entity';
+import {
+  DispatchPlan,
+  DispatchPlanStatus,
+} from '../src/riders/entities/dispatch-plan.entity';
 
 describe('Rider dispatch workflow (e2e)', () => {
   let app: INestApplication<App>;
@@ -444,6 +448,206 @@ describe('Rider dispatch workflow (e2e)', () => {
         actor: rider.id,
       },
     ]);
+  });
+
+  it('rolls back a later planned decline and marks current-stop promotion stale until re-optimized', async () => {
+    const suffix = `${runId}-planned-decline`;
+    const [customer, admin, rider] = await usersRepo.save([
+      usersRepo.create({
+        email: `customer-${suffix}@example.com`,
+        passwordHash: 'not-used',
+        role: UserRole.CUSTOMER,
+        isActive: true,
+      }),
+      usersRepo.create({
+        email: `admin-${suffix}@example.com`,
+        passwordHash: 'not-used',
+        role: UserRole.ADMIN,
+        isActive: true,
+      }),
+      usersRepo.create({
+        email: `rider-${suffix}@example.com`,
+        passwordHash: 'not-used',
+        role: UserRole.RIDER,
+        isActive: true,
+      }),
+    ]);
+    const riderProfile = await riderProfilesRepo.save(
+      riderProfilesRepo.create({
+        userId: rider.id,
+        vehicleType: 'bike',
+        isAvailable: true,
+      }),
+    );
+    const [nearOrder, farOrder] = await ordersRepo.save([
+      ordersRepo.create({
+        orderId: `NEAR-${suffix}`,
+        userId: customer.id,
+        category: 'paper',
+        quantity: 1,
+        totalPrice: 20,
+        deliveryFee: 0,
+        paymentMethod: 'cod',
+        deliveryOption: 'delivery',
+        orderStatus: OrderStatus.READY_FOR_DISPATCH,
+      }),
+      ordersRepo.create({
+        orderId: `FAR-${suffix}`,
+        userId: customer.id,
+        category: 'paper',
+        quantity: 1,
+        totalPrice: 20,
+        deliveryFee: 0,
+        paymentMethod: 'cod',
+        deliveryOption: 'delivery',
+        orderStatus: OrderStatus.READY_FOR_DISPATCH,
+      }),
+    ]);
+    await makeOrderRouteable(
+      nearOrder,
+      customer.id,
+      `${suffix}-near`,
+      7.0641,
+      125.6079,
+    );
+    await makeOrderRouteable(
+      farOrder,
+      customer.id,
+      `${suffix}-far`,
+      7.0731,
+      125.6128,
+    );
+    const adminToken = jwtService.sign({
+      sub: admin.id,
+      email: admin.email,
+      role: admin.role,
+    });
+    const riderToken = jwtService.sign({
+      sub: rider.id,
+      email: rider.email,
+      role: rider.role,
+    });
+    const customerToken = jwtService.sign({
+      sub: customer.id,
+      email: customer.email,
+      role: customer.role,
+    });
+    for (const order of [nearOrder, farOrder]) {
+      await request(app.getHttpServer())
+        .post(`/api/admin/orders/${order.id}/assign`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ riderId: riderProfile.id })
+        .expect(201);
+    }
+    const plannedAssignments = await assignmentsRepo.find({
+      where: { riderId: riderProfile.id, isCurrent: true },
+      order: { id: 'ASC' },
+    });
+    const nearAssignment = plannedAssignments.find(
+      (assignment) => assignment.orderId === nearOrder.id,
+    )!;
+    const farAssignment = plannedAssignments.find(
+      (assignment) => assignment.orderId === farOrder.id,
+    )!;
+    await request(app.getHttpServer())
+      .post(`/api/admin/riders/${riderProfile.id}/dispatch-plan`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ assignmentIds: [nearAssignment.id, farAssignment.id] })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/api/riders/assignments/${farAssignment.id}/status`)
+      .set('Authorization', `Bearer ${riderToken}`)
+      .send({ status: DeliveryStatus.DECLINED, declineReason: 'Later stop' })
+      .expect(400)
+      .expect((res) => {
+        expect(res.body.message).toBe(
+          'Complete the current route stop before advancing this delivery',
+        );
+      });
+    await expect(
+      assignmentsRepo.findOneByOrFail({ id: farAssignment.id }),
+    ).resolves.toMatchObject({
+      status: DeliveryStatus.ASSIGNED,
+      isCurrent: true,
+      declineReason: null,
+    });
+    await expect(
+      ordersRepo.findOneByOrFail({ id: farOrder.id }),
+    ).resolves.toMatchObject({ orderStatus: OrderStatus.RIDER_ASSIGNED });
+    await expect(
+      dataSource.getRepository(DispatchPlanStop).findOneByOrFail({
+        assignmentId: farAssignment.id,
+      }),
+    ).resolves.toMatchObject({ status: DispatchStopStatus.PENDING });
+    await expect(
+      dataSource.getRepository(DispatchPlan).findOneByOrFail({
+        riderId: riderProfile.id,
+        status: DispatchPlanStatus.ACTIVE,
+      }),
+    ).resolves.toMatchObject({ routingDataStale: false, version: 1 });
+
+    await request(app.getHttpServer())
+      .patch(`/api/riders/assignments/${nearAssignment.id}/status`)
+      .set('Authorization', `Bearer ${riderToken}`)
+      .send({ status: DeliveryStatus.DECLINED, declineReason: 'Current stop' })
+      .expect(200);
+    await expect(
+      dataSource.getRepository(DispatchPlanStop).findOneByOrFail({
+        assignmentId: nearAssignment.id,
+      }),
+    ).resolves.toMatchObject({
+      status: DispatchStopStatus.SKIPPED,
+      skippedAt: expect.any(Date),
+    });
+    await expect(
+      dataSource.getRepository(DispatchPlan).findOneByOrFail({
+        riderId: riderProfile.id,
+        status: DispatchPlanStatus.ACTIVE,
+      }),
+    ).resolves.toMatchObject({ routingDataStale: true, version: 1 });
+
+    for (const status of [
+      DeliveryStatus.ACCEPTED,
+      DeliveryStatus.PICKED_UP,
+      DeliveryStatus.ON_THE_WAY,
+    ]) {
+      await request(app.getHttpServer())
+        .patch(`/api/riders/assignments/${farAssignment.id}/status`)
+        .set('Authorization', `Bearer ${riderToken}`)
+        .send({ status })
+        .expect(200);
+    }
+    await request(app.getHttpServer())
+      .get(`/api/orders/${farOrder.id}`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .expect(200)
+      .expect((res) => {
+        expect(res.body.deliveryQueuePosition).toBe(1);
+        expect(res.body.deliveryAssignmentId).toBe(farAssignment.id);
+        expect(res.body.deliveryRouteGeometry).toMatchObject({
+          type: 'LineString',
+        });
+        expect(res.body.deliveryRoutingDataStale).toBe(true);
+      });
+
+    await request(app.getHttpServer())
+      .post(`/api/admin/riders/${riderProfile.id}/dispatch-plan/re-optimize`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ assignmentIds: [farAssignment.id] })
+      .expect(201)
+      .expect((res) => {
+        expect(res.body.version).toBe(2);
+        expect(res.body.routingDataStale).toBe(false);
+      });
+    await request(app.getHttpServer())
+      .get(`/api/orders/${farOrder.id}`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .expect(200)
+      .expect((res) => {
+        expect(res.body.deliveryPlanVersion).toBe(2);
+        expect(res.body.deliveryRoutingDataStale).toBe(false);
+      });
   });
 
   it('enforces rider eligibility and one current assignment under concurrency', async () => {

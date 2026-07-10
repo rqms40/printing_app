@@ -461,7 +461,7 @@ describe('DispatchPlanService', () => {
     expect(stopRepo.save!.mock.calls).toHaveLength(0);
   });
 
-  it('allows a pre-plan decline and skips a planned later stop without reordering', async () => {
+  it('allows a pre-plan decline but rejects skipping a planned later stop', async () => {
     planRepo.findOne!.mockResolvedValueOnce(null);
     await expect(
       service.skipStopIfPlanned(manager as EntityManager, rider.id, mark.id),
@@ -491,15 +491,50 @@ describe('DispatchPlanService', () => {
       .findOne!.mockResolvedValueOnce(later)
       .mockResolvedValueOnce(current);
 
-    await service.skipStopIfPlanned(
-      manager as EntityManager,
-      rider.id,
-      mark.id,
+    await expect(
+      service.skipStopIfPlanned(manager as EntityManager, rider.id, mark.id),
+    ).rejects.toThrow(
+      'Complete the current route stop before advancing this delivery',
     );
 
-    expect(later.status).toBe(DispatchStopStatus.SKIPPED);
-    expect(later.skippedAt).toBeInstanceOf(Date);
+    expect(later.status).toBe(DispatchStopStatus.PENDING);
+    expect(later.skippedAt).toBeUndefined();
     expect(current.status).toBe(DispatchStopStatus.PENDING);
     expect(active.status).toBe(DispatchPlanStatus.ACTIVE);
+  });
+
+  it('marks routing stale when the current planned stop is skipped', async () => {
+    const active = {
+      id: 501,
+      riderId: rider.id,
+      status: DispatchPlanStatus.ACTIVE,
+      routingDataStale: false,
+    } as DispatchPlan;
+    const current = {
+      id: 901,
+      planId: active.id,
+      assignmentId: ven.id,
+      sequence: 1,
+      status: DispatchStopStatus.PENDING,
+    } as DispatchPlanStop;
+    const next = {
+      id: 902,
+      planId: active.id,
+      assignmentId: mark.id,
+      sequence: 2,
+      status: DispatchStopStatus.PENDING,
+    } as DispatchPlanStop;
+    planRepo.findOne!.mockResolvedValueOnce(active);
+    stopRepo
+      .findOne!.mockResolvedValueOnce(current)
+      .mockResolvedValueOnce(current)
+      .mockResolvedValueOnce(next);
+
+    await service.skipStopIfPlanned(manager as EntityManager, rider.id, ven.id);
+
+    expect(current.status).toBe(DispatchStopStatus.SKIPPED);
+    expect(current.skippedAt).toBeInstanceOf(Date);
+    expect(active.routingDataStale).toBe(true);
+    expect(planRepo.save!.mock.calls).toContainEqual([active]);
   });
 });
