@@ -100,5 +100,9 @@ describe("RiderList", () => {
 
     expect(screen.getByLabelText("Assign ORD-MARK to Maria")).toBeInTheDocument();
     expect(screen.queryByLabelText("Assign ORD-MARK to Juan")).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Available/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Online/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Offline/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/On delivery/)).not.toBeInTheDocument();
   });
 });

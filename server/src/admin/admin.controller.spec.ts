@@ -456,8 +456,13 @@ describe('AdminController analytics', () => {
     });
 
     it('projects pickup completion but never exposes rider-owned or cancellation transitions', () => {
+      const mapOrder = (
+        controller as unknown as {
+          mapOrder(order: Order): { allowed_next_statuses: OrderStatus[] };
+        }
+      ).mapOrder.bind(controller);
       const map = (orderStatus: OrderStatus, deliveryOption: string) =>
-        (controller as any).mapOrder({
+        mapOrder({
           id: 7,
           orderId: 'ORD-10007',
           userId: 1,

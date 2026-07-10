@@ -64,7 +64,7 @@ const createIcon = (color: string, size = 14) =>
   });
 
 const availableIcon = createIcon('#34d399');
-const busyIcon      = createIcon('#60a5fa');
+const unavailableIcon = createIcon('#808080');
 
 const VEHICLE_COLORS: Record<string, string> = {
   motorcycle: '#FFCA28',
@@ -110,7 +110,7 @@ const S = {
 export function RiderList() {
   const { message } = App.useApp();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'offline'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'available' | 'unavailable'>('all');
   const [mapExpanded, setMapExpanded] = useState(false);
   const [riders, setRiders] = useState<ApiRider[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -150,8 +150,8 @@ export function RiderList() {
     }
   };
 
-  const onlineCount  = riders.filter(d => d.is_available).length;
-  const offlineCount = riders.length - onlineCount;
+  const availableCount = riders.filter(d => d.is_available).length;
+  const unavailableCount = riders.length - availableCount;
   const activeTrips = orders.filter((order) => {
     const status = order.assigned_rider_contact?.delivery_status;
     return status != null && !["declined", "delivered"].includes(status);
@@ -190,7 +190,7 @@ export function RiderList() {
       d.plate_number?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus =
       statusFilter === 'all' ? true :
-      statusFilter === 'online' ? d.is_available :
+      statusFilter === 'available' ? d.is_available :
       !d.is_available;
     return matchesSearch && matchesStatus;
   });
@@ -232,8 +232,8 @@ export function RiderList() {
             Riders
           </Title>
           <Space size={8}>
-            <Badge status="success" text={<Text style={{ color: '#808080', fontSize: 13 }}>{onlineCount} Online</Text>} />
-            <Badge status="default" text={<Text style={{ color: '#808080', fontSize: 13 }}>{offlineCount} Offline</Text>} />
+            <Badge status="success" text={<Text style={{ color: '#808080', fontSize: 13 }}>{availableCount} Available</Text>} />
+            <Badge status="default" text={<Text style={{ color: '#808080', fontSize: 13 }}>{unavailableCount} Unavailable</Text>} />
           </Space>
         </div>
       </div>
@@ -316,7 +316,7 @@ export function RiderList() {
                     <Marker
                       key={d.id}
                       position={[d.last_latitude!, d.last_longitude!]}
-                      icon={d.is_available ? availableIcon : busyIcon}
+                      icon={d.is_available ? availableIcon : unavailableIcon}
                     >
                       <Popup>
                         <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 13, lineHeight: 1.6 }}>
@@ -325,7 +325,7 @@ export function RiderList() {
                             {d.vehicle_type} &middot; {d.plate_number}
                           </div>
                           <Tag color={d.is_available ? 'green' : 'default'} style={{ marginTop: 4 }}>
-                            {d.is_available ? 'Available' : 'On delivery'}
+                            {d.is_available ? 'Available' : 'Unavailable'}
                           </Tag>
                         </div>
                       </Popup>
@@ -347,7 +347,7 @@ export function RiderList() {
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#60a5fa', display: 'inline-block' }} />
-                  On delivery
+                  Unavailable
                 </span>
               </div>
             </div>
@@ -381,8 +381,8 @@ export function RiderList() {
               onChange={v => setStatusFilter(v as typeof statusFilter)}
               options={[
                 { label: `All (${riders.length})`, value: 'all' },
-                { label: `Online (${onlineCount})`, value: 'online' },
-                { label: `Offline (${offlineCount})`, value: 'offline' },
+                { label: `Available (${availableCount})`, value: 'available' },
+                { label: `Unavailable (${unavailableCount})`, value: 'unavailable' },
               ]}
               style={{ background: '#1A1A1A' }}
             />
@@ -469,7 +469,7 @@ export function RiderList() {
                 color={available ? 'green' : 'default'}
                 style={{ borderRadius: 10, fontSize: 12, padding: '1px 10px' }}
               >
-                {available ? 'Online' : 'Offline'}
+                {available ? 'Available' : 'Unavailable'}
               </Tag>
             )}
           />

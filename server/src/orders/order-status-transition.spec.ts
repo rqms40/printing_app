@@ -78,10 +78,18 @@ describe('order status transitions', () => {
   });
 
   it.each([
-    [OrderStatus.ORDER_PLACED, 'delivery', [OrderStatus.FILE_VERIFIED, OrderStatus.FILE_DECLINED]],
+    [
+      OrderStatus.ORDER_PLACED,
+      'delivery',
+      [OrderStatus.FILE_VERIFIED, OrderStatus.FILE_DECLINED],
+    ],
     [OrderStatus.FILE_VERIFIED, 'delivery', [OrderStatus.PRINTING_IN_PROGRESS]],
     [OrderStatus.FILE_DECLINED, 'delivery', []],
-    [OrderStatus.PRINTING_IN_PROGRESS, 'delivery', [OrderStatus.FINISHING_MOUNTING]],
+    [
+      OrderStatus.PRINTING_IN_PROGRESS,
+      'delivery',
+      [OrderStatus.FINISHING_MOUNTING],
+    ],
     [OrderStatus.FINISHING_MOUNTING, 'delivery', [OrderStatus.QUALITY_CHECKED]],
     [OrderStatus.QUALITY_CHECKED, 'delivery', [OrderStatus.READY_FOR_DISPATCH]],
     [OrderStatus.READY_FOR_DISPATCH, 'delivery', []],
@@ -96,9 +104,9 @@ describe('order status transitions', () => {
   ] as const)(
     'projects exact admin-operable transitions from %s for %s orders',
     (fromStatus, deliveryOption, expected) => {
-      expect(
-        adminAllowedNextOrderStatuses(fromStatus, deliveryOption),
-      ).toEqual(expected);
+      expect(adminAllowedNextOrderStatuses(fromStatus, deliveryOption)).toEqual(
+        expected,
+      );
     },
   );
 });
