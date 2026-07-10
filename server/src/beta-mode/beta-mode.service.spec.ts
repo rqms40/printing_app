@@ -6,6 +6,7 @@ import { BetaModeSettings } from './entities/beta-mode-settings.entity';
 import { User } from '../users/entities/user.entity';
 import { FileMetadata } from '../files/entities/file-metadata.entity';
 import { CreditsService } from '../credits/credits.service';
+import { DataSource, EntityManager } from 'typeorm';
 
 const makeUser = (overrides: Partial<User> = {}): User =>
   ({
@@ -30,6 +31,9 @@ describe('BetaModeService', () => {
   };
   let fileMetadataRepo: { findOne: jest.Mock };
   let creditsService: { grantBetaEnrollmentCredits: jest.Mock };
+  let dataSource: { transaction: jest.Mock };
+  let transactionUserRepo: { findOne: jest.Mock; save: jest.Mock };
+  let transactionManager: EntityManager;
   let mockQB: {
     where: jest.Mock;
     andWhere: jest.Mock;
@@ -60,6 +64,22 @@ describe('BetaModeService', () => {
     creditsService = {
       grantBetaEnrollmentCredits: jest.fn().mockResolvedValue(undefined),
     };
+    dataSource = {
+      transaction: jest.fn(),
+    };
+    transactionUserRepo = {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+      findOne: jest.fn((options) => userRepo.findOne(options)),
+      save: jest.fn().mockImplementation(async (user: User) => user),
+    };
+    transactionManager = {
+      getRepository: jest.fn().mockReturnValue(transactionUserRepo),
+    } as unknown as EntityManager;
+    dataSource.transaction.mockImplementation(
+      async (work: (manager: EntityManager) => Promise<unknown>) => {
+        await work(transactionManager);
+      },
+    );
 
     const module = await Test.createTestingModule({
       providers: [
@@ -74,6 +94,7 @@ describe('BetaModeService', () => {
           useValue: fileMetadataRepo,
         },
         { provide: CreditsService, useValue: creditsService },
+        { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
 
@@ -123,26 +144,64 @@ describe('BetaModeService', () => {
   it('enrollUser sets isBetaUser=true and grants 100 credits atomically on first enroll', async () => {
     userRepo.findOne.mockResolvedValue(makeUser({ credits: 50 }));
     await service.enrollUser(1);
-    expect(userRepo.update).toHaveBeenCalledWith(
-      1,
+    expect(transactionUserRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({ isBetaUser: true }),
     );
     expect(creditsService.grantBetaEnrollmentCredits).toHaveBeenCalledWith(
       1,
       100,
+      transactionManager,
     );
   });
 
-  it('records one enrollment grant under concurrent calls', async () => {
+  it('delegates multi-instance correctness to locked database transactions', async () => {
     userRepo.findOne.mockResolvedValue(makeUser({ id: 9, credits: 0 }));
 
     await Promise.all([service.enrollUser(9), service.enrollUser(9)]);
 
-    expect(creditsService.grantBetaEnrollmentCredits).toHaveBeenCalledTimes(1);
+    expect(dataSource.transaction).toHaveBeenCalledTimes(2);
+    expect(creditsService.grantBetaEnrollmentCredits).toHaveBeenCalledTimes(2);
     expect(creditsService.grantBetaEnrollmentCredits).toHaveBeenCalledWith(
       9,
       100,
+      transactionManager,
     );
+  });
+
+  it('locks enrollment state and shares one transaction with the credit grant', async () => {
+    const lockedUser = makeUser({ id: 9, credits: 0 });
+    const transactionUserRepo = {
+      findOne: jest.fn().mockResolvedValue(lockedUser),
+      save: jest.fn().mockImplementation(async (user: User) => user),
+    };
+    const manager = {
+      getRepository: jest.fn().mockReturnValue(transactionUserRepo),
+    } as unknown as EntityManager;
+    dataSource.transaction.mockImplementation(
+      async (work: (manager: EntityManager) => Promise<unknown>) => {
+        await work(manager);
+      },
+    );
+
+    await service.enrollUser(9);
+
+    expect(transactionUserRepo.findOne).toHaveBeenCalledWith({
+      where: { id: 9 },
+      lock: { mode: 'pessimistic_write' },
+    });
+    expect(transactionUserRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 9,
+        isBetaUser: true,
+        betaEnrolledAt: expect.any(Date),
+      }),
+    );
+    expect(creditsService.grantBetaEnrollmentCredits).toHaveBeenCalledWith(
+      9,
+      100,
+      manager,
+    );
+    expect(userRepo.update).not.toHaveBeenCalled();
   });
 
   it('enrollUser is idempotent — does nothing if already enrolled', async () => {
@@ -155,8 +214,12 @@ describe('BetaModeService', () => {
       }),
     );
     await service.enrollUser(1);
-    expect(userRepo.update).not.toHaveBeenCalled();
-    expect(creditsService.grantBetaEnrollmentCredits).not.toHaveBeenCalled();
+    expect(transactionUserRepo.save).not.toHaveBeenCalled();
+    expect(creditsService.grantBetaEnrollmentCredits).toHaveBeenCalledWith(
+      1,
+      100,
+      transactionManager,
+    );
   });
 
   it('enrollUser recovers an enrolled user whose credit grant was interrupted', async () => {
@@ -171,10 +234,11 @@ describe('BetaModeService', () => {
 
     await service.enrollUser(1);
 
-    expect(userRepo.update).not.toHaveBeenCalled();
+    expect(transactionUserRepo.save).not.toHaveBeenCalled();
     expect(creditsService.grantBetaEnrollmentCredits).toHaveBeenCalledWith(
       1,
       100,
+      transactionManager,
     );
   });
 
@@ -183,7 +247,14 @@ describe('BetaModeService', () => {
       makeUser({ isBetaUser: false, betaCreditsGranted: true, credits: 150 }),
     );
     await service.enrollUser(1);
-    expect(creditsService.grantBetaEnrollmentCredits).not.toHaveBeenCalled();
+    expect(transactionUserRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ isBetaUser: true }),
+    );
+    expect(creditsService.grantBetaEnrollmentCredits).toHaveBeenCalledWith(
+      1,
+      100,
+      transactionManager,
+    );
   });
 
   it('enrollUser preserves original betaEnrolledAt on re-enroll', async () => {
@@ -196,8 +267,9 @@ describe('BetaModeService', () => {
       }),
     );
     await service.enrollUser(1);
-    const [, updateArg] = userRepo.update.mock.calls[0];
-    expect(updateArg).not.toHaveProperty('betaEnrolledAt');
+    expect(transactionUserRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ betaEnrolledAt: original }),
+    );
   });
 
   it('enrollUser throws NotFoundException for unknown userId', async () => {

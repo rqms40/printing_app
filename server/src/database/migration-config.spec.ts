@@ -36,9 +36,7 @@ describe('createTypeOrmOptions migration configuration', () => {
       'utf8',
     );
 
-    expect(seedGuard).toContain("timestamp: '1777853400000'");
-    expect(seedGuard).toContain(
-      "name: 'BetaCreditLedgerAndRankIndex1777853400000'",
-    );
+    expect(seedGuard).toContain("timestamp: '1777853500000'");
+    expect(seedGuard).toContain("name: 'AtomicCreditAccounting1777853500000'");
   });
 });

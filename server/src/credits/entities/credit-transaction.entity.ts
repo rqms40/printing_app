@@ -25,6 +25,12 @@ export enum CreditTransactionStatus {
   unique: true,
   where: `"reference_id" LIKE 'BETA-ENROLLMENT:%'`,
 })
+@Index('uq_credit_transactions_refund_reference', ['referenceId'], {
+  unique: true,
+  where:
+    `"reference_id" LIKE 'ORDER-REFUND:%' OR ` +
+    `"reference_id" LIKE 'BATCH-REFUND:%'`,
+})
 export class CreditTransaction {
   @PrimaryGeneratedColumn()
   id: number;

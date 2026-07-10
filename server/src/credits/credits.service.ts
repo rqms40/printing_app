@@ -35,31 +35,80 @@ export class CreditsService {
   async grantBetaEnrollmentCredits(
     userId: number,
     amount = 100,
+    manager?: EntityManager,
   ): Promise<void> {
-    const referenceId = `BETA-ENROLLMENT:${userId}`;
+    if (manager) {
+      await this.grantBetaEnrollmentCreditsWithManager(userId, amount, manager);
+      return;
+    }
 
     try {
-      await this.dataSource.transaction(async (manager) => {
-        const transactionRepo = manager.getRepository(CreditTransaction);
-        const userRepo = manager.getRepository(User);
-        const existing = await transactionRepo.findOne({
-          where: { referenceId },
-        });
-        if (existing) return;
-
-        await transactionRepo.insert({
+      await this.dataSource.transaction((transactionManager) =>
+        this.grantBetaEnrollmentCreditsWithManager(
           userId,
-          type: CreditTransactionType.TOP_UP,
-          amountCredits: amount,
-          status: CreditTransactionStatus.APPROVED,
-          referenceId,
-        });
-        await userRepo.increment({ id: userId }, 'credits', amount);
-        await userRepo.update(userId, { betaCreditsGranted: true });
-      });
+          amount,
+          transactionManager,
+        ),
+      );
     } catch (error) {
-      if (CreditsService.isUniqueViolation(error)) return;
+      if (CreditsService.isUniqueViolation(error)) {
+        await this.dataSource.transaction((transactionManager) =>
+          this.grantBetaEnrollmentCreditsWithManager(
+            userId,
+            amount,
+            transactionManager,
+          ),
+        );
+        return;
+      }
       throw error;
+    }
+  }
+
+  private async grantBetaEnrollmentCreditsWithManager(
+    userId: number,
+    amount: number,
+    manager: EntityManager,
+  ): Promise<void> {
+    const referenceId = `BETA-ENROLLMENT:${userId}`;
+    const transactionRepo = manager.getRepository(CreditTransaction);
+    const userRepo = manager.getRepository(User);
+    const user = await userRepo.findOne({
+      where: { id: userId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const existing = await transactionRepo.findOne({
+      where: { referenceId },
+    });
+    if (existing) {
+      if (
+        existing.userId !== userId ||
+        existing.type !== CreditTransactionType.TOP_UP ||
+        Number(existing.amountCredits) !== amount ||
+        existing.status !== CreditTransactionStatus.APPROVED
+      ) {
+        throw new BadRequestException(
+          'Beta enrollment ledger reference mismatch',
+        );
+      }
+      if (!user.betaCreditsGranted) {
+        await userRepo.update(userId, { betaCreditsGranted: true });
+      }
+      return;
+    }
+
+    await transactionRepo.insert({
+      userId,
+      type: CreditTransactionType.TOP_UP,
+      amountCredits: amount,
+      status: CreditTransactionStatus.APPROVED,
+      referenceId,
+    });
+    if (!user.betaCreditsGranted) {
+      await userRepo.increment({ id: userId }, 'credits', amount);
+      await userRepo.update(userId, { betaCreditsGranted: true });
     }
   }
 
@@ -253,85 +302,128 @@ export class CreditsService {
     manager?: EntityManager,
   ): Promise<CreditTransaction> {
     if (manager) {
-      const userRepo = manager.getRepository(User);
-      const transactionRepo = manager.getRepository(CreditTransaction);
-      const user = await userRepo.findOne({
-        where: { id: userId },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!user) throw new NotFoundException('User not found');
-      if (Number(user.credits) < amountCredits) {
-        throw new BadRequestException('Insufficient credits');
-      }
-
-      user.credits = Number(user.credits) - amountCredits;
-      await userRepo.save(user);
-      const transaction = await transactionRepo.save(
-        transactionRepo.create({
-          userId,
-          type: CreditTransactionType.DEDUCTION,
-          amountCredits,
-          status: CreditTransactionStatus.APPROVED,
-          referenceId,
-        }),
+      return this.subtractCreditsWithManager(
+        userId,
+        amountCredits,
+        referenceId,
+        manager,
       );
-      this.notificationsService.triggerCreditsUpdate(
-        user.id,
-        Number(user.credits),
-      );
-      return transaction;
     }
+    return this.dataSource.transaction((transactionManager) =>
+      this.subtractCreditsWithManager(
+        userId,
+        amountCredits,
+        referenceId,
+        transactionManager,
+      ),
+    );
+  }
 
-    const user = await this.usersService.findById(userId);
+  private async subtractCreditsWithManager(
+    userId: number,
+    amountCredits: number,
+    referenceId: string | undefined,
+    manager: EntityManager,
+  ): Promise<CreditTransaction> {
+    const userRepo = manager.getRepository(User);
+    const transactionRepo = manager.getRepository(CreditTransaction);
+    const user = await userRepo.findOne({
+      where: { id: userId },
+      lock: { mode: 'pessimistic_write' },
+    });
     if (!user) throw new NotFoundException('User not found');
-
     if (Number(user.credits) < amountCredits) {
       throw new BadRequestException('Insufficient credits');
     }
 
     user.credits = Number(user.credits) - amountCredits;
-    await this.usersService.updateProfile(user.id, { credits: user.credits });
-
+    await userRepo.save(user);
+    const transaction = await transactionRepo.save(
+      transactionRepo.create({
+        userId,
+        type: CreditTransactionType.DEDUCTION,
+        amountCredits,
+        status: CreditTransactionStatus.APPROVED,
+        referenceId,
+      }),
+    );
     this.notificationsService.triggerCreditsUpdate(
       user.id,
       Number(user.credits),
     );
-
-    const tx = this.transactionRepo.create({
-      userId,
-      type: CreditTransactionType.DEDUCTION,
-      amountCredits,
-      status: CreditTransactionStatus.APPROVED,
-      referenceId,
-    });
-
-    return this.transactionRepo.save(tx);
+    return transaction;
   }
 
   async refundCredits(
     userId: number,
     amountCredits: number,
     referenceId?: string,
+    manager?: EntityManager,
   ): Promise<CreditTransaction> {
-    const user = await this.usersService.findById(userId);
+    if (manager) {
+      return this.refundCreditsWithManager(
+        userId,
+        amountCredits,
+        referenceId,
+        manager,
+      );
+    }
+    return this.dataSource.transaction((transactionManager) =>
+      this.refundCreditsWithManager(
+        userId,
+        amountCredits,
+        referenceId,
+        transactionManager,
+      ),
+    );
+  }
+
+  private async refundCreditsWithManager(
+    userId: number,
+    amountCredits: number,
+    referenceId: string | undefined,
+    manager: EntityManager,
+  ): Promise<CreditTransaction> {
+    const userRepo = manager.getRepository(User);
+    const transactionRepo = manager.getRepository(CreditTransaction);
+    const user = await userRepo.findOne({
+      where: { id: userId },
+      lock: { mode: 'pessimistic_write' },
+    });
     if (!user) throw new NotFoundException('User not found');
 
-    user.credits = Number(user.credits) + amountCredits;
-    await this.usersService.updateProfile(user.id, { credits: user.credits });
+    const existing = referenceId
+      ? await transactionRepo.findOne({ where: { referenceId } })
+      : null;
+    if (existing) {
+      if (
+        existing.userId !== userId ||
+        existing.type !== CreditTransactionType.TOP_UP ||
+        Number(existing.amountCredits) !== amountCredits ||
+        existing.status !== CreditTransactionStatus.APPROVED
+      ) {
+        throw new BadRequestException(
+          'Credit refund ledger reference mismatch',
+        );
+      }
+      return existing;
+    }
 
+    user.credits = Number(user.credits) + amountCredits;
+    await userRepo.save(user);
+    const transaction = await transactionRepo.save(
+      transactionRepo.create({
+        userId,
+        type: CreditTransactionType.TOP_UP,
+        amountCredits,
+        status: CreditTransactionStatus.APPROVED,
+        referenceId,
+      }),
+    );
     this.notificationsService.triggerCreditsUpdate(
       user.id,
       Number(user.credits),
     );
-
-    const tx = this.transactionRepo.create({
-      userId,
-      type: CreditTransactionType.TOP_UP,
-      amountCredits,
-      status: CreditTransactionStatus.APPROVED,
-      referenceId,
-    });
-
-    return this.transactionRepo.save(tx);
+    return transaction;
   }
 }

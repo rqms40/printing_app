@@ -90,6 +90,20 @@ const catalogPricingProvider = () => ({
 });
 
 describe('calculateChargeTotal', () => {
+  it.each([
+    ['blank', ''],
+    ['whitespace', '   '],
+    ['negative', '-0.01'],
+  ])('rejects a %s charge component', (_label, totalPrice) => {
+    expect(() => calculateChargeTotal({ totalPrice })).toThrow(
+      'Invalid totalPrice charge component',
+    );
+  });
+
+  it('allows an explicit zero charge component', () => {
+    expect(calculateChargeTotal({ totalPrice: '0.00' })).toBe(0);
+  });
+
   it('treats an individual order totalPrice as its print subtotal', () => {
     expect(
       calculateChargeTotal({
@@ -221,6 +235,7 @@ describe('OrdersService', () => {
       create: jest.fn(),
       save: jest.fn(),
       count: jest.fn(),
+      findOne: jest.fn(),
     };
     paperSpecsRepo = {
       create: jest.fn(),
@@ -452,7 +467,6 @@ describe('OrdersService', () => {
       const data = { userId: 1, orderStatus: 'pending' } as Partial<Order>;
       const result = await service.create(data);
 
-      expect(repo.count).toHaveBeenCalled();
       expect(repo.create).toHaveBeenCalledWith(
         expect.objectContaining({ orderId: 'ORD-10001' }),
       );
@@ -461,7 +475,11 @@ describe('OrdersService', () => {
     });
 
     it('should generate correct orderId based on count', async () => {
-      repo.count.mockResolvedValue(42);
+      transactionQuery
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          { max_batch_ref: 10000, max_order_ref: 10042 },
+        ]);
       repo.create.mockReturnValue(mockOrder);
       repo.save.mockResolvedValue(mockOrder);
 
@@ -502,11 +520,31 @@ describe('OrdersService', () => {
       expect(creditsService.subtractCredits).toHaveBeenCalledWith(
         1,
         280,
-        'order_placed',
+        'ORDER-DEBIT:ORD-10001',
+        expect.anything(),
       );
       expect(repo.create).toHaveBeenCalledWith(
         expect.objectContaining({ paymentStatus: 'paid' }),
       );
+    });
+
+    it('does not leave a credit debit when order persistence fails', async () => {
+      repo.count.mockResolvedValue(0);
+      repo.create.mockReturnValue(mockOrder);
+      repo.save.mockResolvedValue(mockOrder);
+      orderItemsRepo.save.mockRejectedValueOnce(new Error('item save failed'));
+
+      await expect(
+        service.create({
+          userId: 1,
+          paymentMethod: 'gridCredits',
+          totalPrice: 250,
+          deliveryFee: 30,
+        } as Partial<Order>),
+      ).rejects.toThrow('item save failed');
+
+      expect(creditsService.subtractCredits).not.toHaveBeenCalled();
+      expect(notificationsService.createForAllAdmins).not.toHaveBeenCalled();
     });
 
     it('rejects non-credit legacy orders for beta customers', async () => {
@@ -731,7 +769,7 @@ describe('OrdersService', () => {
       expect(creditsService.subtractCredits).toHaveBeenCalledWith(
         1,
         447,
-        'order_placed',
+        'ORDER-DEBIT:ORD-10001',
         expect.anything(),
       );
     });
@@ -750,7 +788,7 @@ describe('OrdersService', () => {
       expect(creditsService.subtractCredits).toHaveBeenCalledWith(
         1,
         527,
-        'order_placed',
+        'ORDER-DEBIT:ORD-10001',
         expect.anything(),
       );
     });
@@ -806,9 +844,11 @@ describe('OrdersService', () => {
     });
 
     it('generates batch and order refs after the greatest stored suffix', async () => {
-      transactionQuery.mockResolvedValueOnce([
-        { max_batch_ref: 10006, max_order_ref: 10009 },
-      ]);
+      transactionQuery
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          { max_batch_ref: 10006, max_order_ref: 10009 },
+        ]);
 
       await (service as any).createBatch(1, batchDto);
 
@@ -1168,7 +1208,8 @@ describe('OrdersService', () => {
       expect(creditsService.refundCredits).toHaveBeenCalledWith(
         creditOrder.userId,
         Number(creditOrder.totalPrice) + Number(creditOrder.deliveryFee),
-        creditOrder.orderId,
+        `ORDER-REFUND:${creditOrder.orderId}`,
+        expect.anything(),
       );
       expect(repo.update).toHaveBeenCalledWith(1, {
         orderStatus: OrderStatus.CANCELLED,
@@ -1176,7 +1217,7 @@ describe('OrdersService', () => {
       });
     });
 
-    it('refunds every charged component exactly once from decimal strings', async () => {
+    it('refunds individual decimal-string charge components exactly once', async () => {
       const creditOrder = {
         ...mockOrder,
         userId: 1,
@@ -1184,13 +1225,6 @@ describe('OrdersService', () => {
         deliveryFee: '20.00',
         paymentMethod: 'gridCredits',
         orderStatus: OrderStatus.ORDER_PLACED,
-        batchOrder: {
-          subtotal: '40.00',
-          totalPrice: '85.00',
-          deliveryFee: '20.00',
-          priorityFee: '15.00',
-          extraDestinationFee: '10.00',
-        },
       } as unknown as Order;
       repo.findOneOrFail.mockResolvedValue(creditOrder);
       repo.update.mockResolvedValue(undefined as any);
@@ -1199,8 +1233,9 @@ describe('OrdersService', () => {
 
       expect(creditsService.refundCredits).toHaveBeenCalledWith(
         creditOrder.userId,
-        85,
-        creditOrder.orderId,
+        60,
+        `ORDER-REFUND:${creditOrder.orderId}`,
+        expect.anything(),
       );
     });
 
@@ -1220,7 +1255,8 @@ describe('OrdersService', () => {
       expect(creditsService.refundCredits).toHaveBeenCalledWith(
         creditOrder.userId,
         Number(creditOrder.totalPrice),
-        creditOrder.orderId,
+        `ORDER-REFUND:${creditOrder.orderId}`,
+        expect.anything(),
       );
     });
 
@@ -1257,6 +1293,58 @@ describe('OrdersService', () => {
       expect(repo.update).toHaveBeenCalledWith(1, {
         orderStatus: OrderStatus.CANCELLED,
       });
+    });
+  });
+
+  describe('cancelBatch', () => {
+    it('refunds one logical batch charge once when legacy data has multiple order rows', async () => {
+      const batch = {
+        id: 77,
+        batchRef: 'BATCH-10001',
+        userId: 1,
+        subtotal: '40.00',
+        totalPrice: '85.00',
+        deliveryFee: '20.00',
+        priorityFee: '15.00',
+        extraDestinationFee: '10.00',
+        paymentMethod: 'gridCredits',
+        slotBookingId: null,
+      } as unknown as BatchOrder;
+      const orders = [1, 2].map(
+        (id) =>
+          ({
+            ...mockOrder,
+            id,
+            orderId: `ORD-1000${id}`,
+            userId: 1,
+            batchOrderId: batch.id,
+            batchOrder: batch,
+            paymentMethod: 'gridCredits',
+            orderStatus: OrderStatus.ORDER_PLACED,
+          }) as Order,
+      );
+      repo.find.mockResolvedValue(orders);
+      (batchRepo.findOne as jest.Mock).mockResolvedValue(batch);
+      repo.findOneOrFail.mockImplementation(async ({ where }) => {
+        return orders.find((order) => order.id === where.id) ?? orders[0];
+      });
+
+      await service.cancelBatch(batch.id, 1);
+
+      expect(creditsService.refundCredits).toHaveBeenCalledTimes(1);
+      expect(creditsService.refundCredits).toHaveBeenCalledWith(
+        1,
+        85,
+        'BATCH-REFUND:BATCH-10001',
+        expect.anything(),
+      );
+      expect(repo.update).toHaveBeenCalledWith(
+        expect.objectContaining({ batchOrderId: batch.id }),
+        expect.objectContaining({
+          orderStatus: OrderStatus.CANCELLED,
+          paymentStatus: 'refunded',
+        }),
+      );
     });
   });
 
@@ -2833,7 +2921,7 @@ describe('cancelBatch', () => {
     Pick<Repository<Order>, 'find' | 'findOneOrFail' | 'save' | 'update'>
   >;
   let batchOrdersRepo: jest.Mocked<
-    Pick<Repository<any>, 'findOne' | 'findOneOrFail'>
+    Pick<Repository<any>, 'findOne' | 'findOneOrFail' | 'save'>
   >;
   let slotsService: jest.Mocked<Pick<DeliverySlotsService, 'releaseSlot'>>;
   let dataSource: Partial<DataSource>;
@@ -2844,6 +2932,7 @@ describe('cancelBatch', () => {
     batchOrdersRepo = {
       findOne: jest.fn(),
       findOneOrFail: jest.fn(),
+      save: jest.fn(async (batch) => batch),
     };
     ordersRepo = {
       find: jest.fn(),
@@ -2856,15 +2945,10 @@ describe('cancelBatch', () => {
       releaseSlot: jest.fn(),
     };
 
-    // Default transaction mock: provides manager with save + update + findOneOrFail routed to batchOrdersRepo
+    // Default transaction mock routes repositories through one transaction manager.
     const makeMockManager = () => ({
-      findOneOrFail: jest
-        .fn()
-        .mockImplementation(async (_entity: any, opts: any) => {
-          return batchOrdersRepo.findOneOrFail(opts);
-        }),
-      save: jest.fn().mockImplementation(async (entity: any) => entity),
-      update: jest.fn().mockResolvedValue(undefined),
+      getRepository: (entity: unknown) =>
+        entity === BatchOrder ? batchOrdersRepo : ordersRepo,
     });
 
     dataSource = {
@@ -2971,7 +3055,13 @@ describe('cancelBatch', () => {
   });
 
   it('releases slot and marks orders cancelled when before cutoff', async () => {
-    const fakeBatch = { id: 1, userId: 1, slotBookingId: 7 };
+    const fakeBatch = {
+      id: 1,
+      batchRef: 'BATCH-10001',
+      userId: 1,
+      slotBookingId: 7,
+      paymentMethod: 'gcash',
+    };
     ordersRepo.find.mockResolvedValue([
       {
         id: 11,
@@ -2995,7 +3085,13 @@ describe('cancelBatch', () => {
   });
 
   it('rejects cancellation past cutoff', async () => {
-    const fakeBatch = { id: 1, userId: 1, slotBookingId: 7 };
+    const fakeBatch = {
+      id: 1,
+      batchRef: 'BATCH-10001',
+      userId: 1,
+      slotBookingId: 7,
+      paymentMethod: 'gcash',
+    };
     ordersRepo.find.mockResolvedValue([
       {
         id: 11,

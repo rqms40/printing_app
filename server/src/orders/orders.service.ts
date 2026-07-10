@@ -167,8 +167,11 @@ function numericChargeComponent(
   value: ChargeComponent,
 ): number {
   if (value == null) return 0;
+  if (typeof value === 'string' && value.trim() === '') {
+    throw new BadRequestException(`Invalid ${name} charge component`);
+  }
   const amount = Number(value);
-  if (!Number.isFinite(amount)) {
+  if (!Number.isFinite(amount) || amount < 0) {
     throw new BadRequestException(`Invalid ${name} charge component`);
   }
   return amount;
@@ -476,7 +479,6 @@ export class OrdersService {
     orderData.totalPrice = quote.subtotal;
     orderData.category = quoteItem.categorySlug;
 
-    // Validate and deduct credits if payment method is credits
     const creditPayment = OrdersService.isCreditPaymentMethod(
       orderData.paymentMethod,
     );
@@ -486,52 +488,64 @@ export class OrdersService {
           deliveryFee: orderData.deliveryFee,
         })
       : 0;
-    if (creditPayment && amountCredits > 0) {
-      if (!orderData.userId) {
-        throw new Error('User ID is required to process credit payment');
-      }
-
-      const userId = orderData.userId;
-
-      // Attempt subtraction, will throw BadRequestException if insufficient
-      await this.creditsService.subtractCredits(
-        userId,
-        amountCredits,
-        'order_placed',
-      );
-    }
     orderData.paymentStatus = creditPayment ? 'paid' : 'pending';
-
-    const count = await this.ordersRepo.count();
-    const orderId = `ORD-${(10001 + count).toString().padStart(5, '0')}`;
-    const order = this.ordersRepo.create({ ...orderData, orderId });
-    const savedOrder = await this.ordersRepo.save(order);
-    const savedItem = await this.orderItemsRepo.save(
-      this.orderItemsRepo.create({
-        orderId: savedOrder.id,
-        category: savedOrder.category,
-        quantity: savedOrder.quantity,
-        totalPrice: savedOrder.totalPrice,
-        fileName: savedOrder.fileName,
-        fileUrl: savedOrder.fileUrl,
-        fileMetadataId: savedOrder.fileMetadataId,
-        specialInstructions:
-          this.normalizeSpecialInstructions(specialInstructions),
-        categoryId: quoteItem.categoryId,
-        categorySlug: quoteItem.categorySlug,
-        categoryName: quoteItem.categoryName,
-        pricingModel: quoteItem.pricingModel,
-      }),
-    );
-
-    for (const snapshot of quoteItem.specSnapshots) {
-      await this.orderItemSpecValueRepo.save(
-        this.orderItemSpecValueRepo.create({
-          orderItemId: savedItem.id,
-          ...snapshot,
+    const savedOrder = await this.dataSource.transaction(async (manager) => {
+      const transactionOrdersRepo = manager.getRepository(Order);
+      const transactionItemsRepo = manager.getRepository(OrderItem);
+      const transactionSpecValuesRepo =
+        manager.getRepository(OrderItemSpecValue);
+      if (orderData.userId != null) {
+        await this.assertBetaOrderLimit(
+          Number(orderData.userId),
+          transactionOrdersRepo,
+        );
+      }
+      const { orderRef } = await this.nextBatchReferences(manager);
+      const order = transactionOrdersRepo.create({
+        ...orderData,
+        orderId: orderRef,
+      });
+      const persistedOrder = await transactionOrdersRepo.save(order);
+      const savedItem = await transactionItemsRepo.save(
+        transactionItemsRepo.create({
+          orderId: persistedOrder.id,
+          category: persistedOrder.category,
+          quantity: persistedOrder.quantity,
+          totalPrice: persistedOrder.totalPrice,
+          fileName: persistedOrder.fileName,
+          fileUrl: persistedOrder.fileUrl,
+          fileMetadataId: persistedOrder.fileMetadataId,
+          specialInstructions:
+            this.normalizeSpecialInstructions(specialInstructions),
+          categoryId: quoteItem.categoryId,
+          categorySlug: quoteItem.categorySlug,
+          categoryName: quoteItem.categoryName,
+          pricingModel: quoteItem.pricingModel,
         }),
       );
-    }
+
+      for (const snapshot of quoteItem.specSnapshots) {
+        await transactionSpecValuesRepo.save(
+          transactionSpecValuesRepo.create({
+            orderItemId: savedItem.id,
+            ...snapshot,
+          }),
+        );
+      }
+
+      if (creditPayment && amountCredits > 0) {
+        if (!orderData.userId) {
+          throw new Error('User ID is required to process credit payment');
+        }
+        await this.creditsService.subtractCredits(
+          orderData.userId,
+          amountCredits,
+          `ORDER-DEBIT:${orderRef}`,
+          manager,
+        );
+      }
+      return persistedOrder;
+    });
 
     await this.notifyOrderPlaced(savedOrder);
 
@@ -941,7 +955,7 @@ export class OrdersService {
         await this.creditsService.subtractCredits(
           userId,
           totalPrice,
-          'order_placed',
+          `ORDER-DEBIT:${orderRef}`,
           manager,
         );
       }
@@ -1089,12 +1103,11 @@ export class OrdersService {
     batchRef: string;
     orderRef: string;
   }> {
+    await manager.query('SELECT pg_advisory_xact_lock(1196573522)');
     const rows = await manager.query<
       Array<{ max_batch_ref: string | number; max_order_ref: string | number }>
     >(`
-      WITH reference_lock AS (
-        SELECT pg_advisory_xact_lock(1196573522)
-      ), batch_max AS (
+      WITH batch_max AS (
         SELECT COALESCE(
           MAX(substring(batch_ref FROM '^BATCH-([0-9]+)$')::bigint),
           10000
@@ -1110,7 +1123,7 @@ export class OrdersService {
       SELECT
         batch_max.value AS max_batch_ref,
         order_max.value AS max_order_ref
-      FROM reference_lock, batch_max, order_max
+      FROM batch_max, order_max
     `);
     const maxBatchRef = Number(rows[0]?.max_batch_ref ?? 10000);
     const maxOrderRef = Number(rows[0]?.max_order_ref ?? 10000);
@@ -1463,74 +1476,152 @@ export class OrdersService {
   }
 
   async cancelBatch(batchOrderId: number, userId: number): Promise<void> {
-    const orders = await this.ordersRepo.find({
-      where: { batchOrderId, userId },
-    });
-    if (orders.length === 0) {
-      throw new NotFoundException('Batch order not found');
-    }
-    for (const order of orders) {
-      if (!OrdersService.CANCELLABLE_STATUSES.includes(order.orderStatus)) {
-        throw new BadRequestException(
-          `Order ${order.orderId} in status "${order.orderStatus}" cannot be cancelled`,
-        );
-      }
-    }
-    const batch = await this.batchOrdersRepo.findOne({
-      where: { id: batchOrderId, userId },
-    });
-    if (batch?.slotBookingId) {
-      try {
-        await this.dataSource.transaction(async (manager) => {
-          await this.slotsService.releaseSlot(manager, batch.slotBookingId!);
-          batch.slotBookingId = null;
-          await manager.save(batch);
-        });
-      } catch (err) {
-        if (err instanceof CancellationClosedException) {
-          throw err;
-        }
-        this.logger.warn(
-          `Failed to release slot for batch ${batchOrderId}: ${err}`,
-        );
-      }
-    }
-    for (const order of orders) {
-      await this.cancelOrder(order.id, userId);
+    const previousOrders = await this.cancelBatchInTransaction(
+      batchOrderId,
+      userId,
+    );
+    for (const previous of previousOrders) {
+      await this.publishStatusUpdate(previous, previous.id, 'cancelled');
     }
   }
 
   async cancelOrder(id: number, userId: number): Promise<Order> {
-    const order = await this.ordersRepo.findOneOrFail({
+    const candidate = await this.ordersRepo.findOneOrFail({
       where: { id },
-      relations: OrdersService.ORDER_RELATIONS,
     });
-    if (order.userId !== userId) {
+    if (candidate.userId !== userId) {
       throw new Error('Forbidden');
     }
-    if (!OrdersService.CANCELLABLE_STATUSES.includes(order.orderStatus)) {
-      throw new Error('Order cannot be cancelled at this stage');
+    if (candidate.batchOrderId != null) {
+      const previousOrders = await this.cancelBatchInTransaction(
+        candidate.batchOrderId,
+        userId,
+      );
+      for (const previous of previousOrders) {
+        await this.publishStatusUpdate(previous, previous.id, 'cancelled');
+      }
+      const order = await this.findById(id);
+      if (!order) throw new NotFoundException('Order not found');
+      return order;
     }
 
-    if (OrdersService.isCreditPaymentMethod(order.paymentMethod)) {
-      const refundAmount = calculateChargeTotal(
-        order.batchOrder ?? {
+    const previous = await this.dataSource.transaction(async (manager) => {
+      const transactionOrdersRepo = manager.getRepository(Order);
+      const order = await transactionOrdersRepo.findOneOrFail({
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (order.userId !== userId) throw new Error('Forbidden');
+      if (order.orderStatus === OrderStatus.CANCELLED) return null;
+      if (!OrdersService.CANCELLABLE_STATUSES.includes(order.orderStatus)) {
+        throw new Error('Order cannot be cancelled at this stage');
+      }
+
+      const creditPayment = OrdersService.isCreditPaymentMethod(
+        order.paymentMethod,
+      );
+      if (creditPayment) {
+        const refundAmount = calculateChargeTotal({
           totalPrice: order.totalPrice,
           deliveryFee: order.deliveryFee,
+        });
+        if (refundAmount > 0) {
+          await this.creditsService.refundCredits(
+            order.userId,
+            refundAmount,
+            `ORDER-REFUND:${order.orderId}`,
+            manager,
+          );
+        }
+      }
+      await transactionOrdersRepo.update(id, {
+        orderStatus: OrderStatus.CANCELLED,
+        ...(creditPayment ? { paymentStatus: 'refunded' } : {}),
+      });
+      return order;
+    });
+
+    if (previous) {
+      return this.publishStatusUpdate(previous, id, 'cancelled');
+    }
+    const order = await this.findById(id);
+    if (!order) throw new NotFoundException('Order not found');
+    return order;
+  }
+
+  private async cancelBatchInTransaction(
+    batchOrderId: number,
+    userId: number,
+  ): Promise<Order[]> {
+    return this.dataSource.transaction(async (manager) => {
+      const transactionBatchRepo = manager.getRepository(BatchOrder);
+      const transactionOrdersRepo = manager.getRepository(Order);
+      const batch = await transactionBatchRepo.findOne({
+        where: { id: batchOrderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!batch || batch.userId !== userId) {
+        throw new NotFoundException('Batch order not found');
+      }
+      const orders = await transactionOrdersRepo.find({
+        where: { batchOrderId },
+        order: { id: 'ASC' },
+      });
+      if (
+        orders.length === 0 ||
+        orders.some((order) => order.userId !== userId)
+      ) {
+        throw new NotFoundException('Batch order not found');
+      }
+
+      const pending = orders.filter(
+        (order) => order.orderStatus !== OrderStatus.CANCELLED,
+      );
+      for (const order of pending) {
+        if (!OrdersService.CANCELLABLE_STATUSES.includes(order.orderStatus)) {
+          throw new BadRequestException(
+            `Order ${order.orderId} in status "${order.orderStatus}" cannot be cancelled`,
+          );
+        }
+      }
+      if (pending.length === 0) return [];
+
+      if (batch.slotBookingId) {
+        try {
+          await this.slotsService.releaseSlot(manager, batch.slotBookingId);
+          batch.slotBookingId = null;
+          await transactionBatchRepo.save(batch);
+        } catch (error) {
+          if (error instanceof CancellationClosedException) throw error;
+          this.logger.warn(
+            `Failed to release slot for batch ${batchOrderId}: ${error}`,
+          );
+        }
+      }
+
+      const creditPayment = OrdersService.isCreditPaymentMethod(
+        batch.paymentMethod,
+      );
+      if (creditPayment) {
+        const refundAmount = calculateChargeTotal(batch);
+        if (refundAmount > 0) {
+          await this.creditsService.refundCredits(
+            batch.userId,
+            refundAmount,
+            `BATCH-REFUND:${batch.batchRef}`,
+            manager,
+          );
+        }
+      }
+      await transactionOrdersRepo.update(
+        { batchOrderId, userId },
+        {
+          orderStatus: OrderStatus.CANCELLED,
+          ...(creditPayment ? { paymentStatus: 'refunded' } : {}),
         },
       );
-      if (refundAmount <= 0) {
-        return this.updateStatus(id, 'cancelled');
-      }
-      await this.creditsService.refundCredits(
-        order.userId,
-        refundAmount,
-        order.orderId,
-      );
-      return this.updateStatus(id, 'cancelled', { paymentStatus: 'refunded' });
-    }
-
-    return this.updateStatus(id, 'cancelled');
+      return pending;
+    });
   }
 
   async updateStatus(
@@ -1545,6 +1636,15 @@ export class OrdersService {
       orderStatus,
       ...updates,
     });
+    return this.publishStatusUpdate(existing, id, status);
+  }
+
+  private async publishStatusUpdate(
+    existing: Order,
+    id: number,
+    status: string,
+  ): Promise<Order> {
+    const orderStatus = status as OrderStatus;
     const order = await this.ordersRepo.findOneOrFail({
       where: { id },
       relations: OrdersService.ORDER_RELATIONS,

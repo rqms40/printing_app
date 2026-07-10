@@ -242,6 +242,12 @@ describe('production migration lifecycle (e2e)', () => {
          VALUES ($1, $2) RETURNING id`,
         [`beta-ledger-adoption-${database}@example.test`, 'not-used'],
       );
+      const [legacyGrantedUser] = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO users (
+           email, password_hash, credits, beta_credits_granted
+         ) VALUES ($1, $2, 321, true) RETURNING id`,
+        [`beta-ledger-legacy-${database}@example.test`, 'not-used'],
+      );
       await dataSource.query(
         `INSERT INTO credit_transactions
            (user_id, type, "amountCredits", status, reference_id)
@@ -250,8 +256,13 @@ describe('production migration lifecycle (e2e)', () => {
            ($1, 'top_up', 100, 'approved', $2),
            ($1, 'deduction', 10, 'approved', 'order_placed'),
            ($1, 'deduction', 10, 'approved', 'order_placed'),
-           ($1, 'top_up', 5, 'approved', NULL)`,
-        [user.id, `BETA-ENROLLMENT:${user.id}`],
+           ($1, 'top_up', 5, 'approved', NULL),
+           ($1, 'top_up', 100, 'approved', $3)`,
+        [
+          user.id,
+          `BETA-ENROLLMENT:${user.id}`,
+          `BETA-ENROLLMENT:${legacyGrantedUser.id}`,
+        ],
       );
 
       await dataSource.runMigrations();
@@ -266,7 +277,7 @@ describe('production migration lifecycle (e2e)', () => {
       >(
         `SELECT COUNT(*)::int AS total,
                 COUNT(*) FILTER (
-                  WHERE reference_id = $1
+                  WHERE reference_id LIKE 'BETA-ENROLLMENT:%'
                 )::int AS beta_references,
                 COUNT(*) FILTER (
                   WHERE reference_id = 'order_placed'
@@ -275,23 +286,46 @@ describe('production migration lifecycle (e2e)', () => {
                   WHERE reference_id IS NULL
                 )::int AS null_references
          FROM credit_transactions`,
-        [`BETA-ENROLLMENT:${user.id}`],
       );
       expect(references).toEqual({
-        total: 5,
-        beta_references: 1,
+        total: 7,
+        beta_references: 2,
         order_references: 2,
-        null_references: 2,
+        null_references: 3,
       });
+      await expect(
+        dataSource.query(
+          `SELECT id, credits, beta_credits_granted
+           FROM users
+           WHERE id IN ($1, $2)
+           ORDER BY id`,
+          [user.id, legacyGrantedUser.id],
+        ),
+      ).resolves.toEqual([
+        { id: user.id, credits: '0.00', beta_credits_granted: true },
+        {
+          id: legacyGrantedUser.id,
+          credits: '321.00',
+          beta_credits_granted: true,
+        },
+      ]);
       await expect(
         dataSource.query(
           `SELECT
              to_regclass('public.uq_credit_transactions_beta_enrollment_reference') IS NOT NULL
                AS beta_ledger_index,
              to_regclass('public.idx_users_beta_enrollment_rank') IS NOT NULL
-               AS beta_rank_index`,
+               AS beta_rank_index,
+             to_regclass('public.uq_credit_transactions_refund_reference') IS NOT NULL
+               AS refund_index`,
         ),
-      ).resolves.toEqual([{ beta_ledger_index: true, beta_rank_index: true }]);
+      ).resolves.toEqual([
+        {
+          beta_ledger_index: true,
+          beta_rank_index: true,
+          refund_index: true,
+        },
+      ]);
     } finally {
       await dataSource.destroy();
     }
@@ -364,6 +398,16 @@ describe('production migration lifecycle (e2e)', () => {
         } else {
           await dataSource.query(`DELETE FROM gridgo_schema_baseline`);
         }
+
+        await dataSource.undoLastMigration();
+
+        await expect(
+          dataSource.query(
+            `SELECT
+               to_regclass('public.uq_credit_transactions_refund_reference') IS NOT NULL
+                 AS refund_index`,
+          ),
+        ).resolves.toEqual([{ refund_index: true }]);
 
         await dataSource.undoLastMigration();
 
@@ -457,7 +501,7 @@ describe('production migration lifecycle (e2e)', () => {
     await staleMigration.connect();
     await staleMigration.query(
       `DELETE FROM migrations WHERE timestamp = $1 AND name = $2`,
-      ['1777853400000', 'BetaCreditLedgerAndRankIndex1777853400000'],
+      ['1777853500000', 'AtomicCreditAccounting1777853500000'],
     );
     await staleMigration.end();
 

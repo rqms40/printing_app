@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
+import { Brackets, DataSource, Repository } from 'typeorm';
 import { BetaModeSettings } from './entities/beta-mode-settings.entity';
 import { User } from '../users/entities/user.entity';
 import { FileMetadata } from '../files/entities/file-metadata.entity';
@@ -31,8 +31,6 @@ const BETA_SURVEY_COMPLETE_HOLD_REASON = 'beta_survey_complete';
 
 @Injectable()
 export class BetaModeService {
-  private readonly enrollmentInFlight = new Map<number, Promise<void>>();
-
   constructor(
     @InjectRepository(BetaModeSettings)
     private settingsRepo: Repository<BetaModeSettings>,
@@ -41,6 +39,7 @@ export class BetaModeService {
     @InjectRepository(FileMetadata)
     private fileMetadataRepo: Repository<FileMetadata>,
     private creditsService: CreditsService,
+    private dataSource: DataSource,
   ) {}
 
   async getGlobalStatus(): Promise<{ isEnabled: boolean }> {
@@ -108,38 +107,33 @@ export class BetaModeService {
   }
 
   async enrollUser(userId: number): Promise<void> {
-    const existing = this.enrollmentInFlight.get(userId);
-    if (existing) return existing;
+    await this.dataSource.transaction(async (manager) => {
+      const userRepo = manager.getRepository(User);
+      const user = await userRepo.findOne({
+        where: { id: userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!user) throw new NotFoundException(`User ${userId} not found`);
 
-    const enrollment = this.performEnrollment(userId);
-    this.enrollmentInFlight.set(userId, enrollment);
-    try {
-      await enrollment;
-    } finally {
-      if (this.enrollmentInFlight.get(userId) === enrollment) {
-        this.enrollmentInFlight.delete(userId);
+      let enrollmentChanged = false;
+      if (!user.isBetaUser) {
+        user.isBetaUser = true;
+        enrollmentChanged = true;
       }
-    }
-  }
+      if (!user.betaEnrolledAt) {
+        user.betaEnrolledAt = new Date();
+        enrollmentChanged = true;
+      }
+      if (enrollmentChanged) {
+        await userRepo.save(user);
+      }
 
-  private async performEnrollment(userId: number): Promise<void> {
-    const user = await this.userRepo.findOne({ where: { id: userId } });
-    if (!user) throw new NotFoundException(`User ${userId} not found`);
-
-    const update: Partial<User> = {};
-    if (!user.isBetaUser) {
-      update.isBetaUser = true;
-    }
-    if (!user.betaEnrolledAt) {
-      update.betaEnrolledAt = new Date();
-    }
-    if (Object.keys(update).length > 0) {
-      await this.userRepo.update(userId, update);
-    }
-
-    if (!user.betaCreditsGranted) {
-      await this.creditsService.grantBetaEnrollmentCredits(userId, 100);
-    }
+      await this.creditsService.grantBetaEnrollmentCredits(
+        userId,
+        100,
+        manager,
+      );
+    });
   }
 
   async unenrollUser(userId: number): Promise<void> {
