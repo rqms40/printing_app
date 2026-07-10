@@ -105,9 +105,18 @@ describe('Orders websocket realtime rooms (e2e)', () => {
   });
 
   it('pushes order updates to the real active customer and admin only', async () => {
-    const customerSocket = await connectOrdersSocket(tokenFor(customer));
-    const otherSocket = await connectOrdersSocket(tokenFor(otherCustomer));
-    const adminSocket = await connectOrdersSocket(tokenFor(adminUser));
+    const customerSocket = await connectOrdersSocket(
+      tokenFor(customer),
+      `user_${customer.id}`,
+    );
+    const otherSocket = await connectOrdersSocket(
+      tokenFor(otherCustomer),
+      `user_${otherCustomer.id}`,
+    );
+    const adminSocket = await connectOrdersSocket(
+      tokenFor(adminUser),
+      'admin_orders',
+    );
     const customerUpdates: unknown[] = [];
     const otherUpdates: unknown[] = [];
     customerSocket.on('orderUpdate', (value) => customerUpdates.push(value));
@@ -129,7 +138,10 @@ describe('Orders websocket realtime rooms (e2e)', () => {
   });
 
   it('pushes riderAssignment to the real assigned rider user room', async () => {
-    const riderSocket = await connectOrdersSocket(tokenFor(rider));
+    const riderSocket = await connectOrdersSocket(
+      tokenFor(rider),
+      `user_${rider.id}`,
+    );
     const assignmentEvent = onceEvent(riderSocket, 'riderAssignment');
     const payload = {
       assignmentId: 99,
@@ -177,10 +189,20 @@ describe('Orders websocket realtime rooms (e2e)', () => {
     });
   }
 
-  async function connectOrdersSocket(token: string): Promise<Socket> {
+  async function connectOrdersSocket(
+    token: string,
+    expectedRoom: string,
+  ): Promise<Socket> {
     const socket = createOrdersSocket(token);
     await onceConnect(socket);
-    await new Promise((resolve) => setImmediate(resolve));
+    await waitFor(
+      () =>
+        (
+          (ordersGateway.server as any).adapter.rooms.get(expectedRoom) as
+            | Set<string>
+            | undefined
+        )?.has(socket.id) === true,
+    );
     return socket;
   }
 

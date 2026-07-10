@@ -12,6 +12,10 @@ describe('LocationGateway', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 10,
+      role: UserRole.CUSTOMER,
+    });
     usersService.findSocketIdentity.mockImplementation(async (id: number) => ({
       id,
       role: UserRole.CUSTOMER,
@@ -91,6 +95,7 @@ describe('LocationGateway', () => {
   it('allows the owner to subscribe to the persisted current stop even when straight-line ordering disagrees', async () => {
     const join = jest.fn().mockResolvedValue(undefined);
     const client = {
+      handshake: { auth: { token: 'customer-token' } },
       data: { userId: 10, role: UserRole.CUSTOMER },
       join,
       disconnect: jest.fn(),
@@ -143,6 +148,7 @@ describe('LocationGateway', () => {
   it('withholds live tracking until the current stop is in transit', async () => {
     const join = jest.fn().mockResolvedValue(undefined);
     const client = {
+      handshake: { auth: { token: 'customer-token' } },
       data: { userId: 10, role: UserRole.CUSTOMER },
       join,
       disconnect: jest.fn(),
@@ -170,7 +176,12 @@ describe('LocationGateway', () => {
   });
 
   it('checks customer ownership before revealing persisted queue position', async () => {
+    jwtService.verifyAsync.mockResolvedValue({
+      sub: 99,
+      role: UserRole.CUSTOMER,
+    });
     const client = {
+      handshake: { auth: { token: 'other-customer-token' } },
       data: { userId: 99, role: UserRole.CUSTOMER },
       join: jest.fn(),
       disconnect: jest.fn(),
@@ -195,6 +206,7 @@ describe('LocationGateway', () => {
 
   it('rechecks account activity and role before every subscription', async () => {
     const client = {
+      handshake: { auth: { token: 'customer-token' } },
       data: { userId: 10, role: UserRole.CUSTOMER },
       join: jest.fn(),
       disconnect: jest.fn(),

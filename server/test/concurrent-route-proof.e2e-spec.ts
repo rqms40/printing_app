@@ -8,6 +8,7 @@ import { DataSource, Repository } from 'typeorm';
 import { Client } from 'pg';
 
 import { AppModule } from '../src/app.module';
+import { OrdersGateway } from '../src/orders/orders.gateway';
 import { User, UserRole } from '../src/users/entities/user.entity';
 import { Address } from '../src/addresses/entities/address.entity';
 import { BatchOrder } from '../src/orders/entities/batch-order.entity';
@@ -54,6 +55,7 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
   let dispatchPlansRepo: Repository<DispatchPlan>;
   let dispatchStopsRepo: Repository<DispatchPlanStop>;
   let storageService: StorageService;
+  let ordersGateway: OrdersGateway;
 
   const sockets: Socket[] = [];
   const storageObjectKeys = new Set<string>();
@@ -139,6 +141,7 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
     dispatchPlansRepo = dataSource.getRepository(DispatchPlan);
     dispatchStopsRepo = dataSource.getRepository(DispatchPlanStop);
     storageService = app.get(StorageService);
+    ordersGateway = app.get(OrdersGateway);
   });
 
   afterEach(() => {
@@ -388,10 +391,22 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
         ).toEqual([`RNEAR-${runId}`, `RMID-${runId}`, `RFAR-${runId}`]);
       });
 
-    const venOrdersSocket = await connectOrdersSocket(sign(nearCustomer));
-    const markOrdersSocket = await connectOrdersSocket(sign(midCustomer));
-    const otherOrdersSocket = await connectOrdersSocket(sign(farCustomer));
-    const adminOrdersSocket = await connectOrdersSocket(sign(admin));
+    const venOrdersSocket = await connectOrdersSocket(
+      sign(nearCustomer),
+      `user_${nearCustomer.id}`,
+    );
+    const markOrdersSocket = await connectOrdersSocket(
+      sign(midCustomer),
+      `user_${midCustomer.id}`,
+    );
+    const otherOrdersSocket = await connectOrdersSocket(
+      sign(farCustomer),
+      `user_${farCustomer.id}`,
+    );
+    const adminOrdersSocket = await connectOrdersSocket(
+      sign(admin),
+      'admin_orders',
+    );
     const venPromotions: unknown[] = [];
     const otherPromotions: unknown[] = [];
     const adminPromotions: unknown[] = [];
@@ -658,7 +673,10 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
     return socket;
   }
 
-  async function connectOrdersSocket(token: string): Promise<Socket> {
+  async function connectOrdersSocket(
+    token: string,
+    expectedRoom: string,
+  ): Promise<Socket> {
     const socket = io(`${baseUrl}/ws/orders`, {
       transports: ['websocket'],
       auth: { token },
@@ -667,13 +685,30 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
     });
     sockets.push(socket);
     await onceSocketEvent(socket, 'connect');
-    await new Promise((resolve) => setImmediate(resolve));
+    await waitFor(
+      () =>
+        (
+          (ordersGateway.server as any).adapter.rooms.get(expectedRoom) as
+            | Set<string>
+            | undefined
+        )?.has(socket.id) === true,
+    );
     return socket;
   }
 
   async function expectNoSocketEvents(eventLists: unknown[][]) {
     await new Promise((resolve) => setTimeout(resolve, 100));
     for (const events of eventLists) expect(events).toEqual([]);
+  }
+
+  async function waitFor(predicate: () => boolean): Promise<void> {
+    const deadline = Date.now() + 3_000;
+    while (!predicate()) {
+      if (Date.now() > deadline) {
+        throw new Error('Timed out waiting for socket room membership');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
   }
 
   function onceSocketEvent<T = unknown>(

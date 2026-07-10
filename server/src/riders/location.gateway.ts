@@ -15,7 +15,7 @@ import {
   DeliveryAssignment,
   DeliveryStatus,
 } from './entities/delivery-assignment.entity';
-import { UsersService } from '../users/users.service';
+import { UsersService, type SocketIdentity } from '../users/users.service';
 import { UserRole } from '../users/entities/user.entity';
 import { DispatchPlanService } from './dispatch-plan.service';
 
@@ -48,35 +48,10 @@ export class LocationGateway implements OnGatewayConnection {
   ) {}
 
   async handleConnection(client: LocationSocket) {
-    const token = client.handshake.auth?.token as string | undefined;
-    if (!token) {
-      client.disconnect();
-      return;
-    }
     try {
-      const payload = await this.jwtService.verifyAsync<{
-        sub?: unknown;
-        role?: unknown;
-      }>(token);
-      if (
-        typeof payload.sub !== 'number' ||
-        !Number.isInteger(payload.sub) ||
-        payload.sub <= 0
-      ) {
+      if (!(await this.authenticateSocket(client))) {
         client.disconnect();
-        return;
       }
-      const identity = await this.usersService.findSocketIdentity(payload.sub);
-      if (
-        !identity?.isActive ||
-        payload.role !== identity.role ||
-        !Object.values(UserRole).includes(identity.role)
-      ) {
-        client.disconnect();
-        return;
-      }
-      client.data.userId = identity.id;
-      client.data.role = identity.role;
     } catch {
       client.disconnect();
     }
@@ -88,17 +63,22 @@ export class LocationGateway implements OnGatewayConnection {
     @ConnectedSocket() socket: LocationSocket,
   ) {
     const numericId = Number(assignmentId);
-    const userId = socket.data.userId;
-    const role = socket.data.role;
-    if (!Number.isInteger(numericId) || numericId <= 0 || !userId) {
+    if (!Number.isInteger(numericId) || numericId <= 0) {
       throw new WsException('Unauthorized');
     }
 
-    const identity = await this.usersService.findSocketIdentity(userId);
-    if (!identity?.isActive || !role || identity.role !== role) {
+    let identity: SocketIdentity | null = null;
+    try {
+      identity = await this.authenticateSocket(socket);
+    } catch {
+      // Authentication failures deliberately share one public response.
+    }
+    if (!identity) {
       socket.disconnect();
       throw new WsException('Unauthorized');
     }
+    const userId = identity.id;
+    const role = identity.role;
 
     const assignment = await this.assignmentRepo.findOne({
       where: { id: numericId, isCurrent: true },
@@ -149,5 +129,34 @@ export class LocationGateway implements OnGatewayConnection {
     location: RiderLocationUpdatePayload,
   ) {
     this.server.to(`delivery_${assignmentId}`).emit('locationUpdate', location);
+  }
+
+  private async authenticateSocket(
+    socket: LocationSocket,
+  ): Promise<SocketIdentity | null> {
+    const token = socket.handshake.auth?.token as string | undefined;
+    if (!token) return null;
+    const payload = await this.jwtService.verifyAsync<{
+      sub?: unknown;
+      role?: unknown;
+    }>(token);
+    if (
+      typeof payload.sub !== 'number' ||
+      !Number.isInteger(payload.sub) ||
+      payload.sub <= 0
+    ) {
+      return null;
+    }
+    const identity = await this.usersService.findSocketIdentity(payload.sub);
+    if (
+      !identity?.isActive ||
+      payload.role !== identity.role ||
+      !Object.values(UserRole).includes(identity.role)
+    ) {
+      return null;
+    }
+    socket.data.userId = identity.id;
+    socket.data.role = identity.role;
+    return identity;
   }
 }
