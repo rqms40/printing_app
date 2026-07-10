@@ -111,6 +111,7 @@ describe('RidersService', () => {
 
   beforeEach(async () => {
     profileRepo = {
+      find: jest.fn(),
       findOne: jest.fn(),
       save: jest.fn(),
     };
@@ -513,6 +514,40 @@ describe('RidersService', () => {
 
       await expect(service.getProfile(999)).rejects.toThrow(NotFoundException);
     });
+  });
+
+  describe('getAllRidersWithUser', () => {
+    it.each([
+      ['eligible', true, true, UserRole.RIDER, true],
+      ['unavailable', false, true, UserRole.RIDER, false],
+      ['inactive', true, false, UserRole.RIDER, false],
+      ['wrong role', true, true, UserRole.CUSTOMER, false],
+    ])(
+      'projects %s assignment eligibility from server-owned identity state',
+      async (_label, isAvailable, isActive, role, expected) => {
+        profileRepo.find.mockResolvedValue([
+          {
+            ...mockProfile,
+            isAvailable,
+            user: {
+              id: mockProfile.userId,
+              fullName: 'Juan Rider',
+              email: 'juan@example.test',
+              isActive,
+              role,
+            } as User,
+          } as RiderProfile,
+        ]);
+
+        await expect(service.getAllRidersWithUser()).resolves.toEqual([
+          expect.objectContaining({
+            id: mockProfile.id,
+            is_available: isAvailable,
+            assignment_eligible: expected,
+          }),
+        ]);
+      },
+    );
   });
 
   describe('setAvailability', () => {

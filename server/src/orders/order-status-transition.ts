@@ -34,6 +34,39 @@ export const ORDER_STATUS_TRANSITIONS: Record<
   [OrderStatus.CANCELLED]: [],
 };
 
+const ADMIN_OPERABLE_SOURCE_STATUSES = new Set<OrderStatus>([
+  OrderStatus.ORDER_PLACED,
+  OrderStatus.FILE_VERIFIED,
+  OrderStatus.PRINTING_IN_PROGRESS,
+  OrderStatus.FINISHING_MOUNTING,
+  OrderStatus.QUALITY_CHECKED,
+  OrderStatus.READY_FOR_DISPATCH,
+]);
+
+const ADMIN_OPERABLE_TARGET_STATUSES = new Set<OrderStatus>([
+  OrderStatus.FILE_VERIFIED,
+  OrderStatus.FILE_DECLINED,
+  OrderStatus.PRINTING_IN_PROGRESS,
+  OrderStatus.FINISHING_MOUNTING,
+  OrderStatus.QUALITY_CHECKED,
+  OrderStatus.READY_FOR_DISPATCH,
+  OrderStatus.COMPLETED_PICKUP,
+]);
+
+export function adminAllowedNextOrderStatuses(
+  fromStatus: OrderStatus,
+  deliveryOption?: string | null,
+): OrderStatus[] {
+  if (!ADMIN_OPERABLE_SOURCE_STATUSES.has(fromStatus)) return [];
+
+  return ORDER_STATUS_TRANSITIONS[fromStatus].filter(
+    (toStatus) =>
+      ADMIN_OPERABLE_TARGET_STATUSES.has(toStatus) &&
+      (toStatus !== OrderStatus.COMPLETED_PICKUP ||
+        deliveryOption === 'pickup'),
+  );
+}
+
 export function parseOrderStatus(status: string): OrderStatus {
   if (!Object.values(OrderStatus).includes(status as OrderStatus)) {
     throw new BadRequestException(`Unknown order status: ${status}`);

@@ -449,6 +449,40 @@ describe('AdminController analytics', () => {
       ]);
       expect(mapped.delivery_slot_booking_id).toBe(5);
       expect(mapped.extra_destination_fee).toBe(20);
+      expect(mapped.allowed_next_statuses).toEqual([
+        OrderStatus.FILE_VERIFIED,
+        OrderStatus.FILE_DECLINED,
+      ]);
+    });
+
+    it('projects pickup completion but never exposes rider-owned or cancellation transitions', () => {
+      const map = (orderStatus: OrderStatus, deliveryOption: string) =>
+        (controller as any).mapOrder({
+          id: 7,
+          orderId: 'ORD-10007',
+          userId: 1,
+          category: 'paper',
+          quantity: 1,
+          totalPrice: 12,
+          deliveryFee: 0,
+          paymentMethod: 'grid_credits',
+          paymentStatus: 'paid',
+          orderStatus,
+          deliveryOption,
+          items: [],
+          statusHistory: [],
+          createdAt: new Date('2026-05-02T19:00:36.788Z'),
+          updatedAt: new Date('2026-05-02T19:00:36.788Z'),
+        } as unknown as Order).allowed_next_statuses;
+
+      expect(map(OrderStatus.READY_FOR_DISPATCH, 'pickup')).toEqual([
+        OrderStatus.COMPLETED_PICKUP,
+      ]);
+      expect(map(OrderStatus.READY_FOR_DISPATCH, 'delivery')).toEqual([]);
+      expect(map(OrderStatus.RIDER_ASSIGNED, 'delivery')).toEqual([]);
+      expect(map(OrderStatus.FILE_VERIFIED, 'delivery')).toEqual([
+        OrderStatus.PRINTING_IN_PROGRESS,
+      ]);
     });
 
     it('includes proof of delivery metadata for admin order review', () => {

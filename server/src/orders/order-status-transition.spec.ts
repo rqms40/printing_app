@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import {
+  adminAllowedNextOrderStatuses,
   assertOrderStatusTransition,
   ORDER_STATUS_TRANSITIONS,
   parseOrderStatus,
@@ -75,4 +76,29 @@ describe('order status transitions', () => {
       'Unknown order status: ready-ish',
     );
   });
+
+  it.each([
+    [OrderStatus.ORDER_PLACED, 'delivery', [OrderStatus.FILE_VERIFIED, OrderStatus.FILE_DECLINED]],
+    [OrderStatus.FILE_VERIFIED, 'delivery', [OrderStatus.PRINTING_IN_PROGRESS]],
+    [OrderStatus.FILE_DECLINED, 'delivery', []],
+    [OrderStatus.PRINTING_IN_PROGRESS, 'delivery', [OrderStatus.FINISHING_MOUNTING]],
+    [OrderStatus.FINISHING_MOUNTING, 'delivery', [OrderStatus.QUALITY_CHECKED]],
+    [OrderStatus.QUALITY_CHECKED, 'delivery', [OrderStatus.READY_FOR_DISPATCH]],
+    [OrderStatus.READY_FOR_DISPATCH, 'delivery', []],
+    [OrderStatus.READY_FOR_DISPATCH, 'pickup', [OrderStatus.COMPLETED_PICKUP]],
+    [OrderStatus.RIDER_ASSIGNED, 'delivery', []],
+    [OrderStatus.PICKED_UP, 'delivery', []],
+    [OrderStatus.ON_THE_WAY, 'delivery', []],
+    [OrderStatus.ARRIVED_AT_DESTINATION, 'delivery', []],
+    [OrderStatus.DELIVERED, 'delivery', []],
+    [OrderStatus.COMPLETED_PICKUP, 'pickup', []],
+    [OrderStatus.CANCELLED, 'delivery', []],
+  ] as const)(
+    'projects exact admin-operable transitions from %s for %s orders',
+    (fromStatus, deliveryOption, expected) => {
+      expect(
+        adminAllowedNextOrderStatuses(fromStatus, deliveryOption),
+      ).toEqual(expected);
+    },
+  );
 });

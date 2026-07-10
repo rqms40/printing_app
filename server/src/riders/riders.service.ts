@@ -250,6 +250,10 @@ export class RidersService {
       plate_number: p.plateNumber ?? null,
       license_number: p.licenseNumber ?? null,
       is_available: p.isAvailable,
+      assignment_eligible:
+        p.isAvailable &&
+        p.user?.isActive === true &&
+        p.user.role === UserRole.RIDER,
       last_latitude: p.lastLatitude ? Number(p.lastLatitude) : null,
       last_longitude: p.lastLongitude ? Number(p.lastLongitude) : null,
       last_location_update: p.lastLocationUpdate ?? null,

@@ -21,6 +21,7 @@ import { UpdateStatusDto } from '../orders/dto/update-status.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
+import { adminAllowedNextOrderStatuses } from '../orders/order-status-transition';
 import { User } from '../users/entities/user.entity';
 import { CreditsService } from '../credits/credits.service';
 import {
@@ -564,6 +565,10 @@ export class AdminController {
       payment_method: o.paymentMethod,
       payment_status: o.paymentStatus,
       order_status: o.orderStatus,
+      allowed_next_statuses: adminAllowedNextOrderStatuses(
+        o.orderStatus,
+        o.deliveryOption,
+      ),
       delivery_option: o.deliveryOption,
       delivery_address_id: o.deliveryAddressId ?? null,
       delivery_address: this.destinationSnapshot(o.destination),
