@@ -1,23 +1,23 @@
-name: Admin CI
+name: Landing CI
 
 on:
   push:
     branches: [main]
   pull_request:
     paths:
-      - "admin/**"
-      - ".github/workflows/ci-admin.yml"
+      - "apps/Landing-page/**"
+      - ".github/workflows/ci-landing.yml"
 
 permissions:
   contents: read
 
 jobs:
-  admin:
-    name: Admin
+  landing:
+    name: Landing
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: admin
+        working-directory: apps/Landing-page
 
     steps:
       - name: Check out repository
@@ -28,16 +28,22 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: admin/package-lock.json
+          cache-dependency-path: apps/Landing-page/package-lock.json
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Type check
-        run: npx tsc --noEmit
+      - name: Lint
+        run: npm run lint
 
-      - name: Unit tests
-        run: npm test
+      - name: Community CTA contract
+        run: npm run test:community-cta
+
+      - name: Video contract
+        run: npm run test:video
+
+      - name: Support copy contract
+        run: npm run test:support-copy
 
       - name: Production build
         run: npm run build

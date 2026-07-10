@@ -1,32 +1,39 @@
-name: Mobile Web E2E
+name: Mobile Web E2E CI
 
 on:
   push:
-    paths:
-      - "e2e/mobile-web/**"
-      - "AGENTS.md"
-      - ".github/workflows/ci-mobile-web-e2e.yml"
+    branches: [main]
   pull_request:
     paths:
+      - "apps/mobile/**"
+      - "admin/**"
+      - "server/**"
       - "e2e/mobile-web/**"
+      - "docker/**"
+      - "docker-compose.dev.yml"
       - "AGENTS.md"
-      - ".github/workflows/ci-mobile-web-e2e.yml"
+      - ".github/workflows/**"
+
+permissions:
+  contents: read
 
 jobs:
-  beta-workflow-contract:
+  mobile-web-e2e:
+    name: Mobile Web E2E
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: e2e/mobile-web
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "24"
-          cache: "npm"
+          cache: npm
           cache-dependency-path: e2e/mobile-web/package-lock.json
 
       - name: Install dependencies
@@ -36,3 +43,14 @@ jobs:
         env:
           MOBILE_WEB_E2E_NO_SERVER: "1"
         run: npm test -- tests/beta-workflow.spec.ts
+
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mobile-web-e2e-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            e2e/mobile-web/test-results
+            e2e/mobile-web/playwright-report
+          if-no-files-found: ignore
+          retention-days: 7

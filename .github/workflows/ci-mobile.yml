@@ -2,27 +2,32 @@ name: Mobile CI
 
 on:
   push:
-    paths:
-      - 'apps/mobile/**'
-      - '.github/workflows/ci-mobile.yml'
+    branches: [main]
   pull_request:
     paths:
-      - 'apps/mobile/**'
+      - "apps/mobile/**"
+      - ".github/workflows/ci-mobile.yml"
+
+permissions:
+  contents: read
 
 jobs:
-  test:
+  mobile:
+    name: Mobile
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: apps/mobile
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
-          flutter-version: '3.41.6'
+          flutter-version: "3.41.6"
+          cache: true
 
       - name: Install dependencies
         run: flutter pub get
@@ -38,5 +43,7 @@ jobs:
           mkdir -p android/app
           echo '{"project_info":{"project_id":"grid-print-85681"},"client":[{"client_info":{"mobilesdk_app_id":"1:3582834609:android:8cb382ce6878312f862f90","android_client_info":{"package_name":"com.example.printing_app"}},"oauth_client":[],"api_key":[],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}' > android/app/google-services.json
 
-      - name: Build web (verify compilation)
-        run: flutter build web --release --no-tree-shake-icons
+      - name: Build real-flow web release
+        run: >-
+          flutter build web --release --no-tree-shake-icons
+          --dart-define=GRIDGO_REAL_FLOW=true
