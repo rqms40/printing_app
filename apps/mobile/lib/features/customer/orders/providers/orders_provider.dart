@@ -12,6 +12,7 @@ import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/models/paper_specs.dart';
 import 'package:printing_app/shared/models/three_d_specs.dart';
+import 'package:printing_app/shared/models/route_geometry.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
@@ -43,6 +44,17 @@ int _readInt(dynamic value, int fallback) {
   if (value is num) return value.toInt();
   if (value is String) return int.tryParse(value) ?? fallback;
   return fallback;
+}
+
+int? _readBoundedInt(dynamic value, {required int minimum}) {
+  final parsed = value is int
+      ? value
+      : value is num && value.isFinite && value == value.roundToDouble()
+      ? value.toInt()
+      : value is String
+      ? int.tryParse(value)
+      : null;
+  return parsed != null && parsed >= minimum ? parsed : null;
 }
 
 double _readDouble(dynamic value, double fallback) {
@@ -358,6 +370,40 @@ Order _parseOrder(Map<String, dynamic> json) {
             .map((item) => _parseOrderLineItem(Map<String, dynamic>.from(item)))
             .toList()
       : const <OrderLineItem>[];
+  final rawDeliveryGeometry = _readJsonValue(
+    json,
+    'deliveryRouteGeometry',
+    'delivery_route_geometry',
+  );
+  final deliveryGeometry = GeoJsonLineString.tryParse(rawDeliveryGeometry);
+  final rawRoutingStale = _readJsonValue(
+    json,
+    'deliveryRoutingDataStale',
+    'delivery_routing_data_stale',
+  );
+  final rawPlanVersion = _readJsonValue(
+    json,
+    'deliveryPlanVersion',
+    'delivery_plan_version',
+  );
+  final planVersion = _readBoundedInt(rawPlanVersion, minimum: 1);
+  final rawLegDuration = _readJsonValue(
+    json,
+    'deliveryLegDurationSeconds',
+    'delivery_leg_duration_seconds',
+  );
+  final legDuration = _readBoundedInt(rawLegDuration, minimum: 0);
+  final rawLegDistance = _readJsonValue(
+    json,
+    'deliveryLegDistanceMeters',
+    'delivery_leg_distance_meters',
+  );
+  final legDistance = _readBoundedInt(rawLegDistance, minimum: 0);
+  final hasMalformedRouteContract =
+      (rawDeliveryGeometry != null && deliveryGeometry == null) ||
+      (rawPlanVersion != null && planVersion == null) ||
+      (rawLegDuration != null && legDuration == null) ||
+      (rawLegDistance != null && legDistance == null);
 
   return Order(
     id: _readJsonValue(json, 'id')?.toString() ?? '',
@@ -480,17 +526,22 @@ Order _parseOrder(Map<String, dynamic> json) {
         _readJsonValue(json, 'deliveryQueueSize', 'delivery_queue_size') == null
         ? null
         : _readInt(
-            _readJsonValue(
-              json,
-              'deliveryQueueSize',
-              'delivery_queue_size',
-            ),
+            _readJsonValue(json, 'deliveryQueueSize', 'delivery_queue_size'),
             0,
           ),
     canTrackDelivery: _readBool(
       _readJsonValue(json, 'canTrackDelivery', 'can_track_delivery'),
       false,
     ),
+    deliveryPlanState: _normalizeOptionalText(
+      _readJsonValue(json, 'deliveryPlanState', 'delivery_plan_state'),
+    ),
+    deliveryPlanVersion: planVersion,
+    deliveryRouteGeometry: deliveryGeometry,
+    deliveryRouteGeometryMalformed: hasMalformedRouteContract,
+    deliveryLegDurationSeconds: legDuration,
+    deliveryLegDistanceMeters: legDistance,
+    deliveryRoutingDataStale: rawRoutingStale is bool ? rawRoutingStale : null,
     assignedRider: _parseAssignedRider(json),
     estimatedCompletionAt: _parseDateNullable(
       _readJsonValue(json, 'estimatedCompletionAt', 'estimated_completion_at'),
@@ -679,6 +730,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   final Future<void> Function()? onCompletionUpdate;
   final VoidCallback? onInitialLoadComplete;
   VoidCallback? _removeOrderUpdateListener;
+  VoidCallback? _removeDeliveryQueueListener;
   bool _initialLoadReported = false;
   bool _sessionNeedsStart = false;
 
@@ -686,11 +738,44 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     try {
       _removeOrderUpdateListener = WebSocketService.instance
           .listenForOrderUpdates(_handleOrderUpdate);
+      _removeDeliveryQueueListener ??= WebSocketService.instance
+          .listenForDeliveryQueueUpdates(_handleDeliveryQueueUpdate);
       await WebSocketService.instance.connectOrders(
         onConnect: _subscribeToAllOrders,
       );
     } catch (e) {
       debugPrint('WebSocket connection failed: $e');
+    }
+  }
+
+  void _handleDeliveryQueueUpdate(Map<String, dynamic> data) {
+    final orderId = data['orderId']?.toString();
+    if (orderId == null || orderId.isEmpty) return;
+    unawaited(_refreshOrderById(orderId));
+  }
+
+  Future<void> _refreshOrderById(String orderId) async {
+    try {
+      final response = await ApiClient.instance.get('/orders/$orderId');
+      final updated = _parseOrder(
+        Map<String, dynamic>.from(response.data as Map),
+      );
+      if (!mounted) return;
+      final index = state.indexWhere(
+        (order) => order.id == updated.id || order.orderId == updated.orderId,
+      );
+      if (index < 0) {
+        await _fetchOrders();
+        return;
+      }
+      final next = [...state];
+      next[index] = updated;
+      state = _groupBatchOrders(next);
+      _subscribeToAllOrders();
+    } catch (error) {
+      debugPrint(
+        'OrdersProvider: queue promotion refetch failed for $orderId: $error',
+      );
     }
   }
 
@@ -723,6 +808,8 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   void dispose() {
     _removeOrderUpdateListener?.call();
     _removeOrderUpdateListener = null;
+    _removeDeliveryQueueListener?.call();
+    _removeDeliveryQueueListener = null;
     super.dispose();
   }
 

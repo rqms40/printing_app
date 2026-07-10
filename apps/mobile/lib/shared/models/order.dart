@@ -1,6 +1,7 @@
 import 'enums.dart';
 import 'paper_specs.dart';
 import 'three_d_specs.dart';
+import 'route_geometry.dart';
 
 class OrderDeliveryAddress {
   const OrderDeliveryAddress({
@@ -155,6 +156,13 @@ class Order {
     this.deliveryQueuePosition,
     this.deliveryQueueSize,
     this.canTrackDelivery = false,
+    this.deliveryPlanState,
+    this.deliveryPlanVersion,
+    this.deliveryRouteGeometry,
+    this.deliveryRouteGeometryMalformed = false,
+    this.deliveryLegDurationSeconds,
+    this.deliveryLegDistanceMeters,
+    this.deliveryRoutingDataStale,
     this.assignedRider,
     this.estimatedCompletionAt,
     this.adminStatusNote,
@@ -199,6 +207,13 @@ class Order {
   final int? deliveryQueuePosition;
   final int? deliveryQueueSize;
   final bool canTrackDelivery;
+  final String? deliveryPlanState;
+  final int? deliveryPlanVersion;
+  final GeoJsonLineString? deliveryRouteGeometry;
+  final bool deliveryRouteGeometryMalformed;
+  final int? deliveryLegDurationSeconds;
+  final int? deliveryLegDistanceMeters;
+  final bool? deliveryRoutingDataStale;
   final AssignedRiderContact? assignedRider;
   final DateTime? estimatedCompletionAt;
   final String? adminStatusNote;
@@ -293,6 +308,13 @@ class Order {
     int? deliveryQueuePosition,
     int? deliveryQueueSize,
     bool? canTrackDelivery,
+    String? deliveryPlanState,
+    int? deliveryPlanVersion,
+    GeoJsonLineString? deliveryRouteGeometry,
+    bool? deliveryRouteGeometryMalformed,
+    int? deliveryLegDurationSeconds,
+    int? deliveryLegDistanceMeters,
+    bool? deliveryRoutingDataStale,
     AssignedRiderContact? assignedRider,
     DateTime? estimatedCompletionAt,
     String? adminStatusNote,
@@ -338,6 +360,18 @@ class Order {
           deliveryQueuePosition ?? this.deliveryQueuePosition,
       deliveryQueueSize: deliveryQueueSize ?? this.deliveryQueueSize,
       canTrackDelivery: canTrackDelivery ?? this.canTrackDelivery,
+      deliveryPlanState: deliveryPlanState ?? this.deliveryPlanState,
+      deliveryPlanVersion: deliveryPlanVersion ?? this.deliveryPlanVersion,
+      deliveryRouteGeometry:
+          deliveryRouteGeometry ?? this.deliveryRouteGeometry,
+      deliveryRouteGeometryMalformed:
+          deliveryRouteGeometryMalformed ?? this.deliveryRouteGeometryMalformed,
+      deliveryLegDurationSeconds:
+          deliveryLegDurationSeconds ?? this.deliveryLegDurationSeconds,
+      deliveryLegDistanceMeters:
+          deliveryLegDistanceMeters ?? this.deliveryLegDistanceMeters,
+      deliveryRoutingDataStale:
+          deliveryRoutingDataStale ?? this.deliveryRoutingDataStale,
       assignedRider: assignedRider ?? this.assignedRider,
       estimatedCompletionAt:
           estimatedCompletionAt ?? this.estimatedCompletionAt,

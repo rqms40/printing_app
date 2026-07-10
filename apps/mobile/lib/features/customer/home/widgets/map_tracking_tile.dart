@@ -26,38 +26,56 @@ class MapTrackingTile extends ConsumerStatefulWidget {
 }
 
 class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
-  static const _freshLocationWindow = Duration(minutes: 10);
-
   String? _subscribedAssignmentId;
+  int? _subscribedPlanVersion;
   bool _isConnecting = false;
   late final WebSocketService _ws;
+  Timer? _healthRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     _ws = ref.read(webSocketServiceProvider);
+    _ws.listenForLocationHealth(_handleLocationHealth);
+    _healthRefreshTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
-    _ws.disconnectLocation();
+    _ws.removeLocationUpdateListener(_handleLocationUpdate);
+    _ws.removeLocationHealthListener(_handleLocationHealth);
+    _healthRefreshTimer?.cancel();
     super.dispose();
   }
 
-  Future<void> _ensureLocationSubscription(String assignmentId) async {
-    if (_subscribedAssignmentId == assignmentId || _isConnecting) return;
-    _isConnecting = true;
-    if (_subscribedAssignmentId != null) {
-      _ws.disconnectLocation();
+  Future<void> _ensureLocationSubscription(
+    String assignmentId,
+    int planVersion,
+  ) async {
+    if ((_subscribedAssignmentId == assignmentId &&
+            _subscribedPlanVersion == planVersion) ||
+        _isConnecting) {
+      return;
     }
+    _isConnecting = true;
     try {
       await _ws.connectLocation(onLocationUpdate: _handleLocationUpdate);
       if (!mounted) return;
-      _ws.subscribeToDelivery(assignmentId);
+      _ws.subscribeToDeliveryPlan(assignmentId, planVersion);
       _subscribedAssignmentId = assignmentId;
+      _subscribedPlanVersion = planVersion;
     } finally {
       _isConnecting = false;
     }
+  }
+
+  void _handleLocationHealth(LocationSocketHealth health) {
+    scheduleMicrotask(() {
+      if (!mounted) return;
+      ref.read(liveLocationSocketHealthProvider.notifier).state = health;
+    });
   }
 
   void _handleLocationUpdate(dynamic data) {
@@ -65,31 +83,40 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
     final payload = Map<String, dynamic>.from(data);
     final lat = (payload['latitude'] as num?)?.toDouble();
     final lng = (payload['longitude'] as num?)?.toDouble();
-    if (lat == null || lng == null) return;
+    final assignmentId = payload['assignmentId']?.toString();
+    final rawPlanVersion = payload['planVersion'];
+    final planVersion = rawPlanVersion is num
+        ? rawPlanVersion.toInt()
+        : int.tryParse(rawPlanVersion?.toString() ?? '');
+    final mapState = ref.read(liveDeliveryMapProvider).asData?.value;
+    if (lat == null ||
+        lng == null ||
+        assignmentId == null ||
+        planVersion == null ||
+        assignmentId != _subscribedAssignmentId ||
+        mapState?.planVersion == null ||
+        planVersion != mapState!.planVersion) {
+      return;
+    }
+    final timestamp = _parsePayloadTimestamp(payload['timestamp']);
+    if (timestamp == null) return;
 
     ref.read(liveRiderLocationProvider.notifier).state = LocationUpdate(
       id: 'home-live',
-      deliveryAssignmentId:
-          payload['assignmentId']?.toString() ??
-          payload['assignment_id']?.toString() ??
-          _subscribedAssignmentId ??
-          '',
+      deliveryAssignmentId: assignmentId,
+      planVersion: planVersion,
       latitude: lat,
       longitude: lng,
-      timestamp: _parsePayloadTimestamp(payload['timestamp']),
+      timestamp: timestamp,
     );
   }
 
-  DateTime _parsePayloadTimestamp(dynamic value) {
+  DateTime? _parsePayloadTimestamp(dynamic value) {
     if (value is DateTime) return value;
     if (value is String) {
-      return DateTime.tryParse(value) ?? DateTime.now();
+      return DateTime.tryParse(value);
     }
-    if (value is num) {
-      final milliseconds = value > 1000000000000 ? value : value * 1000;
-      return DateTime.fromMillisecondsSinceEpoch(milliseconds.round());
-    }
-    return DateTime.now();
+    return null;
   }
 
   @override
@@ -98,6 +125,7 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
     // Watched directly here so location updates only rebuild markers,
     // not the entire FutureProvider async cycle.
     final locationUpdate = ref.watch(liveRiderLocationProvider);
+    final socketHealth = ref.watch(liveLocationSocketHealthProvider);
     final slots = ref.watch(deliverySlotProvider(_today()));
     final brightness = Theme.of(context).brightness;
     final colors = brightness == Brightness.dark
@@ -130,30 +158,41 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
 
         final canShowLiveMap =
             state.status == LiveMapStatus.active &&
-            state.orderStatus == OrderStatus.onTheWay &&
+            (state.orderStatus == OrderStatus.onTheWay ||
+                state.orderStatus == OrderStatus.arrivedAtDestination) &&
             state.canTrackDelivery &&
-            state.deliveryAssignmentId != null;
+            state.deliveryAssignmentId != null &&
+            state.planVersion != null;
 
         final deliveryAssignmentId = state.deliveryAssignmentId;
         if (canShowLiveMap &&
             deliveryAssignmentId != null &&
             deliveryAssignmentId.isNotEmpty) {
+          final planVersion = state.planVersion!;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
-            unawaited(_ensureLocationSubscription(deliveryAssignmentId));
+            unawaited(
+              _ensureLocationSubscription(deliveryAssignmentId, planVersion),
+            );
           });
         }
 
         if (canShowLiveMap) {
-          final isLocationFresh =
+          final hasMatchingLocation =
               locationUpdate != null &&
               locationUpdate.deliveryAssignmentId ==
                   state.deliveryAssignmentId &&
-              DateTime.now().difference(locationUpdate.timestamp) <=
-                  _freshLocationWindow;
-          final liveRiderPoint = isLocationFresh
+              locationUpdate.planVersion == state.planVersion;
+          final liveRiderPoint = hasMatchingLocation
               ? LatLng(locationUpdate.latitude, locationUpdate.longitude)
               : null;
+          final locationHealth = hasMatchingLocation
+              ? classifyLocationHealth(
+                  updatedAt: locationUpdate.timestamp,
+                  now: ref.read(deliveryTrackingNowProvider)(),
+                  connected: socketHealth == LocationSocketHealth.connected,
+                )
+              : LocationHealth.offline;
 
           return _DeliveryStatusAndMapLayout(
             colors: colors,
@@ -162,9 +201,8 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
             isLoading: slots.isLoading,
             liveState: state,
             liveRiderPoint: liveRiderPoint,
-            onMapTap: liveRiderPoint == null
-                ? null
-                : () => context.push('/customer/tracking'),
+            locationHealth: locationHealth,
+            onMapTap: () => context.push('/customer/tracking'),
           );
         }
 
@@ -204,6 +242,7 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
     required this.isLoading,
     this.liveState,
     this.liveRiderPoint,
+    this.locationHealth = LocationHealth.offline,
     this.onMapTap,
   });
 
@@ -213,6 +252,7 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
   final bool isLoading;
   final LiveDeliveryMapState? liveState;
   final LatLng? liveRiderPoint;
+  final LocationHealth locationHealth;
   final VoidCallback? onMapTap;
 
   static const _maxInlineSlots = 3;
@@ -221,7 +261,8 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
 
   bool get _hasActiveDelivery =>
       liveState?.status == LiveMapStatus.active &&
-      liveState?.orderStatus == OrderStatus.onTheWay;
+      (liveState?.orderStatus == OrderStatus.onTheWay ||
+          liveState?.orderStatus == OrderStatus.arrivedAtDestination);
 
   bool get _shouldShowMapPanel => !_hasActiveDelivery || liveRiderPoint != null;
 
@@ -282,8 +323,8 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
         : visibleSlots.isEmpty
         ? 'No batches scheduled today'
         : 'Live map starts after rider dispatch.';
-    final statusPanel = _hasActiveDelivery &&
-            liveState?.canTrackDelivery == false
+    final statusPanel =
+        _hasActiveDelivery && liveState?.canTrackDelivery == false
         ? _QueuedDeliveryStatusTile(
             key: const Key('delivery-status-panel'),
             colors: colors,
@@ -294,9 +335,9 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
             key: const Key('delivery-status-panel'),
             colors: colors,
             liveState: liveState!,
-            liveRiderPoint:
-                liveRiderPoint ?? liveState!.riderPoint ?? liveState!.shopPoint,
+            liveRiderPoint: liveRiderPoint,
             hasLiveRiderPoint: liveRiderPoint != null,
+            locationHealth: locationHealth,
             slots: sortedSlots,
           )
         : _BatchStatusTile(
@@ -315,6 +356,7 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
             message: isLoading ? 'Loading delivery status...' : idleMapMessage,
             liveState: liveState,
             liveRiderPoint: liveRiderPoint,
+            locationHealth: locationHealth,
             onMapTap: onMapTap,
           )
         : null;
@@ -553,6 +595,7 @@ class _DeliveryMapPanel extends StatelessWidget {
     required this.message,
     this.liveState,
     this.liveRiderPoint,
+    this.locationHealth = LocationHealth.offline,
     this.onMapTap,
   });
 
@@ -561,6 +604,7 @@ class _DeliveryMapPanel extends StatelessWidget {
   final String message;
   final LiveDeliveryMapState? liveState;
   final LatLng? liveRiderPoint;
+  final LocationHealth locationHealth;
   final VoidCallback? onMapTap;
 
   bool get _hasLiveMap => liveState != null && liveRiderPoint != null;
@@ -572,6 +616,7 @@ class _DeliveryMapPanel extends StatelessWidget {
             state: liveState!,
             brightness: brightness,
             riderPoint: liveRiderPoint!,
+            locationHealth: locationHealth,
           )
         : _MapPlaceholder(
             colors: colors,
@@ -684,7 +729,10 @@ class _MapPlaceholder extends StatelessWidget {
                 flags: InteractiveFlag.none,
               ),
             ),
-            children: [MapHelpers.tileLayer(brightness)],
+            children: [
+              MapHelpers.tileLayer(brightness),
+              MapHelpers.attribution(),
+            ],
           ),
           Container(color: Colors.black.withValues(alpha: 0.52)),
           DecoratedBox(
@@ -794,21 +842,22 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
     required this.liveState,
     required this.liveRiderPoint,
     required this.hasLiveRiderPoint,
+    required this.locationHealth,
     required this.slots,
   });
 
   final AppColorSet colors;
   final LiveDeliveryMapState liveState;
-  final LatLng liveRiderPoint;
+  final LatLng? liveRiderPoint;
   final bool hasLiveRiderPoint;
+  final LocationHealth locationHealth;
   final List<DeliverySlot> slots;
 
   @override
   Widget build(BuildContext context) {
-    final ratio = routeProgressRatioForPoint(
-      liveRiderPoint,
-      liveState.routePoints,
-    );
+    final ratio = liveRiderPoint == null
+        ? 0.0
+        : routeProgressRatioForPoint(liveRiderPoint!, liveState.routePoints);
     final percent = (ratio * 100).round();
 
     final assignedSlot = liveState.assignedSlot;
@@ -891,11 +940,27 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
               colors: colors,
               icon: Icons.electric_moped_rounded,
               title: 'Rider is on the way',
-              subtitle: hasLiveRiderPoint
-                  ? 'Tracking real-time location'
-                  : 'Awaiting a fresh GPS ping',
+              subtitle: switch (locationHealth) {
+                LocationHealth.live => 'Tracking real-time location',
+                LocationHealth.stale => 'Location stale — showing last update',
+                LocationHealth.offline when hasLiveRiderPoint =>
+                  'GPS offline — showing last location',
+                LocationHealth.offline => 'Awaiting an authenticated GPS ping',
+              },
               darkIcon: true,
             ),
+            if (liveState.routingHealth != RoutingHealth.current) ...[
+              const SizedBox(height: AppSpacing.xs),
+              _StatusLine(
+                colors: colors,
+                icon: Icons.route_outlined,
+                title: liveState.routingHealth == RoutingHealth.stale
+                    ? 'Route data stale'
+                    : 'Route geometry degraded',
+                subtitle: 'Stop order remains server verified',
+                darkIcon: true,
+              ),
+            ],
             if (!hasLiveRiderPoint) ...[
               const SizedBox(height: AppSpacing.xs),
               _StatusLine(
@@ -940,9 +1005,8 @@ class _PendingRoutePreview extends StatelessWidget {
     (state.shopPoint.longitude + state.destPoint.longitude) / 2,
   );
 
-  List<LatLng> get _routePoints => state.routePoints.isNotEmpty
-      ? state.routePoints
-      : [state.shopPoint, state.destPoint];
+  List<LatLng> get _routePoints =>
+      state.routePoints.isNotEmpty ? state.routePoints : const [];
 
   @override
   Widget build(BuildContext context) {
@@ -964,13 +1028,15 @@ class _PendingRoutePreview extends StatelessWidget {
             ),
             children: [
               MapHelpers.tileLayer(brightness),
-              MapHelpers.routePolyline(_routePoints),
+              if (_routePoints.isNotEmpty)
+                MapHelpers.routePolyline(_routePoints),
               MarkerLayer(
                 markers: [
                   MapHelpers.shopMarker(point: state.shopPoint),
                   MapHelpers.destinationMarker(point: state.destPoint),
                 ],
               ),
+              MapHelpers.attribution(includeRouting: _routePoints.isNotEmpty),
             ],
           ),
           Container(color: Colors.black.withValues(alpha: 0.22)),
@@ -1149,10 +1215,12 @@ class _ActiveTile extends StatelessWidget {
     required this.state,
     required this.brightness,
     required this.riderPoint,
+    required this.locationHealth,
   });
   final LiveDeliveryMapState state;
   final Brightness brightness;
   final LatLng riderPoint;
+  final LocationHealth locationHealth;
 
   @override
   Widget build(BuildContext context) {
@@ -1183,6 +1251,7 @@ class _ActiveTile extends StatelessWidget {
                 MapHelpers.riderMarker(riderPoint),
               ],
             ),
+            MapHelpers.attribution(includeRouting: true),
           ],
         ),
 
@@ -1212,7 +1281,11 @@ class _ActiveTile extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  'LIVE MAP',
+                  switch (locationHealth) {
+                    LocationHealth.live => 'LIVE MAP',
+                    LocationHealth.stale => 'STALE LOCATION',
+                    LocationHealth.offline => 'GPS OFFLINE',
+                  },
                   style: AppTypography.overline.copyWith(
                     color: Colors.black,
                     fontSize: 8,

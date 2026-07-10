@@ -19,6 +19,8 @@ dynamic _normalize(dynamic data) {
   return data;
 }
 
+enum LocationSocketHealth { disconnected, connecting, subscribing, connected }
+
 /// Centralized WebSocket service for real-time order and location updates.
 class WebSocketService {
   static final instance = WebSocketService._();
@@ -51,6 +53,15 @@ class WebSocketService {
   final List<Function(int)> _messagesReadListeners = [];
   final List<Function(Map<String, dynamic>)> _slotUpdatedListeners = [];
   String? _pendingLocationDeliveryId;
+  int? _pendingLocationPlanVersion;
+  String? _subscribedLocationAssignmentId;
+  int? _subscribedLocationPlanVersion;
+  static const int _locationReconnectAttempts = 5;
+  LocationSocketHealth _locationHealth = LocationSocketHealth.disconnected;
+  final List<Function(Map<String, dynamic>)> _locationListeners = [];
+  final List<Function(LocationSocketHealth)> _locationHealthListeners = [];
+  int _locationSubscribeEmitCountForTests = 0;
+  int _locationSocketRecreateRequestsForTests = 0;
 
   bool get isNotificationsConnected => _notificationsSocket?.connected == true;
   bool get isChatConnected => _chatSocket?.connected == true;
@@ -70,6 +81,7 @@ class WebSocketService {
 
   // Callbacks registered for rider assignment updates
   final List<Function(Map<String, dynamic>)> _riderAssignmentListeners = [];
+  final List<Function(Map<String, dynamic>)> _deliveryQueueListeners = [];
 
   String get _baseUrl => kServerUrl;
 
@@ -99,6 +111,7 @@ class WebSocketService {
     _ordersSocket!.on('riderAssignment', (data) {
       _dispatchRiderAssignment(data);
     });
+    _ordersSocket!.on('deliveryQueueUpdated', _dispatchDeliveryQueueUpdated);
     _ordersSocket!.on('connect', (_) {
       debugPrint('WS Orders connected');
       onConnect?.call();
@@ -168,50 +181,226 @@ class WebSocketService {
     return () => _riderAssignmentListeners.remove(callback);
   }
 
+  VoidCallback listenForDeliveryQueueUpdates(
+    Function(Map<String, dynamic>) callback,
+  ) {
+    if (!_deliveryQueueListeners.contains(callback)) {
+      _deliveryQueueListeners.add(callback);
+    }
+    return () => _deliveryQueueListeners.remove(callback);
+  }
+
+  void _dispatchDeliveryQueueUpdated(dynamic data) {
+    final normalized = _normalize(data);
+    if (normalized is! Map<String, dynamic>) return;
+    for (final callback in List.of(_deliveryQueueListeners)) {
+      try {
+        callback(normalized);
+      } catch (error) {
+        debugPrint('WS deliveryQueueUpdated handler error: $error');
+      }
+    }
+  }
+
   void subscribeToOrder(String orderId) {
     _ordersSocket?.emit('subscribe', orderId);
   }
 
   Future<void> connectLocation({Function(dynamic)? onLocationUpdate}) async {
-    _locationSocket?.disconnect();
-    _locationSocket = null;
+    if (onLocationUpdate != null &&
+        !_locationListeners.contains(onLocationUpdate)) {
+      _locationListeners.add(onLocationUpdate);
+    }
+    if (_locationSocket?.connected == true) return;
+    if (_locationSocket != null) {
+      _setLocationHealth(LocationSocketHealth.connecting);
+      _locationSocket!.connect();
+      return;
+    }
 
     final token = await TokenStorage.getToken();
+    _setLocationHealth(LocationSocketHealth.connecting);
     _locationSocket = io.io(
       '$_baseUrl/ws/location',
       io.OptionBuilder()
           .setTransports(['websocket'])
           .setAuth({'token': token ?? ''})
+          .enableReconnection()
+          .setReconnectionAttempts(_locationReconnectAttempts)
+          .setReconnectionDelay(500)
+          .setReconnectionDelayMax(4000)
           .disableAutoConnect()
           .build(),
     );
-    if (onLocationUpdate != null) {
-      _locationSocket!.on('locationUpdate', (data) {
-        try {
-          onLocationUpdate(_normalize(data));
-        } catch (e) {
-          debugPrint('WS locationUpdate handler error: $e');
-        }
-      });
-    }
+    _locationSocket!.on('locationUpdate', _dispatchLocationUpdate);
+    _locationSocket!.on('subscribed', _dispatchLocationSubscribed);
     _locationSocket!.on('connect', (_) {
       debugPrint('WS Location connected');
-      final deliveryId = _pendingLocationDeliveryId;
-      if (deliveryId != null && deliveryId.isNotEmpty) {
-        _locationSocket?.emit('subscribe', deliveryId);
-      }
+      _emitPendingLocationSubscription();
     });
-    _locationSocket!.on(
-      'connect_error',
-      (e) => debugPrint('WS Location error: $e'),
-    );
+    _locationSocket!.on('disconnect', (_) {
+      _clearAcknowledgedLocationIdentity();
+      _setLocationHealth(LocationSocketHealth.disconnected);
+    });
+    _locationSocket!.on('connect_error', (e) {
+      debugPrint('WS Location error: $e');
+      _clearAcknowledgedLocationIdentity();
+      _setLocationHealth(LocationSocketHealth.disconnected);
+    });
+    _locationSocket!.on('reconnect_attempt', (_) {
+      _setLocationHealth(LocationSocketHealth.connecting);
+    });
+    _locationSocket!.on('reconnect_failed', (_) {
+      _pendingLocationDeliveryId = null;
+      _pendingLocationPlanVersion = null;
+      _clearAcknowledgedLocationIdentity();
+      _setLocationHealth(LocationSocketHealth.disconnected);
+    });
     _locationSocket!.connect();
   }
 
   void subscribeToDelivery(String assignmentId) {
+    _subscribeToDelivery(assignmentId, planVersion: null);
+  }
+
+  void subscribeToDeliveryPlan(String assignmentId, int planVersion) {
+    _subscribeToDelivery(assignmentId, planVersion: planVersion);
+  }
+
+  void _subscribeToDelivery(String assignmentId, {required int? planVersion}) {
+    if (assignmentId.isEmpty) return;
+    final previousAssignment = _pendingLocationDeliveryId;
+    final previousPlanVersion = _pendingLocationPlanVersion;
     _pendingLocationDeliveryId = assignmentId;
+    _pendingLocationPlanVersion = planVersion;
+    _clearAcknowledgedLocationIdentity();
+    if (previousAssignment != null && previousAssignment != assignmentId) {
+      _locationSocketRecreateRequestsForTests++;
+      final previousSocket = _locationSocket;
+      if (previousSocket != null) {
+        _locationSocket = null;
+        previousSocket.disconnect();
+        unawaited(connectLocation());
+        return;
+      }
+    }
     if (_locationSocket?.connected == true) {
+      _setLocationHealth(LocationSocketHealth.subscribing);
       _locationSocket?.emit('subscribe', assignmentId);
+    } else if (previousAssignment == assignmentId &&
+        previousPlanVersion != planVersion) {
+      _setLocationHealth(LocationSocketHealth.connecting);
+    }
+  }
+
+  void _emitPendingLocationSubscription() {
+    final deliveryId = _pendingLocationDeliveryId;
+    if (deliveryId != null && deliveryId.isNotEmpty) {
+      _setLocationHealth(LocationSocketHealth.subscribing);
+      _locationSubscribeEmitCountForTests++;
+      _locationSocket?.emit('subscribe', deliveryId);
+    } else {
+      _setLocationHealth(LocationSocketHealth.connecting);
+    }
+  }
+
+  VoidCallback listenForLocationUpdates(
+    Function(Map<String, dynamic>) callback,
+  ) {
+    if (!_locationListeners.contains(callback)) {
+      _locationListeners.add(callback);
+    }
+    return () => _locationListeners.remove(callback);
+  }
+
+  void listenForLocationHealth(Function(LocationSocketHealth)? callback) {
+    if (callback == null) return;
+    if (!_locationHealthListeners.contains(callback)) {
+      _locationHealthListeners.add(callback);
+    }
+    callback(_locationHealth);
+  }
+
+  void removeLocationHealthListener(Function(LocationSocketHealth)? callback) {
+    if (callback == null) return;
+    _locationHealthListeners.remove(callback);
+  }
+
+  void removeLocationUpdateListener(Function(dynamic) callback) {
+    _locationListeners.remove(callback);
+  }
+
+  void _dispatchLocationSubscribed(dynamic data) {
+    final normalized = _normalize(data);
+    if (normalized is! Map<String, dynamic>) return;
+    final assignmentId = normalized['assignmentId']?.toString();
+    final versionValue = normalized['planVersion'];
+    final planVersion = versionValue is num
+        ? versionValue.toInt()
+        : int.tryParse(versionValue?.toString() ?? '');
+    if (assignmentId == null ||
+        assignmentId != _pendingLocationDeliveryId ||
+        planVersion == null ||
+        planVersion <= 0 ||
+        (_pendingLocationPlanVersion != null &&
+            planVersion != _pendingLocationPlanVersion)) {
+      return;
+    }
+    _subscribedLocationAssignmentId = assignmentId;
+    _subscribedLocationPlanVersion = planVersion;
+    _setLocationHealth(LocationSocketHealth.connected);
+  }
+
+  void _dispatchLocationUpdate(dynamic data) {
+    final normalized = _normalize(data);
+    if (normalized is! Map<String, dynamic>) return;
+    final assignmentId = normalized['assignmentId']?.toString();
+    final versionValue = normalized['planVersion'];
+    final planVersion = versionValue is num
+        ? versionValue.toInt()
+        : int.tryParse(versionValue?.toString() ?? '');
+    if (assignmentId != _subscribedLocationAssignmentId ||
+        planVersion != _subscribedLocationPlanVersion) {
+      return;
+    }
+    final latitude = normalized['latitude'];
+    final longitude = normalized['longitude'];
+    final timestamp = normalized['timestamp'];
+    if (latitude is! num ||
+        longitude is! num ||
+        !latitude.toDouble().isFinite ||
+        !longitude.toDouble().isFinite ||
+        latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180 ||
+        timestamp is! String ||
+        DateTime.tryParse(timestamp) == null) {
+      return;
+    }
+    for (final callback in List.of(_locationListeners)) {
+      try {
+        callback(normalized);
+      } catch (error) {
+        debugPrint('WS locationUpdate handler error: $error');
+      }
+    }
+  }
+
+  void _clearAcknowledgedLocationIdentity() {
+    _subscribedLocationAssignmentId = null;
+    _subscribedLocationPlanVersion = null;
+  }
+
+  void _setLocationHealth(LocationSocketHealth health) {
+    if (_locationHealth == health) return;
+    _locationHealth = health;
+    for (final callback in List.of(_locationHealthListeners)) {
+      try {
+        callback(health);
+      } catch (error) {
+        debugPrint('WS location health handler error: $error');
+      }
     }
   }
 
@@ -223,10 +412,74 @@ class WebSocketService {
     _locationSocket?.disconnect();
     _locationSocket = null;
     _pendingLocationDeliveryId = null;
+    _pendingLocationPlanVersion = null;
+    _clearAcknowledgedLocationIdentity();
+    _locationListeners.clear();
+    _locationHealthListeners.clear();
+    _locationHealth = LocationSocketHealth.disconnected;
+    _locationSubscribeEmitCountForTests = 0;
+    _locationSocketRecreateRequestsForTests = 0;
   }
 
   @visibleForTesting
   String? get pendingLocationDeliveryIdForTests => _pendingLocationDeliveryId;
+
+  @visibleForTesting
+  int? get pendingLocationPlanVersionForTests => _pendingLocationPlanVersion;
+
+  @visibleForTesting
+  String? get subscribedLocationAssignmentIdForTests =>
+      _subscribedLocationAssignmentId;
+
+  @visibleForTesting
+  int? get subscribedLocationPlanVersionForTests =>
+      _subscribedLocationPlanVersion;
+
+  int get locationReconnectAttempts => _locationReconnectAttempts;
+
+  @visibleForTesting
+  LocationSocketHealth get locationHealthForTests => _locationHealth;
+
+  @visibleForTesting
+  int get locationSubscribeEmitCountForTests =>
+      _locationSubscribeEmitCountForTests;
+
+  @visibleForTesting
+  int get locationSocketRecreateRequestsForTests =>
+      _locationSocketRecreateRequestsForTests;
+
+  @visibleForTesting
+  void dispatchLocationSocketConnectedForTests() {
+    _emitPendingLocationSubscription();
+  }
+
+  @visibleForTesting
+  void dispatchLocationReconnectFailedForTests() {
+    _pendingLocationDeliveryId = null;
+    _pendingLocationPlanVersion = null;
+    _clearAcknowledgedLocationIdentity();
+    _setLocationHealth(LocationSocketHealth.disconnected);
+  }
+
+  @visibleForTesting
+  void dispatchLocationSubscribedForTests(dynamic data) {
+    _dispatchLocationSubscribed(data);
+  }
+
+  @visibleForTesting
+  void dispatchLocationUpdateForTests(dynamic data) {
+    _dispatchLocationUpdate(data);
+  }
+
+  @visibleForTesting
+  void dispatchDeliveryQueueUpdatedForTests(dynamic data) {
+    _dispatchDeliveryQueueUpdated(data);
+  }
+
+  @visibleForTesting
+  void clearDeliveryQueueListenersForTests() {
+    _deliveryQueueListeners.clear();
+  }
 
   Future<void> connectNotifications({
     Function(Map<String, dynamic>)? onCreditsUpdate,
@@ -605,6 +858,7 @@ class WebSocketService {
     _slotUpdatedListeners.clear();
     _orderListeners.clear();
     _riderAssignmentListeners.clear();
+    _deliveryQueueListeners.clear();
     _surveyRequiredListeners.clear();
   }
 }

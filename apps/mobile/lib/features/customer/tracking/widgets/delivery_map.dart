@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +9,7 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/home/providers/live_delivery_map_provider.dart';
+import 'package:printing_app/features/customer/order/providers/delivery_slot_provider.dart';
 import 'package:printing_app/features/customer/tracking/providers/live_rider_location_provider.dart';
 import 'package:printing_app/shared/models/location_update.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
@@ -26,6 +29,8 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
   late final AnimationController _pulseController;
   final _mapController = MapController();
   bool _isMapReady = false;
+  late final WebSocketService _ws;
+  Timer? _healthRefreshTimer;
 
   @override
   void initState() {
@@ -34,39 +39,26 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     )..repeat(reverse: true);
-    ref.read(liveRiderLocationProvider.notifier).state = null;
+    _ws = ref.read(webSocketServiceProvider);
+    _ws.listenForLocationHealth(_handleLocationHealth);
+    _healthRefreshTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
     _connectLocationSocket();
   }
 
   /// Opens the location WebSocket and subscribes to the active delivery.
   /// This is the only place in the app where the location WS is connected.
   Future<void> _connectLocationSocket() async {
-    await WebSocketService.instance.connectLocation(
-      onLocationUpdate: (data) {
-        if (!mounted) return; // widget may have been disposed
-        if (data is! Map) return;
-        final d = Map<String, dynamic>.from(data);
-        final lat = (d['latitude'] as num?)?.toDouble();
-        final lng = (d['longitude'] as num?)?.toDouble();
-        if (lat == null || lng == null) return;
-        ref.read(liveRiderLocationProvider.notifier).state = LocationUpdate(
-          id: 'live',
-          deliveryAssignmentId:
-              d['assignmentId']?.toString() ??
-              d['assignment_id']?.toString() ??
-              'active',
-          latitude: lat,
-          longitude: lng,
-          timestamp: DateTime.now(),
-        );
-      },
-    );
+    await _ws.connectLocation(onLocationUpdate: _handleLocationUpdate);
 
     if (!mounted) return; // widget may have been disposed before WS connected
     final mapState = await ref.read(liveDeliveryMapProvider.future);
     final deliveryAssignmentId = mapState.deliveryAssignmentId;
-    if (deliveryAssignmentId != null && deliveryAssignmentId.isNotEmpty) {
-      WebSocketService.instance.subscribeToDelivery(deliveryAssignmentId);
+    if (deliveryAssignmentId != null &&
+        deliveryAssignmentId.isNotEmpty &&
+        mapState.planVersion != null) {
+      _ws.subscribeToDeliveryPlan(deliveryAssignmentId, mapState.planVersion!);
     } else {
       debugPrint(
         'DeliveryMap: missing deliveryAssignmentId; live location subscription skipped',
@@ -78,8 +70,51 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
   void dispose() {
     _pulseController.dispose();
     _mapController.dispose();
-    WebSocketService.instance.disconnectLocation();
+    _ws.removeLocationUpdateListener(_handleLocationUpdate);
+    _ws.removeLocationHealthListener(_handleLocationHealth);
+    _healthRefreshTimer?.cancel();
     super.dispose();
+  }
+
+  void _handleLocationHealth(LocationSocketHealth health) {
+    scheduleMicrotask(() {
+      if (!mounted) return;
+      ref.read(liveLocationSocketHealthProvider.notifier).state = health;
+    });
+  }
+
+  void _handleLocationUpdate(dynamic data) {
+    if (!mounted || data is! Map) return;
+    final payload = Map<String, dynamic>.from(data);
+    final latitude = (payload['latitude'] as num?)?.toDouble();
+    final longitude = (payload['longitude'] as num?)?.toDouble();
+    final assignmentId = payload['assignmentId']?.toString();
+    final rawPlanVersion = payload['planVersion'];
+    final planVersion = rawPlanVersion is num
+        ? rawPlanVersion.toInt()
+        : int.tryParse(rawPlanVersion?.toString() ?? '');
+    final timestamp = payload['timestamp'] is String
+        ? DateTime.tryParse(payload['timestamp'] as String)
+        : null;
+    final state = ref.read(liveDeliveryMapProvider).asData?.value;
+    if (latitude == null ||
+        longitude == null ||
+        assignmentId == null ||
+        planVersion == null ||
+        timestamp == null ||
+        state?.deliveryAssignmentId != assignmentId ||
+        state?.planVersion == null ||
+        state!.planVersion != planVersion) {
+      return;
+    }
+    ref.read(liveRiderLocationProvider.notifier).state = LocationUpdate(
+      id: 'live',
+      deliveryAssignmentId: assignmentId,
+      planVersion: planVersion,
+      latitude: latitude,
+      longitude: longitude,
+      timestamp: timestamp,
+    );
   }
 
   void _moveCameraTo(LatLng point) {
@@ -103,6 +138,7 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
 
     final mapAsync = ref.watch(liveDeliveryMapProvider);
     final locationUpdate = ref.watch(liveRiderLocationProvider);
+    final socketHealth = ref.watch(liveLocationSocketHealthProvider);
 
     // Move camera whenever a live location update arrives.
     ref.listen(liveRiderLocationProvider, (_, next) {
@@ -116,10 +152,25 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
       error: (e, st) => _loadingView(colors),
       data: (state) {
         if (state.status != LiveMapStatus.active) return _loadingView(colors);
-        final riderPoint = locationUpdate != null
-            ? LatLng(locationUpdate.latitude, locationUpdate.longitude)
-            : state.shopPoint;
-        return _mapView(state, riderPoint, brightness, colors);
+        final matchingLocation =
+            locationUpdate != null &&
+                locationUpdate.deliveryAssignmentId ==
+                    state.deliveryAssignmentId &&
+                state.planVersion != null &&
+                locationUpdate.planVersion == state.planVersion
+            ? locationUpdate
+            : null;
+        final riderPoint = matchingLocation != null
+            ? LatLng(matchingLocation.latitude, matchingLocation.longitude)
+            : null;
+        final health = matchingLocation == null
+            ? LocationHealth.offline
+            : classifyLocationHealth(
+                updatedAt: matchingLocation.timestamp,
+                now: ref.read(deliveryTrackingNowProvider)(),
+                connected: socketHealth == LocationSocketHealth.connected,
+              );
+        return _mapView(state, riderPoint, health, brightness, colors);
       },
     );
   }
@@ -138,11 +189,14 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
 
   Widget _mapView(
     LiveDeliveryMapState state,
-    LatLng riderPoint,
+    LatLng? riderPoint,
+    LocationHealth locationHealth,
     Brightness brightness,
     AppColorSet colors,
   ) {
-    final eta = estimateRouteEtaMinutes(riderPoint, state.routePoints);
+    final eta = riderPoint == null
+        ? ((state.legDurationSeconds ?? 0) / 60).ceil()
+        : estimateRouteEtaMinutes(riderPoint, state.routePoints);
 
     return ClipRRect(
       key: widget.tutorialKey,
@@ -160,7 +214,7 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
               FlutterMap(
                 mapController: _mapController,
                 options: MapOptions(
-                  initialCenter: riderPoint,
+                  initialCenter: riderPoint ?? state.destPoint,
                   initialZoom: 13.5,
                   onMapReady: () {
                     _isMapReady = true;
@@ -178,9 +232,11 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
                     markers: [
                       MapHelpers.shopMarker(point: state.shopPoint),
                       MapHelpers.destinationMarker(point: state.destPoint),
-                      MapHelpers.riderMarker(riderPoint),
+                      if (riderPoint != null)
+                        MapHelpers.riderMarker(riderPoint),
                     ],
                   ),
+                  MapHelpers.attribution(includeRouting: true),
                 ],
               ),
 
@@ -223,7 +279,11 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
                       ),
                       const SizedBox(width: AppSpacing.xs),
                       Text(
-                        'Live Tracking',
+                        switch (locationHealth) {
+                          LocationHealth.live => 'Live Tracking',
+                          LocationHealth.stale => 'Location stale',
+                          LocationHealth.offline => 'GPS offline',
+                        },
                         style: AppTypography.caption.copyWith(
                           color: colors.onSurface,
                           fontWeight: FontWeight.w600,
