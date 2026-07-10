@@ -1,5 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
-import { isAdoptedSchema } from '../src/database/migration-ownership';
+import { isBaselineOwned } from '../src/database/migration-ownership';
 
 export class RenamePrintModeFitToScale1777766500000 implements MigrationInterface {
   name = 'RenamePrintModeFitToScale1777766500000';
@@ -34,7 +34,7 @@ export class RenamePrintModeFitToScale1777766500000 implements MigrationInterfac
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    if (await isAdoptedSchema(queryRunner)) return;
+    if (!(await isBaselineOwned(queryRunner))) return;
 
     if (
       (await queryRunner.hasTable('users')) &&

@@ -1,5 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
-import { isAdoptedSchema } from '../src/database/migration-ownership';
+import { isBaselineOwned } from '../src/database/migration-ownership';
 
 export class AddOrderItemSpecialInstructions1777766400000 implements MigrationInterface {
   name = 'AddOrderItemSpecialInstructions1777766400000';
@@ -16,7 +16,7 @@ export class AddOrderItemSpecialInstructions1777766400000 implements MigrationIn
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    if (await isAdoptedSchema(queryRunner)) return;
+    if (!(await isBaselineOwned(queryRunner))) return;
 
     if (await queryRunner.hasTable('order_items')) {
       await queryRunner.query(

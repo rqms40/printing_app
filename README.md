@@ -26,7 +26,7 @@ graph TB
     end
 
     subgraph Data
-        E[(PostgreSQL 15<br/>30 tables)]
+        E[(PostgreSQL 15<br/>Versioned schema)]
         F[Redis 7<br/>Provisioned]
         G[MinIO<br/>File Storage]
     end
@@ -412,7 +412,8 @@ Refine v4 + React 18 + Ant Design 5 web dashboard. ~25 pages with 4 concurrent W
 
 ### Server (`server/`)
 
-NestJS 11 backend — REST API + 6 WebSocket namespaces, **59 spec files** (Jest), versioned migrations, Swagger at `/docs`.
+NestJS 11 backend — REST API + 6 WebSocket namespaces, Jest coverage,
+versioned migrations, and Swagger at `/docs`.
 
 **WebSocket namespaces (Socket.IO)**
 
@@ -448,7 +449,7 @@ React 19 + Vite 8 + Tailwind CSS v4 marketing site. Runs on port 5174.
 # Mobile — 424 tests (unit / widget / integration)
 cd apps/mobile && fvm flutter test
 
-# Server — 59 spec files (Jest + ts-jest, real PostgreSQL in CI)
+# Server — Jest + ts-jest, with real PostgreSQL in CI
 cd server && npm test
 cd server && npm run test:cov      # with coverage
 cd server && npm run test:e2e      # end-to-end (not run in CI)

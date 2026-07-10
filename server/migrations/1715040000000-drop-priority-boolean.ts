@@ -1,5 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
-import { isAdoptedSchema } from '../src/database/migration-ownership';
+import { isBaselineOwned } from '../src/database/migration-ownership';
 
 export class DropPriorityBoolean1715040000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -13,7 +13,7 @@ export class DropPriorityBoolean1715040000000 implements MigrationInterface {
     }
   }
   public async down(queryRunner: QueryRunner): Promise<void> {
-    if (await isAdoptedSchema(queryRunner)) return;
+    if (!(await isBaselineOwned(queryRunner))) return;
 
     if (!(await queryRunner.hasTable('batch_orders'))) {
       return;

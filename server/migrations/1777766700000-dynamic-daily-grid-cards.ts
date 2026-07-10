@@ -1,5 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
-import { isAdoptedSchema } from '../src/database/migration-ownership';
+import { isBaselineOwned } from '../src/database/migration-ownership';
 
 export class DynamicDailyGridCards1777766700000 implements MigrationInterface {
   name = 'DynamicDailyGridCards1777766700000';
@@ -69,7 +69,7 @@ export class DynamicDailyGridCards1777766700000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    if (await isAdoptedSchema(queryRunner)) return;
+    if (!(await isBaselineOwned(queryRunner))) return;
 
     await queryRunner.query(
       `ALTER TABLE IF EXISTS "daily_grid_cards" ADD COLUMN IF NOT EXISTS "paper_specs" jsonb`,

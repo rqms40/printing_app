@@ -40,8 +40,8 @@ export async function getBaselineOwnership(
   return rows[0]?.ownership ?? null;
 }
 
-export async function isAdoptedSchema(
+export async function isBaselineOwned(
   queryRunner: QueryRunner,
 ): Promise<boolean> {
-  return (await getBaselineOwnership(queryRunner)) === 'adopted';
+  return (await getBaselineOwnership(queryRunner)) === 'owned';
 }

@@ -1,5 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
-import { isAdoptedSchema } from '../src/database/migration-ownership';
+import { isBaselineOwned } from '../src/database/migration-ownership';
 
 export class DynamicProductCatalog1777680000000 implements MigrationInterface {
   name = 'DynamicProductCatalog1777680000000';
@@ -100,15 +100,143 @@ export class DynamicProductCatalog1777680000000 implements MigrationInterface {
     }
 
     if (
+      (await queryRunner.hasTable('service_categories')) &&
+      (await queryRunner.hasTable('product_categories'))
+    ) {
+      await queryRunner.query(`
+        INSERT INTO "product_categories" (
+          "name",
+          "slug",
+          "description",
+          "mobile_description",
+          "icon",
+          "file_processing_type",
+          "pricing_model",
+          "base_rate",
+          "quantity_unit",
+          "max_file_size_mb",
+          "allowed_extensions",
+          "is_active",
+          "sort_order",
+          "created_at",
+          "updated_at"
+        )
+        SELECT
+          legacy_category."name",
+          legacy_category."slug",
+          legacy_category."description",
+          left(legacy_category."description", 160),
+          legacy_category."icon",
+          CASE
+            WHEN lower(legacy_category."slug") LIKE '%3d%'
+              OR lower(legacy_category."name") LIKE '%3d%'
+            THEN 'model_3d'
+            ELSE 'document'
+          END,
+          CASE
+            WHEN lower(legacy_category."slug") LIKE '%3d%'
+              OR lower(legacy_category."name") LIKE '%3d%'
+            THEN 'base_plus_material_estimate'
+            ELSE 'per_page_modifiers'
+          END,
+          legacy_category."base_rate",
+          CASE
+            WHEN lower(legacy_category."slug") LIKE '%3d%'
+              OR lower(legacy_category."name") LIKE '%3d%'
+            THEN 'model'
+            ELSE 'copy'
+          END,
+          legacy_category."max_file_size_mb",
+          CASE
+            WHEN btrim(legacy_category."allowed_extensions") IN ('', '[]')
+            THEN '[]'::jsonb
+            ELSE to_jsonb(
+              regexp_split_to_array(
+                translate(legacy_category."allowed_extensions", '[]" ', ''),
+                ','
+              )
+            )
+          END,
+          legacy_category."is_active",
+          legacy_category."sort_order",
+          legacy_category."created_at",
+          legacy_category."updated_at"
+        FROM "service_categories" legacy_category
+        ON CONFLICT ("slug") DO UPDATE
+        SET
+          "description" = COALESCE(
+            NULLIF("product_categories"."description", ''),
+            EXCLUDED."description"
+          ),
+          "mobile_description" = COALESCE(
+            NULLIF("product_categories"."mobile_description", ''),
+            EXCLUDED."mobile_description"
+          ),
+          "icon" = COALESCE(
+            NULLIF("product_categories"."icon", ''),
+            EXCLUDED."icon"
+          ),
+          "allowed_extensions" = CASE
+            WHEN "product_categories"."allowed_extensions" = '[]'::jsonb
+            THEN EXCLUDED."allowed_extensions"
+            ELSE "product_categories"."allowed_extensions"
+          END
+      `);
+    }
+
+    if (
       (await queryRunner.hasTable('service_addons')) &&
       (await queryRunner.hasTable('product_categories'))
     ) {
-      await queryRunner.query(
-        `ALTER TABLE "service_addons" DROP CONSTRAINT IF EXISTS "FK_service_addons_category"`,
-      );
       await queryRunner.query(`
         DO $$
+        DECLARE
+          category_fk record;
+          legacy_fk_present boolean := false;
         BEGIN
+          FOR category_fk IN
+            SELECT
+              constraint_record.conname,
+              constraint_record.confrelid =
+                to_regclass('public.service_categories') AS references_legacy
+            FROM pg_constraint constraint_record
+            JOIN pg_attribute column_record
+              ON column_record.attrelid = constraint_record.conrelid
+             AND column_record.attnum = ANY (constraint_record.conkey)
+            WHERE constraint_record.contype = 'f'
+              AND constraint_record.conrelid =
+                'public.service_addons'::regclass
+              AND column_record.attname = 'category_id'
+          LOOP
+            legacy_fk_present :=
+              legacy_fk_present OR category_fk.references_legacy;
+            EXECUTE format(
+              'ALTER TABLE service_addons DROP CONSTRAINT %I',
+              category_fk.conname
+            );
+          END LOOP;
+
+          IF legacy_fk_present THEN
+            UPDATE "service_addons" addon
+            SET "category_id" = product_category."id"
+            FROM "service_categories" legacy_category
+            JOIN "product_categories" product_category
+              ON product_category."slug" = legacy_category."slug"
+            WHERE addon."category_id" = legacy_category."id";
+          END IF;
+
+          IF EXISTS (
+            SELECT 1
+            FROM "service_addons" addon
+            LEFT JOIN "product_categories" product_category
+              ON product_category."id" = addon."category_id"
+            WHERE addon."category_id" IS NOT NULL
+              AND product_category."id" IS NULL
+          ) THEN
+            RAISE EXCEPTION
+              'Cannot migrate service_addons.category_id: unmapped category';
+          END IF;
+
           IF NOT EXISTS (
             SELECT 1
             FROM pg_constraint constraint_record
@@ -148,7 +276,7 @@ export class DynamicProductCatalog1777680000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    if (await isAdoptedSchema(queryRunner)) return;
+    if (!(await isBaselineOwned(queryRunner))) return;
 
     for (const table of [
       'order_item_spec_values',
