@@ -46,14 +46,20 @@ export class DispatchPlanStop {
   @ManyToOne(() => DispatchPlan, (plan) => plan.stops, {
     onDelete: 'CASCADE',
   })
-  @JoinColumn({ name: 'plan_id' })
+  @JoinColumn({
+    name: 'plan_id',
+    foreignKeyConstraintName: 'FK_dispatch_plan_stops_plan',
+  })
   plan: DispatchPlan;
 
   @Column({ name: 'assignment_id' })
   assignmentId: number;
 
   @ManyToOne(() => DeliveryAssignment, { onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'assignment_id' })
+  @JoinColumn({
+    name: 'assignment_id',
+    foreignKeyConstraintName: 'FK_dispatch_plan_stops_assignment',
+  })
   assignment: DeliveryAssignment;
 
   @Column({ type: 'int' })

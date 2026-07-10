@@ -1360,6 +1360,84 @@ describe('production migration lifecycle (e2e)', () => {
     expect(accepted.stdout).toContain('seed skipped');
   });
 
+  it('rejects a same-named active-plan index with the wrong predicate before mutating adopted data', async () => {
+    const database = await createDatabase('dispatch_wrong_index');
+    const dataSource = await initializeMigrationDataSource(database);
+    await dataSource.runMigrations();
+    await dataSource.query(
+      `INSERT INTO users (email, password_hash) VALUES ($1, 'not-used')`,
+      [`dispatch-index-preserved-${database}@example.test`],
+    );
+    await dataSource.query(`DROP INDEX "uq_dispatch_plans_active_rider"`);
+    await dataSource.query(`
+      CREATE UNIQUE INDEX "uq_dispatch_plans_active_rider"
+      ON "dispatch_plans" ("rider_id")
+      WHERE "status" = 'completed'
+    `);
+    await dataSource.query(
+      `DELETE FROM migrations WHERE timestamp = $1 AND name = $2`,
+      ['1777853900000', 'PersistedDispatchPlans1777853900000'],
+    );
+
+    await expect(dataSource.runMigrations()).rejects.toThrow(
+      'invalid index uq_dispatch_plans_active_rider',
+    );
+    await expect(
+      dataSource.query<Array<{ count: number }>>(
+        `SELECT count(*)::int AS count FROM users WHERE email = $1`,
+        [`dispatch-index-preserved-${database}@example.test`],
+      ),
+    ).resolves.toEqual([{ count: 1 }]);
+    await expect(
+      dataSource.query<Array<{ predicate: string }>>(`
+        SELECT pg_get_expr(indexprs.indpred, indexprs.indrelid) AS predicate
+        FROM pg_index AS indexprs
+        JOIN pg_class AS index_class ON index_class.oid = indexprs.indexrelid
+        WHERE index_class.relname = 'uq_dispatch_plans_active_rider'
+      `),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        predicate: expect.stringContaining('completed'),
+      }),
+    ]);
+    await dataSource.destroy();
+  });
+
+  it('rejects an adopted stop table without its primary key before mutating data', async () => {
+    const database = await createDatabase('dispatch_missing_pk');
+    const dataSource = await initializeMigrationDataSource(database);
+    await dataSource.runMigrations();
+    await dataSource.query(
+      `INSERT INTO users (email, password_hash) VALUES ($1, 'not-used')`,
+      [`dispatch-pk-preserved-${database}@example.test`],
+    );
+    await dataSource.query(
+      `ALTER TABLE "dispatch_plan_stops" DROP CONSTRAINT "PK_dispatch_plan_stops"`,
+    );
+    await dataSource.query(
+      `DELETE FROM migrations WHERE timestamp = $1 AND name = $2`,
+      ['1777853900000', 'PersistedDispatchPlans1777853900000'],
+    );
+
+    await expect(dataSource.runMigrations()).rejects.toThrow(
+      'dispatch_plan_stops table: expected id primary key',
+    );
+    await expect(
+      dataSource.query<Array<{ count: number }>>(
+        `SELECT count(*)::int AS count FROM users WHERE email = $1`,
+        [`dispatch-pk-preserved-${database}@example.test`],
+      ),
+    ).resolves.toEqual([{ count: 1 }]);
+    await expect(
+      dataSource.query<Array<{ count: number }>>(`
+        SELECT count(*)::int AS count
+        FROM pg_constraint
+        WHERE conrelid = 'dispatch_plan_stops'::regclass AND contype = 'p'
+      `),
+    ).resolves.toEqual([{ count: 0 }]);
+    await dataSource.destroy();
+  });
+
   async function createDatabase(label: string): Promise<string> {
     const database = `gridgo_${label}_${process.pid}_${createdDatabases.size}`;
     if (!/^[a-z0-9_]+$/.test(database)) {

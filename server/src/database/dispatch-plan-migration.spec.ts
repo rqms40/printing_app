@@ -46,4 +46,49 @@ describe('PersistedDispatchPlans1777853900000', () => {
     ).rejects.toThrow('Incompatible adopted dispatch_plans table');
     expect(queryRunner.query).not.toHaveBeenCalled();
   });
+
+  it('fails closed before mutation when an adopted plan table has no primary key', async () => {
+    const types: Record<string, string> = {
+      id: 'integer',
+      rider_id: 'integer',
+      version: 'integer',
+      status: 'enum',
+      origin_latitude: 'numeric',
+      origin_longitude: 'numeric',
+      provider: 'character varying',
+      profile: 'character varying',
+      total_duration_seconds: 'integer',
+      total_distance_meters: 'integer',
+      routing_data_stale: 'boolean',
+      planned_at: 'timestamp',
+      superseded_at: 'timestamp',
+      completed_at: 'timestamp',
+      created_at: 'timestamp',
+      updated_at: 'timestamp',
+    };
+    const columns = Object.entries(types).map(([name, type]) => ({
+      name,
+      type,
+      isNullable: ['superseded_at', 'completed_at'].includes(name),
+      enum:
+        name === 'status' ? ['active', 'superseded', 'completed'] : undefined,
+    }));
+    const queryRunner = {
+      hasTable: jest.fn().mockResolvedValue(true),
+      getTable: jest.fn().mockResolvedValue({
+        findColumnByName: (name: string) =>
+          columns.find((column) => column.name === name),
+        primaryColumns: [],
+        foreignKeys: [],
+        checks: [],
+        indices: [],
+      }),
+      query: jest.fn(),
+    } as any;
+
+    await expect(
+      new PersistedDispatchPlans1777853900000().up(queryRunner),
+    ).rejects.toThrow('primary key');
+    expect(queryRunner.query).not.toHaveBeenCalled();
+  });
 });

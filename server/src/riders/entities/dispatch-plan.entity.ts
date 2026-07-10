@@ -45,7 +45,10 @@ export class DispatchPlan {
   riderId: number;
 
   @ManyToOne(() => RiderProfile, { onDelete: 'RESTRICT' })
-  @JoinColumn({ name: 'rider_id' })
+  @JoinColumn({
+    name: 'rider_id',
+    foreignKeyConstraintName: 'FK_dispatch_plans_rider',
+  })
   rider: RiderProfile;
 
   @Column({ type: 'int' })

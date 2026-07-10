@@ -43,14 +43,155 @@ const NULLABLE_COLUMNS = new Set([
   'skipped_at',
 ]);
 
+type ForeignKeyContract = {
+  name: string;
+  columns: string[];
+  referencedTable: string;
+  referencedColumns: string[];
+  onDelete: 'CASCADE' | 'RESTRICT';
+};
+
+type CheckContract = { name: string; expression: string };
+
+type IndexContract = {
+  name: string;
+  columns: string[];
+  unique: boolean;
+  where?: string;
+};
+
+type TableContract = {
+  columns: Record<string, string[]>;
+  enumValues: string[];
+  foreignKeys: ForeignKeyContract[];
+  checks: CheckContract[];
+  indices: IndexContract[];
+};
+
+const TABLE_CONTRACTS: Record<string, TableContract> = {
+  dispatch_plans: {
+    columns: PLAN_COLUMNS,
+    enumValues: ['active', 'superseded', 'completed'],
+    foreignKeys: [
+      {
+        name: 'FK_dispatch_plans_rider',
+        columns: ['rider_id'],
+        referencedTable: 'rider_profiles',
+        referencedColumns: ['id'],
+        onDelete: 'RESTRICT',
+      },
+    ],
+    checks: [
+      { name: 'CHK_dispatch_plans_version', expression: 'version>0' },
+      {
+        name: 'CHK_dispatch_plans_origin',
+        expression:
+          'origin_latitude>=-90andorigin_latitude<=90andorigin_longitude>=-180andorigin_longitude<=180',
+      },
+      {
+        name: 'CHK_dispatch_plans_totals',
+        expression: 'total_duration_seconds>=0andtotal_distance_meters>=0',
+      },
+    ],
+    indices: [
+      {
+        name: 'uq_dispatch_plans_rider_version',
+        columns: ['rider_id', 'version'],
+        unique: true,
+      },
+      {
+        name: 'idx_dispatch_plans_rider_status',
+        columns: ['rider_id', 'status'],
+        unique: false,
+      },
+      {
+        name: 'uq_dispatch_plans_active_rider',
+        columns: ['rider_id'],
+        unique: true,
+        where: 'status=active',
+      },
+    ],
+  },
+  dispatch_plan_stops: {
+    columns: STOP_COLUMNS,
+    enumValues: ['pending', 'completed', 'skipped'],
+    foreignKeys: [
+      {
+        name: 'FK_dispatch_plan_stops_plan',
+        columns: ['plan_id'],
+        referencedTable: 'dispatch_plans',
+        referencedColumns: ['id'],
+        onDelete: 'CASCADE',
+      },
+      {
+        name: 'FK_dispatch_plan_stops_assignment',
+        columns: ['assignment_id'],
+        referencedTable: 'delivery_assignments',
+        referencedColumns: ['id'],
+        onDelete: 'RESTRICT',
+      },
+    ],
+    checks: [
+      {
+        name: 'CHK_dispatch_plan_stops_sequence',
+        expression: 'sequence>0',
+      },
+      {
+        name: 'CHK_dispatch_plan_stops_destination',
+        expression:
+          'destination_latitude>=-90anddestination_latitude<=90anddestination_longitude>=-180anddestination_longitude<=180',
+      },
+      {
+        name: 'CHK_dispatch_plan_stops_leg',
+        expression: 'leg_duration_seconds>=0andleg_distance_meters>=0',
+      },
+    ],
+    indices: [
+      {
+        name: 'uq_dispatch_plan_stops_sequence',
+        columns: ['plan_id', 'sequence'],
+        unique: true,
+      },
+      {
+        name: 'uq_dispatch_plan_stops_assignment',
+        columns: ['plan_id', 'assignment_id'],
+        unique: true,
+      },
+      {
+        name: 'idx_dispatch_plan_stops_assignment',
+        columns: ['assignment_id'],
+        unique: false,
+      },
+    ],
+  },
+};
+
+function sameValues(actual: string[], expected: string[]): boolean {
+  return (
+    actual.length === expected.length &&
+    actual.every((value, index) => value === expected[index])
+  );
+}
+
+function sameSet(actual: string[], expected: string[]): boolean {
+  return sameValues([...actual].sort(), [...expected].sort());
+}
+
+function normalizeExpression(value: string | undefined): string {
+  return (value ?? '')
+    .toLowerCase()
+    .replace(/::[a-z_][a-z0-9_]*/g, '')
+    .replace(/["'()\s]/g, '');
+}
+
 async function assertCompatibleTable(
   queryRunner: QueryRunner,
   tableName: string,
-  requiredColumns: Record<string, string[]>,
 ): Promise<void> {
+  const contract = TABLE_CONTRACTS[tableName];
   const table = await queryRunner.getTable(tableName);
   if (!table) throw new Error(`Incompatible adopted ${tableName} table`);
-  for (const [name, acceptedTypes] of Object.entries(requiredColumns)) {
+  for (const [name, acceptedTypes] of Object.entries(contract.columns)) {
     const column = table.findColumnByName(name);
     if (!column || !acceptedTypes.includes(column.type.toLowerCase())) {
       throw new Error(
@@ -65,19 +206,63 @@ async function assertCompatibleTable(
         `Incompatible adopted ${tableName} table: invalid nullability for ${name}`,
       );
     }
-    if (
-      name === 'status' &&
-      Array.isArray(column.enum) &&
-      (tableName === 'dispatch_plans'
-        ? !['active', 'superseded', 'completed'].every((value) =>
-            column.enum?.includes(value),
-          )
-        : !['pending', 'completed', 'skipped'].every((value) =>
-            column.enum?.includes(value),
-          ))
-    ) {
+    if (name === 'status' && !sameSet(column.enum ?? [], contract.enumValues)) {
       throw new Error(
         `Incompatible adopted ${tableName} table: invalid status enum`,
+      );
+    }
+  }
+
+  if (
+    !sameValues(
+      table.primaryColumns.map((column) => column.name),
+      ['id'],
+    )
+  ) {
+    throw new Error(
+      `Incompatible adopted ${tableName} table: expected id primary key`,
+    );
+  }
+
+  for (const expected of contract.foreignKeys) {
+    const actual = table.foreignKeys.find(
+      (foreignKey) => foreignKey.name === expected.name,
+    );
+    if (
+      !actual ||
+      !sameValues(actual.columnNames, expected.columns) ||
+      actual.referencedTableName !== expected.referencedTable ||
+      !sameValues(actual.referencedColumnNames, expected.referencedColumns) ||
+      (actual.onDelete ?? '').toUpperCase() !== expected.onDelete
+    ) {
+      throw new Error(
+        `Incompatible adopted ${tableName} table: invalid foreign key ${expected.name}`,
+      );
+    }
+  }
+
+  for (const expected of contract.checks) {
+    const actual = table.checks.find((check) => check.name === expected.name);
+    if (
+      !actual ||
+      normalizeExpression(actual.expression) !== expected.expression
+    ) {
+      throw new Error(
+        `Incompatible adopted ${tableName} table: invalid check ${expected.name}`,
+      );
+    }
+  }
+
+  for (const expected of contract.indices) {
+    const actual = table.indices.find((index) => index.name === expected.name);
+    if (
+      !actual ||
+      !sameValues(actual.columnNames, expected.columns) ||
+      actual.isUnique !== expected.unique ||
+      normalizeExpression(actual.where) !== (expected.where ?? '')
+    ) {
+      throw new Error(
+        `Incompatible adopted ${tableName} table: invalid index ${expected.name}`,
       );
     }
   }
@@ -87,9 +272,14 @@ export class PersistedDispatchPlans1777853900000 implements MigrationInterface {
   name = 'PersistedDispatchPlans1777853900000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    if (await queryRunner.hasTable('dispatch_plans')) {
-      await assertCompatibleTable(queryRunner, 'dispatch_plans', PLAN_COLUMNS);
-    } else {
+    const hasPlans = await queryRunner.hasTable('dispatch_plans');
+    const hasStops = await queryRunner.hasTable('dispatch_plan_stops');
+    if (hasPlans) await assertCompatibleTable(queryRunner, 'dispatch_plans');
+    if (hasStops) {
+      await assertCompatibleTable(queryRunner, 'dispatch_plan_stops');
+    }
+
+    if (!hasPlans) {
       await queryRunner.query(`
         DO $$
         BEGIN
@@ -165,13 +355,7 @@ export class PersistedDispatchPlans1777853900000 implements MigrationInterface {
         ON "dispatch_plans" ("rider_id") WHERE "status" = 'active'
     `);
 
-    if (await queryRunner.hasTable('dispatch_plan_stops')) {
-      await assertCompatibleTable(
-        queryRunner,
-        'dispatch_plan_stops',
-        STOP_COLUMNS,
-      );
-    } else {
+    if (!hasStops) {
       await queryRunner.query(`
         DO $$
         BEGIN
