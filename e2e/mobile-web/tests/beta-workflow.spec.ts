@@ -314,6 +314,8 @@ test.describe("GRIDGO beta workflow regression contract", () => {
     expect(agentsGuide).toContain("Beta Workflow Regression");
     expect(agentsGuide).toContain("e2e/mobile-web/tests/beta-workflow.spec.ts");
     expect(agentsGuide).toContain("GRIDGO_RUN_BETA_FLOW_E2E=1");
+    expect(agentsGuide).toContain("GRIDGO_RUN_BETA_FLOW_DESTRUCTIVE=1");
+    expect(agentsGuide).toContain("beta-workflow-destructive.spec.ts");
   });
 
   test("documents the beta workflow command in the mobile web E2E README", () => {
@@ -322,6 +324,8 @@ test.describe("GRIDGO beta workflow regression contract", () => {
     expect(readme).toContain("Beta Workflow Regression");
     expect(readme).toContain("npm test -- tests/beta-workflow.spec.ts");
     expect(readme).toContain("GRIDGO_RUN_BETA_FLOW_E2E=1");
+    expect(readme).toContain("GRIDGO_RUN_BETA_FLOW_DESTRUCTIVE=1");
+    expect(readme).toContain("beta-workflow-destructive.spec.ts");
   });
 });
 

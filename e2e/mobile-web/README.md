@@ -38,4 +38,19 @@ GRIDGO_API_URL=http://127.0.0.1:3000/api \
 npm test -- tests/beta-workflow.spec.ts
 ```
 
-The live preflight expects `docker-compose.dev.yml` to already be running. It verifies the API, mobile web, and responsive admin login surfaces before a destructive beta QA run; the full customer/admin/rider flow remains tracked by the contract steps and linked issues.
+The live preflight expects `docker-compose.dev.yml` to already be running. It verifies the API, mobile web, and responsive admin login surfaces without creating beta workflow records.
+
+Run the opt-in destructive API workflow only against an isolated dev stack:
+
+```sh
+GRIDGO_RUN_BETA_FLOW_DESTRUCTIVE=1 \
+MOBILE_WEB_E2E_NO_SERVER=1 \
+GRIDGO_API_URL=http://127.0.0.1:3000/api \
+GRIDGO_ADMIN_EMAIL=<dev-admin-email> \
+GRIDGO_ADMIN_PASSWORD=<dev-admin-password> \
+GRIDGO_RIDER_EMAIL=<dev-rider-email> \
+GRIDGO_RIDER_PASSWORD=<dev-rider-password> \
+npm test -- tests/beta-workflow-destructive.spec.ts
+```
+
+This scenario creates two new beta customers, files, addresses, orders, delivery assignments, proofs, surveys, and a testimonial. It intentionally remains skipped unless explicitly enabled and credentials are supplied through the environment.

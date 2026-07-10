@@ -188,10 +188,24 @@ cd e2e/mobile-web && \
   GRIDGO_RUN_BETA_FLOW_E2E=1 \
   MOBILE_WEB_E2E_URL=http://127.0.0.1:8088 \
   GRIDGO_API_URL=http://127.0.0.1:3000/api \
-  npm test -- tests/beta-workflow.spec.ts
+npm test -- tests/beta-workflow.spec.ts
 ```
 
-The live preflight assumes `docker-compose.dev.yml` is already running. Do not run destructive customer/rider/admin beta scenarios on shared data unless the issue or user explicitly asks for a live workflow run. When extending the live test, keep Mark, Ven, and Juan as separate role paths and preserve the queue/privacy expectations documented in the test.
+Run the opt-in destructive API workflow only against an isolated dev stack:
+
+```bash
+cd e2e/mobile-web && \
+  GRIDGO_RUN_BETA_FLOW_DESTRUCTIVE=1 \
+  MOBILE_WEB_E2E_NO_SERVER=1 \
+  GRIDGO_API_URL=http://127.0.0.1:3000/api \
+  GRIDGO_ADMIN_EMAIL=<dev-admin-email> \
+  GRIDGO_ADMIN_PASSWORD=<dev-admin-password> \
+  GRIDGO_RIDER_EMAIL=<dev-rider-email> \
+  GRIDGO_RIDER_PASSWORD=<dev-rider-password> \
+  npm test -- tests/beta-workflow-destructive.spec.ts
+```
+
+The live preflight assumes `docker-compose.dev.yml` is already running. The destructive workflow creates two customers, uploads, addresses, orders, delivery assignments, proofs, surveys, and a testimonial. Do not run destructive customer/rider/admin beta scenarios on shared data unless the issue or user explicitly asks for a live workflow run. Keep Mark, Ven, and Juan as separate role paths and preserve the queue/privacy expectations documented in the tests.
 
 ## Surface-Specific Guidance
 
