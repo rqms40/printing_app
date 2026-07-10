@@ -63,6 +63,19 @@ interface SpecSnapshotLookupRow {
   estimated_quantity: string | null;
 }
 
+type SeedPasswordVariable =
+  | 'GRIDGO_SEED_CUSTOMER_PASSWORD'
+  | 'GRIDGO_SEED_RIDER_PASSWORD'
+  | 'GRIDGO_SEED_ADMIN_PASSWORD';
+
+function requireSeedPassword(name: SeedPasswordVariable): string {
+  const password = process.env[name];
+  if (!password) {
+    throw new Error(`${name} is required to seed demo users`);
+  }
+  return password;
+}
+
 function typedQuery<T>(
   ds: DataSource,
   sql: string,
@@ -189,6 +202,16 @@ async function insertOrderItemSpecSnapshot(
  * Or:  npm run seed
  */
 async function seed() {
+  const customerPassword = requireSeedPassword('GRIDGO_SEED_CUSTOMER_PASSWORD');
+  const riderPassword = requireSeedPassword('GRIDGO_SEED_RIDER_PASSWORD');
+  const adminPassword = requireSeedPassword('GRIDGO_SEED_ADMIN_PASSWORD');
+  const [customerPasswordHash, riderPasswordHash, adminPasswordHash] =
+    await Promise.all([
+      bcrypt.hash(customerPassword, 10),
+      bcrypt.hash(riderPassword, 10),
+      bcrypt.hash(adminPassword, 10),
+    ]);
+
   const app = await NestFactory.createApplicationContext(AppModule);
   const ds = app.get(DataSource);
 
@@ -204,12 +227,10 @@ async function seed() {
   }
 
   // ─── Users ──────────────────────────────────────────────────────────
-  const passwordHash = await bcrypt.hash('password123', 10);
-
   const users = [
     {
       email: 'maria@gridgo.ph',
-      password_hash: passwordHash,
+      password_hash: customerPasswordHash,
       full_name: 'Maria Santos',
       phone_number: '+639171234567',
       gender: 'female',
@@ -227,7 +248,7 @@ async function seed() {
     },
     {
       email: 'juan@gridgo.ph',
-      password_hash: passwordHash,
+      password_hash: riderPasswordHash,
       full_name: 'Juan Reyes',
       phone_number: '+639181234567',
       gender: 'male',
@@ -242,7 +263,7 @@ async function seed() {
     },
     {
       email: 'admin@gridgo.ph',
-      password_hash: passwordHash,
+      password_hash: adminPasswordHash,
       full_name: 'Admin User',
       phone_number: '+639191234567',
       gender: 'male',
@@ -1452,10 +1473,6 @@ async function seed() {
   }
 
   console.log('\n🎉 Seed complete!\n');
-  console.log('Login credentials (all use password: password123):');
-  console.log('  Customer: maria@gridgo.ph');
-  console.log('  Rider:   juan@gridgo.ph');
-  console.log('  Admin:    admin@gridgo.ph');
 
   await app.close();
 }

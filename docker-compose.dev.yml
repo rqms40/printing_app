@@ -119,6 +119,9 @@ services:
         required: false
     environment:
       <<: *api-env
+      GRIDGO_SEED_CUSTOMER_PASSWORD: ${GRIDGO_SEED_CUSTOMER_PASSWORD}
+      GRIDGO_SEED_RIDER_PASSWORD: ${GRIDGO_SEED_RIDER_PASSWORD}
+      GRIDGO_SEED_ADMIN_PASSWORD: ${GRIDGO_SEED_ADMIN_PASSWORD}
     depends_on:
       migrate:
         condition: service_completed_successfully

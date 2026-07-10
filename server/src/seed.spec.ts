@@ -2,6 +2,40 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 describe('seed script', () => {
+  it('requires independent role-specific passwords without publishing credentials', () => {
+    const seedSource = readFileSync(join(__dirname, 'seed.ts'), 'utf8');
+
+    expect(seedSource).toContain('GRIDGO_SEED_CUSTOMER_PASSWORD');
+    expect(seedSource).toContain('GRIDGO_SEED_RIDER_PASSWORD');
+    expect(seedSource).toContain('GRIDGO_SEED_ADMIN_PASSWORD');
+    expect(seedSource).toContain('bcrypt.hash(customerPassword, 10)');
+    expect(seedSource).toContain('bcrypt.hash(riderPassword, 10)');
+    expect(seedSource).toContain('bcrypt.hash(adminPassword, 10)');
+    expect(seedSource).not.toContain('password123');
+    expect(seedSource).not.toContain('Login credentials');
+    expect(seedSource).not.toContain('all use password');
+  });
+
+  it('passes seed password variable names through Compose without values', () => {
+    const composeSource = readFileSync(
+      join(__dirname, '..', '..', 'docker-compose.dev.yml'),
+      'utf8',
+    );
+
+    expect(composeSource).toContain(
+      'GRIDGO_SEED_CUSTOMER_PASSWORD: ${GRIDGO_SEED_CUSTOMER_PASSWORD}',
+    );
+    expect(composeSource).toContain(
+      'GRIDGO_SEED_RIDER_PASSWORD: ${GRIDGO_SEED_RIDER_PASSWORD}',
+    );
+    expect(composeSource).toContain(
+      'GRIDGO_SEED_ADMIN_PASSWORD: ${GRIDGO_SEED_ADMIN_PASSWORD}',
+    );
+    expect(composeSource).not.toMatch(
+      /GRIDGO_SEED_(?:CUSTOMER|RIDER|ADMIN)_PASSWORD:\s*[^$\s]/,
+    );
+  });
+
   it('includes batch_orders in the fresh reset truncate list', () => {
     const seedSource = readFileSync(join(__dirname, 'seed.ts'), 'utf8');
 
