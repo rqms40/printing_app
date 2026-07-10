@@ -83,7 +83,7 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
         ? AppColors.dark
         : AppColors.light;
     final active = widget.activeStop;
-    final livePoint = active != null
+    final gps = active != null
         ? ref.watch(
             riderLocationTrackerProvider(
               RiderLocationTrackerArgs(
@@ -93,11 +93,15 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
             ),
           )
         : null;
-    final caption = _hasMalformedGeometry
+    final livePoint = gps?.point;
+    final routeCaption = _hasMalformedGeometry
         ? 'Route geometry degraded'
         : _planVersion == null
         ? 'No persisted dispatch plan'
         : 'Persisted route · Plan v$_planVersion';
+    final caption = active?.shouldTrackLocation == true && gps != null
+        ? '$routeCaption · ${gps.message}'
+        : routeCaption;
 
     return GestureDetector(
       onTap: widget.onTap,

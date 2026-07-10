@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/shared/models/address.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/services/api_client.dart';
@@ -37,11 +38,15 @@ class AddressNotifier extends StateNotifier<List<Address>> {
   AddressNotifier({
     List<Address> initialState = const [],
     bool skipBootstrap = false,
-  }) : super(initialState) {
+    bool? realFlow,
+  }) : realFlow = realFlow ?? AppConstants.realFlow,
+       super(initialState) {
     if (!skipBootstrap) _fetchAddresses();
   }
 
   static const int maxAddresses = 5;
+  final bool realFlow;
+  String? errorMessage;
 
   bool get canAddMore => state.length < maxAddresses;
 
@@ -52,13 +57,21 @@ class AddressNotifier extends StateNotifier<List<Address>> {
       state = data
           .map((json) => _parseAddress(json as Map<String, dynamic>))
           .toList();
+      errorMessage = null;
     } catch (_) {
-      // Offline fallback
-      state = List.from(MockData.addresses);
+      if (!realFlow) {
+        state = List.from(MockData.addresses);
+        errorMessage = 'Showing offline demo addresses';
+      } else {
+        _setError('Unable to load saved addresses');
+      }
     }
   }
 
-  Future<void> refreshAddresses() async => _fetchAddresses();
+  Future<bool> refreshAddresses() async {
+    await _fetchAddresses();
+    return errorMessage == null;
+  }
 
   Future<Address?> addAddress(
     Address address, {
@@ -90,20 +103,25 @@ class AddressNotifier extends StateNotifier<List<Address>> {
       } else {
         state = [...state, newAddr];
       }
+      errorMessage = null;
       return newAddr;
     } catch (_) {
-      if (!addLocallyOnFailure) return null;
+      if (!addLocallyOnFailure || realFlow) {
+        _setError('Address was not saved');
+        return null;
+      }
       // Offline: add locally
       if (address.isDefault) {
         state = [for (final a in state) a.copyWith(isDefault: false), address];
       } else {
         state = [...state, address];
       }
+      errorMessage = 'Address is available only on this device';
       return null;
     }
   }
 
-  Future<void> updateAddress(Address address) async {
+  Future<bool> updateAddress(Address address) async {
     try {
       await ApiClient.instance.put(
         '/addresses/${address.id}',
@@ -120,28 +138,54 @@ class AddressNotifier extends StateNotifier<List<Address>> {
           'isDefault': address.isDefault,
         },
       );
-    } catch (_) {}
+    } catch (_) {
+      if (realFlow) {
+        _setError('Unable to update this address');
+        return false;
+      }
+    }
     // Update local state regardless
     state = [
       for (final a in state)
         if (a.id == address.id) address else a,
     ];
+    errorMessage = null;
+    return true;
   }
 
-  Future<void> deleteAddress(String id) async {
+  Future<bool> deleteAddress(String id) async {
     try {
       await ApiClient.instance.delete('/addresses/$id');
-    } catch (_) {}
+    } catch (_) {
+      if (realFlow) {
+        _setError('Unable to delete this address');
+        return false;
+      }
+    }
     // Update local state regardless
     state = state.where((a) => a.id != id).toList();
+    errorMessage = null;
+    return true;
   }
 
-  Future<void> setDefault(String id) async {
+  Future<bool> setDefault(String id) async {
     try {
       await ApiClient.instance.patch('/addresses/$id/default');
-    } catch (_) {}
+    } catch (_) {
+      if (realFlow) {
+        _setError('Unable to set the default address');
+        return false;
+      }
+    }
     // Update local state regardless
     state = [for (final a in state) a.copyWith(isDefault: a.id == id)];
+    errorMessage = null;
+    return true;
+  }
+
+  void _setError(String message) {
+    errorMessage = message;
+    state = [...state];
   }
 }
 

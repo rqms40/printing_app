@@ -17,6 +17,7 @@ void main() {
   List<Map<String, dynamic>>? activeAssignmentsResponse;
   List<Map<String, dynamic>>? historyAssignmentsResponse;
   Map<String, dynamic>? dispatchPlanResponse;
+  var failDispatchPlan = false;
   var failPatchStatus = false;
   Map<String, dynamic>? lastStatusPatchData;
   Interceptor? riderApiInterceptor;
@@ -68,6 +69,16 @@ void main() {
 
         if (options.path == '/riders/dispatch-plan' &&
             options.method == 'GET') {
+          if (failDispatchPlan) {
+            handler.reject(
+              DioException(
+                requestOptions: options,
+                type: DioExceptionType.connectionError,
+                error: 'dispatch plan offline',
+              ),
+            );
+            return;
+          }
           handler.resolve(
             Response(
               requestOptions: options,
@@ -122,6 +133,7 @@ void main() {
     activeAssignmentsResponse = null;
     historyAssignmentsResponse = null;
     dispatchPlanResponse = null;
+    failDispatchPlan = false;
     failPatchStatus = false;
     lastStatusPatchData = null;
   });
@@ -146,6 +158,129 @@ void main() {
         MockData.deliveryAssignments.length,
       );
     });
+
+    test('real-flow mode never substitutes mock assignments', () async {
+      final realNotifier = DeliveriesNotifier(bootstrap: false, realFlow: true);
+      addTearDown(realNotifier.dispose);
+
+      await realNotifier.refreshAssignments();
+
+      expect(realNotifier.state.views, isEmpty);
+      expect(
+        realNotifier.state.errorMessage,
+        'Unable to load live assignments',
+      );
+      expect(realNotifier.state.dataStale, isTrue);
+    });
+
+    test(
+      'real-flow refresh retains one coherent plan when a source fails',
+      () async {
+        activeAssignmentsResponse = [
+          _assignmentJson(
+            id: '101',
+            status: DeliveryStatus.onTheWay,
+            updatedAt: '2026-02-01T09:00:00Z',
+          ),
+        ];
+        historyAssignmentsResponse = [];
+        dispatchPlanResponse = {
+          'version': 4,
+          'originLatitude': '7.064',
+          'originLongitude': '125.6079',
+          'provider': 'osrm',
+          'profile': 'driving',
+          'routingDataStale': false,
+          'stops': [_planStop(101, sequence: 1, status: 'pending')],
+        };
+        final realNotifier = DeliveriesNotifier(realFlow: true);
+        addTearDown(realNotifier.dispose);
+        await _waitForBootstrap();
+        expect(realNotifier.state.views.single.id, '101');
+
+        activeAssignmentsResponse = [
+          _assignmentJson(
+            id: '102',
+            status: DeliveryStatus.onTheWay,
+            updatedAt: '2026-02-01T10:00:00Z',
+          ),
+        ];
+        failDispatchPlan = true;
+        await realNotifier.refreshAssignments();
+
+        expect(realNotifier.state.views.single.id, '101');
+        expect(realNotifier.state.views.single.planVersion, 4);
+        expect(realNotifier.state.dataStale, isTrue);
+        expect(
+          realNotifier.state.errorMessage,
+          'Unable to load live assignments',
+        );
+      },
+    );
+
+    test(
+      'real-flow missing order relation never imports mock context',
+      () async {
+        final assignment = _assignmentJson(
+          id: 'live-without-order',
+          status: DeliveryStatus.assigned,
+          updatedAt: '2026-02-01T09:00:00Z',
+        );
+        assignment.remove('order');
+        assignment['orderId'] = MockData.orders.first.id;
+        activeAssignmentsResponse = [assignment];
+        historyAssignmentsResponse = [];
+        dispatchPlanResponse = null;
+        final realNotifier = DeliveriesNotifier(realFlow: true);
+        addTearDown(realNotifier.dispose);
+        await _waitForBootstrap();
+
+        expect(
+          realNotifier.state.views.single.order.orderRef,
+          MockData.orders.first.id,
+        );
+        expect(realNotifier.state.views.single.order.totalPrice, 0);
+        expect(realNotifier.state.views.single.order.destination, isNull);
+      },
+    );
+
+    test(
+      'real-flow malformed non-null plan retains the last valid plan',
+      () async {
+        activeAssignmentsResponse = [
+          _assignmentJson(
+            id: '101',
+            status: DeliveryStatus.onTheWay,
+            updatedAt: '2026-02-01T09:00:00Z',
+          ),
+        ];
+        historyAssignmentsResponse = [];
+        dispatchPlanResponse = {
+          'version': 4,
+          'originLatitude': '7.064',
+          'originLongitude': '125.6079',
+          'provider': 'osrm',
+          'profile': 'driving',
+          'routingDataStale': false,
+          'stops': [_planStop(101, sequence: 1, status: 'pending')],
+        };
+        final realNotifier = DeliveriesNotifier(realFlow: true);
+        addTearDown(realNotifier.dispose);
+        await _waitForBootstrap();
+        expect(realNotifier.state.views.single.planVersion, 4);
+
+        dispatchPlanResponse = {'version': 'broken', 'stops': 'not-a-list'};
+        await realNotifier.refreshAssignments();
+
+        expect(realNotifier.state.views.single.id, '101');
+        expect(realNotifier.state.views.single.planVersion, 4);
+        expect(realNotifier.state.dataStale, isTrue);
+        expect(
+          realNotifier.state.errorMessage,
+          'Unable to load live assignments',
+        );
+      },
+    );
 
     test('filteredAssignments excludes declined by default', () {
       final filtered = notifier.state.filteredAssignments;

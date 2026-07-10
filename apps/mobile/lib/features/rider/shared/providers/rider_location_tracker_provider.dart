@@ -4,126 +4,321 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/services/api_client.dart';
-import 'package:printing_app/shared/services/websocket_service.dart';
 
-/// Tracks rider GPS for an active delivery and broadcasts to customers.
-class RiderLocationTracker extends StateNotifier<LatLng?> {
+enum RiderLocationPermission { denied, deniedForever, whileInUse, always }
+
+enum RiderGpsStatus {
+  disabled,
+  requestingPermission,
+  serviceDisabled,
+  permissionDenied,
+  permissionDeniedForever,
+  locating,
+  uploading,
+  live,
+  uploadFailed,
+  streamError,
+}
+
+@immutable
+class RiderGpsPoint {
+  const RiderGpsPoint({
+    required this.latitude,
+    required this.longitude,
+    this.speed,
+    this.heading,
+  });
+
+  final double latitude;
+  final double longitude;
+  final double? speed;
+  final double? heading;
+
+  LatLng get latLng => LatLng(latitude, longitude);
+}
+
+abstract interface class RiderLocationSource {
+  Future<RiderLocationPermission> checkPermission();
+  Future<RiderLocationPermission> requestPermission();
+  Future<bool> isServiceEnabled();
+  Future<RiderGpsPoint> getCurrentPosition();
+  Stream<RiderGpsPoint> get positionStream;
+}
+
+class GeolocatorRiderLocationSource implements RiderLocationSource {
+  const GeolocatorRiderLocationSource();
+
+  @override
+  Future<RiderLocationPermission> checkPermission() async =>
+      _permission(await Geolocator.checkPermission());
+
+  @override
+  Future<RiderLocationPermission> requestPermission() async =>
+      _permission(await Geolocator.requestPermission());
+
+  @override
+  Future<bool> isServiceEnabled() => Geolocator.isLocationServiceEnabled();
+
+  @override
+  Future<RiderGpsPoint> getCurrentPosition() async =>
+      _point(await Geolocator.getCurrentPosition());
+
+  @override
+  Stream<RiderGpsPoint> get positionStream => Geolocator.getPositionStream(
+    locationSettings: const LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 12,
+    ),
+  ).map(_point);
+
+  static RiderGpsPoint _point(Position position) => RiderGpsPoint(
+    latitude: position.latitude,
+    longitude: position.longitude,
+    speed: position.speed,
+    heading: position.heading,
+  );
+
+  static RiderLocationPermission _permission(LocationPermission permission) =>
+      switch (permission) {
+        LocationPermission.denied => RiderLocationPermission.denied,
+        LocationPermission.deniedForever =>
+          RiderLocationPermission.deniedForever,
+        LocationPermission.always => RiderLocationPermission.always,
+        LocationPermission.whileInUse => RiderLocationPermission.whileInUse,
+        LocationPermission.unableToDetermine => RiderLocationPermission.denied,
+      };
+}
+
+@immutable
+class RiderLocationTrackerState {
+  const RiderLocationTrackerState({
+    required this.status,
+    this.point,
+    this.error,
+  });
+
+  final RiderGpsStatus status;
+  final LatLng? point;
+  final Object? error;
+
+  String get message => switch (status) {
+    RiderGpsStatus.disabled => 'GPS sharing starts when dispatch begins',
+    RiderGpsStatus.requestingPermission => 'Requesting location permission',
+    RiderGpsStatus.serviceDisabled => 'Location services are disabled',
+    RiderGpsStatus.permissionDenied => 'Location permission was denied',
+    RiderGpsStatus.permissionDeniedForever =>
+      'Location permission is blocked in device settings',
+    RiderGpsStatus.locating => 'Waiting for a GPS fix',
+    RiderGpsStatus.uploading => 'Sending GPS location to the server',
+    RiderGpsStatus.live => 'Live GPS is being shared',
+    RiderGpsStatus.uploadFailed => 'Could not send GPS location to the server',
+    RiderGpsStatus.streamError => 'GPS signal is unavailable',
+  };
+
+  RiderLocationTrackerState withPoint(
+    LatLng value,
+    RiderGpsStatus nextStatus, {
+    Object? nextError,
+  }) => RiderLocationTrackerState(
+    status: nextStatus,
+    point: value,
+    error: nextError,
+  );
+}
+
+typedef RiderLocationPoster = Future<void> Function(LatLng point);
+typedef RiderLocationClock = DateTime Function();
+typedef RiderApiPatch = Future<dynamic> Function(String path, {dynamic data});
+
+class RiderLocationApi {
+  RiderLocationApi({RiderApiPatch? patch})
+    : _patch = patch ?? ApiClient.instance.patch;
+
+  final RiderApiPatch _patch;
+
+  Future<void> post(LatLng point) async {
+    if (!point.latitude.isFinite ||
+        !point.longitude.isFinite ||
+        point.latitude < -90 ||
+        point.latitude > 90 ||
+        point.longitude < -180 ||
+        point.longitude > 180) {
+      throw ArgumentError.value(point, 'point', 'must be finite coordinates');
+    }
+    await _patch(
+      '/riders/location',
+      data: {'latitude': point.latitude, 'longitude': point.longitude},
+    );
+  }
+}
+
+/// Tracks only physical device GPS and publishes it through the acknowledged
+/// rider REST endpoint. Dispatch position is never simulated client-side.
+class RiderLocationTracker extends StateNotifier<RiderLocationTrackerState> {
   RiderLocationTracker({
     required this.assignmentId,
     required this.enabled,
-  }) : super(null) {
-    if (enabled) {
-      unawaited(_start());
-    }
+    RiderLocationSource? source,
+    RiderLocationPoster? postLocation,
+    RiderLocationClock? now,
+    bool autoStart = true,
+  }) : _source = source ?? const GeolocatorRiderLocationSource(),
+       _postLocation = postLocation ?? RiderLocationApi().post,
+       _now = now ?? DateTime.now,
+       super(
+         RiderLocationTrackerState(
+           status: enabled
+               ? RiderGpsStatus.requestingPermission
+               : RiderGpsStatus.disabled,
+         ),
+       ) {
+    if (enabled && autoStart) unawaited(start());
   }
+
+  static const _minimumPostInterval = Duration(seconds: 15);
+  static const _minimumPostDistanceMeters = 12.0;
+  static const _distance = Distance();
 
   final String assignmentId;
   final bool enabled;
+  final RiderLocationSource _source;
+  final RiderLocationPoster _postLocation;
+  final RiderLocationClock _now;
 
-  StreamSubscription<Position>? _subscription;
-  Timer? _mockTimer;
-  int _mockIndex = 0;
-  DateTime? _lastRestUpdate;
+  StreamSubscription<RiderGpsPoint>? _subscription;
+  LatLng? _lastAcknowledgedPoint;
+  DateTime? _lastAcknowledgedAt;
+  LatLng? _pendingPoint;
+  bool _posting = false;
+  bool _started = false;
+  bool _disposed = false;
 
-  Future<void> _start() async {
-    await WebSocketService.instance.connectLocation();
+  Future<void> start() async {
+    if (!enabled || _started || _disposed) return;
+    _started = true;
+    _setStatus(RiderGpsStatus.requestingPermission);
     try {
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
+      var permission = await _source.checkPermission();
+      if (permission == RiderLocationPermission.denied) {
+        permission = await _source.requestPermission();
       }
-      if (permission == LocationPermission.deniedForever) {
-        _startMockUpdates();
+      if (_disposed) return;
+      if (permission == RiderLocationPermission.deniedForever) {
+        _setStatus(RiderGpsStatus.permissionDeniedForever);
         return;
       }
-
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (serviceEnabled) {
-        final current = await Geolocator.getCurrentPosition();
-        _emitPosition(current);
-        _subscription = Geolocator.getPositionStream(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 12,
-          ),
-        ).listen(_emitPosition, onError: (_) => _startMockUpdates());
+      if (permission == RiderLocationPermission.denied) {
+        _setStatus(RiderGpsStatus.permissionDenied);
         return;
       }
-    } catch (e) {
-      debugPrint('RiderLocationTracker: $e');
+      if (!await _source.isServiceEnabled()) {
+        if (!_disposed) _setStatus(RiderGpsStatus.serviceDisabled);
+        return;
+      }
+      if (_disposed) return;
+      _setStatus(RiderGpsStatus.locating);
+      _acceptPoint((await _source.getCurrentPosition()).latLng);
+      if (_disposed) return;
+      _subscription = _source.positionStream.listen(
+        (position) => _acceptPoint(position.latLng),
+        onError: _handleStreamError,
+      );
+    } catch (error) {
+      if (!_disposed) {
+        state = RiderLocationTrackerState(
+          status: RiderGpsStatus.streamError,
+          point: state.point,
+          error: error,
+        );
+      }
     }
-    _startMockUpdates();
   }
 
-  void _emitPosition(Position position) {
-    final point = LatLng(position.latitude, position.longitude);
-    state = point;
-    _broadcast(point);
+  void _acceptPoint(LatLng point) {
+    if (_disposed) return;
+    final shouldPost = _shouldPost(point, _now());
+    state = state.withPoint(
+      point,
+      shouldPost ? RiderGpsStatus.uploading : RiderGpsStatus.live,
+    );
+    if (!shouldPost) return;
+    _pendingPoint = point;
+    if (!_posting) unawaited(_drainPosts());
   }
 
-  void _broadcast(LatLng point) {
-    WebSocketService.instance.sendRiderLocation({
-      'assignmentId': assignmentId,
-      'latitude': point.latitude,
-      'longitude': point.longitude,
-      'timestamp': DateTime.now().toIso8601String(),
-    });
+  bool _shouldPost(LatLng point, DateTime at) {
+    final lastPoint = _lastAcknowledgedPoint;
+    final lastAt = _lastAcknowledgedAt;
+    if (lastPoint == null || lastAt == null) return true;
+    final elapsed = at.difference(lastAt);
+    final movedMeters = _distance.as(LengthUnit.Meter, lastPoint, point);
+    return elapsed >= _minimumPostInterval ||
+        movedMeters >= _minimumPostDistanceMeters;
+  }
 
-    final now = DateTime.now();
-    if (_lastRestUpdate != null &&
-        now.difference(_lastRestUpdate!) < const Duration(seconds: 15)) {
-      return;
+  Future<void> _drainPosts() async {
+    if (_posting || _disposed) return;
+    _posting = true;
+    try {
+      while (!_disposed && _pendingPoint != null) {
+        final point = _pendingPoint!;
+        _pendingPoint = null;
+        if (!_shouldPost(point, _now())) continue;
+        try {
+          await _postLocation(point);
+          if (_disposed) return;
+          _lastAcknowledgedPoint = point;
+          _lastAcknowledgedAt = _now();
+          state = state.withPoint(state.point ?? point, RiderGpsStatus.live);
+        } catch (error) {
+          if (_disposed) return;
+          state = RiderLocationTrackerState(
+            status: RiderGpsStatus.uploadFailed,
+            point: state.point ?? point,
+            error: error,
+          );
+        }
+      }
+    } finally {
+      _posting = false;
     }
-    _lastRestUpdate = now;
-    unawaited(
-      ApiClient.instance
-          .patch(
-            '/riders/location',
-            data: {
-              'latitude': point.latitude,
-              'longitude': point.longitude,
-            },
-          )
-          .then((_) => null, onError: (_) => null),
+  }
+
+  void _handleStreamError(Object error, StackTrace stackTrace) {
+    if (_disposed) return;
+    state = RiderLocationTrackerState(
+      status: RiderGpsStatus.streamError,
+      point: state.point,
+      error: error,
     );
   }
 
-  void _startMockUpdates() {
-    final updates = MockData.locationUpdates;
-    if (updates.isEmpty) return;
-
-    void emitAt(int index) {
-      final update = updates[index % updates.length];
-      final point = LatLng(update.latitude, update.longitude);
-      state = point;
-      _broadcast(point);
-    }
-
-    emitAt(0);
-    _mockIndex = 1;
-    _mockTimer = Timer.periodic(const Duration(seconds: 4), (_) {
-      emitAt(_mockIndex);
-      _mockIndex++;
-    });
+  void _setStatus(RiderGpsStatus status) {
+    if (_disposed) return;
+    state = RiderLocationTrackerState(status: status, point: state.point);
   }
 
   @override
   void dispose() {
-    _subscription?.cancel();
-    _mockTimer?.cancel();
+    _disposed = true;
+    unawaited(_subscription?.cancel());
+    _pendingPoint = null;
     super.dispose();
   }
 }
 
 final riderLocationTrackerProvider = StateNotifierProvider.autoDispose
-    .family<RiderLocationTracker, LatLng?, RiderLocationTrackerArgs>(
-  (ref, args) => RiderLocationTracker(
-    assignmentId: args.assignmentId,
-    enabled: args.enabled,
-  ),
-);
+    .family<
+      RiderLocationTracker,
+      RiderLocationTrackerState,
+      RiderLocationTrackerArgs
+    >((ref, args) {
+      return RiderLocationTracker(
+        assignmentId: args.assignmentId,
+        enabled: args.enabled,
+      );
+    });
 
 class RiderLocationTrackerArgs {
   const RiderLocationTrackerArgs({

@@ -161,6 +161,7 @@ services:
         FLUTTER_VERSION: ${FLUTTER_VERSION:-3.41.6}
         SERVER_URL: http://${GRIDGO_PUBLIC_HOST:-192.168.40.201}:${GRIDGO_API_PORT:-3000}
         ENABLE_DEV_AUTH: ${GRIDGO_ENABLE_DEV_AUTH:-false}
+        GRIDGO_REAL_FLOW: ${GRIDGO_REAL_FLOW:-true}
     ports:
       - "${GRIDGO_BIND_ADDR:-0.0.0.0}:${GRIDGO_MOBILE_PORT:-8088}:80"
     depends_on:

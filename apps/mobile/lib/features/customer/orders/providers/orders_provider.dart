@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/features/customer/beta/exceptions/beta_order_limit_exception.dart';
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
 import 'package:printing_app/features/customer/order/models/checkout_state.dart';
@@ -720,7 +721,9 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     bool skipBootstrap = false,
     this.onCompletionUpdate,
     this.onInitialLoadComplete,
-  }) : super(initialState) {
+    bool? realFlow,
+  }) : realFlow = realFlow ?? AppConstants.realFlow,
+       super(initialState) {
     if (!skipBootstrap) {
       _fetchOrders();
       _connectWebSocket();
@@ -729,6 +732,8 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
 
   final Future<void> Function()? onCompletionUpdate;
   final VoidCallback? onInitialLoadComplete;
+  final bool realFlow;
+  String? errorMessage;
   VoidCallback? _removeOrderUpdateListener;
   VoidCallback? _removeDeliveryQueueListener;
   bool _initialLoadReported = false;
@@ -849,14 +854,18 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       state = _groupBatchOrders(
         data.map((json) => _parseOrder(json as Map<String, dynamic>)).toList(),
       );
+      errorMessage = null;
       debugPrint('OrdersProvider: Loaded ${state.length} orders from API');
     } catch (e) {
       if (!mounted) return;
-      if (state.isEmpty) {
+      if (state.isEmpty && !realFlow) {
         debugPrint('OrdersProvider: API failed ($e), using MockData');
         state = List.of(MockData.orders);
+        errorMessage = 'Showing offline demo orders';
       } else {
         debugPrint('OrdersProvider: API failed ($e), preserving current state');
+        errorMessage = 'Unable to refresh live orders';
+        state = [...state];
       }
     }
     // Subscribe to all loaded orders in case socket connected before fetch completed.
@@ -934,10 +943,12 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
           throw const BetaOrderLimitException();
         }
       }
+      if (realFlow) rethrow;
       debugPrint('OrdersProvider: API create failed ($e), adding locally');
       state = [order, ...state];
       return order;
     } catch (e) {
+      if (realFlow) rethrow;
       debugPrint('OrdersProvider: API create failed ($e), adding locally');
       state = [order, ...state];
       return order;

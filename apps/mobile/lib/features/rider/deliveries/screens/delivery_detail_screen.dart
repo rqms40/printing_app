@@ -167,6 +167,7 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
                   child: RiderMapView(
                     assignmentId: view.id,
                     destination: destLatLng,
+                    planStop: view.planStop,
                     trackLocation: false,
                     interactive: true,
                     showLiveBadge: false,

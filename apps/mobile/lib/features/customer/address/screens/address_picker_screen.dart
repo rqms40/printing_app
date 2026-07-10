@@ -66,7 +66,7 @@ class _AddressPickerScreenState extends ConsumerState<AddressPickerScreen> {
     super.dispose();
   }
 
-  void _save() {
+  Future<void> _save() async {
     if (_cityController.text.trim().isEmpty ||
         _landmarkController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -92,9 +92,17 @@ class _AddressPickerScreenState extends ConsumerState<AddressPickerScreen> {
         isDefault: _isDefault,
         updatedAt: now,
       );
-      notifier.updateAddress(updated);
+      final updatedSuccessfully = await notifier.updateAddress(updated);
+      if (!mounted || !updatedSuccessfully) {
+        _showSaveError(notifier.errorMessage);
+        return;
+      }
       if (_isDefault) {
-        notifier.setDefault(updated.id);
+        final defaultUpdated = await notifier.setDefault(updated.id);
+        if (!mounted || !defaultUpdated) {
+          _showSaveError(notifier.errorMessage);
+          return;
+        }
       }
     } else {
       final newAddress = Address(
@@ -115,10 +123,22 @@ class _AddressPickerScreenState extends ConsumerState<AddressPickerScreen> {
         createdAt: now,
         updatedAt: now,
       );
-      notifier.addAddress(newAddress);
+      final saved = await notifier.addAddress(newAddress);
+      if (!mounted || saved == null) {
+        _showSaveError(notifier.errorMessage);
+        return;
+      }
     }
 
+    if (!mounted) return;
     Navigator.of(context).pop();
+  }
+
+  void _showSaveError(String? message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message ?? 'Unable to save this address')),
+    );
   }
 
   @override

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,16 +6,17 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/features/rider/shared/providers/rider_location_tracker_provider.dart';
-import 'package:printing_app/shared/services/routing_service.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
-/// Full-featured map for rider deliveries with OSRM routing and live GPS.
+/// Rider delivery map backed only by the persisted server dispatch leg.
 class RiderMapView extends ConsumerStatefulWidget {
   const RiderMapView({
     super.key,
     required this.assignmentId,
     required this.destination,
+    required this.planStop,
     required this.trackLocation,
     this.interactive = true,
     this.showLiveBadge = true,
@@ -27,6 +26,7 @@ class RiderMapView extends ConsumerStatefulWidget {
 
   final String assignmentId;
   final LatLng? destination;
+  final RiderDispatchPlanStop? planStop;
   final bool trackLocation;
   final bool interactive;
   final bool showLiveBadge;
@@ -40,13 +40,24 @@ class RiderMapView extends ConsumerStatefulWidget {
 class _RiderMapViewState extends ConsumerState<RiderMapView>
     with SingleTickerProviderStateMixin {
   final _mapController = MapController();
-  List<LatLng> _routePoints = [];
-  bool _isLoading = true;
   late final AnimationController _pulseController;
 
   LatLng get _shop => MapHelpers.shopPoint;
 
-  LatLng get _destination => widget.destination ?? MapHelpers.davaoCenter;
+  LatLng get _destination =>
+      widget.planStop?.destination ??
+      widget.destination ??
+      MapHelpers.davaoCenter;
+
+  List<LatLng> get _routePoints => widget.showRoute
+      ? widget.planStop?.geometry?.points ?? const []
+      : const [];
+
+  bool get _routeDegraded =>
+      widget.showRoute &&
+      (widget.planStop == null ||
+          widget.planStop!.geometryMalformed ||
+          widget.planStop!.geometry == null);
 
   @override
   void initState() {
@@ -55,41 +66,11 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     )..repeat(reverse: true);
-    _loadRoute();
   }
 
   @override
   void didUpdateWidget(covariant RiderMapView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_routeKey(oldWidget) != _routeKey(widget)) {
-      unawaited(_loadRoute());
-    } else {
-      _fitBounds();
-    }
-  }
-
-  String _routeKey(RiderMapView widget) {
-    final point = widget.destination ?? MapHelpers.davaoCenter;
-    return '${widget.showRoute}:${point.latitude}:${point.longitude}';
-  }
-
-  Future<void> _loadRoute() async {
-    if (!widget.showRoute) {
-      if (!mounted) return;
-      setState(() {
-        _routePoints = const [];
-        _isLoading = false;
-      });
-      _fitBounds();
-      return;
-    }
-
-    final points = await RoutingService.getRoute(_shop, _destination);
-    if (!mounted) return;
-    setState(() {
-      _routePoints = points;
-      _isLoading = false;
-    });
     _fitBounds();
   }
 
@@ -97,7 +78,7 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
     final bounds = LatLngBounds.fromPoints([
       _shop,
       _destination,
-      if (widget.showRoute) ..._routePoints,
+      ..._routePoints,
     ]);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -116,21 +97,21 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).brightness == Brightness.dark
+    final brightness = Theme.of(context).brightness;
+    final colors = brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
     final radius = widget.borderRadius ?? BorderRadius.zero;
 
-    final riderPoint = widget.trackLocation
-        ? ref.watch(
-            riderLocationTrackerProvider(
-              RiderLocationTrackerArgs(
-                assignmentId: widget.assignmentId,
-                enabled: true,
-              ),
-            ),
-          )
-        : null;
+    final tracker = ref.watch(
+      riderLocationTrackerProvider(
+        RiderLocationTrackerArgs(
+          assignmentId: widget.assignmentId,
+          enabled: widget.trackLocation,
+        ),
+      ),
+    );
+    final riderPoint = tracker.point;
 
     final markers = <Marker>[
       MapHelpers.shopMarker(point: _shop),
@@ -142,46 +123,64 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
       borderRadius: radius,
       child: Stack(
         children: [
-          if (_isLoading)
-            ColoredBox(
-              color: colors.surfaceVariant,
-              child: Center(
-                child: CircularProgressIndicator(
-                  color: colors.accent,
-                  strokeWidth: 2,
-                ),
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: _destination,
+              initialZoom: 13,
+              interactionOptions: InteractionOptions(
+                flags: widget.interactive
+                    ? InteractiveFlag.all
+                    : InteractiveFlag.none,
               ),
-            )
-          else
-            FlutterMap(
-              mapController: _mapController,
-              options: MapOptions(
-                initialCenter: _destination,
-                initialZoom: 13,
-                interactionOptions: InteractionOptions(
-                  flags: widget.interactive
-                      ? InteractiveFlag.all
-                      : InteractiveFlag.none,
-                ),
-                onMapReady: _fitBounds,
-              ),
-              children: [
-                MapHelpers.tileLayer(Theme.of(context).brightness),
-                if (widget.showRoute && _routePoints.isNotEmpty)
-                  MapHelpers.routePolyline(_routePoints),
-                MarkerLayer(markers: markers),
-              ],
+              onMapReady: _fitBounds,
             ),
-
-          if (widget.showLiveBadge &&
-              widget.trackLocation &&
-              riderPoint != null)
+            children: [
+              MapHelpers.tileLayer(brightness),
+              if (_routePoints.isNotEmpty)
+                MapHelpers.persistedRouteLeg(
+                  key: const Key('active-route-leg'),
+                  points: _routePoints,
+                  isCompleted: false,
+                  isCurrent: true,
+                ),
+              MarkerLayer(markers: markers),
+              MapHelpers.attribution(includeRouting: _routePoints.isNotEmpty),
+            ],
+          ),
+          if (widget.showLiveBadge && widget.trackLocation)
             Positioned(
               top: AppSpacing.md,
               left: AppSpacing.md,
-              child: _LiveBadge(pulseController: _pulseController),
+              child: _GpsBadge(
+                pulseController: _pulseController,
+                state: tracker,
+              ),
             ),
-
+          if (widget.showRoute)
+            Positioned(
+              left: AppSpacing.md,
+              right: AppSpacing.md,
+              bottom: AppSpacing.sm,
+              child: IgnorePointer(
+                child: Text(
+                  _routeDegraded
+                      ? 'Route geometry unavailable'
+                      : 'Persisted route · '
+                            '${(widget.planStop!.legDistanceMeters / 1000).toStringAsFixed(1)} km',
+                  textAlign: TextAlign.center,
+                  style: AppTypography.caption.copyWith(
+                    color: _routeDegraded
+                        ? Colors.orangeAccent
+                        : colors.onSurface,
+                    fontWeight: FontWeight.w600,
+                    shadows: const [
+                      Shadow(color: Color(0xCC000000), blurRadius: 8),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           Positioned(
             bottom: AppSpacing.md,
             right: AppSpacing.md,
@@ -196,10 +195,15 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
   }
 }
 
-class _LiveBadge extends StatelessWidget {
-  const _LiveBadge({required this.pulseController});
+class _GpsBadge extends StatelessWidget {
+  const _GpsBadge({required this.pulseController, required this.state});
 
   final AnimationController pulseController;
+  final RiderLocationTrackerState state;
+
+  bool get _isHealthy =>
+      state.status == RiderGpsStatus.live ||
+      state.status == RiderGpsStatus.uploading;
 
   @override
   Widget build(BuildContext context) {
@@ -208,6 +212,7 @@ class _LiveBadge extends StatelessWidget {
         : AppColors.light;
 
     return Container(
+      constraints: const BoxConstraints(maxWidth: 250),
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.sm,
         vertical: AppSpacing.xs,
@@ -235,17 +240,21 @@ class _LiveBadge extends StatelessWidget {
               width: 8,
               height: 8,
               decoration: BoxDecoration(
-                color: colors.brand,
+                color: _isHealthy ? colors.brand : Colors.orangeAccent,
                 shape: BoxShape.circle,
               ),
             ),
           ),
           const SizedBox(width: AppSpacing.xs),
-          Text(
-            'Live GPS',
-            style: AppTypography.caption.copyWith(
-              color: colors.onBackground,
-              fontWeight: FontWeight.w600,
+          Flexible(
+            child: Text(
+              state.message,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.caption.copyWith(
+                color: colors.onBackground,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],

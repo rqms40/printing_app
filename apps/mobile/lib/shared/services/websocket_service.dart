@@ -404,10 +404,6 @@ class WebSocketService {
     }
   }
 
-  void sendRiderLocation(Map<String, dynamic> location) {
-    _locationSocket?.emit('updateLocation', location);
-  }
-
   void disconnectLocation() {
     _locationSocket?.disconnect();
     _locationSocket = null;

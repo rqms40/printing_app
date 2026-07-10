@@ -186,6 +186,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
             child: RiderMapView(
               assignmentId: view.id,
               destination: destination?.latLng,
+              planStop: view.planStop,
               trackLocation: trackGps,
               interactive: true,
             ),

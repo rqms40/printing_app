@@ -77,7 +77,7 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final active = widget.activeStop;
-    final livePoint = active != null
+    final gps = active != null
         ? ref.watch(
             riderLocationTrackerProvider(
               RiderLocationTrackerArgs(
@@ -87,17 +87,21 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
             ),
           )
         : null;
+    final livePoint = gps?.point;
     final completedCount = _planned
         .where(
           (stop) => stop.planStop?.status == RiderDispatchStopStatus.completed,
         )
         .length;
     final currentSequence = active?.planSequence ?? 0;
-    final caption = _hasMalformedGeometry
+    final routeCaption = _hasMalformedGeometry
         ? 'Route geometry degraded'
         : _planVersion == null
         ? 'No persisted dispatch plan'
         : 'Persisted route · Plan v$_planVersion';
+    final caption = active?.shouldTrackLocation == true && gps != null
+        ? '$routeCaption · ${gps.message}'
+        : routeCaption;
 
     return SizedBox.expand(
       child: Padding(

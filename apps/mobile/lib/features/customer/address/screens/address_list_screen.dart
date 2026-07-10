@@ -21,6 +21,21 @@ class AddressListScreen extends ConsumerWidget {
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
+    final errorMessage = notifier.errorMessage;
+
+    Future<bool> deleteAddress(String id) async {
+      final deleted = await notifier.deleteAddress(id);
+      if (!deleted && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              notifier.errorMessage ?? 'Unable to delete this address',
+            ),
+          ),
+        );
+      }
+      return deleted;
+    }
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -33,85 +48,112 @@ class AddressListScreen extends ConsumerWidget {
         elevation: 0,
         iconTheme: IconThemeData(color: colors.onBackground),
       ),
-      body: addresses.isEmpty
-          ? const EmptyState(
-              heading: 'No saved addresses',
-              body: 'Add your delivery addresses to make ordering easier.',
-              icon: HugeIcons.strokeRoundedLocation01,
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              itemCount: addresses.length,
-              separatorBuilder: (_, _) =>
-                  const SizedBox(height: AppSpacing.md),
-              itemBuilder: (context, index) {
-                final address = addresses[index];
-                final delay = (index * 60).ms;
-                return Dismissible(
-                  key: ValueKey(address.id),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    alignment: Alignment.centerRight,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-                    decoration: BoxDecoration(
-                      color: colors.error,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: HugeIcon(
-                      icon: HugeIcons.strokeRoundedDelete02,
-                      color: colors.background,
-                    ),
-                  ),
-                  confirmDismiss: (_) async {
-                    bool? confirmed;
-                    await ConfirmationDialog.show(
-                      context,
-                      title: 'Delete Address',
-                      message:
-                          'Are you sure you want to delete "${address.label}"?',
-                      confirmLabel: 'Delete',
-                      cancelLabel: 'Cancel',
-                      onConfirm: () {
-                        confirmed = true;
-                        Navigator.of(context).pop();
-                      },
-                      onCancel: () {
-                        confirmed = false;
-                        Navigator.of(context).pop();
-                      },
-                    );
-                    return confirmed ?? false;
-                  },
-                  onDismissed: (_) {
-                    notifier.deleteAddress(address.id);
-                  },
-                  child: AddressCard(
-                    address: address,
-                    onEdit: () {
-                      context.push('/customer/addresses/new');
-                    },
-                    onDelete: () {
-                      ConfirmationDialog.show(
-                        context,
-                        title: 'Delete Address',
-                        message:
-                            'Are you sure you want to delete "${address.label}"?',
-                        confirmLabel: 'Delete',
-                        cancelLabel: 'Cancel',
-                        onConfirm: () {
-                          notifier.deleteAddress(address.id);
-                          Navigator.of(context).pop();
-                        },
-                        onCancel: () => Navigator.of(context).pop(),
-                      );
-                    },
-                  ),
-                ).animate()
-                  .fadeIn(duration: 400.ms, delay: delay, curve: Curves.easeOut)
-                  .slideY(begin: 0.03, duration: 400.ms, delay: delay, curve: Curves.easeOut);
-              },
+      body: Column(
+        children: [
+          if (errorMessage != null)
+            MaterialBanner(
+              content: Text(errorMessage),
+              actions: [
+                TextButton(
+                  onPressed: notifier.refreshAddresses,
+                  child: const Text('Retry'),
+                ),
+              ],
             ),
+          Expanded(
+            child: addresses.isEmpty
+                ? const EmptyState(
+                    heading: 'No saved addresses',
+                    body:
+                        'Add your delivery addresses to make ordering easier.',
+                    icon: HugeIcons.strokeRoundedLocation01,
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    itemCount: addresses.length,
+                    separatorBuilder: (_, _) =>
+                        const SizedBox(height: AppSpacing.md),
+                    itemBuilder: (context, index) {
+                      final address = addresses[index];
+                      final delay = (index * 60).ms;
+                      return Dismissible(
+                            key: ValueKey(address.id),
+                            direction: DismissDirection.endToStart,
+                            background: Container(
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.lg,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colors.error,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: HugeIcon(
+                                icon: HugeIcons.strokeRoundedDelete02,
+                                color: colors.background,
+                              ),
+                            ),
+                            confirmDismiss: (_) async {
+                              bool? confirmed;
+                              await ConfirmationDialog.show(
+                                context,
+                                title: 'Delete Address',
+                                message:
+                                    'Are you sure you want to delete "${address.label}"?',
+                                confirmLabel: 'Delete',
+                                cancelLabel: 'Cancel',
+                                onConfirm: () {
+                                  confirmed = true;
+                                  Navigator.of(context).pop();
+                                },
+                                onCancel: () {
+                                  confirmed = false;
+                                  Navigator.of(context).pop();
+                                },
+                              );
+                              if (confirmed != true) return false;
+                              return deleteAddress(address.id);
+                            },
+                            onDismissed: (_) {},
+                            child: AddressCard(
+                              address: address,
+                              onEdit: () {
+                                context.push('/customer/addresses/new');
+                              },
+                              onDelete: () {
+                                ConfirmationDialog.show(
+                                  context,
+                                  title: 'Delete Address',
+                                  message:
+                                      'Are you sure you want to delete "${address.label}"?',
+                                  confirmLabel: 'Delete',
+                                  cancelLabel: 'Cancel',
+                                  onConfirm: () async {
+                                    Navigator.of(context).pop();
+                                    await deleteAddress(address.id);
+                                  },
+                                  onCancel: () => Navigator.of(context).pop(),
+                                );
+                              },
+                            ),
+                          )
+                          .animate()
+                          .fadeIn(
+                            duration: 400.ms,
+                            delay: delay,
+                            curve: Curves.easeOut,
+                          )
+                          .slideY(
+                            begin: 0.03,
+                            duration: 400.ms,
+                            delay: delay,
+                            curve: Curves.easeOut,
+                          );
+                    },
+                  ),
+          ),
+        ],
+      ),
       floatingActionButton: notifier.canAddMore
           ? FloatingActionButton.extended(
               backgroundColor: colors.accent,

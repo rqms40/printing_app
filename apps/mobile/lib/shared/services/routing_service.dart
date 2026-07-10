@@ -4,7 +4,8 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:google_polyline_algorithm/google_polyline_algorithm.dart';
 
-/// Service that fetches real driving routes from OSRM (free, no API key).
+/// Local preview routing only. Dispatch and delivery-tracking surfaces must
+/// consume persisted server GeoJSON and must never call this service.
 ///
 /// OSRM public demo server: router.project-osrm.org
 /// Returns actual road-following polyline geometry.
@@ -19,7 +20,7 @@ class RoutingService {
   static Future<List<LatLng>> Function(LatLng start, LatLng end)?
   debugRouteFetcher;
 
-  /// Fetches a driving route between two points.
+  /// Fetches a non-dispatch preview route between two points.
   ///
   /// Returns a list of [LatLng] coordinates following real roads.
   /// Falls back to a detailed hardcoded Manila route if the API is unavailable.

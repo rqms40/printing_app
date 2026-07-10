@@ -507,6 +507,10 @@ void main() {
       expect(orders, hasLength(1));
       expect(orders.single.id, '7');
       expect(orders.single.orderId, 'ORD-10007');
+      expect(
+        container.read(ordersProvider.notifier).errorMessage,
+        'Unable to refresh live orders',
+      );
     });
 
     test('dispose unregisters websocket completion listener', () async {
@@ -1039,6 +1043,33 @@ void main() {
       expect(container.read(ordersProvider).map((o) => o.id), [
         'test_new_fallback',
       ]);
+    });
+
+    test('real-flow addOrder fails closed on generic 500', () async {
+      force500Paths.add('/orders');
+      final notifier = OrdersNotifier(skipBootstrap: true, realFlow: true);
+      addTearDown(notifier.dispose);
+      final newOrder = Order(
+        id: 'must-not-be-local',
+        orderId: 'ORD-99997',
+        userId: 'usr_001',
+        category: 'paper',
+        quantity: 1,
+        totalPrice: 100,
+        deliveryFee: 0,
+        paymentMethod: PaymentMethod.gridCredits,
+        paymentStatus: PaymentStatus.pending,
+        orderStatus: OrderStatus.orderPlaced,
+        deliveryOption: 'delivery',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      await expectLater(
+        notifier.addOrder(newOrder),
+        throwsA(isA<DioException>()),
+      );
+      expect(notifier.state, isEmpty);
     });
   });
 
