@@ -169,8 +169,9 @@ class BetaTestimonialNotifier extends StateNotifier<BetaTestimonialState> {
   static String _friendlyDioError(DioException e) {
     final status = e.response?.statusCode;
     if (status == 401) return 'Session expired — please sign in again.';
-    if (status == 413)
+    if (status == 413) {
       return 'Photo is too large. Please choose a smaller image.';
+    }
     if (status == 400) {
       final msg = e.response?.data?['message'];
       return (msg is String)

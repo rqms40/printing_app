@@ -89,6 +89,15 @@ void main() {
   });
 
   group('legitimate deep-link preservation', () {
+    test('restores a validated platform target after splash auto-login', () {
+      const target = '/customer/orders/42?source=platform';
+      final splash = '/splash?redirect=${Uri.encodeComponent(target)}';
+
+      expect(_redirect(splash, AuthState.unauthenticated()), isNull);
+      expect(_redirect(splash, _activeCustomer), target);
+      expect(_redirect(splash, _heldCustomer), '/customer/beta/locked');
+    });
+
     test('preserves a protected customer URI through login', () {
       const target = '/customer/orders/42?source=notification';
       final login = _redirect(target, AuthState.unauthenticated());

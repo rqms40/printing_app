@@ -158,10 +158,16 @@ String? resolveAppRedirect({
   final isOnBetaLocked = path == '/customer/beta/locked';
   final isOnBetaSuccess = path == '/customer/beta/success-wall';
 
-  if (isOnSplash) return null;
-
   if (authState.betaLocked != null) {
     return isOnBetaLocked ? null : '/customer/beta/locked';
+  }
+
+  if (isOnSplash) {
+    final requested = uri.queryParameters['redirect'];
+    if (isAuth && _isSafeRoleDeepLink(requested, authState.user?.role)) {
+      return requested;
+    }
+    return null;
   }
 
   if (isOnBetaSuccess) {
