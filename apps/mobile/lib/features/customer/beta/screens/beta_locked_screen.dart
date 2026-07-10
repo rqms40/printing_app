@@ -57,7 +57,7 @@ class _BetaLockedScreenState extends ConsumerState<BetaLockedScreen> {
           _photoFileName = null;
         });
       }
-      ref.read(betaTestimonialProvider.notifier).clearError();
+      ref.read(betaTestimonialProvider.notifier).resetForNewPhoto();
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

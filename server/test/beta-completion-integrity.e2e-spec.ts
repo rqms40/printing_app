@@ -110,7 +110,7 @@ describe('beta completion integrity (e2e)', () => {
     }
   });
 
-  it('converges concurrent requirements, retries survey success, and preserves one testimonial', async () => {
+  it('keeps per-order requirements, sequences the final hold, and preserves one testimonial', async () => {
     const database = await createDatabase('races');
     const dataSource = await initializeDatabase(database);
     try {
@@ -140,12 +140,12 @@ describe('beta completion integrity (e2e)', () => {
           surveys.createPostDeliveryRequirementIfNeeded(order),
         ),
       );
-      expect(requirements[0]?.id).toBe(requirements[1]?.id);
+      expect(requirements[0]?.id).not.toBe(requirements[1]?.id);
       await expect(
         dataSource.getRepository(TamSurveyRequirement).countBy({
           userId: user.id,
         }),
-      ).resolves.toBe(1);
+      ).resolves.toBe(2);
 
       const answers = Object.fromEntries(
         Array.from({ length: 14 }, (_, index) => [String(index), index % 5]),
@@ -155,15 +155,31 @@ describe('beta completion integrity (e2e)', () => {
         requirements[0]!.id,
         { surveyData: answers, openForumFeedback: {} },
       );
+      expect(first.logoutRequired).toBe(false);
+      await expect(surveys.getAccountState(user.id)).resolves.toMatchObject({
+        accountStatus: 'survey_required',
+        holds: [
+          {
+            requirementId: requirements[1]!.id,
+            orderId: orders[1].id,
+          },
+        ],
+      });
       const retry = await surveys.submitRequirement(
         user.id,
         requirements[0]!.id,
         { surveyData: answers, openForumFeedback: {} },
       );
       expect(retry).toEqual(first);
+      const final = await surveys.submitRequirement(
+        user.id,
+        requirements[1]!.id,
+        { surveyData: answers, openForumFeedback: {} },
+      );
+      expect(final.logoutRequired).toBe(true);
       await expect(
         dataSource.getRepository(TamSurvey).countBy({ userId: user.id }),
-      ).resolves.toBe(1);
+      ).resolves.toBe(2);
 
       const files = await filesRepo.save([
         makeTestimonialFile(filesRepo, user.id, `${database}-a`),

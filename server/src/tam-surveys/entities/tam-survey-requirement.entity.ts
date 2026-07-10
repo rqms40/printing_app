@@ -24,10 +24,6 @@ export enum TamSurveyRequirementStatus {
 
 @Entity('tam_survey_requirements')
 @Index('idx_tam_survey_requirements_user_status', ['userId', 'status'])
-@Index('uq_tam_survey_requirements_user_pending', ['userId'], {
-  unique: true,
-  where: `"status" = 'pending'`,
-})
 @Index('uq_tam_survey_requirements_order_reason', ['orderId', 'reason'], {
   unique: true,
 })

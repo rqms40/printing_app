@@ -288,13 +288,56 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
         final hold = ref.read(accountStateProvider).requiredSurveyHold;
         if (hold == null) return;
 
-        await ApiClient.instance.post(
+        final response = await ApiClient.instance.post(
           '/tam-surveys/requirements/${hold.requirementId}/submit',
           data: {
             'surveyData': formattedAnswers,
             'openForumFeedback': _decodeOpenForumFeedback(_comment),
           },
         );
+
+        final responseData = response.data;
+        final logoutRequired =
+            responseData is Map && responseData['logoutRequired'] == true;
+
+        if (!logoutRequired) {
+          await ref.read(accountStateProvider.notifier).refresh();
+          if (!mounted) return;
+
+          final refreshedAccountState = ref.read(accountStateProvider);
+          final nextHold = refreshedAccountState.requiredSurveyHold;
+          if (refreshedAccountState.requiresSurvey &&
+              nextHold != null &&
+              nextHold.requirementId != hold.requirementId) {
+            setState(() {
+              _answers.clear();
+              _comment = null;
+              _submitted = false;
+              _autoLaunched = true;
+              _checkController.reset();
+            });
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _openQuestion(0);
+            });
+            return;
+          }
+
+          if (refreshedAccountState.requiresSurvey) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Survey submitted. Refresh to load your next survey.',
+                ),
+              ),
+            );
+            return;
+          }
+
+          await ref.read(authProvider.notifier).refreshProfile();
+          if (mounted) context.go('/customer/home');
+          return;
+        }
+
         ref.read(authProvider.notifier).markBetaCompletionSubmitted();
 
         if (!mounted) return;
@@ -445,7 +488,7 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
-                      'You will land back on the login screen once submitted.',
+                      'We will continue automatically once submitted.',
                       textAlign: TextAlign.center,
                       style: AppTypography.caption.copyWith(
                         color: colors.onSurfaceDim,

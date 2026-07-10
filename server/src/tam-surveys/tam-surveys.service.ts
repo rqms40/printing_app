@@ -26,7 +26,6 @@ const REQUIRED_SURVEY_QUESTION_COUNT = 14;
 const POSTGRES_UNIQUE_VIOLATION = '23505';
 const REQUIREMENT_UNIQUE_CONSTRAINTS = new Set([
   'uq_tam_survey_requirements_order_reason',
-  'uq_tam_survey_requirements_user_pending',
 ]);
 export const BETA_SURVEY_COMPLETE_HOLD_REASON = 'beta_survey_complete';
 
@@ -108,15 +107,34 @@ export class TamSurveysService {
     order: Pick<Order, 'id' | 'orderId' | 'userId'>,
     manager?: EntityManager,
   ): Promise<TamSurveyRequirement | null> {
-    const betaModeSettingsRepo =
-      manager?.getRepository(BetaModeSettings) ?? this.betaModeSettingsRepo;
-    const usersRepo = manager?.getRepository(User) ?? this.usersRepo;
-    const requirementsRepo =
-      manager?.getRepository(TamSurveyRequirement) ?? this.requirementsRepo;
+    if (!manager) {
+      try {
+        return await this.dataSource.transaction((transactionManager) =>
+          this.createPostDeliveryRequirementIfNeeded(order, transactionManager),
+        );
+      } catch (error) {
+        if (!this.isRequirementUniqueViolation(error)) throw error;
+        const racedRequirement = await this.requirementsRepo.findOne({
+          where: {
+            orderId: order.id,
+            reason: TamSurveyRequirementReason.POST_DELIVERY,
+          },
+        });
+        if (!racedRequirement) throw error;
+        return racedRequirement;
+      }
+    }
+
+    const betaModeSettingsRepo = manager.getRepository(BetaModeSettings);
+    const usersRepo = manager.getRepository(User);
+    const requirementsRepo = manager.getRepository(TamSurveyRequirement);
 
     if (!(await this.isBetaModeEnabled(betaModeSettingsRepo))) return null;
 
-    const user = await usersRepo.findOne({ where: { id: order.userId } });
+    const user = await usersRepo.findOne({
+      where: { id: order.userId },
+      lock: { mode: 'pessimistic_write' },
+    });
     if (
       user?.role !== UserRole.CUSTOMER ||
       !user.isBetaUser ||
@@ -127,9 +145,8 @@ export class TamSurveysService {
 
     const existing = await requirementsRepo.findOne({
       where: {
-        userId: order.userId,
+        orderId: order.id,
         reason: TamSurveyRequirementReason.POST_DELIVERY,
-        status: TamSurveyRequirementStatus.PENDING,
       },
     });
     if (existing) return existing;
@@ -144,26 +161,9 @@ export class TamSurveysService {
       submittedAt: null,
     });
 
-    try {
-      return await requirementsRepo.save(requirement);
-    } catch (error) {
-      // A failed statement aborts an existing Postgres transaction, so let the
-      // outer completion transaction roll back rather than attempting a query
-      // in the failed transaction. The locked order serializes this path.
-      if (manager) throw error;
-      if (!this.isRequirementUniqueViolation(error)) throw error;
-
-      const racedRequirement = await requirementsRepo.findOne({
-        where: {
-          userId: order.userId,
-          reason: TamSurveyRequirementReason.POST_DELIVERY,
-          status: TamSurveyRequirementStatus.PENDING,
-        },
-      });
-      if (!racedRequirement) throw error;
-
-      return racedRequirement;
-    }
+    // Let a failed statement abort the surrounding Postgres transaction. The
+    // user lock serializes requirements for separate orders from the same user.
+    return requirementsRepo.save(requirement);
   }
 
   async getAccountState(userId: number): Promise<AccountStateResponse> {
@@ -250,11 +250,19 @@ export class TamSurveysService {
         requirement.status === TamSurveyRequirementStatus.SUBMITTED &&
         requirement.surveyId != null
       ) {
+        const remainingPending = await requirementsRepo.count({
+          where: {
+            userId,
+            reason: TamSurveyRequirementReason.POST_DELIVERY,
+            status: TamSurveyRequirementStatus.PENDING,
+          },
+        });
         return {
           success: true as const,
           surveyId: requirement.surveyId,
           logoutRequired:
             holdPolicyApplies &&
+            remainingPending === 0 &&
             user.isActive === false &&
             user.accountHoldReason === BETA_SURVEY_COMPLETE_HOLD_REASON,
         };
@@ -278,7 +286,16 @@ export class TamSurveysService {
       requirement.submittedAt = new Date();
       await requirementsRepo.save(requirement);
 
-      if (holdPolicyApplies) {
+      const remainingPending = await requirementsRepo.count({
+        where: {
+          userId,
+          reason: TamSurveyRequirementReason.POST_DELIVERY,
+          status: TamSurveyRequirementStatus.PENDING,
+        },
+      });
+      const shouldHold = holdPolicyApplies && remainingPending === 0;
+
+      if (shouldHold) {
         const holdAt = new Date();
         await usersRepo.update(userId, {
           isActive: false,
@@ -291,7 +308,7 @@ export class TamSurveysService {
       return {
         success: true as const,
         surveyId: savedSurvey.id,
-        logoutRequired: holdPolicyApplies,
+        logoutRequired: shouldHold,
       };
     });
     if (result.logoutRequired) {
@@ -335,7 +352,7 @@ export class TamSurveysService {
 
     const result: Record<string, number> = {};
     for (const [key, rawValue] of Object.entries(data)) {
-      if (!/^\d+$/.test(key)) {
+      if (!/^(0|[1-9]\d*)$/.test(key)) {
         throw new BadRequestException(`Invalid survey question key: ${key}`);
       }
       const index = Number(key);

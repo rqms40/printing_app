@@ -75,18 +75,13 @@ describe('TAM survey post-delivery metadata', () => {
     expect(TamSurveyRequirementStatus.SUBMITTED).toBe('submitted');
   });
 
-  it('declares one pending post-delivery requirement per customer', () => {
+  it('does not collapse pending requirements across a customer orders', () => {
     const index = getMetadataArgsStorage().indices.find(
       (candidate) =>
         candidate.target === TamSurveyRequirement &&
         candidate.name === 'uq_tam_survey_requirements_user_pending',
     );
-
-    expect(index).toMatchObject({
-      unique: true,
-      where: `"status" = 'pending'`,
-    });
-    expect(index?.columns).toEqual(['userId']);
+    expect(index).toBeUndefined();
   });
 
   it('registers TamSurveyRequirement in the survey TypeOrm feature module', () => {
@@ -138,6 +133,7 @@ describe('TamSurveysService', () => {
     };
     requirementRepo = {
       findOne: jest.fn(),
+      count: jest.fn().mockResolvedValue(0),
       create: jest.fn((data) => data as TamSurveyRequirement),
       save: jest.fn(
         async (req) => ({ id: 123, ...req }) as TamSurveyRequirement,
@@ -280,7 +276,7 @@ describe('TamSurveysService', () => {
     expect(requirementRepo.save).not.toHaveBeenCalled();
   });
 
-  it('returns a different order pending requirement to preserve the per-user invariant', async () => {
+  it('creates a distinct pending requirement for a different delivered order', async () => {
     const existing = {
       id: 77,
       userId: 10,
@@ -289,20 +285,20 @@ describe('TamSurveysService', () => {
       status: TamSurveyRequirementStatus.PENDING,
     } as TamSurveyRequirement;
     userRepo.findOne.mockResolvedValue(betaUser);
-    requirementRepo.findOne.mockResolvedValue(existing);
+    requirementRepo.findOne.mockResolvedValueOnce(null);
 
-    await expect(
-      service.createPostDeliveryRequirementIfNeeded(order),
-    ).resolves.toBe(existing);
+    const result = await service.createPostDeliveryRequirementIfNeeded(order);
 
     expect(requirementRepo.findOne).toHaveBeenCalledWith({
       where: {
-        userId: 10,
+        orderId: 55,
         reason: TamSurveyRequirementReason.POST_DELIVERY,
-        status: TamSurveyRequirementStatus.PENDING,
       },
     });
-    expect(requirementRepo.save).not.toHaveBeenCalled();
+    expect(result).not.toBe(existing);
+    expect(requirementRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 55 }),
+    );
   });
 
   it('returns the existing requirement when a concurrent create hits the unique constraint', async () => {
@@ -317,7 +313,7 @@ describe('TamSurveysService', () => {
       .mockResolvedValueOnce(existing);
     requirementRepo.save.mockRejectedValueOnce({
       code: '23505',
-      constraint: 'uq_tam_survey_requirements_user_pending',
+      constraint: 'uq_tam_survey_requirements_order_reason',
     });
 
     const result = await service.createPostDeliveryRequirementIfNeeded(order);
@@ -325,11 +321,33 @@ describe('TamSurveysService', () => {
     expect(result).toBe(existing);
     expect(requirementRepo.findOne).toHaveBeenLastCalledWith({
       where: {
-        userId: 10,
+        orderId: 55,
         reason: TamSurveyRequirementReason.POST_DELIVERY,
-        status: TamSurveyRequirementStatus.PENDING,
       },
     });
+  });
+
+  it('keeps the account active when another pending requirement remains', async () => {
+    requirementRepo.findOne.mockResolvedValue({
+      id: 123,
+      userId: 10,
+      orderId: 55,
+      status: TamSurveyRequirementStatus.PENDING,
+    } as TamSurveyRequirement);
+    requirementRepo.count.mockResolvedValueOnce(1);
+    await expect(
+      service.submitRequirement(10, 123, {
+        surveyData: fullSurveyData,
+        openForumFeedback: {},
+      }),
+    ).resolves.toEqual({
+      success: true,
+      surveyId: 900,
+      logoutRequired: false,
+    });
+
+    expect(userRepo.update).not.toHaveBeenCalled();
+    expect(realtimeSessions.disconnectUser).not.toHaveBeenCalled();
   });
 
   it('does not treat an unrelated unique violation as a requirement race', async () => {
@@ -653,6 +671,22 @@ describe('TamSurveysService', () => {
         openForumFeedback: { feature: '', delivery: '' },
       }),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects non-canonical numeric survey keys', async () => {
+    requirementRepo.findOne.mockResolvedValue({
+      id: 123,
+      userId: 10,
+      orderId: 55,
+      status: TamSurveyRequirementStatus.PENDING,
+    } as TamSurveyRequirement);
+
+    await expect(
+      service.submitRequirement(10, 123, {
+        surveyData: { ...fullSurveyData, '00': 4 },
+        openForumFeedback: {},
+      }),
+    ).rejects.toThrow('Invalid survey question key: 00');
   });
 
   it('rejects submitting another user requirement', async () => {

@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -204,6 +207,92 @@ void main() {
         expect(notifier.state.sharedOnSocial, isTrue);
         expect(notifier.state.shareRecorded, isTrue);
         expect(patchCalls, 1);
+      },
+    );
+
+    test(
+      'response-loss retry reuses the uploaded testimonial file id',
+      () async {
+        var uploadCalls = 0;
+        final submittedFileIds = <int>[];
+        var submitCalls = 0;
+        final notifier = BetaTestimonialNotifier(
+          uploadPhoto:
+              ({photo, photoBytes, photoFileName, onSendProgress}) async {
+                uploadCalls += 1;
+                onSendProgress?.call(1, 1);
+                return 42;
+              },
+          submitTestimonial:
+              ({required fileId, required sharedOnSocial}) async {
+                submittedFileIds.add(fileId);
+                submitCalls += 1;
+                if (submitCalls == 1) {
+                  final request = RequestOptions(
+                    path: '/beta-mode/testimonial',
+                  );
+                  throw DioException(
+                    requestOptions: request,
+                    response: Response(
+                      requestOptions: request,
+                      statusCode: 503,
+                    ),
+                  );
+                }
+              },
+        );
+
+        await expectLater(
+          notifier.submit(
+            photoBytes: Uint8List.fromList([1, 2, 3]),
+            photoFileName: 'proof.png',
+            sharedOnSocial: false,
+          ),
+          throwsA(isA<DioException>()),
+        );
+        await notifier.submit(
+          photoBytes: Uint8List.fromList([1, 2, 3]),
+          photoFileName: 'proof.png',
+          sharedOnSocial: false,
+        );
+
+        expect(uploadCalls, 1);
+        expect(submittedFileIds, [42, 42]);
+        expect(notifier.state.uploadedFileId, 42);
+        expect(notifier.state.submitted, isTrue);
+      },
+    );
+
+    test(
+      'upload progress cannot erase a share confirmed during upload',
+      () async {
+        late BetaTestimonialNotifier notifier;
+        bool? submittedShared;
+        notifier = BetaTestimonialNotifier(
+          uploadPhoto:
+              ({photo, photoBytes, photoFileName, onSendProgress}) async {
+                onSendProgress?.call(1, 2);
+                await notifier.recordConfirmedShare(
+                  photoAlreadyUploaded: false,
+                );
+                onSendProgress?.call(2, 2);
+                return 77;
+              },
+          submitTestimonial:
+              ({required fileId, required sharedOnSocial}) async {
+                submittedShared = sharedOnSocial;
+              },
+        );
+
+        await notifier.submit(
+          photoBytes: Uint8List.fromList([4, 5, 6]),
+          photoFileName: 'shared.png',
+          sharedOnSocial: false,
+        );
+
+        expect(submittedShared, isTrue);
+        expect(notifier.state.sharedOnSocial, isTrue);
+        expect(notifier.state.shareRecorded, isTrue);
       },
     );
   });

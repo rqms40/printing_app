@@ -47,6 +47,7 @@ import {
   DispatchPlanStatus,
 } from '../riders/entities/dispatch-plan.entity';
 import { DispatchStopStatus } from '../riders/entities/dispatch-plan-stop.entity';
+import { BetaModeSettings } from '../beta-mode/entities/beta-mode-settings.entity';
 
 const specValueRepoProvider = () => ({
   provide: getRepositoryToken(OrderItemSpecValue),
@@ -171,6 +172,7 @@ describe('OrdersService', () => {
   let catalogPricingService: { quote: jest.Mock };
   let fileMetadataRepo: jest.Mocked<Partial<Repository<FileMetadata>>>;
   let transactionQuery: jest.Mock;
+  let transactionBetaSettingsRepo: { findOne: jest.Mock };
 
   const mockOrder = {
     id: 1,
@@ -370,6 +372,9 @@ describe('OrdersService', () => {
     transactionQuery = jest
       .fn()
       .mockResolvedValue([{ max_batch_ref: 10000, max_order_ref: 10000 }]);
+    transactionBetaSettingsRepo = {
+      findOne: jest.fn().mockResolvedValue({ id: 1, isEnabled: false }),
+    };
     dataSource = {
       query: jest.fn().mockResolvedValue([{ is_enabled: true }]),
       transaction: jest.fn(async (runInTransaction) =>
@@ -384,6 +389,8 @@ describe('OrdersService', () => {
             if (entity?.name === 'ThreeDSpec') return threeDSpecsRepo;
             if (entity?.name === 'BatchOrder') return batchRepo;
             if (entity?.name === 'OrderStatusHistory') return historyRepo;
+            if (entity?.name === BetaModeSettings.name)
+              return transactionBetaSettingsRepo;
             if (entity?.name === 'DeliveryDestination')
               return {
                 create: jest.fn((d) => d),
@@ -594,6 +601,39 @@ describe('OrdersService', () => {
         } as Partial<Order>),
       ).rejects.toMatchObject({
         response: expect.objectContaining({ code: 'beta_credits_only' }),
+      });
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('cannot commit non-credit payment if beta enables before persistence', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({
+        id: 1,
+        role: 'customer',
+        isBetaUser: true,
+        betaEnrolledAt: null,
+      });
+      (dataSource.query as jest.Mock).mockResolvedValue([
+        { is_enabled: false },
+      ]);
+      transactionBetaSettingsRepo.findOne.mockResolvedValue({
+        id: 1,
+        isEnabled: true,
+      });
+
+      await expect(
+        service.create({
+          userId: 1,
+          category: 'paper',
+          paymentMethod: 'gcash',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'beta_credits_only' }),
+      });
+
+      expect(transactionBetaSettingsRepo.findOne).toHaveBeenCalledWith({
+        where: {},
+        order: { id: 'ASC' },
+        lock: { mode: 'pessimistic_read' },
       });
       expect(repo.save).not.toHaveBeenCalled();
     });

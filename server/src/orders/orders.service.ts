@@ -63,6 +63,7 @@ import {
   DispatchPlanStatus,
 } from '../riders/entities/dispatch-plan.entity';
 import { DispatchStopStatus } from '../riders/entities/dispatch-plan-stop.entity';
+import { BetaModeSettings } from '../beta-mode/entities/beta-mode-settings.entity';
 import {
   assertOrderStatusTransition,
   parseOrderStatus,
@@ -548,6 +549,11 @@ export class OrdersService {
           Number(orderData.userId),
           transactionOrdersRepo,
         );
+        await this.assertBetaPaymentMethod(
+          Number(orderData.userId),
+          String(orderData.paymentMethod ?? ''),
+          manager,
+        );
       }
       const { orderRef } = await this.nextBatchReferences(manager);
       const order = transactionOrdersRepo.create({
@@ -842,6 +848,7 @@ export class OrdersService {
 
       const { batchRef, orderRef } = await this.nextBatchReferences(manager);
       await this.assertBetaOrderLimit(userId, txOrdersRepo);
+      await this.assertBetaPaymentMethod(userId, dto.paymentMethod, manager);
       const creditPayment = OrdersService.isCreditPaymentMethod(
         dto.paymentMethod,
       );
@@ -1136,17 +1143,26 @@ export class OrdersService {
   private async assertBetaPaymentMethod(
     userId: number,
     paymentMethod: string,
+    manager?: EntityManager,
   ): Promise<void> {
     const user = await this.usersService.findById(userId);
     if (user?.role !== UserRole.CUSTOMER || !user.isBetaUser) return;
 
-    const rows = await this.dataSource.query<Array<{ is_enabled: boolean }>>(
-      'SELECT is_enabled FROM beta_mode_settings ORDER BY id LIMIT 1',
-    );
-    if (
-      rows[0]?.is_enabled &&
-      !OrdersService.isCreditPaymentMethod(paymentMethod)
-    ) {
+    let isEnabled: boolean;
+    if (manager) {
+      const settings = await manager.getRepository(BetaModeSettings).findOne({
+        where: {},
+        order: { id: 'ASC' },
+        lock: { mode: 'pessimistic_read' },
+      });
+      isEnabled = settings?.isEnabled ?? false;
+    } else {
+      const rows = await this.dataSource.query<Array<{ is_enabled: boolean }>>(
+        'SELECT is_enabled FROM beta_mode_settings ORDER BY id LIMIT 1',
+      );
+      isEnabled = rows[0]?.is_enabled ?? false;
+    }
+    if (isEnabled && !OrdersService.isCreditPaymentMethod(paymentMethod)) {
       throw new ForbiddenException({
         code: 'beta_credits_only',
         message: 'Beta checkout requires GRIDGO Credits.',
