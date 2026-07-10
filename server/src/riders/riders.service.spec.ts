@@ -24,6 +24,7 @@ import { FilesService } from '../files/files.service';
 import { DispatchPlanService } from './dispatch-plan.service';
 import { DispatchPlanStatus } from './entities/dispatch-plan.entity';
 import { DispatchStopStatus } from './entities/dispatch-plan-stop.entity';
+import { OrdersGateway } from '../orders/orders.gateway';
 
 describe('RidersService', () => {
   let service: RidersService;
@@ -36,6 +37,7 @@ describe('RidersService', () => {
   let conversationRepo: jest.Mocked<Partial<Repository<Conversation>>>;
   let dataSource: Partial<DataSource>;
   let locationGateway: Partial<LocationGateway>;
+  let ordersGateway: { notifyDeliveryQueueUpdated: jest.Mock };
   let chatGateway: { notifyConversationClosed: jest.Mock };
   let ordersService: {
     updateStatus: jest.Mock;
@@ -172,6 +174,9 @@ describe('RidersService', () => {
     locationGateway = {
       broadcastLocation: jest.fn(),
     };
+    ordersGateway = {
+      notifyDeliveryQueueUpdated: jest.fn(),
+    };
     chatGateway = {
       notifyConversationClosed: jest.fn(),
     };
@@ -203,6 +208,7 @@ describe('RidersService', () => {
           useValue: assignmentRepo,
         },
         { provide: LocationGateway, useValue: locationGateway },
+        { provide: OrdersGateway, useValue: ordersGateway },
         { provide: OrdersService, useValue: ordersService },
         { provide: FilesService, useValue: filesService },
         { provide: ChatGateway, useValue: chatGateway },
@@ -658,6 +664,7 @@ describe('RidersService', () => {
 
       expect(ordersService.publishStatusUpdate).not.toHaveBeenCalled();
       expect(locationGateway.broadcastLocation).not.toHaveBeenCalled();
+      expect(ordersGateway.notifyDeliveryQueueUpdated).not.toHaveBeenCalled();
       expect(chatGateway.notifyConversationClosed).not.toHaveBeenCalled();
     });
 
@@ -873,6 +880,251 @@ describe('RidersService', () => {
         surveyRequirement,
       );
     });
+
+    it('notifies only the persisted next customer after delivery commits', async () => {
+      const venAssignment = {
+        ...mockAssignment,
+        id: 100,
+        status: DeliveryStatus.ARRIVED,
+        isCurrent: true,
+      } as DeliveryAssignment;
+      const markAssignment = {
+        ...mockAssignment,
+        id: 101,
+        orderId: 2,
+        status: DeliveryStatus.ON_THE_WAY,
+        isCurrent: true,
+        order: { id: 2, orderId: 'MARK-2', userId: 22 },
+      } as DeliveryAssignment;
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.findOne
+        .mockResolvedValueOnce(venAssignment)
+        .mockResolvedValueOnce(venAssignment)
+        .mockResolvedValueOnce(markAssignment);
+      assignmentRepo.save.mockImplementation(
+        async (assignment) => assignment as DeliveryAssignment,
+      );
+      orderRepo.findOneOrFail.mockResolvedValue({
+        id: 1,
+        orderId: 'VEN-1',
+        userId: 21,
+        batchOrderId: null,
+        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+      } as Order);
+      ordersService.completeDelivery.mockResolvedValue({
+        previous: {
+          id: 1,
+          orderId: 'VEN-1',
+          userId: 21,
+          batchOrderId: null,
+          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        },
+        surveyRequirement: { id: 70 },
+      });
+      dispatchPlanService.getActivePlanForRider.mockResolvedValue({
+        id: 500,
+        riderId: mockProfile.id,
+        version: 4,
+        status: DispatchPlanStatus.ACTIVE,
+        stops: [
+          {
+            assignmentId: venAssignment.id,
+            sequence: 1,
+            status: DispatchStopStatus.COMPLETED,
+          },
+          {
+            assignmentId: markAssignment.id,
+            sequence: 2,
+            status: DispatchStopStatus.PENDING,
+          },
+        ],
+      });
+
+      await service.updateDeliveryStatus(
+        mockProfile.userId,
+        venAssignment.id,
+        DeliveryStatus.DELIVERED,
+        undefined,
+        { type: 'signature', signatureData: 'svg:ven-proof' } as any,
+      );
+
+      expect(ordersGateway.notifyDeliveryQueueUpdated).toHaveBeenCalledWith(
+        22,
+        {
+          orderId: 2,
+          orderRef: 'MARK-2',
+          queuePosition: 1,
+          queueSize: 1,
+          canTrackDelivery: true,
+          assignmentId: 101,
+          planVersion: 4,
+        },
+      );
+      expect(ordersGateway.notifyDeliveryQueueUpdated).not.toHaveBeenCalledWith(
+        21,
+        expect.anything(),
+      );
+    });
+
+    it('publishes queue promotion independently of other post-commit failures', async () => {
+      const arrived = {
+        ...mockAssignment,
+        status: DeliveryStatus.ARRIVED,
+        isCurrent: true,
+      } as DeliveryAssignment;
+      const next = {
+        ...mockAssignment,
+        id: 102,
+        orderId: 3,
+        status: DeliveryStatus.ASSIGNED,
+        isCurrent: true,
+        order: { id: 3, orderId: 'NEXT-3', userId: 23 },
+      } as DeliveryAssignment;
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.findOne
+        .mockResolvedValueOnce(arrived)
+        .mockResolvedValueOnce(arrived)
+        .mockResolvedValueOnce(next);
+      assignmentRepo.save.mockImplementation(
+        async (assignment) => assignment as DeliveryAssignment,
+      );
+      orderRepo.findOneOrFail.mockResolvedValue({
+        id: 1,
+        orderId: 'VEN-1',
+        userId: 21,
+        batchOrderId: null,
+        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+      } as Order);
+      ordersService.completeDelivery.mockResolvedValue({
+        previous: {
+          id: 1,
+          orderId: 'VEN-1',
+          userId: 21,
+          batchOrderId: null,
+          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        },
+        surveyRequirement: null,
+      });
+      ordersService.publishStatusUpdate.mockRejectedValue(
+        new Error('order publication failed'),
+      );
+      dispatchPlanService.getActivePlanForRider.mockResolvedValue({
+        id: 500,
+        riderId: mockProfile.id,
+        version: 5,
+        status: DispatchPlanStatus.ACTIVE,
+        stops: [
+          {
+            assignmentId: next.id,
+            sequence: 2,
+            status: DispatchStopStatus.PENDING,
+          },
+        ],
+      });
+
+      await expect(
+        service.updateDeliveryStatus(
+          mockProfile.userId,
+          arrived.id,
+          DeliveryStatus.DELIVERED,
+          undefined,
+          { type: 'signature', signatureData: 'svg:proof' } as any,
+        ),
+      ).resolves.toMatchObject({ status: DeliveryStatus.DELIVERED });
+
+      expect(ordersGateway.notifyDeliveryQueueUpdated).toHaveBeenCalledWith(
+        23,
+        expect.objectContaining({
+          canTrackDelivery: false,
+          assignmentId: null,
+          planVersion: 5,
+        }),
+      );
+    });
+
+    it.each(['lookup', 'gateway'] as const)(
+      'keeps committed order publication successful when promotion %s fails',
+      async (failure) => {
+        const arrived = {
+          ...mockAssignment,
+          status: DeliveryStatus.ARRIVED,
+          isCurrent: true,
+        } as DeliveryAssignment;
+        const next = {
+          ...mockAssignment,
+          id: 103,
+          orderId: 4,
+          status: DeliveryStatus.ON_THE_WAY,
+          isCurrent: true,
+          order: { id: 4, orderId: 'NEXT-4', userId: 24 },
+        } as DeliveryAssignment;
+        profileRepo.findOne.mockResolvedValue(mockProfile);
+        assignmentRepo.findOne
+          .mockResolvedValueOnce(arrived)
+          .mockResolvedValueOnce(arrived);
+        if (failure === 'lookup') {
+          assignmentRepo.findOne.mockRejectedValueOnce(
+            new Error('promotion lookup failed'),
+          );
+        } else {
+          assignmentRepo.findOne.mockResolvedValueOnce(next);
+          ordersGateway.notifyDeliveryQueueUpdated.mockImplementation(() => {
+            throw new Error('promotion gateway failed');
+          });
+        }
+        assignmentRepo.save.mockImplementation(
+          async (assignment) => assignment as DeliveryAssignment,
+        );
+        orderRepo.findOneOrFail.mockResolvedValue({
+          id: 1,
+          orderId: 'VEN-1',
+          userId: 21,
+          batchOrderId: null,
+          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        } as Order);
+        const previous = {
+          id: 1,
+          orderId: 'VEN-1',
+          userId: 21,
+          batchOrderId: null,
+          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        } as Order;
+        ordersService.completeDelivery.mockResolvedValue({
+          previous,
+          surveyRequirement: { id: 70 },
+        });
+        dispatchPlanService.getActivePlanForRider.mockResolvedValue({
+          id: 500,
+          riderId: mockProfile.id,
+          version: 6,
+          status: DispatchPlanStatus.ACTIVE,
+          stops: [
+            {
+              assignmentId: next.id,
+              sequence: 2,
+              status: DispatchStopStatus.PENDING,
+            },
+          ],
+        });
+
+        await expect(
+          service.updateDeliveryStatus(
+            mockProfile.userId,
+            arrived.id,
+            DeliveryStatus.DELIVERED,
+            undefined,
+            { type: 'signature', signatureData: 'svg:proof' } as any,
+          ),
+        ).resolves.toMatchObject({ status: DeliveryStatus.DELIVERED });
+
+        expect(ordersService.publishStatusUpdate).toHaveBeenCalledWith(
+          previous,
+          previous.id,
+          OrderStatus.DELIVERED,
+          { id: 70 },
+        );
+      },
+    );
 
     it('rejects photo proof owned by another user', async () => {
       profileRepo.findOne.mockResolvedValue(mockProfile);
@@ -1235,11 +1487,13 @@ describe('RidersService', () => {
       });
 
       expect(locationGateway.broadcastLocation).toHaveBeenCalledWith('100', {
-        assignmentId: 100,
+        assignmentId: '100',
         planVersion: 4,
         latitude: 7.06405,
         longitude: 125.60795,
-        timestamp: expect.any(Date),
+        timestamp: expect.stringMatching(
+          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+        ),
       });
     });
 

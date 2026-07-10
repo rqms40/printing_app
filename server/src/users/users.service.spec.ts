@@ -74,6 +74,34 @@ describe('UsersService', () => {
     });
   });
 
+  describe('findSocketIdentity', () => {
+    it('loads only the authoritative socket identity fields', async () => {
+      repo.findOne.mockResolvedValue({
+        id: 1,
+        role: 'customer',
+        isActive: true,
+      } as User);
+
+      await expect(service.findSocketIdentity(1)).resolves.toEqual({
+        id: 1,
+        role: 'customer',
+        isActive: true,
+      });
+      expect(repo.findOne).toHaveBeenCalledWith({
+        where: { id: 1 },
+        select: { id: true, role: true, isActive: true },
+      });
+    });
+
+    it.each([undefined, null, 0, -1, 1.2, '1', Number.NaN])(
+      'fails closed for invalid user id %p',
+      async (id) => {
+        await expect(service.findSocketIdentity(id)).resolves.toBeNull();
+        expect(repo.findOne).not.toHaveBeenCalled();
+      },
+    );
+  });
+
   describe('create', () => {
     it('should hash password and save user', async () => {
       repo.findOne.mockResolvedValue(null); // no existing user

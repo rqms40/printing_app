@@ -316,6 +316,10 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
       where: { id: nearAssignment.order.userId },
     });
     await advanceToOnTheWay(nearAssignment.id, riderToken);
+    const midCustomer = await usersRepo.findOneOrFail({
+      where: { id: midAssignment.order.userId },
+    });
+    await advanceToOnTheWay(midAssignment.id, riderToken);
     const farCustomer = await usersRepo.findOneOrFail({
       where: { id: farAssignment.order.userId },
     });
@@ -329,21 +333,40 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
         expect(res.body.deliveryRouteGeometry).toBeNull();
         expect(res.body.canTrackDelivery).toBe(false);
       });
-    const locationSocket = await subscribeToLocation(
+    await request(app.getHttpServer())
+      .get(`/api/orders/${midAssignment.orderId}`)
+      .set('Authorization', `Bearer ${sign(midCustomer)}`)
+      .expect(200)
+      .expect((res) => {
+        expect(res.body.deliveryQueuePosition).toBe(2);
+        expect(res.body.deliveryAssignmentId).toBeNull();
+        expect(res.body.canTrackDelivery).toBe(false);
+      });
+
+    await riderProfilesRepo.update(riderProfile.id, {
+      lastLatitude: stops[0].latitude,
+      lastLongitude: stops[0].longitude,
+      lastLocationUpdate: new Date(),
+    });
+    const venLocationSocket = await subscribeToLocation(
       nearAssignment.id,
       sign(nearCustomer),
+      2,
     );
-    const locationUpdate = onceSocketEvent(locationSocket, 'locationUpdate');
+    const locationUpdate = onceSocketEvent(venLocationSocket, 'locationUpdate');
     await request(app.getHttpServer())
       .patch('/api/riders/location')
       .set('Authorization', `Bearer ${riderToken}`)
       .send({ latitude: 7.0648, longitude: 125.6087 })
       .expect(200);
     await expect(locationUpdate).resolves.toMatchObject({
-      assignmentId: nearAssignment.id,
+      assignmentId: String(nearAssignment.id),
       planVersion: 2,
       latitude: 7.0648,
       longitude: 125.6087,
+      timestamp: expect.stringMatching(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+      ),
     });
     await request(app.getHttpServer())
       .patch('/api/riders/location')
@@ -364,6 +387,27 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
             ),
         ).toEqual([`RNEAR-${runId}`, `RMID-${runId}`, `RFAR-${runId}`]);
       });
+
+    const venOrdersSocket = await connectOrdersSocket(sign(nearCustomer));
+    const markOrdersSocket = await connectOrdersSocket(sign(midCustomer));
+    const otherOrdersSocket = await connectOrdersSocket(sign(farCustomer));
+    const adminOrdersSocket = await connectOrdersSocket(sign(admin));
+    const venPromotions: unknown[] = [];
+    const otherPromotions: unknown[] = [];
+    const adminPromotions: unknown[] = [];
+    venOrdersSocket.on('deliveryQueueUpdated', (payload) =>
+      venPromotions.push(payload),
+    );
+    otherOrdersSocket.on('deliveryQueueUpdated', (payload) =>
+      otherPromotions.push(payload),
+    );
+    adminOrdersSocket.on('deliveryQueueUpdated', (payload) =>
+      adminPromotions.push(payload),
+    );
+    const markPromotion = onceSocketEvent(
+      markOrdersSocket,
+      'deliveryQueueUpdated',
+    );
 
     await request(app.getHttpServer())
       .patch(`/api/riders/assignments/${nearAssignment.id}/status`)
@@ -388,6 +432,20 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
           `svg:route-signature-${runId}`,
         );
       });
+    await expect(markPromotion).resolves.toEqual({
+      orderId: midAssignment.orderId,
+      orderRef: `RMID-${runId}`,
+      queuePosition: 1,
+      queueSize: 2,
+      canTrackDelivery: true,
+      assignmentId: midAssignment.id,
+      planVersion: 2,
+    });
+    await expectNoSocketEvents([
+      venPromotions,
+      otherPromotions,
+      adminPromotions,
+    ]);
 
     await expect(
       dispatchStopsRepo.findOneOrFail({
@@ -403,10 +461,11 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
       }),
     ).resolves.toMatchObject({ status: DispatchStopStatus.PENDING });
 
-    await advanceToArrived(midAssignment.id, riderToken);
-    const midCustomer = await usersRepo.findOneOrFail({
-      where: { id: midAssignment.order.userId },
-    });
+    await request(app.getHttpServer())
+      .patch(`/api/riders/assignments/${midAssignment.id}/status`)
+      .set('Authorization', `Bearer ${riderToken}`)
+      .send({ status: DeliveryStatus.ARRIVED })
+      .expect(200);
     await request(app.getHttpServer())
       .get(`/api/orders/${midAssignment.orderId}`)
       .set('Authorization', `Bearer ${sign(midCustomer)}`)
@@ -419,6 +478,29 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
         });
         expect(res.body.canTrackDelivery).toBe(true);
       });
+    const markLocationSocket = await subscribeToLocation(
+      midAssignment.id,
+      sign(midCustomer),
+      2,
+    );
+    const venLocationAfterCompletion: unknown[] = [];
+    venLocationSocket.on('locationUpdate', (payload) =>
+      venLocationAfterCompletion.push(payload),
+    );
+    const markLocation = onceSocketEvent(markLocationSocket, 'locationUpdate');
+    await request(app.getHttpServer())
+      .patch('/api/riders/location')
+      .set('Authorization', `Bearer ${riderToken}`)
+      .send({ latitude: 7.079, longitude: 125.619 })
+      .expect(200);
+    await expect(markLocation).resolves.toMatchObject({
+      assignmentId: String(midAssignment.id),
+      planVersion: 2,
+      latitude: 7.079,
+      longitude: 125.619,
+      timestamp: expect.any(String),
+    });
+    await expectNoSocketEvents([venLocationAfterCompletion]);
     await request(app.getHttpServer())
       .patch(`/api/riders/assignments/${midAssignment.id}/status`)
       .set('Authorization', `Bearer ${riderToken}`)
@@ -537,15 +619,6 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
     );
   }
 
-  async function advanceToArrived(assignmentId: number, riderToken: string) {
-    await advanceToOnTheWay(assignmentId, riderToken);
-    await request(app.getHttpServer())
-      .patch(`/api/riders/assignments/${assignmentId}/status`)
-      .set('Authorization', `Bearer ${riderToken}`)
-      .send({ status: DeliveryStatus.ARRIVED })
-      .expect(200);
-  }
-
   async function advanceToOnTheWay(assignmentId: number, riderToken: string) {
     for (const status of [
       DeliveryStatus.ACCEPTED,
@@ -563,6 +636,7 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
   async function subscribeToLocation(
     assignmentId: number,
     customerToken: string,
+    planVersion: number,
   ): Promise<Socket> {
     const socket = io(`${baseUrl}/ws/location`, {
       transports: ['websocket'],
@@ -574,12 +648,32 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
     await onceSocketEvent(socket, 'connect');
     const subscribed = onceSocketEvent<{
       assignmentId: string;
+      planVersion: number;
     }>(socket, 'subscribed');
     socket.emit('subscribe', String(assignmentId));
     await expect(subscribed).resolves.toEqual({
       assignmentId: String(assignmentId),
+      planVersion,
     });
     return socket;
+  }
+
+  async function connectOrdersSocket(token: string): Promise<Socket> {
+    const socket = io(`${baseUrl}/ws/orders`, {
+      transports: ['websocket'],
+      auth: { token },
+      forceNew: true,
+      reconnection: false,
+    });
+    sockets.push(socket);
+    await onceSocketEvent(socket, 'connect');
+    await new Promise((resolve) => setImmediate(resolve));
+    return socket;
+  }
+
+  async function expectNoSocketEvents(eventLists: unknown[][]) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    for (const events of eventLists) expect(events).toEqual([]);
   }
 
   function onceSocketEvent<T = unknown>(

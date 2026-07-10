@@ -10,22 +10,28 @@ import {
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import {
   DeliveryAssignment,
   DeliveryStatus,
 } from './entities/delivery-assignment.entity';
-import {
-  orderDeliveryAssignmentsByRoute,
-  SHOP_LOCATION,
-  toGeoPoint,
-} from './delivery-route';
+import { UsersService } from '../users/users.service';
+import { UserRole } from '../users/entities/user.entity';
+import { DispatchPlanService } from './dispatch-plan.service';
+
+export type RiderLocationUpdatePayload = {
+  assignmentId: string;
+  planVersion: number;
+  latitude: number;
+  longitude: number;
+  timestamp: string;
+};
 
 type LocationSocket = Socket<
   Record<string, never>,
   Record<string, never>,
   Record<string, never>,
-  { userId?: number; role?: string }
+  { userId?: number; role?: UserRole }
 >;
 
 @WebSocketGateway({ namespace: '/ws/location', cors: { origin: '*' } })
@@ -37,6 +43,8 @@ export class LocationGateway implements OnGatewayConnection {
     private readonly jwtService: JwtService,
     @InjectRepository(DeliveryAssignment)
     private readonly assignmentRepo: Repository<DeliveryAssignment>,
+    private readonly usersService: UsersService,
+    private readonly dispatchPlanService: DispatchPlanService,
   ) {}
 
   async handleConnection(client: LocationSocket) {
@@ -47,11 +55,28 @@ export class LocationGateway implements OnGatewayConnection {
     }
     try {
       const payload = await this.jwtService.verifyAsync<{
-        sub: number;
-        role?: string;
+        sub?: unknown;
+        role?: unknown;
       }>(token);
-      client.data.userId = payload.sub;
-      client.data.role = payload.role ?? 'customer';
+      if (
+        typeof payload.sub !== 'number' ||
+        !Number.isInteger(payload.sub) ||
+        payload.sub <= 0
+      ) {
+        client.disconnect();
+        return;
+      }
+      const identity = await this.usersService.findSocketIdentity(payload.sub);
+      if (
+        !identity?.isActive ||
+        payload.role !== identity.role ||
+        !Object.values(UserRole).includes(identity.role)
+      ) {
+        client.disconnect();
+        return;
+      }
+      client.data.userId = identity.id;
+      client.data.role = identity.role;
     } catch {
       client.disconnect();
     }
@@ -69,13 +94,19 @@ export class LocationGateway implements OnGatewayConnection {
       throw new WsException('Unauthorized');
     }
 
+    const identity = await this.usersService.findSocketIdentity(userId);
+    if (!identity?.isActive || !role || identity.role !== role) {
+      socket.disconnect();
+      throw new WsException('Unauthorized');
+    }
+
     const assignment = await this.assignmentRepo.findOne({
       where: { id: numericId, isCurrent: true },
-      relations: ['order', 'order.destination', 'rider'],
+      relations: ['order', 'rider'],
     });
     if (!assignment) throw new WsException('Delivery not found');
 
-    if (role === 'customer') {
+    if (role === UserRole.CUSTOMER) {
       if (assignment.order?.userId !== userId) {
         throw new WsException('Forbidden');
       }
@@ -86,46 +117,37 @@ export class LocationGateway implements OnGatewayConnection {
       ) {
         throw new WsException('Live tracking is not available for this stop');
       }
-      const active = await this.assignmentRepo.find({
-        where: {
-          riderId: assignment.riderId,
-          isCurrent: true,
-          status: In([
-            DeliveryStatus.ASSIGNED,
-            DeliveryStatus.ACCEPTED,
-            DeliveryStatus.PICKED_UP,
-            DeliveryStatus.ON_THE_WAY,
-            DeliveryStatus.ARRIVED,
-          ]),
-        },
-        relations: ['order', 'order.destination', 'rider'],
-      });
-      const riderStart =
-        toGeoPoint(
-          assignment.rider?.lastLatitude,
-          assignment.rider?.lastLongitude,
-        ) ?? SHOP_LOCATION;
-      const current = orderDeliveryAssignmentsByRoute(active, riderStart)[0];
-      if (current?.id !== assignment.id) {
-        throw new WsException('Live tracking is not available for this stop');
-      }
-    } else if (role === 'rider') {
+    } else if (role === UserRole.RIDER) {
       if (assignment.rider?.userId !== userId) {
         throw new WsException('Forbidden');
       }
-    } else if (role !== 'admin') {
+    } else if (role !== UserRole.ADMIN) {
       throw new WsException('Forbidden');
     }
 
-    void socket.join(`delivery_${numericId}`);
+    const currentStop =
+      await this.dispatchPlanService.getCurrentPendingStopForRider(
+        assignment.riderId,
+      );
+    if (currentStop?.stop.assignmentId !== assignment.id) {
+      throw new WsException('Live tracking is not available for this stop');
+    }
+
+    await socket.join(`delivery_${numericId}`);
     return {
       event: 'subscribed',
-      data: { assignmentId: String(numericId) },
+      data: {
+        assignmentId: String(numericId),
+        planVersion: currentStop.planVersion,
+      },
     };
   }
 
   // Called by RidersService when rider sends GPS update
-  broadcastLocation(assignmentId: string, location: any) {
+  broadcastLocation(
+    assignmentId: string,
+    location: RiderLocationUpdatePayload,
+  ) {
     this.server.to(`delivery_${assignmentId}`).emit('locationUpdate', location);
   }
 }

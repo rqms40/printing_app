@@ -34,6 +34,10 @@ import { MAX_SIGNATURE_PROOF_BYTES } from './dto/update-delivery-status.dto';
 import { TamSurveyRequirement } from '../tam-surveys/entities/tam-survey-requirement.entity';
 import { DispatchPlanService } from './dispatch-plan.service';
 import { DispatchStopStatus } from './entities/dispatch-plan-stop.entity';
+import {
+  DeliveryQueueUpdatedPayload,
+  OrdersGateway,
+} from '../orders/orders.gateway';
 
 // Valid state transitions for delivery status
 const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
@@ -88,6 +92,7 @@ export class RidersService {
     @InjectRepository(DeliveryAssignment)
     private assignmentRepo: Repository<DeliveryAssignment>,
     private locationGateway: LocationGateway,
+    private ordersGateway: OrdersGateway,
     private ordersService: OrdersService,
     private filesService: FilesService,
     private chatGateway: ChatGateway,
@@ -304,11 +309,11 @@ export class RidersService {
       : null;
     if (currentStop && currentAssignment) {
       this.locationGateway.broadcastLocation(String(currentAssignment.id), {
-        assignmentId: currentAssignment.id,
+        assignmentId: String(currentAssignment.id),
         planVersion: currentStop.planVersion,
         latitude: dto.latitude,
         longitude: dto.longitude,
-        timestamp: profile.lastLocationUpdate,
+        timestamp: saved.lastLocationUpdate.toISOString(),
       });
     }
 
@@ -610,6 +615,16 @@ export class RidersService {
       };
     });
 
+    if (result.savedAssignment.status === DeliveryStatus.DELIVERED) {
+      try {
+        await this.publishCurrentDeliveryQueue(profile.id);
+      } catch (error) {
+        this.logger.warn(
+          `Post-commit queue promotion failed after assignment ${assignmentId}: ${error}`,
+        );
+      }
+    }
+
     if (result.closedConversationIds.length > 0) {
       try {
         this.chatGateway.notifyConversationClosed(result.closedConversationIds);
@@ -644,6 +659,50 @@ export class RidersService {
     }
 
     return result.savedAssignment;
+  }
+
+  private async publishCurrentDeliveryQueue(riderId: number): Promise<void> {
+    const plan = await this.dispatchPlanService.getActivePlanForRider(riderId);
+    const pendingStops = (plan?.stops ?? [])
+      .filter((stop) => stop.status === DispatchStopStatus.PENDING)
+      .sort((left, right) => left.sequence - right.sequence);
+    const currentStop = pendingStops[0];
+    if (!plan || !currentStop) return;
+
+    const assignment = await this.assignmentRepo.findOne({
+      where: {
+        id: currentStop.assignmentId,
+        riderId,
+        isCurrent: true,
+        status: In([
+          DeliveryStatus.ASSIGNED,
+          DeliveryStatus.ACCEPTED,
+          DeliveryStatus.PICKED_UP,
+          DeliveryStatus.ON_THE_WAY,
+          DeliveryStatus.ARRIVED,
+        ]),
+      },
+      relations: ['order'],
+    });
+    if (!assignment?.order) return;
+
+    const canTrackDelivery = [
+      DeliveryStatus.ON_THE_WAY,
+      DeliveryStatus.ARRIVED,
+    ].includes(assignment.status);
+    const payload: DeliveryQueueUpdatedPayload = {
+      orderId: assignment.order.id,
+      orderRef: assignment.order.orderId,
+      queuePosition: 1,
+      queueSize: pendingStops.length,
+      canTrackDelivery,
+      assignmentId: canTrackDelivery ? assignment.id : null,
+      planVersion: plan.version,
+    };
+    this.ordersGateway.notifyDeliveryQueueUpdated(
+      assignment.order.userId,
+      payload,
+    );
   }
 
   private async applyOrderStatusChange(

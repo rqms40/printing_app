@@ -29,6 +29,8 @@ type UserProfilingInput = {
   printingPreferences?: PrintingPreference[];
 };
 
+export type SocketIdentity = Pick<User, 'id' | 'role' | 'isActive'>;
+
 @Injectable()
 export class UsersService {
   private static readonly VALID_PAYMENT_METHODS = [
@@ -46,6 +48,16 @@ export class UsersService {
 
   async findById(id: number): Promise<User | null> {
     return this.usersRepo.findOne({ where: { id } });
+  }
+
+  async findSocketIdentity(id: unknown): Promise<SocketIdentity | null> {
+    if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0) {
+      return null;
+    }
+    return this.usersRepo.findOne({
+      where: { id },
+      select: { id: true, role: true, isActive: true },
+    });
   }
 
   async create(

@@ -16,6 +16,7 @@ import { DispatchPlanStop } from './entities/dispatch-plan-stop.entity';
 import { DispatchPlanService } from './dispatch-plan.service';
 import { ROUTING_PROVIDER } from './routing/routing-provider';
 import { OsrmRoutingProvider } from './routing/osrm-routing.provider';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { OsrmRoutingProvider } from './routing/osrm-routing.provider';
     OrdersModule,
     ChatModule,
     FilesModule,
+    UsersModule,
   ],
   controllers: [RidersController],
   providers: [
