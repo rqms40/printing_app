@@ -59,10 +59,10 @@ import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 import { TamSurveyRequirement } from '../tam-surveys/entities/tam-survey-requirement.entity';
 import { CatalogPricingService } from '../products/catalog-pricing.service';
 import {
-  orderDeliveryAssignmentsByRoute,
-  SHOP_LOCATION,
-  toGeoPoint,
-} from '../riders/delivery-route';
+  DispatchPlan,
+  DispatchPlanStatus,
+} from '../riders/entities/dispatch-plan.entity';
+import { DispatchStopStatus } from '../riders/entities/dispatch-plan-stop.entity';
 import {
   assertOrderStatusTransition,
   parseOrderStatus,
@@ -257,6 +257,8 @@ export class OrdersService {
     private catalogPricingService: CatalogPricingService,
     @InjectRepository(FileMetadata)
     private readonly fileMetadataRepo: Repository<FileMetadata>,
+    @InjectRepository(DispatchPlan)
+    private readonly dispatchPlanRepo: Repository<DispatchPlan>,
   ) {}
 
   async findByUser(userId: number): Promise<Order[]> {
@@ -312,46 +314,38 @@ export class OrdersService {
           .filter((id): id is number => id != null),
       ),
     ];
-    const activeRouteAssignments =
+    const plans =
       riderIds.length === 0
         ? []
-        : await this.deliveryAssignmentRepo.find({
+        : await this.dispatchPlanRepo.find({
             where: {
               riderId: In(riderIds),
-              isCurrent: true,
-              status: In([
-                DeliveryStatus.ASSIGNED,
-                DeliveryStatus.ACCEPTED,
-                DeliveryStatus.PICKED_UP,
-                DeliveryStatus.ON_THE_WAY,
-                DeliveryStatus.ARRIVED,
-              ]),
+              status: DispatchPlanStatus.ACTIVE,
             },
-            relations: ['order', 'order.destination', 'rider', 'rider.user'],
+            relations: ['stops'],
           });
-    const routeByRiderId = new Map<number, DeliveryAssignment[]>();
-    for (const riderId of riderIds) {
-      const riderAssignments = activeRouteAssignments.filter(
-        (assignment) => assignment.riderId === riderId,
-      );
-      const rider = riderAssignments[0]?.rider;
-      const startPoint =
-        toGeoPoint(rider?.lastLatitude, rider?.lastLongitude) ?? SHOP_LOCATION;
-      routeByRiderId.set(
-        riderId,
-        orderDeliveryAssignmentsByRoute(riderAssignments, startPoint),
-      );
-    }
+    const planByRiderId = new Map(plans.map((plan) => [plan.riderId, plan]));
 
     return orders.map((order) => {
       const assignment = assignmentByOrderId.get(order.id);
-      const route = assignment?.riderId
-        ? (routeByRiderId.get(assignment.riderId) ?? [])
-        : [];
+      const plan = assignment?.riderId
+        ? planByRiderId.get(assignment.riderId)
+        : undefined;
+      const remainingStops = (plan?.stops ?? [])
+        .filter((stop) => stop.status === DispatchStopStatus.PENDING)
+        .sort((left, right) => left.sequence - right.sequence);
+      const plannedStop = assignment
+        ? plan?.stops?.find(
+            (candidate) => candidate.assignmentId === assignment.id,
+          )
+        : undefined;
       const routeIndex = assignment
-        ? route.findIndex((candidate) => candidate.id === assignment.id)
+        ? remainingStops.findIndex(
+            (candidate) => candidate.assignmentId === assignment.id,
+          )
         : -1;
       const queuePosition = routeIndex >= 0 ? routeIndex + 1 : null;
+      const currentStop = routeIndex === 0 ? remainingStops[0] : null;
       const canTrackDelivery =
         queuePosition === 1 &&
         assignment != null &&
@@ -362,7 +356,22 @@ export class OrdersService {
       return Object.assign(order, {
         deliveryAssignmentId: canTrackDelivery ? assignment?.id : null,
         deliveryQueuePosition: queuePosition,
-        deliveryQueueSize: route.length || null,
+        deliveryQueueSize:
+          routeIndex >= 0 ? remainingStops.length || null : null,
+        deliveryPlanState: plannedStop ? 'planned' : 'unplanned',
+        deliveryPlanVersion: plannedStop ? (plan?.version ?? null) : null,
+        deliveryRouteGeometry: canTrackDelivery
+          ? (currentStop?.legGeometry ?? null)
+          : null,
+        deliveryLegDurationSeconds: canTrackDelivery
+          ? (currentStop?.legDurationSeconds ?? null)
+          : null,
+        deliveryLegDistanceMeters: canTrackDelivery
+          ? (currentStop?.legDistanceMeters ?? null)
+          : null,
+        deliveryRoutingDataStale: canTrackDelivery
+          ? (plan?.routingDataStale ?? false)
+          : null,
         canTrackDelivery,
         assignedRiderContact: this.assignedRiderContactFromAssignment(
           assignment,

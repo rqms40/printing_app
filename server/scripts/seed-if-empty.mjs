@@ -2,8 +2,8 @@ import { spawn } from 'node:child_process';
 import { Client } from 'pg';
 
 const requiredMigration = {
-  timestamp: '1777853800000',
-  name: 'EvidenceFileIntegrity1777853800000',
+  timestamp: '1777853900000',
+  name: 'PersistedDispatchPlans1777853900000',
 };
 
 const client = new Client({

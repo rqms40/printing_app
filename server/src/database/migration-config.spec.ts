@@ -30,13 +30,13 @@ describe('createTypeOrmOptions migration configuration', () => {
     expect(optedInOptions.synchronize).toBe(true);
   });
 
-  it('requires the latest evidence-integrity migration before seeding', () => {
+  it('requires the latest dispatch-plan migration before seeding', () => {
     const seedGuard = readFileSync(
       join(process.cwd(), 'scripts', 'seed-if-empty.mjs'),
       'utf8',
     );
 
-    expect(seedGuard).toContain("timestamp: '1777853800000'");
-    expect(seedGuard).toContain("name: 'EvidenceFileIntegrity1777853800000'");
+    expect(seedGuard).toContain("timestamp: '1777853900000'");
+    expect(seedGuard).toContain("name: 'PersistedDispatchPlans1777853900000'");
   });
 });

@@ -21,6 +21,16 @@ import {
 } from '../src/riders/entities/delivery-assignment.entity';
 import { databaseOptionsFromEnv } from '../src/database/data-source';
 import { StorageService } from '../src/storage/storage.service';
+import { ROUTING_PROVIDER } from '../src/riders/routing/routing-provider';
+import { FakeRoutingProvider } from './support/fake-routing-provider';
+import {
+  DispatchPlan,
+  DispatchPlanStatus,
+} from '../src/riders/entities/dispatch-plan.entity';
+import {
+  DispatchPlanStop,
+  DispatchStopStatus,
+} from '../src/riders/entities/dispatch-plan-stop.entity';
 
 type StopSeed = {
   label: string;
@@ -41,6 +51,8 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
   let ordersRepo: Repository<Order>;
   let riderProfilesRepo: Repository<RiderProfile>;
   let assignmentsRepo: Repository<DeliveryAssignment>;
+  let dispatchPlansRepo: Repository<DispatchPlan>;
+  let dispatchStopsRepo: Repository<DispatchPlanStop>;
   let storageService: StorageService;
 
   const sockets: Socket[] = [];
@@ -101,7 +113,10 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(ROUTING_PROVIDER)
+      .useValue(new FakeRoutingProvider())
+      .compile();
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');
@@ -121,6 +136,8 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
     ordersRepo = dataSource.getRepository(Order);
     riderProfilesRepo = dataSource.getRepository(RiderProfile);
     assignmentsRepo = dataSource.getRepository(DeliveryAssignment);
+    dispatchPlansRepo = dataSource.getRepository(DispatchPlan);
+    dispatchStopsRepo = dataSource.getRepository(DispatchPlanStop);
     storageService = app.get(StorageService);
   });
 
@@ -213,6 +230,73 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
       ),
     );
 
+    const assignments = await assignmentsRepo.find({
+      relations: ['order'],
+      where: { riderId: riderProfile.id },
+    });
+    const assignmentByRef = new Map(
+      assignments.map((assignment) => [assignment.order.orderId, assignment]),
+    );
+    const nearAssignment = assignmentByRef.get(`RNEAR-${runId}`)!;
+    const midAssignment = assignmentByRef.get(`RMID-${runId}`)!;
+    const farAssignment = assignmentByRef.get(`RFAR-${runId}`)!;
+
+    const assignmentIds = assignments.map((assignment) => assignment.id);
+    const concurrentCreates = await Promise.all(
+      [1, 2].map(() =>
+        request(app.getHttpServer())
+          .post(`/api/admin/riders/${riderProfile.id}/dispatch-plan`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({ assignmentIds }),
+      ),
+    );
+    expect(concurrentCreates.map((response) => response.status).sort()).toEqual(
+      [201, 409],
+    );
+    const createdPlan = concurrentCreates.find(
+      (response) => response.status === 201,
+    )!;
+    expect(createdPlan.body.version).toBe(1);
+    expect(
+      createdPlan.body.stops.map(
+        (stop: { assignmentId: number }) => stop.assignmentId,
+      ),
+    ).toEqual([nearAssignment.id, midAssignment.id, farAssignment.id]);
+
+    const concurrentReoptimizations = await Promise.all(
+      [1, 2].map(() =>
+        request(app.getHttpServer())
+          .post(
+            `/api/admin/riders/${riderProfile.id}/dispatch-plan/re-optimize`,
+          )
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({ assignmentIds }),
+      ),
+    );
+    expect(
+      concurrentReoptimizations.map((response) => response.status).sort(),
+    ).toEqual([201, 409]);
+    await expect(
+      dispatchPlansRepo.countBy({ riderId: riderProfile.id }),
+    ).resolves.toBe(2);
+    await expect(
+      dispatchPlansRepo.findOneOrFail({
+        where: {
+          riderId: riderProfile.id,
+          status: DispatchPlanStatus.ACTIVE,
+        },
+      }),
+    ).resolves.toMatchObject({ version: 2 });
+    const activePlan = await dispatchPlansRepo.findOneOrFail({
+      where: {
+        riderId: riderProfile.id,
+        status: DispatchPlanStatus.ACTIVE,
+      },
+    });
+    await expect(
+      dispatchPlansRepo.update(activePlan.id, { version: 0 }),
+    ).rejects.toMatchObject({ code: '23514' });
+
     const routeResponse = await request(app.getHttpServer())
       .get('/api/riders/assignments')
       .set('Authorization', `Bearer ${riderToken}`)
@@ -228,21 +312,23 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
       `RFAR-${runId}`,
     ]);
 
-    const assignments = await assignmentsRepo.find({
-      relations: ['order'],
-      where: { riderId: riderProfile.id },
-    });
-    const assignmentByRef = new Map(
-      assignments.map((assignment) => [assignment.order.orderId, assignment]),
-    );
-    const nearAssignment = assignmentByRef.get(`RNEAR-${runId}`)!;
-    const midAssignment = assignmentByRef.get(`RMID-${runId}`)!;
-    const farAssignment = assignmentByRef.get(`RFAR-${runId}`)!;
-
     const nearCustomer = await usersRepo.findOneOrFail({
       where: { id: nearAssignment.order.userId },
     });
     await advanceToOnTheWay(nearAssignment.id, riderToken);
+    const farCustomer = await usersRepo.findOneOrFail({
+      where: { id: farAssignment.order.userId },
+    });
+    await request(app.getHttpServer())
+      .get(`/api/orders/${farAssignment.orderId}`)
+      .set('Authorization', `Bearer ${sign(farCustomer)}`)
+      .expect(200)
+      .expect((res) => {
+        expect(res.body.deliveryQueuePosition).toBe(3);
+        expect(res.body.deliveryAssignmentId).toBeNull();
+        expect(res.body.deliveryRouteGeometry).toBeNull();
+        expect(res.body.canTrackDelivery).toBe(false);
+      });
     const locationSocket = await subscribeToLocation(
       nearAssignment.id,
       sign(nearCustomer),
@@ -254,9 +340,30 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
       .send({ latitude: 7.0648, longitude: 125.6087 })
       .expect(200);
     await expect(locationUpdate).resolves.toMatchObject({
+      assignmentId: nearAssignment.id,
+      planVersion: 2,
       latitude: 7.0648,
       longitude: 125.6087,
     });
+    await request(app.getHttpServer())
+      .patch('/api/riders/location')
+      .set('Authorization', `Bearer ${riderToken}`)
+      .send({ latitude: stops[0].latitude, longitude: stops[0].longitude })
+      .expect(200);
+    await request(app.getHttpServer())
+      .get('/api/riders/assignments')
+      .set('Authorization', `Bearer ${riderToken}`)
+      .expect(200)
+      .expect((res) => {
+        expect(
+          res.body
+            .slice(0, 3)
+            .map(
+              (assignment: { order?: { orderId?: string } }) =>
+                assignment.order?.orderId,
+            ),
+        ).toEqual([`RNEAR-${runId}`, `RMID-${runId}`, `RFAR-${runId}`]);
+      });
 
     await request(app.getHttpServer())
       .patch(`/api/riders/assignments/${nearAssignment.id}/status`)
@@ -282,7 +389,36 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
         );
       });
 
+    await expect(
+      dispatchStopsRepo.findOneOrFail({
+        where: {
+          assignmentId: nearAssignment.id,
+          status: DispatchStopStatus.COMPLETED,
+        },
+      }),
+    ).resolves.toMatchObject({ completedAt: expect.any(Date) });
+    await expect(
+      dispatchStopsRepo.findOneOrFail({
+        where: { assignmentId: midAssignment.id },
+      }),
+    ).resolves.toMatchObject({ status: DispatchStopStatus.PENDING });
+
     await advanceToArrived(midAssignment.id, riderToken);
+    const midCustomer = await usersRepo.findOneOrFail({
+      where: { id: midAssignment.order.userId },
+    });
+    await request(app.getHttpServer())
+      .get(`/api/orders/${midAssignment.orderId}`)
+      .set('Authorization', `Bearer ${sign(midCustomer)}`)
+      .expect(200)
+      .expect((res) => {
+        expect(res.body.deliveryQueuePosition).toBe(1);
+        expect(res.body.deliveryAssignmentId).toBe(midAssignment.id);
+        expect(res.body.deliveryRouteGeometry).toMatchObject({
+          type: 'LineString',
+        });
+        expect(res.body.canTrackDelivery).toBe(true);
+      });
     await request(app.getHttpServer())
       .patch(`/api/riders/assignments/${midAssignment.id}/status`)
       .set('Authorization', `Bearer ${riderToken}`)

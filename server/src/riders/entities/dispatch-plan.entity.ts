@@ -1,5 +1,6 @@
 import {
   Column,
+  Check,
   CreateDateColumn,
   Entity,
   Index,
@@ -23,6 +24,19 @@ export enum DispatchPlanStatus {
   unique: true,
 })
 @Index('idx_dispatch_plans_rider_status', ['riderId', 'status'])
+@Index('uq_dispatch_plans_active_rider', ['riderId'], {
+  unique: true,
+  where: '"status" = \'active\'',
+})
+@Check('CHK_dispatch_plans_version', '"version" > 0')
+@Check(
+  'CHK_dispatch_plans_origin',
+  '"origin_latitude" BETWEEN -90 AND 90 AND "origin_longitude" BETWEEN -180 AND 180',
+)
+@Check(
+  'CHK_dispatch_plans_totals',
+  '"total_duration_seconds" >= 0 AND "total_distance_meters" >= 0',
+)
 export class DispatchPlan {
   @PrimaryGeneratedColumn()
   id: number;

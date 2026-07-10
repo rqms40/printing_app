@@ -24,11 +24,6 @@ import { LocationGateway } from './location.gateway';
 import { OrdersService } from '../orders/orders.service';
 import { ProofOfDeliveryDto } from './dto/update-delivery-status.dto';
 import {
-  orderDeliveryAssignmentsByRoute,
-  SHOP_LOCATION,
-  toGeoPoint,
-} from './delivery-route';
-import {
   Conversation,
   ConversationStatus,
   ConversationType,
@@ -37,6 +32,8 @@ import { ChatGateway } from '../chat/chat.gateway';
 import { FilesService } from '../files/files.service';
 import { MAX_SIGNATURE_PROOF_BYTES } from './dto/update-delivery-status.dto';
 import { TamSurveyRequirement } from '../tam-surveys/entities/tam-survey-requirement.entity';
+import { DispatchPlanService } from './dispatch-plan.service';
+import { DispatchStopStatus } from './entities/dispatch-plan-stop.entity';
 
 // Valid state transitions for delivery status
 const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
@@ -95,6 +92,7 @@ export class RidersService {
     private filesService: FilesService,
     private chatGateway: ChatGateway,
     private dataSource: DataSource,
+    private dispatchPlanService: DispatchPlanService,
   ) {}
 
   async assignOrderToRider(
@@ -292,14 +290,22 @@ export class RidersService {
     profile.lastLocationUpdate = new Date();
     const saved = await this.profileRepo.save(profile);
 
-    const [currentStop] = await this.getActiveAssignments(userId);
-    if (
-      currentStop &&
-      [DeliveryStatus.ON_THE_WAY, DeliveryStatus.ARRIVED].includes(
-        currentStop.status,
-      )
-    ) {
-      this.locationGateway.broadcastLocation(String(currentStop.id), {
+    const currentStop =
+      await this.dispatchPlanService.getCurrentPendingStopForRider(profile.id);
+    const currentAssignment = currentStop
+      ? await this.assignmentRepo.findOne({
+          where: {
+            id: currentStop.stop.assignmentId,
+            riderId: profile.id,
+            isCurrent: true,
+            status: In([DeliveryStatus.ON_THE_WAY, DeliveryStatus.ARRIVED]),
+          },
+        })
+      : null;
+    if (currentStop && currentAssignment) {
+      this.locationGateway.broadcastLocation(String(currentAssignment.id), {
+        assignmentId: currentAssignment.id,
+        planVersion: currentStop.planVersion,
         latitude: dto.latitude,
         longitude: dto.longitude,
         timestamp: profile.lastLocationUpdate,
@@ -333,16 +339,76 @@ export class RidersService {
       .orderBy('da.createdAt', 'DESC')
       .getMany();
 
-    return this.orderAssignmentsByRoute(assignments, profile);
+    const plan = await this.dispatchPlanService.getActivePlanForRider(
+      profile.id,
+    );
+    if (!plan) {
+      return [...assignments]
+        .sort((left, right) => left.id - right.id)
+        .map((assignment) =>
+          Object.assign(assignment, {
+            dispatchPlanState: 'unplanned',
+            dispatchPlanVersion: null,
+            routePosition: null,
+            dispatchPlanStop: null,
+          }),
+        );
+    }
+
+    const assignmentById = new Map(
+      assignments.map((assignment) => [assignment.id, assignment]),
+    );
+    const remainingStops = plan.stops
+      .filter((stop) => stop.status === DispatchStopStatus.PENDING)
+      .sort((left, right) => left.sequence - right.sequence);
+    const planned = remainingStops.flatMap((stop, index) => {
+      const assignment = assignmentById.get(stop.assignmentId);
+      if (!assignment) return [];
+      assignmentById.delete(stop.assignmentId);
+      return [
+        Object.assign(assignment, {
+          dispatchPlanState: 'planned',
+          dispatchPlanVersion: plan.version,
+          routePosition: index + 1,
+          dispatchPlanStop: {
+            sequence: stop.sequence,
+            status: stop.status,
+            destinationLatitude: stop.destinationLatitude,
+            destinationLongitude: stop.destinationLongitude,
+            legDurationSeconds: stop.legDurationSeconds,
+            legDistanceMeters: stop.legDistanceMeters,
+            legGeometry: stop.legGeometry,
+          },
+        }),
+      ];
+    });
+    const unplanned = [...assignmentById.values()]
+      .sort((left, right) => left.id - right.id)
+      .map((assignment) =>
+        Object.assign(assignment, {
+          dispatchPlanState: 'unplanned',
+          dispatchPlanVersion: null,
+          routePosition: null,
+          dispatchPlanStop: null,
+        }),
+      );
+    return [...planned, ...unplanned];
   }
 
-  private orderAssignmentsByRoute(
-    assignments: DeliveryAssignment[],
-    profile: RiderProfile,
-  ): DeliveryAssignment[] {
-    const startPoint =
-      toGeoPoint(profile.lastLatitude, profile.lastLongitude) ?? SHOP_LOCATION;
-    return orderDeliveryAssignmentsByRoute(assignments, startPoint);
+  createDispatchPlan(riderId: number, assignmentIds: number[]) {
+    return this.dispatchPlanService.createPlan(riderId, assignmentIds);
+  }
+
+  getDispatchPlanForRider(riderId: number) {
+    return this.dispatchPlanService.getActivePlanForRider(riderId);
+  }
+
+  getDispatchPlan(userId: number) {
+    return this.dispatchPlanService.getActivePlanForRiderUser(userId);
+  }
+
+  reoptimizeDispatchPlan(riderId: number, assignmentIds?: number[]) {
+    return this.dispatchPlanService.reoptimizePlan(riderId, assignmentIds);
   }
 
   async updateDeliveryStatus(
@@ -417,13 +483,15 @@ export class RidersService {
             })
           : [];
 
-      if (newStatus === DeliveryStatus.ARRIVED) {
-        const [currentStop] = await this.getActiveAssignments(userId);
-        if (currentStop?.id !== assignment.id) {
-          throw new BadRequestException(
-            'Complete the current route stop before advancing this delivery',
-          );
-        }
+      if (
+        newStatus === DeliveryStatus.ARRIVED ||
+        newStatus === DeliveryStatus.DELIVERED
+      ) {
+        await this.dispatchPlanService.assertCurrentStop(
+          manager,
+          profile.id,
+          assignment.id,
+        );
       }
 
       const now = new Date();
@@ -515,6 +583,21 @@ export class RidersService {
           newStatus === DeliveryStatus.DECLINED
             ? { assignedRiderId: null }
             : {},
+        );
+      }
+
+      if (newStatus === DeliveryStatus.DELIVERED) {
+        await this.dispatchPlanService.advanceStop(
+          manager,
+          profile.id,
+          assignment.id,
+          DispatchStopStatus.COMPLETED,
+        );
+      } else if (newStatus === DeliveryStatus.DECLINED) {
+        await this.dispatchPlanService.skipStopIfPlanned(
+          manager,
+          profile.id,
+          assignment.id,
         );
       }
 

@@ -187,18 +187,27 @@ export class DispatchPlanService {
     return this.getActivePlanForRider(profile.id);
   }
 
+  async getCurrentPendingStopForRider(
+    riderId: number,
+  ): Promise<{ stop: DispatchPlanStop; planVersion: number } | null> {
+    const plan = await this.getActivePlanForRider(riderId);
+    const stop =
+      plan?.stops
+        ?.filter((stop) => stop.status === DispatchStopStatus.PENDING)
+        .sort((left, right) => left.sequence - right.sequence)[0] ?? null;
+    return plan && stop ? { stop, planVersion: plan.version } : null;
+  }
+
   async assertCurrentStop(
     manager: EntityManager,
     riderId: number,
     assignmentId: number,
-    allowUnplanned = false,
   ): Promise<void> {
     const plan = await manager.getRepository(DispatchPlan).findOne({
       where: { riderId, status: DispatchPlanStatus.ACTIVE },
       lock: { mode: 'pessimistic_write' },
     });
     if (!plan) {
-      if (allowUnplanned) return;
       throw new BadRequestException('Dispatch plan is required');
     }
     const target = await manager.getRepository(DispatchPlanStop).findOne({
@@ -206,7 +215,6 @@ export class DispatchPlanService {
       lock: { mode: 'pessimistic_write' },
     });
     if (!target) {
-      if (allowUnplanned) return;
       throw new BadRequestException('Assignment is not in the dispatch plan');
     }
     if (target.status !== DispatchStopStatus.PENDING) {
@@ -229,7 +237,6 @@ export class DispatchPlanService {
     riderId: number,
     assignmentId: number,
     outcome: DispatchStopStatus.COMPLETED | DispatchStopStatus.SKIPPED,
-    allowUnplanned = false,
   ): Promise<void> {
     const planRepo = manager.getRepository(DispatchPlan);
     const stopRepo = manager.getRepository(DispatchPlanStop);
@@ -238,7 +245,18 @@ export class DispatchPlanService {
       lock: { mode: 'pessimistic_write' },
     });
     if (!plan) {
-      if (allowUnplanned) return;
+      const latest = await planRepo.findOne({
+        where: { riderId },
+        order: { version: 'DESC' },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (latest) {
+        const closedStop = await stopRepo.findOne({
+          where: { planId: latest.id, assignmentId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (closedStop?.status === outcome) return;
+      }
       throw new BadRequestException('Dispatch plan is required');
     }
     const stop = await stopRepo.findOne({
@@ -246,7 +264,6 @@ export class DispatchPlanService {
       lock: { mode: 'pessimistic_write' },
     });
     if (!stop) {
-      if (allowUnplanned) return;
       throw new BadRequestException('Assignment is not in the dispatch plan');
     }
     if (stop.status === outcome) return;
@@ -270,6 +287,42 @@ export class DispatchPlanService {
     if (outcome === DispatchStopStatus.SKIPPED) stop.skippedAt = now;
     await stopRepo.save(stop);
 
+    const next = await stopRepo.findOne({
+      where: { planId: plan.id, status: DispatchStopStatus.PENDING },
+      order: { sequence: 'ASC' },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!next) {
+      plan.status = DispatchPlanStatus.COMPLETED;
+      plan.completedAt = now;
+      await planRepo.save(plan);
+    }
+  }
+
+  async skipStopIfPlanned(
+    manager: EntityManager,
+    riderId: number,
+    assignmentId: number,
+  ): Promise<void> {
+    const planRepo = manager.getRepository(DispatchPlan);
+    const stopRepo = manager.getRepository(DispatchPlanStop);
+    const plan = await planRepo.findOne({
+      where: { riderId, status: DispatchPlanStatus.ACTIVE },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!plan) return;
+    const stop = await stopRepo.findOne({
+      where: { planId: plan.id, assignmentId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!stop || stop.status === DispatchStopStatus.SKIPPED) return;
+    if (stop.status !== DispatchStopStatus.PENDING) {
+      throw new BadRequestException('Dispatch stop is already closed');
+    }
+    const now = new Date();
+    stop.status = DispatchStopStatus.SKIPPED;
+    stop.skippedAt = now;
+    await stopRepo.save(stop);
     const next = await stopRepo.findOne({
       where: { planId: plan.id, status: DispatchStopStatus.PENDING },
       order: { sequence: 'ASC' },

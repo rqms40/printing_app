@@ -415,4 +415,86 @@ describe('DispatchPlanService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
     expect(stopRepo.save).not.toHaveBeenCalled();
   });
+
+  it('fails closed when delivery advancement has no active plan', async () => {
+    planRepo.findOne!.mockResolvedValue(null);
+    await expect(
+      service.advanceStop(
+        manager as EntityManager,
+        rider.id,
+        ven.id,
+        DispatchStopStatus.COMPLETED,
+      ),
+    ).rejects.toThrow('Dispatch plan is required');
+  });
+
+  it('treats retrying the final persisted advancement as idempotent', async () => {
+    const completedPlan = {
+      id: 501,
+      riderId: rider.id,
+      version: 1,
+      status: DispatchPlanStatus.COMPLETED,
+    } as DispatchPlan;
+    planRepo
+      .findOne!.mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(completedPlan);
+    stopRepo.findOne!.mockResolvedValueOnce({
+      id: 901,
+      planId: completedPlan.id,
+      assignmentId: ven.id,
+      status: DispatchStopStatus.COMPLETED,
+    } as DispatchPlanStop);
+
+    await expect(
+      service.advanceStop(
+        manager as EntityManager,
+        rider.id,
+        ven.id,
+        DispatchStopStatus.COMPLETED,
+      ),
+    ).resolves.toBeUndefined();
+    expect(stopRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('allows a pre-plan decline and skips a planned later stop without reordering', async () => {
+    planRepo.findOne!.mockResolvedValueOnce(null);
+    await expect(
+      service.skipStopIfPlanned(manager as EntityManager, rider.id, mark.id),
+    ).resolves.toBeUndefined();
+
+    const active = {
+      id: 501,
+      riderId: rider.id,
+      status: DispatchPlanStatus.ACTIVE,
+    } as DispatchPlan;
+    const later = {
+      id: 902,
+      planId: active.id,
+      assignmentId: mark.id,
+      sequence: 2,
+      status: DispatchStopStatus.PENDING,
+    } as DispatchPlanStop;
+    const current = {
+      id: 901,
+      planId: active.id,
+      assignmentId: ven.id,
+      sequence: 1,
+      status: DispatchStopStatus.PENDING,
+    } as DispatchPlanStop;
+    planRepo.findOne!.mockResolvedValueOnce(active);
+    stopRepo
+      .findOne!.mockResolvedValueOnce(later)
+      .mockResolvedValueOnce(current);
+
+    await service.skipStopIfPlanned(
+      manager as EntityManager,
+      rider.id,
+      mark.id,
+    );
+
+    expect(later.status).toBe(DispatchStopStatus.SKIPPED);
+    expect(later.skippedAt).toBeInstanceOf(Date);
+    expect(current.status).toBe(DispatchStopStatus.PENDING);
+    expect(active.status).toBe(DispatchPlanStatus.ACTIVE);
+  });
 });

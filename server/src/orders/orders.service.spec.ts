@@ -42,6 +42,11 @@ import { DeliverySpeedTier } from './enums/delivery-speed-tier.enum';
 import { CatalogPricingService } from '../products/catalog-pricing.service';
 import { User } from '../users/entities/user.entity';
 import { TamSurveyRequirement } from '../tam-surveys/entities/tam-survey-requirement.entity';
+import {
+  DispatchPlan,
+  DispatchPlanStatus,
+} from '../riders/entities/dispatch-plan.entity';
+import { DispatchStopStatus } from '../riders/entities/dispatch-plan-stop.entity';
 
 const specValueRepoProvider = () => ({
   provide: getRepositoryToken(OrderItemSpecValue),
@@ -50,6 +55,11 @@ const specValueRepoProvider = () => ({
 
     save: jest.fn(async (data) => data),
   },
+});
+
+const dispatchPlanRepoProvider = () => ({
+  provide: getRepositoryToken(DispatchPlan),
+  useValue: { find: jest.fn().mockResolvedValue([]) },
 });
 
 const catalogPricingProvider = () => ({
@@ -149,6 +159,7 @@ describe('OrdersService', () => {
   let paperSpecsRepo: jest.Mocked<Partial<Repository<PaperSpec>>>;
   let threeDSpecsRepo: jest.Mocked<Partial<Repository<ThreeDSpec>>>;
   let assignmentRepo: jest.Mocked<Partial<Repository<DeliveryAssignment>>>;
+  let dispatchPlanRepo: jest.Mocked<Partial<Repository<DispatchPlan>>>;
   let historyRepo: jest.Mocked<Partial<Repository<OrderStatusHistory>>>;
   let addressRepo: jest.Mocked<Partial<Repository<Address>>>;
   let dataSource: Partial<DataSource>;
@@ -257,6 +268,7 @@ describe('OrdersService', () => {
       find: jest.fn(),
       findOne: jest.fn(),
     };
+    dispatchPlanRepo = { find: jest.fn().mockResolvedValue([]) };
     historyRepo = {
       insert: jest.fn(),
     };
@@ -397,6 +409,10 @@ describe('OrdersService', () => {
         {
           provide: getRepositoryToken(DeliveryAssignment),
           useValue: assignmentRepo,
+        },
+        {
+          provide: getRepositoryToken(DispatchPlan),
+          useValue: dispatchPlanRepo,
         },
         { provide: getRepositoryToken(Address), useValue: addressRepo },
         {
@@ -987,9 +1003,32 @@ describe('OrdersService', () => {
           user: { fullName: 'Juan Rider' },
         },
       } as DeliveryAssignment;
-      assignmentRepo.find
-        .mockResolvedValueOnce([currentAssignment])
-        .mockResolvedValueOnce([currentAssignment]);
+      assignmentRepo.find.mockResolvedValueOnce([currentAssignment]);
+      dispatchPlanRepo.find!.mockResolvedValueOnce([
+        {
+          id: 500,
+          riderId: 5,
+          version: 1,
+          status: DispatchPlanStatus.ACTIVE,
+          routingDataStale: false,
+          stops: [
+            {
+              assignmentId: 99,
+              sequence: 1,
+              status: DispatchStopStatus.PENDING,
+              legDurationSeconds: 30,
+              legDistanceMeters: 100,
+              legGeometry: {
+                type: 'LineString',
+                coordinates: [
+                  [125.608, 7.064],
+                  [125.609, 7.065],
+                ],
+              },
+            },
+          ],
+        } as DispatchPlan,
+      ]);
 
       const result = await service.findByUser(1);
 
@@ -1007,6 +1046,10 @@ describe('OrdersService', () => {
           deliveryAssignmentId: 99,
           deliveryQueuePosition: 1,
           deliveryQueueSize: 1,
+          deliveryPlanVersion: 1,
+          deliveryRouteGeometry: expect.objectContaining({
+            type: 'LineString',
+          }),
           canTrackDelivery: true,
         }),
       );
@@ -1044,9 +1087,46 @@ describe('OrdersService', () => {
         },
         rider,
       } as DeliveryAssignment;
-      assignmentRepo.find
-        .mockResolvedValueOnce([laterAssignment])
-        .mockResolvedValueOnce([laterAssignment, currentAssignment]);
+      assignmentRepo.find.mockResolvedValueOnce([laterAssignment]);
+      dispatchPlanRepo.find!.mockResolvedValueOnce([
+        {
+          id: 500,
+          riderId: 5,
+          version: 1,
+          status: DispatchPlanStatus.ACTIVE,
+          routingDataStale: false,
+          stops: [
+            {
+              assignmentId: 98,
+              sequence: 1,
+              status: DispatchStopStatus.PENDING,
+              legDurationSeconds: 30,
+              legDistanceMeters: 100,
+              legGeometry: {
+                type: 'LineString',
+                coordinates: [
+                  [125.608, 7.064],
+                  [125.609, 7.065],
+                ],
+              },
+            },
+            {
+              assignmentId: 99,
+              sequence: 2,
+              status: DispatchStopStatus.PENDING,
+              legDurationSeconds: 300,
+              legDistanceMeters: 1000,
+              legGeometry: {
+                type: 'LineString',
+                coordinates: [
+                  [125.609, 7.065],
+                  [125.72, 7.22],
+                ],
+              },
+            },
+          ],
+        } as DispatchPlan,
+      ]);
 
       const result = await service.findByUser(1);
 
@@ -1055,6 +1135,9 @@ describe('OrdersService', () => {
           deliveryAssignmentId: null,
           deliveryQueuePosition: 2,
           deliveryQueueSize: 2,
+          deliveryPlanVersion: 1,
+          deliveryRouteGeometry: null,
+          deliveryLegDurationSeconds: null,
           canTrackDelivery: false,
         }),
       );
@@ -1897,6 +1980,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
           useValue: { create: jest.fn(), save: jest.fn() },
         },
         specValueRepoProvider(),
+        dispatchPlanRepoProvider(),
         { provide: getRepositoryToken(BatchOrder), useValue: {} },
         {
           provide: getRepositoryToken(PaperSpec),
@@ -2667,6 +2751,7 @@ describe('createBatch with slot + destinations', () => {
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
         { provide: getRepositoryToken(OrderItem), useValue: orderItemsRepo },
         specValueRepoProvider(),
+        dispatchPlanRepoProvider(),
         { provide: getRepositoryToken(BatchOrder), useValue: batchRepo },
         { provide: getRepositoryToken(PaperSpec), useValue: paperSpecsRepo },
         { provide: getRepositoryToken(ThreeDSpec), useValue: threeDSpecsRepo },
@@ -3648,6 +3733,7 @@ describe('cancelBatch', () => {
           useValue: { create: jest.fn(), save: jest.fn() },
         },
         specValueRepoProvider(),
+        dispatchPlanRepoProvider(),
         { provide: getRepositoryToken(BatchOrder), useValue: batchOrdersRepo },
         {
           provide: getRepositoryToken(PaperSpec),
@@ -3840,6 +3926,7 @@ describe('updateManualStatus', () => {
           useValue: { create: jest.fn(), save: jest.fn() },
         },
         specValueRepoProvider(),
+        dispatchPlanRepoProvider(),
         { provide: getRepositoryToken(BatchOrder), useValue: {} },
         {
           provide: getRepositoryToken(PaperSpec),
@@ -4005,6 +4092,7 @@ describe('createBatch — 3D bounds enforcement', () => {
           useValue: { create: jest.fn(), save: jest.fn() },
         },
         specValueRepoProvider(),
+        dispatchPlanRepoProvider(),
         { provide: getRepositoryToken(BatchOrder), useValue: {} },
         {
           provide: getRepositoryToken(PaperSpec),
@@ -4163,6 +4251,7 @@ describe('listExternalDeliveries and updateExternalDeliveryStatus', () => {
           useValue: { create: jest.fn(), save: jest.fn() },
         },
         specValueRepoProvider(),
+        dispatchPlanRepoProvider(),
         { provide: getRepositoryToken(BatchOrder), useValue: batchOrdersRepo },
         {
           provide: getRepositoryToken(PaperSpec),

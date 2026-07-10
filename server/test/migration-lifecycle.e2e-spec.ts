@@ -1340,7 +1340,7 @@ describe('production migration lifecycle (e2e)', () => {
     await staleMigration.connect();
     await staleMigration.query(
       `DELETE FROM migrations WHERE timestamp = $1 AND name = $2`,
-      ['1777853800000', 'EvidenceFileIntegrity1777853800000'],
+      ['1777853900000', 'PersistedDispatchPlans1777853900000'],
     );
     await staleMigration.end();
 

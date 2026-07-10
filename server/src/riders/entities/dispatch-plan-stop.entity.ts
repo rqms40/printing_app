@@ -1,5 +1,6 @@
 import {
   Column,
+  Check,
   CreateDateColumn,
   Entity,
   Index,
@@ -26,6 +27,15 @@ export enum DispatchStopStatus {
   unique: true,
 })
 @Index('idx_dispatch_plan_stops_assignment', ['assignmentId'])
+@Check('CHK_dispatch_plan_stops_sequence', '"sequence" > 0')
+@Check(
+  'CHK_dispatch_plan_stops_destination',
+  '"destination_latitude" BETWEEN -90 AND 90 AND "destination_longitude" BETWEEN -180 AND 180',
+)
+@Check(
+  'CHK_dispatch_plan_stops_leg',
+  '"leg_duration_seconds" >= 0 AND "leg_distance_meters" >= 0',
+)
 export class DispatchPlanStop {
   @PrimaryGeneratedColumn()
   id: number;

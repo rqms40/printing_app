@@ -21,6 +21,9 @@ import {
 } from '../chat/entities/conversation.entity';
 import { ChatGateway } from '../chat/chat.gateway';
 import { FilesService } from '../files/files.service';
+import { DispatchPlanService } from './dispatch-plan.service';
+import { DispatchPlanStatus } from './entities/dispatch-plan.entity';
+import { DispatchStopStatus } from './entities/dispatch-plan-stop.entity';
 
 describe('RidersService', () => {
   let service: RidersService;
@@ -40,6 +43,16 @@ describe('RidersService', () => {
     completeDelivery: jest.Mock;
   };
   let filesService: { resolveDeliveryProofFile: jest.Mock };
+  let dispatchPlanService: {
+    createPlan: jest.Mock;
+    reoptimizePlan: jest.Mock;
+    getActivePlanForRider: jest.Mock;
+    getActivePlanForRiderUser: jest.Mock;
+    getCurrentPendingStopForRider: jest.Mock;
+    assertCurrentStop: jest.Mock;
+    advanceStop: jest.Mock;
+    skipStopIfPlanned: jest.Mock;
+  };
 
   const mockProfile = {
     id: 10,
@@ -170,6 +183,16 @@ describe('RidersService', () => {
     filesService = {
       resolveDeliveryProofFile: jest.fn(),
     };
+    dispatchPlanService = {
+      createPlan: jest.fn(),
+      reoptimizePlan: jest.fn(),
+      getActivePlanForRider: jest.fn().mockResolvedValue(null),
+      getActivePlanForRiderUser: jest.fn().mockResolvedValue(null),
+      getCurrentPendingStopForRider: jest.fn().mockResolvedValue(null),
+      assertCurrentStop: jest.fn().mockResolvedValue(undefined),
+      advanceStop: jest.fn().mockResolvedValue(undefined),
+      skipStopIfPlanned: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -184,6 +207,7 @@ describe('RidersService', () => {
         { provide: FilesService, useValue: filesService },
         { provide: ChatGateway, useValue: chatGateway },
         { provide: DataSource, useValue: dataSource },
+        { provide: DispatchPlanService, useValue: dispatchPlanService },
       ],
     }).compile();
 
@@ -1114,7 +1138,6 @@ describe('RidersService', () => {
         status: DeliveryStatus.ON_THE_WAY,
       } as DeliveryAssignment;
       assignmentRepo.findOne.mockResolvedValue(otwAssignment);
-      mockActiveAssignmentsQuery([otwAssignment]);
       const arrived = await service.updateDeliveryStatus(
         1,
         100,
@@ -1162,7 +1185,11 @@ describe('RidersService', () => {
         batchOrderId: null,
         orderStatus: OrderStatus.ON_THE_WAY,
       } as Order);
-      mockActiveAssignmentsQuery([later, current]);
+      dispatchPlanService.assertCurrentStop.mockRejectedValueOnce(
+        new BadRequestException(
+          'Complete the current route stop before advancing this delivery',
+        ),
+      );
 
       await expect(
         service.updateDeliveryStatus(1, 100, DeliveryStatus.ARRIVED),
@@ -1183,7 +1210,40 @@ describe('RidersService', () => {
   });
 
   describe('getActiveAssignments', () => {
-    it('orders active assignments by nearest route from the rider location', async () => {
+    it('broadcasts the persisted plan version with current-stop location updates', async () => {
+      profileRepo.findOne.mockResolvedValue({ ...mockProfile });
+      profileRepo.save.mockImplementation(
+        async (profile) => profile as RiderProfile,
+      );
+      dispatchPlanService.getCurrentPendingStopForRider.mockResolvedValue({
+        stop: {
+          assignmentId: 100,
+          sequence: 1,
+          status: DispatchStopStatus.PENDING,
+        },
+        planVersion: 4,
+      });
+      assignmentRepo.findOne.mockResolvedValue({
+        ...mockAssignment,
+        isCurrent: true,
+        status: DeliveryStatus.ON_THE_WAY,
+      } as DeliveryAssignment);
+
+      await service.updateLocation(1, {
+        latitude: 7.06405,
+        longitude: 125.60795,
+      });
+
+      expect(locationGateway.broadcastLocation).toHaveBeenCalledWith('100', {
+        assignmentId: 100,
+        planVersion: 4,
+        latitude: 7.06405,
+        longitude: 125.60795,
+        timestamp: expect.any(Date),
+      });
+    });
+
+    it('orders active assignments by the persisted dispatch plan', async () => {
       profileRepo.findOne.mockResolvedValue({
         ...mockProfile,
         lastLatitude: 7.064,
@@ -1193,6 +1253,22 @@ describe('RidersService', () => {
       const nearestFromShop = makeAssignment(2, 7.065, 125.609);
       const secondStop = makeAssignment(3, 7.08, 125.62);
       mockActiveAssignmentsQuery([farFirstFromDb, secondStop, nearestFromShop]);
+      dispatchPlanService.getActivePlanForRider.mockResolvedValue({
+        id: 500,
+        riderId: 10,
+        version: 3,
+        status: DispatchPlanStatus.ACTIVE,
+        stops: [2, 3, 1].map((assignmentId, index) => ({
+          assignmentId,
+          sequence: index + 1,
+          status: DispatchStopStatus.PENDING,
+          destinationLatitude: 7.064 + index / 100,
+          destinationLongitude: 125.608 + index / 100,
+          legDurationSeconds: 30,
+          legDistanceMeters: 100,
+          legGeometry: { type: 'LineString', coordinates: [] },
+        })),
+      });
 
       const result = await service.getActiveAssignments(1);
 
@@ -1205,9 +1281,11 @@ describe('RidersService', () => {
         'destination',
       );
       expect(result.map((assignment) => assignment.id)).toEqual([2, 3, 1]);
+      expect((result[0] as any).dispatchPlanVersion).toBe(3);
+      expect((result[0] as any).routePosition).toBe(1);
     });
 
-    it('falls back to shop location when rider GPS is partially missing', async () => {
+    it('does not reorder a persisted plan when rider GPS changes', async () => {
       profileRepo.findOne.mockResolvedValue({
         ...mockProfile,
         lastLatitude: null,
@@ -1216,13 +1294,25 @@ describe('RidersService', () => {
       const nearShop = makeAssignment(1, 7.065, 125.609);
       const nearInvalidPartialGps = makeAssignment(2, 0.1, 125.608);
       mockActiveAssignmentsQuery([nearInvalidPartialGps, nearShop]);
+      dispatchPlanService.getActivePlanForRider.mockResolvedValue({
+        id: 500,
+        riderId: 10,
+        version: 1,
+        status: DispatchPlanStatus.ACTIVE,
+        stops: [2, 1].map((assignmentId, index) => ({
+          assignmentId,
+          sequence: index + 1,
+          status: DispatchStopStatus.PENDING,
+          legGeometry: { type: 'LineString', coordinates: [] },
+        })),
+      });
 
       const result = await service.getActiveAssignments(1);
 
-      expect(result.map((assignment) => assignment.id)).toEqual([1, 2]);
+      expect(result.map((assignment) => assignment.id)).toEqual([2, 1]);
     });
 
-    it('keeps assignments without destination coordinates after routeable stops', async () => {
+    it('exposes assignments as explicitly unplanned before dispatch', async () => {
       profileRepo.findOne.mockResolvedValue({
         ...mockProfile,
         lastLatitude: null,
@@ -1234,10 +1324,16 @@ describe('RidersService', () => {
 
       const result = await service.getActiveAssignments(1);
 
-      expect(result.map((assignment) => assignment.id)).toEqual([2, 1]);
+      expect(result.map((assignment) => assignment.id)).toEqual([1, 2]);
+      expect(
+        result.map((assignment) => (assignment as any).dispatchPlanState),
+      ).toEqual(['unplanned', 'unplanned']);
+      expect(
+        result.map((assignment) => (assignment as any).routePosition),
+      ).toEqual([null, null]);
     });
 
-    it('keeps partially geocoded destinations after routeable stops', async () => {
+    it('keeps newly assigned unplanned work after planned stops', async () => {
       profileRepo.findOne.mockResolvedValue({
         ...mockProfile,
         lastLatitude: 7.064,
@@ -1246,10 +1342,25 @@ describe('RidersService', () => {
       const partialCoordinates = makeAssignment(1, null, 125.609);
       const routeable = makeAssignment(2, 7.22, 125.72);
       mockActiveAssignmentsQuery([partialCoordinates, routeable]);
+      dispatchPlanService.getActivePlanForRider.mockResolvedValue({
+        id: 500,
+        riderId: 10,
+        version: 1,
+        status: DispatchPlanStatus.ACTIVE,
+        stops: [
+          {
+            assignmentId: 2,
+            sequence: 1,
+            status: DispatchStopStatus.PENDING,
+            legGeometry: { type: 'LineString', coordinates: [] },
+          },
+        ],
+      });
 
       const result = await service.getActiveAssignments(1);
 
       expect(result.map((assignment) => assignment.id)).toEqual([2, 1]);
+      expect((result[1] as any).dispatchPlanState).toBe('unplanned');
     });
   });
 });

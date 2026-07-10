@@ -71,6 +71,11 @@ services:
       MINIO_BUCKET: grid-print
       MINIO_USE_SSL: 'false'
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      ROUTING_BASE_URL: ${ROUTING_BASE_URL:-}
+      ROUTING_PROFILE: ${ROUTING_PROFILE:-driving}
+      ROUTING_TIMEOUT_MS: ${ROUTING_TIMEOUT_MS:-5000}
+      GRIDGO_STORE_LATITUDE: ${GRIDGO_STORE_LATITUDE:-7.064}
+      GRIDGO_STORE_LONGITUDE: ${GRIDGO_STORE_LONGITUDE:-125.6079}
       NODE_ENV: production
     depends_on:
       migrate:

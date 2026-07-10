@@ -23,6 +23,7 @@ import { DeliverySlotsModule } from '../delivery-slots/delivery-slots.module';
 import { PrinterProfileModule } from '../printer-profile/printer-profile.module';
 import { TamSurveysModule } from '../tam-surveys/tam-surveys.module';
 import { ProductsModule } from '../products/products.module';
+import { DispatchPlan } from '../riders/entities/dispatch-plan.entity';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { ProductsModule } from '../products/products.module';
       Address,
       DeliveryDestination,
       FileMetadata,
+      DispatchPlan,
     ]),
     JwtModule.registerAsync({
       inject: [ConfigService],

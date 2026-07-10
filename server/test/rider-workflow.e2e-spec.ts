@@ -35,6 +35,14 @@ import {
 } from '../src/files/entities/file-metadata.entity';
 import { TamSurveyRequirement } from '../src/tam-surveys/entities/tam-survey-requirement.entity';
 import { OrdersGateway } from '../src/orders/orders.gateway';
+import { BatchOrder } from '../src/orders/entities/batch-order.entity';
+import { DeliveryDestination } from '../src/orders/entities/delivery-destination.entity';
+import { ROUTING_PROVIDER } from '../src/riders/routing/routing-provider';
+import { FakeRoutingProvider } from './support/fake-routing-provider';
+import {
+  DispatchPlanStop,
+  DispatchStopStatus,
+} from '../src/riders/entities/dispatch-plan-stop.entity';
 
 describe('Rider dispatch workflow (e2e)', () => {
   let app: INestApplication<App>;
@@ -89,7 +97,10 @@ describe('Rider dispatch workflow (e2e)', () => {
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(ROUTING_PROVIDER)
+      .useValue(new FakeRoutingProvider())
+      .compile();
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');
@@ -134,6 +145,45 @@ describe('Rider dispatch workflow (e2e)', () => {
     await admin.query(`DROP DATABASE IF EXISTS "${isolatedDatabase}"`);
     await admin.end();
   });
+
+  async function makeOrderRouteable(
+    order: Order,
+    customerId: number,
+    suffix: string,
+    latitude = 7.0641,
+    longitude = 125.6079,
+  ): Promise<void> {
+    const batchRepo = dataSource.getRepository(BatchOrder);
+    const destinationRepo = dataSource.getRepository(DeliveryDestination);
+    const batch = await batchRepo.save(
+      batchRepo.create({
+        batchRef: `ROUTE-${suffix}`,
+        userId: customerId,
+        subtotal: 20,
+        deliveryFee: 0,
+        totalPrice: 20,
+        paymentMethod: 'cod',
+        paymentStatus: 'paid',
+        deliveryOption: 'delivery',
+        deliveryType: 'local',
+      }),
+    );
+    const destination = await destinationRepo.save(
+      destinationRepo.create({
+        batchOrderId: batch.id,
+        addressId: null,
+        label: 'E2E route stop',
+        sortOrder: 0,
+        fullAddress: 'GRIDGO deterministic route stop',
+        city: 'Davao City',
+        latitude,
+        longitude,
+      }),
+    );
+    order.batchOrderId = batch.id;
+    order.destinationId = destination.id;
+    await ordersRepo.save(order);
+  }
 
   it('assigns, notifies, requeues on decline, then completes rider delivery', async () => {
     const customer = await usersRepo.save(
@@ -185,6 +235,7 @@ describe('Rider dispatch workflow (e2e)', () => {
         orderStatus: OrderStatus.READY_FOR_DISPATCH,
       }),
     );
+    await makeOrderRouteable(order, customer.id, `${runId}-main`);
 
     const adminToken = jwtService.sign({
       sub: admin.id,
@@ -287,6 +338,12 @@ describe('Rider dispatch workflow (e2e)', () => {
       where: { orderId: order.id, isCurrent: true },
     });
     expect(assignment.status).toBe(DeliveryStatus.ASSIGNED);
+
+    await request(app.getHttpServer())
+      .post(`/api/admin/riders/${riderProfile.id}/dispatch-plan`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ assignmentIds: [assignment.id] })
+      .expect(201);
 
     const transitions: Array<[DeliveryStatus, OrderStatus]> = [
       [DeliveryStatus.ACCEPTED, OrderStatus.RIDER_ASSIGNED],
@@ -1147,6 +1204,7 @@ describe('Rider dispatch workflow (e2e)', () => {
         orderStatus: OrderStatus.READY_FOR_DISPATCH,
       }),
     );
+    await makeOrderRouteable(order, customer.id, suffix);
     const betaSettingsRepo = dataSource.getRepository(BetaModeSettings);
     const betaSettings =
       (await betaSettingsRepo.find())[0] ??
@@ -1172,6 +1230,11 @@ describe('Rider dispatch workflow (e2e)', () => {
     const assignment = await assignmentsRepo.findOneOrFail({
       where: { orderId: order.id, isCurrent: true },
     });
+    await request(app.getHttpServer())
+      .post(`/api/admin/riders/${riderProfile.id}/dispatch-plan`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ assignmentIds: [assignment.id] })
+      .expect(201);
     for (const status of [
       DeliveryStatus.ACCEPTED,
       DeliveryStatus.PICKED_UP,
@@ -1245,6 +1308,14 @@ describe('Rider dispatch workflow (e2e)', () => {
           orderId: order.id,
         }),
       ).resolves.toBe(0);
+      await expect(
+        dataSource.getRepository(DispatchPlanStop).findOneOrFail({
+          where: { assignmentId: assignment.id },
+        }),
+      ).resolves.toMatchObject({
+        status: DispatchStopStatus.PENDING,
+        completedAt: null,
+      });
       await expect(
         notificationsRepo.countBy({ orderRef: order.orderId }),
       ).resolves.toBe(notificationCount);

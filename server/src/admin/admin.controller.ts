@@ -35,6 +35,10 @@ import { DeliveryDestination } from '../orders/entities/delivery-destination.ent
 import { OrdersGateway } from '../orders/orders.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
+import {
+  CreateDispatchPlanDto,
+  ReoptimizeDispatchPlanDto,
+} from '../riders/dto/create-dispatch-plan.dto';
 
 type AnalyticsPeriod = '7D' | '30D' | '6M';
 type AnalyticsPoint = { label: string; value: number };
@@ -807,6 +811,30 @@ export class AdminController {
   @Get('riders')
   async getAllRiders() {
     return this.ridersService.getAllRidersWithUser();
+  }
+
+  @Post('riders/:id/dispatch-plan')
+  createDispatchPlan(
+    @Param('id', ParseIntPipe) riderId: number,
+    @Body() dto: CreateDispatchPlanDto,
+  ) {
+    return this.ridersService.createDispatchPlan(riderId, dto.assignmentIds);
+  }
+
+  @Get('riders/:id/dispatch-plan')
+  getDispatchPlan(@Param('id', ParseIntPipe) riderId: number) {
+    return this.ridersService.getDispatchPlanForRider(riderId);
+  }
+
+  @Post('riders/:id/dispatch-plan/re-optimize')
+  reoptimizeDispatchPlan(
+    @Param('id', ParseIntPipe) riderId: number,
+    @Body() dto: ReoptimizeDispatchPlanDto,
+  ) {
+    return this.ridersService.reoptimizeDispatchPlan(
+      riderId,
+      dto.assignmentIds,
+    );
   }
 
   // All users

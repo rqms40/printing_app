@@ -59,6 +59,11 @@ export class RidersController {
     return this.ridersService.getActiveAssignments(req.user.sub);
   }
 
+  @Get('dispatch-plan')
+  getDispatchPlan(@Request() req: RequestWithUser) {
+    return this.ridersService.getDispatchPlan(req.user.sub);
+  }
+
   @Patch('assignments/:id/status')
   updateDeliveryStatus(
     @Request() req: RequestWithUser,

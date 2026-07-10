@@ -251,7 +251,14 @@ describe('OsrmRoutingProvider', () => {
   });
 
   it('converts provider timeouts to routing_unavailable', async () => {
-    fetchMock.mockRejectedValue(new DOMException('aborted', 'AbortError'));
+    fetchMock.mockImplementation(
+      async (_url: string, options: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          options.signal.addEventListener('abort', () => {
+            reject(new DOMException('aborted', 'AbortError'));
+          });
+        }),
+    );
     await expect(
       provider().getMatrix([
         { latitude: 7.064, longitude: 125.6079 },
