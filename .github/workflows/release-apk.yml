@@ -5,16 +5,17 @@ on:
     tags:
       - "v*"
 
-permissions:
-  actions: read
-  checks: read
-  contents: write
+permissions: {}
 
 jobs:
   gate:
     name: Release Gate
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 120
+    permissions:
+      actions: read
+      checks: read
+      contents: read
     outputs:
       release_sha: ${{ steps.release.outputs.release_sha }}
       visual_run_id: ${{ steps.workflows.outputs.visual_run_id }}
@@ -57,7 +58,7 @@ jobs:
             local event="$2"
             local expected_jobs="$3"
             local run_json=""
-            for _ in $(seq 1 60); do
+            for _ in $(seq 1 540); do
               runs="$(gh api --method GET \
                 "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs" \
                 -f branch=main -f event="$event" -f head_sha="$RELEASE_SHA" -f per_page=100)"
@@ -182,6 +183,8 @@ jobs:
     name: Signed APK
     needs: gate
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: apps/mobile
@@ -191,14 +194,15 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Recheck exact main SHA
         env:
+          GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ needs.gate.outputs.release_sha }}
         run: |
-          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
-          test "$(git rev-parse refs/remotes/origin/main)" = "$RELEASE_SHA"
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)" = "$RELEASE_SHA"
 
       - name: Set up Java 17
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
@@ -251,6 +255,11 @@ jobs:
           flutter build apk --release --dart-define=GRIDGO_REAL_FLOW=true
           test -s build/app/outputs/flutter-apk/app-release.apk
 
+      - name: Remove decoded signing material after build
+        run: |
+          rm -f android/app/google-services.json
+          rm -f "$GITHUB_WORKSPACE/keystore.jks"
+
       - name: Name versioned and latest APK assets
         env:
           TAG_NAME: ${{ github.ref_name }}
@@ -258,16 +267,38 @@ jobs:
           cp build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/GRIDGO-${TAG_NAME}.apk"
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/GRIDGO-latest.apk
 
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+      - name: Upload signed APK artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          files: apps/mobile/build/app/outputs/flutter-apk/GRIDGO-*.apk
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: signed-apks-${{ needs.gate.outputs.release_sha }}
+          path: apps/mobile/build/app/outputs/flutter-apk/GRIDGO-*.apk
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Remove decoded signing material
+      - name: Remove decoded signing material if interrupted
         if: always()
         run: |
           rm -f android/app/google-services.json
           rm -f "$GITHUB_WORKSPACE/keystore.jks"
+
+  publisher:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download signed APK artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: signed-apks-${{ github.sha }}
+          path: release-assets
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          files: release-assets/GRIDGO-*.apk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
