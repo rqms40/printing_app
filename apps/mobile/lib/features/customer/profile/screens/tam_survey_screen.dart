@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
 import 'package:printing_app/shared/providers/theme_provider.dart';
 import 'package:printing_app/shared/services/api_client.dart';
@@ -294,6 +295,7 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
             'openForumFeedback': _decodeOpenForumFeedback(_comment),
           },
         );
+        ref.read(authProvider.notifier).markBetaCompletionSubmitted();
 
         if (!mounted) return;
         setState(() => _submitted = true);
@@ -419,9 +421,7 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
           body: SafeArea(
             child: Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.xl,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -439,15 +439,17 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
                           ? 'Submitting your beta feedback…'
                           : 'Opening your beta feedback survey…',
                       textAlign: TextAlign.center,
-                      style: AppTypography.body
-                          .copyWith(color: colors.onSurface),
+                      style: AppTypography.body.copyWith(
+                        color: colors.onSurface,
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
                       'You will land back on the login screen once submitted.',
                       textAlign: TextAlign.center,
-                      style: AppTypography.caption
-                          .copyWith(color: colors.onSurfaceDim),
+                      style: AppTypography.caption.copyWith(
+                        color: colors.onSurfaceDim,
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.xxl),
                     TextButton.icon(
@@ -467,8 +469,9 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
                       ),
                       label: Text(
                         allAnswered ? 'Retry submission' : 'Open survey',
-                        style: AppTypography.button
-                            .copyWith(color: colors.onSurface),
+                        style: AppTypography.button.copyWith(
+                          color: colors.onSurface,
+                        ),
                       ),
                     ),
                   ],
@@ -586,8 +589,9 @@ class _TamSurveyScreenState extends ConsumerState<TamSurveyScreen>
                               GridLogo(
                                 size: 18,
                                 foregroundColor: colors.onSurfaceDim,
-                                secondaryColor:
-                                    colors.onSurfaceDim.withValues(alpha: 0.5),
+                                secondaryColor: colors.onSurfaceDim.withValues(
+                                  alpha: 0.5,
+                                ),
                               ),
                               const SizedBox(width: AppSpacing.sm),
                               Text(

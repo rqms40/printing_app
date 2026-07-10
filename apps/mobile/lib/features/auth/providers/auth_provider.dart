@@ -28,6 +28,54 @@ String? betaHeldAccessTokenFromResponse(Map<dynamic, dynamic> data) {
   return token == null || token.isEmpty ? null : token;
 }
 
+abstract interface class AuthSessionClient {
+  Future<Map<String, dynamic>> login(String email, String password);
+
+  Future<Map<String, dynamic>> getProfile();
+
+  Future<Map<String, dynamic>> getCompletionState();
+
+  Future<bool> hasStoredToken();
+
+  Future<void> saveToken(String token);
+
+  Future<void> clearToken();
+}
+
+class ApiAuthSessionClient implements AuthSessionClient {
+  const ApiAuthSessionClient();
+
+  @override
+  Future<Map<String, dynamic>> login(String email, String password) async {
+    final response = await ApiClient.instance.post(
+      '/auth/login',
+      data: {'email': email, 'password': password},
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  @override
+  Future<Map<String, dynamic>> getProfile() async {
+    final response = await ApiClient.instance.get('/users/profile');
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  @override
+  Future<Map<String, dynamic>> getCompletionState() async {
+    final response = await ApiClient.instance.get('/beta-mode/me/completion');
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  @override
+  Future<bool> hasStoredToken() => TokenStorage.hasToken();
+
+  @override
+  Future<void> saveToken(String token) => TokenStorage.saveToken(token);
+
+  @override
+  Future<void> clearToken() => TokenStorage.clearToken();
+}
+
 // ---------------------------------------------------------------------------
 // Simple user model (self-contained, no external deps)
 // ---------------------------------------------------------------------------
@@ -125,6 +173,7 @@ class AuthState {
     this.isLoading = false,
     this.errorMessage,
     this.betaLocked,
+    this.betaCompletionJustSubmitted = false,
   });
 
   factory AuthState.unauthenticated() => const AuthState();
@@ -134,6 +183,7 @@ class AuthState {
   final bool isLoading;
   final String? errorMessage;
   final BetaLockedInfo? betaLocked;
+  final bool betaCompletionJustSubmitted;
 
   AuthState copyWith({
     AuthStatus? status,
@@ -142,6 +192,7 @@ class AuthState {
     String? errorMessage,
     BetaLockedInfo? betaLocked,
     bool clearBetaLocked = false,
+    bool? betaCompletionJustSubmitted,
   }) {
     return AuthState(
       status: status ?? this.status,
@@ -149,6 +200,8 @@ class AuthState {
       isLoading: isLoading ?? this.isLoading,
       errorMessage: errorMessage,
       betaLocked: clearBetaLocked ? null : (betaLocked ?? this.betaLocked),
+      betaCompletionJustSubmitted:
+          betaCompletionJustSubmitted ?? this.betaCompletionJustSubmitted,
     );
   }
 }
@@ -161,14 +214,19 @@ class AuthState {
 // (Avoids creating a yet-another barrel just for this constant.)
 
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier([this._ref, bool? devAuthEnabled])
-    : _devAuthEnabled = devAuthEnabled ?? AppConstants.enableDevAuth,
-      super(AuthState.unauthenticated()) {
+  AuthNotifier([
+    this._ref,
+    bool? devAuthEnabled,
+    AuthSessionClient? sessionClient,
+  ]) : _devAuthEnabled = devAuthEnabled ?? AppConstants.enableDevAuth,
+       _sessionClient = sessionClient ?? const ApiAuthSessionClient(),
+       super(AuthState.unauthenticated()) {
     _listenToFcmMessages();
   }
 
   final Ref? _ref;
   final bool _devAuthEnabled;
+  final AuthSessionClient _sessionClient;
   StreamSubscription<Map<String, dynamic>>? _fcmSub;
 
   void _listenToFcmMessages() {
@@ -192,14 +250,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> login(String email, String password) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {
-      final response = await ApiClient.instance.post(
-        '/auth/login',
-        data: {'email': email, 'password': password},
-      );
-      final data = response.data as Map<String, dynamic>;
-      await TokenStorage.saveToken(data['access_token'] as String);
+      final data = await _sessionClient.login(email, password);
+      await _sessionClient.saveToken(data['access_token'] as String);
       final user = _parseUser(data['user'] as Map<String, dynamic>);
-      await _sendFcmToken();
+      if (_ref != null) await _sendFcmToken();
       state = AuthState(
         status: user.isProfileComplete
             ? AuthStatus.authenticated
@@ -219,14 +273,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
         final responseData = e.response!.data as Map<String, dynamic>;
         final heldToken = betaHeldAccessTokenFromResponse(responseData);
         if (heldToken != null) {
-          await TokenStorage.saveToken(heldToken);
+          await _sessionClient.saveToken(heldToken);
         }
         final info = BetaLockedInfo.fromJson(responseData);
-        state = state.copyWith(
-          isLoading: false,
-          betaLocked: info,
-          errorMessage: null,
-        );
+        WebSocketService.instance.disconnect();
+        _ref?.read(accountStateProvider.notifier).clear();
+        state = AuthState(betaLocked: info);
         return;
       }
       final message = e.response?.data is Map
@@ -436,7 +488,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
-    await TokenStorage.clearToken();
+    await _sessionClient.clearToken();
     WebSocketService.instance.disconnect();
     _ref?.read(checkoutProvider.notifier).reset();
     _ref?.read(accountStateProvider.notifier).clear();
@@ -455,35 +507,64 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> tryAutoLogin() async {
-    final hasToken = await TokenStorage.hasToken();
+    final hasToken = await _sessionClient.hasStoredToken();
     if (!hasToken) return;
 
     try {
-      final response = await ApiClient.instance.get('/users/profile');
-      final user = _parseUser(response.data as Map<String, dynamic>);
-      state = AuthState(
-        status: user.isProfileComplete
-            ? AuthStatus.authenticated
-            : AuthStatus.profileIncomplete,
-        user: user,
-      );
+      final completion = await _sessionClient.getCompletionState();
+      if (completion['accountStatus'] == 'beta_held') {
+        WebSocketService.instance.disconnect();
+        _ref?.read(accountStateProvider.notifier).clear();
+        state = AuthState(betaLocked: BetaLockedInfo.fromJson(completion));
+        return;
+      }
+    } catch (_) {
+      // Normal customers are not eligible for the held-safe endpoint. Continue
+      // with the ordinary profile request before deciding the token is invalid.
+    }
+
+    final AuthUser user;
+    try {
+      user = _parseUser(await _sessionClient.getProfile());
+    } catch (_) {
+      await _sessionClient.clearToken();
+      _ref?.read(accountStateProvider.notifier).clear();
+      state = AuthState.unauthenticated();
+      return;
+    }
+
+    state = AuthState(
+      status: user.isProfileComplete
+          ? AuthStatus.authenticated
+          : AuthStatus.profileIncomplete,
+      user: user,
+    );
+    try {
       await TutorialRepository().syncFromServer(user.tutorialSeenKeys);
       await _ref?.read(tutorialProvider.notifier).loadFromPrefs();
       await _ref?.read(accountStateProvider.notifier).refresh();
       _connectNotificationsWs();
+      _resetSessionScopedData();
     } catch (_) {
-      await TokenStorage.clearToken();
-      _ref?.read(accountStateProvider.notifier).clear();
-      // Token expired or invalid — stay unauthenticated
+      // The identity is already verified. Local tutorial/account bootstrap is
+      // retryable and must never erase an otherwise valid session.
     }
+  }
+
+  void markBetaCompletionSubmitted() {
+    if (state.status != AuthStatus.authenticated ||
+        state.user?.role != 'customer') {
+      return;
+    }
+    WebSocketService.instance.disconnect();
+    state = state.copyWith(betaCompletionJustSubmitted: true);
   }
 
   Future<void> refreshProfile() async {
     if (state.status == AuthStatus.unauthenticated) return;
 
     try {
-      final response = await ApiClient.instance.get('/users/profile');
-      final user = _parseUser(response.data as Map<String, dynamic>);
+      final user = _parseUser(await _sessionClient.getProfile());
       state = AuthState(
         status: user.isProfileComplete
             ? AuthStatus.authenticated

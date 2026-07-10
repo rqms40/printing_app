@@ -34,6 +34,12 @@ class _FakeAccountStateNotifier extends AccountStateNotifier {
 
 class _TestAuthNotifier extends AuthNotifier {
   var logoutCalls = 0;
+  var completionSubmittedCalls = 0;
+
+  @override
+  void markBetaCompletionSubmitted() {
+    completionSubmittedCalls += 1;
+  }
 
   @override
   Future<void> logout() async {
@@ -265,6 +271,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       expect(authNotifier.logoutCalls, 0);
+      expect(authNotifier.completionSubmittedCalls, 1);
       expect(find.text('Beta Success Wall'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());

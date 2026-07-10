@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
@@ -6,6 +7,81 @@ import 'package:printing_app/features/customer/profile/providers/account_state_p
 import 'package:printing_app/shared/services/websocket_service.dart';
 
 import '../../../helpers/test_setup.dart';
+
+class _FakeAuthSessionClient implements AuthSessionClient {
+  bool hasToken = true;
+  var clearTokenCalls = 0;
+  final savedTokens = <String>[];
+  final loginResults = <Future<Map<String, dynamic>> Function()>[];
+  Future<Map<String, dynamic>> Function()? completionResult;
+  Future<Map<String, dynamic>> Function()? profileResult;
+  var completionCalls = 0;
+  var profileCalls = 0;
+
+  @override
+  Future<void> clearToken() async {
+    clearTokenCalls += 1;
+  }
+
+  @override
+  Future<Map<String, dynamic>> getCompletionState() async {
+    completionCalls += 1;
+    return completionResult!.call();
+  }
+
+  @override
+  Future<Map<String, dynamic>> getProfile() async {
+    profileCalls += 1;
+    return profileResult!.call();
+  }
+
+  @override
+  Future<bool> hasStoredToken() async => hasToken;
+
+  @override
+  Future<Map<String, dynamic>> login(String email, String password) {
+    return loginResults.removeAt(0).call();
+  }
+
+  @override
+  Future<void> saveToken(String token) async {
+    savedTokens.add(token);
+  }
+}
+
+Map<String, dynamic> _customerLoginResponse({String token = 'active-token'}) =>
+    {
+      'access_token': token,
+      'user': {
+        'id': 11,
+        'email': 'mark@example.com',
+        'fullName': 'Mark Prado',
+        'role': 'customer',
+        'isProfileComplete': true,
+        'tutorialSeenKeys': <String>[],
+        'printingPreferences': <String>[],
+      },
+    };
+
+Map<String, dynamic> _heldCompletionResponse() => {
+  'accountStatus': 'beta_held',
+  'user': {'fullName': 'Mark Prado', 'email': 'mark@example.com'},
+  'betaPhotoUploaded': true,
+  'betaSharedOnSocial': false,
+  'betaCompletedAt': '2026-07-10T00:00:00.000Z',
+};
+
+DioException _dioFailure(int statusCode, Map<String, dynamic> data) {
+  final request = RequestOptions(path: '/test');
+  return DioException(
+    requestOptions: request,
+    response: Response(
+      requestOptions: request,
+      statusCode: statusCode,
+      data: data,
+    ),
+  );
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -170,6 +246,91 @@ void main() {
         AccountGateStatus.unknown,
       );
     });
+
+    test(
+      'auto-login restores verified beta-held state without clearing token',
+      () async {
+        final client = _FakeAuthSessionClient();
+        client.completionResult = () async => _heldCompletionResponse();
+        client.profileResult = () async =>
+            _customerLoginResponse()['user'] as Map<String, dynamic>;
+        final heldNotifier = AuthNotifier(null, false, client);
+
+        await heldNotifier.tryAutoLogin();
+
+        expect(client.completionCalls, 1);
+        expect(client.profileCalls, 0);
+        expect(client.clearTokenCalls, 0);
+        expect(heldNotifier.state.status, AuthStatus.unauthenticated);
+        expect(heldNotifier.state.betaLocked?.fullName, 'Mark Prado');
+        expect(heldNotifier.state.betaLocked?.betaPhotoUploaded, isTrue);
+      },
+    );
+
+    test(
+      'auto-login reaches normal customer state after beta-off self-heal',
+      () async {
+        final client = _FakeAuthSessionClient();
+        client.completionResult = () async => {'accountStatus': 'active'};
+        client.profileResult = () async =>
+            _customerLoginResponse()['user'] as Map<String, dynamic>;
+        final restoredNotifier = AuthNotifier(null, false, client);
+
+        await restoredNotifier.tryAutoLogin();
+
+        expect(client.completionCalls, 1);
+        expect(client.profileCalls, 1);
+        expect(client.clearTokenCalls, 0);
+        expect(restoredNotifier.state.status, AuthStatus.authenticated);
+        expect(restoredNotifier.state.user?.role, 'customer');
+        expect(restoredNotifier.state.betaLocked, isNull);
+      },
+    );
+
+    test(
+      'same credentials transition from beta-held to normal login',
+      () async {
+        final client = _FakeAuthSessionClient()
+          ..loginResults.addAll([
+            () async => throw _dioFailure(403, {
+              'code': 'beta_held',
+              'access_token': 'held-token',
+              ..._heldCompletionResponse(),
+            }),
+            () async => _customerLoginResponse(),
+          ]);
+        final restoredNotifier = AuthNotifier(null, false, client);
+
+        await restoredNotifier.login('mark@example.com', 'password');
+        expect(restoredNotifier.state.betaLocked?.fullName, 'Mark Prado');
+        expect(client.savedTokens, ['held-token']);
+
+        await restoredNotifier.login('mark@example.com', 'password');
+        expect(restoredNotifier.state.status, AuthStatus.authenticated);
+        expect(restoredNotifier.state.betaLocked, isNull);
+        expect(client.savedTokens, ['held-token', 'active-token']);
+      },
+    );
+
+    test(
+      'invalid stored token is cleared only after completion and profile fail',
+      () async {
+        final client = _FakeAuthSessionClient();
+        client.completionResult = () async =>
+            throw _dioFailure(403, {'message': 'Completion unavailable'});
+        client.profileResult = () async =>
+            throw _dioFailure(401, {'message': 'Unauthorized'});
+        final invalidNotifier = AuthNotifier(null, false, client);
+
+        await invalidNotifier.tryAutoLogin();
+
+        expect(client.completionCalls, 1);
+        expect(client.profileCalls, 1);
+        expect(client.clearTokenCalls, 1);
+        expect(invalidNotifier.state.status, AuthStatus.unauthenticated);
+        expect(invalidNotifier.state.betaLocked, isNull);
+      },
+    );
   });
 
   group('AuthState', () {
