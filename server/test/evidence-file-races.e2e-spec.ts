@@ -20,6 +20,11 @@ import {
 import { RiderProfile } from '../src/riders/entities/rider-profile.entity';
 import { StorageService } from '../src/storage/storage.service';
 import { User, UserRole } from '../src/users/entities/user.entity';
+import { BatchOrder } from '../src/orders/entities/batch-order.entity';
+import { DeliveryDestination } from '../src/orders/entities/delivery-destination.entity';
+import { ROUTING_PROVIDER } from '../src/riders/routing/routing-provider';
+import { FakeRoutingProvider } from './support/fake-routing-provider';
+import { DispatchPlanService } from '../src/riders/dispatch-plan.service';
 
 describe('Evidence file deletion races (e2e)', () => {
   jest.setTimeout(120_000);
@@ -35,6 +40,7 @@ describe('Evidence file deletion races (e2e)', () => {
   let profilesRepo: Repository<RiderProfile>;
   let assignmentsRepo: Repository<DeliveryAssignment>;
   let filesRepo: Repository<FileMetadata>;
+  let dispatchPlanService: DispatchPlanService;
   let customer: User;
   let rider: User;
   let riderProfile: RiderProfile;
@@ -72,7 +78,10 @@ describe('Evidence file deletion races (e2e)', () => {
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(ROUTING_PROVIDER)
+      .useValue(new FakeRoutingProvider())
+      .compile();
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');
     app.useGlobalPipes(
@@ -90,6 +99,7 @@ describe('Evidence file deletion races (e2e)', () => {
     profilesRepo = dataSource.getRepository(RiderProfile);
     assignmentsRepo = dataSource.getRepository(DeliveryAssignment);
     filesRepo = dataSource.getRepository(FileMetadata);
+    dispatchPlanService = app.get(DispatchPlanService);
 
     customer = await usersRepo.save(
       usersRepo.create({
@@ -429,6 +439,33 @@ describe('Evidence file deletion races (e2e)', () => {
   });
 
   async function createArrivedAssignment(label: string) {
+    const batchRepo = dataSource.getRepository(BatchOrder);
+    const destinationRepo = dataSource.getRepository(DeliveryDestination);
+    const batch = await batchRepo.save(
+      batchRepo.create({
+        batchRef: `RACE-BATCH-${label}-${runId}`,
+        userId: customer.id,
+        subtotal: 10,
+        deliveryFee: 0,
+        totalPrice: 10,
+        paymentMethod: 'cash',
+        paymentStatus: 'paid',
+        deliveryOption: 'delivery',
+        deliveryType: 'local',
+      }),
+    );
+    const destination = await destinationRepo.save(
+      destinationRepo.create({
+        batchOrderId: batch.id,
+        addressId: null,
+        label: 'Evidence route stop',
+        sortOrder: 0,
+        fullAddress: 'GRIDGO evidence route stop',
+        city: 'Davao City',
+        latitude: 7.0641,
+        longitude: 125.6079,
+      }),
+    );
     const order = await ordersRepo.save(
       ordersRepo.create({
         orderId: `RACE-${label}-${runId}`,
@@ -442,9 +479,11 @@ describe('Evidence file deletion races (e2e)', () => {
         deliveryOption: 'delivery',
         orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
         assignedRiderId: rider.id,
+        batchOrderId: batch.id,
+        destinationId: destination.id,
       }),
     );
-    return assignmentsRepo.save(
+    const assignment = await assignmentsRepo.save(
       assignmentsRepo.create({
         orderId: order.id,
         riderId: riderProfile.id,
@@ -456,6 +495,14 @@ describe('Evidence file deletion races (e2e)', () => {
         arrivedAt: new Date(),
       }),
     );
+    if (await dispatchPlanService.getActivePlanForRider(riderProfile.id)) {
+      await dispatchPlanService.reoptimizePlan(riderProfile.id, [
+        assignment.id,
+      ]);
+    } else {
+      await dispatchPlanService.createPlan(riderProfile.id, [assignment.id]);
+    }
+    return assignment;
   }
 
   async function uploadEvidence(
