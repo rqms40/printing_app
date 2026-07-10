@@ -55,7 +55,35 @@ export class PerOrderSurveyRequirements1777854100000 implements MigrationInterfa
 
   async down(queryRunner: QueryRunner): Promise<void> {
     if (!(await queryRunner.hasTable('tam_survey_requirements'))) return;
-    await queryRunner.query(`DROP INDEX IF EXISTS "${ORDER_REASON_INDEX}"`);
+
+    const table = await queryRunner.getTable('tam_survey_requirements');
+    const userPending = table?.indices.find(
+      (index) => index.name === USER_PENDING_INDEX,
+    );
+    if (userPending) {
+      if (!this.isExactUserPendingIndex(userPending)) {
+        throw new Error(
+          'incompatible adopted per-user pending survey index; refusing migration rollback',
+        );
+      }
+      return;
+    }
+
+    const duplicates = (await queryRunner.query(`
+      SELECT "user_id", COUNT(*) AS "pending_count"
+      FROM "tam_survey_requirements"
+      WHERE "status" = 'pending'
+      GROUP BY "user_id"
+      HAVING COUNT(*) > 1
+      ORDER BY "user_id"
+      LIMIT 1
+    `)) as Array<{ user_id: number }>;
+    if (duplicates.length > 0) {
+      throw new Error(
+        'multiple pending survey requirements prevent safe migration rollback',
+      );
+    }
+
     await queryRunner.query(`
       CREATE UNIQUE INDEX "${USER_PENDING_INDEX}"
       ON "tam_survey_requirements" ("user_id")

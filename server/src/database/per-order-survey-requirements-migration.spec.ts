@@ -90,4 +90,66 @@ describe('PerOrderSurveyRequirements1777854100000', () => {
       'DROP INDEX "uq_tam_survey_requirements_user_pending"',
     ]);
   });
+
+  it('down restores the per-user guard while retaining baseline per-order integrity', async () => {
+    const queries: string[] = [];
+    const queryRunner = {
+      hasTable: jest.fn().mockResolvedValue(true),
+      getTable: jest.fn().mockResolvedValue({
+        indices: [
+          {
+            name: 'uq_tam_survey_requirements_order_reason',
+            isUnique: true,
+            columnNames: ['order_id', 'reason'],
+          },
+        ],
+      }),
+      query: jest.fn(async (sql: string) => {
+        queries.push(sql);
+        return [];
+      }),
+    } as any;
+
+    await new PerOrderSurveyRequirements1777854100000().down(queryRunner);
+
+    const sql = queries.join('\n');
+    expect(sql).toContain('GROUP BY "user_id"');
+    expect(sql).toContain('uq_tam_survey_requirements_user_pending');
+    expect(sql).not.toContain('DROP INDEX');
+    expect(sql).not.toContain('DROP INDEX IF EXISTS');
+    expect(sql).not.toContain(
+      `DROP INDEX "uq_tam_survey_requirements_order_reason"`,
+    );
+  });
+
+  it('down refuses multi-pending state before any schema mutation', async () => {
+    const queries: string[] = [];
+    const queryRunner = {
+      hasTable: jest.fn().mockResolvedValue(true),
+      getTable: jest.fn().mockResolvedValue({
+        indices: [
+          {
+            name: 'uq_tam_survey_requirements_order_reason',
+            isUnique: true,
+            columnNames: ['order_id', 'reason'],
+          },
+        ],
+      }),
+      query: jest.fn(async (sql: string) => {
+        queries.push(sql);
+        return [{ user_id: 7, pending_count: 2 }];
+      }),
+    } as any;
+
+    await expect(
+      new PerOrderSurveyRequirements1777854100000().down(queryRunner),
+    ).rejects.toThrow(
+      'multiple pending survey requirements prevent safe migration rollback',
+    );
+
+    expect(queries).toHaveLength(1);
+    expect(queries[0]).toContain('GROUP BY "user_id"');
+    expect(queries[0]).not.toContain('CREATE');
+    expect(queries[0]).not.toContain('DROP');
+  });
 });

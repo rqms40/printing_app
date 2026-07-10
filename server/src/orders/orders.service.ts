@@ -419,6 +419,7 @@ export class OrdersService {
   async assertBetaOrderLimit(
     userId: number,
     ordersRepo: Repository<Order> = this.ordersRepo,
+    isBetaModeEnabled = true,
   ): Promise<void> {
     const user = await this.usersService.findById(userId);
     if (
@@ -429,10 +430,7 @@ export class OrdersService {
       return;
     }
 
-    const rows = await this.dataSource.query<Array<{ is_enabled: boolean }>>(
-      'SELECT is_enabled FROM beta_mode_settings ORDER BY id LIMIT 1',
-    );
-    if (!rows[0]?.is_enabled) return;
+    if (!isBetaModeEnabled) return;
 
     const count = await ordersRepo.count({
       where: {
@@ -474,13 +472,6 @@ export class OrdersService {
       specialInstructions?: unknown;
     },
   ): Promise<Order> {
-    if (data.userId != null) {
-      await this.assertBetaOrderLimit(Number(data.userId));
-      await this.assertBetaPaymentMethod(
-        Number(data.userId),
-        String(data.paymentMethod ?? ''),
-      );
-    }
     const {
       paperSpecs,
       threeDSpecs,
@@ -545,14 +536,16 @@ export class OrdersService {
       const transactionSpecValuesRepo =
         manager.getRepository(OrderItemSpecValue);
       if (orderData.userId != null) {
+        const isBetaModeEnabled = await this.lockBetaModeEnabled(manager);
         await this.assertBetaOrderLimit(
           Number(orderData.userId),
           transactionOrdersRepo,
+          isBetaModeEnabled,
         );
         await this.assertBetaPaymentMethod(
           Number(orderData.userId),
           String(orderData.paymentMethod ?? ''),
-          manager,
+          isBetaModeEnabled,
         );
       }
       const { orderRef } = await this.nextBatchReferences(manager);
@@ -617,8 +610,6 @@ export class OrdersService {
     userId: number,
     dto: CreateBatchOrderDto,
   ): Promise<CreateBatchResult> {
-    await this.assertBetaOrderLimit(userId);
-    await this.assertBetaPaymentMethod(userId, dto.paymentMethod);
     if (!dto.items || dto.items.length === 0) {
       throw new BadRequestException('Batch order requires at least one item');
     }
@@ -846,9 +837,14 @@ export class OrdersService {
       const txSpecValueRepo = manager.getRepository(OrderItemSpecValue);
       const txDestinationRepo = manager.getRepository(DeliveryDestination);
 
+      const isBetaModeEnabled = await this.lockBetaModeEnabled(manager);
+      await this.assertBetaOrderLimit(userId, txOrdersRepo, isBetaModeEnabled);
+      await this.assertBetaPaymentMethod(
+        userId,
+        dto.paymentMethod,
+        isBetaModeEnabled,
+      );
       const { batchRef, orderRef } = await this.nextBatchReferences(manager);
-      await this.assertBetaOrderLimit(userId, txOrdersRepo);
-      await this.assertBetaPaymentMethod(userId, dto.paymentMethod, manager);
       const creditPayment = OrdersService.isCreditPaymentMethod(
         dto.paymentMethod,
       );
@@ -1143,31 +1139,28 @@ export class OrdersService {
   private async assertBetaPaymentMethod(
     userId: number,
     paymentMethod: string,
-    manager?: EntityManager,
+    isBetaModeEnabled = true,
   ): Promise<void> {
     const user = await this.usersService.findById(userId);
     if (user?.role !== UserRole.CUSTOMER || !user.isBetaUser) return;
-
-    let isEnabled: boolean;
-    if (manager) {
-      const settings = await manager.getRepository(BetaModeSettings).findOne({
-        where: {},
-        order: { id: 'ASC' },
-        lock: { mode: 'pessimistic_read' },
-      });
-      isEnabled = settings?.isEnabled ?? false;
-    } else {
-      const rows = await this.dataSource.query<Array<{ is_enabled: boolean }>>(
-        'SELECT is_enabled FROM beta_mode_settings ORDER BY id LIMIT 1',
-      );
-      isEnabled = rows[0]?.is_enabled ?? false;
-    }
-    if (isEnabled && !OrdersService.isCreditPaymentMethod(paymentMethod)) {
+    if (
+      isBetaModeEnabled &&
+      !OrdersService.isCreditPaymentMethod(paymentMethod)
+    ) {
       throw new ForbiddenException({
         code: 'beta_credits_only',
         message: 'Beta checkout requires GRIDGO Credits.',
       });
     }
+  }
+
+  private async lockBetaModeEnabled(manager: EntityManager): Promise<boolean> {
+    const settings = await manager.getRepository(BetaModeSettings).findOne({
+      where: {},
+      order: { id: 'ASC' },
+      lock: { mode: 'pessimistic_write' },
+    });
+    return settings?.isEnabled ?? false;
   }
 
   private async nextBatchReferences(manager: EntityManager): Promise<{

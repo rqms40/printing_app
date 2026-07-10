@@ -373,7 +373,7 @@ describe('OrdersService', () => {
       .fn()
       .mockResolvedValue([{ max_batch_ref: 10000, max_order_ref: 10000 }]);
     transactionBetaSettingsRepo = {
-      findOne: jest.fn().mockResolvedValue({ id: 1, isEnabled: false }),
+      findOne: jest.fn().mockResolvedValue({ id: 1, isEnabled: true }),
     };
     dataSource = {
       query: jest.fn().mockResolvedValue([{ is_enabled: true }]),
@@ -633,8 +633,49 @@ describe('OrdersService', () => {
       expect(transactionBetaSettingsRepo.findOne).toHaveBeenCalledWith({
         where: {},
         order: { id: 'ASC' },
-        lock: { mode: 'pessimistic_read' },
+        lock: { mode: 'pessimistic_write' },
       });
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('cannot commit a second beta order if beta enables before persistence', async () => {
+      const enrolledAt = new Date('2026-04-01T00:00:00Z');
+      (usersService.findById as jest.Mock).mockResolvedValue({
+        id: 1,
+        role: 'customer',
+        isBetaUser: true,
+        betaEnrolledAt: enrolledAt,
+      });
+      (dataSource.query as jest.Mock).mockResolvedValue([
+        { is_enabled: false },
+      ]);
+      transactionBetaSettingsRepo.findOne.mockResolvedValue({
+        id: 1,
+        isEnabled: true,
+      });
+      repo.count.mockResolvedValue(1);
+      repo.create.mockReturnValue(mockOrder);
+      repo.save.mockResolvedValue(mockOrder);
+
+      await expect(
+        service.create({
+          userId: 1,
+          category: 'paper',
+          paymentMethod: 'gridCredits',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: BETA_ORDER_LIMIT_REACHED,
+        }),
+      });
+
+      expect(transactionBetaSettingsRepo.findOne).toHaveBeenCalledTimes(1);
+      expect(transactionBetaSettingsRepo.findOne).toHaveBeenCalledWith({
+        where: {},
+        order: { id: 'ASC' },
+        lock: { mode: 'pessimistic_write' },
+      });
+      expect(dataSource.query).not.toHaveBeenCalled();
       expect(repo.save).not.toHaveBeenCalled();
     });
 
@@ -882,7 +923,7 @@ describe('OrdersService', () => {
       ).rejects.toMatchObject({
         response: expect.objectContaining({ code: 'beta_credits_only' }),
       });
-      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
     });
 
     it('allows normal payment methods for beta customers after beta mode is disabled', async () => {
@@ -896,7 +937,7 @@ describe('OrdersService', () => {
         .mockResolvedValue([{ is_enabled: false }]);
 
       await expect(
-        (service as any).assertBetaPaymentMethod(1, 'gcash'),
+        (service as any).assertBetaPaymentMethod(1, 'gcash', false),
       ).resolves.toBeUndefined();
     });
 
@@ -994,9 +1035,7 @@ describe('OrdersService', () => {
       (dataSource as any).query = jest
         .fn()
         .mockResolvedValue([{ is_enabled: true }]);
-      (repo.count as jest.Mock)
-        .mockResolvedValueOnce(0)
-        .mockResolvedValueOnce(1);
+      (repo.count as jest.Mock).mockResolvedValueOnce(1);
 
       await expect(
         (service as any).createBatch(1, batchDto),
@@ -1962,7 +2001,9 @@ describe('OrdersService', () => {
       const countSpy = repo.count as jest.Mock;
       countSpy.mockClear();
 
-      await expect(service.assertBetaOrderLimit(7)).resolves.toBeUndefined();
+      await expect(
+        service.assertBetaOrderLimit(7, repo as Repository<Order>, false),
+      ).resolves.toBeUndefined();
 
       expect(countSpy).not.toHaveBeenCalled();
     });
@@ -2030,7 +2071,7 @@ describe('OrdersService', () => {
       });
     });
 
-    it('createBatch() rejects without opening a transaction', async () => {
+    it('createBatch() rejects under the locked transaction policy', async () => {
       const txSpy = dataSource.transaction as jest.Mock;
       txSpy.mockClear();
       await expect(
@@ -2038,12 +2079,12 @@ describe('OrdersService', () => {
           items: [{ category: 'paper', quantity: 1, totalPrice: 0 }],
           deliveryFee: 0,
           paymentMethod: 'cod',
-          deliveryOption: 'delivery',
+          deliveryOption: 'pickup',
         } as any),
       ).rejects.toMatchObject({
         response: { code: 'BETA_ORDER_LIMIT_REACHED' },
       });
-      expect(txSpy).not.toHaveBeenCalled();
+      expect(txSpy).toHaveBeenCalledTimes(1);
     });
   });
 });
@@ -2884,6 +2925,13 @@ describe('createBatch with slot + destinations', () => {
             if (entity?.name === 'ThreeDSpec') return threeDSpecsRepo;
             if (entity?.name === 'BatchOrder') return batchRepo;
             if (entity?.name === 'DeliveryDestination') return destinationRepo;
+            if (entity?.name === BetaModeSettings.name) {
+              return {
+                findOne: jest
+                  .fn()
+                  .mockResolvedValue({ id: 1, isEnabled: false }),
+              };
+            }
             throw new Error(`Unexpected repo: ${entity?.name}`);
           },
         }),
