@@ -30,6 +30,7 @@ import {
 import { OrdersGateway } from './orders.gateway';
 import { FirebaseService } from '../firebase/firebase.service';
 import { UsersService } from '../users/users.service';
+import { User } from '../users/entities/user.entity';
 import {
   CreditMutationResult,
   CreditsService,
@@ -55,6 +56,7 @@ import {
 } from '../delivery-slots/exceptions';
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
 import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
+import { TamSurveyRequirement } from '../tam-surveys/entities/tam-survey-requirement.entity';
 import { CatalogPricingService } from '../products/catalog-pricing.service';
 import {
   orderDeliveryAssignmentsByRoute,
@@ -180,6 +182,11 @@ export type ChargeComponents = {
 export type OrderStatusChangeContext = {
   actorUserId: number;
   reason: string;
+};
+
+export type OrderCompletionTransactionResult = {
+  previous: Order;
+  surveyRequirement: TamSurveyRequirement | null;
 };
 
 function numericChargeComponent(
@@ -1728,7 +1735,7 @@ export class OrdersService {
   ): Promise<Order> {
     const orderStatus = parseOrderStatus(status);
     const candidate = await this.ordersRepo.findOneOrFail({ where: { id } });
-    const existing = await this.dataSource.transaction(async (manager) => {
+    const completion = await this.dataSource.transaction(async (manager) => {
       if (candidate.batchOrderId != null) {
         await manager.getRepository(BatchOrder).findOneOrFail({
           where: { id: candidate.batchOrderId },
@@ -1743,7 +1750,9 @@ export class OrdersService {
       if (locked.batchOrderId !== candidate.batchOrderId) {
         throw new BadRequestException('Order batch changed during update');
       }
-      if (locked.orderStatus === orderStatus) return null;
+      if (locked.orderStatus === orderStatus) {
+        return { previous: null, surveyRequirement: null };
+      }
       if (orderStatus === OrderStatus.CANCELLED) {
         throw new BadRequestException('Use the cancellation workflow');
       }
@@ -1790,20 +1799,88 @@ export class OrdersService {
         changedByUserId: context!.actorUserId,
         notes: reason,
       });
-      return locked;
+      const surveyRequirement =
+        orderStatus === OrderStatus.COMPLETED_PICKUP
+          ? await this.prepareCompletionRecords(manager, locked)
+          : null;
+      return { previous: locked, surveyRequirement };
     });
-    if (!existing) {
+    if (!completion.previous) {
       const current = await this.findById(id);
       if (!current) throw new NotFoundException('Order not found');
       return current;
     }
-    return this.publishStatusUpdate(existing, id, status);
+    return this.publishStatusUpdate(
+      completion.previous,
+      id,
+      status,
+      completion.surveyRequirement,
+    );
+  }
+
+  async completeDelivery(
+    manager: EntityManager,
+    orderId: number,
+    actorUserId: number,
+  ): Promise<OrderCompletionTransactionResult> {
+    const ordersRepo = manager.getRepository(Order);
+    const order = await ordersRepo.findOneOrFail({
+      where: { id: orderId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (order.deliveryOption !== 'delivery') {
+      throw new BadRequestException('Delivery completion requires delivery');
+    }
+    assertOrderStatusTransition(order.orderStatus, OrderStatus.DELIVERED);
+    const updateResult = await ordersRepo.update(
+      { id: order.id, orderStatus: order.orderStatus },
+      { orderStatus: OrderStatus.DELIVERED },
+    );
+    if (updateResult?.affected != null && updateResult.affected !== 1) {
+      throw new BadRequestException('Order changed during rider update');
+    }
+    await manager.getRepository(OrderStatusHistory).insert({
+      orderId: order.id,
+      fromStatus: order.orderStatus,
+      toStatus: OrderStatus.DELIVERED,
+      changedByUserId: actorUserId,
+      notes: 'Rider completed delivery',
+    });
+    const surveyRequirement = await this.prepareCompletionRecords(
+      manager,
+      order,
+    );
+    return { previous: order, surveyRequirement };
+  }
+
+  private async prepareCompletionRecords(
+    manager: EntityManager,
+    order: Order,
+  ): Promise<TamSurveyRequirement | null> {
+    if (order.fileMetadataId != null) {
+      const owner = await manager.getRepository(User).findOne({
+        where: { id: order.userId },
+        select: ['id', 'fileRetentionDays'],
+      });
+      if (owner?.fileRetentionDays != null) {
+        await this.filesService.stampExpiry(
+          order.fileMetadataId,
+          owner.fileRetentionDays,
+          manager,
+        );
+      }
+    }
+    return this.tamSurveysService.createPostDeliveryRequirementIfNeeded(
+      order,
+      manager,
+    );
   }
 
   async publishStatusUpdate(
     existing: Order,
     id: number,
     status: string,
+    surveyRequirement?: TamSurveyRequirement | null,
   ): Promise<Order> {
     const orderStatus = status as OrderStatus;
     const order = await this.ordersRepo.findOneOrFail({
@@ -1814,88 +1891,65 @@ export class OrdersService {
       order,
     ]);
 
-    // Stamp file expiry when order reaches either terminal completion status
-    if (
-      (orderStatus === OrderStatus.COMPLETED_PICKUP ||
-        orderStatus === OrderStatus.DELIVERED) &&
-      order.fileMetadataId != null
-    ) {
-      const owner = await this.usersService.findById(order.userId);
-      if (owner?.fileRetentionDays != null) {
-        await this.filesService.stampExpiry(
-          order.fileMetadataId,
-          owner.fileRetentionDays,
-        );
-      }
-    }
-
-    if (
-      orderStatus === OrderStatus.DELIVERED ||
-      orderStatus === OrderStatus.COMPLETED_PICKUP
-    ) {
+    if (surveyRequirement) {
       try {
-        const surveyReq =
-          await this.tamSurveysService.createPostDeliveryRequirementIfNeeded(
-            order,
+        const surveyReq = surveyRequirement;
+        // Real-time WebSocket push — client refreshes accountState instantly
+        try {
+          this.ordersGateway.notifySurveyRequired(order.userId, {
+            requirementId: surveyReq.id,
+            orderId: order.id,
+            orderRef: order.orderId,
+          });
+        } catch (wsErr) {
+          this.logger.warn(
+            `survey-required WS emit failed for user ${order.userId}: ${wsErr}`,
           );
-        if (surveyReq) {
-          // Real-time WebSocket push — client refreshes accountState instantly
-          try {
-            this.ordersGateway.notifySurveyRequired(order.userId, {
-              requirementId: surveyReq.id,
+        }
+
+        // In-app notification (best-effort)
+        try {
+          await this.notificationsService.create({
+            userId: order.userId,
+            title: 'Order delivered — share your feedback',
+            message:
+              'Your order has been delivered. Please complete a quick survey to continue.',
+            type: 'survey_required',
+            orderRef: order.orderId,
+            metadata: {
               orderId: order.id,
-              orderRef: order.orderId,
-            });
-          } catch (wsErr) {
-            this.logger.warn(
-              `survey-required WS emit failed for user ${order.userId}: ${wsErr}`,
-            );
-          }
+              requirementId: surveyReq.id,
+            },
+          });
+        } catch (notifErr) {
+          this.logger.warn(
+            `survey_required in-app notification failed for order ${order.orderId}: ${notifErr}`,
+          );
+        }
 
-          // In-app notification (best-effort)
-          try {
-            await this.notificationsService.create({
-              userId: order.userId,
-              title: 'Order delivered — share your feedback',
-              message:
-                'Your order has been delivered. Please complete a quick survey to continue.',
-              type: 'survey_required',
-              orderRef: order.orderId,
-              metadata: {
-                orderId: order.id,
-                requirementId: surveyReq.id,
+        // FCM push (best-effort — no token = skip)
+        try {
+          const fcmToken = await this.usersService.getFcmToken(order.userId);
+          if (fcmToken) {
+            await this.firebaseService.sendToDevice(
+              fcmToken,
+              'Order delivered — share your feedback',
+              'Your order has been delivered. Please complete a quick survey to continue.',
+              {
+                type: 'survey_required',
+                orderId: String(order.id),
+                requirementId: String(surveyReq.id),
               },
-            });
-          } catch (notifErr) {
-            this.logger.warn(
-              `survey_required in-app notification failed for order ${order.orderId}: ${notifErr}`,
             );
           }
-
-          // FCM push (best-effort — no token = skip)
-          try {
-            const fcmToken = await this.usersService.getFcmToken(order.userId);
-            if (fcmToken) {
-              await this.firebaseService.sendToDevice(
-                fcmToken,
-                'Order delivered — share your feedback',
-                'Your order has been delivered. Please complete a quick survey to continue.',
-                {
-                  type: 'survey_required',
-                  orderId: String(order.id),
-                  requirementId: String(surveyReq.id),
-                },
-              );
-            }
-          } catch (fcmErr) {
-            this.logger.warn(
-              `survey_required FCM push failed for order ${order.orderId}: ${fcmErr}`,
-            );
-          }
+        } catch (fcmErr) {
+          this.logger.warn(
+            `survey_required FCM push failed for order ${order.orderId}: ${fcmErr}`,
+          );
         }
       } catch (err) {
         this.logger.warn(
-          `Post-delivery survey requirement failed for order ${order.orderId}: ${err}`,
+          `Post-delivery survey publication failed for order ${order.orderId}: ${err}`,
         );
       }
     }

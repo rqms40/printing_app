@@ -40,6 +40,8 @@ import { FileMetadata } from '../files/entities/file-metadata.entity';
 import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 import { DeliverySpeedTier } from './enums/delivery-speed-tier.enum';
 import { CatalogPricingService } from '../products/catalog-pricing.service';
+import { User } from '../users/entities/user.entity';
+import { TamSurveyRequirement } from '../tam-surveys/entities/tam-survey-requirement.entity';
 
 const specValueRepoProvider = () => ({
   provide: getRepositoryToken(OrderItemSpecValue),
@@ -1820,6 +1822,10 @@ describe('OrdersService', () => {
 
 describe('OrdersService.updateStatus — expiresAt stamping', () => {
   let service: OrdersService;
+  let transactionManager: any;
+  let transactionHistoryRepo: { insert: jest.Mock };
+  let transactionUserRepo: { findOne: jest.Mock };
+  let transactionEvents: string[];
   const ordersRepo = {
     findOne: jest.fn(),
     findOneOrFail: jest.fn(),
@@ -1860,13 +1866,28 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    transactionEvents = [];
+    transactionHistoryRepo = { insert: jest.fn().mockResolvedValue({}) };
+    transactionUserRepo = { findOne: jest.fn() };
+    transactionManager = {
+      getRepository: jest.fn((entity) => {
+        if (entity === Order) return ordersRepo;
+        if (entity === OrderStatusHistory) return transactionHistoryRepo;
+        if (entity === User) return transactionUserRepo;
+        throw new Error(`Unexpected repository ${entity.name}`);
+      }),
+    };
     ordersRepo.findOneOrFail.mockResolvedValue(makeOrder());
     ordersRepo.update.mockResolvedValue({ affected: 1 });
-    const transaction = jest.fn(async (work) =>
-      work({
-        getRepository: () => ordersRepo,
-      }),
-    );
+    const transaction = jest.fn(async (work) => {
+      transactionEvents.push('transaction-start');
+      const result = await work(transactionManager);
+      transactionEvents.push('transaction-commit');
+      return result;
+    });
+    mockGateway.notifySurveyRequired.mockImplementation(() => {
+      transactionEvents.push('survey-ws');
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrdersService,
@@ -1956,7 +1977,144 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
     service = module.get<OrdersService>(OrdersService);
   });
 
-  it('stamps expiresAt when completed_pickup and retention is set', async () => {
+  it('completes delivery, history, expiry, and survey using one manager', async () => {
+    const arrived = makeOrder({
+      orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+      deliveryOption: 'delivery',
+    });
+    const historyRepo = { insert: jest.fn().mockResolvedValue({}) };
+    const userRepo = {
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: arrived.userId, fileRetentionDays: 7 }),
+    };
+    const manager = {
+      getRepository: jest.fn((entity) => {
+        if (entity === Order) return ordersRepo;
+        if (entity === OrderStatusHistory) return historyRepo;
+        if (entity === User) return userRepo;
+        throw new Error(`Unexpected repository ${entity.name}`);
+      }),
+    } as any;
+    const surveyRequirement = { id: 77 } as TamSurveyRequirement;
+    ordersRepo.findOneOrFail.mockResolvedValue(arrived);
+    ordersRepo.update.mockResolvedValue({ affected: 1 });
+    mockFilesService.stampExpiry.mockResolvedValue(undefined);
+    mockTamSurveysService.createPostDeliveryRequirementIfNeeded.mockResolvedValue(
+      surveyRequirement,
+    );
+
+    const result = await Promise.resolve().then(() =>
+      (service as any).completeDelivery(manager, arrived.id, 51),
+    );
+
+    expect(ordersRepo.update).toHaveBeenCalledWith(
+      {
+        id: arrived.id,
+        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+      },
+      { orderStatus: OrderStatus.DELIVERED },
+    );
+    expect(historyRepo.insert).toHaveBeenCalledWith({
+      orderId: arrived.id,
+      fromStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+      toStatus: OrderStatus.DELIVERED,
+      changedByUserId: 51,
+      notes: 'Rider completed delivery',
+    });
+    expect(mockFilesService.stampExpiry).toHaveBeenCalledWith(
+      arrived.fileMetadataId,
+      7,
+      manager,
+    );
+    expect(
+      mockTamSurveysService.createPostDeliveryRequirementIfNeeded,
+    ).toHaveBeenCalledWith(arrived, manager);
+    expect(result).toEqual({
+      previous: arrived,
+      surveyRequirement,
+    });
+  });
+
+  it('publishes a transaction-created survey requirement without creating another', async () => {
+    const delivered = makeOrder({ orderStatus: OrderStatus.DELIVERED });
+    const surveyRequirement = { id: 77 } as TamSurveyRequirement;
+    ordersRepo.findOneOrFail.mockResolvedValue(delivered);
+    mockTamSurveysService.createPostDeliveryRequirementIfNeeded.mockResolvedValue(
+      { id: 999 },
+    );
+    mockUsersService.getFcmToken.mockResolvedValue(null);
+
+    await (service.publishStatusUpdate as any)(
+      delivered,
+      delivered.id,
+      OrderStatus.DELIVERED,
+      surveyRequirement,
+    );
+
+    expect(
+      mockTamSurveysService.createPostDeliveryRequirementIfNeeded,
+    ).not.toHaveBeenCalled();
+    expect(mockGateway.notifySurveyRequired).toHaveBeenCalledWith(
+      delivered.userId,
+      {
+        requirementId: surveyRequirement.id,
+        orderId: delivered.id,
+        orderRef: delivered.orderId,
+      },
+    );
+  });
+
+  it('keeps completed-pickup expiry and survey writes atomic before events', async () => {
+    const ready = makeOrder({
+      orderStatus: OrderStatus.READY_FOR_DISPATCH,
+      deliveryOption: 'pickup',
+    });
+    const completed = makeOrder({
+      orderStatus: OrderStatus.COMPLETED_PICKUP,
+      deliveryOption: 'pickup',
+    });
+    const surveyRequirement = { id: 88 } as TamSurveyRequirement;
+    ordersRepo.findOneOrFail
+      .mockResolvedValueOnce(ready)
+      .mockResolvedValueOnce(ready)
+      .mockResolvedValueOnce(completed);
+    ordersRepo.update.mockResolvedValue({ affected: 1 });
+    transactionUserRepo.findOne.mockResolvedValue({
+      id: ready.userId,
+      fileRetentionDays: 7,
+    });
+    mockFilesService.stampExpiry.mockResolvedValue(undefined);
+    mockTamSurveysService.createPostDeliveryRequirementIfNeeded.mockResolvedValue(
+      surveyRequirement,
+    );
+    mockUsersService.getFcmToken.mockResolvedValue(null);
+
+    await service.updateStatus(
+      ready.id,
+      OrderStatus.COMPLETED_PICKUP,
+      {},
+      { actorUserId: 51, reason: 'Customer collected pickup' },
+    );
+
+    expect(mockFilesService.stampExpiry).toHaveBeenCalledWith(
+      ready.fileMetadataId,
+      7,
+      transactionManager,
+    );
+    expect(
+      mockTamSurveysService.createPostDeliveryRequirementIfNeeded,
+    ).toHaveBeenCalledWith(ready, transactionManager);
+    expect(mockGateway.notifySurveyRequired).toHaveBeenCalledWith(
+      ready.userId,
+      expect.objectContaining({ requirementId: surveyRequirement.id }),
+    );
+    expect(transactionEvents.indexOf('transaction-commit')).toBeLessThan(
+      transactionEvents.indexOf('survey-ws'),
+    );
+  });
+
+  it('does not repeat completed-pickup expiry writes during publication', async () => {
     const order = makeOrder();
     ordersRepo.findOneOrFail
       .mockResolvedValueOnce(order) // existing (before update)
@@ -1968,7 +2126,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
 
     await service.publishStatusUpdate(order, 1, 'completed_pickup');
 
-    expect(mockFilesService.stampExpiry).toHaveBeenCalledWith(5, 7);
+    expect(mockFilesService.stampExpiry).not.toHaveBeenCalled();
   });
 
   it('does not stamp when user fileRetentionDays is null', async () => {
@@ -2009,7 +2167,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
     expect(mockFilesService.stampExpiry).not.toHaveBeenCalled();
   });
 
-  it('stamps expiresAt when delivered and retention is set', async () => {
+  it('does not repeat delivered expiry writes during publication', async () => {
     const order = makeOrder({ orderStatus: OrderStatus.DELIVERED });
     ordersRepo.findOneOrFail.mockResolvedValue(order);
     ordersRepo.update.mockResolvedValue({});
@@ -2019,10 +2177,10 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
 
     await service.publishStatusUpdate(order, 1, 'delivered');
 
-    expect(mockFilesService.stampExpiry).toHaveBeenCalledWith(5, 7);
+    expect(mockFilesService.stampExpiry).not.toHaveBeenCalled();
   });
 
-  it('creates a post-delivery survey requirement when delivered', async () => {
+  it('does not create a survey requirement during delivered publication', async () => {
     const order = makeOrder({ orderStatus: OrderStatus.DELIVERED });
     ordersRepo.findOneOrFail.mockResolvedValue(order);
     ordersRepo.update.mockResolvedValue({});
@@ -2034,10 +2192,10 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
 
     expect(
       mockTamSurveysService.createPostDeliveryRequirementIfNeeded,
-    ).toHaveBeenCalledWith(order);
+    ).not.toHaveBeenCalled();
   });
 
-  it('creates a post-delivery survey requirement when completed_pickup', async () => {
+  it('does not create a survey requirement during pickup publication', async () => {
     const order = makeOrder({ orderStatus: OrderStatus.COMPLETED_PICKUP });
     ordersRepo.findOneOrFail.mockResolvedValue(order);
     ordersRepo.update.mockResolvedValue({});
@@ -2049,24 +2207,26 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
 
     expect(
       mockTamSurveysService.createPostDeliveryRequirementIfNeeded,
-    ).toHaveBeenCalledWith(order);
+    ).not.toHaveBeenCalled();
   });
 
-  it('continues notification flow when survey requirement creation fails', async () => {
+  it('continues notification flow when survey WebSocket publication fails', async () => {
     const order = makeOrder({ orderStatus: OrderStatus.DELIVERED });
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
     ordersRepo.findOneOrFail.mockResolvedValue(order);
     ordersRepo.update.mockResolvedValue({});
     mockUsersService.findById.mockResolvedValue({ fileRetentionDays: null });
     mockUsersService.getFcmToken.mockResolvedValue(null);
-    mockTamSurveysService.createPostDeliveryRequirementIfNeeded.mockRejectedValueOnce(
-      new Error('survey unavailable'),
-    );
+    mockGateway.notifySurveyRequired.mockImplementationOnce(() => {
+      throw new Error('survey socket unavailable');
+    });
     mockNotifications.create.mockResolvedValue({});
 
     try {
       await expect(
-        service.publishStatusUpdate(order, 1, 'delivered'),
+        service.publishStatusUpdate(order, 1, 'delivered', {
+          id: 42,
+        } as TamSurveyRequirement),
       ).resolves.toEqual(order);
 
       expect(mockNotifications.create).toHaveBeenCalledWith(
@@ -2077,7 +2237,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         }),
       );
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Post-delivery survey requirement failed'),
+        expect.stringContaining('survey-required WS emit failed'),
       );
     } finally {
       warnSpy.mockRestore();
@@ -2115,7 +2275,12 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       mockUsersService.findById.mockResolvedValue({ fileRetentionDays: null });
       mockUsersService.getFcmToken.mockResolvedValue(null);
 
-      await service.publishStatusUpdate(order, 1, 'delivered');
+      await service.publishStatusUpdate(
+        order,
+        1,
+        'delivered',
+        surveyReq as any,
+      );
 
       expect(mockGateway.notifySurveyRequired).toHaveBeenCalledWith(
         order.userId,
@@ -2134,7 +2299,12 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       mockUsersService.findById.mockResolvedValue({ fileRetentionDays: null });
       mockUsersService.getFcmToken.mockResolvedValue(null);
 
-      await service.publishStatusUpdate(order, 1, 'delivered');
+      await service.publishStatusUpdate(
+        order,
+        1,
+        'delivered',
+        surveyReq as any,
+      );
 
       expect(mockNotifications.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -2157,7 +2327,12 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       // getFcmToken is called for both the status push and the survey push
       mockUsersService.getFcmToken.mockResolvedValue('fcm-xyz');
 
-      await service.publishStatusUpdate(order, 1, 'delivered');
+      await service.publishStatusUpdate(
+        order,
+        1,
+        'delivered',
+        surveyReq as any,
+      );
 
       // Verify at least one call was made with the survey_required metadata
       const surveyCalls = mockFirebase.sendToDevice.mock.calls.filter(

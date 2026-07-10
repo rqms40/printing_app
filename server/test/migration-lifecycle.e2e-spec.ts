@@ -85,6 +85,57 @@ describe('production migration lifecycle (e2e)', () => {
     }
   });
 
+  it('adopts file purposes without treating ambiguous rows as proof or testimonial files', async () => {
+    const database = await createDatabase('file_purpose_adoption');
+    await createSynchronizedFixture(database, false);
+    const dataSource = await initializeMigrationDataSource(database);
+
+    try {
+      await dataSource.query(`
+        ALTER TABLE file_metadata ALTER COLUMN purpose DROP DEFAULT;
+        ALTER TABLE file_metadata ALTER COLUMN purpose DROP NOT NULL;
+        ALTER TABLE file_metadata
+          ALTER COLUMN purpose TYPE varchar USING purpose::text
+      `);
+      await dataSource.query(`
+        INSERT INTO file_metadata
+          (original_name, mime_type, size, url, object_key, purpose)
+        VALUES
+          ('explicit-general.png', 'image/png', 10, 'https://files/1',
+           'uploads/beta_testimonial/explicit.png', 'general'),
+          ('proof.png', 'image/png', 10, 'https://files/2',
+           'uploads/proof_of_delivery/proof.png', NULL),
+          ('legacy-proof.jpg', 'image/jpeg', 10, 'https://files/3',
+           'uploads/proof-of-delivery/proof.jpg', NULL),
+          ('testimonial.webp', 'image/webp', 10, 'https://files/4',
+           'uploads/beta_testimonial/photo.webp', NULL),
+          ('ambiguous.png', 'image/png', 10, 'https://files/5',
+           'archive/customer/photo.png', NULL),
+          ('normalized.png', 'image/png', 10, 'https://files/6',
+           'archive/explicit/photo.png', ' proof-of-delivery ')
+      `);
+
+      await dataSource.runMigrations();
+
+      await expect(
+        dataSource.query<Array<{ original_name: string; purpose: string }>>(
+          `SELECT original_name, purpose::text AS purpose
+           FROM file_metadata
+           ORDER BY id`,
+        ),
+      ).resolves.toEqual([
+        { original_name: 'explicit-general.png', purpose: 'general' },
+        { original_name: 'proof.png', purpose: 'proof_of_delivery' },
+        { original_name: 'legacy-proof.jpg', purpose: 'proof_of_delivery' },
+        { original_name: 'testimonial.webp', purpose: 'beta_testimonial' },
+        { original_name: 'ambiguous.png', purpose: 'legacy' },
+        { original_name: 'normalized.png', purpose: 'proof_of_delivery' },
+      ]);
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
   it('adopts a populated legacy catalog and remaps addons by category slug', async () => {
     const database = await createDatabase('legacy_catalog');
     await createSynchronizedFixture(database, false);
@@ -1115,7 +1166,7 @@ describe('production migration lifecycle (e2e)', () => {
     await staleMigration.connect();
     await staleMigration.query(
       `DELETE FROM migrations WHERE timestamp = $1 AND name = $2`,
-      ['1777853600000', 'OrderHistoryAndAssignmentIntegrity1777853600000'],
+      ['1777853700000', 'FilePurposeAndDeliveryCompletion1777853700000'],
     );
     await staleMigration.end();
 

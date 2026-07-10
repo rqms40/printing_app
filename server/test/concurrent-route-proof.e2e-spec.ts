@@ -4,7 +4,8 @@ import { JwtService } from '@nestjs/jwt';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { io, Socket } from 'socket.io-client';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { Client } from 'pg';
 
 import { AppModule } from '../src/app.module';
 import { User, UserRole } from '../src/users/entities/user.entity';
@@ -18,7 +19,11 @@ import {
   DeliveryStatus,
   ProofOfDeliveryType,
 } from '../src/riders/entities/delivery-assignment.entity';
-import { Notification } from '../src/notifications/entities/notification.entity';
+import {
+  FileMetadata,
+  FilePurpose,
+} from '../src/files/entities/file-metadata.entity';
+import { databaseOptionsFromEnv } from '../src/database/data-source';
 
 type StopSeed = {
   label: string;
@@ -39,10 +44,20 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
   let ordersRepo: Repository<Order>;
   let riderProfilesRepo: Repository<RiderProfile>;
   let assignmentsRepo: Repository<DeliveryAssignment>;
-  let notificationsRepo: Repository<Notification>;
+  let fileMetadataRepo: Repository<FileMetadata>;
 
   const sockets: Socket[] = [];
   const runId = Date.now().toString().slice(-8);
+  const originalDatabaseName = process.env.DATABASE_NAME;
+  const originalJwtSecret = process.env.JWT_SECRET;
+  const isolatedDatabase = `gridgo_route_proof_${process.pid}_${runId}`;
+  const adminConfig = {
+    host: process.env.DATABASE_HOST ?? 'localhost',
+    port: Number(process.env.DATABASE_PORT ?? 5432),
+    database: originalDatabaseName ?? 'grid_print',
+    user: process.env.DATABASE_USER ?? 'postgres',
+    password: process.env.DATABASE_PASSWORD ?? 'postgres',
+  };
   const emails = {
     admin: `route-admin-${runId}@example.com`,
     rider: `route-rider-${runId}@example.com`,
@@ -69,6 +84,23 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
   ];
 
   beforeAll(async () => {
+    if (!/^[a-z0-9_]+$/.test(isolatedDatabase)) {
+      throw new Error('Unsafe isolated database identifier');
+    }
+    const admin = new Client(adminConfig);
+    await admin.connect();
+    await admin.query(`CREATE DATABASE "${isolatedDatabase}"`);
+    await admin.end();
+
+    process.env.DATABASE_NAME = isolatedDatabase;
+    process.env.JWT_SECRET = originalJwtSecret ?? `route-proof-${runId}`;
+    const migrationDataSource = new DataSource(
+      databaseOptionsFromEnv(process.env),
+    );
+    await migrationDataSource.initialize();
+    await migrationDataSource.runMigrations();
+    await migrationDataSource.destroy();
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -91,7 +123,7 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
     ordersRepo = dataSource.getRepository(Order);
     riderProfilesRepo = dataSource.getRepository(RiderProfile);
     assignmentsRepo = dataSource.getRepository(DeliveryAssignment);
-    notificationsRepo = dataSource.getRepository(Notification);
+    fileMetadataRepo = dataSource.getRepository(FileMetadata);
   });
 
   afterEach(() => {
@@ -101,45 +133,22 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
   });
 
   afterAll(async () => {
-    const orderRefs = stops.map((stop) => stop.orderRef);
-    const orders = await ordersRepo.find({ where: { orderId: In(orderRefs) } });
-    const orderIds = orders.map((order) => order.id);
-    await notificationsRepo.delete({ orderRef: In(orderRefs) });
-    if (orderIds.length > 0) {
-      await assignmentsRepo.delete({ orderId: In(orderIds) });
-      await ordersRepo.delete({ id: In(orderIds) });
-    }
-    await destinationsRepo
-      .createQueryBuilder()
-      .delete()
-      .where('label LIKE :prefix', { prefix: `Route ${runId}%` })
-      .execute();
-    await batchOrdersRepo
-      .createQueryBuilder()
-      .delete()
-      .where('batch_ref LIKE :prefix', { prefix: `ROUTE-BATCH-${runId}%` })
-      .execute();
-    await addressesRepo
-      .createQueryBuilder()
-      .delete()
-      .where('label LIKE :prefix', { prefix: `Route ${runId}%` })
-      .execute();
-    await riderProfilesRepo
-      .createQueryBuilder()
-      .delete()
-      .where('user_id IN (SELECT id FROM users WHERE email IN (:...emails))', {
-        emails: Object.values(emails),
-      })
-      .execute();
-    await usersRepo
-      .createQueryBuilder()
-      .delete()
-      .where('email IN (:...emails)', {
-        emails: [...Object.values(emails), ...stops.map(customerEmail)],
-      })
-      .execute();
+    if (app) await app.close();
+    if (originalDatabaseName === undefined) delete process.env.DATABASE_NAME;
+    else process.env.DATABASE_NAME = originalDatabaseName;
+    if (originalJwtSecret === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = originalJwtSecret;
 
-    await app.close();
+    const admin = new Client(adminConfig);
+    await admin.connect();
+    await admin.query(
+      `SELECT pg_terminate_backend(pid)
+       FROM pg_stat_activity
+       WHERE datname = $1 AND pid <> pg_backend_pid()`,
+      [isolatedDatabase],
+    );
+    await admin.query(`DROP DATABASE IF EXISTS "${isolatedDatabase}"`);
+    await admin.end();
   });
 
   it('routes simultaneous orders from the shop and completes signature and photo proof', async () => {
@@ -170,6 +179,17 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
         isAvailable: true,
         lastLatitude: null,
         lastLongitude: null,
+      }),
+    );
+    const photoProof = await fileMetadataRepo.save(
+      fileMetadataRepo.create({
+        originalName: `route-photo-${runId}.jpg`,
+        mimeType: 'image/jpeg',
+        size: 1024,
+        url: `https://files.test/route-photo-${runId}.jpg`,
+        objectKey: `uploads/proof_of_delivery/route-photo-${runId}.jpg`,
+        uploadedBy: rider.id,
+        purpose: FilePurpose.PROOF_OF_DELIVERY,
       }),
     );
 
@@ -216,7 +236,15 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
     const midAssignment = assignmentByRef.get(`RMID-${runId}`)!;
     const farAssignment = assignmentByRef.get(`RFAR-${runId}`)!;
 
-    const locationUpdate = onceLocationUpdate(nearAssignment.id);
+    const nearCustomer = await usersRepo.findOneOrFail({
+      where: { id: nearAssignment.order.userId },
+    });
+    await advanceToOnTheWay(nearAssignment.id, riderToken);
+    const locationSocket = await subscribeToLocation(
+      nearAssignment.id,
+      sign(nearCustomer),
+    );
+    const locationUpdate = onceSocketEvent(locationSocket, 'locationUpdate');
     await request(app.getHttpServer())
       .patch('/api/riders/location')
       .set('Authorization', `Bearer ${riderToken}`)
@@ -227,7 +255,11 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
       longitude: 125.6087,
     });
 
-    await advanceToArrived(nearAssignment.id, riderToken);
+    await request(app.getHttpServer())
+      .patch(`/api/riders/assignments/${nearAssignment.id}/status`)
+      .set('Authorization', `Bearer ${riderToken}`)
+      .send({ status: DeliveryStatus.ARRIVED })
+      .expect(200);
     await request(app.getHttpServer())
       .patch(`/api/riders/assignments/${nearAssignment.id}/status`)
       .set('Authorization', `Bearer ${riderToken}`)
@@ -255,16 +287,16 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
         status: DeliveryStatus.DELIVERED,
         proof: {
           type: ProofOfDeliveryType.PHOTO,
-          fileId: 901,
-          objectKey: `proof/route-photo-${runId}.jpg`,
+          fileId: photoProof.id,
+          objectKey: `spoofed/client-route-photo-${runId}.jpg`,
         },
       })
       .expect(200)
       .expect((res) => {
         expect(res.body.status).toBe(DeliveryStatus.DELIVERED);
         expect(res.body.proofType).toBe(ProofOfDeliveryType.PHOTO);
-        expect(res.body.proofFileId).toBe(901);
-        expect(res.body.proofObjectKey).toBe(`proof/route-photo-${runId}.jpg`);
+        expect(res.body.proofFileId).toBe(photoProof.id);
+        expect(res.body.proofObjectKey).toBe(photoProof.objectKey);
         expect(res.body.proofSignatureData).toBeNull();
       });
 
@@ -367,11 +399,19 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
   }
 
   async function advanceToArrived(assignmentId: number, riderToken: string) {
+    await advanceToOnTheWay(assignmentId, riderToken);
+    await request(app.getHttpServer())
+      .patch(`/api/riders/assignments/${assignmentId}/status`)
+      .set('Authorization', `Bearer ${riderToken}`)
+      .send({ status: DeliveryStatus.ARRIVED })
+      .expect(200);
+  }
+
+  async function advanceToOnTheWay(assignmentId: number, riderToken: string) {
     for (const status of [
       DeliveryStatus.ACCEPTED,
       DeliveryStatus.PICKED_UP,
       DeliveryStatus.ON_THE_WAY,
-      DeliveryStatus.ARRIVED,
     ]) {
       await request(app.getHttpServer())
         .patch(`/api/riders/assignments/${assignmentId}/status`)
@@ -381,27 +421,44 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
     }
   }
 
-  function onceLocationUpdate(assignmentId: number): Promise<unknown> {
+  async function subscribeToLocation(
+    assignmentId: number,
+    customerToken: string,
+  ): Promise<Socket> {
+    const socket = io(`${baseUrl}/ws/location`, {
+      transports: ['websocket'],
+      auth: { token: customerToken },
+      forceNew: true,
+      reconnection: false,
+    });
+    sockets.push(socket);
+    await onceSocketEvent(socket, 'connect');
+    const subscribed = onceSocketEvent<{
+      assignmentId: string;
+    }>(socket, 'subscribed');
+    socket.emit('subscribe', String(assignmentId));
+    await expect(subscribed).resolves.toEqual({
+      assignmentId: String(assignmentId),
+    });
+    return socket;
+  }
+
+  function onceSocketEvent<T = unknown>(
+    socket: Socket,
+    event: string,
+  ): Promise<T> {
     return new Promise((resolve, reject) => {
-      const socket = io(`${baseUrl}/ws/location`, {
-        transports: ['websocket'],
-        forceNew: true,
-        reconnection: false,
-      });
-      sockets.push(socket);
-      const timeout = setTimeout(() => {
-        reject(new Error('Timed out waiting for locationUpdate'));
-      }, 3000);
-      socket.on('connect_error', (err) => {
-        clearTimeout(timeout);
-        reject(err);
-      });
-      socket.on('connect', () => {
-        socket.emit('subscribe', String(assignmentId));
-      });
-      socket.on('locationUpdate', (payload) => {
+      const timeout = setTimeout(
+        () => reject(new Error(`Timed out waiting for ${event}`)),
+        3_000,
+      );
+      socket.once(event, (payload: T) => {
         clearTimeout(timeout);
         resolve(payload);
+      });
+      socket.once('connect_error', (error) => {
+        clearTimeout(timeout);
+        reject(error);
       });
     });
   }

@@ -20,6 +20,7 @@ import {
   ConversationType,
 } from '../chat/entities/conversation.entity';
 import { ChatGateway } from '../chat/chat.gateway';
+import { FilesService } from '../files/files.service';
 
 describe('RidersService', () => {
   let service: RidersService;
@@ -36,7 +37,9 @@ describe('RidersService', () => {
   let ordersService: {
     updateStatus: jest.Mock;
     publishStatusUpdate: jest.Mock;
+    completeDelivery: jest.Mock;
   };
+  let filesService: { resolveDeliveryProofFile: jest.Mock };
 
   const mockProfile = {
     id: 10,
@@ -162,6 +165,10 @@ describe('RidersService', () => {
     ordersService = {
       updateStatus: jest.fn(),
       publishStatusUpdate: jest.fn(),
+      completeDelivery: jest.fn(),
+    };
+    filesService = {
+      resolveDeliveryProofFile: jest.fn(),
     };
 
     const module = await Test.createTestingModule({
@@ -174,6 +181,7 @@ describe('RidersService', () => {
         },
         { provide: LocationGateway, useValue: locationGateway },
         { provide: OrdersService, useValue: ordersService },
+        { provide: FilesService, useValue: filesService },
         { provide: ChatGateway, useValue: chatGateway },
         { provide: DataSource, useValue: dataSource },
       ],
@@ -592,6 +600,43 @@ describe('RidersService', () => {
       expect(historyRepo.insert).toHaveBeenCalledTimes(1);
     });
 
+    it('rolls back delivery and emits nothing when survey creation fails', async () => {
+      const arrivedAssignment = {
+        ...mockAssignment,
+        status: DeliveryStatus.ARRIVED,
+        isCurrent: true,
+      } as DeliveryAssignment;
+      const arrivedOrder = {
+        id: arrivedAssignment.orderId,
+        orderId: 'ORD-1',
+        batchOrderId: null,
+        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+      } as Order;
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.findOne.mockResolvedValue(arrivedAssignment);
+      assignmentRepo.save.mockImplementation(
+        async (assignment) => assignment as DeliveryAssignment,
+      );
+      orderRepo.findOneOrFail.mockResolvedValue(arrivedOrder);
+      ordersService.completeDelivery.mockRejectedValue(
+        new Error('survey insert failed'),
+      );
+
+      await expect(
+        service.updateDeliveryStatus(
+          mockProfile.userId,
+          arrivedAssignment.id,
+          DeliveryStatus.DELIVERED,
+          undefined,
+          { type: 'signature', signatureData: 'svg:rollback' } as any,
+        ),
+      ).rejects.toThrow('survey insert failed');
+
+      expect(ordersService.publishStatusUpdate).not.toHaveBeenCalled();
+      expect(locationGateway.broadcastLocation).not.toHaveBeenCalled();
+      expect(chatGateway.notifyConversationClosed).not.toHaveBeenCalled();
+    });
+
     it('closes a declined assignment so reassignment preserves its audit row', async () => {
       const assignedAssignment = {
         ...mockAssignment,
@@ -757,20 +802,40 @@ describe('RidersService', () => {
         batchOrderId: null,
         orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
       } as Order);
+      const surveyRequirement = { id: 70 };
+      ordersService.completeDelivery.mockResolvedValue({
+        previous: {
+          id: 1,
+          batchOrderId: null,
+          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        },
+        surveyRequirement,
+      });
+      filesService.resolveDeliveryProofFile.mockResolvedValue({
+        id: 55,
+        objectKey: 'uploads/proof_of_delivery/server-55.jpg',
+      });
 
       const result = await (service.updateDeliveryStatus as any)(
         1,
         100,
         DeliveryStatus.DELIVERED,
         undefined,
-        { type: 'photo', fileId: 55, objectKey: 'uploads/pod/55.jpg' },
+        { type: 'photo', fileId: 55, objectKey: 'spoofed/client-key.jpg' },
       );
 
       expect(result.status).toBe(DeliveryStatus.DELIVERED);
       expect(result.deliveredAt).toBeDefined();
       expect(result.proofType).toBe('photo');
       expect(result.proofFileId).toBe(55);
-      expect(result.proofObjectKey).toBe('uploads/pod/55.jpg');
+      expect(result.proofObjectKey).toBe(
+        'uploads/proof_of_delivery/server-55.jpg',
+      );
+      expect(filesService.resolveDeliveryProofFile).toHaveBeenCalledWith(
+        55,
+        mockProfile.userId,
+        expect.objectContaining({ getRepository: expect.any(Function) }),
+      );
       expect(result.proofCapturedAt).toBeDefined();
       expect(result.proofCapturedByRiderId).toBe(mockProfile.id);
       expect(result.proofSignatureData).toBeNull();
@@ -781,7 +846,44 @@ describe('RidersService', () => {
         }),
         1,
         OrderStatus.DELIVERED,
+        surveyRequirement,
       );
+    });
+
+    it('rejects photo proof owned by another user', async () => {
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.findOne.mockResolvedValue({
+        ...mockAssignment,
+        status: DeliveryStatus.ARRIVED,
+      } as DeliveryAssignment);
+      orderRepo.findOneOrFail.mockResolvedValue({
+        id: 1,
+        batchOrderId: null,
+        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+      } as Order);
+      ordersService.completeDelivery.mockResolvedValue({
+        previous: {
+          id: 1,
+          batchOrderId: null,
+          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        },
+        surveyRequirement: null,
+      });
+      filesService.resolveDeliveryProofFile.mockRejectedValue(
+        new BadRequestException('Proof file does not belong to this rider'),
+      );
+
+      await expect(
+        service.updateDeliveryStatus(
+          1,
+          100,
+          DeliveryStatus.DELIVERED,
+          undefined,
+          { type: 'photo', fileId: 44 } as any,
+        ),
+      ).rejects.toThrow('Proof file does not belong to this rider');
+
+      expect(assignmentRepo.save).not.toHaveBeenCalled();
     });
 
     it('marks an assignment delivered with signature proof', async () => {
@@ -798,6 +900,14 @@ describe('RidersService', () => {
         batchOrderId: null,
         orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
       } as Order);
+      ordersService.completeDelivery.mockResolvedValue({
+        previous: {
+          id: 1,
+          batchOrderId: null,
+          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        },
+        surveyRequirement: null,
+      });
 
       const result = await (service.updateDeliveryStatus as any)(
         1,
@@ -815,6 +925,70 @@ describe('RidersService', () => {
       expect(result.proofCapturedByRiderId).toBe(mockProfile.id);
       expect(result.proofFileId).toBeNull();
       expect(result.proofObjectKey).toBeNull();
+    });
+
+    it('rejects an oversized signature by normalized UTF-8 byte length', async () => {
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.findOne.mockResolvedValue({
+        ...mockAssignment,
+        status: DeliveryStatus.ARRIVED,
+      } as DeliveryAssignment);
+      orderRepo.findOneOrFail.mockResolvedValue({
+        id: 1,
+        batchOrderId: null,
+        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+      } as Order);
+
+      await expect(
+        service.updateDeliveryStatus(
+          1,
+          100,
+          DeliveryStatus.DELIVERED,
+          undefined,
+          {
+            type: 'signature',
+            signatureData: ` ${'🙂'.repeat(16_385)} `,
+          } as any,
+        ),
+      ).rejects.toThrow('Signature proof is too large');
+
+      expect(assignmentRepo.save).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      {
+        type: 'photo',
+        fileId: 55,
+        signatureData: 'mixed-signature',
+      },
+      {
+        type: 'signature',
+        signatureData: 'signature',
+        fileId: 55,
+      },
+    ])('rejects unsupported mixed proof payload %#', async (proof) => {
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.findOne.mockResolvedValue({
+        ...mockAssignment,
+        status: DeliveryStatus.ARRIVED,
+      } as DeliveryAssignment);
+      orderRepo.findOneOrFail.mockResolvedValue({
+        id: 1,
+        batchOrderId: null,
+        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+      } as Order);
+
+      await expect(
+        service.updateDeliveryStatus(
+          1,
+          100,
+          DeliveryStatus.DELIVERED,
+          undefined,
+          proof as any,
+        ),
+      ).rejects.toThrow('Unsupported mixed proof payload');
+
+      expect(assignmentRepo.save).not.toHaveBeenCalled();
     });
 
     it('should transition from ASSIGNED to DECLINED', async () => {
@@ -954,6 +1128,14 @@ describe('RidersService', () => {
         status: DeliveryStatus.ARRIVED,
       } as DeliveryAssignment;
       assignmentRepo.findOne.mockResolvedValue(arrivedAssignment);
+      ordersService.completeDelivery.mockResolvedValue({
+        previous: {
+          id: 1,
+          batchOrderId: null,
+          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        },
+        surveyRequirement: null,
+      });
       const delivered = await (service.updateDeliveryStatus as any)(
         1,
         100,

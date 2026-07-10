@@ -27,3 +27,13 @@ describe('FileMetadata preview GLB column', () => {
     expect(cols).toContain('previewGlbObjectKey');
   });
 });
+
+describe('FileMetadata purpose column', () => {
+  it('persists the normalized upload purpose', () => {
+    const columns = getMetadataArgsStorage()
+      .filterColumns(FileMetadata)
+      .map((column) => column.propertyName);
+
+    expect(columns).toContain('purpose');
+  });
+});

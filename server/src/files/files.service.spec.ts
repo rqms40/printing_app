@@ -13,6 +13,7 @@ import { FilesService } from './files.service';
 import { FileMetadata } from './entities/file-metadata.entity';
 import { StorageService } from '../storage/storage.service';
 import { FileAnalysisService } from './file-analysis.service';
+import { EntityManager } from 'typeorm';
 
 const mockFileRepo = {
   create: jest.fn(),
@@ -117,6 +118,7 @@ describe('FilesService', () => {
             /^uploads\/general\/\d{4}\/\d{2}\/\d{2}\/.+\.jpg$/,
           ),
           uploadedBy: 42,
+          purpose: 'general',
         }),
       );
       expect(result).toEqual(savedMeta);
@@ -211,6 +213,41 @@ describe('FilesService', () => {
         'image/tiff',
         'poster.tif',
       );
+    });
+
+    it('normalizes the legacy proof purpose before building the object key', async () => {
+      const file = makeFile();
+      mockStorageService.upload.mockResolvedValue('http://x/y');
+      mockFileRepo.create.mockImplementation(
+        (value: Partial<FileMetadata>) => value as FileMetadata,
+      );
+      mockFileRepo.save.mockImplementation(
+        async (value: FileMetadata) => value,
+      );
+
+      await service.storeMetadata(file, 7, ' proof-of-delivery ');
+
+      expect(mockStorageService.upload).toHaveBeenCalledWith(
+        file.buffer,
+        expect.stringMatching(
+          /^uploads\/proof_of_delivery\/\d{4}\/\d{2}\/\d{2}\/.+\.jpg$/,
+        ),
+        'image/jpeg',
+      );
+      expect(mockFileRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ purpose: 'proof_of_delivery' }),
+      );
+    });
+
+    it('rejects an arbitrary purpose before writing an object', async () => {
+      const file = makeFile();
+
+      await expect(
+        service.storeMetadata(file, 7, '../../rider-proof'),
+      ).rejects.toThrow('File purpose not allowed');
+
+      expect(mockStorageService.upload).not.toHaveBeenCalled();
+      expect(mockFileRepo.save).not.toHaveBeenCalled();
     });
 
     it('accepts a TIFF upload with generic binary MIME (paper-print fallback)', async () => {
@@ -395,6 +432,102 @@ describe('FilesService', () => {
     });
   });
 
+  describe('resolveDeliveryProofFile', () => {
+    const getRepository = jest.fn(() => mockFileRepo);
+    const manager = {
+      getRepository,
+    } as unknown as EntityManager;
+
+    const resolveProof = (fileId: number, riderUserId: number) =>
+      service.resolveDeliveryProofFile(fileId, riderUserId, manager);
+
+    it('rejects a proof file owned by another user', async () => {
+      mockFileRepo.findOne.mockResolvedValue(
+        makeFileMeta({
+          id: 44,
+          uploadedBy: 999,
+          objectKey: 'uploads/proof_of_delivery/44.png',
+          mimeType: 'image/png',
+          purpose: 'proof_of_delivery',
+        } as Partial<FileMetadata>),
+      );
+
+      await expect(resolveProof(44, 7)).rejects.toThrow(
+        'Proof file does not belong to this rider',
+      );
+    });
+
+    it('rejects the wrong proof purpose', async () => {
+      mockFileRepo.findOne.mockResolvedValue(
+        makeFileMeta({
+          id: 44,
+          uploadedBy: 7,
+          objectKey: 'uploads/general/44.png',
+          mimeType: 'image/png',
+          purpose: 'general',
+        } as Partial<FileMetadata>),
+      );
+
+      await expect(resolveProof(44, 7)).rejects.toThrow(
+        'File is not a proof of delivery',
+      );
+    });
+
+    it('rejects a proof file with a non-image MIME type', async () => {
+      mockFileRepo.findOne.mockResolvedValue(
+        makeFileMeta({
+          id: 44,
+          uploadedBy: 7,
+          objectKey: 'uploads/proof_of_delivery/44.pdf',
+          mimeType: 'application/pdf',
+          purpose: 'proof_of_delivery',
+        } as Partial<FileMetadata>),
+      );
+
+      await expect(resolveProof(44, 7)).rejects.toThrow(
+        'Proof file must be PNG, JPEG, or WebP',
+      );
+    });
+
+    it('rejects a missing or purged proof record', async () => {
+      mockFileRepo.findOne.mockResolvedValue(null);
+
+      await expect(resolveProof(404, 7)).rejects.toThrow(
+        'Proof file not found',
+      );
+    });
+
+    it('rejects a proof record without a real object key', async () => {
+      mockFileRepo.findOne.mockResolvedValue(
+        makeFileMeta({
+          id: 44,
+          uploadedBy: 7,
+          objectKey: null,
+          mimeType: 'image/webp',
+          purpose: 'proof_of_delivery',
+        } as Partial<FileMetadata>),
+      );
+
+      await expect(resolveProof(44, 7)).rejects.toThrow(
+        'Proof file has no storage object',
+      );
+    });
+
+    it('returns owned proof metadata with the audited server object key', async () => {
+      const file = makeFileMeta({
+        id: 44,
+        uploadedBy: 7,
+        objectKey: 'uploads/proof_of_delivery/44.webp',
+        mimeType: 'image/webp',
+        purpose: 'proof_of_delivery',
+      } as Partial<FileMetadata>);
+      mockFileRepo.findOne.mockResolvedValue(file);
+
+      await expect(resolveProof(44, 7)).resolves.toBe(file);
+      expect(getRepository).toHaveBeenCalledWith(FileMetadata);
+    });
+  });
+
   describe('getPresignedUrl', () => {
     it('returns presigned URL when owner requests own file', async () => {
       const fileMeta = makeFileMeta();
@@ -494,6 +627,22 @@ describe('FilesService', () => {
       expect(diffMs).toBeLessThanOrEqual(
         sevenDaysMs + (after.getTime() - before.getTime()) + 1000,
       );
+    });
+
+    it('uses a supplied transaction manager instead of the global repository', async () => {
+      const transactionRepo = { update: jest.fn().mockResolvedValue({}) };
+      const getRepository = jest.fn(() => transactionRepo);
+      const manager = {
+        getRepository,
+      } as unknown as EntityManager;
+
+      await service.stampExpiry(5, 7, manager);
+
+      expect(getRepository).toHaveBeenCalledWith(FileMetadata);
+      expect(transactionRepo.update).toHaveBeenCalledWith(5, {
+        expiresAt: expect.any(Date),
+      });
+      expect(mockFileRepo.update).not.toHaveBeenCalled();
     });
   });
 

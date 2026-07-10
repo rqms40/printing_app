@@ -63,7 +63,7 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
       }
 
       final form = FormData.fromMap({
-        'purpose': 'proof-of-delivery',
+        'purpose': 'proof_of_delivery',
         'file': await MultipartFile.fromFile(
           picked.path,
           filename: picked.name,
@@ -83,7 +83,6 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
       Navigator.of(context).pop({
         'type': 'photo',
         'fileId': fileId is int ? fileId : int.tryParse(fileId.toString()),
-        'objectKey': data['objectKey'] ?? data['object_key'],
       });
     } catch (_) {
       if (!mounted) return;

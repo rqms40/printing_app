@@ -397,6 +397,8 @@ describe('BetaModeService', () => {
         id: 42,
         uploadedBy: 1,
         objectKey: 'uploads/beta_testimonial/2026/07/photo.png',
+        purpose: 'beta_testimonial',
+        mimeType: 'image/png',
       });
 
       const result = await service.submitTestimonial(1, {
@@ -420,6 +422,8 @@ describe('BetaModeService', () => {
         id: 42,
         uploadedBy: 1,
         objectKey: 'uploads/beta_testimonial/2026/07/photo.png',
+        purpose: 'beta_testimonial',
+        mimeType: 'image/png',
       });
 
       await service.submitTestimonial(1, { fileId: 42 });
@@ -450,7 +454,37 @@ describe('BetaModeService', () => {
       fileMetadataRepo.findOne.mockResolvedValue({
         id: 42,
         uploadedBy: 1,
-        objectKey: 'uploads/general/2026/07/document.pdf',
+        objectKey: 'uploads/beta_testimonial/2026/07/spoofed.png',
+        purpose: 'general',
+        mimeType: 'image/png',
+      });
+
+      await expect(
+        service.submitTestimonial(1, { fileId: 42 }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('rejects a testimonial file with a non-image MIME type', async () => {
+      fileMetadataRepo.findOne.mockResolvedValue({
+        id: 42,
+        uploadedBy: 1,
+        objectKey: 'uploads/beta_testimonial/2026/07/document.pdf',
+        purpose: 'beta_testimonial',
+        mimeType: 'application/pdf',
+      });
+
+      await expect(
+        service.submitTestimonial(1, { fileId: 42 }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('rejects a testimonial record without a storage object key', async () => {
+      fileMetadataRepo.findOne.mockResolvedValue({
+        id: 42,
+        uploadedBy: 1,
+        objectKey: null,
+        purpose: 'beta_testimonial',
+        mimeType: 'image/jpeg',
       });
 
       await expect(

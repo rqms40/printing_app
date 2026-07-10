@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Order } from '../orders/entities/order.entity';
 import { User } from '../users/entities/user.entity';
 import {
@@ -97,13 +97,20 @@ export class TamSurveysService {
 
   async createPostDeliveryRequirementIfNeeded(
     order: Pick<Order, 'id' | 'orderId' | 'userId'>,
+    manager?: EntityManager,
   ): Promise<TamSurveyRequirement | null> {
-    if (!(await this.isBetaModeEnabled())) return null;
+    const betaModeSettingsRepo =
+      manager?.getRepository(BetaModeSettings) ?? this.betaModeSettingsRepo;
+    const usersRepo = manager?.getRepository(User) ?? this.usersRepo;
+    const requirementsRepo =
+      manager?.getRepository(TamSurveyRequirement) ?? this.requirementsRepo;
 
-    const user = await this.usersRepo.findOne({ where: { id: order.userId } });
+    if (!(await this.isBetaModeEnabled(betaModeSettingsRepo))) return null;
+
+    const user = await usersRepo.findOne({ where: { id: order.userId } });
     if (!user?.isBetaUser) return null;
 
-    const existing = await this.requirementsRepo.findOne({
+    const existing = await requirementsRepo.findOne({
       where: {
         orderId: order.id,
         reason: TamSurveyRequirementReason.POST_DELIVERY,
@@ -111,7 +118,7 @@ export class TamSurveysService {
     });
     if (existing) return existing;
 
-    const requirement = this.requirementsRepo.create({
+    const requirement = requirementsRepo.create({
       userId: order.userId,
       orderId: order.id,
       reason: TamSurveyRequirementReason.POST_DELIVERY,
@@ -122,11 +129,15 @@ export class TamSurveysService {
     });
 
     try {
-      return await this.requirementsRepo.save(requirement);
+      return await requirementsRepo.save(requirement);
     } catch (error) {
+      // A failed statement aborts an existing Postgres transaction, so let the
+      // outer completion transaction roll back rather than attempting a query
+      // in the failed transaction. The locked order serializes this path.
+      if (manager) throw error;
       if (!this.isUniqueViolation(error)) throw error;
 
-      const racedRequirement = await this.requirementsRepo.findOne({
+      const racedRequirement = await requirementsRepo.findOne({
         where: {
           orderId: order.id,
           reason: TamSurveyRequirementReason.POST_DELIVERY,
@@ -241,8 +252,10 @@ export class TamSurveysService {
     );
   }
 
-  private async isBetaModeEnabled(): Promise<boolean> {
-    const settings = await this.betaModeSettingsRepo.find();
+  private async isBetaModeEnabled(
+    repo: Repository<BetaModeSettings> = this.betaModeSettingsRepo,
+  ): Promise<boolean> {
+    const settings = await repo.find();
     return settings[0]?.isEnabled ?? false;
   }
 

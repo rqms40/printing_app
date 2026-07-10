@@ -7,13 +7,14 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, MoreThan, Repository } from 'typeorm';
+import { EntityManager, IsNull, MoreThan, Repository } from 'typeorm';
 import { extname } from 'path';
 import { createReadStream } from 'fs';
 import { readFile, unlink } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import type { Readable } from 'stream';
-import { FileMetadata } from './entities/file-metadata.entity';
+import { FileMetadata, FilePurpose } from './entities/file-metadata.entity';
+import { DELIVERY_PROOF_IMAGE_MIME_TYPES } from './files.constants';
 import { StorageService } from '../storage/storage.service';
 import { FileAnalysisService } from './file-analysis.service';
 import {
@@ -43,6 +44,7 @@ export class FilesService {
     purpose = 'general',
   ): Promise<FileMetadata> {
     try {
+      const normalizedPurpose = this.normalizeUploadPurpose(purpose);
       const fileExt = extname(file.originalname).toLowerCase();
       const mimeOk = ALLOWED_MIME_TYPES.includes(file.mimetype);
       const extOk =
@@ -66,7 +68,7 @@ export class FilesService {
 
       const now = new Date();
       const datePath = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
-      const objectKey = `uploads/${purpose}/${datePath}/${randomUUID()}${fileExt}`;
+      const objectKey = `uploads/${normalizedPurpose}/${datePath}/${randomUUID()}${fileExt}`;
 
       // Run the original-file upload concurrently with content analysis.
       // Disk-backed uploads stream to object storage so large files do not sit
@@ -133,6 +135,7 @@ export class FilesService {
         url,
         objectKey,
         uploadedBy,
+        purpose: normalizedPurpose,
         widthPt: analysis?.widthPt ?? null,
         heightPt: analysis?.heightPt ?? null,
         widthPx: analysis?.widthPx ?? null,
@@ -150,6 +153,51 @@ export class FilesService {
     } finally {
       await this.removeDiskUpload(file);
     }
+  }
+
+  private normalizeUploadPurpose(purpose: string): FilePurpose {
+    const normalized = purpose.trim().toLowerCase().replace(/-/g, '_');
+    const allowed = new Set<FilePurpose>([
+      FilePurpose.GENERAL,
+      FilePurpose.PAPER,
+      FilePurpose.PROOF_OF_DELIVERY,
+      FilePurpose.BETA_TESTIMONIAL,
+    ]);
+    if (!allowed.has(normalized as FilePurpose)) {
+      throw new BadRequestException('File purpose not allowed');
+    }
+    return normalized as FilePurpose;
+  }
+
+  async resolveDeliveryProofFile(
+    fileId: number,
+    riderUserId: number,
+    manager: EntityManager,
+  ): Promise<FileMetadata> {
+    const file = await manager.getRepository(FileMetadata).findOne({
+      where: { id: fileId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!file) {
+      throw new BadRequestException('Proof file not found');
+    }
+    if (file.uploadedBy !== riderUserId) {
+      throw new BadRequestException('Proof file does not belong to this rider');
+    }
+    if (file.purpose !== FilePurpose.PROOF_OF_DELIVERY) {
+      throw new BadRequestException('File is not a proof of delivery');
+    }
+    if (
+      !DELIVERY_PROOF_IMAGE_MIME_TYPES.includes(
+        file.mimeType as (typeof DELIVERY_PROOF_IMAGE_MIME_TYPES)[number],
+      )
+    ) {
+      throw new BadRequestException('Proof file must be PNG, JPEG, or WebP');
+    }
+    if (!file.objectKey?.trim()) {
+      throw new BadRequestException('Proof file has no storage object');
+    }
+    return file;
   }
 
   private hasMemoryBuffer(file: Express.Multer.File): boolean {
@@ -280,10 +328,12 @@ export class FilesService {
   async stampExpiry(
     fileMetadataId: number,
     retentionDays: number,
+    manager?: EntityManager,
   ): Promise<void> {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + retentionDays);
-    await this.fileRepo.update(fileMetadataId, { expiresAt });
+    const repo = manager?.getRepository(FileMetadata) ?? this.fileRepo;
+    await repo.update(fileMetadataId, { expiresAt });
   }
 
   async deleteExpired(): Promise<{

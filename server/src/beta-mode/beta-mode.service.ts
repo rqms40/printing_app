@@ -7,7 +7,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, DataSource, Repository } from 'typeorm';
 import { BetaModeSettings } from './entities/beta-mode-settings.entity';
 import { User } from '../users/entities/user.entity';
-import { FileMetadata } from '../files/entities/file-metadata.entity';
+import {
+  FileMetadata,
+  FilePurpose,
+} from '../files/entities/file-metadata.entity';
+import { DELIVERY_PROOF_IMAGE_MIME_TYPES } from '../files/files.constants';
 import { CreditsService } from '../credits/credits.service';
 
 export interface BetaMemberRow {
@@ -277,7 +281,13 @@ export class BetaModeService {
     if (file.uploadedBy !== userId) {
       throw new ForbiddenException('File does not belong to this user');
     }
-    if (!file.objectKey?.startsWith('uploads/beta_testimonial/')) {
+    if (
+      file.purpose !== FilePurpose.BETA_TESTIMONIAL ||
+      !DELIVERY_PROOF_IMAGE_MIME_TYPES.includes(
+        file.mimeType as (typeof DELIVERY_PROOF_IMAGE_MIME_TYPES)[number],
+      ) ||
+      !file.objectKey?.trim()
+    ) {
       throw new ForbiddenException('A beta testimonial photo is required');
     }
     await this.userRepo.update(userId, {

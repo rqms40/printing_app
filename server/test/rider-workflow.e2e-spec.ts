@@ -28,6 +28,13 @@ import {
   ChatMessage,
   SenderRole,
 } from '../src/chat/entities/chat-message.entity';
+import { BetaModeSettings } from '../src/beta-mode/entities/beta-mode-settings.entity';
+import {
+  FileMetadata,
+  FilePurpose,
+} from '../src/files/entities/file-metadata.entity';
+import { TamSurveyRequirement } from '../src/tam-surveys/entities/tam-survey-requirement.entity';
+import { OrdersGateway } from '../src/orders/orders.gateway';
 
 describe('Rider dispatch workflow (e2e)', () => {
   let app: INestApplication<App>;
@@ -1080,6 +1087,176 @@ describe('Rider dispatch workflow (e2e)', () => {
         `DROP TRIGGER fail_task3_status_history_trigger ON order_status_history`,
       );
       await dataSource.query(`DROP FUNCTION fail_task3_status_history()`);
+    }
+  });
+
+  it('rolls back assignment proof, delivery, expiry, history, and events when survey creation fails', async () => {
+    const suffix = `${runId}-survey-rollback`;
+    const [customer, admin, rider] = await usersRepo.save([
+      usersRepo.create({
+        email: `customer-${suffix}@example.com`,
+        passwordHash: 'not-used',
+        role: UserRole.CUSTOMER,
+        isActive: true,
+        isBetaUser: true,
+        fileRetentionDays: 7,
+      }),
+      usersRepo.create({
+        email: `admin-${suffix}@example.com`,
+        passwordHash: 'not-used',
+        role: UserRole.ADMIN,
+        isActive: true,
+      }),
+      usersRepo.create({
+        email: `rider-${suffix}@example.com`,
+        passwordHash: 'not-used',
+        role: UserRole.RIDER,
+        isActive: true,
+      }),
+    ]);
+    const riderProfile = await riderProfilesRepo.save(
+      riderProfilesRepo.create({
+        userId: rider.id,
+        vehicleType: 'bike',
+        isAvailable: true,
+      }),
+    );
+    const fileRepo = dataSource.getRepository(FileMetadata);
+    const orderFile = await fileRepo.save(
+      fileRepo.create({
+        originalName: `${suffix}.pdf`,
+        mimeType: 'application/pdf',
+        size: 10,
+        url: `https://files.test/${suffix}.pdf`,
+        objectKey: `uploads/general/${suffix}.pdf`,
+        uploadedBy: customer.id,
+        purpose: FilePurpose.GENERAL,
+      }),
+    );
+    const order = await ordersRepo.save(
+      ordersRepo.create({
+        orderId: `E2E-${suffix}`,
+        userId: customer.id,
+        category: 'paper',
+        fileMetadataId: orderFile.id,
+        quantity: 1,
+        totalPrice: 20,
+        deliveryFee: 0,
+        paymentMethod: 'cod',
+        deliveryOption: 'delivery',
+        orderStatus: OrderStatus.READY_FOR_DISPATCH,
+      }),
+    );
+    const betaSettingsRepo = dataSource.getRepository(BetaModeSettings);
+    const betaSettings =
+      (await betaSettingsRepo.find())[0] ??
+      betaSettingsRepo.create({ isEnabled: true });
+    betaSettings.isEnabled = true;
+    await betaSettingsRepo.save(betaSettings);
+
+    const adminToken = jwtService.sign({
+      sub: admin.id,
+      email: admin.email,
+      role: admin.role,
+    });
+    const riderToken = jwtService.sign({
+      sub: rider.id,
+      email: rider.email,
+      role: rider.role,
+    });
+    await request(app.getHttpServer())
+      .post(`/api/admin/orders/${order.id}/assign`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ riderId: riderProfile.id })
+      .expect(201);
+    const assignment = await assignmentsRepo.findOneOrFail({
+      where: { orderId: order.id, isCurrent: true },
+    });
+    for (const status of [
+      DeliveryStatus.ACCEPTED,
+      DeliveryStatus.PICKED_UP,
+      DeliveryStatus.ON_THE_WAY,
+      DeliveryStatus.ARRIVED,
+    ]) {
+      await request(app.getHttpServer())
+        .patch(`/api/riders/assignments/${assignment.id}/status`)
+        .set('Authorization', `Bearer ${riderToken}`)
+        .send({ status })
+        .expect(200);
+    }
+
+    const notificationCount = await notificationsRepo.countBy({
+      orderRef: order.orderId,
+    });
+    const historyCount = await statusHistoryRepo.countBy({ orderId: order.id });
+    const ordersGateway = app.get(OrdersGateway);
+    const orderEvent = jest.spyOn(ordersGateway, 'notifyOrderUpdate');
+    const surveyEvent = jest.spyOn(ordersGateway, 'notifySurveyRequired');
+    await dataSource.query(`
+      CREATE FUNCTION fail_task4_survey_insert() RETURNS trigger AS $$
+      BEGIN
+        IF NEW.order_id = ${order.id} THEN
+          RAISE EXCEPTION 'task4 survey failure';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql
+    `);
+    await dataSource.query(`
+      CREATE TRIGGER fail_task4_survey_insert_trigger
+      BEFORE INSERT ON tam_survey_requirements
+      FOR EACH ROW EXECUTE FUNCTION fail_task4_survey_insert()
+    `);
+
+    try {
+      await request(app.getHttpServer())
+        .patch(`/api/riders/assignments/${assignment.id}/status`)
+        .set('Authorization', `Bearer ${riderToken}`)
+        .send({
+          status: DeliveryStatus.DELIVERED,
+          proof: {
+            type: ProofOfDeliveryType.SIGNATURE,
+            signatureData: 'svg:survey-rollback',
+          },
+        })
+        .expect(500);
+
+      await expect(
+        assignmentsRepo.findOneOrFail({ where: { id: assignment.id } }),
+      ).resolves.toMatchObject({
+        status: DeliveryStatus.ARRIVED,
+        deliveredAt: null,
+        proofType: null,
+        proofSignatureData: null,
+      });
+      await expect(
+        ordersRepo.findOneOrFail({ where: { id: order.id } }),
+      ).resolves.toMatchObject({
+        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+      });
+      await expect(
+        fileRepo.findOneOrFail({ where: { id: orderFile.id } }),
+      ).resolves.toMatchObject({ expiresAt: null });
+      await expect(
+        statusHistoryRepo.countBy({ orderId: order.id }),
+      ).resolves.toBe(historyCount);
+      await expect(
+        dataSource.getRepository(TamSurveyRequirement).countBy({
+          orderId: order.id,
+        }),
+      ).resolves.toBe(0);
+      await expect(
+        notificationsRepo.countBy({ orderRef: order.orderId }),
+      ).resolves.toBe(notificationCount);
+      expect(orderEvent).not.toHaveBeenCalled();
+      expect(surveyEvent).not.toHaveBeenCalled();
+    } finally {
+      orderEvent.mockRestore();
+      surveyEvent.mockRestore();
+      await dataSource.query(
+        `DROP TRIGGER fail_task4_survey_insert_trigger ON tam_survey_requirements`,
+      );
+      await dataSource.query(`DROP FUNCTION fail_task4_survey_insert()`);
     }
   });
 

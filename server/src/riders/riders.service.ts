@@ -34,6 +34,9 @@ import {
   ConversationType,
 } from '../chat/entities/conversation.entity';
 import { ChatGateway } from '../chat/chat.gateway';
+import { FilesService } from '../files/files.service';
+import { MAX_SIGNATURE_PROOF_BYTES } from './dto/update-delivery-status.dto';
+import { TamSurveyRequirement } from '../tam-surveys/entities/tam-survey-requirement.entity';
 
 // Valid state transitions for delivery status
 const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
@@ -89,6 +92,7 @@ export class RidersService {
     private assignmentRepo: Repository<DeliveryAssignment>,
     private locationGateway: LocationGateway,
     private ordersService: OrdersService,
+    private filesService: FilesService,
     private chatGateway: ChatGateway,
     private dataSource: DataSource,
   ) {}
@@ -425,7 +429,7 @@ export class RidersService {
       const now = new Date();
       const proofMetadata =
         newStatus === DeliveryStatus.DELIVERED
-          ? this.validateProofOfDelivery(proof)
+          ? await this.validateProofOfDelivery(proof, userId, manager)
           : null;
 
       assignment.status = newStatus;
@@ -489,25 +493,36 @@ export class RidersService {
         (newStatus === DeliveryStatus.DECLINED
           ? OrderStatus.READY_FOR_DISPATCH
           : undefined);
-      const previous = orderStatus
-        ? await this.applyOrderStatusChange(
-            manager,
-            order,
-            orderStatus,
-            userId,
-            newStatus === DeliveryStatus.DECLINED
-              ? `Rider declined assignment: ${declineReason?.trim() || 'No reason provided'}`
-              : `Rider updated delivery to ${newStatus}`,
-            newStatus === DeliveryStatus.DECLINED
-              ? { assignedRiderId: null }
-              : {},
-          )
-        : null;
+      let previous: Order | null = null;
+      let surveyRequirement: TamSurveyRequirement | null = null;
+      if (newStatus === DeliveryStatus.DELIVERED) {
+        const completion = await this.ordersService.completeDelivery(
+          manager,
+          order.id,
+          userId,
+        );
+        previous = completion.previous;
+        surveyRequirement = completion.surveyRequirement;
+      } else if (orderStatus) {
+        previous = await this.applyOrderStatusChange(
+          manager,
+          order,
+          orderStatus,
+          userId,
+          newStatus === DeliveryStatus.DECLINED
+            ? `Rider declined assignment: ${declineReason?.trim() || 'No reason provided'}`
+            : `Rider updated delivery to ${newStatus}`,
+          newStatus === DeliveryStatus.DECLINED
+            ? { assignedRiderId: null }
+            : {},
+        );
+      }
 
       return {
         savedAssignment,
         orderStatus,
         previous,
+        surveyRequirement,
         closedConversationIds,
       };
     });
@@ -524,11 +539,20 @@ export class RidersService {
 
     if (result.orderStatus && result.previous) {
       try {
-        await this.ordersService.publishStatusUpdate(
-          result.previous,
-          result.previous.id,
-          result.orderStatus,
-        );
+        if (result.surveyRequirement) {
+          await this.ordersService.publishStatusUpdate(
+            result.previous,
+            result.previous.id,
+            result.orderStatus,
+            result.surveyRequirement,
+          );
+        } else {
+          await this.ordersService.publishStatusUpdate(
+            result.previous,
+            result.previous.id,
+            result.orderStatus,
+          );
+        }
       } catch (error) {
         this.logger.warn(
           `Post-commit delivery publication failed for order ${result.previous.id}: ${error}`,
@@ -569,31 +593,50 @@ export class RidersService {
     return order;
   }
 
-  private validateProofOfDelivery(
+  private async validateProofOfDelivery(
     proof?: ProofOfDeliveryDto,
-  ): DeliveryProofMetadata {
+    riderUserId?: number,
+    manager?: EntityManager,
+  ): Promise<DeliveryProofMetadata> {
     if (!proof) {
       throw new BadRequestException('Proof of delivery is required');
     }
 
     if (proof.type === ProofOfDeliveryType.PHOTO) {
-      if (proof.fileId == null && !proof.objectKey?.trim()) {
-        throw new BadRequestException(
-          'Photo proof requires a file id or object key',
-        );
+      if (proof.signatureData != null) {
+        throw new BadRequestException('Unsupported mixed proof payload');
       }
+      if (!Number.isInteger(proof.fileId) || proof.fileId! <= 0) {
+        throw new BadRequestException('Photo proof requires a file id');
+      }
+      if (!riderUserId || !manager) {
+        throw new BadRequestException('Proof validation context is required');
+      }
+      const file = await this.filesService.resolveDeliveryProofFile(
+        proof.fileId!,
+        riderUserId,
+        manager,
+      );
       return {
         proofType: ProofOfDeliveryType.PHOTO,
-        proofFileId: proof.fileId ?? null,
-        proofObjectKey: proof.objectKey?.trim() || null,
+        proofFileId: file.id,
+        proofObjectKey: file.objectKey,
         proofSignatureData: null,
       };
     }
 
     if (proof.type === ProofOfDeliveryType.SIGNATURE) {
+      if (proof.fileId != null || proof.objectKey != null) {
+        throw new BadRequestException('Unsupported mixed proof payload');
+      }
       const signatureData = proof.signatureData?.trim();
       if (!signatureData) {
         throw new BadRequestException('Signature proof is required');
+      }
+      if (
+        Buffer.byteLength(signatureData, 'utf8') > MAX_SIGNATURE_PROOF_BYTES
+      ) {
+        throw new BadRequestException('Signature proof is too large');
       }
       return {
         proofType: ProofOfDeliveryType.SIGNATURE,

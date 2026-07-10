@@ -137,6 +137,7 @@ describe('TamSurveysService', () => {
         if (entity === TamSurvey) return surveyRepo;
         if (entity === TamSurveyRequirement) return requirementRepo;
         if (entity === User) return userRepo;
+        if (entity === BetaModeSettings) return betaModeSettingsRepo;
         throw new Error(`Unexpected repository: ${entity.name}`);
       }),
     };
@@ -180,6 +181,25 @@ describe('TamSurveysService', () => {
         submittedAt: null,
         requiredAt: expect.any(Date),
       }),
+    );
+    expect(result?.id).toBe(123);
+  });
+
+  it('creates the post-delivery requirement through a supplied manager', async () => {
+    userRepo.findOne.mockResolvedValue(betaUser);
+    requirementRepo.findOne.mockResolvedValue(null);
+
+    const result = await (service.createPostDeliveryRequirementIfNeeded as any)(
+      order,
+      transactionalManager,
+    );
+
+    expect(transactionalManager.getRepository).toHaveBeenCalledWith(
+      BetaModeSettings,
+    );
+    expect(transactionalManager.getRepository).toHaveBeenCalledWith(User);
+    expect(transactionalManager.getRepository).toHaveBeenCalledWith(
+      TamSurveyRequirement,
     );
     expect(result?.id).toBe(123);
   });
