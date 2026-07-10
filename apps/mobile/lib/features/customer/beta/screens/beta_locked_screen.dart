@@ -15,7 +15,12 @@ import 'package:printing_app/features/customer/beta/widgets/beta_photo_upload_ca
 import 'package:printing_app/features/customer/beta/widgets/beta_share_row.dart';
 
 class BetaLockedScreen extends ConsumerStatefulWidget {
-  const BetaLockedScreen({super.key});
+  const BetaLockedScreen({
+    super.key,
+    this.shareLauncher = const SystemBetaShareLauncher(),
+  });
+
+  final BetaShareLauncher shareLauncher;
 
   @override
   ConsumerState<BetaLockedScreen> createState() => _BetaLockedScreenState();
@@ -57,8 +62,10 @@ class _BetaLockedScreenState extends ConsumerState<BetaLockedScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text(
-                  'Could not open the photo library. Please check permissions.')),
+            content: Text(
+              'Could not open the photo library. Please check permissions.',
+            ),
+          ),
         );
       }
     }
@@ -71,7 +78,7 @@ class _BetaLockedScreenState extends ConsumerState<BetaLockedScreen> {
         photo: kIsWeb ? null : _photoFile,
         photoBytes: kIsWeb ? _photoBytes : null,
         photoFileName: kIsWeb ? _photoFileName : null,
-        sharedOnSocial: true, // sharing is handled by BetaShareRow
+        sharedOnSocial: ref.read(betaTestimonialProvider).sharedOnSocial,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -79,12 +86,32 @@ class _BetaLockedScreenState extends ConsumerState<BetaLockedScreen> {
         );
       }
     } catch (_) {
-      final errMsg =
-          ref.read(betaTestimonialProvider).error ?? 'Upload failed';
+      final errMsg = ref.read(betaTestimonialProvider).error ?? 'Upload failed';
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(errMsg)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(errMsg)));
       }
+    }
+  }
+
+  Future<void> _recordConfirmedShare() async {
+    final lockedInfo = ref.read(authProvider).betaLocked;
+    final uploadState = ref.read(betaTestimonialProvider);
+    final photoAlreadyUploaded =
+        uploadState.submitted || (lockedInfo?.betaPhotoUploaded ?? false);
+    try {
+      await ref
+          .read(betaTestimonialProvider.notifier)
+          .recordConfirmedShare(photoAlreadyUploaded: photoAlreadyUploaded);
+    } catch (_) {
+      if (!mounted) return;
+      final message =
+          ref.read(betaTestimonialProvider).error ??
+          'Share opened, but confirmation could not be saved yet.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
@@ -137,15 +164,17 @@ class _BetaLockedScreenState extends ConsumerState<BetaLockedScreen> {
                         children: [
                           Text(
                             'Hi $fullName, thanks for testing.',
-                            style: AppTypography.h2
-                                .copyWith(color: colors.onBackground),
+                            style: AppTypography.h2.copyWith(
+                              color: colors.onBackground,
+                            ),
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: AppSpacing.sm),
                           Text(
                             'Your full-release access opens at launch.',
-                            style: AppTypography.body
-                                .copyWith(color: colors.onSurfaceDim),
+                            style: AppTypography.body.copyWith(
+                              color: colors.onSurfaceDim,
+                            ),
                             textAlign: TextAlign.center,
                           ),
 
@@ -169,8 +198,7 @@ class _BetaLockedScreenState extends ConsumerState<BetaLockedScreen> {
                               SizedBox(
                                 height: 52,
                                 child: ElevatedButton(
-                                  onPressed:
-                                      isUploading ? null : _submit,
+                                  onPressed: isUploading ? null : _submit,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: colors.accent,
                                     disabledBackgroundColor: colors.disabled,
@@ -200,7 +228,10 @@ class _BetaLockedScreenState extends ConsumerState<BetaLockedScreen> {
 
                           const SizedBox(height: AppSpacing.md),
 
-                          const BetaShareRow(),
+                          BetaShareRow(
+                            launcher: widget.shareLauncher,
+                            onShareConfirmed: _recordConfirmedShare,
+                          ),
 
                           const SizedBox(height: AppSpacing.xxl),
                         ],

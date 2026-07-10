@@ -11,6 +11,8 @@ class BetaTestimonialState {
     this.uploadProgress,
     this.error,
     this.submitted = false,
+    this.sharedOnSocial = false,
+    this.shareRecorded = false,
   });
 
   /// 0.0–1.0 while uploading; null when idle or done.
@@ -21,6 +23,8 @@ class BetaTestimonialState {
 
   /// True once the full submit (upload + POST testimonial) succeeded.
   final bool submitted;
+  final bool sharedOnSocial;
+  final bool shareRecorded;
 
   bool get isUploading => uploadProgress != null;
   bool get hasError => error != null;
@@ -31,16 +35,47 @@ class BetaTestimonialState {
     bool clearProgress = false,
     bool clearError = false,
     bool? submitted,
-  }) =>
-      BetaTestimonialState(
-        uploadProgress: clearProgress ? null : (uploadProgress ?? this.uploadProgress),
-        error: clearError ? null : (error ?? this.error),
-        submitted: submitted ?? this.submitted,
-      );
+    bool? sharedOnSocial,
+    bool? shareRecorded,
+  }) => BetaTestimonialState(
+    uploadProgress: clearProgress
+        ? null
+        : (uploadProgress ?? this.uploadProgress),
+    error: clearError ? null : (error ?? this.error),
+    submitted: submitted ?? this.submitted,
+    sharedOnSocial: sharedOnSocial ?? this.sharedOnSocial,
+    shareRecorded: shareRecorded ?? this.shareRecorded,
+  );
 }
 
+typedef MarkBetaShared = Future<void> Function();
+
 class BetaTestimonialNotifier extends StateNotifier<BetaTestimonialState> {
-  BetaTestimonialNotifier() : super(const BetaTestimonialState());
+  BetaTestimonialNotifier({MarkBetaShared? markShared})
+    : _markShared = markShared ?? _markSharedWithApi,
+      super(const BetaTestimonialState());
+
+  final MarkBetaShared _markShared;
+
+  Future<void> recordConfirmedShare({
+    required bool photoAlreadyUploaded,
+  }) async {
+    if (!state.sharedOnSocial) {
+      state = state.copyWith(sharedOnSocial: true);
+    }
+    if (!photoAlreadyUploaded || state.shareRecorded) return;
+
+    try {
+      await _markShared();
+      state = state.copyWith(sharedOnSocial: true, shareRecorded: true);
+    } on DioException catch (error) {
+      state = state.copyWith(error: _friendlyDioError(error));
+      rethrow;
+    } catch (error) {
+      state = state.copyWith(error: error.toString());
+      rethrow;
+    }
+  }
 
   /// Submit a testimonial. On web [photoBytes] is used instead of [photo].
   Future<void> submit({
@@ -54,14 +89,21 @@ class BetaTestimonialNotifier extends StateNotifier<BetaTestimonialState> {
       'Either photo (native) or photoBytes+photoFileName (web) must be provided',
     );
 
-    state = const BetaTestimonialState(uploadProgress: 0.0);
+    state = state.copyWith(
+      uploadProgress: 0.0,
+      clearError: true,
+      submitted: false,
+    );
 
     try {
       // ── 1. Build form data ────────────────────────────────────────────────
       final MultipartFile multipart;
       if (photo != null) {
         final fileName = photo.path.split('/').last;
-        multipart = await MultipartFile.fromFile(photo.path, filename: fileName);
+        multipart = await MultipartFile.fromFile(
+          photo.path,
+          filename: fileName,
+        );
       } else {
         multipart = MultipartFile.fromBytes(
           photoBytes!,
@@ -95,32 +137,45 @@ class BetaTestimonialNotifier extends StateNotifier<BetaTestimonialState> {
         '/beta-mode/testimonial',
         data: {
           'fileId': fileId,
-          'sharedOnSocial': sharedOnSocial,
+          'sharedOnSocial': state.sharedOnSocial || sharedOnSocial,
         },
       );
 
-      state = const BetaTestimonialState(submitted: true);
+      state = state.copyWith(
+        clearProgress: true,
+        clearError: true,
+        submitted: true,
+        sharedOnSocial: state.sharedOnSocial || sharedOnSocial,
+        shareRecorded: state.sharedOnSocial || sharedOnSocial,
+      );
     } on DioException catch (e) {
       final msg = _friendlyDioError(e);
-      state = BetaTestimonialState(error: msg);
+      state = state.copyWith(clearProgress: true, error: msg);
       rethrow;
     } catch (e) {
-      state = BetaTestimonialState(error: e.toString());
+      state = state.copyWith(clearProgress: true, error: e.toString());
       rethrow;
     }
   }
 
   void clearError() {
-    state = const BetaTestimonialState();
+    state = state.copyWith(clearError: true, clearProgress: true);
+  }
+
+  static Future<void> _markSharedWithApi() async {
+    await ApiClient.instance.patch('/beta-mode/me/share');
   }
 
   static String _friendlyDioError(DioException e) {
     final status = e.response?.statusCode;
     if (status == 401) return 'Session expired — please sign in again.';
-    if (status == 413) return 'Photo is too large. Please choose a smaller image.';
+    if (status == 413)
+      return 'Photo is too large. Please choose a smaller image.';
     if (status == 400) {
       final msg = e.response?.data?['message'];
-      return (msg is String) ? msg : 'Invalid file. Please choose a JPEG, PNG, or WebP image.';
+      return (msg is String)
+          ? msg
+          : 'Invalid file. Please choose a JPEG, PNG, or WebP image.';
     }
     if (e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.sendTimeout ||
@@ -132,7 +187,8 @@ class BetaTestimonialNotifier extends StateNotifier<BetaTestimonialState> {
   }
 }
 
-final betaTestimonialProvider = StateNotifierProvider.autoDispose<
-    BetaTestimonialNotifier, BetaTestimonialState>(
-  (_) => BetaTestimonialNotifier(),
-);
+final betaTestimonialProvider =
+    StateNotifierProvider.autoDispose<
+      BetaTestimonialNotifier,
+      BetaTestimonialState
+    >((_) => BetaTestimonialNotifier());
