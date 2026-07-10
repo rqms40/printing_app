@@ -4,13 +4,20 @@ export class DynamicProductCatalog1777680000000 implements MigrationInterface {
   name = 'DynamicProductCatalog1777680000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP TABLE IF EXISTS "paper_specs" CASCADE`);
-    await queryRunner.query(`DROP TABLE IF EXISTS "three_d_specs" CASCADE`);
-    await queryRunner.query(`DROP TABLE IF EXISTS "spec_options" CASCADE`);
-    await queryRunner.query(`DROP TABLE IF EXISTS "service_categories" CASCADE`);
+    for (const table of [
+      'paper_specs',
+      'three_d_specs',
+      'spec_options',
+      'service_categories',
+    ]) {
+      if (await queryRunner.hasTable(table)) {
+        await queryRunner.query(`DROP TABLE "${table}" CASCADE`);
+      }
+    }
 
-    await queryRunner.query(`
-      CREATE TABLE "product_categories" (
+    if (!(await queryRunner.hasTable('product_categories'))) {
+      await queryRunner.query(`
+        CREATE TABLE "product_categories" (
         "id" SERIAL PRIMARY KEY,
         "name" varchar(100) NOT NULL,
         "slug" varchar(50) NOT NULL UNIQUE,
@@ -28,10 +35,12 @@ export class DynamicProductCatalog1777680000000 implements MigrationInterface {
         "created_at" timestamp NOT NULL DEFAULT now(),
         "updated_at" timestamp NOT NULL DEFAULT now()
       )
-    `);
+      `);
+    }
 
-    await queryRunner.query(`
-      CREATE TABLE "product_spec_definitions" (
+    if (!(await queryRunner.hasTable('product_spec_definitions'))) {
+      await queryRunner.query(`
+        CREATE TABLE "product_spec_definitions" (
         "id" SERIAL PRIMARY KEY,
         "category_id" integer NOT NULL REFERENCES "product_categories"("id") ON DELETE CASCADE,
         "key" varchar(50) NOT NULL,
@@ -54,10 +63,12 @@ export class DynamicProductCatalog1777680000000 implements MigrationInterface {
         "updated_at" timestamp NOT NULL DEFAULT now(),
         CONSTRAINT "uq_product_spec_key" UNIQUE ("category_id", "key")
       )
-    `);
+      `);
+    }
 
-    await queryRunner.query(`
-      CREATE TABLE "product_spec_options" (
+    if (!(await queryRunner.hasTable('product_spec_options'))) {
+      await queryRunner.query(`
+        CREATE TABLE "product_spec_options" (
         "id" SERIAL PRIMARY KEY,
         "spec_definition_id" integer NOT NULL REFERENCES "product_spec_definitions"("id") ON DELETE CASCADE,
         "label" varchar(100) NOT NULL,
@@ -74,10 +85,12 @@ export class DynamicProductCatalog1777680000000 implements MigrationInterface {
         "updated_at" timestamp NOT NULL DEFAULT now(),
         CONSTRAINT "uq_product_spec_option_value" UNIQUE ("spec_definition_id", "value")
       )
-    `);
+      `);
+    }
 
-    await queryRunner.query(`
-      CREATE TABLE "order_item_spec_values" (
+    if (!(await queryRunner.hasTable('order_item_spec_values'))) {
+      await queryRunner.query(`
+        CREATE TABLE "order_item_spec_values" (
         "id" SERIAL PRIMARY KEY,
         "order_item_id" integer NOT NULL REFERENCES "order_items"("id") ON DELETE CASCADE,
         "spec_definition_id" integer,
@@ -93,44 +106,81 @@ export class DynamicProductCatalog1777680000000 implements MigrationInterface {
         "unit_cost" numeric(10,2) NOT NULL DEFAULT 0,
         "estimated_quantity" numeric(10,2)
       )
-    `);
+      `);
+    }
 
-    await queryRunner.query(
-      `ALTER TABLE "service_addons" DROP CONSTRAINT IF EXISTS "FK_service_addons_category"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "service_addons" ADD CONSTRAINT "FK_service_addons_product_category" FOREIGN KEY ("category_id") REFERENCES "product_categories"("id") ON DELETE SET NULL`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "order_items" ADD COLUMN IF NOT EXISTS "category_id" integer`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "order_items" ADD COLUMN IF NOT EXISTS "category_slug" varchar(50)`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "order_items" ADD COLUMN IF NOT EXISTS "category_name" varchar(100)`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "order_items" ADD COLUMN IF NOT EXISTS "pricing_model" varchar(50)`,
-    );
+    if (
+      (await queryRunner.hasTable('service_addons')) &&
+      (await queryRunner.hasTable('product_categories'))
+    ) {
+      await queryRunner.query(
+        `ALTER TABLE "service_addons" DROP CONSTRAINT IF EXISTS "FK_service_addons_category"`,
+      );
+      await queryRunner.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint constraint_record
+            JOIN pg_attribute column_record
+              ON column_record.attrelid = constraint_record.conrelid
+              AND column_record.attnum = ANY (constraint_record.conkey)
+            WHERE constraint_record.contype = 'f'
+              AND constraint_record.conrelid = 'public.service_addons'::regclass
+              AND constraint_record.confrelid = 'public.product_categories'::regclass
+              AND column_record.attname = 'category_id'
+          ) THEN
+            ALTER TABLE "service_addons"
+            ADD CONSTRAINT "FK_service_addons_product_category"
+            FOREIGN KEY ("category_id")
+            REFERENCES "product_categories"("id")
+            ON DELETE SET NULL;
+          END IF;
+        END $$;
+      `);
+    }
+
+    if (await queryRunner.hasTable('order_items')) {
+      const columns = [
+        ['category_id', 'integer'],
+        ['category_slug', 'varchar(50)'],
+        ['category_name', 'varchar(100)'],
+        ['pricing_model', 'varchar(50)'],
+      ] as const;
+      for (const [column, type] of columns) {
+        if (!(await queryRunner.hasColumn('order_items', column))) {
+          await queryRunner.query(
+            `ALTER TABLE "order_items" ADD COLUMN "${column}" ${type}`,
+          );
+        }
+      }
+    }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP TABLE IF EXISTS "order_item_spec_values"`);
-    await queryRunner.query(`DROP TABLE IF EXISTS "product_spec_options"`);
-    await queryRunner.query(`DROP TABLE IF EXISTS "product_spec_definitions"`);
-    await queryRunner.query(`DROP TABLE IF EXISTS "product_categories"`);
-    await queryRunner.query(
-      `ALTER TABLE "order_items" DROP COLUMN IF EXISTS "pricing_model"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "order_items" DROP COLUMN IF EXISTS "category_name"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "order_items" DROP COLUMN IF EXISTS "category_slug"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "order_items" DROP COLUMN IF EXISTS "category_id"`,
-    );
+    for (const table of [
+      'order_item_spec_values',
+      'product_spec_options',
+      'product_spec_definitions',
+      'product_categories',
+    ]) {
+      if (await queryRunner.hasTable(table)) {
+        await queryRunner.query(`DROP TABLE "${table}" CASCADE`);
+      }
+    }
+    if (await queryRunner.hasTable('order_items')) {
+      for (const column of [
+        'pricing_model',
+        'category_name',
+        'category_slug',
+        'category_id',
+      ]) {
+        if (await queryRunner.hasColumn('order_items', column)) {
+          await queryRunner.query(
+            `ALTER TABLE "order_items" DROP COLUMN "${column}"`,
+          );
+        }
+      }
+    }
   }
 }

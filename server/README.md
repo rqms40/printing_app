@@ -31,6 +31,33 @@
 $ npm install
 ```
 
+## Database migrations and seed data
+
+TypeORM migrations are the default schema path in every environment. Configure
+the `DATABASE_*` variables, then migrate before starting the API or loading demo
+data:
+
+```bash
+npm run migration:run
+npm run seed:if-empty
+```
+
+`npm run schema:fresh-check` runs those commands in the same order. The seed
+command is safe to rerun: it skips a populated `users` table and fails with a
+clear instruction if migrations have not created that table yet.
+
+Create and manage migrations with:
+
+```bash
+npm run migration:generate -- migrations/descriptive-name
+npm run migration:run
+npm run migration:revert
+```
+
+Schema synchronization is disabled by default. `DATABASE_SYNCHRONIZE=true` is
+an explicit local-only escape hatch for inspecting entity metadata; do not use
+it instead of migrations for shared or production databases.
+
 ## Compile and run the project
 
 ```bash

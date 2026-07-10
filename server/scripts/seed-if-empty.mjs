@@ -29,12 +29,16 @@ async function main() {
     const table = await client.query(
       "SELECT to_regclass('public.users') AS table_name",
     );
-    if (table.rows[0]?.table_name) {
-      const count = await client.query('SELECT count(*)::int AS count FROM users');
-      if (Number(count.rows[0]?.count || 0) > 0) {
-        console.log('GRIDGO seed skipped: users table already has data.');
-        return;
-      }
+    if (!table.rows[0]?.table_name) {
+      throw new Error('Run npm run migration:run before seeding');
+    }
+
+    const count = await client.query(
+      'SELECT count(*)::int AS count FROM users',
+    );
+    if (Number(count.rows[0]?.count || 0) > 0) {
+      console.log('GRIDGO seed skipped: users table already has data.');
+      return;
     }
   } finally {
     await client.end();

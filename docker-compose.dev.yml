@@ -16,6 +16,7 @@ x-api-env: &api-env
   MINIO_USE_SSL: "false"
   MINIO_PUBLIC_URL: http://${GRIDGO_PUBLIC_HOST:-192.168.40.201}:${GRIDGO_MINIO_PORT:-9000}
   NODE_ENV: development
+  DATABASE_SYNCHRONIZE: "false"
   PORT: 3000
 
 services:
@@ -52,18 +53,34 @@ services:
       timeout: 5s
       retries: 20
 
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/server-dev.Dockerfile
+    command: npm run migration:run
+    env_file:
+      - path: server/.env
+        required: false
+    environment:
+      <<: *api-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   seed:
     build:
       context: .
       dockerfile: docker/server-dev.Dockerfile
     command: npm run seed:if-empty
     env_file:
-      - server/.env
+      - path: server/.env
+        required: false
     environment:
       <<: *api-env
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       minio:
         condition: service_healthy
     restart: "no"
@@ -74,7 +91,8 @@ services:
       dockerfile: docker/server-dev.Dockerfile
     command: npm run start
     env_file:
-      - server/.env
+      - path: server/.env
+        required: false
     environment:
       <<: *api-env
     ports:

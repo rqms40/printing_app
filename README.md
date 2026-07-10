@@ -238,7 +238,7 @@ printing_app/
 | **Landing 3D** | @react-three/fiber 9 + Three.js | Scroll-driven phone model WebGL scene |
 | **Landing animation** | Framer Motion 12 | Scroll-triggered entry animations |
 | **Backend** | NestJS 11 + TypeScript 5.7 | Modular REST + WebSocket API |
-| **Database** | PostgreSQL 15 + TypeORM 0.3 | 30 tables, 10 migrations, `synchronize: true` in dev |
+| **Database** | PostgreSQL 15 + TypeORM 0.3 | 30 tables, 13 migrations, synchronization disabled by default |
 | **Auth** | Passport.js + JWT | 7-day tokens, bcrypt hashing, 3 roles |
 | **File storage** | MinIO (S3-compatible) | Presigned URLs, GLB preview conversion |
 | **Push** | Firebase Cloud Messaging (Admin SDK 13) | Mobile push notifications |
@@ -261,9 +261,9 @@ printing_app/
 
 ### Option A: One-command Docker dev stack (recommended)
 
-Runs the API, seeded PostgreSQL, MinIO, mobile web, admin dashboard, and landing
-page together. This is the easiest path when testing the Flutter web app from a
-browser at `http://192.168.40.201:8088`.
+Runs the API, PostgreSQL migration and seed jobs, MinIO, mobile web, admin
+dashboard, and landing page together. This is the easiest path when testing the
+Flutter web app from a browser at `http://192.168.40.201:8088`.
 
 ```bash
 GRIDGO_PUBLIC_HOST=192.168.40.201 docker compose -f docker-compose.dev.yml up --build
@@ -323,8 +323,8 @@ docker-compose up -d          # starts postgres:15, redis:7, minio
 ```bash
 cd server
 npm install
-npm run migration:run   # apply the 10 TypeORM migrations
-npm run seed            # load demo data (users, catalog, orders, slots)
+npm run migration:run   # apply the 13 TypeORM migrations
+npm run seed:if-empty   # load demo data only when users is empty
 npm run start:dev       # http://localhost:3000/docs  (Swagger)
 ```
 
@@ -412,7 +412,7 @@ Refine v4 + React 18 + Ant Design 5 web dashboard. ~25 pages with 4 concurrent W
 
 ### Server (`server/`)
 
-NestJS 11 backend — REST API + 6 WebSocket namespaces, **59 spec files** (Jest), **10 migrations**, Swagger at `/docs`.
+NestJS 11 backend — REST API + 6 WebSocket namespaces, **59 spec files** (Jest), **13 migrations**, Swagger at `/docs`.
 
 **WebSocket namespaces (Socket.IO)**
 
@@ -504,7 +504,7 @@ The `server/Dockerfile` is a multi-stage `node:20-alpine` build. Key production 
 - Set a strong `JWT_SECRET` (default is `grid-jwt-secret-change-in-production`)
 - Set real `OPENROUTER_API_KEY`
 - Configure real PayMongo keys when ready
-- Set `NODE_ENV=production` (disables TypeORM `synchronize`, enables Helmet)
+- Keep `DATABASE_SYNCHRONIZE=false` (the default) and set `NODE_ENV=production`
 - Run migrations: `npm run migration:run`
 - Replace MinIO with S3/R2 if deploying to cloud (change `MINIO_*` env vars)
 
@@ -528,7 +528,7 @@ See `server/.env.example` for the full list. Key variables:
 
 ## Database
 
-PostgreSQL 15 via TypeORM. **30 tables**, **10 migrations**.
+PostgreSQL 15 via TypeORM. **30 tables**, **13 migrations**.
 
 **Core tables:** `users` · `orders` · `batch_orders` · `order_items` · `order_item_spec_values` · `order_status_history` · `delivery_destinations` · `addresses`
 
@@ -548,13 +548,15 @@ PostgreSQL 15 via TypeORM. **30 tables**, **10 migrations**.
 
 **Config:** `daily_grid_cards` · `printer_profiles`
 
-TypeORM `synchronize: true` in development (schema auto-synced). In production, run migrations manually via `npm run migration:run`. Seed script: `npm run seed`.
+TypeORM synchronization is disabled by default in every environment. Apply the
+schema with `npm run migration:run`, then use `npm run seed:if-empty` for demo
+data. `DATABASE_SYNCHRONIZE=true` is an explicit local-only escape hatch.
 
 ## Development Status — v1.3.0
 
 - [x] Phase 1 — UI shell (3 roles, full screen inventory, theme system)
 - [x] Phase 2 — Local logic (Hive drafts, dark mode, connectivity, offline mock fallback)
-- [x] Phase 3 — NestJS backend (30 DB tables, 10 migrations, Swagger)
+- [x] Phase 3 — NestJS backend (30 DB tables, 13 migrations, Swagger)
 - [x] Phase 4 — Flutter ↔ API integration (Dio interceptors, JWT auth)
 - [x] Phase 5 — Admin dashboard (Refine + Ant Design, ~25 pages, 4 WebSocket connections)
 - [x] Phase 6 — Cart-style batch checkout (multi-item single-transaction orders)

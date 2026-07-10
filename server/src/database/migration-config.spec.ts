@@ -1,0 +1,30 @@
+import { ConfigService } from '@nestjs/config';
+import { createTypeOrmOptions } from './typeorm.config';
+
+describe('createTypeOrmOptions migration configuration', () => {
+  it('registers migrations and disables production synchronization', () => {
+    const config = new ConfigService({ NODE_ENV: 'production' });
+
+    const options = createTypeOrmOptions(config);
+
+    expect(options.synchronize).toBe(false);
+    expect(options.migrations).toEqual([
+      expect.stringContaining('migrations/*{.ts,.js}'),
+    ]);
+  });
+
+  it('enables synchronization only when explicitly requested', () => {
+    const defaultOptions = createTypeOrmOptions(
+      new ConfigService({ NODE_ENV: 'development' }),
+    );
+    const optedInOptions = createTypeOrmOptions(
+      new ConfigService({
+        NODE_ENV: 'development',
+        DATABASE_SYNCHRONIZE: 'true',
+      }),
+    );
+
+    expect(defaultOptions.synchronize).toBe(false);
+    expect(optedInOptions.synchronize).toBe(true);
+  });
+});
