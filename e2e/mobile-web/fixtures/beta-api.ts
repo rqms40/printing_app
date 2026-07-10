@@ -11,6 +11,135 @@ import type { BetaRouteCheckpoint } from "./beta-locations";
 
 export type JsonRecord = Record<string, unknown>;
 
+const EXPECTED_PRIVACY_DENIAL = "Live tracking is not available for this stop";
+
+function numericField(source: JsonRecord, ...keys: string[]): number {
+  for (const key of keys) {
+    if (source[key] != null) return Number(source[key]);
+  }
+  return Number.NaN;
+}
+
+export function assertExpectedPrivacyDenial(payload: unknown): void {
+  const message =
+    typeof payload === "string"
+      ? payload
+      : typeof payload === "object" && payload !== null && "message" in payload
+        ? String((payload as { message: unknown }).message)
+        : "";
+  expect(
+    message,
+    "later-stop socket must return the calibrated privacy denial",
+  ).toBe(EXPECTED_PRIVACY_DENIAL);
+}
+
+export function validateLocationEvidence(
+  payload: JsonRecord,
+  expected: {
+    assignmentId: number;
+    planVersion: number;
+    checkpoint: BetaRouteCheckpoint;
+  },
+): void {
+  expect(positiveId(payload.assignmentId, "location assignment id")).toBe(
+    expected.assignmentId,
+  );
+  expect(positiveId(payload.planVersion, "location plan version")).toBe(
+    expected.planVersion,
+  );
+  expect(Number(payload.latitude)).toBeCloseTo(expected.checkpoint.latitude, 5);
+  expect(Number(payload.longitude)).toBeCloseTo(
+    expected.checkpoint.longitude,
+    5,
+  );
+}
+
+export function validatePersistedDispatchPlan(
+  value: JsonRecord,
+  expected: { venAssignmentId: number; markAssignmentId: number },
+): void {
+  positiveId(value.id, "dispatch plan id");
+  positiveId(value.version, "dispatch plan version");
+  expect(String(value.provider).toLowerCase(), "routing provider").toBe("osrm");
+  expect(
+    numericField(value, "total_duration_seconds", "totalDurationSeconds"),
+    "total road duration",
+  ).toBeGreaterThan(0);
+  expect(
+    numericField(value, "total_distance_meters", "totalDistanceMeters"),
+    "total road distance",
+  ).toBeGreaterThan(0);
+  const stops = value.stops as JsonRecord[];
+  expect(
+    stops,
+    "persisted route must contain exactly two run stops",
+  ).toHaveLength(2);
+  const expectedAssignments = [
+    expected.venAssignmentId,
+    expected.markAssignmentId,
+  ];
+  stops.forEach((stop, index) => {
+    expect(numericField(stop, "sequence"), `stop ${index + 1} sequence`).toBe(
+      index + 1,
+    );
+    expect(
+      numericField(stop, "assignment_id", "assignmentId"),
+      `stop ${index + 1} assignment`,
+    ).toBe(expectedAssignments[index]);
+    expect(
+      numericField(stop, "leg_duration_seconds", "legDurationSeconds"),
+      `stop ${index + 1} road duration`,
+    ).toBeGreaterThan(0);
+    expect(
+      numericField(stop, "leg_distance_meters", "legDistanceMeters"),
+      `stop ${index + 1} road distance`,
+    ).toBeGreaterThan(0);
+    const geometry = (stop.leg_geometry ?? stop.legGeometry) as JsonRecord;
+    expect(geometry?.type, `stop ${index + 1} geometry type`).toBe(
+      "LineString",
+    );
+    const coordinates = geometry?.coordinates as unknown[];
+    expect(
+      coordinates?.length,
+      `stop ${index + 1} geometry coordinates`,
+    ).toBeGreaterThan(1);
+  });
+}
+
+export function assertAddressWithinTolerance(
+  actual: JsonRecord,
+  expected: { latitude: number; longitude: number },
+  tolerance = 0.00015,
+): void {
+  const latitude = numericField(actual, "latitude", "lat");
+  const longitude = numericField(actual, "longitude", "lng", "lon");
+  expect(
+    Math.abs(latitude - expected.latitude),
+    "pinned address latitude tolerance",
+  ).toBeLessThanOrEqual(tolerance);
+  expect(
+    Math.abs(longitude - expected.longitude),
+    "pinned address longitude tolerance",
+  ).toBeLessThanOrEqual(tolerance);
+}
+
+export const surveyQuestionIndexes = Object.freeze(
+  Array.from({ length: 14 }, (_, index) => index),
+);
+
+export function validateSurveySubmission(
+  response: JsonRecord,
+  expected: { requirementId: number; answeredIndexes: readonly number[] },
+): void {
+  expect(expected.answeredIndexes, "all required survey indexes").toEqual(
+    surveyQuestionIndexes,
+  );
+  expect(response.success, "survey response success").toBe(true);
+  expect(
+    positiveId(response.requirementId, "survey response requirement id"),
+  ).toBe(expected.requirementId);
+}
+
 export async function strictJson<T>(
   response: APIResponse,
   action: string,
@@ -85,46 +214,111 @@ export async function authenticatedGet<T>(
 
 export async function setAcknowledgedGeolocation(options: {
   riderPage: Page;
+  apiBaseURL: string;
+  customerToken: string;
   checkpoint: BetaRouteCheckpoint;
   expectedAssignmentId: number;
+  expectedPlanVersion: number;
   assertCustomerMarker: () => Promise<void>;
 }): Promise<JsonRecord> {
-  const { riderPage, checkpoint, expectedAssignmentId, assertCustomerMarker } =
-    options;
+  const {
+    riderPage,
+    apiBaseURL,
+    customerToken,
+    checkpoint,
+    expectedAssignmentId,
+    expectedPlanVersion,
+    assertCustomerMarker,
+  } = options;
+  const socketRoot = apiBaseURL.replace(/\/api\/?$/, "");
+  const socket = io(`${socketRoot}/ws/location`, {
+    auth: { token: customerToken },
+    transports: ["websocket"],
+    forceNew: true,
+    reconnection: false,
+  });
+  const timeoutMs = 10_000;
+  const subscribed = new Promise<JsonRecord>((resolve, reject) => {
+    const timer = setTimeout(
+      () =>
+        reject(new Error("current-customer location subscription timed out")),
+      timeoutMs,
+    );
+    socket.once("subscribed", (payload: JsonRecord) => {
+      clearTimeout(timer);
+      resolve(payload);
+    });
+    socket.once("exception", (payload: unknown) => {
+      clearTimeout(timer);
+      reject(
+        new Error(
+          `current-customer subscription rejected: ${JSON.stringify(payload)}`,
+        ),
+      );
+    });
+    socket.once("connect_error", (error) => {
+      clearTimeout(timer);
+      reject(new Error(`current-customer socket failed: ${error.message}`));
+    });
+    socket.once("connect", () =>
+      socket.emit("subscribe", String(expectedAssignmentId)),
+    );
+  });
+  const subscribedPayload = await subscribed;
+  expect(
+    positiveId(subscribedPayload.assignmentId, "subscribed assignment id"),
+  ).toBe(expectedAssignmentId);
+  expect(
+    positiveId(subscribedPayload.planVersion, "subscribed plan version"),
+  ).toBe(expectedPlanVersion);
+  const locationUpdate = new Promise<JsonRecord>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error("authenticated location update timed out")),
+      timeoutMs,
+    );
+    socket.once("locationUpdate", (payload: JsonRecord) => {
+      clearTimeout(timer);
+      resolve(payload);
+    });
+  });
   const responsePromise = riderPage.waitForResponse(
     (response) =>
       response.request().method() === "PATCH" &&
       new URL(response.url()).pathname.endsWith("/api/riders/location"),
   );
-  await riderPage.context().setGeolocation(checkpoint);
-  const acknowledged = await strictBrowserJson<JsonRecord>(
-    await responsePromise,
-    `acknowledge rider checkpoint ${checkpoint.id}`,
-  );
-  positiveId(acknowledged.id, "acknowledged rider profile id");
-  const responseAssignmentId =
-    acknowledged.currentAssignmentId ?? acknowledged.assignmentId;
-  if (responseAssignmentId != null) {
-    expect(positiveId(responseAssignmentId, "acknowledged assignment id")).toBe(
-      expectedAssignmentId,
+  try {
+    await riderPage.context().setGeolocation(checkpoint);
+    const acknowledged = await strictBrowserJson<JsonRecord>(
+      await responsePromise,
+      `acknowledge rider checkpoint ${checkpoint.id}`,
     );
+    positiveId(acknowledged.id, "acknowledged rider profile id");
+    expect(
+      Number(
+        acknowledged.lastLatitude ??
+          acknowledged.last_latitude ??
+          acknowledged.latitude,
+      ),
+    ).toBeCloseTo(checkpoint.latitude, 5);
+    expect(
+      Number(
+        acknowledged.lastLongitude ??
+          acknowledged.last_longitude ??
+          acknowledged.longitude,
+      ),
+    ).toBeCloseTo(checkpoint.longitude, 5);
+    const location = await locationUpdate;
+    validateLocationEvidence(location, {
+      assignmentId: expectedAssignmentId,
+      planVersion: expectedPlanVersion,
+      checkpoint,
+    });
+    await assertCustomerMarker();
+    return location;
+  } finally {
+    socket.removeAllListeners();
+    socket.disconnect();
   }
-  expect(
-    Number(
-      acknowledged.lastLatitude ??
-        acknowledged.last_latitude ??
-        acknowledged.latitude,
-    ),
-  ).toBeCloseTo(checkpoint.latitude, 4);
-  expect(
-    Number(
-      acknowledged.lastLongitude ??
-        acknowledged.last_longitude ??
-        acknowledged.longitude,
-    ),
-  ).toBeCloseTo(checkpoint.longitude, 4);
-  await assertCustomerMarker();
-  return acknowledged;
 }
 
 export type AssignmentRecord = {
@@ -193,18 +387,13 @@ export async function assertLocationPrivacyDenied(options: {
       finish(new Error("later-stop customer joined a private location room")),
     );
     socket.on("exception", (payload: unknown) => {
-      const message =
-        typeof payload === "string" ? payload : JSON.stringify(payload);
-      if (
-        !/Forbidden|Live tracking is not available|Delivery not found|Unauthorized/i.test(
-          message,
-        )
-      ) {
-        finish(new Error(`unexpected socket denial: ${message}`));
-        return;
+      try {
+        assertExpectedPrivacyDenial(payload);
+        expect(receivedLocation).toBe(false);
+        finish();
+      } catch (error) {
+        finish(error instanceof Error ? error : new Error(String(error)));
       }
-      expect(receivedLocation).toBe(false);
-      finish();
     });
     socket.on("connect_error", (error) =>
       finish(new Error(`location socket connection failed: ${error.message}`)),

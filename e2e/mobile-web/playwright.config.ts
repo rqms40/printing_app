@@ -20,7 +20,7 @@ export default defineConfig({
     : "test-results",
   use: {
     baseURL,
-    trace: "retain-on-failure",
+    trace: visualWorkflow ? "off" : "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
   },

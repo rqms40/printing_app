@@ -69,12 +69,17 @@ export const betaActors: Record<BetaActorName, BetaActorDefinition> = {
   },
 };
 
-function consoleEntry(message: ConsoleMessage): ActorConsoleEntry {
+function consoleEntry(
+  message: ConsoleMessage,
+  protectedSecrets: ReadonlySet<string>,
+): ActorConsoleEntry {
   const location = message.location();
   return {
     type: message.type(),
-    text: sanitizeEvidenceText(message.text()),
-    ...(location.url ? { url: sanitizeEvidenceUrl(location.url) } : {}),
+    text: sanitizeEvidenceText(message.text(), protectedSecrets),
+    ...(location.url
+      ? { url: sanitizeEvidenceUrl(location.url, protectedSecrets) }
+      : {}),
   };
 }
 
@@ -113,9 +118,14 @@ export async function enableFlutterSemantics(page: Page): Promise<void> {
 
 export async function createBetaActorContexts(
   browser: Browser,
-  options: { mobileURL: string; adminURL: string },
+  options: {
+    mobileURL: string;
+    adminURL: string;
+    protectedSecrets?: ReadonlySet<string>;
+  },
 ): Promise<Record<BetaActorName, BetaActorRuntime>> {
   const runtimes = {} as Record<BetaActorName, BetaActorRuntime>;
+  const protectedSecrets = options.protectedSecrets ?? new Set<string>();
   for (const name of Object.keys(betaActors) as BetaActorName[]) {
     const definition = betaActors[name];
     const context = await browser.newContext(
@@ -124,26 +134,29 @@ export async function createBetaActorContexts(
     const page = await context.newPage();
     const console: ActorConsoleEntry[] = [];
     const network: ActorNetworkEntry[] = [];
-    page.on("console", (message) => console.push(consoleEntry(message)));
+    page.on("console", (message) =>
+      console.push(consoleEntry(message, protectedSecrets)),
+    );
     page.on("pageerror", (error) =>
       console.push({
         type: "pageerror",
-        text: sanitizeEvidenceText(error.message),
+        text: sanitizeEvidenceText(error.message, protectedSecrets),
       }),
     );
     page.on("response", (response) => {
       network.push({
         method: response.request().method(),
-        url: sanitizeEvidenceUrl(response.url()),
+        url: sanitizeEvidenceUrl(response.url(), protectedSecrets),
         status: response.status(),
       });
     });
     page.on("requestfailed", (request) => {
       network.push({
         method: request.method(),
-        url: sanitizeEvidenceUrl(request.url()),
+        url: sanitizeEvidenceUrl(request.url(), protectedSecrets),
         failure: sanitizeEvidenceText(
           request.failure()?.errorText ?? "request failed",
+          protectedSecrets,
         ),
       });
     });

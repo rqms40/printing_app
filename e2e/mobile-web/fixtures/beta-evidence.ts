@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page } from "@playwright/test";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -22,6 +22,8 @@ export type DurableIds = Partial<{
   surveyRequirementId: number;
   testimonialFileId: number;
   betaRank: number;
+  latitude: number;
+  longitude: number;
   markOrderId: number;
   venOrderId: number;
   markAssignmentId: number;
@@ -238,16 +240,26 @@ const SECRET_QUERY_KEYS = new Set([
   "secret",
 ]);
 
-export function sanitizeEvidenceText(value: string): string {
-  return value
+export function sanitizeEvidenceText(
+  value: string,
+  protectedSecrets: ReadonlySet<string> = new Set(),
+): string {
+  let sanitized = value
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [REDACTED]")
     .replace(
       /(["']?(?:access_?token|token|jwt|authorization|password|secret)["']?\s*[=:]\s*["']?)[^"'\s&;,}]+/gi,
       "$1[REDACTED]",
     );
+  for (const secret of protectedSecrets) {
+    if (secret) sanitized = sanitized.split(secret).join("[REDACTED]");
+  }
+  return sanitized;
 }
 
-export function sanitizeEvidenceUrl(value: string): string {
+export function sanitizeEvidenceUrl(
+  value: string,
+  protectedSecrets: ReadonlySet<string> = new Set(),
+): string {
   try {
     const url = new URL(value);
     for (const key of [...url.searchParams.keys()]) {
@@ -256,9 +268,9 @@ export function sanitizeEvidenceUrl(value: string): string {
     }
     url.username = "";
     url.password = "";
-    return sanitizeEvidenceText(url.toString());
+    return sanitizeEvidenceText(url.toString(), protectedSecrets);
   } catch {
-    return sanitizeEvidenceText(value);
+    return sanitizeEvidenceText(value, protectedSecrets);
   }
 }
 
@@ -280,16 +292,55 @@ export type EvidenceManifestEntry = {
   };
 };
 
+export function canonicalEvidenceFile(step: BetaEvidenceStep): string {
+  return `${String(step.id).padStart(2, "0")}-${step.slug}.png`;
+}
+
+export function assertCanonicalEvidenceComplete(
+  entries: ReadonlyArray<{ stepId: number; file: string; sha256: string }>,
+): void {
+  const canonical = entries.filter((entry) => {
+    const step = betaEvidenceSteps.find(
+      (candidate) => candidate.id === entry.stepId,
+    );
+    return step != null && entry.file === canonicalEvidenceFile(step);
+  });
+  expect(
+    canonical,
+    "one canonical screenshot is required for every evidence step",
+  ).toHaveLength(29);
+  expect(
+    new Set(canonical.map((entry) => entry.stepId)).size,
+    "canonical step ids must be unique",
+  ).toBe(29);
+  expect(
+    new Set(canonical.map((entry) => entry.sha256)).size,
+    "canonical PNG hashes must be unique",
+  ).toBe(29);
+  for (const entry of canonical) {
+    expect(entry.sha256, `step ${entry.stepId} SHA-256`).toMatch(
+      /^[a-f0-9]{64}$/,
+    );
+  }
+}
+
+export function validateEvidenceViewport(
+  actual: { width: number; height: number } | null,
+  expected: { width: number; height: number },
+): void {
+  expect(actual, "exact actor viewport").toEqual(expected);
+}
+
 export type EvidenceRun = {
-  runId: string;
+  runLabel: string;
   root: string;
   screenshotsDir: string;
   logsDir: string;
-  tracesDir: string;
   manifestPath: string;
   entries: EvidenceManifestEntry[];
+  protectedSecrets: Set<string>;
   artifacts: Array<{
-    kind: "console" | "network" | "trace" | "video";
+    kind: "console" | "network" | "video";
     actor: BetaActorName;
     file: string;
     bytes: number;
@@ -297,23 +348,27 @@ export type EvidenceRun = {
   }>;
 };
 
-export function beginEvidenceRun(runId: string): EvidenceRun {
+export function generateVisualCustomerPassword(): string {
+  return `${randomBytes(24).toString("base64url")}Aa1!`;
+}
+
+export function beginEvidenceRun(runLabel: string): EvidenceRun {
   const root = path.resolve(
-    process.env.GRIDGO_BETA_EVIDENCE_DIR ?? `/tmp/gridgo-beta-visual/${runId}`,
+    process.env.GRIDGO_BETA_EVIDENCE_DIR ??
+      `/tmp/gridgo-beta-visual/${runLabel}`,
   );
   const screenshotsDir = path.join(root, "screenshots");
   const logsDir = path.join(root, "logs");
-  const tracesDir = path.join(root, "traces");
-  for (const directory of [root, screenshotsDir, logsDir, tracesDir])
+  for (const directory of [root, screenshotsDir, logsDir])
     mkdirSync(directory, { recursive: true });
   const run: EvidenceRun = {
-    runId,
+    runLabel,
     root,
     screenshotsDir,
     logsDir,
-    tracesDir,
     manifestPath: path.join(root, "manifest.json"),
     entries: [],
+    protectedSecrets: new Set(),
     artifacts: [],
   };
   flushManifest(run);
@@ -331,17 +386,54 @@ function pngDimensions(buffer: Buffer): { width: number; height: number } {
   return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
 }
 
+export function registerEvidenceSecrets(
+  run: EvidenceRun,
+  secrets: ReadonlyArray<string | undefined>,
+): void {
+  for (const secret of secrets) {
+    if (secret) run.protectedSecrets.add(secret);
+  }
+  flushManifest(run);
+}
+
+export function serializeEvidenceManifest(
+  run: Pick<
+    EvidenceRun,
+    "runLabel" | "entries" | "artifacts" | "protectedSecrets"
+  >,
+): string {
+  const serialized = `${JSON.stringify(
+    {
+      runLabel: run.runLabel,
+      generatedAt: new Date().toISOString(),
+      entries: run.entries,
+      artifacts: run.artifacts,
+    },
+    null,
+    2,
+  )}\n`;
+  if (
+    /password|access_?token|\btoken\b|authorization|bearer\s/i.test(serialized)
+  ) {
+    throw new Error("Evidence manifest contains a credential marker");
+  }
+  for (const secret of run.protectedSecrets) {
+    if (secret && serialized.includes(secret)) {
+      throw new Error("Evidence manifest contains a protected credential");
+    }
+  }
+  return serialized;
+}
+
 function flushManifest(run: EvidenceRun): void {
-  writeFileSync(
-    run.manifestPath,
-    `${JSON.stringify({ runId: run.runId, generatedAt: new Date().toISOString(), entries: run.entries, artifacts: run.artifacts }, null, 2)}\n`,
-    { mode: 0o600 },
-  );
+  writeFileSync(run.manifestPath, serializeEvidenceManifest(run), {
+    mode: 0o600,
+  });
 }
 
 export function recordEvidenceArtifact(
   run: EvidenceRun,
-  kind: "console" | "network" | "trace" | "video",
+  kind: "console" | "network" | "video",
   actor: BetaActorName,
   filePath: string,
 ): void {
@@ -391,6 +483,8 @@ export async function captureStep(options: {
   durableIds?: DurableIds;
   variant?: string;
   assertionSummary?: string[];
+  expectedViewport: { width: number; height: number };
+  allowBlockingDialog?: boolean;
   assertState: () => Promise<void>;
 }): Promise<EvidenceManifestEntry> {
   const {
@@ -403,14 +497,40 @@ export async function captureStep(options: {
     durableIds = {},
     variant,
     assertState,
+    expectedViewport,
+    allowBlockingDialog = false,
   } = options;
   await expect(page).toHaveURL(/^https?:\/\//);
   const title = await page.title();
   expect(title.trim(), "page title must identify the app").not.toBe("");
   await expect(page.locator("body")).not.toBeEmpty();
   await expect(page.locator("body")).not.toContainText(
-    /Unexpected Application Error|Vite.*Internal Server Error|webpack.*error/i,
+    /Unexpected Application Error|Vite.*Internal Server Error|webpack.*error|Something went wrong|Unhandled Runtime Error/i,
   );
+  await expect(
+    page.locator(
+      "vite-error-overlay, nextjs-portal, #webpack-dev-server-client-overlay",
+    ),
+  ).toHaveCount(0);
+  const visibleCount = async (selector: string) => {
+    let count = 0;
+    for (const locator of await page.locator(selector).all()) {
+      if (await locator.isVisible()) count += 1;
+    }
+    return count;
+  };
+  if (!allowBlockingDialog) {
+    expect(
+      await visibleCount('[role="dialog"], .ant-modal-wrap'),
+      "no blocking dialog may obscure accepted evidence",
+    ).toBe(0);
+  }
+  expect(
+    await visibleCount(
+      '[aria-busy="true"], .ant-spin-spinning, [role="progressbar"]:not([aria-valuenow])',
+    ),
+    "accepted evidence must be fully loaded",
+  ).toBe(0);
   expect(
     relevantConsoleErrors(console),
     "relevant browser console errors",
@@ -433,6 +553,7 @@ export async function captureStep(options: {
   expect(overflow, "page must not overflow horizontally").toBeLessThanOrEqual(
     1,
   );
+  validateEvidenceViewport(page.viewportSize(), expectedViewport);
   await assertState();
 
   let accessibility: EvidenceManifestEntry["accessibility"];
@@ -460,24 +581,25 @@ export async function captureStep(options: {
   }
 
   const prefix = String(step.id).padStart(2, "0");
-  const file = `${prefix}-${variant ?? step.slug}.png`;
+  const file = variant
+    ? `${prefix}-${variant}.png`
+    : canonicalEvidenceFile(step);
   const screenshotPath = path.join(run.screenshotsDir, file);
-  await page.screenshot({ path: screenshotPath, fullPage: true });
+  await page.screenshot({ path: screenshotPath, fullPage: false });
   const buffer = readFileSync(screenshotPath);
   const dimensions = pngDimensions(buffer);
-  expect(dimensions.width).toBeGreaterThan(300);
-  expect(dimensions.height).toBeGreaterThan(600);
+  expect(dimensions).toEqual(expectedViewport);
   const entry: EvidenceManifestEntry = {
     stepId: step.id,
     actor,
     file,
-    url: sanitizeEvidenceUrl(page.url()),
-    title: sanitizeEvidenceText(title),
+    url: sanitizeEvidenceUrl(page.url(), run.protectedSecrets),
+    title: sanitizeEvidenceText(title, run.protectedSecrets),
     sha256: createHash("sha256").update(buffer).digest("hex"),
     png: { ...dimensions, bytes: buffer.length },
     durableIds,
     assertionSummary: [step.assertion, ...(options.assertionSummary ?? [])].map(
-      sanitizeEvidenceText,
+      (summary) => sanitizeEvidenceText(summary, run.protectedSecrets),
     ),
     ...(accessibility ? { accessibility } : {}),
   };
@@ -485,12 +607,18 @@ export async function captureStep(options: {
   flushManifest(run);
   writeFileSync(
     path.join(run.logsDir, `${actor}-console.json`),
-    `${JSON.stringify(console, null, 2)}\n`,
+    `${sanitizeEvidenceText(
+      JSON.stringify(console, null, 2),
+      run.protectedSecrets,
+    )}\n`,
     { mode: 0o600 },
   );
   writeFileSync(
     path.join(run.logsDir, `${actor}-network.json`),
-    `${JSON.stringify(network, null, 2)}\n`,
+    `${sanitizeEvidenceText(
+      JSON.stringify(network, null, 2),
+      run.protectedSecrets,
+    )}\n`,
     { mode: 0o600 },
   );
   return entry;

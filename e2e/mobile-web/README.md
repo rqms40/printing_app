@@ -83,10 +83,15 @@ The Browser plugin is not installed in this environment, so this approved
 workflow uses repository Playwright Chromium. It does not complete an external
 social-network post: it requires the share popup callback and then aborts the
 external resource. Screenshots, SHA-256 hashes, sanitized console/network logs,
-four traces, videos, and the JSON manifest default to
+videos, and the JSON manifest default to
 `/tmp/gridgo-beta-visual/<run-id>`, outside committed source. Override that
 location with `GRIDGO_BETA_EVIDENCE_DIR`. Do not point it into the repository or
 publish it without reviewing the sanitization output.
+
+Playwright traces are deliberately disabled for the authenticated visual
+project. Retained traces include request headers and can expose bearer tokens;
+there is no proven trace-archive redaction pass in this harness. Sanitized
+method/URL/status network logs and token-free videos are retained instead.
 
 Axe WCAG 2A/2AA checks run on selected login, checkout, queue, proof, survey,
 and held screens and fail on serious or critical findings. Axe can inspect the

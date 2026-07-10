@@ -2,11 +2,13 @@ import {
   expect,
   test,
   type APIRequestContext,
+  type Locator,
   type Page,
   type Response,
 } from "@playwright/test";
 import { readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -17,6 +19,8 @@ import {
   type BetaActorRuntime,
 } from "../fixtures/beta-actors";
 import {
+  assertAddressWithinTolerance,
+  assertExpectedPrivacyDenial,
   assertLocationPrivacyDenied,
   authenticatedGet,
   onlyRunAssignments,
@@ -25,17 +29,27 @@ import {
   setAcknowledgedGeolocation,
   strictBrowserJson,
   strictJson,
+  surveyQuestionIndexes,
+  validateLocationEvidence,
+  validatePersistedDispatchPlan,
+  validateSurveySubmission,
   waitForStrict2xx,
   type AssignmentRecord,
   type JsonRecord,
 } from "../fixtures/beta-api";
 import {
   beginEvidenceRun,
+  assertCanonicalEvidenceComplete,
   betaEvidenceSteps,
   captureStep,
   evidenceStep,
+  canonicalEvidenceFile,
   recordEvidenceArtifact,
+  registerEvidenceSecrets,
   sanitizeEvidenceText,
+  validateEvidenceViewport,
+  generateVisualCustomerPassword,
+  serializeEvidenceManifest,
   type DurableIds,
   type EvidenceRun,
 } from "../fixtures/beta-evidence";
@@ -107,15 +121,78 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
   });
 
   test("sanitizes tokens, credentials, and tokenized URLs from evidence", () => {
+    const rawPassword = "independent-raw-password-Aa1!";
     const sanitized = sanitizeEvidenceText(
-      'Bearer abc.def.ghi password=hunter2 {"access_token":"json-secret"} https://grid.test/x?access_token=top-secret&safe=ok',
+      `Bearer abc.def.ghi password=hunter2 {"access_token":"json-secret"} https://grid.test/x?access_token=top-secret&safe=ok ${rawPassword}`,
+      new Set([rawPassword]),
     );
     expect(sanitized).not.toContain("abc.def.ghi");
     expect(sanitized).not.toContain("hunter2");
     expect(sanitized).not.toContain("top-secret");
     expect(sanitized).not.toContain("json-secret");
+    expect(sanitized).not.toContain(rawPassword);
     expect(sanitized).toContain("[REDACTED]");
     expect(sanitized).toContain("safe=ok");
+  });
+
+  test("keeps credentials independent from the run label and out of manifests", () => {
+    const runLabel = randomUUID();
+    const markPassword = generateVisualCustomerPassword();
+    const venPassword = generateVisualCustomerPassword();
+    expect(markPassword).not.toBe(venPassword);
+    expect(markPassword).not.toContain(runLabel);
+    expect(venPassword).not.toContain(runLabel);
+    expect(markPassword).not.toBe(`BetaVisual-Mark-${runLabel}!`);
+    expect(venPassword).not.toBe(`BetaVisual-Ven-${runLabel}!`);
+
+    const serialized = serializeEvidenceManifest({
+      runLabel,
+      entries: [],
+      artifacts: [],
+      protectedSecrets: new Set([
+        markPassword,
+        venPassword,
+        "admin-secret",
+        "rider-secret",
+        "access-token-value",
+      ]),
+    });
+    for (const secret of [
+      markPassword,
+      venPassword,
+      "admin-secret",
+      "rider-secret",
+      "access-token-value",
+    ]) {
+      expect(serialized).not.toContain(secret);
+    }
+    expect(serialized).not.toMatch(
+      /password|access_?token|\btoken\b|authorization|bearer\s/i,
+    );
+    for (const forbiddenPayload of [
+      "password=unsafe",
+      "token=unsafe",
+      "access_token=unsafe",
+      "Authorization: unsafe",
+      "Bearer unsafe",
+    ]) {
+      expect(() =>
+        serializeEvidenceManifest({
+          runLabel: forbiddenPayload,
+          entries: [],
+          artifacts: [],
+          protectedSecrets: new Set(),
+        }),
+      ).toThrow();
+    }
+    expect(() =>
+      serializeEvidenceManifest({
+        runLabel: markPassword,
+        entries: [],
+        artifacts: [],
+        protectedSecrets: new Set([markPassword]),
+      }),
+    ).toThrow();
   });
 
   test("publishes the visual command, dependencies, fixture, and operator docs", () => {
@@ -138,6 +215,17 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     expect(
       statSync(path.join(e2eRoot, "fixtures/beta-upload.png")).size,
     ).toBeGreaterThan(4_096);
+    const config = readFileSync(
+      path.join(e2eRoot, "playwright.config.ts"),
+      "utf8",
+    );
+    const visualSource = readFileSync(
+      path.join(e2eRoot, "tests/beta-workflow-visual.spec.ts"),
+      "utf8",
+    );
+    expect(config).toContain('trace: visualWorkflow ? "off"');
+    const manualTracingApi = ["context", "tracing", ""].join(".");
+    expect(visualSource).not.toContain(manualTracingApi);
     for (const file of [
       path.join(e2eRoot, "README.md"),
       path.join(repoRoot, "AGENTS.md"),
@@ -146,6 +234,179 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
       expect(docs).toContain("GRIDGO_RUN_BETA_FLOW_VISUAL=1");
       expect(docs).toContain("npm run test:beta:visual");
     }
+    expect(readFileSync(path.join(e2eRoot, "README.md"), "utf8")).toContain(
+      "traces are deliberately disabled",
+    );
+  });
+
+  test("accepts only the intended later-stop privacy denial", () => {
+    expect(() =>
+      assertExpectedPrivacyDenial(
+        "Live tracking is not available for this stop",
+      ),
+    ).not.toThrow();
+    for (const looseFailure of [
+      "Unauthorized",
+      "Delivery not found",
+      "Forbidden",
+    ]) {
+      expect(() => assertExpectedPrivacyDenial(looseFailure)).toThrow();
+    }
+  });
+
+  test("requires exact assignment and plan identity on every GPS acknowledgement", () => {
+    expect(() =>
+      validateLocationEvidence(
+        {
+          assignmentId: "202",
+          planVersion: 7,
+          latitude: betaAddresses.ven.latitude,
+          longitude: betaAddresses.ven.longitude,
+        },
+        {
+          assignmentId: 202,
+          planVersion: 7,
+          checkpoint: betaCheckpoint("ven"),
+        },
+      ),
+    ).not.toThrow();
+    expect(() =>
+      validateLocationEvidence(
+        {
+          latitude: betaAddresses.ven.latitude,
+          longitude: betaAddresses.ven.longitude,
+        },
+        {
+          assignmentId: 202,
+          planVersion: 7,
+          checkpoint: betaCheckpoint("ven"),
+        },
+      ),
+    ).toThrow();
+  });
+
+  test("requires a persisted positive OSRM Ven then Mark plan", () => {
+    const plan = {
+      id: 91,
+      version: 3,
+      provider: "osrm",
+      total_duration_seconds: 420,
+      total_distance_meters: 3100,
+      stops: [
+        {
+          assignment_id: 22,
+          sequence: 1,
+          leg_duration_seconds: 120,
+          leg_distance_meters: 700,
+          leg_geometry: {
+            type: "LineString",
+            coordinates: [
+              [125.6079, 7.064],
+              [125.6082, 7.0645],
+            ],
+          },
+        },
+        {
+          assignment_id: 11,
+          sequence: 2,
+          leg_duration_seconds: 300,
+          leg_distance_meters: 2400,
+          leg_geometry: {
+            type: "LineString",
+            coordinates: [
+              [125.6082, 7.0645],
+              [125.6128, 7.0731],
+            ],
+          },
+        },
+      ],
+    };
+    expect(() =>
+      validatePersistedDispatchPlan(plan, {
+        venAssignmentId: 22,
+        markAssignmentId: 11,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      validatePersistedDispatchPlan(
+        { ...plan, provider: "fallback" },
+        { venAssignmentId: 22, markAssignmentId: 11 },
+      ),
+    ).toThrow();
+  });
+
+  test("requires verified UI pin coordinates within tolerance", () => {
+    expect(() =>
+      assertAddressWithinTolerance(
+        {
+          latitude: betaAddresses.ven.latitude,
+          longitude: betaAddresses.ven.longitude,
+        },
+        betaAddresses.ven,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertAddressWithinTolerance(
+        {
+          latitude: betaAddresses.mark.latitude,
+          longitude: betaAddresses.mark.longitude,
+        },
+        betaAddresses.ven,
+      ),
+    ).toThrow();
+  });
+
+  test("requires all 14 survey indexes and the exact requirement response", () => {
+    expect(surveyQuestionIndexes).toEqual(
+      Array.from({ length: 14 }, (_, index) => index),
+    );
+    expect(() =>
+      validateSurveySubmission(
+        { requirementId: 81, success: true },
+        { requirementId: 81, answeredIndexes: surveyQuestionIndexes },
+      ),
+    ).not.toThrow();
+    expect(() =>
+      validateSurveySubmission(
+        { requirementId: 82, success: true },
+        {
+          requirementId: 81,
+          answeredIndexes: surveyQuestionIndexes.slice(0, 13),
+        },
+      ),
+    ).toThrow();
+  });
+
+  test("requires one unique canonical screenshot and hash for every step", () => {
+    const canonical = betaEvidenceSteps.map((step) => ({
+      stepId: step.id,
+      file: canonicalEvidenceFile(step),
+      sha256: String(step.id).padStart(64, "0"),
+    }));
+    expect(() => assertCanonicalEvidenceComplete(canonical)).not.toThrow();
+    expect(() => assertCanonicalEvidenceComplete(canonical.slice(1))).toThrow();
+    expect(() =>
+      assertCanonicalEvidenceComplete(
+        canonical.map((entry, index) =>
+          index === 1 ? { ...entry, sha256: canonical[0].sha256 } : entry,
+        ),
+      ),
+    ).toThrow();
+  });
+
+  test("requires the exact configured actor viewport", () => {
+    expect(() =>
+      validateEvidenceViewport(
+        { width: 393, height: 852 },
+        betaActors.mark.viewport,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      validateEvidenceViewport(
+        { width: 393, height: 727 },
+        betaActors.mark.viewport,
+      ),
+    ).toThrow();
   });
 });
 
@@ -179,31 +440,55 @@ function apiPath(response: Response, suffix: string): boolean {
 }
 
 async function clickNamed(page: Page, name: string | RegExp): Promise<void> {
-  const button = page.getByRole("button", { name }).last();
-  if (await button.count()) {
-    await button.scrollIntoViewIfNeeded();
-    await button.click();
+  const buttons = await visibleLocators(page.getByRole("button", { name }));
+  if (buttons.length > 0) {
+    expect(buttons, `one visible button named ${String(name)}`).toHaveLength(1);
+    await buttons[0].scrollIntoViewIfNeeded();
+    await buttons[0].click();
     return;
   }
-  const text = page.getByText(name).last();
-  await text.scrollIntoViewIfNeeded();
-  await text.click();
+  const texts = await visibleLocators(
+    page.getByText(name, { exact: typeof name === "string" }),
+  );
+  expect(texts, `one visible text control named ${String(name)}`).toHaveLength(
+    1,
+  );
+  await texts[0].scrollIntoViewIfNeeded();
+  await texts[0].click();
+}
+
+async function visibleLocators(locator: Locator): Promise<Locator[]> {
+  const matches: Locator[] = [];
+  for (const candidate of await locator.all()) {
+    if (await candidate.isVisible()) matches.push(candidate);
+  }
+  return matches;
 }
 
 async function clickOptional(
   page: Page,
   name: string | RegExp,
 ): Promise<boolean> {
-  const button = page.getByRole("button", { name }).last();
-  if ((await button.count()) && (await button.isVisible())) {
-    await button.scrollIntoViewIfNeeded();
-    await button.click();
+  const buttons = await visibleLocators(page.getByRole("button", { name }));
+  if (buttons.length > 0) {
+    expect(
+      buttons,
+      `at most one visible optional button ${String(name)}`,
+    ).toHaveLength(1);
+    await buttons[0].scrollIntoViewIfNeeded();
+    await buttons[0].click();
     return true;
   }
-  const text = page.getByText(name).last();
-  if (!(await text.count()) || !(await text.isVisible())) return false;
-  await text.scrollIntoViewIfNeeded();
-  await text.click();
+  const texts = await visibleLocators(
+    page.getByText(name, { exact: typeof name === "string" }),
+  );
+  if (texts.length === 0) return false;
+  expect(
+    texts,
+    `at most one visible optional text ${String(name)}`,
+  ).toHaveLength(1);
+  await texts[0].scrollIntoViewIfNeeded();
+  await texts[0].click();
   return true;
 }
 
@@ -212,15 +497,88 @@ async function fillNamed(
   name: string | RegExp,
   value: string,
 ): Promise<void> {
-  const field =
+  const fields = await visibleLocators(
     typeof name === "string"
-      ? page.getByLabel(name, { exact: true }).last()
-      : page.getByLabel(name).last();
-  if (await field.count()) {
-    await field.fill(value);
+      ? page.getByLabel(name, { exact: true })
+      : page.getByLabel(name),
+  );
+  if (fields.length > 0) {
+    expect(fields, `one visible field labeled ${String(name)}`).toHaveLength(1);
+    await fields[0].fill(value);
     return;
   }
-  await page.getByPlaceholder(name).last().fill(value);
+  const placeholders = await visibleLocators(
+    page.getByPlaceholder(name, { exact: typeof name === "string" }),
+  );
+  expect(
+    placeholders,
+    `one visible field placeholder ${String(name)}`,
+  ).toHaveLength(1);
+  await placeholders[0].fill(value);
+}
+
+function webMercatorPoint(latitude: number, longitude: number, zoom: number) {
+  const scale = 256 * 2 ** zoom;
+  const sin = Math.sin((latitude * Math.PI) / 180);
+  return {
+    x: ((longitude + 180) / 360) * scale,
+    y: (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * scale,
+  };
+}
+
+async function pinAddressThroughMap(
+  page: Page,
+  target: { latitude: number; longitude: number },
+): Promise<void> {
+  const coordinate = page.getByText(/\d+\.\d{5},\s*\d+\.\d{5}/).first();
+  const instruction = page.getByText("Drag map to set location", {
+    exact: true,
+  });
+  await expect(coordinate).toBeVisible();
+  await expect(instruction).toBeVisible();
+  const coordinateBox = await coordinate.boundingBox();
+  const instructionBox = await instruction.boundingBox();
+  expect(coordinateBox, "map coordinate overlay bounds").not.toBeNull();
+  expect(instructionBox, "map instruction bounds").not.toBeNull();
+  const viewport = page.viewportSize();
+  expect(viewport, "address viewport").not.toBeNull();
+  const mapCenterX = viewport!.width / 2;
+  const mapTop = coordinateBox!.y - 8;
+  const mapBottom = instructionBox!.y + instructionBox!.height + 8;
+  const mapCenterY = (mapTop + mapBottom) / 2;
+  const desired = webMercatorPoint(target.latitude, target.longitude, 15);
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const currentText = (await coordinate.textContent())?.trim() ?? "";
+    const match = currentText.match(/^(-?\d+\.\d+),\s*(-?\d+\.\d+)$/);
+    expect(match, "rendered map coordinate overlay").not.toBeNull();
+    const current = webMercatorPoint(Number(match![1]), Number(match![2]), 15);
+    const deltaX = desired.x - current.x;
+    const deltaY = desired.y - current.y;
+    if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) {
+      await page.mouse.click(mapCenterX, mapCenterY);
+      break;
+    }
+    const dragX = Math.max(-70, Math.min(70, deltaX));
+    const dragY = Math.max(-70, Math.min(70, deltaY));
+    await page.mouse.move(mapCenterX, mapCenterY);
+    await page.mouse.down();
+    await page.mouse.move(mapCenterX - dragX, mapCenterY - dragY, {
+      steps: 20,
+    });
+    await page.mouse.up();
+    await expect(coordinate).not.toHaveText(currentText);
+  }
+  await expect
+    .poll(async () => {
+      const text = (await coordinate.textContent())?.trim() ?? "";
+      const match = text.match(/^(-?\d+\.\d+),\s*(-?\d+\.\d+)$/);
+      if (!match) return Number.POSITIVE_INFINITY;
+      return Math.max(
+        Math.abs(Number(match[1]) - target.latitude),
+        Math.abs(Number(match[2]) - target.longitude),
+      );
+    })
+    .toBeLessThanOrEqual(0.00015);
 }
 
 async function dismissTutorials(page: Page): Promise<void> {
@@ -252,11 +610,56 @@ async function capture(
     network: actor.network,
     durableIds,
     variant,
+    expectedViewport: actor.definition.viewport,
+    allowBlockingDialog: [11, 25, 27].includes(id),
     assertionSummary: [`Visible state: ${String(state)}`],
     assertState: async () => {
       await expect(actor.page.locator("body")).toContainText(state);
     },
   });
+}
+
+async function assertLiveTrackingUi(actor: BetaActorRuntime): Promise<void> {
+  await expect(
+    actor.page.getByText("Open live tracking", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    actor.page.getByText("Tracking real-time location", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    actor.page.getByText("Rider is on the way", { exact: true }),
+  ).toBeVisible();
+  await expect(actor.page.locator("canvas").first()).toBeVisible();
+  await expect
+    .poll(
+      () =>
+        actor.network.some(
+          (entry) =>
+            (entry.status ?? 0) >= 200 &&
+            (entry.status ?? 0) < 300 &&
+            /(?:tile\.openstreetmap|basemaps\.cartocdn|\.tile\.)/i.test(
+              entry.url,
+            ),
+        ),
+      { message: `${actor.name} map must load at least one real tile` },
+    )
+    .toBe(true);
+}
+
+async function assertPrivateQueueUi(page: Page): Promise<void> {
+  await expect(page.getByText("2nd in queue", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Open live tracking", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Tracking real-time location", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Rider is on the way", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText(/-?\d{1,2}\.\d{4,}\s*,\s*-?\d{2,3}\.\d{4,}/),
+  ).toHaveCount(0);
 }
 
 async function loginAdmin(
@@ -418,17 +821,7 @@ async function saveAddressThroughUi(
   await fillNamed(actor.page, "Province", "Davao del Sur");
   await fillNamed(actor.page, "Zip Code", "8000");
   await fillNamed(actor.page, /Landmark/, `${name} deterministic beta pin`);
-  const map = actor.page.locator("flt-platform-view, canvas").first();
-  if (await map.count()) {
-    const box = await map.boundingBox();
-    if (box) {
-      const y =
-        name === "Ven"
-          ? Math.min(box.height - 12, box.height * 0.78)
-          : box.height * 0.5;
-      await map.click({ position: { x: box.width * 0.5, y } });
-    }
-  }
+  await pinAddressThroughMap(actor.page, address);
   const body = await waitForStrict2xx<JsonRecord>(
     actor.page,
     (response) =>
@@ -437,6 +830,7 @@ async function saveAddressThroughUi(
     () => clickNamed(actor.page, "Save Address"),
     `${name} saved-address UI action`,
   );
+  assertAddressWithinTolerance(body, address);
   return positiveId(body.id, `${name} address id`);
 }
 
@@ -786,31 +1180,43 @@ async function drawAndSubmitSignature(
 
 async function completeSurveyUi(customer: CustomerRun): Promise<void> {
   const page = customer.actor.page;
+  const requirementId = positiveId(
+    customer.surveyRequirementId,
+    `${customer.name} recorded survey requirement id`,
+  );
   await expect(page.locator("body")).toContainText(/survey|feedback/i);
-  for (let guard = 0; guard < 24; guard += 1) {
-    const submit = page.getByRole("button", { name: /Submit Feedback/i });
-    if ((await submit.count()) && (await submit.isVisible())) {
-      await waitForStrict2xx<JsonRecord>(
-        page,
-        (response) =>
-          response.request().method() === "POST" &&
-          /tam-surveys\/requirements\/\d+\/submit$/.test(
-            new URL(response.url()).pathname,
-          ),
-        () => submit.click(),
-        `${customer.name} required survey submission`,
-      );
-      return;
-    }
-    const choices = page.getByRole("radio");
-    if (await choices.count()) await choices.last().click();
-    const textArea = page.locator("textarea").first();
-    if ((await textArea.count()) && (await textArea.isVisible()))
-      await textArea.fill(`${customer.name} completed the release workflow.`);
-    if (!(await clickOptional(page, /Next|Continue/i)))
-      throw new Error(`${customer.name} survey could not advance`);
+  const answeredIndexes: number[] = [];
+  for (const index of surveyQuestionIndexes) {
+    await expect(
+      page.getByText(`Question ${index + 1} of 14`, { exact: true }),
+    ).toBeVisible();
+    const sliders = await visibleLocators(page.getByRole("slider"));
+    expect(sliders, `${customer.name} question ${index} slider`).toHaveLength(
+      1,
+    );
+    await sliders[0].focus();
+    await sliders[0].press("End");
+    await clickNamed(page, "Next");
+    answeredIndexes.push(index);
   }
-  throw new Error(`${customer.name} survey exceeded the expected page count`);
+  expect(answeredIndexes).toEqual(surveyQuestionIndexes);
+  await page
+    .getByPlaceholder("Share your thoughts...", { exact: true })
+    .fill(`${customer.name} completed the full release workflow.`);
+  await page
+    .getByPlaceholder("Optional comments...", { exact: true })
+    .fill("All fourteen required questions were answered through the UI.");
+  const response = await waitForStrict2xx<JsonRecord>(
+    page,
+    (candidate) =>
+      candidate.request().method() === "POST" &&
+      new URL(candidate.url()).pathname.endsWith(
+        `/api/tam-surveys/requirements/${requirementId}/submit`,
+      ),
+    () => clickNamed(page, "Submit Feedback"),
+    `${customer.name} required survey submission`,
+  );
+  validateSurveySubmission(response, { requirementId, answeredIndexes });
 }
 
 async function launchSocialAndAbortExternal(
@@ -887,15 +1293,23 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
     expect(riderEmail, "GRIDGO_RIDER_EMAIL is required").toBeTruthy();
     expect(riderPassword, "GRIDGO_RIDER_PASSWORD is required").toBeTruthy();
 
-    const runId = `beta-visual-${Date.now()}-${testInfo.workerIndex}`;
-    const run = beginEvidenceRun(runId);
+    const runLabel = randomUUID();
+    const markPassword = generateVisualCustomerPassword();
+    const venPassword = generateVisualCustomerPassword();
+    const run = beginEvidenceRun(runLabel);
+    registerEvidenceSecrets(run, [
+      adminPassword,
+      riderPassword,
+      markPassword,
+      venPassword,
+    ]);
     process.env.GRIDGO_BETA_VIDEO_DIR = path.join(run.root, "videos");
     const actors = await createBetaActorContexts(browser, {
       mobileURL,
       adminURL,
+      protectedSecrets: run.protectedSecrets,
     });
     let adminAuth: AuthPayload | undefined;
-    let tracingStarted = false;
     try {
       adminAuth = await loginAdmin(
         actors.admin,
@@ -904,13 +1318,14 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         adminPassword!,
         run,
       );
+      registerEvidenceSecrets(run, [adminAuth.access_token]);
       await setBetaThroughAdmin(actors.admin, adminURL, true, run);
 
       const markBase = await registerCustomerThroughUi({
         actor: actors.mark,
         name: "Mark",
-        email: `${runId}-mark@example.test`,
-        password: `BetaVisual-Mark-${runId}!`,
+        email: `${runLabel}-mark@example.test`,
+        password: markPassword,
         mobileURL,
         run,
         registrationStep: 3,
@@ -921,6 +1336,7 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         run,
         firstStep: 4,
       });
+      registerEvidenceSecrets(run, [mark.token]);
       await advanceProductionAndAssign({
         admin: actors.admin,
         adminURL,
@@ -936,6 +1352,7 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         riderEmail!,
         riderPassword!,
       );
+      registerEvidenceSecrets(run, [riderAuth.access_token]);
       const markAssignments = await authenticatedGet<AssignmentRecord[]>(
         request,
         apiBaseURL,
@@ -968,8 +1385,8 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
       const venBase = await registerCustomerThroughUi({
         actor: actors.ven,
         name: "Ven",
-        email: `${runId}-ven@example.test`,
-        password: `BetaVisual-Ven-${runId}!`,
+        email: `${runLabel}-ven@example.test`,
+        password: venPassword,
         mobileURL,
         run,
         registrationStep: 18,
@@ -980,6 +1397,7 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         run,
         firstStep: 18,
       });
+      registerEvidenceSecrets(run, [ven.token]);
       await advanceProductionAndAssign({
         admin: actors.admin,
         adminURL,
@@ -1006,18 +1424,6 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         orderRef: ven.orderRef,
         assignmentId: ven.assignmentId,
       });
-
-      // Do not place typed credentials or registration form values in traces.
-      // Snapshots stay disabled so authenticated request headers are excluded;
-      // numbered screenshots remain the source of rendered DOM evidence.
-      for (const actor of Object.values(actors)) {
-        await actor.context.tracing.start({
-          screenshots: true,
-          snapshots: false,
-          sources: false,
-        });
-      }
-      tracingStarted = true;
 
       const assignments = await authenticatedGet<AssignmentRecord[]>(
         request,
@@ -1057,13 +1463,12 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         () => panel.getByRole("button", { name: /Create road route/i }).click(),
         "persist two-stop OSRM dispatch plan",
       );
+      validatePersistedDispatchPlan(planBody, {
+        venAssignmentId: ven.assignmentId,
+        markAssignmentId: mark.assignmentId,
+      });
       const planId = positiveId(planBody.id, "dispatch plan id");
       const planVersion = positiveId(planBody.version, "dispatch plan version");
-      const stops = planBody.stops as JsonRecord[];
-      expect(
-        stops.map((stop) => Number(stop.assignment_id ?? stop.assignmentId)),
-      ).toEqual([ven.assignmentId, mark.assignmentId]);
-      expect(String(planBody.provider).toLowerCase()).toContain("osrm");
 
       for (const customer of [ven, mark]) {
         await openRiderAssignment(
@@ -1071,41 +1476,133 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
           mobileURL,
           customer.assignmentId,
         );
-        await riderAction(actors.juan, /Accept/i, customer.assignmentId);
-        await riderAction(
+        const accepted = await riderAction(
+          actors.juan,
+          /Accept/i,
+          customer.assignmentId,
+        );
+        expect(accepted).toMatchObject({
+          id: customer.assignmentId,
+          status: "accepted",
+        });
+        const pickedUp = await riderAction(
           actors.juan,
           /Mark as picked up/i,
           customer.assignmentId,
         );
+        expect(pickedUp).toMatchObject({
+          id: customer.assignmentId,
+          status: "picked_up",
+        });
+        const onTheWay = await riderAction(
+          actors.juan,
+          /Start delivery/i,
+          customer.assignmentId,
+        );
+        expect(onTheWay).toMatchObject({
+          id: customer.assignmentId,
+          status: "on_the_way",
+        });
       }
+      const dispatchedAssignments = onlyRunAssignments(
+        await authenticatedGet<AssignmentRecord[]>(
+          request,
+          apiBaseURL,
+          "/riders/assignments",
+          riderAuth.access_token,
+          "reload Juan dispatched run assignments",
+        ),
+        [ven.orderId, mark.orderId],
+      );
+      expect(dispatchedAssignments).toHaveLength(2);
+      expect(
+        dispatchedAssignments.every(
+          (assignment) => assignment.status === "on_the_way",
+        ),
+      ).toBe(true);
       await actors.juan.page.goto(`${mobileURL}/rider/home`);
-      await capture(run, actors.juan, 21, /Ven|Mark|2 stops|route/i, {
+      await expect(
+        actors.juan.page.getByText(ven.orderRef, { exact: true }),
+      ).toBeVisible();
+      await expect(
+        actors.juan.page.getByText(mark.orderRef, { exact: true }),
+      ).toBeVisible();
+      await expect(
+        actors.juan.page.getByText("STOP 1", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        actors.juan.page.getByText("STOP 2", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        actors.juan.page.getByText("STOP 3", { exact: true }),
+      ).toHaveCount(0);
+      await capture(run, actors.juan, 21, /Today's Route/i, {
         markOrderId: mark.orderId,
         venOrderId: ven.orderId,
         markAssignmentId: mark.assignmentId,
         venAssignmentId: ven.assignmentId,
       });
-      await capture(run, actors.admin, 22, /OSRM.*v\d+|#1.*Ven.*#2.*Mark/is, {
+
+      await actors.admin.page.reload();
+      const persistedResponse = actors.admin.page.waitForResponse(
+        (response) =>
+          response.request().method() === "GET" &&
+          /\/api\/admin\/riders\/\d+\/dispatch-plan$/.test(
+            new URL(response.url()).pathname,
+          ),
+      );
+      await actors.admin.page
+        .getByRole("button", { name: /Dispatch plan for Juan/i })
+        .click();
+      const persistedPlan = await strictBrowserJson<JsonRecord>(
+        await persistedResponse,
+        "reload persisted OSRM dispatch plan",
+      );
+      validatePersistedDispatchPlan(persistedPlan, {
+        venAssignmentId: ven.assignmentId,
+        markAssignmentId: mark.assignmentId,
+      });
+      expect(positiveId(persistedPlan.id, "persisted plan id")).toBe(planId);
+      expect(positiveId(persistedPlan.version, "persisted plan version")).toBe(
+        planVersion,
+      );
+      const persistedPanel = actors.admin.page.getByRole("region", {
+        name: /Dispatch plan for Juan/i,
+      });
+      await expect(persistedPanel.getByTestId("dispatch-stop-1")).toContainText(
+        "#1",
+      );
+      await expect(persistedPanel.getByTestId("dispatch-stop-1")).toContainText(
+        "Ven",
+      );
+      await expect(persistedPanel.getByTestId("dispatch-stop-1")).toContainText(
+        ven.orderRef,
+      );
+      await expect(persistedPanel.getByTestId("dispatch-stop-2")).toContainText(
+        "#2",
+      );
+      await expect(persistedPanel.getByTestId("dispatch-stop-2")).toContainText(
+        "Mark",
+      );
+      await expect(persistedPanel.getByTestId("dispatch-stop-2")).toContainText(
+        mark.orderRef,
+      );
+      await capture(run, actors.admin, 22, /OSRM/i, {
         dispatchPlanId: planId,
         dispatchPlanVersion: planVersion,
         markAssignmentId: mark.assignmentId,
         venAssignmentId: ven.assignmentId,
       });
-
-      for (const customer of [ven, mark]) {
-        await openRiderAssignment(
-          actors.juan,
-          mobileURL,
-          customer.assignmentId,
-        );
-        await riderAction(
-          actors.juan,
-          /Start delivery/i,
-          customer.assignmentId,
-        );
-      }
       await actors.ven.page.goto(`${mobileURL}/customer/home`);
       await actors.mark.page.goto(`${mobileURL}/customer/home`);
+      const markDocumentMarker = `mark-document-${runLabel}`;
+      await actors.mark.page.evaluate((marker) => {
+        Object.defineProperty(window, "__gridgoBetaDocumentMarker", {
+          value: marker,
+          configurable: false,
+          writable: false,
+        });
+      }, markDocumentMarker);
       const venOrders = await authenticatedGet<JsonRecord[]>(
         request,
         apiBaseURL,
@@ -1138,40 +1635,56 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         canTrackDelivery: false,
         deliveryAssignmentId: null,
       });
-      await expect(actors.ven.page.locator("body")).toContainText(
-        /next|live|1st/i,
-      );
-      await expect(actors.mark.page.locator("body")).toContainText(
-        /2nd in queue|second|position 2/i,
-      );
-      await expect(
-        actors.mark.page.getByText(/Open live tracking/i),
-      ).toHaveCount(0);
+      await assertPrivateQueueUi(actors.mark.page);
+
+      const beforeVenMarker = await actors.ven.page.screenshot();
+      const venStoreLocation = await setAcknowledgedGeolocation({
+        riderPage: actors.juan.page,
+        apiBaseURL,
+        customerToken: ven.token,
+        checkpoint: betaCheckpoint("store"),
+        expectedAssignmentId: ven.assignmentId,
+        expectedPlanVersion: planVersion,
+        assertCustomerMarker: async () => {
+          await assertLiveTrackingUi(actors.ven);
+          await expect
+            .poll(
+              async () =>
+                !(await actors.ven.page.screenshot()).equals(beforeVenMarker),
+            )
+            .toBe(true);
+        },
+      });
+      await capture(run, actors.ven, 23, /Tracking real-time location/i, {
+        orderId: ven.orderId,
+        assignmentId: ven.assignmentId,
+        dispatchPlanVersion: planVersion,
+        latitude: Number(venStoreLocation.latitude),
+        longitude: Number(venStoreLocation.longitude),
+      });
+
       await assertLocationPrivacyDenied({
         apiBaseURL,
         token: mark.token,
         assignmentId: mark.assignmentId,
       });
-      await capture(run, actors.ven, 23, /live|next|1st/i, {
-        orderId: ven.orderId,
-        assignmentId: ven.assignmentId,
-        dispatchPlanVersion: planVersion,
-      });
-      await capture(run, actors.mark, 24, /2nd in queue|second|position 2/i, {
+      await assertPrivateQueueUi(actors.mark.page);
+      await capture(run, actors.mark, 24, /2nd in queue/i, {
         orderId: mark.orderId,
         dispatchPlanVersion: planVersion,
       });
 
-      for (const checkpointId of ["store", "road-to-ven", "ven"] as const) {
+      for (const checkpointId of ["road-to-ven", "ven"] as const) {
         const beforeMarker = await actors.ven.page.screenshot();
         await setAcknowledgedGeolocation({
           riderPage: actors.juan.page,
+          apiBaseURL,
+          customerToken: ven.token,
           checkpoint: betaCheckpoint(checkpointId),
           expectedAssignmentId: ven.assignmentId,
+          expectedPlanVersion: planVersion,
           assertCustomerMarker: async () => {
-            await expect(actors.ven.page.locator("body")).toContainText(
-              /Live|GPS|updated|on the way/i,
-            );
+            await assertLiveTrackingUi(actors.ven);
             await expect
               .poll(
                 async () =>
@@ -1198,9 +1711,14 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         assignmentId: ven.assignmentId,
       });
 
-      await expect(actors.mark.page.locator("body")).toContainText(
-        /live|next|1st/i,
-      );
+      expect(
+        await actors.mark.page.evaluate(
+          () =>
+            (window as typeof window & { __gridgoBetaDocumentMarker?: string })
+              .__gridgoBetaDocumentMarker,
+        ),
+        "Mark document marker must survive automatic promotion",
+      ).toBe(markDocumentMarker);
       const promotedOrders = await authenticatedGet<JsonRecord[]>(
         request,
         apiBaseURL,
@@ -1217,23 +1735,54 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         deliveryAssignmentId: mark.assignmentId,
       });
       await expect(
-        actors.mark.page.getByText(/Open live tracking/i),
+        actors.mark.page.getByText("Open live tracking", { exact: true }),
       ).toBeVisible();
-      await capture(run, actors.mark, 26, /live|next|1st/i, {
+      const beforePromotedMarker = await actors.mark.page.screenshot();
+      const markPromotedLocation = await setAcknowledgedGeolocation({
+        riderPage: actors.juan.page,
+        apiBaseURL,
+        customerToken: mark.token,
+        checkpoint: betaCheckpoint("road-to-mark"),
+        expectedAssignmentId: mark.assignmentId,
+        expectedPlanVersion: planVersion,
+        assertCustomerMarker: async () => {
+          await assertLiveTrackingUi(actors.mark);
+          await expect
+            .poll(
+              async () =>
+                !(await actors.mark.page.screenshot()).equals(
+                  beforePromotedMarker,
+                ),
+            )
+            .toBe(true);
+        },
+      });
+      expect(
+        await actors.mark.page.evaluate(
+          () =>
+            (window as typeof window & { __gridgoBetaDocumentMarker?: string })
+              .__gridgoBetaDocumentMarker,
+        ),
+        "Mark must gain live tracking without a document reload",
+      ).toBe(markDocumentMarker);
+      await capture(run, actors.mark, 26, /Tracking real-time location/i, {
         orderId: mark.orderId,
         assignmentId: mark.assignmentId,
         dispatchPlanVersion: planVersion,
+        latitude: Number(markPromotedLocation.latitude),
+        longitude: Number(markPromotedLocation.longitude),
       });
-      for (const checkpointId of ["road-to-mark", "mark"] as const) {
+      for (const checkpointId of ["mark"] as const) {
         const beforeMarker = await actors.mark.page.screenshot();
         await setAcknowledgedGeolocation({
           riderPage: actors.juan.page,
+          apiBaseURL,
+          customerToken: mark.token,
           checkpoint: betaCheckpoint(checkpointId),
           expectedAssignmentId: mark.assignmentId,
+          expectedPlanVersion: planVersion,
           assertCustomerMarker: async () => {
-            await expect(actors.mark.page.locator("body")).toContainText(
-              /Live|GPS|updated|on the way/i,
-            );
+            await assertLiveTrackingUi(actors.mark);
             await expect
               .poll(
                 async () =>
@@ -1340,13 +1889,6 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         ),
       );
 
-      for (const actor of Object.values(actors)) {
-        const tracePath = path.join(run.tracesDir, `${actor.name}.zip`);
-        await actor.context.tracing.stop({ path: tracePath });
-        recordEvidenceArtifact(run, "trace", actor.name, tracePath);
-      }
-      tracingStarted = false;
-
       for (const customer of [ven, mark]) {
         await customer.actor.page.goto(`${mobileURL}/auth/login`);
         await enableFlutterSemantics(customer.actor.page);
@@ -1410,7 +1952,7 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
             : `${customer.name.toLowerCase()}-restored-login`,
         );
       }
-      expect(run.entries.some((entry) => entry.stepId === 29)).toBe(true);
+      assertCanonicalEvidenceComplete(run.entries);
     } finally {
       if (adminAuth) {
         const cleanup = await request.patch(
@@ -1421,19 +1963,6 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
           },
         );
         await strictJson(cleanup, "finally disable beta mode");
-      }
-      if (tracingStarted) {
-        for (const actor of Object.values(actors)) {
-          const tracePath = path.join(run.tracesDir, `${actor.name}.zip`);
-          await actor.context.tracing
-            .stop({ path: tracePath })
-            .catch(() => undefined);
-          try {
-            recordEvidenceArtifact(run, "trace", actor.name, tracePath);
-          } catch {
-            // Preserve the original journey failure if trace finalization also failed.
-          }
-        }
       }
       const videos = Object.values(actors).map((actor) => ({
         actor: actor.name,
@@ -1448,12 +1977,18 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
       for (const actor of Object.values(actors)) {
         writeFileSync(
           path.join(run.logsDir, `${actor.name}-console.json`),
-          `${JSON.stringify(actor.console, null, 2)}\n`,
+          `${sanitizeEvidenceText(
+            JSON.stringify(actor.console, null, 2),
+            run.protectedSecrets,
+          )}\n`,
           { mode: 0o600 },
         );
         writeFileSync(
           path.join(run.logsDir, `${actor.name}-network.json`),
-          `${JSON.stringify(actor.network, null, 2)}\n`,
+          `${sanitizeEvidenceText(
+            JSON.stringify(actor.network, null, 2),
+            run.protectedSecrets,
+          )}\n`,
           { mode: 0o600 },
         );
         recordEvidenceArtifact(

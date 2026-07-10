@@ -222,7 +222,7 @@ cd e2e/mobile-web && \
 npm run test:beta:visual
 ```
 
-The live preflight assumes `docker-compose.dev.yml` is already running. The destructive workflow creates two customers, uploads, addresses, orders, delivery assignments, proofs, surveys, and testimonials. The visual workflow writes numbered screenshots, sanitized logs, hashes, manifest, traces, and video outside committed source. Do not run destructive customer/rider/admin beta scenarios on shared data unless the issue or user explicitly asks for a live workflow run. Keep Mark, Ven, and Juan as separate role paths and preserve the queue/privacy expectations documented in the tests.
+The live preflight assumes `docker-compose.dev.yml` is already running. The destructive workflow creates two customers, uploads, addresses, orders, delivery assignments, proofs, surveys, and testimonials. The visual workflow writes numbered screenshots, sanitized logs, hashes, a manifest, and videos outside committed source. Authenticated Playwright traces are deliberately disabled because retained request headers can expose bearer tokens. Do not run destructive customer/rider/admin beta scenarios on shared data unless the issue or user explicitly asks for a live workflow run. Keep Mark, Ven, and Juan as separate role paths and preserve the queue/privacy expectations documented in the tests.
 
 ## Surface-Specific Guidance
 
