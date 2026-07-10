@@ -167,11 +167,12 @@ class MapHelpers {
   );
 
   /// Rider marker — dark circle + navigation arrow.
-  static Marker riderMarker(LatLng point) => Marker(
-    point: point,
-    width: 44,
-    height: 44,
-    child: Container(
+  static Marker riderMarker(
+    LatLng point, {
+    Key? semanticKey,
+    String? semanticLabel,
+  }) {
+    final marker = Container(
       decoration: BoxDecoration(
         color: const Color(0xFF1A1A1A),
         shape: BoxShape.circle,
@@ -189,6 +190,19 @@ class MapHelpers {
         color: Colors.white,
         size: 20,
       ),
-    ),
-  );
+    );
+    return Marker(
+      point: point,
+      width: 44,
+      height: 44,
+      child: semanticLabel == null
+          ? marker
+          : Semantics(
+              key: semanticKey,
+              container: true,
+              label: semanticLabel,
+              child: marker,
+            ),
+    );
+  }
 }

@@ -120,6 +120,10 @@ Widget _wrapConstrained(
   ).widget;
 }
 
+Finder _semanticsLabel(String label) => find.byWidgetPredicate(
+  (widget) => widget is Semantics && widget.properties.label == label,
+);
+
 const _dailySlots = [
   DeliverySlot(
     templateId: 1,
@@ -368,6 +372,13 @@ void main() {
     );
     expect(find.text('Open live tracking'), findsNothing);
     expect(find.byKey(const Key('pending-route-preview-map')), findsNothing);
+    expect(_semanticsLabel('Live delivery map'), findsNothing);
+    expect(_semanticsLabel('Rider current location marker'), findsNothing);
+    expect(find.byKey(const Key('live-delivery-map')), findsNothing);
+    expect(
+      find.byKey(const Key('rider-current-location-marker')),
+      findsNothing,
+    );
     verifyNever(harness.webSocket.subscribeToDeliveryPlan('assign-001', 1));
   });
 
@@ -441,6 +452,13 @@ void main() {
       expect(find.text('Order Dispatched'), findsOneWidget);
       expect(find.text('Rider is on the way'), findsOneWidget);
       expect(find.text('Live map starts after rider dispatch.'), findsNothing);
+      expect(_semanticsLabel('Live delivery map'), findsOneWidget);
+      expect(_semanticsLabel('Rider current location marker'), findsOneWidget);
+      expect(find.byKey(const Key('live-delivery-map')), findsOneWidget);
+      expect(
+        find.byKey(const Key('rider-current-location-marker')),
+        findsOneWidget,
+      );
     },
   );
 

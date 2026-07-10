@@ -1253,29 +1253,39 @@ class _ActiveTile extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        FlutterMap(
-          options: MapOptions(
-            initialCenter: riderPoint,
-            initialZoom: 13.8,
-            interactionOptions: const InteractionOptions(
-              flags: InteractiveFlag.none,
+        Semantics(
+          key: const Key('live-delivery-map'),
+          container: true,
+          explicitChildNodes: true,
+          label: 'Live delivery map',
+          child: FlutterMap(
+            options: MapOptions(
+              initialCenter: riderPoint,
+              initialZoom: 13.8,
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.none,
+              ),
             ),
+            children: [
+              MapHelpers.tileLayer(brightness),
+              if (state.routePoints.isNotEmpty)
+                MapHelpers.routePolyline(state.routePoints),
+              MarkerLayer(
+                markers: [
+                  MapHelpers.shopMarker(point: state.shopPoint),
+                  MapHelpers.destinationMarker(point: state.destPoint),
+                  MapHelpers.riderMarker(
+                    riderPoint,
+                    semanticKey: const Key('rider-current-location-marker'),
+                    semanticLabel: 'Rider current location marker',
+                  ),
+                ],
+              ),
+              MapHelpers.attribution(
+                includeRouting: state.routePoints.isNotEmpty,
+              ),
+            ],
           ),
-          children: [
-            MapHelpers.tileLayer(brightness),
-            if (state.routePoints.isNotEmpty)
-              MapHelpers.routePolyline(state.routePoints),
-            MarkerLayer(
-              markers: [
-                MapHelpers.shopMarker(point: state.shopPoint),
-                MapHelpers.destinationMarker(point: state.destPoint),
-                MapHelpers.riderMarker(riderPoint),
-              ],
-            ),
-            MapHelpers.attribution(
-              includeRouting: state.routePoints.isNotEmpty,
-            ),
-          ],
         ),
 
         // LIVE MAP badge — top left

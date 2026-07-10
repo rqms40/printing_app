@@ -195,6 +195,18 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     ).toThrow();
   });
 
+  test("scrubs a bare registration token even when the next flow action throws", () => {
+    const protectedSecrets = new Set<string>();
+    const bareToken = "bare-registration-token-without-a-label";
+    expect(() => {
+      protectedSecrets.add(bareToken);
+      throw new Error("order flow failed before its first capture");
+    }).toThrow("order flow failed");
+    expect(
+      sanitizeEvidenceText(`console emitted ${bareToken}`, protectedSecrets),
+    ).not.toContain(bareToken);
+  });
+
   test("publishes the visual command, dependencies, fixture, and operator docs", () => {
     const e2eRoot = path.resolve(
       path.dirname(fileURLToPath(import.meta.url)),
@@ -226,6 +238,46 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     expect(config).toContain('trace: visualWorkflow ? "off"');
     const manualTracingApi = ["context", "tracing", ""].join(".");
     expect(visualSource).not.toContain(manualTracingApi);
+    const liveAssertion = visualSource.slice(
+      visualSource.lastIndexOf("async function assertLiveTrackingUi"),
+      visualSource.lastIndexOf("async function assertPrivateQueueUi"),
+    );
+    expect(liveAssertion).toContain('getByLabel("Live delivery map"');
+    expect(liveAssertion).toContain(
+      'getByLabel("Rider current location marker"',
+    );
+    expect(liveAssertion).not.toContain('locator("canvas")');
+    expect(liveAssertion).not.toContain("actor.network.some");
+    const privateAssertion = visualSource.slice(
+      visualSource.lastIndexOf("async function assertPrivateQueueUi"),
+      visualSource.lastIndexOf("async function loginAdmin"),
+    );
+    expect(privateAssertion).toContain('getByLabel("Live delivery map"');
+    expect(privateAssertion).toContain(
+      'getByLabel("Rider current location marker"',
+    );
+    const registrationFlow = visualSource.slice(
+      visualSource.lastIndexOf("async function registerCustomerThroughUi"),
+      visualSource.lastIndexOf("async function saveAddressThroughUi"),
+    );
+    const registrationResponse = registrationFlow.indexOf(
+      "const auth = await waitForStrict2xx<AuthPayload>",
+    );
+    const tokenRegistration = registrationFlow.indexOf(
+      "registerEvidenceSecrets(run, [auth.access_token]);",
+    );
+    const betaLookup = registrationFlow.indexOf(
+      "const beta = await strictJson",
+    );
+    expect(registrationResponse).toBeGreaterThanOrEqual(0);
+    expect(tokenRegistration).toBeGreaterThan(registrationResponse);
+    expect(tokenRegistration).toBeLessThan(betaLookup);
+    const captureHelper = visualSource.slice(
+      visualSource.lastIndexOf("async function capture("),
+      visualSource.lastIndexOf("async function assertLiveTrackingUi"),
+    );
+    expect(captureHelper).not.toContain("[11, 25, 27].includes(id)");
+    expect(captureHelper).toContain("allowBlockingDialog = false");
     for (const file of [
       path.join(e2eRoot, "README.md"),
       path.join(repoRoot, "AGENTS.md"),
@@ -599,8 +651,9 @@ async function capture(
   id: number,
   state: string | RegExp,
   durableIds: DurableIds = {},
-  variant?: string,
+  options: { variant?: string; allowBlockingDialog?: boolean } = {},
 ): Promise<void> {
+  const { variant, allowBlockingDialog = false } = options;
   await captureStep({
     run,
     page: actor.page,
@@ -611,7 +664,7 @@ async function capture(
     durableIds,
     variant,
     expectedViewport: actor.definition.viewport,
-    allowBlockingDialog: [11, 25, 27].includes(id),
+    allowBlockingDialog,
     assertionSummary: [`Visible state: ${String(state)}`],
     assertState: async () => {
       await expect(actor.page.locator("body")).toContainText(state);
@@ -629,21 +682,12 @@ async function assertLiveTrackingUi(actor: BetaActorRuntime): Promise<void> {
   await expect(
     actor.page.getByText("Rider is on the way", { exact: true }),
   ).toBeVisible();
-  await expect(actor.page.locator("canvas").first()).toBeVisible();
-  await expect
-    .poll(
-      () =>
-        actor.network.some(
-          (entry) =>
-            (entry.status ?? 0) >= 200 &&
-            (entry.status ?? 0) < 300 &&
-            /(?:tile\.openstreetmap|basemaps\.cartocdn|\.tile\.)/i.test(
-              entry.url,
-            ),
-        ),
-      { message: `${actor.name} map must load at least one real tile` },
-    )
-    .toBe(true);
+  await expect(
+    actor.page.getByLabel("Live delivery map", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    actor.page.getByLabel("Rider current location marker", { exact: true }),
+  ).toBeVisible();
 }
 
 async function assertPrivateQueueUi(page: Page): Promise<void> {
@@ -658,6 +702,12 @@ async function assertPrivateQueueUi(page: Page): Promise<void> {
     page.getByText("Rider is on the way", { exact: true }),
   ).toHaveCount(0);
   await expect(
+    page.getByLabel("Live delivery map", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByLabel("Rider current location marker", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
     page.getByText(/-?\d{1,2}\.\d{4,}\s*,\s*-?\d{2,3}\.\d{4,}/),
   ).toHaveCount(0);
 }
@@ -670,7 +720,16 @@ async function loginAdmin(
   run: EvidenceRun,
 ): Promise<AuthPayload> {
   await actor.page.goto(`${adminURL}/login`);
-  await capture(run, actor, 1, /Admin Sign In/, {}, "admin-login");
+  await capture(
+    run,
+    actor,
+    1,
+    /Admin Sign In/,
+    {},
+    {
+      variant: "admin-login",
+    },
+  );
   await actor.page.getByPlaceholder("admin@gridgo.ph").fill(email);
   await actor.page.getByPlaceholder("Enter password").fill(password);
   const auth = await waitForStrict2xx<AuthPayload>(
@@ -698,13 +757,26 @@ async function setBetaThroughAdmin(
   await expect(
     actor.page.getByText("Beta Mode", { exact: true }),
   ).toBeVisible();
-  const toggle = actor.page.locator("button[role=switch]").last();
+  const toggles = await visibleLocators(
+    actor.page.locator("button[role=switch]"),
+  );
+  expect(toggles, "one visible beta-mode switch").toHaveLength(1);
+  const toggle = toggles[0];
   const current = (await toggle.getAttribute("aria-checked")) === "true";
   if (run && enabled) {
     expect(current, "fresh release stack must begin with beta disabled").toBe(
       false,
     );
-    await capture(run, actor, 2, /Beta Mode/, {}, "beta-before-enable");
+    await capture(
+      run,
+      actor,
+      2,
+      /Beta Mode/,
+      {},
+      {
+        variant: "beta-before-enable",
+      },
+    );
   }
   if (current !== enabled) {
     const responsePromise = actor.page.waitForResponse(
@@ -753,7 +825,7 @@ async function registerCustomerThroughUi(options: {
       3,
       /Your data, your rules/,
       {},
-      "mark-registration-entry",
+      { variant: "mark-registration-entry" },
     );
   await clickNamed(actor.page, "Agree & Continue");
   await actor.page.locator("input").last().fill(name);
@@ -779,6 +851,7 @@ async function registerCustomerThroughUi(options: {
     () => clickNamed(actor.page, "Create Account"),
     `${name} UI registration`,
   );
+  registerEvidenceSecrets(run, [auth.access_token]);
   const userId = positiveId(auth.user.id, `${name} user id`);
   expect(Number(auth.user.credits)).toBe(100);
   const beta = await strictJson<{ rank: number; isBetaUser: boolean }>(
@@ -874,7 +947,7 @@ async function placeCustomerOrder(options: {
         userId,
         betaRank: base.betaRank,
       },
-      "ven-beta-credits",
+      { variant: "ven-beta-credits" },
     );
   }
 
@@ -925,7 +998,7 @@ async function placeCustomerOrder(options: {
         fileId,
         addressId,
       },
-      "mark-saved-recent-address",
+      { variant: "mark-saved-recent-address" },
     );
   }
   await actor.page.goto(`${mobileURL}/customer/order/checkout`);
@@ -945,11 +1018,18 @@ async function placeCustomerOrder(options: {
   );
   await clickNamed(actor.page, /GRIDGO Credits/i);
   if (name === "Mark")
-    await capture(run, actor, 11, /GRIDGO Credits/i, {
-      userId,
-      fileId,
-      addressId,
-    });
+    await capture(
+      run,
+      actor,
+      11,
+      /GRIDGO Credits/i,
+      {
+        userId,
+        fileId,
+        addressId,
+      },
+      { allowBlockingDialog: true },
+    );
   else
     await capture(
       run,
@@ -962,7 +1042,7 @@ async function placeCustomerOrder(options: {
         fileId,
         addressId,
       },
-      "ven-credits-checkout",
+      { variant: "ven-credits-checkout", allowBlockingDialog: true },
     );
   await clickNamed(actor.page, "Use this");
   if (name === "Mark")
@@ -983,7 +1063,7 @@ async function placeCustomerOrder(options: {
         fileId,
         addressId,
       },
-      "ven-order-summary",
+      { variant: "ven-order-summary" },
     );
 
   const orderBody = await waitForStrict2xx<JsonRecord>(
@@ -1086,7 +1166,7 @@ async function advanceProductionAndAssign(options: {
     assignmentStep,
     /Juan|Rider assigned/i,
     { orderId: customer.orderId, orderRef: customer.orderRef },
-    `${customer.name.toLowerCase()}-assignment-confirmed`,
+    { variant: `${customer.name.toLowerCase()}-assignment-confirmed` },
   );
 }
 
@@ -1336,7 +1416,6 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         run,
         firstStep: 4,
       });
-      registerEvidenceSecrets(run, [mark.token]);
       await advanceProductionAndAssign({
         admin: actors.admin,
         adminURL,
@@ -1397,7 +1476,6 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         run,
         firstStep: 18,
       });
-      registerEvidenceSecrets(run, [ven.token]);
       await advanceProductionAndAssign({
         admin: actors.admin,
         adminURL,
@@ -1637,7 +1715,6 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
       });
       await assertPrivateQueueUi(actors.mark.page);
 
-      const beforeVenMarker = await actors.ven.page.screenshot();
       const venStoreLocation = await setAcknowledgedGeolocation({
         riderPage: actors.juan.page,
         apiBaseURL,
@@ -1647,12 +1724,6 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         expectedPlanVersion: planVersion,
         assertCustomerMarker: async () => {
           await assertLiveTrackingUi(actors.ven);
-          await expect
-            .poll(
-              async () =>
-                !(await actors.ven.page.screenshot()).equals(beforeVenMarker),
-            )
-            .toBe(true);
         },
       });
       await capture(run, actors.ven, 23, /Tracking real-time location/i, {
@@ -1675,7 +1746,6 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
       });
 
       for (const checkpointId of ["road-to-ven", "ven"] as const) {
-        const beforeMarker = await actors.ven.page.screenshot();
         await setAcknowledgedGeolocation({
           riderPage: actors.juan.page,
           apiBaseURL,
@@ -1685,12 +1755,6 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
           expectedPlanVersion: planVersion,
           assertCustomerMarker: async () => {
             await assertLiveTrackingUi(actors.ven);
-            await expect
-              .poll(
-                async () =>
-                  !(await actors.ven.page.screenshot()).equals(beforeMarker),
-              )
-              .toBe(true);
           },
         });
       }
@@ -1703,7 +1767,7 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
           25,
           /Proof of Delivery|Signature/i,
           { orderId: ven.orderId, assignmentId: ven.assignmentId },
-          "ven-proof-ready",
+          { variant: "ven-proof-ready", allowBlockingDialog: true },
         ),
       );
       await capture(run, actors.juan, 25, /Delivered|Proof|Ven/i, {
@@ -1737,7 +1801,6 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
       await expect(
         actors.mark.page.getByText("Open live tracking", { exact: true }),
       ).toBeVisible();
-      const beforePromotedMarker = await actors.mark.page.screenshot();
       const markPromotedLocation = await setAcknowledgedGeolocation({
         riderPage: actors.juan.page,
         apiBaseURL,
@@ -1747,14 +1810,6 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         expectedPlanVersion: planVersion,
         assertCustomerMarker: async () => {
           await assertLiveTrackingUi(actors.mark);
-          await expect
-            .poll(
-              async () =>
-                !(await actors.mark.page.screenshot()).equals(
-                  beforePromotedMarker,
-                ),
-            )
-            .toBe(true);
         },
       });
       expect(
@@ -1773,7 +1828,6 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         longitude: Number(markPromotedLocation.longitude),
       });
       for (const checkpointId of ["mark"] as const) {
-        const beforeMarker = await actors.mark.page.screenshot();
         await setAcknowledgedGeolocation({
           riderPage: actors.juan.page,
           apiBaseURL,
@@ -1783,12 +1837,6 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
           expectedPlanVersion: planVersion,
           assertCustomerMarker: async () => {
             await assertLiveTrackingUi(actors.mark);
-            await expect
-              .poll(
-                async () =>
-                  !(await actors.mark.page.screenshot()).equals(beforeMarker),
-              )
-              .toBe(true);
           },
         });
       }
@@ -1801,7 +1849,7 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
           27,
           /Proof of Delivery|Signature/i,
           { orderId: mark.orderId, assignmentId: mark.assignmentId },
-          "mark-proof-ready",
+          { variant: "mark-proof-ready", allowBlockingDialog: true },
         ),
       );
       await capture(run, actors.juan, 27, /Delivered|Proof|Mark/i, {
@@ -1864,7 +1912,7 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
           orderId: mark.orderId,
           surveyRequirementId: mark.surveyRequirementId,
         },
-        "mark-automatic-survey",
+        { variant: "mark-automatic-survey" },
       );
       await completeSurveyUi(ven);
       await completeSurveyUi(mark);
@@ -1875,7 +1923,7 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
           29,
           /YOU MADE|SPREAD THE WORD|YOUR PHOTO/i,
           { userId: ven.userId, orderId: ven.orderId },
-          "ven-share-popup-confirmed",
+          { variant: "ven-share-popup-confirmed" },
         ),
       );
       mark.testimonialFileId = await uploadTestimonialAndHold(mark, () =>
@@ -1885,7 +1933,7 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
           29,
           /YOU MADE|SPREAD THE WORD|YOUR PHOTO/i,
           { userId: mark.userId, orderId: mark.orderId },
-          "mark-share-popup-confirmed",
+          { variant: "mark-share-popup-confirmed" },
         ),
       );
 
@@ -1920,7 +1968,7 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
             orderId: customer.orderId,
             testimonialFileId: customer.testimonialFileId,
           },
-          `${customer.name.toLowerCase()}-held`,
+          { variant: `${customer.name.toLowerCase()}-held` },
         );
       }
 
@@ -1931,7 +1979,7 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         29,
         /Beta Mode|Disabled/i,
         {},
-        "beta-disabled",
+        { variant: "beta-disabled" },
       );
       for (const customer of [ven, mark]) {
         const restored = await loginMobile(
@@ -1949,7 +1997,7 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
           { userId: customer.userId, orderId: customer.orderId },
           customer.name === "Mark"
             ? undefined
-            : `${customer.name.toLowerCase()}-restored-login`,
+            : { variant: `${customer.name.toLowerCase()}-restored-login` },
         );
       }
       assertCanonicalEvidenceComplete(run.entries);

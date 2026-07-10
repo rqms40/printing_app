@@ -182,7 +182,12 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
       loading: () => _loadingView(colors),
       error: (e, st) => _loadingView(colors),
       data: (state) {
-        if (state.status != LiveMapStatus.active) return _loadingView(colors);
+        final canShowLiveMap =
+            state.status == LiveMapStatus.active &&
+            state.canTrackDelivery &&
+            state.deliveryAssignmentId?.isNotEmpty == true &&
+            state.planVersion != null;
+        if (!canShowLiveMap) return _loadingView(colors);
         _scheduleLocationSubscription(state);
         final matchingLocation =
             locationUpdate != null &&
@@ -251,35 +256,49 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
           borderRadius: AppRadius.borderLg,
           child: Stack(
             children: [
-              FlutterMap(
-                mapController: _mapController,
-                options: MapOptions(
-                  initialCenter: riderPoint ?? state.destPoint,
-                  initialZoom: 13.5,
-                  onMapReady: () {
-                    _isMapReady = true;
-                    final latest = ref.read(liveRiderLocationProvider);
-                    if (latest != null) {
-                      _moveCameraTo(LatLng(latest.latitude, latest.longitude));
-                    }
-                  },
+              Semantics(
+                key: const Key('live-delivery-map'),
+                container: true,
+                explicitChildNodes: true,
+                label: 'Live delivery map',
+                child: FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: riderPoint ?? state.destPoint,
+                    initialZoom: 13.5,
+                    onMapReady: () {
+                      _isMapReady = true;
+                      final latest = ref.read(liveRiderLocationProvider);
+                      if (latest != null) {
+                        _moveCameraTo(
+                          LatLng(latest.latitude, latest.longitude),
+                        );
+                      }
+                    },
+                  ),
+                  children: [
+                    MapHelpers.tileLayer(brightness),
+                    if (state.routePoints.isNotEmpty)
+                      MapHelpers.routePolyline(state.routePoints),
+                    MarkerLayer(
+                      markers: [
+                        MapHelpers.shopMarker(point: state.shopPoint),
+                        MapHelpers.destinationMarker(point: state.destPoint),
+                        if (riderPoint != null)
+                          MapHelpers.riderMarker(
+                            riderPoint,
+                            semanticKey: const Key(
+                              'rider-current-location-marker',
+                            ),
+                            semanticLabel: 'Rider current location marker',
+                          ),
+                      ],
+                    ),
+                    MapHelpers.attribution(
+                      includeRouting: state.routePoints.isNotEmpty,
+                    ),
+                  ],
                 ),
-                children: [
-                  MapHelpers.tileLayer(brightness),
-                  if (state.routePoints.isNotEmpty)
-                    MapHelpers.routePolyline(state.routePoints),
-                  MarkerLayer(
-                    markers: [
-                      MapHelpers.shopMarker(point: state.shopPoint),
-                      MapHelpers.destinationMarker(point: state.destPoint),
-                      if (riderPoint != null)
-                        MapHelpers.riderMarker(riderPoint),
-                    ],
-                  ),
-                  MapHelpers.attribution(
-                    includeRouting: state.routePoints.isNotEmpty,
-                  ),
-                ],
               ),
 
               // Live Tracking badge — top left

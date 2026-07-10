@@ -107,6 +107,10 @@ LocationUpdate _location(Duration age, DateTime now) => LocationUpdate(
   timestamp: now.subtract(age),
 );
 
+Finder _semanticsLabel(String label) => find.byWidgetPredicate(
+  (widget) => widget is Semantics && widget.properties.label == label,
+);
+
 void main() {
   group('DeliveryMap widget', () {
     testWidgets('shows loading indicator without an active delivery', (
@@ -127,6 +131,44 @@ void main() {
 
       verify(harness.socket.subscribeToDeliveryPlan('101', 4)).called(1);
       expect(find.text('Live Tracking'), findsOneWidget);
+      expect(_semanticsLabel('Live delivery map'), findsOneWidget);
+      expect(_semanticsLabel('Rider current location marker'), findsOneWidget);
+      expect(find.byKey(const Key('live-delivery-map')), findsOneWidget);
+      expect(
+        find.byKey(const Key('rider-current-location-marker')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('withholds live-map semantics from unauthorized later stops', (
+      tester,
+    ) async {
+      final harness = _harness(
+        LiveDeliveryMapState.active(
+          shopPoint: const LatLng(7.064, 125.608),
+          destPoint: const LatLng(7.073, 125.613),
+          routePoints: const [LatLng(7.064, 125.608), LatLng(7.073, 125.613)],
+          orderId: 'ORD-LATER-STOP',
+          deliveryAssignmentId: null,
+          planVersion: 4,
+          orderStatus: OrderStatus.onTheWay,
+          canTrackDelivery: false,
+          queuePosition: 2,
+          queueSize: 2,
+        ),
+      );
+
+      await tester.pumpWidget(harness.widget);
+      await _settle(tester);
+
+      expect(_semanticsLabel('Live delivery map'), findsNothing);
+      expect(_semanticsLabel('Rider current location marker'), findsNothing);
+      expect(find.byKey(const Key('live-delivery-map')), findsNothing);
+      expect(
+        find.byKey(const Key('rider-current-location-marker')),
+        findsNothing,
+      );
+      verifyNever(harness.socket.subscribeToDeliveryPlan('101', 4));
     });
 
     testWidgets(
