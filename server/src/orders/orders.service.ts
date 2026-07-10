@@ -152,6 +152,41 @@ type CreateBatchResult = {
   assignedSlot?: AssignedSlot;
 };
 
+type ChargeComponent = number | string | null | undefined;
+
+export type ChargeComponents = {
+  subtotal?: ChargeComponent;
+  totalPrice?: ChargeComponent;
+  deliveryFee?: ChargeComponent;
+  priorityFee?: ChargeComponent;
+  extraDestinationFee?: ChargeComponent;
+};
+
+function numericChargeComponent(
+  name: keyof ChargeComponents,
+  value: ChargeComponent,
+): number {
+  if (value == null) return 0;
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) {
+    throw new BadRequestException(`Invalid ${name} charge component`);
+  }
+  return amount;
+}
+
+export function calculateChargeTotal(components: ChargeComponents): number {
+  const subtotalKey = components.subtotal == null ? 'totalPrice' : 'subtotal';
+  return (
+    numericChargeComponent(subtotalKey, components[subtotalKey]) +
+    numericChargeComponent('deliveryFee', components.deliveryFee) +
+    numericChargeComponent('priorityFee', components.priorityFee) +
+    numericChargeComponent(
+      'extraDestinationFee',
+      components.extraDestinationFee,
+    )
+  );
+}
+
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
@@ -442,17 +477,21 @@ export class OrdersService {
     orderData.category = quoteItem.categorySlug;
 
     // Validate and deduct credits if payment method is credits
-    if (
-      OrdersService.isCreditPaymentMethod(orderData.paymentMethod) &&
-      Number(orderData.totalPrice ?? 0) + Number(orderData.deliveryFee ?? 0) > 0
-    ) {
+    const creditPayment = OrdersService.isCreditPaymentMethod(
+      orderData.paymentMethod,
+    );
+    const amountCredits = creditPayment
+      ? calculateChargeTotal({
+          totalPrice: orderData.totalPrice,
+          deliveryFee: orderData.deliveryFee,
+        })
+      : 0;
+    if (creditPayment && amountCredits > 0) {
       if (!orderData.userId) {
         throw new Error('User ID is required to process credit payment');
       }
 
       const userId = orderData.userId;
-      const amountCredits =
-        Number(orderData.totalPrice ?? 0) + Number(orderData.deliveryFee ?? 0);
 
       // Attempt subtraction, will throw BadRequestException if insufficient
       await this.creditsService.subtractCredits(
@@ -461,11 +500,7 @@ export class OrdersService {
         'order_placed',
       );
     }
-    orderData.paymentStatus = OrdersService.isCreditPaymentMethod(
-      orderData.paymentMethod,
-    )
-      ? 'paid'
-      : 'pending';
+    orderData.paymentStatus = creditPayment ? 'paid' : 'pending';
 
     const count = await this.ordersRepo.count();
     const orderId = `ORD-${(10001 + count).toString().padStart(5, '0')}`;
@@ -682,8 +717,12 @@ export class OrdersService {
     const extraDestCount = Math.max(0, resolvedDestinations.length - 1);
     const extraDestinationFee =
       extraDestCount * Number(settings.extraDestinationSurcharge);
-    const totalPrice =
-      subtotal + deliveryFee + priorityFee + extraDestinationFee;
+    const totalPrice = calculateChargeTotal({
+      subtotal,
+      deliveryFee,
+      priorityFee,
+      extraDestinationFee,
+    });
 
     // --- 3D bounds enforcement ---
     const profile = await this.printerProfileService.getProfile();
@@ -1473,12 +1512,16 @@ export class OrdersService {
       throw new Error('Order cannot be cancelled at this stage');
     }
 
-    if (
-      OrdersService.isCreditPaymentMethod(order.paymentMethod) &&
-      Number(order.totalPrice) + Number(order.deliveryFee ?? 0) > 0
-    ) {
-      const refundAmount =
-        Number(order.totalPrice) + Number(order.deliveryFee ?? 0);
+    if (OrdersService.isCreditPaymentMethod(order.paymentMethod)) {
+      const refundAmount = calculateChargeTotal(
+        order.batchOrder ?? {
+          totalPrice: order.totalPrice,
+          deliveryFee: order.deliveryFee,
+        },
+      );
+      if (refundAmount <= 0) {
+        return this.updateStatus(id, 'cancelled');
+      }
       await this.creditsService.refundCredits(
         order.userId,
         refundAmount,

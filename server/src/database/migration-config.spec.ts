@@ -1,5 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { createTypeOrmOptions } from './typeorm.config';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 describe('createTypeOrmOptions migration configuration', () => {
   it('registers migrations and disables production synchronization', () => {
@@ -26,5 +28,17 @@ describe('createTypeOrmOptions migration configuration', () => {
 
     expect(defaultOptions.synchronize).toBe(false);
     expect(optedInOptions.synchronize).toBe(true);
+  });
+
+  it('requires the beta credit ledger migration before seeding', () => {
+    const seedGuard = readFileSync(
+      join(process.cwd(), 'scripts', 'seed-if-empty.mjs'),
+      'utf8',
+    );
+
+    expect(seedGuard).toContain("timestamp: '1777853400000'");
+    expect(seedGuard).toContain(
+      "name: 'BetaCreditLedgerAndRankIndex1777853400000'",
+    );
   });
 });

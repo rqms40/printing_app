@@ -1,6 +1,11 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { EntityManager, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  getMetadataArgsStorage,
+  Repository,
+} from 'typeorm';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { CreditsService } from './credits.service';
 import {
@@ -21,6 +26,7 @@ describe('CreditsService', () => {
   let settingsRepo: jest.Mocked<Partial<Repository<CreditSettings>>>;
   let usersService: jest.Mocked<Partial<UsersService>>;
   let notificationsService: jest.Mocked<Partial<NotificationsService>>;
+  let dataSource: { transaction: jest.Mock };
 
   const mockUser = { id: 1, email: 'user@gridgo.ph', credits: 1000 } as User;
   const mockSettings = { id: 1, conversionRate: 1.0 } as CreditSettings;
@@ -54,6 +60,9 @@ describe('CreditsService', () => {
       createForAllAdmins: jest.fn().mockResolvedValue(undefined),
       triggerCreditsUpdate: jest.fn().mockResolvedValue(undefined),
     };
+    dataSource = {
+      transaction: jest.fn(),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -73,6 +82,7 @@ describe('CreditsService', () => {
             notifyUserCreditsUpdate: jest.fn(),
           },
         },
+        { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
 
@@ -215,6 +225,130 @@ describe('CreditsService', () => {
       );
       expect(managerTxRepo.save).toHaveBeenCalled();
       expect(usersService.updateProfile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('grantBetaEnrollmentCredits', () => {
+    it('records an approved grant and increments the balance in one transaction', async () => {
+      const managerTxRepo = {
+        findOne: jest.fn().mockResolvedValue(null),
+        insert: jest.fn().mockResolvedValue({ identifiers: [{ id: 10 }] }),
+      };
+      const userRepo = {
+        increment: jest.fn().mockResolvedValue({ affected: 1 }),
+        update: jest.fn().mockResolvedValue({ affected: 1 }),
+      };
+      dataSource.transaction.mockImplementation(
+        async (work: (manager: EntityManager) => Promise<unknown>) => {
+          await work({
+            getRepository: (entity: unknown) =>
+              entity === CreditTransaction ? managerTxRepo : userRepo,
+          } as unknown as EntityManager);
+        },
+      );
+
+      await (
+        service as CreditsService & {
+          grantBetaEnrollmentCredits(
+            userId: number,
+            amount: number,
+          ): Promise<void>;
+        }
+      ).grantBetaEnrollmentCredits(9, 100);
+
+      expect(managerTxRepo.insert).toHaveBeenCalledWith({
+        userId: 9,
+        type: CreditTransactionType.TOP_UP,
+        amountCredits: 100,
+        status: CreditTransactionStatus.APPROVED,
+        referenceId: 'BETA-ENROLLMENT:9',
+      });
+      expect(userRepo.increment).toHaveBeenCalledWith(
+        { id: 9 },
+        'credits',
+        100,
+      );
+      expect(userRepo.update).toHaveBeenCalledWith(9, {
+        betaCreditsGranted: true,
+      });
+    });
+
+    it('does not increment again when the enrollment ledger already exists', async () => {
+      const managerTxRepo = {
+        findOne: jest.fn().mockResolvedValue({ id: 10 }),
+        insert: jest.fn(),
+      };
+      const userRepo = { increment: jest.fn(), update: jest.fn() };
+      dataSource.transaction.mockImplementation(
+        async (work: (manager: EntityManager) => Promise<unknown>) => {
+          await work({
+            getRepository: (entity: unknown) =>
+              entity === CreditTransaction ? managerTxRepo : userRepo,
+          } as unknown as EntityManager);
+        },
+      );
+
+      await (
+        service as CreditsService & {
+          grantBetaEnrollmentCredits(
+            userId: number,
+            amount: number,
+          ): Promise<void>;
+        }
+      ).grantBetaEnrollmentCredits(9, 100);
+
+      expect(managerTxRepo.insert).not.toHaveBeenCalled();
+      expect(userRepo.increment).not.toHaveBeenCalled();
+      expect(userRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('treats a concurrent unique-key loser as an idempotent success', async () => {
+      dataSource.transaction.mockRejectedValue({
+        driverError: {
+          code: '23505',
+          constraint: 'uq_credit_transactions_beta_enrollment_reference',
+        },
+      });
+
+      await expect(
+        service.grantBetaEnrollmentCredits(9, 100),
+      ).resolves.toBeUndefined();
+    });
+
+    it('does not hide an unrelated unique-constraint failure', async () => {
+      dataSource.transaction.mockRejectedValue({
+        driverError: { code: '23505', constraint: 'some_other_constraint' },
+      });
+
+      await expect(
+        service.grantBetaEnrollmentCredits(9, 100),
+      ).rejects.toMatchObject({
+        driverError: {
+          code: '23505',
+          constraint: 'some_other_constraint',
+        },
+      });
+    });
+
+    it('does not hide non-unique transaction failures', async () => {
+      dataSource.transaction.mockRejectedValue(new Error('database offline'));
+
+      await expect(service.grantBetaEnrollmentCredits(9, 100)).rejects.toThrow(
+        'database offline',
+      );
+    });
+  });
+
+  it('declares beta enrollment references unique without constraining other references', () => {
+    const index = getMetadataArgsStorage().indices.find(
+      (candidate) =>
+        candidate.target === CreditTransaction &&
+        candidate.name === 'uq_credit_transactions_beta_enrollment_reference',
+    );
+
+    expect(index).toMatchObject({
+      unique: true,
+      where: `"reference_id" LIKE 'BETA-ENROLLMENT:%'`,
     });
   });
 });

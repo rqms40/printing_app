@@ -9,7 +9,7 @@ import { FilesService } from '../files/files.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource, MoreThanOrEqual, Repository } from 'typeorm';
 import { BETA_ORDER_LIMIT_REACHED } from './dto/beta-order-limit.error';
-import { OrdersService } from './orders.service';
+import { calculateChargeTotal, OrdersService } from './orders.service';
 import { Order, OrderStatus } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { OrderItemSpecValue } from './entities/order-item-spec-value.entity';
@@ -87,6 +87,38 @@ const catalogPricingProvider = () => ({
       };
     }),
   },
+});
+
+describe('calculateChargeTotal', () => {
+  it('treats an individual order totalPrice as its print subtotal', () => {
+    expect(
+      calculateChargeTotal({
+        totalPrice: '40.00',
+        deliveryFee: '20.00',
+      }),
+    ).toBe(60);
+  });
+
+  it('prefers subtotal over an all-in total and adds decimal-string fees once', () => {
+    expect(
+      calculateChargeTotal({
+        subtotal: '40.00',
+        totalPrice: '85.00',
+        deliveryFee: '20.00',
+        priorityFee: '15.00',
+        extraDestinationFee: '10.00',
+      }),
+    ).toBe(85);
+  });
+
+  it('rejects non-numeric charge components instead of returning NaN', () => {
+    expect(() =>
+      calculateChargeTotal({
+        totalPrice: 'not-a-number',
+        deliveryFee: '20.00',
+      }),
+    ).toThrow('Invalid totalPrice charge component');
+  });
 });
 
 describe('OrdersService', () => {
@@ -704,6 +736,25 @@ describe('OrdersService', () => {
       );
     });
 
+    it('deducts subtotal, delivery, priority, and extra-destination fees exactly once', async () => {
+      await (service as any).createBatch(1, {
+        ...batchDto,
+        speedTier: DeliverySpeedTier.PRIORITY,
+        destinations: [
+          { addressId: 9, label: 'First stop' },
+          { addressId: 9, label: 'Second stop' },
+        ],
+      });
+
+      expect(creditsService.subtractCredits).toHaveBeenCalledTimes(1);
+      expect(creditsService.subtractCredits).toHaveBeenCalledWith(
+        1,
+        527,
+        'order_placed',
+        expect.anything(),
+      );
+    });
+
     it('rejects non-credit payment methods for beta customers while beta mode is enabled', async () => {
       (usersService.findById as jest.Mock).mockResolvedValue({
         id: 1,
@@ -1125,6 +1176,34 @@ describe('OrdersService', () => {
       });
     });
 
+    it('refunds every charged component exactly once from decimal strings', async () => {
+      const creditOrder = {
+        ...mockOrder,
+        userId: 1,
+        totalPrice: '40.00',
+        deliveryFee: '20.00',
+        paymentMethod: 'gridCredits',
+        orderStatus: OrderStatus.ORDER_PLACED,
+        batchOrder: {
+          subtotal: '40.00',
+          totalPrice: '85.00',
+          deliveryFee: '20.00',
+          priorityFee: '15.00',
+          extraDestinationFee: '10.00',
+        },
+      } as unknown as Order;
+      repo.findOneOrFail.mockResolvedValue(creditOrder);
+      repo.update.mockResolvedValue(undefined as any);
+
+      await service.cancelOrder(1, creditOrder.userId);
+
+      expect(creditsService.refundCredits).toHaveBeenCalledWith(
+        creditOrder.userId,
+        85,
+        creditOrder.orderId,
+      );
+    });
+
     it('refunds GRIDGO Credits when the stored payment method is snake_case', async () => {
       const creditOrder = {
         ...mockOrder,
@@ -1159,6 +1238,25 @@ describe('OrdersService', () => {
       await service.cancelOrder(1, 1);
 
       expect(creditsService.refundCredits).not.toHaveBeenCalled();
+    });
+
+    it('does not parse charge components for non-credit cancellations', async () => {
+      const gcashOrder = {
+        ...mockOrder,
+        userId: 1,
+        totalPrice: 'legacy-invalid-value',
+        paymentMethod: 'gcash',
+        orderStatus: OrderStatus.ORDER_PLACED,
+      } as unknown as Order;
+      repo.findOneOrFail.mockResolvedValue(gcashOrder);
+      repo.update.mockResolvedValue(undefined as any);
+
+      await expect(service.cancelOrder(1, 1)).resolves.toEqual(gcashOrder);
+
+      expect(creditsService.refundCredits).not.toHaveBeenCalled();
+      expect(repo.update).toHaveBeenCalledWith(1, {
+        orderStatus: OrderStatus.CANCELLED,
+      });
     });
   });
 

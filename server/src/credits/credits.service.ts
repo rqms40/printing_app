@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import {
   CreditTransaction,
   CreditTransactionType,
@@ -29,7 +29,55 @@ export class CreditsService {
     private notificationsService: NotificationsService,
     private firebaseService: FirebaseService,
     private notificationsGateway: NotificationsGateway,
+    private dataSource: DataSource,
   ) {}
+
+  async grantBetaEnrollmentCredits(
+    userId: number,
+    amount = 100,
+  ): Promise<void> {
+    const referenceId = `BETA-ENROLLMENT:${userId}`;
+
+    try {
+      await this.dataSource.transaction(async (manager) => {
+        const transactionRepo = manager.getRepository(CreditTransaction);
+        const userRepo = manager.getRepository(User);
+        const existing = await transactionRepo.findOne({
+          where: { referenceId },
+        });
+        if (existing) return;
+
+        await transactionRepo.insert({
+          userId,
+          type: CreditTransactionType.TOP_UP,
+          amountCredits: amount,
+          status: CreditTransactionStatus.APPROVED,
+          referenceId,
+        });
+        await userRepo.increment({ id: userId }, 'credits', amount);
+        await userRepo.update(userId, { betaCreditsGranted: true });
+      });
+    } catch (error) {
+      if (CreditsService.isUniqueViolation(error)) return;
+      throw error;
+    }
+  }
+
+  private static isUniqueViolation(error: unknown): boolean {
+    if (typeof error !== 'object' || error == null) return false;
+    const candidate = error as {
+      code?: unknown;
+      constraint?: unknown;
+      driverError?: { code?: unknown; constraint?: unknown };
+    };
+    const code = candidate.driverError?.code ?? candidate.code;
+    const constraint =
+      candidate.driverError?.constraint ?? candidate.constraint;
+    return (
+      code === '23505' &&
+      constraint === 'uq_credit_transactions_beta_enrollment_reference'
+    );
+  }
 
   async getSettings(): Promise<CreditSettings> {
     let settings = await this.settingsRepo.find();

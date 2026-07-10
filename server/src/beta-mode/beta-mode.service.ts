@@ -4,10 +4,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository, LessThanOrEqual } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { BetaModeSettings } from './entities/beta-mode-settings.entity';
 import { User } from '../users/entities/user.entity';
 import { FileMetadata } from '../files/entities/file-metadata.entity';
+import { CreditsService } from '../credits/credits.service';
 
 export interface BetaMemberRow {
   id: number;
@@ -30,6 +31,8 @@ const BETA_SURVEY_COMPLETE_HOLD_REASON = 'beta_survey_complete';
 
 @Injectable()
 export class BetaModeService {
+  private readonly enrollmentInFlight = new Map<number, Promise<void>>();
+
   constructor(
     @InjectRepository(BetaModeSettings)
     private settingsRepo: Repository<BetaModeSettings>,
@@ -37,6 +40,7 @@ export class BetaModeService {
     private userRepo: Repository<User>,
     @InjectRepository(FileMetadata)
     private fileMetadataRepo: Repository<FileMetadata>,
+    private creditsService: CreditsService,
   ) {}
 
   async getGlobalStatus(): Promise<{ isEnabled: boolean }> {
@@ -91,7 +95,7 @@ export class BetaModeService {
   > {
     const users = await this.userRepo.find({
       where: { isBetaUser: true },
-      order: { betaEnrolledAt: 'ASC' },
+      order: { betaEnrolledAt: 'ASC', id: 'ASC' },
     });
     return users.map((u, index) => ({
       rank: index + 1,
@@ -104,6 +108,21 @@ export class BetaModeService {
   }
 
   async enrollUser(userId: number): Promise<void> {
+    const existing = this.enrollmentInFlight.get(userId);
+    if (existing) return existing;
+
+    const enrollment = this.performEnrollment(userId);
+    this.enrollmentInFlight.set(userId, enrollment);
+    try {
+      await enrollment;
+    } finally {
+      if (this.enrollmentInFlight.get(userId) === enrollment) {
+        this.enrollmentInFlight.delete(userId);
+      }
+    }
+  }
+
+  private async performEnrollment(userId: number): Promise<void> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException(`User ${userId} not found`);
 
@@ -119,13 +138,7 @@ export class BetaModeService {
     }
 
     if (!user.betaCreditsGranted) {
-      // Atomic increment with DB-level guard prevents double-grant under concurrent requests
-      await this.userRepo
-        .createQueryBuilder()
-        .update(User)
-        .set({ credits: () => 'credits + 100', betaCreditsGranted: true })
-        .where('id = :id AND beta_credits_granted = false', { id: userId })
-        .execute();
+      await this.creditsService.grantBetaEnrollmentCredits(userId, 100);
     }
   }
 
@@ -164,6 +177,7 @@ export class BetaModeService {
     const total = await qb.clone().getCount();
     const users = await qb
       .orderBy('u.beta_enrolled_at', 'ASC')
+      .addOrderBy('u.id', 'ASC')
       .offset(offset)
       .limit(limit)
       .getMany();
@@ -244,12 +258,14 @@ export class BetaModeService {
       };
     }
 
-    const rank = await this.userRepo.count({
-      where: {
-        isBetaUser: true,
-        betaEnrolledAt: LessThanOrEqual(user.betaEnrolledAt),
-      },
-    });
+    const rank = await this.userRepo
+      .createQueryBuilder('u')
+      .where('u.is_beta_user = true')
+      .andWhere(
+        '(u.beta_enrolled_at < :at OR (u.beta_enrolled_at = :at AND u.id <= :id))',
+        { at: user.betaEnrolledAt, id: user.id },
+      )
+      .getCount();
 
     return { globallyEnabled: settings.isEnabled, isBetaUser: true, rank };
   }

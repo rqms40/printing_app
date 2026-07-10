@@ -2,8 +2,8 @@ import { spawn } from 'node:child_process';
 import { Client } from 'pg';
 
 const requiredMigration = {
-  timestamp: '1777853300000',
-  name: 'AddProofOfDelivery1777853300000',
+  timestamp: '1777853400000',
+  name: 'BetaCreditLedgerAndRankIndex1777853400000',
 };
 
 const client = new Client({

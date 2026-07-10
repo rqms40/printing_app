@@ -5,6 +5,7 @@ import { BetaModeService } from './beta-mode.service';
 import { BetaModeSettings } from './entities/beta-mode-settings.entity';
 import { User } from '../users/entities/user.entity';
 import { FileMetadata } from '../files/entities/file-metadata.entity';
+import { CreditsService } from '../credits/credits.service';
 
 const makeUser = (overrides: Partial<User> = {}): User =>
   ({
@@ -24,16 +25,15 @@ describe('BetaModeService', () => {
   let userRepo: {
     findOne: jest.Mock;
     find: jest.Mock;
-    count: jest.Mock;
     update: jest.Mock;
     createQueryBuilder: jest.Mock;
   };
   let fileMetadataRepo: { findOne: jest.Mock };
+  let creditsService: { grantBetaEnrollmentCredits: jest.Mock };
   let mockQB: {
-    update: jest.Mock;
-    set: jest.Mock;
     where: jest.Mock;
-    execute: jest.Mock;
+    andWhere: jest.Mock;
+    getCount: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -44,20 +44,21 @@ describe('BetaModeService', () => {
       save: jest.fn().mockImplementation(async (v) => v),
     };
     mockQB = {
-      update: jest.fn().mockReturnThis(),
-      set: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
-      execute: jest.fn().mockResolvedValue({ affected: 1 }),
+      andWhere: jest.fn().mockReturnThis(),
+      getCount: jest.fn().mockResolvedValue(0),
     };
     userRepo = {
       findOne: jest.fn(),
       find: jest.fn(),
-      count: jest.fn(),
       update: jest.fn().mockResolvedValue(undefined),
       createQueryBuilder: jest.fn().mockReturnValue(mockQB),
     };
     fileMetadataRepo = {
       findOne: jest.fn(),
+    };
+    creditsService = {
+      grantBetaEnrollmentCredits: jest.fn().mockResolvedValue(undefined),
     };
 
     const module = await Test.createTestingModule({
@@ -72,6 +73,7 @@ describe('BetaModeService', () => {
           provide: getRepositoryToken(FileMetadata),
           useValue: fileMetadataRepo,
         },
+        { provide: CreditsService, useValue: creditsService },
       ],
     }).compile();
 
@@ -125,14 +127,22 @@ describe('BetaModeService', () => {
       1,
       expect.objectContaining({ isBetaUser: true }),
     );
-    expect(mockQB.set).toHaveBeenCalledWith(
-      expect.objectContaining({ betaCreditsGranted: true }),
+    expect(creditsService.grantBetaEnrollmentCredits).toHaveBeenCalledWith(
+      1,
+      100,
     );
-    expect(mockQB.where).toHaveBeenCalledWith(
-      expect.stringContaining('beta_credits_granted = false'),
-      expect.objectContaining({ id: 1 }),
+  });
+
+  it('records one enrollment grant under concurrent calls', async () => {
+    userRepo.findOne.mockResolvedValue(makeUser({ id: 9, credits: 0 }));
+
+    await Promise.all([service.enrollUser(9), service.enrollUser(9)]);
+
+    expect(creditsService.grantBetaEnrollmentCredits).toHaveBeenCalledTimes(1);
+    expect(creditsService.grantBetaEnrollmentCredits).toHaveBeenCalledWith(
+      9,
+      100,
     );
-    expect(mockQB.execute).toHaveBeenCalled();
   });
 
   it('enrollUser is idempotent — does nothing if already enrolled', async () => {
@@ -146,7 +156,7 @@ describe('BetaModeService', () => {
     );
     await service.enrollUser(1);
     expect(userRepo.update).not.toHaveBeenCalled();
-    expect(mockQB.execute).not.toHaveBeenCalled();
+    expect(creditsService.grantBetaEnrollmentCredits).not.toHaveBeenCalled();
   });
 
   it('enrollUser recovers an enrolled user whose credit grant was interrupted', async () => {
@@ -162,7 +172,10 @@ describe('BetaModeService', () => {
     await service.enrollUser(1);
 
     expect(userRepo.update).not.toHaveBeenCalled();
-    expect(mockQB.execute).toHaveBeenCalled();
+    expect(creditsService.grantBetaEnrollmentCredits).toHaveBeenCalledWith(
+      1,
+      100,
+    );
   });
 
   it('enrollUser does not grant credits again if betaCreditsGranted is already true', async () => {
@@ -170,7 +183,7 @@ describe('BetaModeService', () => {
       makeUser({ isBetaUser: false, betaCreditsGranted: true, credits: 150 }),
     );
     await service.enrollUser(1);
-    expect(mockQB.execute).not.toHaveBeenCalled();
+    expect(creditsService.grantBetaEnrollmentCredits).not.toHaveBeenCalled();
   });
 
   it('enrollUser preserves original betaEnrolledAt on re-enroll', async () => {
@@ -220,7 +233,7 @@ describe('BetaModeService', () => {
       isBetaUser: false,
       rank: null,
     });
-    expect(userRepo.count).not.toHaveBeenCalled();
+    expect(userRepo.createQueryBuilder).not.toHaveBeenCalled();
   });
 
   it('getBetaStatus returns correct rank for enrolled user', async () => {
@@ -229,7 +242,7 @@ describe('BetaModeService', () => {
     userRepo.findOne.mockResolvedValue(
       makeUser({ isBetaUser: true, betaEnrolledAt: enrolledAt }),
     );
-    userRepo.count.mockResolvedValue(3);
+    mockQB.getCount.mockResolvedValue(3);
 
     const result = await service.getBetaStatus(1);
 
@@ -238,6 +251,26 @@ describe('BetaModeService', () => {
       isBetaUser: true,
       rank: 3,
     });
+  });
+
+  it('breaks equal enrollment timestamps by user id', async () => {
+    const sharedTimestamp = new Date('2026-01-15T00:00:00Z');
+    const rankQuery = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getCount: jest.fn().mockResolvedValue(3),
+    };
+    userRepo.createQueryBuilder.mockReturnValueOnce(rankQuery);
+    userRepo.findOne.mockResolvedValue(
+      makeUser({ id: 9, isBetaUser: true, betaEnrolledAt: sharedTimestamp }),
+    );
+
+    await service.getBetaStatus(9);
+
+    expect(rankQuery.andWhere).toHaveBeenCalledWith(
+      '(u.beta_enrolled_at < :at OR (u.beta_enrolled_at = :at AND u.id <= :id))',
+      { at: sharedTimestamp, id: 9 },
+    );
   });
 
   // ── getBetaUsers ───────────────────────────────────────────────────────────
@@ -255,6 +288,33 @@ describe('BetaModeService', () => {
     expect(result[0].rank).toBe(1);
     expect(result[1].rank).toBe(2);
     expect(result[0].betaEnrolledAt).toBe(t1);
+    expect(userRepo.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        order: { betaEnrolledAt: 'ASC', id: 'ASC' },
+      }),
+    );
+  });
+
+  it('uses user id as the secondary order for paginated beta members', async () => {
+    const countQuery = { getCount: jest.fn().mockResolvedValue(0) };
+    const memberQuery = {
+      where: jest.fn().mockReturnThis(),
+      clone: jest.fn().mockReturnValue(countQuery),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      offset: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([]),
+    };
+    userRepo.createQueryBuilder.mockReturnValueOnce(memberQuery);
+
+    await service.searchBetaMembers({ page: 1, limit: 10 });
+
+    expect(memberQuery.orderBy).toHaveBeenCalledWith(
+      'u.beta_enrolled_at',
+      'ASC',
+    );
+    expect(memberQuery.addOrderBy).toHaveBeenCalledWith('u.id', 'ASC');
   });
 
   // ── submitTestimonial ──────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import {
   CreateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 
@@ -20,6 +21,10 @@ export enum CreditTransactionStatus {
 }
 
 @Entity('credit_transactions')
+@Index('uq_credit_transactions_beta_enrollment_reference', ['referenceId'], {
+  unique: true,
+  where: `"reference_id" LIKE 'BETA-ENROLLMENT:%'`,
+})
 export class CreditTransaction {
   @PrimaryGeneratedColumn()
   id: number;
@@ -50,8 +55,8 @@ export class CreditTransaction {
   @Column({ name: 'proof_of_payment_url', nullable: true, type: 'text' })
   proofOfPaymentUrl: string;
 
-  @Column({ name: 'reference_id', nullable: true })
-  referenceId: string; // e.g., Order ID for deductions
+  @Column({ name: 'reference_id', type: 'varchar', nullable: true })
+  referenceId: string | null; // e.g., Order ID for deductions
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

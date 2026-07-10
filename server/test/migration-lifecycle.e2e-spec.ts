@@ -3,6 +3,13 @@ import { join } from 'node:path';
 import { Client } from 'pg';
 import { DataSource, type DataSourceOptions } from 'typeorm';
 import { databaseOptionsFromEnv } from '../src/database/data-source';
+import { CreditsService } from '../src/credits/credits.service';
+import { CreditTransaction } from '../src/credits/entities/credit-transaction.entity';
+import { CreditSettings } from '../src/credits/entities/credit-settings.entity';
+import { UsersService } from '../src/users/users.service';
+import { NotificationsService } from '../src/notifications/notifications.service';
+import { FirebaseService } from '../src/firebase/firebase.service';
+import { NotificationsGateway } from '../src/notifications/notifications.gateway';
 
 type CountRow = { count: number };
 type LegacyCatalogRelationshipRow = {
@@ -221,6 +228,128 @@ describe('production migration lifecycle (e2e)', () => {
     }
   });
 
+  it('applies the beta ledger migration to adopted duplicate and null references without constraining order references', async () => {
+    const database = await createDatabase('beta_ledger_adoption');
+    await createSynchronizedFixture(database, false);
+    const dataSource = await initializeMigrationDataSource(database);
+
+    try {
+      await dataSource.query(`
+        DROP INDEX IF EXISTS uq_credit_transactions_beta_enrollment_reference
+      `);
+      const [user] = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO users (email, password_hash)
+         VALUES ($1, $2) RETURNING id`,
+        [`beta-ledger-adoption-${database}@example.test`, 'not-used'],
+      );
+      await dataSource.query(
+        `INSERT INTO credit_transactions
+           (user_id, type, "amountCredits", status, reference_id)
+         VALUES
+           ($1, 'top_up', 100, 'approved', $2),
+           ($1, 'top_up', 100, 'approved', $2),
+           ($1, 'deduction', 10, 'approved', 'order_placed'),
+           ($1, 'deduction', 10, 'approved', 'order_placed'),
+           ($1, 'top_up', 5, 'approved', NULL)`,
+        [user.id, `BETA-ENROLLMENT:${user.id}`],
+      );
+
+      await dataSource.runMigrations();
+
+      const [references] = await dataSource.query<
+        Array<{
+          total: number;
+          beta_references: number;
+          order_references: number;
+          null_references: number;
+        }>
+      >(
+        `SELECT COUNT(*)::int AS total,
+                COUNT(*) FILTER (
+                  WHERE reference_id = $1
+                )::int AS beta_references,
+                COUNT(*) FILTER (
+                  WHERE reference_id = 'order_placed'
+                )::int AS order_references,
+                COUNT(*) FILTER (
+                  WHERE reference_id IS NULL
+                )::int AS null_references
+         FROM credit_transactions`,
+        [`BETA-ENROLLMENT:${user.id}`],
+      );
+      expect(references).toEqual({
+        total: 5,
+        beta_references: 1,
+        order_references: 2,
+        null_references: 2,
+      });
+      await expect(
+        dataSource.query(
+          `SELECT
+             to_regclass('public.uq_credit_transactions_beta_enrollment_reference') IS NOT NULL
+               AS beta_ledger_index,
+             to_regclass('public.idx_users_beta_enrollment_rank') IS NOT NULL
+               AS beta_rank_index`,
+        ),
+      ).resolves.toEqual([{ beta_ledger_index: true, beta_rank_index: true }]);
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
+  it('commits exactly one beta enrollment ledger grant under concurrent service calls', async () => {
+    const database = await createDatabase('beta_ledger_concurrency');
+    const dataSource = await initializeMigrationDataSource(database);
+
+    try {
+      await dataSource.runMigrations();
+      const [user] = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO users (email, password_hash)
+         VALUES ($1, $2) RETURNING id`,
+        [`beta-ledger-concurrency-${database}@example.test`, 'not-used'],
+      );
+      const creditsService = new CreditsService(
+        dataSource.getRepository(CreditTransaction),
+        dataSource.getRepository(CreditSettings),
+        {} as UsersService,
+        {} as NotificationsService,
+        {} as FirebaseService,
+        {} as NotificationsGateway,
+        dataSource,
+      );
+
+      await Promise.all(
+        Array.from({ length: 8 }, () =>
+          creditsService.grantBetaEnrollmentCredits(user.id, 100),
+        ),
+      );
+
+      await expect(
+        dataSource.query(
+          `SELECT credits, beta_credits_granted
+           FROM users
+           WHERE id = $1`,
+          [user.id],
+        ),
+      ).resolves.toEqual([{ credits: '100.00', beta_credits_granted: true }]);
+      await expect(
+        dataSource.query(
+          `SELECT COUNT(*)::int AS count,
+                  MIN("amountCredits") AS amount,
+                  MIN(type::text) AS type,
+                  MIN(status::text) AS status
+           FROM credit_transactions
+           WHERE reference_id = $1`,
+          [`BETA-ENROLLMENT:${user.id}`],
+        ),
+      ).resolves.toEqual([
+        { count: 1, amount: '100.00', type: 'top_up', status: 'approved' },
+      ]);
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
   it('fails closed when ownership metadata is missing during a partial revert', async () => {
     for (const metadataState of ['missing-table', 'missing-row'] as const) {
       const database = await createDatabase(
@@ -235,6 +364,20 @@ describe('production migration lifecycle (e2e)', () => {
         } else {
           await dataSource.query(`DELETE FROM gridgo_schema_baseline`);
         }
+
+        await dataSource.undoLastMigration();
+
+        await expect(
+          dataSource.query(
+            `SELECT
+               to_regclass('public.uq_credit_transactions_beta_enrollment_reference') IS NOT NULL
+                 AS beta_ledger_index,
+               to_regclass('public.idx_users_beta_enrollment_rank') IS NOT NULL
+                 AS beta_rank_index`,
+          ),
+        ).resolves.toEqual([
+          { beta_ledger_index: true, beta_rank_index: true },
+        ]);
 
         await dataSource.undoLastMigration();
 
@@ -306,6 +449,28 @@ describe('production migration lifecycle (e2e)', () => {
       ['migration-seed-check@example.test', 'not-used'],
     );
     await dataSource.destroy();
+
+    const staleMigration = new Client({
+      ...adminConfig,
+      database: migratedDatabase,
+    });
+    await staleMigration.connect();
+    await staleMigration.query(
+      `DELETE FROM migrations WHERE timestamp = $1 AND name = $2`,
+      ['1777853400000', 'BetaCreditLedgerAndRankIndex1777853400000'],
+    );
+    await staleMigration.end();
+
+    const staleRejected = runSeedGuard(migratedDatabase);
+    expect(staleRejected.status).not.toBe(0);
+    expect(`${staleRejected.stdout}\n${staleRejected.stderr}`).toContain(
+      'Run npm run migration:run before seeding',
+    );
+
+    const repairedDataSource =
+      await initializeMigrationDataSource(migratedDatabase);
+    await repairedDataSource.runMigrations();
+    await repairedDataSource.destroy();
 
     const accepted = runSeedGuard(migratedDatabase);
     expect(accepted.status).toBe(0);
