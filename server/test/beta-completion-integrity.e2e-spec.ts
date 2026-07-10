@@ -20,6 +20,7 @@ import { TamSurveyRequirement } from '../src/tam-surveys/entities/tam-survey-req
 import { TamSurvey } from '../src/tam-surveys/entities/tam-survey.entity';
 import { TamSurveysService } from '../src/tam-surveys/tam-surveys.service';
 import { User, UserRole } from '../src/users/entities/user.entity';
+import { RealtimeSessionRegistry } from '../src/common/realtime/realtime-session-registry';
 
 describe('beta completion integrity (e2e)', () => {
   jest.setTimeout(120_000);
@@ -227,6 +228,7 @@ describe('beta completion integrity (e2e)', () => {
       dataSource.getRepository(User),
       dataSource.getRepository(BetaModeSettings),
       dataSource,
+      new RealtimeSessionRegistry(),
     );
   }
 

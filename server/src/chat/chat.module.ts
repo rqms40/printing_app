@@ -10,6 +10,7 @@ import { ChatController } from './chat.controller';
 import { OpenRouterService } from './openrouter.service';
 import { UsersModule } from '../users/users.module';
 import { Order } from '../orders/entities/order.entity';
+import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { Order } from '../orders/entities/order.entity';
       }),
     }),
     UsersModule,
+    RealtimeSessionsModule,
   ],
   providers: [ChatGateway, ChatService, OpenRouterService],
   controllers: [ChatController],

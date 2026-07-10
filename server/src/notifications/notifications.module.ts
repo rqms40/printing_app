@@ -9,6 +9,7 @@ import { MarketingSchedulerService } from './marketing-scheduler.service';
 import { NotificationsGateway } from './notifications.gateway';
 import { NotificationsController } from './notifications.controller';
 import { UsersModule } from '../users/users.module';
+import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { UsersModule } from '../users/users.module';
       }),
     }),
     forwardRef(() => UsersModule),
+    RealtimeSessionsModule,
   ],
   controllers: [NotificationsController],
   providers: [

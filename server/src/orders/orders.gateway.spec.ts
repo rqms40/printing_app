@@ -4,6 +4,7 @@ import { Server, Socket } from 'socket.io';
 import { OrdersGateway } from './orders.gateway';
 import { UsersService } from '../users/users.service';
 import { UserRole } from '../users/entities/user.entity';
+import { RealtimeSessionRegistry } from '../common/realtime/realtime-session-registry';
 
 const makeClient = (
   token?: string,
@@ -11,6 +12,7 @@ const makeClient = (
   handshake: { auth: Record<string, unknown> };
 } => ({
   handshake: { auth: token ? { token } : {} },
+  data: {},
   join: jest.fn().mockResolvedValue(undefined),
   disconnect: jest.fn(),
 });
@@ -19,6 +21,7 @@ describe('OrdersGateway', () => {
   let gateway: OrdersGateway;
   let jwtService: jest.Mocked<Pick<JwtService, 'verifyAsync'>>;
   let usersService: { findSocketIdentity: jest.Mock };
+  let realtimeSessions: { register: jest.Mock };
 
   beforeEach(async () => {
     jwtService = { verifyAsync: jest.fn() };
@@ -29,12 +32,14 @@ describe('OrdersGateway', () => {
         isActive: true,
       })),
     };
+    realtimeSessions = { register: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrdersGateway,
         { provide: JwtService, useValue: jwtService },
         { provide: UsersService, useValue: usersService },
+        { provide: RealtimeSessionRegistry, useValue: realtimeSessions },
       ],
     }).compile();
 
@@ -61,6 +66,7 @@ describe('OrdersGateway', () => {
       expect(jwtService.verifyAsync).toHaveBeenCalledWith('valid-admin-token');
       expect(client.join).toHaveBeenCalledWith('admin_orders');
       expect(client.disconnect).not.toHaveBeenCalled();
+      expect(realtimeSessions.register).toHaveBeenCalledWith(1, client);
     });
 
     it('joins the authenticated user room for non-admin JWTs', async () => {

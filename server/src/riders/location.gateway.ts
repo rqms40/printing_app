@@ -18,6 +18,8 @@ import {
 import { UsersService, type SocketIdentity } from '../users/users.service';
 import { UserRole } from '../users/entities/user.entity';
 import { DispatchPlanService } from './dispatch-plan.service';
+import { RealtimeSessionRegistry } from '../common/realtime/realtime-session-registry';
+import { authenticateRealtimeSocket } from '../common/realtime/realtime-socket-auth';
 
 export type RiderLocationUpdatePayload = {
   assignmentId: string;
@@ -45,13 +47,17 @@ export class LocationGateway implements OnGatewayConnection {
     private readonly assignmentRepo: Repository<DeliveryAssignment>,
     private readonly usersService: UsersService,
     private readonly dispatchPlanService: DispatchPlanService,
+    private readonly realtimeSessions: RealtimeSessionRegistry,
   ) {}
 
   async handleConnection(client: LocationSocket) {
     try {
-      if (!(await this.authenticateSocket(client))) {
+      const identity = await this.authenticateSocket(client);
+      if (!identity) {
         client.disconnect();
+        return;
       }
+      this.realtimeSessions.register(identity.id, client);
     } catch {
       client.disconnect();
     }
@@ -134,29 +140,10 @@ export class LocationGateway implements OnGatewayConnection {
   private async authenticateSocket(
     socket: LocationSocket,
   ): Promise<SocketIdentity | null> {
-    const token = socket.handshake.auth?.token as string | undefined;
-    if (!token) return null;
-    const payload = await this.jwtService.verifyAsync<{
-      sub?: unknown;
-      role?: unknown;
-    }>(token);
-    if (
-      typeof payload.sub !== 'number' ||
-      !Number.isInteger(payload.sub) ||
-      payload.sub <= 0
-    ) {
-      return null;
-    }
-    const identity = await this.usersService.findSocketIdentity(payload.sub);
-    if (
-      !identity?.isActive ||
-      payload.role !== identity.role ||
-      !Object.values(UserRole).includes(identity.role)
-    ) {
-      return null;
-    }
-    socket.data.userId = identity.id;
-    socket.data.role = identity.role;
-    return identity;
+    return authenticateRealtimeSocket(
+      this.jwtService,
+      this.usersService,
+      socket,
+    );
   }
 }

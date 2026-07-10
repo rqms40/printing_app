@@ -8,6 +8,7 @@ describe('LocationGateway', () => {
   const assignmentRepo = { findOne: jest.fn() };
   const usersService = { findSocketIdentity: jest.fn() };
   const dispatchPlanService = { getCurrentPendingStopForRider: jest.fn() };
+  const realtimeSessions = { register: jest.fn() };
   let gateway: LocationGateway;
 
   beforeEach(() => {
@@ -26,6 +27,7 @@ describe('LocationGateway', () => {
       assignmentRepo,
       usersService,
       dispatchPlanService,
+      realtimeSessions,
     );
   });
 
@@ -61,6 +63,19 @@ describe('LocationGateway', () => {
 
     expect(client.disconnect).toHaveBeenCalled();
     expect(client.data).toEqual({});
+  });
+
+  it('registers an active socket for post-commit account revocation', async () => {
+    const client = {
+      id: 'location-1',
+      handshake: { auth: { token: 'signed-token' } },
+      data: {},
+      disconnect: jest.fn(),
+    };
+
+    await (gateway as any).handleConnection(client);
+
+    expect(realtimeSessions.register).toHaveBeenCalledWith(10, client);
   });
 
   it('disconnects a missing or role-mismatched database identity', async () => {

@@ -24,6 +24,7 @@ import { PrinterProfileModule } from '../printer-profile/printer-profile.module'
 import { TamSurveysModule } from '../tam-surveys/tam-surveys.module';
 import { ProductsModule } from '../products/products.module';
 import { DispatchPlan } from '../riders/entities/dispatch-plan.entity';
+import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { DispatchPlan } from '../riders/entities/dispatch-plan.entity';
     DeliverySlotsModule,
     PrinterProfileModule,
     ProductsModule,
+    RealtimeSessionsModule,
   ],
   providers: [OrdersService, OrdersGateway],
   controllers: [OrdersController, ExternalDeliveriesController],

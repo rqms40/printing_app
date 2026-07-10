@@ -12,10 +12,23 @@ import { JwtService } from '@nestjs/jwt';
 import { ChatService, type ChatActorRole } from './chat.service';
 import { SenderRole } from './entities/chat-message.entity';
 import { ConversationType, Conversation } from './entities/conversation.entity';
+import { UsersService } from '../users/users.service';
+import { RealtimeSessionRegistry } from '../common/realtime/realtime-session-registry';
+import {
+  authenticateRealtimeSocket,
+  reauthorizeRealtimeSocket,
+} from '../common/realtime/realtime-socket-auth';
+import { UserRole } from '../users/entities/user.entity';
+
+const CHAT_ACTOR_ROLE_BY_USER_ROLE: Record<UserRole, ChatActorRole> = {
+  [UserRole.ADMIN]: 'admin',
+  [UserRole.CUSTOMER]: 'customer',
+  [UserRole.RIDER]: 'rider',
+};
 
 interface ChatSocketData {
   userId?: number;
-  role?: string;
+  role?: UserRole;
 }
 
 type ChatSocket = Socket<
@@ -35,27 +48,24 @@ export class ChatGateway implements OnGatewayConnection {
   constructor(
     private readonly jwtService: JwtService,
     private readonly chatService: ChatService,
+    private readonly usersService: UsersService,
+    private readonly realtimeSessions: RealtimeSessionRegistry,
   ) {}
 
   async handleConnection(client: ChatSocket) {
-    const token = client.handshake.auth?.token as string | undefined;
-    if (!token) {
+    const identity = await authenticateRealtimeSocket(
+      this.jwtService,
+      this.usersService,
+      client,
+    );
+    if (!identity) {
       client.disconnect();
       return;
     }
-    try {
-      const payload = await this.jwtService.verifyAsync<{
-        sub: number;
-        role?: string;
-      }>(token);
-      client.data.userId = payload.sub;
-      client.data.role = payload.role ?? 'customer';
-      if (payload.role === 'admin') {
-        void client.join('admin_inbox');
-      }
-    } catch {
-      client.disconnect();
+    if (identity.role === UserRole.ADMIN) {
+      await client.join('admin_inbox');
     }
+    this.realtimeSessions.register(identity.id, client);
   }
 
   @SubscribeMessage('join-conversation')
@@ -88,7 +98,7 @@ export class ChatGateway implements OnGatewayConnection {
     },
     @ConnectedSocket() client: ChatSocket,
   ) {
-    const role = this.getActor(client).role;
+    const role = (await this.getActor(client)).role;
     const senderRole =
       role === 'admin'
         ? SenderRole.ADMIN
@@ -167,7 +177,7 @@ export class ChatGateway implements OnGatewayConnection {
     @ConnectedSocket() client: ChatSocket,
   ) {
     await this.assertCanAccessConversation(client, data.conversationId);
-    const role = client.data.role ?? 'customer';
+    const role = (await this.getActor(client)).role;
     const senderRole =
       role === 'admin'
         ? SenderRole.ADMIN
@@ -232,19 +242,19 @@ export class ChatGateway implements OnGatewayConnection {
     );
   }
 
-  private getActor(client: ChatSocket): {
+  private async getActor(client: ChatSocket): Promise<{
     userId: number;
     role: ChatActorRole;
-  } {
-    const userId = client.data.userId;
-    if (!userId) {
+  }> {
+    const identity = await reauthorizeRealtimeSocket(this.usersService, client);
+    if (!identity) {
+      client.disconnect();
       throw new WsException('Unauthorized');
     }
-    const rawRole = client.data.role ?? 'customer';
-    if (rawRole !== 'admin' && rawRole !== 'customer' && rawRole !== 'rider') {
-      throw new WsException('Forbidden');
-    }
-    return { userId, role: rawRole };
+    return {
+      userId: identity.id,
+      role: CHAT_ACTOR_ROLE_BY_USER_ROLE[identity.role],
+    };
   }
 
   private async runAsActor<T>(
@@ -252,7 +262,7 @@ export class ChatGateway implements OnGatewayConnection {
     conversationId: number,
     action: (userId: number, role: ChatActorRole) => Promise<T>,
   ): Promise<T> {
-    const actor = this.getActor(client);
+    const actor = await this.getActor(client);
     try {
       return await action(actor.userId, actor.role);
     } catch (error) {

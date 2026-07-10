@@ -17,6 +17,7 @@ import { DispatchPlanService } from './dispatch-plan.service';
 import { ROUTING_PROVIDER } from './routing/routing-provider';
 import { OsrmRoutingProvider } from './routing/osrm-routing.provider';
 import { UsersModule } from '../users/users.module';
+import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { UsersModule } from '../users/users.module';
     ChatModule,
     FilesModule,
     UsersModule,
+    RealtimeSessionsModule,
   ],
   controllers: [RidersController],
   providers: [

@@ -7,6 +7,8 @@ import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { UserRole } from '../users/entities/user.entity';
+import { RealtimeSessionRegistry } from '../common/realtime/realtime-session-registry';
+import { authenticateRealtimeSocket } from '../common/realtime/realtime-socket-auth';
 
 export type DeliveryQueueUpdatedPayload = {
   orderId: number;
@@ -26,43 +28,24 @@ export class OrdersGateway implements OnGatewayConnection {
   constructor(
     private readonly jwtService: JwtService,
     private readonly usersService: UsersService,
+    private readonly realtimeSessions: RealtimeSessionRegistry,
   ) {}
 
   async handleConnection(client: Socket) {
-    const token = client.handshake.auth?.token as string | undefined;
-    if (!token) {
+    const identity = await authenticateRealtimeSocket(
+      this.jwtService,
+      this.usersService,
+      client,
+    );
+    if (!identity) {
       client.disconnect();
       return;
     }
-    try {
-      const payload = await this.jwtService.verifyAsync<{
-        role?: unknown;
-        sub?: unknown;
-      }>(token);
-      if (
-        typeof payload.sub !== 'number' ||
-        !Number.isInteger(payload.sub) ||
-        payload.sub <= 0
-      ) {
-        client.disconnect();
-        return;
-      }
-      const identity = await this.usersService.findSocketIdentity(payload.sub);
-      if (
-        !identity?.isActive ||
-        payload.role !== identity.role ||
-        !Object.values(UserRole).includes(identity.role)
-      ) {
-        client.disconnect();
-        return;
-      }
-      await client.join(`user_${identity.id}`);
-      if (identity.role === UserRole.ADMIN) {
-        await client.join('admin_orders');
-      }
-    } catch {
-      client.disconnect();
+    await client.join(`user_${identity.id}`);
+    if (identity.role === UserRole.ADMIN) {
+      await client.join('admin_orders');
     }
+    this.realtimeSessions.register(identity.id, client);
   }
 
   // Called by OrdersService when status changes

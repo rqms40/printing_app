@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -19,6 +20,7 @@ import {
 } from './entities/tam-survey-requirement.entity';
 import { TamSurvey } from './entities/tam-survey.entity';
 import { BetaModeSettings } from '../beta-mode/entities/beta-mode-settings.entity';
+import { RealtimeSessionRegistry } from '../common/realtime/realtime-session-registry';
 
 const REQUIRED_SURVEY_QUESTION_COUNT = 14;
 const POSTGRES_UNIQUE_VIOLATION = '23505';
@@ -41,6 +43,8 @@ export type AccountStateResponse = {
 
 @Injectable()
 export class TamSurveysService {
+  private readonly logger = new Logger(TamSurveysService.name);
+
   constructor(
     @InjectRepository(TamSurvey)
     private readonly tamSurveysRepo: Repository<TamSurvey>,
@@ -51,6 +55,7 @@ export class TamSurveysService {
     @InjectRepository(BetaModeSettings)
     private readonly betaModeSettingsRepo: Repository<BetaModeSettings>,
     private readonly dataSource: DataSource,
+    private readonly realtimeSessions: RealtimeSessionRegistry,
   ) {}
 
   async createVoluntarySurvey(
@@ -213,7 +218,7 @@ export class TamSurveysService {
     requirementId: number,
     dto: SubmitSurveyRequirementDto,
   ): Promise<{ success: true; surveyId: number; logoutRequired: boolean }> {
-    return this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const requirementsRepo = manager.getRepository(TamSurveyRequirement);
       const tamSurveysRepo = manager.getRepository(TamSurvey);
       const usersRepo = manager.getRepository(User);
@@ -284,11 +289,21 @@ export class TamSurveysService {
       }
 
       return {
-        success: true,
+        success: true as const,
         surveyId: savedSurvey.id,
         logoutRequired: holdPolicyApplies,
       };
     });
+    if (result.logoutRequired) {
+      try {
+        this.realtimeSessions.disconnectUser(userId);
+      } catch (error) {
+        this.logger.warn(
+          `Post-commit socket revocation failed for user ${userId}: ${error instanceof Error ? error.message : 'unknown error'}`,
+        );
+      }
+    }
+    return result;
   }
 
   private isRequirementUniqueViolation(error: unknown): boolean {

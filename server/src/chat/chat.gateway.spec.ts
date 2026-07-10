@@ -4,6 +4,9 @@ import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
 import { SenderRole } from './entities/chat-message.entity';
 import { ConversationType } from './entities/conversation.entity';
+import { UsersService } from '../users/users.service';
+import { UserRole } from '../users/entities/user.entity';
+import { RealtimeSessionRegistry } from '../common/realtime/realtime-session-registry';
 
 const makeSocket = (overrides: Partial<{ auth: any; data: any }> = {}) => ({
   id: 'socket-1',
@@ -28,6 +31,8 @@ describe('ChatGateway', () => {
     assertCanAccessConversationForActor: jest.Mock;
   };
   let jwtService: { verifyAsync: jest.Mock };
+  let usersService: { findSocketIdentity: jest.Mock };
+  let realtimeSessions: { register: jest.Mock };
   let server: {
     to: jest.Mock;
     in: jest.Mock;
@@ -48,12 +53,22 @@ describe('ChatGateway', () => {
     jwtService = {
       verifyAsync: jest.fn().mockResolvedValue({ sub: 42, role: 'customer' }),
     };
+    usersService = {
+      findSocketIdentity: jest.fn(async (id: number) => ({
+        id,
+        role: UserRole.CUSTOMER,
+        isActive: true,
+      })),
+    };
+    realtimeSessions = { register: jest.fn() };
 
     const module = await Test.createTestingModule({
       providers: [
         ChatGateway,
         { provide: ChatService, useValue: chatService },
         { provide: JwtService, useValue: jwtService },
+        { provide: UsersService, useValue: usersService },
+        { provide: RealtimeSessionRegistry, useValue: realtimeSessions },
       ],
     }).compile();
 
@@ -79,10 +94,16 @@ describe('ChatGateway', () => {
       await gateway.handleConnection(socket as any);
       expect(socket.data.userId).toBe(42);
       expect(socket.data.role).toBe('customer');
+      expect(realtimeSessions.register).toHaveBeenCalledWith(42, socket);
     });
 
     it('joins admin_inbox room for admin role', async () => {
       jwtService.verifyAsync.mockResolvedValue({ sub: 1, role: 'admin' });
+      usersService.findSocketIdentity.mockResolvedValue({
+        id: 1,
+        role: UserRole.ADMIN,
+        isActive: true,
+      });
       const socket = makeSocket();
       await gateway.handleConnection(socket as any);
       expect(socket.join).toHaveBeenCalledWith('admin_inbox');
@@ -93,6 +114,20 @@ describe('ChatGateway', () => {
       const socket = makeSocket();
       await gateway.handleConnection(socket as any);
       expect(socket.disconnect).toHaveBeenCalled();
+    });
+
+    it('disconnects an inactive database identity', async () => {
+      usersService.findSocketIdentity.mockResolvedValue({
+        id: 42,
+        role: UserRole.CUSTOMER,
+        isActive: false,
+      });
+      const socket = makeSocket();
+
+      await gateway.handleConnection(socket as any);
+
+      expect(socket.disconnect).toHaveBeenCalled();
+      expect(realtimeSessions.register).not.toHaveBeenCalled();
     });
   });
 
@@ -132,6 +167,11 @@ describe('ChatGateway', () => {
     });
 
     it('rejects a matching rider after the conversation is closed', async () => {
+      usersService.findSocketIdentity.mockResolvedValue({
+        id: 12,
+        role: UserRole.RIDER,
+        isActive: true,
+      });
       const socket = makeSocket({ data: { userId: 12, role: 'rider' } });
       chatService.assertCanAccessConversationForActor.mockRejectedValue(
         new Error('Forbidden'),
@@ -145,7 +185,30 @@ describe('ChatGateway', () => {
   });
 
   describe('handleSendMessage', () => {
+    it('disconnects a newly held customer before accepting a message', async () => {
+      usersService.findSocketIdentity.mockResolvedValue({
+        id: 1,
+        role: UserRole.CUSTOMER,
+        isActive: false,
+      });
+      const socket = makeSocket({ data: { userId: 1, role: 'customer' } });
+
+      await expect(
+        gateway.handleSendMessage(
+          { conversationId: 5, content: 'After hold' },
+          socket as any,
+        ),
+      ).rejects.toThrow('Unauthorized');
+
+      expect(socket.disconnect).toHaveBeenCalled();
+      expect(chatService.saveMessageForActor).not.toHaveBeenCalled();
+    });
     it('denies future messages from a rider after conversation closure', async () => {
+      usersService.findSocketIdentity.mockResolvedValue({
+        id: 12,
+        role: UserRole.RIDER,
+        isActive: true,
+      });
       const socket = makeSocket({ data: { userId: 12, role: 'rider' } });
       chatService.saveMessageForActor.mockRejectedValue(new Error('Forbidden'));
 
@@ -216,6 +279,11 @@ describe('ChatGateway', () => {
     });
 
     it('does not trigger GridBot for admin messages in AI conversations', async () => {
+      usersService.findSocketIdentity.mockResolvedValue({
+        id: 7,
+        role: UserRole.ADMIN,
+        isActive: true,
+      });
       const socket = makeSocket({ data: { userId: 7, role: 'admin' } });
       const saved = { id: 12, conversationId: 3, content: 'I can help' };
       chatService.saveMessageForActor.mockResolvedValue(saved);
@@ -266,6 +334,11 @@ describe('ChatGateway', () => {
 
   describe('handleTyping', () => {
     it('broadcasts user-typing with mapped SenderRole to room peers (not sender)', async () => {
+      usersService.findSocketIdentity.mockResolvedValue({
+        id: 1,
+        role: UserRole.ADMIN,
+        isActive: true,
+      });
       const socket = makeSocket({ data: { userId: 1, role: 'admin' } });
       chatService.findConversation.mockResolvedValue({ customerId: 42 });
       await gateway.handleTyping({ conversationId: 7 }, socket as any);
@@ -280,6 +353,11 @@ describe('ChatGateway', () => {
     });
 
     it('maps rider role to RIDER in user-typing payload', async () => {
+      usersService.findSocketIdentity.mockResolvedValue({
+        id: 2,
+        role: UserRole.RIDER,
+        isActive: true,
+      });
       const socket = makeSocket({ data: { userId: 2, role: 'rider' } });
       chatService.findConversation.mockResolvedValue({
         type: ConversationType.RIDER,

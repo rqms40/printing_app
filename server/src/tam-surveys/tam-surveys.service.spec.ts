@@ -19,6 +19,7 @@ import {
   TamSurveyRequirementStatus,
 } from './entities/tam-survey-requirement.entity';
 import { TamSurveysModule } from './tam-surveys.module';
+import { RealtimeSessionRegistry } from '../common/realtime/realtime-session-registry';
 
 const fullSurveyData = Object.fromEntries(
   Array.from({ length: 14 }, (_, index) => [String(index), index % 5]),
@@ -112,6 +113,7 @@ describe('TamSurveysService', () => {
   let userRepo: any;
   let transactionalManager: any;
   let dataSource: any;
+  let realtimeSessions: { disconnectUser: jest.Mock };
 
   const betaUser = {
     id: 10,
@@ -160,6 +162,7 @@ describe('TamSurveysService', () => {
     dataSource = {
       transaction: jest.fn((callback) => callback(transactionalManager)),
     };
+    realtimeSessions = { disconnectUser: jest.fn() };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -175,6 +178,7 @@ describe('TamSurveysService', () => {
         },
         { provide: getRepositoryToken(User), useValue: userRepo },
         { provide: DataSource, useValue: dataSource },
+        { provide: RealtimeSessionRegistry, useValue: realtimeSessions },
       ],
     }).compile();
 
@@ -452,6 +456,68 @@ describe('TamSurveysService', () => {
       betaCompletedAt: expect.any(Date),
     });
     expect(result).toEqual({
+      success: true,
+      surveyId: 900,
+      logoutRequired: true,
+    });
+    expect(realtimeSessions.disconnectUser).toHaveBeenCalledWith(10);
+  });
+
+  it('revokes sockets only after the survey transaction commits', async () => {
+    requirementRepo.findOne.mockResolvedValue({
+      id: 123,
+      userId: 10,
+      orderId: 55,
+      status: TamSurveyRequirementStatus.PENDING,
+    } as TamSurveyRequirement);
+    let committed = false;
+    dataSource.transaction.mockImplementationOnce(async (callback) => {
+      const result = await callback(transactionalManager);
+      committed = true;
+      return result;
+    });
+    realtimeSessions.disconnectUser.mockImplementation(() => {
+      expect(committed).toBe(true);
+    });
+
+    await service.submitRequirement(10, 123, {
+      surveyData: fullSurveyData,
+      openForumFeedback: {},
+    });
+
+    expect(realtimeSessions.disconnectUser).toHaveBeenCalledWith(10);
+  });
+
+  it('does not revoke sockets when survey submission rolls back', async () => {
+    dataSource.transaction.mockRejectedValueOnce(new Error('forced rollback'));
+
+    await expect(
+      service.submitRequirement(10, 123, {
+        surveyData: fullSurveyData,
+        openForumFeedback: {},
+      }),
+    ).rejects.toThrow('forced rollback');
+
+    expect(realtimeSessions.disconnectUser).not.toHaveBeenCalled();
+  });
+
+  it('returns committed survey success when socket revocation fails', async () => {
+    requirementRepo.findOne.mockResolvedValue({
+      id: 123,
+      userId: 10,
+      orderId: 55,
+      status: TamSurveyRequirementStatus.PENDING,
+    } as TamSurveyRequirement);
+    realtimeSessions.disconnectUser.mockImplementation(() => {
+      throw new Error('socket registry unavailable');
+    });
+
+    await expect(
+      service.submitRequirement(10, 123, {
+        surveyData: fullSurveyData,
+        openForumFeedback: {},
+      }),
+    ).resolves.toEqual({
       success: true,
       surveyId: 900,
       logoutRequired: true,

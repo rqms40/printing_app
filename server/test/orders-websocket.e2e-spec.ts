@@ -10,6 +10,9 @@ import { AppModule } from '../src/app.module';
 import { OrdersGateway } from '../src/orders/orders.gateway';
 import { databaseOptionsFromEnv } from '../src/database/data-source';
 import { User, UserRole } from '../src/users/entities/user.entity';
+import { TamSurveysService } from '../src/tam-surveys/tam-surveys.service';
+import { BetaModeSettings } from '../src/beta-mode/entities/beta-mode-settings.entity';
+import { Order, OrderStatus } from '../src/orders/entities/order.entity';
 
 describe('Orders websocket realtime rooms (e2e)', () => {
   let app: INestApplication<App>;
@@ -22,6 +25,7 @@ describe('Orders websocket realtime rooms (e2e)', () => {
   let adminUser: User;
   let rider: User;
   let inactiveCustomer: User;
+  let dataSource: DataSource;
   const sockets: Socket[] = [];
   const runId = Date.now().toString().slice(-8);
   const originalDatabaseName = process.env.DATABASE_NAME;
@@ -68,7 +72,8 @@ describe('Orders websocket realtime rooms (e2e)', () => {
     baseUrl = await app.getUrl();
     jwtService = app.get(JwtService);
     ordersGateway = app.get(OrdersGateway);
-    usersRepo = app.get(DataSource).getRepository(User);
+    dataSource = app.get(DataSource);
+    usersRepo = dataSource.getRepository(User);
     [customer, otherCustomer, adminUser, rider, inactiveCustomer] =
       await usersRepo.save([
         makeUser('customer', UserRole.CUSTOMER),
@@ -171,6 +176,96 @@ describe('Orders websocket realtime rooms (e2e)', () => {
     expect(reason).toBe('io server disconnect');
   });
 
+  it('revokes every namespace only after a beta survey commit', async () => {
+    await usersRepo.update(customer.id, {
+      isActive: true,
+      isBetaUser: true,
+      isBetaSurveyExempt: false,
+      betaEnrolledAt: new Date(),
+      accountHoldReason: null,
+      accountHeldAt: null,
+    });
+    customer = await usersRepo.findOneByOrFail({ id: customer.id });
+    const settingsRepo = dataSource.getRepository(BetaModeSettings);
+    const settings = await settingsRepo.findOne({ where: {} });
+    if (settings) {
+      await settingsRepo.update(settings.id, { isEnabled: true });
+    } else {
+      await settingsRepo.save(settingsRepo.create({ isEnabled: true }));
+    }
+    const order = await dataSource.getRepository(Order).save(
+      dataSource.getRepository(Order).create({
+        orderId: `ORD-WS-SURVEY-${runId}`,
+        userId: customer.id,
+        category: 'paper',
+        quantity: 1,
+        totalPrice: 10,
+        deliveryFee: 0,
+        paymentMethod: 'gridCredits',
+        paymentStatus: 'paid',
+        deliveryOption: 'delivery',
+        orderStatus: OrderStatus.DELIVERED,
+      }),
+    );
+    const surveys = app.get(TamSurveysService);
+    const requirement =
+      await surveys.createPostDeliveryRequirementIfNeeded(order);
+    expect(requirement).not.toBeNull();
+
+    const namespaces = [
+      '/ws/orders',
+      '/ws/location',
+      '/ws/notifications',
+      '/ws/chat',
+      '/ws/delivery-slots',
+    ];
+    const customerSockets = await Promise.all(
+      namespaces.map((namespace) =>
+        connectSocket(namespace, tokenFor(customer)),
+      ),
+    );
+    const unaffected = await connectSocket(
+      '/ws/orders',
+      tokenFor(otherCustomer),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    await expect(
+      surveys.submitRequirement(customer.id, requirement!.id, {
+        surveyData: {},
+        openForumFeedback: {},
+      }),
+    ).rejects.toThrow('Missing answer');
+    expect(
+      namespaces.filter(
+        (_namespace, index) => !customerSockets[index].connected,
+      ),
+    ).toEqual([]);
+    expect(unaffected.connected).toBe(true);
+
+    const disconnected = customerSockets.map((socket) =>
+      onceEvent<string>(socket, 'disconnect'),
+    );
+    const surveyData = Object.fromEntries(
+      Array.from({ length: 14 }, (_, index) => [String(index), index % 5]),
+    );
+    await expect(
+      surveys.submitRequirement(customer.id, requirement!.id, {
+        surveyData,
+        openForumFeedback: {},
+      }),
+    ).resolves.toMatchObject({ logoutRequired: true });
+    await Promise.all(disconnected);
+    expect(customerSockets.every((socket) => !socket.connected)).toBe(true);
+    expect(unaffected.connected).toBe(true);
+
+    for (const namespace of namespaces) {
+      await expect(
+        connectUntilServerDisconnect(tokenFor(customer), namespace),
+      ).resolves.toBe('io server disconnect');
+    }
+  });
+
   function makeUser(label: string, role: UserRole, isActive = true): User {
     return usersRepo.create({
       email: `orders-ws-${label}-${runId}@example.com`,
@@ -206,8 +301,11 @@ describe('Orders websocket realtime rooms (e2e)', () => {
     return socket;
   }
 
-  function connectUntilServerDisconnect(token: string): Promise<string> {
-    const socket = createOrdersSocket(token);
+  function connectUntilServerDisconnect(
+    token: string,
+    namespace = '/ws/orders',
+  ): Promise<string> {
+    const socket = createSocket(namespace, token);
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(
         () => reject(new Error('Timed out waiting for server disconnect')),
@@ -225,7 +323,20 @@ describe('Orders websocket realtime rooms (e2e)', () => {
   }
 
   function createOrdersSocket(token: string): Socket {
-    const socket = io(`${baseUrl}/ws/orders`, {
+    return createSocket('/ws/orders', token);
+  }
+
+  async function connectSocket(
+    namespace: string,
+    token: string,
+  ): Promise<Socket> {
+    const socket = createSocket(namespace, token);
+    await onceConnect(socket);
+    return socket;
+  }
+
+  function createSocket(namespace: string, token: string): Socket {
+    const socket = io(`${baseUrl}${namespace}`, {
       transports: ['websocket'],
       auth: { token },
       forceNew: true,

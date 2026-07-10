@@ -5,13 +5,22 @@ import {
   MessageBody,
   ConnectedSocket,
   OnGatewayConnection,
+  WsException,
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
+import { UsersService } from '../users/users.service';
+import { RealtimeSessionRegistry } from '../common/realtime/realtime-session-registry';
+import {
+  authenticateRealtimeSocket,
+  reauthorizeRealtimeSocket,
+} from '../common/realtime/realtime-socket-auth';
+import { UserRole } from '../users/entities/user.entity';
 
 interface DeliverySlotsSocketData {
   userId?: number;
+  role?: UserRole;
 }
 
 type DeliverySlotsSocket = Socket<
@@ -27,17 +36,20 @@ export class DeliverySlotsGateway implements OnGatewayConnection {
   server: Server;
   private readonly logger = new Logger('DeliverySlotsGateway');
 
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly usersService: UsersService,
+    private readonly realtimeSessions: RealtimeSessionRegistry,
+  ) {}
 
   async handleConnection(client: DeliverySlotsSocket) {
-    const token = client.handshake.auth?.token as string | undefined;
-    if (!token) return client.disconnect();
-    try {
-      const payload = await this.jwtService.verifyAsync<{ sub: number }>(token);
-      client.data.userId = payload.sub;
-    } catch {
-      client.disconnect();
-    }
+    const identity = await authenticateRealtimeSocket(
+      this.jwtService,
+      this.usersService,
+      client,
+    );
+    if (!identity) return client.disconnect();
+    this.realtimeSessions.register(identity.id, client);
   }
 
   @SubscribeMessage('subscribe-slots')
@@ -45,6 +57,11 @@ export class DeliverySlotsGateway implements OnGatewayConnection {
     @MessageBody() data: { date: string },
     @ConnectedSocket() client: DeliverySlotsSocket,
   ) {
+    const identity = await reauthorizeRealtimeSocket(this.usersService, client);
+    if (!identity) {
+      client.disconnect();
+      throw new WsException('Unauthorized');
+    }
     const room = `slots:${data.date}`;
     await client.join(room);
     this.logger.log(`socket ${client.id} joined ${room}`);
