@@ -34,8 +34,22 @@ class DeliveriesState {
   List<RiderAssignmentView> get inProgressAssignments =>
       views.where((v) => v.isInProgress).toList();
 
-  List<RiderAssignmentView> get routeStops =>
-      [...inProgressAssignments, ...newAssignments].take(5).toList();
+  List<RiderAssignmentView> get plannedRoute =>
+      views.where((view) => view.planStop != null).toList()..sort(
+        (left, right) => left.planSequence!.compareTo(right.planSequence!),
+      );
+
+  List<RiderAssignmentView> get routeStops {
+    if (plannedRoute.isNotEmpty) {
+      return plannedRoute
+          .where(
+            (view) => view.planStop?.status == RiderDispatchStopStatus.pending,
+          )
+          .take(5)
+          .toList();
+    }
+    return [...inProgressAssignments, ...newAssignments].take(5).toList();
+  }
 
   List<RiderAssignmentView> get completedAssignments => views
       .where(
@@ -126,13 +140,26 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
       final activeViews = parseAssignmentViews(activeData);
 
       List<RiderAssignmentView> historyViews = [];
+      RiderDispatchPlan? plan;
       try {
         final historyResponse = await ApiClient.instance.get('/riders/history');
         final historyData = historyResponse.data as List<dynamic>;
         historyViews = parseAssignmentViews(historyData);
       } catch (_) {}
+      try {
+        final planResponse = await ApiClient.instance.get(
+          '/riders/dispatch-plan',
+        );
+        plan = parseRiderDispatchPlan(planResponse.data);
+      } catch (_) {}
 
-      final merged = _mergeViews(activeViews, historyViews);
+      final merged = plan == null
+          ? _mergeViews(activeViews, historyViews)
+          : mergeRiderAssignmentViewsWithPlan(
+              active: activeViews,
+              history: historyViews,
+              plan: plan,
+            );
       state = state.copyWith(
         views: merged,
         isLoading: false,
@@ -348,6 +375,10 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         assignment: updater(view.assignment),
         order: view.order,
         routePosition: view.routePosition,
+        planVersion: view.planVersion,
+        planState: view.planState,
+        planStop: view.planStop,
+        routingDataStale: view.routingDataStale,
       );
     }).toList();
     state = state.copyWith(views: updated);

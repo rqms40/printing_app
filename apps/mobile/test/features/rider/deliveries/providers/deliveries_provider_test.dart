@@ -16,6 +16,7 @@ void main() {
 
   List<Map<String, dynamic>>? activeAssignmentsResponse;
   List<Map<String, dynamic>>? historyAssignmentsResponse;
+  Map<String, dynamic>? dispatchPlanResponse;
   var failPatchStatus = false;
   Map<String, dynamic>? lastStatusPatchData;
   Interceptor? riderApiInterceptor;
@@ -65,6 +66,18 @@ void main() {
           return;
         }
 
+        if (options.path == '/riders/dispatch-plan' &&
+            options.method == 'GET') {
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: dispatchPlanResponse,
+            ),
+          );
+          return;
+        }
+
         if (options.path.startsWith('/riders/assignments/') &&
             options.path.endsWith('/status') &&
             options.method == 'PATCH') {
@@ -108,6 +121,7 @@ void main() {
   setUp(() {
     activeAssignmentsResponse = null;
     historyAssignmentsResponse = null;
+    dispatchPlanResponse = null;
     failPatchStatus = false;
     lastStatusPatchData = null;
   });
@@ -366,6 +380,49 @@ void main() {
       );
     });
 
+    test('uses persisted plan order and keeps its completed legs', () async {
+      activeAssignmentsResponse = [
+        _assignmentJson(
+          id: '102',
+          status: DeliveryStatus.onTheWay,
+          updatedAt: '2026-02-03T09:00:00Z',
+        ),
+      ];
+      historyAssignmentsResponse = [
+        _assignmentJson(
+          id: '101',
+          status: DeliveryStatus.delivered,
+          updatedAt: '2026-02-02T09:00:00Z',
+        ),
+      ];
+      dispatchPlanResponse = {
+        'version': 4,
+        'originLatitude': '7.0640000',
+        'originLongitude': '125.6079000',
+        'provider': 'osrm',
+        'profile': 'driving',
+        'routingDataStale': false,
+        'stops': [
+          _planStop(101, sequence: 1, status: 'completed'),
+          _planStop(102, sequence: 2, status: 'pending'),
+        ],
+      };
+
+      final apiBackedNotifier = DeliveriesNotifier();
+      addTearDown(apiBackedNotifier.dispose);
+      await _waitForBootstrap();
+
+      expect(
+        apiBackedNotifier.state.plannedRoute.map((view) => view.id),
+        orderedEquals(['101', '102']),
+      );
+      expect(apiBackedNotifier.state.plannedRoute.first.planSequence, 1);
+      expect(apiBackedNotifier.state.plannedRoute.first.routePosition, isNull);
+      expect(apiBackedNotifier.state.plannedRoute.last.planSequence, 2);
+      expect(apiBackedNotifier.state.plannedRoute.last.routePosition, 1);
+      expect(apiBackedNotifier.state.plannedRoute.last.planVersion, 4);
+    });
+
     test(
       'refreshes assignments when realtime rider assignment event arrives',
       () async {
@@ -580,6 +637,27 @@ Map<String, dynamic> _assignmentJson({
     'updatedAt': updatedAt,
   };
 }
+
+Map<String, dynamic> _planStop(
+  int assignmentId, {
+  required int sequence,
+  required String status,
+}) => {
+  'assignmentId': assignmentId,
+  'sequence': sequence,
+  'status': status,
+  'destinationLatitude': '7.0731000',
+  'destinationLongitude': '125.6128000',
+  'legDurationSeconds': 12,
+  'legDistanceMeters': 77,
+  'legGeometry': {
+    'type': 'LineString',
+    'coordinates': [
+      [125.6079, 7.064],
+      [125.6128, 7.0731],
+    ],
+  },
+};
 
 DeliveryAssignment _assignment({
   required String id,

@@ -1,3 +1,4 @@
+import 'package:latlong2/latlong.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/shared/models/address.dart';
 import 'package:printing_app/shared/models/delivery_assignment.dart';
@@ -5,6 +6,7 @@ import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/models/user.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
+import 'package:printing_app/shared/models/route_geometry.dart';
 
 DeliveryStatus parseDeliveryStatus(String value) {
   final camelCase = value.replaceAllMapped(
@@ -174,17 +176,41 @@ DeliveryAssignment parseAssignment(Map<String, dynamic> json) {
 RiderAssignmentView parseAssignmentView(
   Map<String, dynamic> json, {
   int? routePosition,
+  bool allowMockFallback = true,
 }) {
   final assignment = parseAssignment(json);
   final orderJson = _asMap(json['order']);
   final order = orderJson != null
       ? _parseOrderContext(orderJson)
-      : orderContextFromMock(assignment);
+      : allowMockFallback
+      ? orderContextFromMock(assignment)
+      : RiderOrderContext(
+          orderRef: assignment.orderId,
+          orderInternalId: assignment.orderId,
+          category: 'print',
+          quantity: 1,
+          totalPrice: 0,
+          deliveryFee: 0,
+        );
+
+  final stop = _parsePlanStop(
+    _asMap(json['dispatchPlanStop'] ?? json['dispatch_plan_stop']),
+    fallbackAssignmentId: assignment.id,
+  );
 
   return RiderAssignmentView(
     assignment: assignment,
     order: order,
-    routePosition: routePosition,
+    routePosition:
+        routePosition ??
+        _readInt(json['routePosition'] ?? json['route_position']),
+    planVersion: _readInt(
+      json['dispatchPlanVersion'] ?? json['dispatch_plan_version'],
+    ),
+    planState:
+        _readString(json['dispatchPlanState'] ?? json['dispatch_plan_state']) ??
+        (stop == null ? 'unplanned' : 'planned'),
+    planStop: stop,
   );
 }
 
@@ -241,9 +267,200 @@ RiderOrderContext orderContextFromMock(DeliveryAssignment assignment) {
   );
 }
 
-List<RiderAssignmentView> parseAssignmentViews(List<dynamic> data) {
+List<RiderAssignmentView> parseAssignmentViews(
+  List<dynamic> data, {
+  bool allowMockFallback = true,
+}) {
   return data.asMap().entries.map((entry) {
-    final json = entry.value as Map<String, dynamic>;
-    return parseAssignmentView(json, routePosition: entry.key + 1);
+    final json = Map<String, dynamic>.from(entry.value as Map);
+    return parseAssignmentView(
+      json,
+      routePosition: _readInt(json['routePosition'] ?? json['route_position']),
+      allowMockFallback: allowMockFallback,
+    );
   }).toList();
+}
+
+RiderDispatchPlan? parseRiderDispatchPlan(dynamic value) {
+  if (value is! Map) return null;
+  final json = Map<String, dynamic>.from(value);
+  final version = _readInt(json['version']);
+  final originLatitude = _readDouble(
+    json['originLatitude'] ?? json['origin_latitude'],
+  );
+  final originLongitude = _readDouble(
+    json['originLongitude'] ?? json['origin_longitude'],
+  );
+  final rawStops = json['stops'];
+  if (version == null || version <= 0) return null;
+  if (!_validCoordinate(originLatitude, originLongitude)) return null;
+  if (rawStops is! List) return null;
+
+  final stops = <RiderDispatchPlanStop>[];
+  for (final rawStop in rawStops) {
+    final stop = _parsePlanStop(_asMap(rawStop));
+    if (stop == null) return null;
+    stops.add(stop);
+  }
+  stops.sort((left, right) => left.sequence.compareTo(right.sequence));
+  final sequences = stops.map((stop) => stop.sequence).toSet();
+  final assignmentIds = stops.map((stop) => stop.assignmentId).toSet();
+  if (sequences.length != stops.length ||
+      assignmentIds.length != stops.length) {
+    return null;
+  }
+
+  return RiderDispatchPlan(
+    version: version,
+    origin: LatLng(originLatitude!, originLongitude!),
+    provider: _readString(json['provider']) ?? 'unknown',
+    profile: _readString(json['profile']) ?? 'unknown',
+    routingDataStale:
+        json['routingDataStale'] == true || json['routing_data_stale'] == true,
+    stops: List.unmodifiable(stops),
+  );
+}
+
+RiderDispatchPlanStop? _parsePlanStop(
+  Map<String, dynamic>? json, {
+  String? fallbackAssignmentId,
+}) {
+  if (json == null) return null;
+  final assignmentId = _readId(
+    json['assignmentId'] ?? json['assignment_id'] ?? fallbackAssignmentId,
+  );
+  final sequence = _readInt(json['sequence']);
+  final latitude = _readDouble(
+    json['destinationLatitude'] ?? json['destination_latitude'],
+  );
+  final longitude = _readDouble(
+    json['destinationLongitude'] ?? json['destination_longitude'],
+  );
+  final duration = _readInt(
+    json['legDurationSeconds'] ?? json['leg_duration_seconds'],
+  );
+  final distance = _readInt(
+    json['legDistanceMeters'] ?? json['leg_distance_meters'],
+  );
+  final statusValue = _readString(json['status']);
+  final status = RiderDispatchStopStatus.values.firstWhere(
+    (candidate) => candidate.name == statusValue,
+    orElse: () => RiderDispatchStopStatus.pending,
+  );
+  if (assignmentId.isEmpty || sequence == null || sequence <= 0) return null;
+  if (!_validCoordinate(latitude, longitude)) return null;
+  if (duration == null || duration < 0 || distance == null || distance < 0) {
+    return null;
+  }
+  if (statusValue == null ||
+      !RiderDispatchStopStatus.values.any(
+        (candidate) => candidate.name == statusValue,
+      )) {
+    return null;
+  }
+  final rawGeometry = json['legGeometry'] ?? json['leg_geometry'];
+  final geometry = GeoJsonLineString.tryParse(rawGeometry);
+  return RiderDispatchPlanStop(
+    assignmentId: assignmentId,
+    sequence: sequence,
+    status: status,
+    destinationLatitude: latitude!,
+    destinationLongitude: longitude!,
+    legDurationSeconds: duration,
+    legDistanceMeters: distance,
+    geometry: geometry,
+    geometryMalformed: rawGeometry != null && geometry == null,
+  );
+}
+
+bool _validCoordinate(double? latitude, double? longitude) =>
+    latitude != null &&
+    longitude != null &&
+    latitude.isFinite &&
+    longitude.isFinite &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    longitude >= -180 &&
+    longitude <= 180;
+
+List<RiderAssignmentView> mergeRiderAssignmentViewsWithPlan({
+  required List<RiderAssignmentView> active,
+  required List<RiderAssignmentView> history,
+  required RiderDispatchPlan? plan,
+}) {
+  if (plan == null) {
+    final ids = <String>{};
+    return [
+      for (final view in [...active, ...history])
+        if (ids.add(view.id)) view,
+    ];
+  }
+
+  final byId = <String, RiderAssignmentView>{};
+  for (final view in history) {
+    byId.putIfAbsent(view.id, () => view);
+  }
+  for (final view in active) {
+    byId[view.id] = view;
+  }
+
+  final plannedIds = <String>{};
+  final planned = <RiderAssignmentView>[];
+  var remainingPosition = 0;
+  for (final stop in plan.stops) {
+    plannedIds.add(stop.assignmentId);
+    final isPending = stop.status == RiderDispatchStopStatus.pending;
+    if (isPending) remainingPosition++;
+    final source = byId[stop.assignmentId] ?? _placeholderView(stop);
+    planned.add(
+      RiderAssignmentView(
+        assignment: source.assignment,
+        order: source.order,
+        routePosition: isPending ? remainingPosition : null,
+        planVersion: plan.version,
+        planState: 'planned',
+        planStop: stop,
+        routingDataStale: plan.routingDataStale,
+      ),
+    );
+  }
+
+  final unplanned = <RiderAssignmentView>[];
+  for (final view in [...active, ...history]) {
+    if (!plannedIds.contains(view.id) &&
+        !unplanned.any((candidate) => candidate.id == view.id)) {
+      unplanned.add(view);
+    }
+  }
+  return [...planned, ...unplanned];
+}
+
+RiderAssignmentView _placeholderView(RiderDispatchPlanStop stop) {
+  final now = DateTime.now();
+  return RiderAssignmentView(
+    assignment: DeliveryAssignment(
+      id: stop.assignmentId,
+      orderId: 'planned-${stop.assignmentId}',
+      riderId: '',
+      status: stop.status == RiderDispatchStopStatus.completed
+          ? DeliveryStatus.delivered
+          : stop.status == RiderDispatchStopStatus.skipped
+          ? DeliveryStatus.declined
+          : DeliveryStatus.assigned,
+      createdAt: now,
+      updatedAt: now,
+    ),
+    order: RiderOrderContext(
+      orderRef: 'Planned stop ${stop.sequence}',
+      orderInternalId: 'planned-${stop.assignmentId}',
+      category: 'print',
+      quantity: 1,
+      totalPrice: 0,
+      deliveryFee: 0,
+      destination: RiderDestinationContext(
+        latitude: stop.destinationLatitude,
+        longitude: stop.destinationLongitude,
+      ),
+    ),
+  );
 }
