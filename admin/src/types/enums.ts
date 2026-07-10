@@ -25,7 +25,7 @@ export type DeliveryStatus =
   | "arrived"
   | "delivered";
 
-export type PaymentMethod = "gcash" | "maya" | "cod";
+export type PaymentMethod = "gcash" | "maya" | "cod" | "grid_credits";
 export type PaymentStatus = "pending" | "paid" | "failed" | "refunded";
 export type VehicleType = "motorcycle" | "bicycle" | "car";
 

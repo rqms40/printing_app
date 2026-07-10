@@ -8,6 +8,7 @@ export interface RiderProfile {
   plate_number?: string;
   license_number?: string;
   is_available: boolean;
+  assignment_eligible?: boolean;
   last_latitude?: number;
   last_longitude?: number;
   last_location_update?: string;
