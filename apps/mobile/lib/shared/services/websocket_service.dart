@@ -58,6 +58,8 @@ class WebSocketService {
   static final instance = WebSocketService._();
   WebSocketService._();
 
+  static const _ordersNamespace = '/ws/orders';
+
   /// When true, [connectDailyGrid] is a no-op. Set in widget tests that pump
   /// [DailyGridSection] to prevent real socket connection attempts.
   /// MUST be reset to false in tearDownAll to avoid polluting other test files.
@@ -123,6 +125,9 @@ class WebSocketService {
 
   String get _baseUrl => kServerUrl;
 
+  @visibleForTesting
+  String get surveyRequiredNamespaceForTests => _ordersNamespace;
+
   Future<void> connectOrders({VoidCallback? onConnect}) async {
     if (disableOrdersSocketForTests) {
       onConnect?.call();
@@ -136,7 +141,7 @@ class WebSocketService {
 
     final token = await TokenStorage.getToken();
     _ordersSocket = io.io(
-      '$_baseUrl/ws/orders',
+      '$_baseUrl$_ordersNamespace',
       io.OptionBuilder()
           .setTransports(['websocket'])
           .setAuth({'token': token ?? ''})
@@ -150,6 +155,7 @@ class WebSocketService {
       _dispatchRiderAssignment(data);
     });
     _ordersSocket!.on('deliveryQueueUpdated', _dispatchDeliveryQueueUpdated);
+    _ordersSocket!.on('survey-required', _dispatchSurveyRequired);
     _ordersSocket!.on('connect', (_) {
       debugPrint('WS Orders connected');
       onConnect?.call();
@@ -558,6 +564,11 @@ class WebSocketService {
   }
 
   @visibleForTesting
+  void dispatchSurveyRequiredForTests(dynamic data) {
+    _dispatchSurveyRequired(data);
+  }
+
+  @visibleForTesting
   void clearDeliveryQueueListenersForTests() {
     _deliveryQueueListeners.clear();
   }
@@ -587,7 +598,6 @@ class WebSocketService {
     );
     _notificationsSocket!.on('creditsUpdate', _dispatchCreditsUpdate);
     _notificationsSocket!.on('newNotification', _dispatchNotification);
-    _notificationsSocket!.on('survey-required', _dispatchSurveyRequired);
     _notificationsSocket!.on(
       'connect',
       (_) => debugPrint('WS Notifications connected'),
