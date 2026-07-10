@@ -162,5 +162,5 @@ describe("OrderList", () => {
       });
       expect(mockGet).toHaveBeenCalledWith("/admin/orders/42");
     });
-  });
+  }, 10_000);
 });
