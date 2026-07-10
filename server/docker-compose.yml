@@ -9,6 +9,11 @@ services:
       - '127.0.0.1:5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d grid_print']
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   redis:
     image: redis:7-alpine
@@ -32,6 +37,22 @@ services:
       timeout: 5s
       retries: 5
 
+  migrate:
+    build: .
+    command: npm run migration:run:prod
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: grid_print
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_SYNCHRONIZE: 'false'
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
   api:
     build: .
     ports:
@@ -42,11 +63,18 @@ services:
       DATABASE_NAME: grid_print
       DATABASE_USER: postgres
       DATABASE_PASSWORD: postgres
+      DATABASE_SYNCHRONIZE: 'false'
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: grid-print
+      MINIO_USE_SSL: 'false'
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       NODE_ENV: production
     depends_on:
-      postgres:
-        condition: service_started
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_started
       minio:

@@ -1,12 +1,78 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import {
+  BASELINE_METADATA_TABLE,
+  getBaselineOwnership,
+  recordBaselineOwnership,
+} from '../src/database/migration-ownership';
+
+const baselineOwnedTables = [
+  'beta_mode_settings',
+  'chat_messages',
+  'chat_conversations',
+  'credit_settings',
+  'credit_transactions',
+  'daily_grid_cards',
+  'delivery_settings',
+  'delivery_slot_bookings',
+  'delivery_slot_templates',
+  'file_metadata',
+  'notifications',
+  'marketing_notifications',
+  'paper_specs',
+  'three_d_specs',
+  'payment_transactions',
+  'printer_profiles',
+  'spec_options',
+  'service_categories',
+  'service_addons',
+  'product_spec_options',
+  'product_spec_definitions',
+  'product_categories',
+  'delivery_assignments',
+  'support_tickets',
+  'rider_profiles',
+  'driver_profiles',
+  'tam_surveys',
+  'tam_survey_requirements',
+  'orders',
+  'order_items',
+  'order_item_spec_values',
+  'delivery_destinations',
+  'batch_orders',
+  'order_status_history',
+  'addresses',
+  'tam_survey_settings',
+  'users',
+] as const;
+
+const baselineOwnedTypes = [
+  'chat_messages_sender_role_enum',
+  'chat_conversations_status_enum',
+  'chat_conversations_type_enum',
+  'credit_transactions_status_enum',
+  'credit_transactions_type_enum',
+  'delivery_proof_type_enum',
+  'delivery_assignments_status_enum',
+  'support_tickets_status_enum',
+  'tam_survey_requirements_status_enum',
+  'tam_survey_requirements_reason_enum',
+  'orders_order_status_enum',
+  'users_role_enum',
+  'users_profile_field_enum',
+  'users_profile_category_enum',
+  'users_age_range_enum',
+] as const;
 
 export class CurrentSchemaBaseline1700000000000 implements MigrationInterface {
   name = 'CurrentSchemaBaseline1700000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     if (await queryRunner.hasTable('users')) {
+      await recordBaselineOwnership(queryRunner, 'adopted');
       return;
     }
+
+    await recordBaselineOwnership(queryRunner, 'owned');
 
     await queryRunner.query(
       `CREATE TYPE "public"."users_age_range_enum" AS ENUM('under_18', '18_24', '25_34', '35_44', '45_plus')`,
@@ -323,213 +389,18 @@ export class CurrentSchemaBaseline1700000000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    if ((await getBaselineOwnership(queryRunner)) !== 'owned') {
+      return;
+    }
+
+    for (const table of baselineOwnedTables) {
+      await queryRunner.query(`DROP TABLE IF EXISTS "${table}" CASCADE`);
+    }
+    for (const type of baselineOwnedTypes) {
+      await queryRunner.query(`DROP TYPE IF EXISTS "public"."${type}" CASCADE`);
+    }
     await queryRunner.query(
-      `ALTER TABLE "chat_messages" DROP CONSTRAINT "FK_3d623662d4ee1219b23cf61e649"`,
+      `DROP TABLE IF EXISTS "${BASELINE_METADATA_TABLE}"`,
     );
-    await queryRunner.query(
-      `ALTER TABLE "chat_conversations" DROP CONSTRAINT "FK_f78efda285469da358dc6189bbb"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "credit_transactions" DROP CONSTRAINT "FK_9ac41a5292ef4d8356a86be30c2"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "delivery_slot_bookings" DROP CONSTRAINT "FK_8b58b1e24d3055367132301f214"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "notifications" DROP CONSTRAINT "FK_9a8a82462cab47c73d25f49261f"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "paper_specs" DROP CONSTRAINT "FK_103893dcc99485e046bbc1ece52"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "paper_specs" DROP CONSTRAINT "FK_a7f24c0fab3b2b78c21b429338b"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "three_d_specs" DROP CONSTRAINT "FK_6cd581ef7a29c6e2ad435979392"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "three_d_specs" DROP CONSTRAINT "FK_3dae48ebcc469343dcf8f7cb665"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "payment_transactions" DROP CONSTRAINT "FK_0f581511ac19ecb02dab437cd41"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "spec_options" DROP CONSTRAINT "FK_3d9c1e27aaf89b3af0bd7f5a86c"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "service_addons" DROP CONSTRAINT "FK_2f041a59cfc5c4b85b2f04708d4"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "product_spec_definitions" DROP CONSTRAINT "FK_1a4b929b0917d33189694524d16"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "product_spec_options" DROP CONSTRAINT "FK_9c8725d2a4ac15e6aebccd46eb3"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "delivery_assignments" DROP CONSTRAINT "FK_eb8780ee78d268c9c7caaba11c5"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "delivery_assignments" DROP CONSTRAINT "FK_3442216f1a3836b6e3a97c3e729"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "rider_profiles" DROP CONSTRAINT "FK_eb61b4b5bcd3ad3a6c14f491dbb"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "tam_surveys" DROP CONSTRAINT "FK_db9e4037bc30f096c61f4216f10"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "tam_surveys" DROP CONSTRAINT "FK_490a83859ac55fbb5fb7f0f9ac2"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "tam_surveys" DROP CONSTRAINT "FK_c544043144c124254b021f87cce"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "tam_survey_requirements" DROP CONSTRAINT "FK_fc8b9dac04a68e774241c8fa63a"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "tam_survey_requirements" DROP CONSTRAINT "FK_a982c70d95c563586b3f216d59e"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "tam_survey_requirements" DROP CONSTRAINT "FK_8c05fd5ca6f32fa358468f2c6a3"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "orders" DROP CONSTRAINT "FK_4880e77c6bc4b4dfe75112f5fcc"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "orders" DROP CONSTRAINT "FK_822c5ebe47e43ebe715f68968c4"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "orders" DROP CONSTRAINT "FK_dc0fe1df630904a0f2b33f2019b"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "orders" DROP CONSTRAINT "FK_0488b9a93537f5a2c2c44b0f3a6"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "orders" DROP CONSTRAINT "FK_a922b820eeef29ac1c6800e826a"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "order_items" DROP CONSTRAINT "FK_fd2ce99fdbb9f47a0dc4e1a76bf"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "order_items" DROP CONSTRAINT "FK_145532db85752b29c57d2b7b1f1"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "order_item_spec_values" DROP CONSTRAINT "FK_31133e139a046e8dd34f2b7954e"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "delivery_destinations" DROP CONSTRAINT "FK_3614958c42ec48a09d4a482486c"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "batch_orders" DROP CONSTRAINT "FK_685db1dc302b3049e8393747ac2"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "batch_orders" DROP CONSTRAINT "FK_e797e11685069c11ba755052645"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "order_status_history" DROP CONSTRAINT "FK_1ca7d5228cf9dc589b60243933c"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "addresses" DROP CONSTRAINT "FK_16aac8a9f6f9c1dd6bcb75ec023"`,
-    );
-    await queryRunner.query(`DROP TABLE "beta_mode_settings"`);
-    await queryRunner.query(`DROP INDEX "public"."idx_chat_msg_conv_created"`);
-    await queryRunner.query(`DROP TABLE "chat_messages"`);
-    await queryRunner.query(
-      `DROP TYPE "public"."chat_messages_sender_role_enum"`,
-    );
-    await queryRunner.query(`DROP INDEX "public"."idx_conv_customer_status"`);
-    await queryRunner.query(`DROP INDEX "public"."idx_conv_status_type"`);
-    await queryRunner.query(`DROP TABLE "chat_conversations"`);
-    await queryRunner.query(
-      `DROP TYPE "public"."chat_conversations_status_enum"`,
-    );
-    await queryRunner.query(
-      `DROP TYPE "public"."chat_conversations_type_enum"`,
-    );
-    await queryRunner.query(`DROP TABLE "credit_settings"`);
-    await queryRunner.query(`DROP TABLE "credit_transactions"`);
-    await queryRunner.query(
-      `DROP TYPE "public"."credit_transactions_status_enum"`,
-    );
-    await queryRunner.query(
-      `DROP TYPE "public"."credit_transactions_type_enum"`,
-    );
-    await queryRunner.query(`DROP TABLE "daily_grid_cards"`);
-    await queryRunner.query(`DROP TABLE "delivery_settings"`);
-    await queryRunner.query(
-      `DROP INDEX "public"."idx_slot_booking_template_date"`,
-    );
-    await queryRunner.query(`DROP TABLE "delivery_slot_bookings"`);
-    await queryRunner.query(`DROP TABLE "delivery_slot_templates"`);
-    await queryRunner.query(`DROP TABLE "file_metadata"`);
-    await queryRunner.query(`DROP INDEX "public"."idx_notifications_user_id"`);
-    await queryRunner.query(`DROP INDEX "public"."idx_notifications_created"`);
-    await queryRunner.query(`DROP TABLE "notifications"`);
-    await queryRunner.query(`DROP TABLE "marketing_notifications"`);
-    await queryRunner.query(`DROP TABLE "paper_specs"`);
-    await queryRunner.query(`DROP TABLE "three_d_specs"`);
-    await queryRunner.query(
-      `DROP INDEX "public"."idx_payment_transactions_order"`,
-    );
-    await queryRunner.query(`DROP TABLE "payment_transactions"`);
-    await queryRunner.query(`DROP TABLE "printer_profiles"`);
-    await queryRunner.query(`DROP TABLE "spec_options"`);
-    await queryRunner.query(`DROP TABLE "service_categories"`);
-    await queryRunner.query(`DROP TABLE "service_addons"`);
-    await queryRunner.query(`DROP TABLE "product_categories"`);
-    await queryRunner.query(`DROP TABLE "product_spec_definitions"`);
-    await queryRunner.query(`DROP TABLE "product_spec_options"`);
-    await queryRunner.query(
-      `DROP INDEX "public"."idx_delivery_assignments_order"`,
-    );
-    await queryRunner.query(
-      `DROP INDEX "public"."idx_delivery_assignments_rider"`,
-    );
-    await queryRunner.query(
-      `DROP INDEX "public"."idx_delivery_assignments_status"`,
-    );
-    await queryRunner.query(`DROP TABLE "delivery_assignments"`);
-    await queryRunner.query(`DROP TYPE "public"."delivery_proof_type_enum"`);
-    await queryRunner.query(
-      `DROP TYPE "public"."delivery_assignments_status_enum"`,
-    );
-    await queryRunner.query(`DROP TABLE "support_tickets"`);
-    await queryRunner.query(`DROP TYPE "public"."support_tickets_status_enum"`);
-    await queryRunner.query(`DROP TABLE "rider_profiles"`);
-    await queryRunner.query(`DROP TABLE "tam_surveys"`);
-    await queryRunner.query(
-      `DROP INDEX "public"."idx_tam_survey_requirements_user_status"`,
-    );
-    await queryRunner.query(
-      `DROP INDEX "public"."uq_tam_survey_requirements_order_reason"`,
-    );
-    await queryRunner.query(`DROP TABLE "tam_survey_requirements"`);
-    await queryRunner.query(
-      `DROP TYPE "public"."tam_survey_requirements_status_enum"`,
-    );
-    await queryRunner.query(
-      `DROP TYPE "public"."tam_survey_requirements_reason_enum"`,
-    );
-    await queryRunner.query(`DROP INDEX "public"."idx_orders_user_id"`);
-    await queryRunner.query(`DROP INDEX "public"."idx_orders_status"`);
-    await queryRunner.query(`DROP TABLE "orders"`);
-    await queryRunner.query(`DROP TYPE "public"."orders_order_status_enum"`);
-    await queryRunner.query(`DROP TABLE "order_items"`);
-    await queryRunner.query(`DROP TABLE "order_item_spec_values"`);
-    await queryRunner.query(`DROP INDEX "public"."idx_destination_batch"`);
-    await queryRunner.query(`DROP TABLE "delivery_destinations"`);
-    await queryRunner.query(`DROP TABLE "batch_orders"`);
-    await queryRunner.query(
-      `DROP INDEX "public"."idx_order_status_history_order"`,
-    );
-    await queryRunner.query(`DROP TABLE "order_status_history"`);
-    await queryRunner.query(`DROP INDEX "public"."idx_addresses_user_id"`);
-    await queryRunner.query(`DROP TABLE "addresses"`);
-    await queryRunner.query(`DROP TABLE "tam_survey_settings"`);
-    await queryRunner.query(`DROP TABLE "users"`);
-    await queryRunner.query(`DROP TYPE "public"."users_role_enum"`);
-    await queryRunner.query(`DROP TYPE "public"."users_profile_field_enum"`);
-    await queryRunner.query(`DROP TYPE "public"."users_profile_category_enum"`);
-    await queryRunner.query(`DROP TYPE "public"."users_age_range_enum"`);
   }
 }

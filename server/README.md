@@ -43,8 +43,9 @@ npm run seed:if-empty
 ```
 
 `npm run schema:fresh-check` runs those commands in the same order. The seed
-command is safe to rerun: it skips a populated `users` table and fails with a
-clear instruction if migrations have not created that table yet.
+command is safe to rerun: it verifies that the latest migration is recorded,
+skips a populated `users` table, and fails with a clear instruction when the
+schema is not fully migrated.
 
 Create and manage migrations with:
 
@@ -53,6 +54,11 @@ npm run migration:generate -- migrations/descriptive-name
 npm run migration:run
 npm run migration:revert
 ```
+
+The production image uses the compiled data source through
+`npm run migration:run:prod`. `server/docker-compose.yml` runs that command as
+a one-shot migration service and starts the API only after it succeeds. The
+production Compose path never loads demo seed data automatically.
 
 Schema synchronization is disabled by default. `DATABASE_SYNCHRONIZE=true` is
 an explicit local-only escape hatch for inspecting entity metadata; do not use

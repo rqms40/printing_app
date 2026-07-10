@@ -1,20 +1,10 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { isAdoptedSchema } from '../src/database/migration-ownership';
 
 export class DynamicProductCatalog1777680000000 implements MigrationInterface {
   name = 'DynamicProductCatalog1777680000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    for (const table of [
-      'paper_specs',
-      'three_d_specs',
-      'spec_options',
-      'service_categories',
-    ]) {
-      if (await queryRunner.hasTable(table)) {
-        await queryRunner.query(`DROP TABLE "${table}" CASCADE`);
-      }
-    }
-
     if (!(await queryRunner.hasTable('product_categories'))) {
       await queryRunner.query(`
         CREATE TABLE "product_categories" (
@@ -158,6 +148,8 @@ export class DynamicProductCatalog1777680000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    if (await isAdoptedSchema(queryRunner)) return;
+
     for (const table of [
       'order_item_spec_values',
       'product_spec_options',

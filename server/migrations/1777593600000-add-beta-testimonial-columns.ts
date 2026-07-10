@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { isAdoptedSchema } from '../src/database/migration-ownership';
 
 export class AddBetaTestimonialColumns1777593600000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -24,6 +25,8 @@ export class AddBetaTestimonialColumns1777593600000 implements MigrationInterfac
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    if (await isAdoptedSchema(queryRunner)) return;
+
     if (await queryRunner.hasTable('users')) {
       await queryRunner.query(`
         ALTER TABLE users

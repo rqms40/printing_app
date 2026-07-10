@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { isAdoptedSchema } from '../src/database/migration-ownership';
 
 const previousRole = ['dri', 'ver'].join('');
 const currentRole = 'rider';
@@ -230,9 +231,7 @@ async function renameSchemaTerms(
   );
 }
 
-export class RiderTerminologyRename1777853200000
-  implements MigrationInterface
-{
+export class RiderTerminologyRename1777853200000 implements MigrationInterface {
   name = 'RiderTerminologyRename1777853200000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -240,6 +239,8 @@ export class RiderTerminologyRename1777853200000
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    if (await isAdoptedSchema(queryRunner)) return;
+
     await renameSchemaTerms(queryRunner, currentRole, previousRole);
   }
 }

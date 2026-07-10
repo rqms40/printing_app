@@ -204,7 +204,7 @@ printing_app/
 │   │   ├── storage/                   # MinIO/S3 storage service
 │   │   ├── health/                    # Health check + DB probe at GET /api/health
 │   │   └── common/                    # Guards, filters, exception handler
-│   ├── migrations/                    # 10 TypeORM migrations (prod schema management)
+│   ├── migrations/                    # Versioned TypeORM production schema management
 │   ├── src/seed.ts                    # Demo data (3 users, catalog, slots, orders)
 │   ├── docker-compose.yml             # PostgreSQL 15 + Redis 7 + MinIO
 │   ├── Dockerfile                     # Multi-stage node:20-alpine production build
@@ -238,7 +238,7 @@ printing_app/
 | **Landing 3D** | @react-three/fiber 9 + Three.js | Scroll-driven phone model WebGL scene |
 | **Landing animation** | Framer Motion 12 | Scroll-triggered entry animations |
 | **Backend** | NestJS 11 + TypeScript 5.7 | Modular REST + WebSocket API |
-| **Database** | PostgreSQL 15 + TypeORM 0.3 | 30 tables, 13 migrations, synchronization disabled by default |
+| **Database** | PostgreSQL 15 + TypeORM 0.3 | Versioned migrations; synchronization disabled by default |
 | **Auth** | Passport.js + JWT | 7-day tokens, bcrypt hashing, 3 roles |
 | **File storage** | MinIO (S3-compatible) | Presigned URLs, GLB preview conversion |
 | **Push** | Firebase Cloud Messaging (Admin SDK 13) | Mobile push notifications |
@@ -323,7 +323,7 @@ docker-compose up -d          # starts postgres:15, redis:7, minio
 ```bash
 cd server
 npm install
-npm run migration:run   # apply the 13 TypeORM migrations
+npm run migration:run   # apply pending TypeORM migrations
 npm run seed:if-empty   # load demo data only when users is empty
 npm run start:dev       # http://localhost:3000/docs  (Swagger)
 ```
@@ -412,7 +412,7 @@ Refine v4 + React 18 + Ant Design 5 web dashboard. ~25 pages with 4 concurrent W
 
 ### Server (`server/`)
 
-NestJS 11 backend — REST API + 6 WebSocket namespaces, **59 spec files** (Jest), **13 migrations**, Swagger at `/docs`.
+NestJS 11 backend — REST API + 6 WebSocket namespaces, **59 spec files** (Jest), versioned migrations, Swagger at `/docs`.
 
 **WebSocket namespaces (Socket.IO)**
 
@@ -500,12 +500,15 @@ cd server
 docker-compose up -d --build        # builds API image from Dockerfile
 ```
 
+The production Compose stack runs a one-shot migration service from the built
+image before the API starts. It does not load demo seed data.
+
 The `server/Dockerfile` is a multi-stage `node:20-alpine` build. Key production checklist:
 - Set a strong `JWT_SECRET` (default is `grid-jwt-secret-change-in-production`)
 - Set real `OPENROUTER_API_KEY`
 - Configure real PayMongo keys when ready
 - Keep `DATABASE_SYNCHRONIZE=false` (the default) and set `NODE_ENV=production`
-- Run migrations: `npm run migration:run`
+- Outside Compose, run compiled migrations: `npm run migration:run:prod`
 - Replace MinIO with S3/R2 if deploying to cloud (change `MINIO_*` env vars)
 
 > **No cloud deployment is configured.** The project currently runs on a local LAN. No Render/Railway/Fly.io/Vercel/GCP config exists.
@@ -528,7 +531,7 @@ See `server/.env.example` for the full list. Key variables:
 
 ## Database
 
-PostgreSQL 15 via TypeORM. **30 tables**, **13 migrations**.
+PostgreSQL 15 via TypeORM with versioned production migrations.
 
 **Core tables:** `users` · `orders` · `batch_orders` · `order_items` · `order_item_spec_values` · `order_status_history` · `delivery_destinations` · `addresses`
 
@@ -549,14 +552,16 @@ PostgreSQL 15 via TypeORM. **30 tables**, **13 migrations**.
 **Config:** `daily_grid_cards` · `printer_profiles`
 
 TypeORM synchronization is disabled by default in every environment. Apply the
-schema with `npm run migration:run`, then use `npm run seed:if-empty` for demo
-data. `DATABASE_SYNCHRONIZE=true` is an explicit local-only escape hatch.
+schema with `npm run migration:run` in development (or
+`npm run migration:run:prod` from the built image), then use
+`npm run seed:if-empty` for demo data. `DATABASE_SYNCHRONIZE=true` is an
+explicit local-only escape hatch.
 
 ## Development Status — v1.3.0
 
 - [x] Phase 1 — UI shell (3 roles, full screen inventory, theme system)
 - [x] Phase 2 — Local logic (Hive drafts, dark mode, connectivity, offline mock fallback)
-- [x] Phase 3 — NestJS backend (30 DB tables, 13 migrations, Swagger)
+- [x] Phase 3 — NestJS backend (versioned DB migrations, Swagger)
 - [x] Phase 4 — Flutter ↔ API integration (Dio interceptors, JWT auth)
 - [x] Phase 5 — Admin dashboard (Refine + Ant Design, ~25 pages, 4 WebSocket connections)
 - [x] Phase 6 — Cart-style batch checkout (multi-item single-transaction orders)
