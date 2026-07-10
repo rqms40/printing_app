@@ -964,6 +964,11 @@ describe('RidersService', () => {
         21,
         expect.anything(),
       );
+      expect(
+        ordersGateway.notifyDeliveryQueueUpdated.mock.invocationCallOrder[0],
+      ).toBeLessThan(
+        ordersService.publishStatusUpdate.mock.invocationCallOrder[0],
+      );
     });
 
     it('publishes queue promotion independently of other post-commit failures', async () => {

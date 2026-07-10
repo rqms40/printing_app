@@ -32,6 +32,7 @@ import {
   DispatchPlanStop,
   DispatchStopStatus,
 } from '../src/riders/entities/dispatch-plan-stop.entity';
+import { orderDeliveryAssignmentsByRoute } from '../src/riders/delivery-route';
 
 type StopSeed = {
   label: string;
@@ -351,6 +352,17 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
       lastLongitude: stops[0].longitude,
       lastLocationUpdate: new Date(),
     });
+    const straightLineOrder = orderDeliveryAssignmentsByRoute(
+      await assignmentsRepo.find({
+        where: { riderId: riderProfile.id, isCurrent: true },
+        relations: ['order', 'order.destination'],
+      }),
+      {
+        latitude: stops[0].latitude,
+        longitude: stops[0].longitude,
+      },
+    );
+    expect(straightLineOrder[0].id).toBe(farAssignment.id);
     const venLocationSocket = await subscribeToLocation(
       nearAssignment.id,
       sign(nearCustomer),
