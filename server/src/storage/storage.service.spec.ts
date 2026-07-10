@@ -8,6 +8,7 @@ const mockMinioClient = {
   makeBucket: jest.fn(),
   setBucketPolicy: jest.fn(),
   putObject: jest.fn(),
+  statObject: jest.fn(),
   presignedGetObject: jest.fn(),
 };
 
@@ -103,6 +104,38 @@ describe('StorageService', () => {
         3600,
       );
       expect(result).toBe(fakeUrl);
+    });
+  });
+
+  describe('objectExists', () => {
+    it('stats the configured bucket and returns true for an existing object', async () => {
+      mockMinioClient.statObject.mockResolvedValue({ size: 123 });
+
+      await expect(
+        service.objectExists('uploads/proof/evidence.png'),
+      ).resolves.toBe(true);
+      expect(mockMinioClient.statObject).toHaveBeenCalledWith(
+        'test-bucket',
+        'uploads/proof/evidence.png',
+      );
+    });
+
+    it('returns false only for a missing object response', async () => {
+      mockMinioClient.statObject.mockRejectedValue({ code: 'NotFound' });
+
+      await expect(
+        service.objectExists('uploads/proof/missing.png'),
+      ).resolves.toBe(false);
+    });
+
+    it('propagates storage availability errors', async () => {
+      mockMinioClient.statObject.mockRejectedValue(
+        new Error('storage unavailable'),
+      );
+
+      await expect(
+        service.objectExists('uploads/proof/evidence.png'),
+      ).rejects.toThrow('storage unavailable');
     });
   });
 });

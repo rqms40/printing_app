@@ -136,6 +136,180 @@ describe('production migration lifecycle (e2e)', () => {
     }
   });
 
+  it('sanitizes dangling file references and restricts deletion across every adopted reference surface', async () => {
+    const database = await createDatabase('evidence_file_integrity');
+    await createSynchronizedFixture(database, false);
+    const dataSource = await initializeMigrationDataSource(database);
+
+    try {
+      const users = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO users
+           (email, password_hash, role, beta_photo_file_id,
+            beta_photo_uploaded_at, beta_shared_on_social)
+         VALUES
+           ($1, 'not-used', 'customer', 900001, NOW(), true),
+           ($2, 'not-used', 'rider', NULL, NULL, false)
+         RETURNING id`,
+        [
+          `evidence-customer-${database}@example.test`,
+          `evidence-rider-${database}@example.test`,
+        ],
+      );
+      const [order] = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO orders
+           (order_id, user_id, category, file_url, file_name,
+            file_metadata_id, total_price, delivery_fee, payment_method,
+            delivery_option, order_status)
+         VALUES
+           ($1, $2, 'paper', 'https://audit/order', 'order-audit.pdf',
+            900002, 10, 0, 'cash', 'delivery', 'arrived_at_destination')
+         RETURNING id`,
+        [`EVIDENCE-${database}`, users[0].id],
+      );
+      const [orderItem] = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO order_items
+           (order_id, category, file_url, file_name, file_metadata_id,
+            quantity, total_price)
+         VALUES
+           ($1, 'paper', 'https://audit/item', 'item-audit.pdf', 900003, 1, 10)
+         RETURNING id`,
+        [order.id],
+      );
+      const [rider] = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO rider_profiles (user_id, vehicle_type, is_available)
+         VALUES ($1, 'bike', true)
+         RETURNING id`,
+        [users[1].id],
+      );
+      const [assignment] = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO delivery_assignments
+           (order_id, rider_id, status, proof_type, proof_file_id,
+            proof_object_key, proof_captured_at, proof_captured_by_rider_id)
+         VALUES
+           ($1, $2, 'arrived', 'photo', 900004,
+            'uploads/proof_of_delivery/audit.png', NOW(), $3)
+         RETURNING id`,
+        [order.id, rider.id, users[1].id],
+      );
+      const [file] = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO file_metadata
+           (original_name, mime_type, size, url, object_key, purpose)
+         VALUES
+           ('evidence.png', 'image/png', 10, 'https://files/evidence',
+            'uploads/proof_of_delivery/evidence.png', 'proof_of_delivery')
+         RETURNING id`,
+      );
+
+      await dataSource.runMigrations();
+
+      await expect(
+        dataSource.query(
+          `SELECT proof_file_id, proof_object_key,
+                  proof_captured_by_rider_id
+           FROM delivery_assignments WHERE id = $1`,
+          [assignment.id],
+        ),
+      ).resolves.toEqual([
+        {
+          proof_file_id: null,
+          proof_object_key: 'uploads/proof_of_delivery/audit.png',
+          proof_captured_by_rider_id: users[1].id,
+        },
+      ]);
+      await expect(
+        dataSource.query(
+          `SELECT beta_photo_file_id, beta_photo_uploaded_at IS NOT NULL AS uploaded,
+                  beta_shared_on_social
+           FROM users WHERE id = $1`,
+          [users[0].id],
+        ),
+      ).resolves.toEqual([
+        {
+          beta_photo_file_id: null,
+          uploaded: true,
+          beta_shared_on_social: true,
+        },
+      ]);
+      await expect(
+        dataSource.query(
+          `SELECT file_metadata_id, file_url, file_name
+           FROM orders WHERE id = $1`,
+          [order.id],
+        ),
+      ).resolves.toEqual([
+        {
+          file_metadata_id: null,
+          file_url: 'https://audit/order',
+          file_name: 'order-audit.pdf',
+        },
+      ]);
+      await expect(
+        dataSource.query(
+          `SELECT file_metadata_id, file_url, file_name
+           FROM order_items WHERE id = $1`,
+          [orderItem.id],
+        ),
+      ).resolves.toEqual([
+        {
+          file_metadata_id: null,
+          file_url: 'https://audit/item',
+          file_name: 'item-audit.pdf',
+        },
+      ]);
+
+      const constraints = await dataSource.query<
+        Array<{ constraint_name: string; delete_action: string }>
+      >(
+        `SELECT conname AS constraint_name, confdeltype AS delete_action
+         FROM pg_constraint
+         WHERE conname = ANY($1::text[])
+         ORDER BY conname`,
+        [
+          [
+            'FK_delivery_assignments_proof_file',
+            'FK_users_beta_photo_file',
+            'FK_orders_file_metadata',
+            'FK_order_items_file_metadata',
+          ],
+        ],
+      );
+      expect(constraints).toEqual([
+        {
+          constraint_name: 'FK_delivery_assignments_proof_file',
+          delete_action: 'r',
+        },
+        {
+          constraint_name: 'FK_order_items_file_metadata',
+          delete_action: 'r',
+        },
+        { constraint_name: 'FK_orders_file_metadata', delete_action: 'r' },
+        { constraint_name: 'FK_users_beta_photo_file', delete_action: 'r' },
+      ]);
+
+      await dataSource.query(
+        `UPDATE delivery_assignments SET proof_file_id = $1 WHERE id = $2`,
+        [file.id, assignment.id],
+      );
+      await dataSource.query(
+        `UPDATE users SET beta_photo_file_id = $1 WHERE id = $2`,
+        [file.id, users[0].id],
+      );
+      await dataSource.query(
+        `UPDATE orders SET file_metadata_id = $1 WHERE id = $2`,
+        [file.id, order.id],
+      );
+      await dataSource.query(
+        `UPDATE order_items SET file_metadata_id = $1 WHERE id = $2`,
+        [file.id, orderItem.id],
+      );
+      await expect(
+        dataSource.query(`DELETE FROM file_metadata WHERE id = $1`, [file.id]),
+      ).rejects.toMatchObject({ code: '23503' });
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
   it('adopts a populated legacy catalog and remaps addons by category slug', async () => {
     const database = await createDatabase('legacy_catalog');
     await createSynchronizedFixture(database, false);
@@ -1166,7 +1340,7 @@ describe('production migration lifecycle (e2e)', () => {
     await staleMigration.connect();
     await staleMigration.query(
       `DELETE FROM migrations WHERE timestamp = $1 AND name = $2`,
-      ['1777853700000', 'FilePurposeAndDeliveryCompletion1777853700000'],
+      ['1777853800000', 'EvidenceFileIntegrity1777853800000'],
     );
     await staleMigration.end();
 

@@ -70,6 +70,28 @@ export class StorageService implements OnModuleInit {
     );
   }
 
+  async objectExists(objectKey: string): Promise<boolean> {
+    const bucket = this.config.get<string>('MINIO_BUCKET', 'grid-print');
+    try {
+      await this.minioClient.statObject(bucket, objectKey);
+      return true;
+    } catch (error) {
+      const details =
+        typeof error === 'object' && error !== null
+          ? (error as Record<string, unknown>)
+          : {};
+      const code = typeof details.code === 'string' ? details.code : '';
+      if (
+        code === 'NotFound' ||
+        code === 'NoSuchKey' ||
+        code === 'NoSuchObject'
+      ) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
   async delete(objectKey: string): Promise<void> {
     const bucket = this.config.get<string>('MINIO_BUCKET', 'grid-print');
     await this.minioClient.removeObject(bucket, objectKey);

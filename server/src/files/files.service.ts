@@ -5,9 +5,16 @@ import {
   BadRequestException,
   InternalServerErrorException,
   ForbiddenException,
+  ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, IsNull, MoreThan, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  IsNull,
+  MoreThan,
+  Repository,
+} from 'typeorm';
 import { extname } from 'path';
 import { createReadStream } from 'fs';
 import { readFile, unlink } from 'fs/promises';
@@ -36,6 +43,7 @@ export class FilesService {
     private readonly fileRepo: Repository<FileMetadata>,
     private readonly storageService: StorageService,
     private readonly analysisService: FileAnalysisService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async storeMetadata(
@@ -197,7 +205,58 @@ export class FilesService {
     if (!file.objectKey?.trim()) {
       throw new BadRequestException('Proof file has no storage object');
     }
+    await this.requireStoredObject(
+      file,
+      new BadRequestException('Proof file storage object not found'),
+    );
     return file;
+  }
+
+  async resolveBetaTestimonialFile(
+    fileId: number,
+    userId: number,
+    manager: EntityManager,
+  ): Promise<FileMetadata> {
+    const file = await manager.getRepository(FileMetadata).findOne({
+      where: { id: fileId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!file) {
+      throw new NotFoundException(`File ${fileId} not found`);
+    }
+    if (file.uploadedBy !== userId) {
+      throw new ForbiddenException('File does not belong to this user');
+    }
+    if (
+      file.purpose !== FilePurpose.BETA_TESTIMONIAL ||
+      !DELIVERY_PROOF_IMAGE_MIME_TYPES.includes(
+        file.mimeType as (typeof DELIVERY_PROOF_IMAGE_MIME_TYPES)[number],
+      ) ||
+      !file.objectKey?.trim()
+    ) {
+      throw new ForbiddenException('A beta testimonial photo is required');
+    }
+    await this.requireStoredObject(
+      file,
+      new ForbiddenException('A beta testimonial photo is required'),
+    );
+    return file;
+  }
+
+  private async requireStoredObject(
+    file: FileMetadata,
+    missingError: Error,
+  ): Promise<void> {
+    try {
+      if (!(await this.storageService.objectExists(file.objectKey!))) {
+        throw missingError;
+      }
+    } catch (error) {
+      if (error === missingError) throw error;
+      throw new InternalServerErrorException(
+        'Could not verify evidence storage',
+      );
+    }
   }
 
   private hasMemoryBuffer(file: Express.Multer.File): boolean {
@@ -271,47 +330,27 @@ export class FilesService {
     return this.storageService.getPresignedUrl(objectKey, ttl);
   }
 
-  /**
-   * Permanently deletes a file the user owns: removes the original from
-   * MinIO, the preview-GLB sibling (if any), and the DB row. Throws if the
-   * caller doesn't own the file (admins bypass via `isAdmin`).
-   */
+  /** Permanently deletes an unreferenced file owned by the caller. */
   async deleteOwnedFile(
     fileId: number,
     requestingUserId: number,
     isAdmin: boolean,
   ): Promise<void> {
-    const file = await this.fileRepo.findOne({ where: { id: fileId } });
-    if (!file) throw new NotFoundException('File not found');
-    if (
-      !isAdmin &&
-      (file.uploadedBy == null || file.uploadedBy !== requestingUserId)
-    ) {
-      throw new ForbiddenException();
-    }
-
-    // Delete MinIO objects first; tolerate "not found" so a partial state
-    // (object already gone) still cleans up the DB row. Hard errors on the
-    // primary object propagate so the caller knows storage is broken.
-    if (file.objectKey) {
-      try {
-        await this.storageService.delete(file.objectKey);
-      } catch (err) {
-        this.logger.warn(
-          `Primary object delete failed for ${file.objectKey}: ${err}`,
-        );
+    let plan: FileDeletionPlan;
+    try {
+      plan = await this.dataSource.transaction((manager) =>
+        this.lockAndDeleteMetadata(manager, fileId, {
+          requestingUserId,
+          isAdmin,
+        }),
+      );
+    } catch (error) {
+      if (this.isForeignKeyViolation(error)) {
+        throw new ConflictException('Referenced files cannot be deleted');
       }
+      throw error;
     }
-    if (file.previewGlbObjectKey) {
-      try {
-        await this.storageService.delete(file.previewGlbObjectKey);
-      } catch (err) {
-        this.logger.warn(
-          `Preview GLB delete failed for ${file.previewGlbObjectKey}: ${err}`,
-        );
-      }
-    }
-    await this.fileRepo.delete(fileId);
+    await this.deleteStoredObjects(plan);
   }
 
   async getMyUploads(userId: number): Promise<FileMetadata[]> {
@@ -352,22 +391,101 @@ export class FilesService {
     let skipped = 0;
 
     for (const file of expired) {
-      if (file.objectKey) {
-        try {
-          await this.storageService.delete(file.objectKey);
-        } catch (err) {
-          this.logger.error(
-            `Failed to delete MinIO object ${file.objectKey}`,
-            err,
-          );
+      try {
+        const plan = await this.dataSource.transaction((manager) =>
+          this.lockAndDeleteMetadata(manager, file.id, { expiredAt: now }),
+        );
+        deleted++;
+        await this.deleteStoredObjects(plan);
+      } catch (error) {
+        if (
+          error instanceof ConflictException ||
+          error instanceof NotFoundException ||
+          this.isForeignKeyViolation(error)
+        ) {
           skipped++;
           continue;
         }
+        throw error;
       }
-      await this.fileRepo.delete(file.id);
-      deleted++;
     }
 
     return { found: expired.length, deleted, skipped };
   }
+
+  private async lockAndDeleteMetadata(
+    manager: EntityManager,
+    fileId: number,
+    options:
+      | { requestingUserId: number; isAdmin: boolean }
+      | { expiredAt: Date },
+  ): Promise<FileDeletionPlan> {
+    const repo = manager.getRepository(FileMetadata);
+    const file = await repo.findOne({
+      where: { id: fileId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!file) throw new NotFoundException('File not found');
+
+    if ('requestingUserId' in options) {
+      if (
+        !options.isAdmin &&
+        (file.uploadedBy == null ||
+          file.uploadedBy !== options.requestingUserId)
+      ) {
+        throw new ForbiddenException();
+      }
+    } else if (!file.expiresAt || file.expiresAt > options.expiredAt) {
+      throw new ConflictException('File is no longer expired');
+    }
+
+    const [{ referenced = false } = {}] = await manager.query<
+      Array<{ referenced: boolean }>
+    >(
+      `SELECT EXISTS (
+         SELECT 1 FROM delivery_assignments WHERE proof_file_id = $1
+         UNION ALL
+         SELECT 1 FROM users WHERE beta_photo_file_id = $1
+         UNION ALL
+         SELECT 1 FROM orders WHERE file_metadata_id = $1
+         UNION ALL
+         SELECT 1 FROM order_items WHERE file_metadata_id = $1
+       ) AS referenced`,
+      [fileId],
+    );
+    if (referenced) {
+      throw new ConflictException('Referenced files cannot be deleted');
+    }
+
+    await repo.delete(fileId);
+    return {
+      objectKey: file.objectKey,
+      previewGlbObjectKey: file.previewGlbObjectKey,
+    };
+  }
+
+  private async deleteStoredObjects(plan: FileDeletionPlan): Promise<void> {
+    for (const key of [plan.objectKey, plan.previewGlbObjectKey]) {
+      if (!key) continue;
+      try {
+        await this.storageService.delete(key);
+      } catch {
+        this.logger.error('Failed to remove stored file object after commit');
+      }
+    }
+  }
+
+  private isForeignKeyViolation(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      String(error.code) === '23503'
+    );
+  }
+}
+
+interface FileDeletionPlan {
+  objectKey: string | null;
+  previewGlbObjectKey: string | null;
 }

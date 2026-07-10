@@ -1,17 +1,9 @@
-import {
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, DataSource, Repository } from 'typeorm';
 import { BetaModeSettings } from './entities/beta-mode-settings.entity';
 import { User } from '../users/entities/user.entity';
-import {
-  FileMetadata,
-  FilePurpose,
-} from '../files/entities/file-metadata.entity';
-import { DELIVERY_PROOF_IMAGE_MIME_TYPES } from '../files/files.constants';
+import { FilesService } from '../files/files.service';
 import { CreditsService } from '../credits/credits.service';
 
 export interface BetaMemberRow {
@@ -40,10 +32,9 @@ export class BetaModeService {
     private settingsRepo: Repository<BetaModeSettings>,
     @InjectRepository(User)
     private userRepo: Repository<User>,
-    @InjectRepository(FileMetadata)
-    private fileMetadataRepo: Repository<FileMetadata>,
     private creditsService: CreditsService,
     private dataSource: DataSource,
+    private filesService: FilesService,
   ) {}
 
   async getGlobalStatus(): Promise<{ isEnabled: boolean }> {
@@ -272,28 +263,17 @@ export class BetaModeService {
     userId: number,
     input: { fileId: number; sharedOnSocial?: boolean },
   ): Promise<{ ok: true }> {
-    const file = await this.fileMetadataRepo.findOne({
-      where: { id: input.fileId },
-    });
-    if (!file) {
-      throw new NotFoundException(`File ${input.fileId} not found`);
-    }
-    if (file.uploadedBy !== userId) {
-      throw new ForbiddenException('File does not belong to this user');
-    }
-    if (
-      file.purpose !== FilePurpose.BETA_TESTIMONIAL ||
-      !DELIVERY_PROOF_IMAGE_MIME_TYPES.includes(
-        file.mimeType as (typeof DELIVERY_PROOF_IMAGE_MIME_TYPES)[number],
-      ) ||
-      !file.objectKey?.trim()
-    ) {
-      throw new ForbiddenException('A beta testimonial photo is required');
-    }
-    await this.userRepo.update(userId, {
-      betaPhotoFileId: input.fileId,
-      betaPhotoUploadedAt: new Date(),
-      betaSharedOnSocial: input.sharedOnSocial ?? false,
+    await this.dataSource.transaction(async (manager) => {
+      await this.filesService.resolveBetaTestimonialFile(
+        input.fileId,
+        userId,
+        manager,
+      );
+      await manager.getRepository(User).update(userId, {
+        betaPhotoFileId: input.fileId,
+        betaPhotoUploadedAt: new Date(),
+        betaSharedOnSocial: input.sharedOnSocial ?? false,
+      });
     });
     return { ok: true };
   }

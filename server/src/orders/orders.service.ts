@@ -1810,12 +1810,30 @@ export class OrdersService {
       if (!current) throw new NotFoundException('Order not found');
       return current;
     }
-    return this.publishStatusUpdate(
-      completion.previous,
-      id,
-      status,
-      completion.surveyRequirement,
-    );
+    try {
+      return await this.publishStatusUpdate(
+        completion.previous,
+        id,
+        status,
+        completion.surveyRequirement,
+      );
+    } catch {
+      this.logger.warn(
+        `Post-commit status publication failed for order ${id}; returning committed state`,
+      );
+      try {
+        const current = await this.findById(id);
+        if (current) return current;
+      } catch {
+        // The status transaction is already committed. Fall through to the
+        // transaction-derived snapshot when the publication reload is down.
+      }
+      return {
+        ...completion.previous,
+        ...updates,
+        orderStatus,
+      } as Order;
+    }
   }
 
   async completeDelivery(

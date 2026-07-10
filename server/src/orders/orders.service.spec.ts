@@ -2114,6 +2114,145 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
     );
   });
 
+  it('returns the committed pickup when post-commit publication fails and retry is event-free', async () => {
+    const ready = makeOrder({
+      orderStatus: OrderStatus.READY_FOR_DISPATCH,
+      deliveryOption: 'pickup',
+    });
+    const completed = makeOrder({
+      orderStatus: OrderStatus.COMPLETED_PICKUP,
+      deliveryOption: 'pickup',
+    });
+    const surveyRequirement = { id: 89 } as TamSurveyRequirement;
+    ordersRepo.findOneOrFail
+      .mockResolvedValue(completed)
+      .mockResolvedValueOnce(ready)
+      .mockResolvedValueOnce(ready)
+      .mockRejectedValueOnce(new Error('post-commit reload failed'));
+    ordersRepo.findOne.mockResolvedValue(completed);
+    ordersRepo.update.mockResolvedValue({ affected: 1 });
+    transactionUserRepo.findOne.mockResolvedValue({
+      id: ready.userId,
+      fileRetentionDays: 7,
+    });
+    mockFilesService.stampExpiry.mockResolvedValue(undefined);
+    mockTamSurveysService.createPostDeliveryRequirementIfNeeded.mockResolvedValue(
+      surveyRequirement,
+    );
+    await expect(
+      service.updateStatus(
+        ready.id,
+        OrderStatus.COMPLETED_PICKUP,
+        {},
+        { actorUserId: 51, reason: 'Customer collected pickup' },
+      ),
+    ).resolves.toEqual(completed);
+
+    expect(ordersRepo.update).toHaveBeenCalledTimes(1);
+    expect(transactionHistoryRepo.insert).toHaveBeenCalledTimes(1);
+    expect(mockFilesService.stampExpiry).toHaveBeenCalledTimes(1);
+    expect(
+      mockTamSurveysService.createPostDeliveryRequirementIfNeeded,
+    ).toHaveBeenCalledTimes(1);
+
+    await expect(
+      service.updateStatus(
+        completed.id,
+        OrderStatus.COMPLETED_PICKUP,
+        {},
+        { actorUserId: 51, reason: 'Retry after response failure' },
+      ),
+    ).resolves.toEqual(completed);
+
+    expect(ordersRepo.update).toHaveBeenCalledTimes(1);
+    expect(transactionHistoryRepo.insert).toHaveBeenCalledTimes(1);
+    expect(mockFilesService.stampExpiry).toHaveBeenCalledTimes(1);
+    expect(
+      mockTamSurveysService.createPostDeliveryRequirementIfNeeded,
+    ).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns committed pickup state when post-commit assignment attachment fails', async () => {
+    const ready = makeOrder({
+      orderStatus: OrderStatus.READY_FOR_DISPATCH,
+      deliveryOption: 'pickup',
+    });
+    const completed = makeOrder({
+      orderStatus: OrderStatus.COMPLETED_PICKUP,
+      deliveryOption: 'pickup',
+    });
+    ordersRepo.findOneOrFail
+      .mockResolvedValueOnce(ready)
+      .mockResolvedValueOnce(ready)
+      .mockResolvedValueOnce(completed);
+    ordersRepo.findOne.mockResolvedValue(completed);
+    ordersRepo.update.mockResolvedValue({ affected: 1 });
+    transactionUserRepo.findOne.mockResolvedValue({
+      id: ready.userId,
+      fileRetentionDays: null,
+    });
+    mockTamSurveysService.createPostDeliveryRequirementIfNeeded.mockResolvedValue(
+      null,
+    );
+    jest
+      .spyOn(service as any, 'attachDeliveryAssignmentIds')
+      .mockRejectedValueOnce(new Error('assignment reload failed'));
+
+    await expect(
+      service.updateStatus(
+        ready.id,
+        OrderStatus.COMPLETED_PICKUP,
+        {},
+        { actorUserId: 51, reason: 'Customer collected pickup' },
+      ),
+    ).resolves.toEqual(completed);
+
+    expect(ordersRepo.update).toHaveBeenCalledTimes(1);
+    expect(transactionHistoryRepo.insert).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps pickup completion successful when every post-commit notification channel fails', async () => {
+    const ready = makeOrder({
+      orderStatus: OrderStatus.READY_FOR_DISPATCH,
+      deliveryOption: 'pickup',
+    });
+    const completed = makeOrder({
+      orderStatus: OrderStatus.COMPLETED_PICKUP,
+      deliveryOption: 'pickup',
+    });
+    ordersRepo.findOneOrFail
+      .mockResolvedValueOnce(ready)
+      .mockResolvedValueOnce(ready)
+      .mockResolvedValueOnce(completed);
+    ordersRepo.update.mockResolvedValue({ affected: 1 });
+    transactionUserRepo.findOne.mockResolvedValue({
+      id: ready.userId,
+      fileRetentionDays: null,
+    });
+    mockTamSurveysService.createPostDeliveryRequirementIfNeeded.mockResolvedValue(
+      null,
+    );
+    mockUsersService.getFcmToken.mockRejectedValue(
+      new Error('fcm lookup failed'),
+    );
+    mockGateway.notifyOrderUpdate.mockRejectedValue(new Error('socket failed'));
+    mockNotifications.create.mockRejectedValue(
+      new Error('notification failed'),
+    );
+
+    await expect(
+      service.updateStatus(
+        ready.id,
+        OrderStatus.COMPLETED_PICKUP,
+        {},
+        { actorUserId: 51, reason: 'Customer collected pickup' },
+      ),
+    ).resolves.toEqual(completed);
+
+    expect(ordersRepo.update).toHaveBeenCalledTimes(1);
+    expect(transactionHistoryRepo.insert).toHaveBeenCalledTimes(1);
+  });
+
   it('does not repeat completed-pickup expiry writes during publication', async () => {
     const order = makeOrder();
     ordersRepo.findOneOrFail

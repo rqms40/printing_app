@@ -4,9 +4,9 @@ import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { BetaModeService } from './beta-mode.service';
 import { BetaModeSettings } from './entities/beta-mode-settings.entity';
 import { User } from '../users/entities/user.entity';
-import { FileMetadata } from '../files/entities/file-metadata.entity';
 import { CreditsService } from '../credits/credits.service';
 import { DataSource, EntityManager } from 'typeorm';
+import { FilesService } from '../files/files.service';
 
 const makeUser = (overrides: Partial<User> = {}): User =>
   ({
@@ -29,10 +29,14 @@ describe('BetaModeService', () => {
     update: jest.Mock;
     createQueryBuilder: jest.Mock;
   };
-  let fileMetadataRepo: { findOne: jest.Mock };
   let creditsService: { grantBetaEnrollmentCredits: jest.Mock };
   let dataSource: { transaction: jest.Mock };
-  let transactionUserRepo: { findOne: jest.Mock; save: jest.Mock };
+  let transactionUserRepo: {
+    findOne: jest.Mock;
+    save: jest.Mock;
+    update: jest.Mock;
+  };
+  let filesService: { resolveBetaTestimonialFile: jest.Mock };
   let transactionManager: EntityManager;
   let mockQB: {
     where: jest.Mock;
@@ -58,9 +62,6 @@ describe('BetaModeService', () => {
       update: jest.fn().mockResolvedValue(undefined),
       createQueryBuilder: jest.fn().mockReturnValue(mockQB),
     };
-    fileMetadataRepo = {
-      findOne: jest.fn(),
-    };
     creditsService = {
       grantBetaEnrollmentCredits: jest.fn().mockResolvedValue(undefined),
     };
@@ -71,13 +72,23 @@ describe('BetaModeService', () => {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-return
       findOne: jest.fn((options) => userRepo.findOne(options)),
       save: jest.fn().mockImplementation(async (user: User) => user),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    filesService = {
+      resolveBetaTestimonialFile: jest.fn().mockResolvedValue({
+        id: 42,
+        uploadedBy: 1,
+        objectKey: 'uploads/beta_testimonial/2026/07/photo.png',
+        purpose: 'beta_testimonial',
+        mimeType: 'image/png',
+      }),
     };
     transactionManager = {
       getRepository: jest.fn().mockReturnValue(transactionUserRepo),
     } as unknown as EntityManager;
     dataSource.transaction.mockImplementation(
       async (work: (manager: EntityManager) => Promise<unknown>) => {
-        await work(transactionManager);
+        return work(transactionManager);
       },
     );
 
@@ -89,12 +100,9 @@ describe('BetaModeService', () => {
           useValue: settingsRepo,
         },
         { provide: getRepositoryToken(User), useValue: userRepo },
-        {
-          provide: getRepositoryToken(FileMetadata),
-          useValue: fileMetadataRepo,
-        },
         { provide: CreditsService, useValue: creditsService },
         { provide: DataSource, useValue: dataSource },
+        { provide: FilesService, useValue: filesService },
       ],
     }).compile();
 
@@ -392,22 +400,54 @@ describe('BetaModeService', () => {
   // ── submitTestimonial ──────────────────────────────────────────────────────
 
   describe('submitTestimonial', () => {
-    it('happy path: updates user row and returns { ok: true }', async () => {
-      fileMetadataRepo.findOne.mockResolvedValue({
+    it('locks evidence and updates the user in the same transaction', async () => {
+      const file = {
         id: 42,
         uploadedBy: 1,
         objectKey: 'uploads/beta_testimonial/2026/07/photo.png',
         purpose: 'beta_testimonial',
         mimeType: 'image/png',
+      };
+      filesService.resolveBetaTestimonialFile.mockResolvedValue(file);
+
+      await service.submitTestimonial(1, {
+        fileId: 42,
+        sharedOnSocial: true,
       });
 
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(filesService.resolveBetaTestimonialFile).toHaveBeenCalledWith(
+        42,
+        1,
+        transactionManager,
+      );
+      expect(transactionUserRepo.update).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ betaPhotoFileId: 42 }),
+      );
+      expect(userRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects testimonial metadata whose storage object is missing', async () => {
+      filesService.resolveBetaTestimonialFile.mockRejectedValue(
+        new ForbiddenException('A beta testimonial photo is required'),
+      );
+
+      await expect(
+        service.submitTestimonial(1, { fileId: 42 }),
+      ).rejects.toThrow('A beta testimonial photo is required');
+
+      expect(transactionUserRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('happy path: updates user row and returns { ok: true }', async () => {
       const result = await service.submitTestimonial(1, {
         fileId: 42,
         sharedOnSocial: true,
       });
 
       expect(result).toEqual({ ok: true });
-      expect(userRepo.update).toHaveBeenCalledWith(
+      expect(transactionUserRepo.update).toHaveBeenCalledWith(
         1,
         expect.objectContaining({
           betaPhotoFileId: 42,
@@ -418,24 +458,18 @@ describe('BetaModeService', () => {
     });
 
     it('defaults sharedOnSocial to false when omitted', async () => {
-      fileMetadataRepo.findOne.mockResolvedValue({
-        id: 42,
-        uploadedBy: 1,
-        objectKey: 'uploads/beta_testimonial/2026/07/photo.png',
-        purpose: 'beta_testimonial',
-        mimeType: 'image/png',
-      });
-
       await service.submitTestimonial(1, { fileId: 42 });
 
-      expect(userRepo.update).toHaveBeenCalledWith(
+      expect(transactionUserRepo.update).toHaveBeenCalledWith(
         1,
         expect.objectContaining({ betaSharedOnSocial: false }),
       );
     });
 
     it('throws NotFoundException when file does not exist', async () => {
-      fileMetadataRepo.findOne.mockResolvedValue(null);
+      filesService.resolveBetaTestimonialFile.mockRejectedValue(
+        new NotFoundException('File 999 not found'),
+      );
 
       await expect(
         service.submitTestimonial(1, { fileId: 999 }),
@@ -443,7 +477,9 @@ describe('BetaModeService', () => {
     });
 
     it('throws ForbiddenException when file belongs to a different user', async () => {
-      fileMetadataRepo.findOne.mockResolvedValue({ id: 42, uploadedBy: 99 });
+      filesService.resolveBetaTestimonialFile.mockRejectedValue(
+        new ForbiddenException('File does not belong to this user'),
+      );
 
       await expect(
         service.submitTestimonial(1, { fileId: 42 }),
@@ -451,13 +487,9 @@ describe('BetaModeService', () => {
     });
 
     it('rejects an ordinary order upload as a beta testimonial', async () => {
-      fileMetadataRepo.findOne.mockResolvedValue({
-        id: 42,
-        uploadedBy: 1,
-        objectKey: 'uploads/beta_testimonial/2026/07/spoofed.png',
-        purpose: 'general',
-        mimeType: 'image/png',
-      });
+      filesService.resolveBetaTestimonialFile.mockRejectedValue(
+        new ForbiddenException('A beta testimonial photo is required'),
+      );
 
       await expect(
         service.submitTestimonial(1, { fileId: 42 }),
@@ -465,13 +497,9 @@ describe('BetaModeService', () => {
     });
 
     it('rejects a testimonial file with a non-image MIME type', async () => {
-      fileMetadataRepo.findOne.mockResolvedValue({
-        id: 42,
-        uploadedBy: 1,
-        objectKey: 'uploads/beta_testimonial/2026/07/document.pdf',
-        purpose: 'beta_testimonial',
-        mimeType: 'application/pdf',
-      });
+      filesService.resolveBetaTestimonialFile.mockRejectedValue(
+        new ForbiddenException('A beta testimonial photo is required'),
+      );
 
       await expect(
         service.submitTestimonial(1, { fileId: 42 }),
@@ -479,13 +507,9 @@ describe('BetaModeService', () => {
     });
 
     it('rejects a testimonial record without a storage object key', async () => {
-      fileMetadataRepo.findOne.mockResolvedValue({
-        id: 42,
-        uploadedBy: 1,
-        objectKey: null,
-        purpose: 'beta_testimonial',
-        mimeType: 'image/jpeg',
-      });
+      filesService.resolveBetaTestimonialFile.mockRejectedValue(
+        new ForbiddenException('A beta testimonial photo is required'),
+      );
 
       await expect(
         service.submitTestimonial(1, { fileId: 42 }),

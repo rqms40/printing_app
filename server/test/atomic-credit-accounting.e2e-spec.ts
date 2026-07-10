@@ -724,9 +724,9 @@ describe('atomic credit accounting (e2e)', () => {
     return new BetaModeService(
       dataSource.getRepository(BetaModeSettings),
       dataSource.getRepository(User),
-      dataSource.getRepository(FileMetadata),
       creditsService,
       dataSource,
+      {} as FilesService,
     );
   }
 

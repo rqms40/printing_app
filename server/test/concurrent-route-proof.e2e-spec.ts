@@ -19,11 +19,8 @@ import {
   DeliveryStatus,
   ProofOfDeliveryType,
 } from '../src/riders/entities/delivery-assignment.entity';
-import {
-  FileMetadata,
-  FilePurpose,
-} from '../src/files/entities/file-metadata.entity';
 import { databaseOptionsFromEnv } from '../src/database/data-source';
+import { StorageService } from '../src/storage/storage.service';
 
 type StopSeed = {
   label: string;
@@ -44,9 +41,10 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
   let ordersRepo: Repository<Order>;
   let riderProfilesRepo: Repository<RiderProfile>;
   let assignmentsRepo: Repository<DeliveryAssignment>;
-  let fileMetadataRepo: Repository<FileMetadata>;
+  let storageService: StorageService;
 
   const sockets: Socket[] = [];
+  const storageObjectKeys = new Set<string>();
   const runId = Date.now().toString().slice(-8);
   const originalDatabaseName = process.env.DATABASE_NAME;
   const originalJwtSecret = process.env.JWT_SECRET;
@@ -123,7 +121,7 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
     ordersRepo = dataSource.getRepository(Order);
     riderProfilesRepo = dataSource.getRepository(RiderProfile);
     assignmentsRepo = dataSource.getRepository(DeliveryAssignment);
-    fileMetadataRepo = dataSource.getRepository(FileMetadata);
+    storageService = app.get(StorageService);
   });
 
   afterEach(() => {
@@ -133,6 +131,9 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
   });
 
   afterAll(async () => {
+    for (const objectKey of storageObjectKeys) {
+      await storageService.delete(objectKey).catch(() => undefined);
+    }
     if (app) await app.close();
     if (originalDatabaseName === undefined) delete process.env.DATABASE_NAME;
     else process.env.DATABASE_NAME = originalDatabaseName;
@@ -181,24 +182,26 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
         lastLongitude: null,
       }),
     );
-    const photoProof = await fileMetadataRepo.save(
-      fileMetadataRepo.create({
-        originalName: `route-photo-${runId}.jpg`,
-        mimeType: 'image/jpeg',
-        size: 1024,
-        url: `https://files.test/route-photo-${runId}.jpg`,
-        objectKey: `uploads/proof_of_delivery/route-photo-${runId}.jpg`,
-        uploadedBy: rider.id,
-        purpose: FilePurpose.PROOF_OF_DELIVERY,
-      }),
-    );
-
     const createdOrders = await Promise.all(
       stops.map((stop) => createReadyOrder(stop)),
     );
 
     const adminToken = sign(admin);
     const riderToken = sign(rider);
+    const photoUpload = await request(app.getHttpServer())
+      .post('/api/files/upload')
+      .set('Authorization', `Bearer ${riderToken}`)
+      .field('purpose', 'proof_of_delivery')
+      .attach('file', Buffer.from('real-route-photo-bytes'), {
+        filename: `route-photo-${runId}.jpg`,
+        contentType: 'image/jpeg',
+      })
+      .expect(201);
+    const photoProof = photoUpload.body as {
+      id: number;
+      objectKey: string;
+    };
+    storageObjectKeys.add(photoProof.objectKey);
 
     await Promise.all(
       createdOrders.map((order) =>
