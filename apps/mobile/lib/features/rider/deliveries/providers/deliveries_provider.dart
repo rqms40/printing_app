@@ -119,6 +119,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
   }
 
   final bool realFlow;
+  int _fetchGeneration = 0;
 
   void Function()? _removeRiderAssignmentListener;
 
@@ -137,6 +138,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
   }
 
   Future<void> _fetchAll({bool refreshing = false}) async {
+    final generation = ++_fetchGeneration;
     state = state.copyWith(
       isLoading: !refreshing && state.views.isEmpty,
       isRefreshing: refreshing,
@@ -192,6 +194,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
               history: historyViews,
               plan: plan,
             );
+      if (generation != _fetchGeneration) return;
       state = state.copyWith(
         views: merged,
         isLoading: false,
@@ -200,6 +203,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         dataStale: plan?.routingDataStale ?? false,
       );
     } catch (_) {
+      if (generation != _fetchGeneration) return;
       if (realFlow) {
         state = state.copyWith(
           isLoading: false,

@@ -78,6 +78,8 @@ Future<void> _settle(WidgetTester tester) async {
 }
 
 LiveDeliveryMapState _active({
+  String assignmentId = '101',
+  int planVersion = 4,
   RoutingHealth routingHealth = RoutingHealth.current,
   List<LatLng> routePoints = const [
     LatLng(7.064, 125.608),
@@ -89,8 +91,8 @@ LiveDeliveryMapState _active({
   destPoint: const LatLng(7.073, 125.613),
   routePoints: routePoints,
   orderId: 'ORD-TEST-001',
-  deliveryAssignmentId: '101',
-  planVersion: 4,
+  deliveryAssignmentId: assignmentId,
+  planVersion: planVersion,
   orderStatus: OrderStatus.onTheWay,
   legDurationSeconds: 120,
   routingHealth: routingHealth,
@@ -126,6 +128,58 @@ void main() {
       verify(harness.socket.subscribeToDeliveryPlan('101', 4)).called(1);
       expect(find.text('Live Tracking'), findsOneWidget);
     });
+
+    testWidgets(
+      'resubscribes the full map after promotion and plan-version change',
+      (tester) async {
+        final mapState = StateProvider<LiveDeliveryMapState>((_) => _active());
+        final socket = MockWebSocketService();
+        when(
+          socket.connectLocation(
+            onLocationUpdate: anyNamed('onLocationUpdate'),
+          ),
+        ).thenAnswer((_) async {});
+        when(socket.listenForLocationHealth(any)).thenAnswer((invocation) {
+          final callback =
+              invocation.positionalArguments.first
+                  as Function(LocationSocketHealth);
+          callback(LocationSocketHealth.connected);
+        });
+        final container = ProviderContainer(
+          overrides: [
+            dioProvider.overrideWithValue(MockDio()),
+            webSocketServiceProvider.overrideWithValue(socket),
+            liveDeliveryMapProvider.overrideWith(
+              (ref) async => ref.watch(mapState),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(home: Scaffold(body: DeliveryMap())),
+          ),
+        );
+        await _settle(tester);
+        verify(socket.subscribeToDeliveryPlan('101', 4)).called(1);
+
+        container.read(mapState.notifier).state = _active(
+          assignmentId: '102',
+          planVersion: 5,
+        );
+        await _settle(tester);
+        verify(socket.subscribeToDeliveryPlan('102', 5)).called(1);
+
+        container.read(mapState.notifier).state = _active(
+          assignmentId: '102',
+          planVersion: 6,
+        );
+        await _settle(tester);
+        verify(socket.subscribeToDeliveryPlan('102', 6)).called(1);
+      },
+    );
 
     testWidgets('reevaluates live location into stale while retaining marker', (
       tester,

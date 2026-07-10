@@ -40,6 +40,11 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
   late final AnimationController _pulseController;
   final _mapController = MapController();
   bool _isMapReady = false;
+  String? _desiredAssignmentId;
+  int? _desiredPlanVersion;
+  String? _subscribedAssignmentId;
+  int? _subscribedPlanVersion;
+  bool _isConnecting = false;
   late final WebSocketService _ws;
   Timer? _healthRefreshTimer;
 
@@ -55,26 +60,44 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
     _healthRefreshTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
-    _connectLocationSocket();
   }
 
-  /// Opens the location WebSocket and subscribes to the active delivery.
-  /// This is the only place in the app where the location WS is connected.
-  Future<void> _connectLocationSocket() async {
-    await _ws.connectLocation(onLocationUpdate: _handleLocationUpdate);
-
-    if (!mounted) return; // widget may have been disposed before WS connected
-    final mapState = await ref.read(liveDeliveryMapProvider.future);
-    final deliveryAssignmentId = mapState.deliveryAssignmentId;
-    if (deliveryAssignmentId != null &&
-        deliveryAssignmentId.isNotEmpty &&
-        mapState.planVersion != null) {
-      _ws.subscribeToDeliveryPlan(deliveryAssignmentId, mapState.planVersion!);
-    } else {
-      debugPrint(
-        'DeliveryMap: missing deliveryAssignmentId; live location subscription skipped',
-      );
+  Future<void> _ensureLocationSubscription(
+    String assignmentId,
+    int planVersion,
+  ) async {
+    _desiredAssignmentId = assignmentId;
+    _desiredPlanVersion = planVersion;
+    if (_subscribedAssignmentId == assignmentId &&
+        _subscribedPlanVersion == planVersion) {
+      return;
     }
+    if (_isConnecting) return;
+    _isConnecting = true;
+    try {
+      await _ws.connectLocation(onLocationUpdate: _handleLocationUpdate);
+      if (!mounted) return;
+      final desiredAssignmentId = _desiredAssignmentId;
+      final desiredPlanVersion = _desiredPlanVersion;
+      if (desiredAssignmentId == null || desiredPlanVersion == null) return;
+      _ws.subscribeToDeliveryPlan(desiredAssignmentId, desiredPlanVersion);
+      _subscribedAssignmentId = desiredAssignmentId;
+      _subscribedPlanVersion = desiredPlanVersion;
+    } finally {
+      _isConnecting = false;
+    }
+  }
+
+  void _scheduleLocationSubscription(LiveDeliveryMapState state) {
+    final assignmentId = state.deliveryAssignmentId;
+    final planVersion = state.planVersion;
+    if (assignmentId == null || assignmentId.isEmpty || planVersion == null) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_ensureLocationSubscription(assignmentId, planVersion));
+    });
   }
 
   @override
@@ -160,6 +183,7 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
       error: (e, st) => _loadingView(colors),
       data: (state) {
         if (state.status != LiveMapStatus.active) return _loadingView(colors);
+        _scheduleLocationSubscription(state);
         final matchingLocation =
             locationUpdate != null &&
                 locationUpdate.deliveryAssignmentId ==

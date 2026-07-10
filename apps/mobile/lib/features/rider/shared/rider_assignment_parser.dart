@@ -212,18 +212,14 @@ RiderAssignmentView parseAssignmentView(
 }) {
   final assignment = parseAssignment(json);
   final orderJson = _asMap(json['order']);
+  if (orderJson == null && !allowMockFallback) {
+    throw FormatException(
+      'Assignment ${assignment.id} is missing its order relation',
+    );
+  }
   final order = orderJson != null
       ? _parseOrderContext(orderJson)
-      : allowMockFallback
-      ? orderContextFromMock(assignment)
-      : RiderOrderContext(
-          orderRef: assignment.orderId,
-          orderInternalId: assignment.orderId,
-          category: 'print',
-          quantity: 1,
-          totalPrice: 0,
-          deliveryFee: 0,
-        );
+      : orderContextFromMock(assignment);
 
   final stop = _parsePlanStop(
     _asMap(json['dispatchPlanStop'] ?? json['dispatch_plan_stop']),
