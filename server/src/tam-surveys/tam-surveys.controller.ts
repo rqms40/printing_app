@@ -9,7 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AllowBetaHeld, JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TamSurveysService } from './tam-surveys.service';
 import {
   SubmitSurveyRequirementDto,
@@ -65,6 +65,7 @@ export class TamSurveysController {
   }
 
   @Post('requirements/:requirementId/submit')
+  @AllowBetaHeld()
   submitRequirement(
     @Req() req: { user: { sub: number } },
     @Param('requirementId', ParseIntPipe) requirementId: number,

@@ -108,6 +108,8 @@ describe('Evidence file deletion races (e2e)', () => {
         fullName: 'Evidence Customer',
         role: UserRole.CUSTOMER,
         isActive: true,
+        isBetaUser: true,
+        betaCompletedAt: new Date(),
       }),
     );
     rider = await usersRepo.save(

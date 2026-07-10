@@ -7,7 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Order } from '../orders/entities/order.entity';
-import { User } from '../users/entities/user.entity';
+import { User, UserRole } from '../users/entities/user.entity';
 import {
   SubmitSurveyRequirementDto,
   SubmitTamSurveyDto,
@@ -22,6 +22,10 @@ import { BetaModeSettings } from '../beta-mode/entities/beta-mode-settings.entit
 
 const REQUIRED_SURVEY_QUESTION_COUNT = 14;
 const POSTGRES_UNIQUE_VIOLATION = '23505';
+const REQUIREMENT_UNIQUE_CONSTRAINTS = new Set([
+  'uq_tam_survey_requirements_order_reason',
+  'uq_tam_survey_requirements_user_pending',
+]);
 export const BETA_SURVEY_COMPLETE_HOLD_REASON = 'beta_survey_complete';
 
 export type AccountStateResponse = {
@@ -108,12 +112,19 @@ export class TamSurveysService {
     if (!(await this.isBetaModeEnabled(betaModeSettingsRepo))) return null;
 
     const user = await usersRepo.findOne({ where: { id: order.userId } });
-    if (!user?.isBetaUser) return null;
+    if (
+      user?.role !== UserRole.CUSTOMER ||
+      !user.isBetaUser ||
+      user.isBetaSurveyExempt
+    ) {
+      return null;
+    }
 
     const existing = await requirementsRepo.findOne({
       where: {
-        orderId: order.id,
+        userId: order.userId,
         reason: TamSurveyRequirementReason.POST_DELIVERY,
+        status: TamSurveyRequirementStatus.PENDING,
       },
     });
     if (existing) return existing;
@@ -135,12 +146,13 @@ export class TamSurveysService {
       // outer completion transaction roll back rather than attempting a query
       // in the failed transaction. The locked order serializes this path.
       if (manager) throw error;
-      if (!this.isUniqueViolation(error)) throw error;
+      if (!this.isRequirementUniqueViolation(error)) throw error;
 
       const racedRequirement = await requirementsRepo.findOne({
         where: {
-          orderId: order.id,
+          userId: order.userId,
           reason: TamSurveyRequirementReason.POST_DELIVERY,
+          status: TamSurveyRequirementStatus.PENDING,
         },
       });
       if (!racedRequirement) throw error;
@@ -158,9 +170,13 @@ export class TamSurveysService {
     // mode is on and they have pending requirements.
     const user = await this.usersRepo.findOne({
       where: { id: userId },
-      select: ['id', 'isBetaSurveyExempt'],
+      select: ['id', 'role', 'isBetaUser', 'isBetaSurveyExempt'],
     });
-    if (user?.isBetaSurveyExempt) {
+    if (
+      user?.role !== UserRole.CUSTOMER ||
+      !user.isBetaUser ||
+      user.isBetaSurveyExempt
+    ) {
       return { accountStatus: 'active', holds: [] };
     }
 
@@ -196,11 +212,24 @@ export class TamSurveysService {
     userId: number,
     requirementId: number,
     dto: SubmitSurveyRequirementDto,
-  ): Promise<{ success: true; surveyId: number; logoutRequired: true }> {
+  ): Promise<{ success: true; surveyId: number; logoutRequired: boolean }> {
     return this.dataSource.transaction(async (manager) => {
       const requirementsRepo = manager.getRepository(TamSurveyRequirement);
       const tamSurveysRepo = manager.getRepository(TamSurvey);
       const usersRepo = manager.getRepository(User);
+      const betaModeSettingsRepo = manager.getRepository(BetaModeSettings);
+
+      const user = await usersRepo.findOne({
+        where: { id: userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!user) throw new NotFoundException('User not found');
+
+      const holdPolicyApplies =
+        user.role === UserRole.CUSTOMER &&
+        user.isBetaUser &&
+        !user.isBetaSurveyExempt &&
+        (await this.isBetaModeEnabled(betaModeSettingsRepo));
 
       const requirement = await requirementsRepo.findOne({
         where: { id: requirementId },
@@ -211,6 +240,19 @@ export class TamSurveysService {
       }
       if (requirement.userId !== userId) {
         throw new ForbiddenException('You can only submit your own survey');
+      }
+      if (
+        requirement.status === TamSurveyRequirementStatus.SUBMITTED &&
+        requirement.surveyId != null
+      ) {
+        return {
+          success: true as const,
+          surveyId: requirement.surveyId,
+          logoutRequired:
+            holdPolicyApplies &&
+            user.isActive === false &&
+            user.accountHoldReason === BETA_SURVEY_COMPLETE_HOLD_REASON,
+        };
       }
       if (requirement.status !== TamSurveyRequirementStatus.PENDING) {
         throw new BadRequestException('Survey requirement already submitted');
@@ -231,24 +273,33 @@ export class TamSurveysService {
       requirement.submittedAt = new Date();
       await requirementsRepo.save(requirement);
 
-      const holdAt = new Date();
-      await usersRepo.update(userId, {
-        isActive: false,
-        accountHoldReason: BETA_SURVEY_COMPLETE_HOLD_REASON,
-        accountHeldAt: holdAt,
-        betaCompletedAt: holdAt,
-      });
+      if (holdPolicyApplies) {
+        const holdAt = new Date();
+        await usersRepo.update(userId, {
+          isActive: false,
+          accountHoldReason: BETA_SURVEY_COMPLETE_HOLD_REASON,
+          accountHeldAt: holdAt,
+          betaCompletedAt: holdAt,
+        });
+      }
 
-      return { success: true, surveyId: savedSurvey.id, logoutRequired: true };
+      return {
+        success: true,
+        surveyId: savedSurvey.id,
+        logoutRequired: holdPolicyApplies,
+      };
     });
   }
 
-  private isUniqueViolation(error: unknown): boolean {
+  private isRequirementUniqueViolation(error: unknown): boolean {
     return (
       typeof error === 'object' &&
       error !== null &&
       'code' in error &&
-      error.code === POSTGRES_UNIQUE_VIOLATION
+      error.code === POSTGRES_UNIQUE_VIOLATION &&
+      'constraint' in error &&
+      typeof error.constraint === 'string' &&
+      REQUIREMENT_UNIQUE_CONSTRAINTS.has(error.constraint)
     );
   }
 

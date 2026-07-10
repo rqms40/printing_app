@@ -74,6 +74,20 @@ describe('TAM survey post-delivery metadata', () => {
     expect(TamSurveyRequirementStatus.SUBMITTED).toBe('submitted');
   });
 
+  it('declares one pending post-delivery requirement per customer', () => {
+    const index = getMetadataArgsStorage().indices.find(
+      (candidate) =>
+        candidate.target === TamSurveyRequirement &&
+        candidate.name === 'uq_tam_survey_requirements_user_pending',
+    );
+
+    expect(index).toMatchObject({
+      unique: true,
+      where: `"status" = 'pending'`,
+    });
+    expect(index?.columns).toEqual(['userId']);
+  });
+
   it('registers TamSurveyRequirement in the survey TypeOrm feature module', () => {
     const imports = Reflect.getMetadata(
       MODULE_METADATA.IMPORTS,
@@ -104,6 +118,8 @@ describe('TamSurveysService', () => {
     email: 'beta@test.com',
     isBetaUser: true,
     isActive: true,
+    role: 'customer',
+    isBetaSurveyExempt: false,
   };
 
   const order = {
@@ -129,7 +145,7 @@ describe('TamSurveysService', () => {
       find: jest.fn().mockResolvedValue([{ id: 1, isEnabled: true }]),
     };
     userRepo = {
-      findOne: jest.fn(),
+      findOne: jest.fn().mockResolvedValue(betaUser),
       update: jest.fn().mockResolvedValue(undefined),
     };
     transactionalManager = {
@@ -213,6 +229,27 @@ describe('TamSurveysService', () => {
     expect(requirementRepo.save).not.toHaveBeenCalled();
   });
 
+  it('does not create a requirement for a beta-exempt customer', async () => {
+    userRepo.findOne.mockResolvedValue({
+      ...betaUser,
+      isBetaSurveyExempt: true,
+    });
+
+    const result = await service.createPostDeliveryRequirementIfNeeded(order);
+
+    expect(result).toBeNull();
+    expect(requirementRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('does not create a requirement for a non-customer beta identity', async () => {
+    userRepo.findOne.mockResolvedValue({ ...betaUser, role: 'rider' });
+
+    const result = await service.createPostDeliveryRequirementIfNeeded(order);
+
+    expect(result).toBeNull();
+    expect(requirementRepo.save).not.toHaveBeenCalled();
+  });
+
   it('does not create a requirement when beta mode is disabled', async () => {
     betaModeSettingsRepo.find.mockResolvedValue([{ id: 1, isEnabled: false }]);
     userRepo.findOne.mockResolvedValue(betaUser);
@@ -239,6 +276,31 @@ describe('TamSurveysService', () => {
     expect(requirementRepo.save).not.toHaveBeenCalled();
   });
 
+  it('returns a different order pending requirement to preserve the per-user invariant', async () => {
+    const existing = {
+      id: 77,
+      userId: 10,
+      orderId: 44,
+      reason: TamSurveyRequirementReason.POST_DELIVERY,
+      status: TamSurveyRequirementStatus.PENDING,
+    } as TamSurveyRequirement;
+    userRepo.findOne.mockResolvedValue(betaUser);
+    requirementRepo.findOne.mockResolvedValue(existing);
+
+    await expect(
+      service.createPostDeliveryRequirementIfNeeded(order),
+    ).resolves.toBe(existing);
+
+    expect(requirementRepo.findOne).toHaveBeenCalledWith({
+      where: {
+        userId: 10,
+        reason: TamSurveyRequirementReason.POST_DELIVERY,
+        status: TamSurveyRequirementStatus.PENDING,
+      },
+    });
+    expect(requirementRepo.save).not.toHaveBeenCalled();
+  });
+
   it('returns the existing requirement when a concurrent create hits the unique constraint', async () => {
     const existing = {
       id: 77,
@@ -249,17 +311,37 @@ describe('TamSurveysService', () => {
     requirementRepo.findOne
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(existing);
-    requirementRepo.save.mockRejectedValueOnce({ code: '23505' });
+    requirementRepo.save.mockRejectedValueOnce({
+      code: '23505',
+      constraint: 'uq_tam_survey_requirements_user_pending',
+    });
 
     const result = await service.createPostDeliveryRequirementIfNeeded(order);
 
     expect(result).toBe(existing);
     expect(requirementRepo.findOne).toHaveBeenLastCalledWith({
       where: {
-        orderId: 55,
+        userId: 10,
         reason: TamSurveyRequirementReason.POST_DELIVERY,
+        status: TamSurveyRequirementStatus.PENDING,
       },
     });
+  });
+
+  it('does not treat an unrelated unique violation as a requirement race', async () => {
+    const unrelated = {
+      code: '23505',
+      constraint: 'users_email_key',
+    };
+    userRepo.findOne.mockResolvedValue(betaUser);
+    requirementRepo.findOne.mockResolvedValue(null);
+    requirementRepo.save.mockRejectedValueOnce(unrelated);
+
+    await expect(
+      service.createPostDeliveryRequirementIfNeeded(order),
+    ).rejects.toBe(unrelated);
+
+    expect(requirementRepo.findOne).toHaveBeenCalledTimes(1);
   });
 
   it('returns survey_required account state when a pending hold exists', async () => {
@@ -295,6 +377,34 @@ describe('TamSurveysService', () => {
     expect(result).toEqual({ accountStatus: 'active', holds: [] });
     expect(requirementRepo.findOne).not.toHaveBeenCalled();
   });
+
+  it.each([
+    { role: 'rider', isBetaUser: true },
+    { role: 'admin', isBetaUser: true },
+    { role: 'customer', isBetaUser: false },
+  ])(
+    'ignores stale pending holds for $role beta=$isBetaUser',
+    async (identity) => {
+      userRepo.findOne.mockResolvedValue({
+        ...betaUser,
+        ...identity,
+      });
+      requirementRepo.findOne.mockResolvedValue({
+        id: 123,
+        userId: 10,
+        orderId: 55,
+        requiredAt: new Date('2026-04-30T12:00:00Z'),
+        order,
+      } as TamSurveyRequirement);
+
+      await expect(service.getAccountState(10)).resolves.toEqual({
+        accountStatus: 'active',
+        holds: [],
+      });
+
+      expect(requirementRepo.findOne).not.toHaveBeenCalled();
+    },
+  );
 
   it('submits a requirement and holds the beta account', async () => {
     requirementRepo.findOne.mockResolvedValue({
@@ -346,6 +456,96 @@ describe('TamSurveysService', () => {
       surveyId: 900,
       logoutRequired: true,
     });
+  });
+
+  it('returns the stored survey identity for a response-loss retry', async () => {
+    userRepo.findOne.mockResolvedValue({
+      ...betaUser,
+      isActive: false,
+      accountHoldReason: 'beta_survey_complete',
+    });
+    requirementRepo.findOne.mockResolvedValue({
+      id: 123,
+      userId: 10,
+      orderId: 55,
+      status: TamSurveyRequirementStatus.SUBMITTED,
+      surveyId: 900,
+    } as TamSurveyRequirement);
+
+    await expect(
+      service.submitRequirement(10, 123, {
+        surveyData: fullSurveyData,
+        openForumFeedback: {},
+      }),
+    ).resolves.toEqual({
+      success: true,
+      surveyId: 900,
+      logoutRequired: true,
+    });
+
+    expect(surveyRepo.save).not.toHaveBeenCalled();
+    expect(userRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('recomputes logoutRequired=false for a retry after beta is disabled', async () => {
+    betaModeSettingsRepo.find.mockResolvedValue([{ id: 1, isEnabled: false }]);
+    requirementRepo.findOne.mockResolvedValue({
+      id: 123,
+      userId: 10,
+      orderId: 55,
+      status: TamSurveyRequirementStatus.SUBMITTED,
+      surveyId: 900,
+    } as TamSurveyRequirement);
+
+    await expect(
+      service.submitRequirement(10, 123, {
+        surveyData: fullSurveyData,
+        openForumFeedback: {},
+      }),
+    ).resolves.toEqual({
+      success: true,
+      surveyId: 900,
+      logoutRequired: false,
+    });
+  });
+
+  it('does not hold a customer when beta mode is disabled before submission', async () => {
+    betaModeSettingsRepo.find.mockResolvedValue([{ id: 1, isEnabled: false }]);
+    requirementRepo.findOne.mockResolvedValue({
+      id: 123,
+      userId: 10,
+      orderId: 55,
+      status: TamSurveyRequirementStatus.PENDING,
+    } as TamSurveyRequirement);
+
+    const result = await service.submitRequirement(10, 123, {
+      surveyData: fullSurveyData,
+      openForumFeedback: {},
+    });
+
+    expect(userRepo.update).not.toHaveBeenCalled();
+    expect(result.logoutRequired).toBe(false);
+  });
+
+  it('does not hold an exempt beta customer who submits a stored requirement', async () => {
+    userRepo.findOne.mockResolvedValue({
+      ...betaUser,
+      isBetaSurveyExempt: true,
+    });
+    requirementRepo.findOne.mockResolvedValue({
+      id: 123,
+      userId: 10,
+      orderId: 55,
+      status: TamSurveyRequirementStatus.PENDING,
+    } as TamSurveyRequirement);
+
+    const result = await service.submitRequirement(10, 123, {
+      surveyData: fullSurveyData,
+      openForumFeedback: {},
+    });
+
+    expect(userRepo.update).not.toHaveBeenCalled();
+    expect(result.logoutRequired).toBe(false);
   });
 
   it('submits a requirement inside a transaction with a write lock', async () => {

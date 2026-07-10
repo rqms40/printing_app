@@ -73,7 +73,12 @@ export class AuthService {
     if (!isValid) throw new UnauthorizedException('Invalid credentials');
 
     if (user.isActive === false) {
-      if (user.accountHoldReason === 'beta_survey_complete') {
+      if (
+        user.role === UserRole.CUSTOMER &&
+        user.isBetaUser &&
+        !user.isBetaSurveyExempt &&
+        user.accountHoldReason === 'beta_survey_complete'
+      ) {
         const betaSettings = await this.betaModeService.getSettings();
         if (!betaSettings.isEnabled) {
           await this.betaModeService.reopenCompletedBetaSurveyHolds(user.id);

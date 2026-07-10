@@ -30,7 +30,7 @@ import {
 import { OrdersGateway } from './orders.gateway';
 import { FirebaseService } from '../firebase/firebase.service';
 import { UsersService } from '../users/users.service';
-import { User } from '../users/entities/user.entity';
+import { User, UserRole } from '../users/entities/user.entity';
 import {
   CreditMutationResult,
   CreditsService,
@@ -420,7 +420,18 @@ export class OrdersService {
     ordersRepo: Repository<Order> = this.ordersRepo,
   ): Promise<void> {
     const user = await this.usersService.findById(userId);
-    if (!user?.isBetaUser || !user.betaEnrolledAt) return;
+    if (
+      user?.role !== UserRole.CUSTOMER ||
+      !user.isBetaUser ||
+      !user.betaEnrolledAt
+    ) {
+      return;
+    }
+
+    const rows = await this.dataSource.query<Array<{ is_enabled: boolean }>>(
+      'SELECT is_enabled FROM beta_mode_settings ORDER BY id LIMIT 1',
+    );
+    if (!rows[0]?.is_enabled) return;
 
     const count = await ordersRepo.count({
       where: {
@@ -1127,7 +1138,7 @@ export class OrdersService {
     paymentMethod: string,
   ): Promise<void> {
     const user = await this.usersService.findById(userId);
-    if (!user?.isBetaUser) return;
+    if (user?.role !== UserRole.CUSTOMER || !user.isBetaUser) return;
 
     const rows = await this.dataSource.query<Array<{ is_enabled: boolean }>>(
       'SELECT is_enabled FROM beta_mode_settings ORDER BY id LIMIT 1',

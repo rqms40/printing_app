@@ -1,8 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, DataSource, Repository } from 'typeorm';
 import { BetaModeSettings } from './entities/beta-mode-settings.entity';
-import { User } from '../users/entities/user.entity';
+import { User, UserRole } from '../users/entities/user.entity';
 import { FilesService } from '../files/files.service';
 import { CreditsService } from '../credits/credits.service';
 
@@ -22,6 +27,16 @@ export interface BetaMembersPage {
   page: number;
   limit: number;
 }
+
+export type BetaCompletionState =
+  | { accountStatus: 'active' }
+  | {
+      accountStatus: 'beta_held';
+      user: { fullName: string | null; email: string };
+      betaPhotoUploaded: boolean;
+      betaSharedOnSocial: boolean;
+      betaCompletedAt: string;
+    };
 
 const BETA_SURVEY_COMPLETE_HOLD_REASON = 'beta_survey_complete';
 
@@ -55,15 +70,34 @@ export class BetaModeService {
   }
 
   async updateSettings(isEnabled: boolean): Promise<BetaModeSettings> {
-    const settings = await this.getSettings();
-    settings.isEnabled = isEnabled;
-    const saved = await this.settingsRepo.save(settings);
+    return this.dataSource.transaction(async (manager) => {
+      const settingsRepo = manager.getRepository(BetaModeSettings);
+      const usersRepo = manager.getRepository(User);
+      let settings = await settingsRepo.findOne({
+        where: {},
+        order: { id: 'ASC' },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!settings) {
+        settings = await settingsRepo.save(
+          settingsRepo.create({ isEnabled: false }),
+        );
+      }
+      settings.isEnabled = isEnabled;
+      const saved = await settingsRepo.save(settings);
 
-    if (!isEnabled) {
-      await this.reopenCompletedBetaSurveyHolds();
-    }
+      if (!isEnabled) {
+        await usersRepo.update(
+          {
+            isActive: false,
+            accountHoldReason: BETA_SURVEY_COMPLETE_HOLD_REASON,
+          },
+          { isActive: true, accountHoldReason: null, accountHeldAt: null },
+        );
+      }
 
-    return saved;
+      return saved;
+    });
   }
 
   async reopenCompletedBetaSurveyHolds(userId?: number): Promise<void> {
@@ -109,6 +143,7 @@ export class BetaModeService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!user) throw new NotFoundException(`User ${userId} not found`);
+      this.assertCustomer(user, 'Only customers may join beta testing');
 
       let enrollmentChanged = false;
       if (!user.isBetaUser) {
@@ -134,6 +169,7 @@ export class BetaModeService {
   async unenrollUser(userId: number): Promise<void> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException(`User ${userId} not found`);
+    this.assertCustomer(user, 'Only customers may join beta testing');
     await this.userRepo.update(userId, { isBetaUser: false });
   }
 
@@ -211,6 +247,7 @@ export class BetaModeService {
   ): Promise<{ id: number; isBetaSurveyExempt: boolean }> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException(`User ${userId} not found`);
+    this.assertCustomer(user, 'Only customers may have a beta survey policy');
     if (!user.isBetaUser) {
       throw new NotFoundException(`User ${userId} is not a beta member`);
     }
@@ -223,6 +260,7 @@ export class BetaModeService {
   ): Promise<{ id: number; betaEnrolledAt: Date }> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException(`User ${userId} not found`);
+    this.assertCustomer(user, 'Only customers may have a beta order limit');
     if (!user.isBetaUser) {
       throw new NotFoundException(`User ${userId} is not a beta member`);
     }
@@ -264,17 +302,116 @@ export class BetaModeService {
     input: { fileId: number; sharedOnSocial?: boolean },
   ): Promise<{ ok: true }> {
     await this.dataSource.transaction(async (manager) => {
+      const usersRepo = manager.getRepository(User);
+      const user = await usersRepo.findOne({
+        where: { id: userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!user) throw new NotFoundException(`User ${userId} not found`);
+      if (
+        user.role !== UserRole.CUSTOMER ||
+        !user.isBetaUser ||
+        !user.betaCompletedAt
+      ) {
+        throw new ForbiddenException(
+          'A completed beta customer survey is required',
+        );
+      }
+
+      if (user.betaPhotoFileId != null) {
+        if (user.betaPhotoFileId !== input.fileId) {
+          throw new ConflictException(
+            'A different beta testimonial is already retained',
+          );
+        }
+        if (input.sharedOnSocial && !user.betaSharedOnSocial) {
+          await usersRepo.update(userId, { betaSharedOnSocial: true });
+        }
+        return;
+      }
+
       await this.filesService.resolveBetaTestimonialFile(
         input.fileId,
         userId,
         manager,
       );
-      await manager.getRepository(User).update(userId, {
+      await usersRepo.update(userId, {
         betaPhotoFileId: input.fileId,
         betaPhotoUploadedAt: new Date(),
-        betaSharedOnSocial: input.sharedOnSocial ?? false,
+        betaSharedOnSocial:
+          user.betaSharedOnSocial || input.sharedOnSocial === true,
       });
     });
     return { ok: true };
+  }
+
+  async markShared(
+    userId: number,
+  ): Promise<{ ok: true; betaSharedOnSocial: true }> {
+    await this.dataSource.transaction(async (manager) => {
+      const usersRepo = manager.getRepository(User);
+      const user = await usersRepo.findOne({
+        where: { id: userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      this.assertCompletedBetaCustomer(user, userId);
+      if (user.betaPhotoFileId == null || user.betaPhotoUploadedAt == null) {
+        throw new ForbiddenException(
+          'A beta testimonial photo is required before sharing',
+        );
+      }
+      if (!user.betaSharedOnSocial) {
+        await usersRepo.update(userId, { betaSharedOnSocial: true });
+      }
+    });
+    return { ok: true, betaSharedOnSocial: true };
+  }
+
+  async getCompletionState(userId: number): Promise<BetaCompletionState> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    this.assertCompletedBetaCustomer(user, userId);
+
+    if (
+      user.isActive === false &&
+      user.accountHoldReason === BETA_SURVEY_COMPLETE_HOLD_REASON
+    ) {
+      const settings = await this.getSettings();
+      if (!settings.isEnabled) {
+        await this.reopenCompletedBetaSurveyHolds(userId);
+        return { accountStatus: 'active' };
+      }
+      return {
+        accountStatus: 'beta_held',
+        user: { fullName: user.fullName, email: user.email },
+        betaPhotoUploaded: user.betaPhotoUploadedAt != null,
+        betaSharedOnSocial: user.betaSharedOnSocial,
+        betaCompletedAt: user.betaCompletedAt.toISOString(),
+      };
+    }
+
+    if (user.isActive) return { accountStatus: 'active' };
+    throw new ForbiddenException('Beta completion state is unavailable');
+  }
+
+  private assertCompletedBetaCustomer(
+    user: User | null,
+    userId: number,
+  ): asserts user is User & { betaCompletedAt: Date } {
+    if (!user) throw new NotFoundException(`User ${userId} not found`);
+    if (
+      user.role !== UserRole.CUSTOMER ||
+      !user.isBetaUser ||
+      user.betaCompletedAt == null
+    ) {
+      throw new ForbiddenException(
+        'A completed beta customer survey is required',
+      );
+    }
+  }
+
+  private assertCustomer(user: User, message: string): void {
+    if (user.role !== UserRole.CUSTOMER) {
+      throw new ForbiddenException(message);
+    }
   }
 }
