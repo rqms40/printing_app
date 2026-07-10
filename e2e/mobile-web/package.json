@@ -6,9 +6,12 @@
   "scripts": {
     "build:web": "cd ../../apps/mobile && fvm flutter build web --release --no-tree-shake-icons",
     "test": "playwright test",
+    "test:beta:visual": "playwright test tests/beta-workflow-visual.spec.ts --project=beta-visual",
     "test:headed": "playwright test --headed"
   },
   "devDependencies": {
-    "@playwright/test": "^1.57.0"
+    "@axe-core/playwright": "^4.12.1",
+    "@playwright/test": "^1.57.0",
+    "socket.io-client": "^4.8.3"
   }
 }
