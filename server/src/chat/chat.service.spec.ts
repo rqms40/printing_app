@@ -10,6 +10,7 @@ import { ChatMessage, SenderRole } from './entities/chat-message.entity';
 import { OpenRouterService } from './openrouter.service';
 import { GRIDBOT_REFUSAL, GRIDBOT_SYSTEM_PROMPT } from './gridbot.prompt';
 import { Order } from '../orders/entities/order.entity';
+import { DataSource } from 'typeorm';
 
 const makeConvRepo = () => ({
   create: jest.fn(),
@@ -35,12 +36,25 @@ describe('ChatService', () => {
   let msgRepo: ReturnType<typeof makeMsgRepo>;
   let orderRepo: ReturnType<typeof makeOrderRepo>;
   let openRouter: { complete: jest.Mock };
+  let dataSource: { transaction: jest.Mock };
 
   beforeEach(async () => {
     convRepo = makeConvRepo();
     msgRepo = makeMsgRepo();
     orderRepo = makeOrderRepo();
     openRouter = { complete: jest.fn() };
+    dataSource = {
+      transaction: jest.fn(async (work: (manager: any) => unknown) =>
+        work({
+          getRepository: (entity: unknown) => {
+            if (entity === Conversation) return convRepo;
+            if (entity === ChatMessage) return msgRepo;
+            if (entity === Order) return orderRepo;
+            throw new Error('Unexpected repository');
+          },
+        }),
+      ),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -48,6 +62,7 @@ describe('ChatService', () => {
         { provide: getRepositoryToken(Conversation), useValue: convRepo },
         { provide: getRepositoryToken(ChatMessage), useValue: msgRepo },
         { provide: getRepositoryToken(Order), useValue: orderRepo },
+        { provide: DataSource, useValue: dataSource },
         { provide: OpenRouterService, useValue: openRouter },
       ],
     }).compile();
@@ -274,11 +289,39 @@ describe('ChatService', () => {
         service.getOrCreateRiderOrderConversation(99, 42),
       ).rejects.toThrow('Only the assigned rider can chat about this order');
     });
+
+    it('serializes creation with decline by locking the order in a transaction', async () => {
+      orderRepo.findOne.mockResolvedValue({
+        id: 42,
+        userId: 5,
+        assignedRiderId: 12,
+      });
+      convRepo.findOne.mockResolvedValue({
+        id: 11,
+        customerId: 5,
+        type: ConversationType.RIDER,
+        orderId: 42,
+        assignedRiderId: 12,
+      });
+
+      await service.getOrCreateRiderOrderConversation(12, 42);
+
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(orderRepo.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lock: { mode: 'pessimistic_write' },
+        }),
+      );
+    });
   });
 
   describe('saveMessage', () => {
     it('saves message and updates conversation updatedAt', async () => {
       const msg = { id: 1, conversationId: 10, content: 'Hello' };
+      convRepo.findOne.mockResolvedValue({
+        id: 10,
+        status: ConversationStatus.OPEN,
+      });
       msgRepo.create.mockReturnValue(msg);
       msgRepo.save.mockResolvedValue(msg);
       convRepo.update.mockResolvedValue(undefined);
@@ -295,6 +338,42 @@ describe('ChatService', () => {
         expect.objectContaining({ updatedAt: expect.any(Date) }),
       );
       expect(result).toEqual(msg);
+    });
+
+    it('rejects an internal write after a conversation is closed', async () => {
+      convRepo.findOne.mockResolvedValue({
+        id: 10,
+        status: ConversationStatus.CLOSED,
+      });
+      msgRepo.create.mockReturnValue({ conversationId: 10 });
+      msgRepo.save.mockResolvedValue({ id: 1, conversationId: 10 });
+
+      await expect(
+        service.saveMessage(10, null, SenderRole.BOT, 'Too late'),
+      ).rejects.toThrow('Conversation is closed');
+      expect(msgRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('actor-authorized actions', () => {
+    it('revalidates the current order rider before returning REST history', async () => {
+      convRepo.findOne.mockResolvedValue({
+        id: 10,
+        customerId: 5,
+        type: ConversationType.RIDER,
+        orderId: 42,
+        assignedRiderId: 12,
+        status: ConversationStatus.OPEN,
+      });
+      orderRepo.findOne.mockResolvedValue({
+        id: 42,
+        assignedRiderId: 99,
+      });
+
+      await expect(
+        (service as any).getMessagesForActor(10, 12, 'rider', 1, 50),
+      ).rejects.toThrow('Forbidden');
+      expect(msgRepo.find).not.toHaveBeenCalled();
     });
   });
 

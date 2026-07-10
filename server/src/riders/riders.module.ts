@@ -9,6 +9,7 @@ import { RidersController } from './riders.controller';
 import { LocationGateway } from './location.gateway';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { ChatModule } from '../chat/chat.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { ConfigService } from '@nestjs/config';
       }),
     }),
     OrdersModule,
+    ChatModule,
   ],
   controllers: [RidersController],
   providers: [RidersService, LocationGateway],

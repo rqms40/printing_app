@@ -20,19 +20,30 @@ describe('ChatGateway', () => {
   let gateway: ChatGateway;
   let chatService: {
     saveMessage: jest.Mock;
+    saveMessageForActor: jest.Mock;
     findConversation: jest.Mock;
     getBotResponse: jest.Mock;
     markMessagesRead: jest.Mock;
+    markMessagesReadForActor: jest.Mock;
+    assertCanAccessConversationForActor: jest.Mock;
   };
   let jwtService: { verifyAsync: jest.Mock };
-  let server: { to: jest.Mock; emit: jest.Mock };
+  let server: {
+    to: jest.Mock;
+    in: jest.Mock;
+    emit: jest.Mock;
+    socketsLeave: jest.Mock;
+  };
 
   beforeEach(async () => {
     chatService = {
       saveMessage: jest.fn(),
+      saveMessageForActor: jest.fn(),
       findConversation: jest.fn(),
       getBotResponse: jest.fn(),
       markMessagesRead: jest.fn(),
+      markMessagesReadForActor: jest.fn(),
+      assertCanAccessConversationForActor: jest.fn().mockResolvedValue({}),
     };
     jwtService = {
       verifyAsync: jest.fn().mockResolvedValue({ sub: 42, role: 'customer' }),
@@ -47,7 +58,12 @@ describe('ChatGateway', () => {
     }).compile();
 
     gateway = module.get(ChatGateway);
-    server = { to: jest.fn().mockReturnThis(), emit: jest.fn() };
+    server = {
+      to: jest.fn().mockReturnThis(),
+      in: jest.fn().mockReturnThis(),
+      emit: jest.fn(),
+      socketsLeave: jest.fn(),
+    };
     (gateway as any).server = server;
   });
 
@@ -93,7 +109,9 @@ describe('ChatGateway', () => {
 
     it('rejects room joins by non-owner customers', async () => {
       const socket = makeSocket({ data: { userId: 1, role: 'customer' } });
-      chatService.findConversation.mockResolvedValue({ customerId: 2 });
+      chatService.assertCanAccessConversationForActor.mockRejectedValue(
+        new Error('Forbidden'),
+      );
 
       await expect(
         gateway.handleJoinConversation({ conversationId: 5 }, socket as any),
@@ -103,11 +121,21 @@ describe('ChatGateway', () => {
 
     it('rejects assigned rider access when the socket role is not rider', async () => {
       const socket = makeSocket({ data: { userId: 12, role: 'customer' } });
-      chatService.findConversation.mockResolvedValue({
-        customerId: 5,
-        type: ConversationType.RIDER,
-        assignedRiderId: 12,
-      });
+      chatService.assertCanAccessConversationForActor.mockRejectedValue(
+        new Error('Forbidden'),
+      );
+
+      await expect(
+        gateway.handleJoinConversation({ conversationId: 5 }, socket as any),
+      ).rejects.toThrow('Forbidden');
+      expect(socket.join).not.toHaveBeenCalled();
+    });
+
+    it('rejects a matching rider after the conversation is closed', async () => {
+      const socket = makeSocket({ data: { userId: 12, role: 'rider' } });
+      chatService.assertCanAccessConversationForActor.mockRejectedValue(
+        new Error('Forbidden'),
+      );
 
       await expect(
         gateway.handleJoinConversation({ conversationId: 5 }, socket as any),
@@ -117,10 +145,24 @@ describe('ChatGateway', () => {
   });
 
   describe('handleSendMessage', () => {
+    it('denies future messages from a rider after conversation closure', async () => {
+      const socket = makeSocket({ data: { userId: 12, role: 'rider' } });
+      chatService.saveMessageForActor.mockRejectedValue(new Error('Forbidden'));
+
+      await expect(
+        gateway.handleSendMessage(
+          { conversationId: 5, content: 'Still here' },
+          socket as any,
+        ),
+      ).rejects.toThrow('Forbidden');
+      expect(chatService.saveMessage).not.toHaveBeenCalled();
+      expect(socket.leave).toHaveBeenCalledWith('conversation:5');
+    });
+
     it('saves message and broadcasts message-received', async () => {
       const socket = makeSocket({ data: { userId: 1, role: 'customer' } });
       const saved = { id: 10, conversationId: 5, content: 'Hi' };
-      chatService.saveMessage.mockResolvedValue(saved);
+      chatService.saveMessageForActor.mockResolvedValue(saved);
       chatService.findConversation.mockResolvedValue({
         customerId: 1,
         type: ConversationType.ADMIN,
@@ -131,10 +173,10 @@ describe('ChatGateway', () => {
         socket as any,
       );
 
-      expect(chatService.saveMessage).toHaveBeenCalledWith(
+      expect(chatService.saveMessageForActor).toHaveBeenCalledWith(
         5,
         1,
-        SenderRole.CUSTOMER,
+        'customer',
         'Hi',
         null,
         null,
@@ -146,9 +188,11 @@ describe('ChatGateway', () => {
     it('emits bot-typing then bot-response for AI conversations', async () => {
       const socket = makeSocket({ data: { userId: 1, role: 'customer' } });
       const botMsg = { id: 11, senderRole: 'bot', content: 'Hi there!' };
-      chatService.saveMessage
-        .mockResolvedValueOnce({ id: 10, content: 'Hello' })
-        .mockResolvedValueOnce(botMsg);
+      chatService.saveMessageForActor.mockResolvedValueOnce({
+        id: 10,
+        content: 'Hello',
+      });
+      chatService.saveMessage.mockResolvedValueOnce(botMsg);
       chatService.findConversation.mockResolvedValue({
         customerId: 1,
         type: ConversationType.AI,
@@ -174,7 +218,7 @@ describe('ChatGateway', () => {
     it('does not trigger GridBot for admin messages in AI conversations', async () => {
       const socket = makeSocket({ data: { userId: 7, role: 'admin' } });
       const saved = { id: 12, conversationId: 3, content: 'I can help' };
-      chatService.saveMessage.mockResolvedValue(saved);
+      chatService.saveMessageForActor.mockResolvedValue(saved);
       chatService.findConversation.mockResolvedValue({
         customerId: 1,
         type: ConversationType.AI,
@@ -197,10 +241,13 @@ describe('ChatGateway', () => {
   describe('handleReadMessages', () => {
     it('marks messages read and emits messages-read', async () => {
       const socket = makeSocket({ data: { userId: 7, role: 'customer' } });
-      chatService.markMessagesRead.mockResolvedValue(undefined);
-      chatService.findConversation.mockResolvedValue({ customerId: 7 });
+      chatService.markMessagesReadForActor.mockResolvedValue(undefined);
       await gateway.handleReadMessages({ conversationId: 5 }, socket as any);
-      expect(chatService.markMessagesRead).toHaveBeenCalledWith(5);
+      expect(chatService.markMessagesReadForActor).toHaveBeenCalledWith(
+        5,
+        7,
+        'customer',
+      );
       expect(server.to).toHaveBeenCalledWith('conversation:5');
       expect(server.emit).toHaveBeenCalledWith(
         'messages-read',
@@ -213,7 +260,7 @@ describe('ChatGateway', () => {
     it('skips processing when socket has no userId', async () => {
       const socket = makeSocket({ data: {} });
       await gateway.handleReadMessages({ conversationId: 5 }, socket as any);
-      expect(chatService.markMessagesRead).not.toHaveBeenCalled();
+      expect(chatService.markMessagesReadForActor).not.toHaveBeenCalled();
     });
   });
 
@@ -275,6 +322,26 @@ describe('ChatGateway', () => {
         type: ConversationType.ADMIN,
         orderId: null,
       });
+    });
+  });
+
+  describe('notifyConversationClosed', () => {
+    it('notifies and removes every socket from closed conversation rooms', () => {
+      const notifyConversationClosed = (gateway as any)
+        .notifyConversationClosed;
+      expect(notifyConversationClosed).toBeDefined();
+      if (typeof notifyConversationClosed !== 'function') return;
+
+      notifyConversationClosed.call(gateway, [5, 8]);
+
+      expect(server.to).toHaveBeenCalledWith('conversation:5');
+      expect(server.emit).toHaveBeenCalledWith('conversation-closed', {
+        conversationId: 5,
+      });
+      expect(server.in).toHaveBeenCalledWith('conversation:5');
+      expect(server.socketsLeave).toHaveBeenCalledWith('conversation:5');
+      expect(server.in).toHaveBeenCalledWith('conversation:8');
+      expect(server.socketsLeave).toHaveBeenCalledWith('conversation:8');
     });
   });
 });

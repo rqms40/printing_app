@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Not, Repository } from 'typeorm';
 import { RiderProfile } from './entities/rider-profile.entity';
 import {
   DeliveryAssignment,
@@ -28,6 +28,12 @@ import {
   SHOP_LOCATION,
   toGeoPoint,
 } from './delivery-route';
+import {
+  Conversation,
+  ConversationStatus,
+  ConversationType,
+} from '../chat/entities/conversation.entity';
+import { ChatGateway } from '../chat/chat.gateway';
 
 // Valid state transitions for delivery status
 const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
@@ -83,6 +89,7 @@ export class RidersService {
     private assignmentRepo: Repository<DeliveryAssignment>,
     private locationGateway: LocationGateway,
     private ordersService: OrdersService,
+    private chatGateway: ChatGateway,
     private dataSource: DataSource,
   ) {}
 
@@ -392,6 +399,20 @@ export class RidersService {
         );
       }
 
+      const riderConversations =
+        newStatus === DeliveryStatus.DECLINED
+          ? await manager.getRepository(Conversation).find({
+              where: {
+                orderId: order.id,
+                type: ConversationType.RIDER,
+                assignedRiderId: userId,
+                status: Not(ConversationStatus.CLOSED),
+              },
+              lock: { mode: 'pessimistic_write' },
+              order: { id: 'ASC' },
+            })
+          : [];
+
       if (newStatus === DeliveryStatus.ARRIVED) {
         const [currentStop] = await this.getActiveAssignments(userId);
         if (currentStop?.id !== assignment.id) {
@@ -440,6 +461,29 @@ export class RidersService {
       const savedAssignment = await manager
         .getRepository(DeliveryAssignment)
         .save(assignment);
+      const closedConversationIds = riderConversations.map(
+        (conversation) => conversation.id,
+      );
+      if (closedConversationIds.length > 0) {
+        const closeResult = await manager.getRepository(Conversation).update(
+          {
+            id: In(closedConversationIds),
+            status: Not(ConversationStatus.CLOSED),
+          },
+          {
+            status: ConversationStatus.CLOSED,
+            closedAt: now,
+          },
+        );
+        if (
+          closeResult?.affected != null &&
+          closeResult.affected !== closedConversationIds.length
+        ) {
+          throw new BadRequestException(
+            'Rider conversation changed during decline',
+          );
+        }
+      }
       const orderStatus =
         ORDER_STATUS_BY_DELIVERY_STATUS[newStatus] ??
         (newStatus === DeliveryStatus.DECLINED
@@ -460,8 +504,23 @@ export class RidersService {
           )
         : null;
 
-      return { savedAssignment, orderStatus, previous };
+      return {
+        savedAssignment,
+        orderStatus,
+        previous,
+        closedConversationIds,
+      };
     });
+
+    if (result.closedConversationIds.length > 0) {
+      try {
+        this.chatGateway.notifyConversationClosed(result.closedConversationIds);
+      } catch (error) {
+        this.logger.warn(
+          `Rider chat room revocation failed for assignment ${assignmentId}: ${error}`,
+        );
+      }
+    }
 
     if (result.orderStatus && result.previous) {
       try {

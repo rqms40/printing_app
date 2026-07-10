@@ -116,7 +116,7 @@ export class OrdersController {
   @UseGuards(RolesGuard)
   updateStatus(
     @Request() req: RequestWithUser,
-    @Param('id') id: number,
+    @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateStatusDto,
   ) {
     if (dto.status === OrderStatus.CANCELLED) {

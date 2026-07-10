@@ -17,6 +17,9 @@ describe('OrderHistoryAndAssignmentIntegrity1777853600000', () => {
     expect(sql).toContain('ADD COLUMN "is_current" boolean');
     expect(sql).toContain('ROW_NUMBER() OVER');
     expect(sql).toContain('SET is_current = false');
+    expect(sql).toContain('SET assigned_rider_id');
+    expect(sql).toContain('UPDATE chat_conversations');
+    expect(sql).toContain("conversation.status::text <> 'closed'");
     expect(sql).toContain('uq_delivery_assignments_current_order');
     expect(sql).toContain('WHERE is_current = true');
   });

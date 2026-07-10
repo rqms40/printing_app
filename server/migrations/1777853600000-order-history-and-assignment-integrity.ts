@@ -101,6 +101,48 @@ export class OrderHistoryAndAssignmentIntegrity1777853600000 implements Migratio
             AND ranked.occurrence > 1
         `,
     );
+    if (canUseOwningOrder) {
+      await queryRunner.query(`
+        UPDATE orders AS owning_order
+        SET assigned_rider_id = selected_assignment.rider_user_id
+        FROM (
+          SELECT order_record.id AS order_id,
+                 rider.user_id AS rider_user_id
+          FROM orders AS order_record
+          LEFT JOIN delivery_assignments AS assignment
+            ON assignment.order_id = order_record.id
+           AND assignment.is_current = true
+          LEFT JOIN rider_profiles AS rider
+            ON rider.id = assignment.rider_id
+        ) AS selected_assignment
+        WHERE owning_order.id = selected_assignment.order_id
+          AND owning_order.assigned_rider_id
+            IS DISTINCT FROM selected_assignment.rider_user_id
+      `);
+
+      if (await queryRunner.hasTable('chat_conversations')) {
+        await queryRunner.query(`
+          UPDATE chat_conversations AS conversation
+          SET status = 'closed',
+              closed_at = COALESCE(conversation.closed_at, NOW()),
+              updated_at = NOW()
+          WHERE conversation.type::text = 'rider'
+            AND conversation.status::text <> 'closed'
+            AND NOT EXISTS (
+              SELECT 1
+              FROM orders AS owning_order
+              INNER JOIN delivery_assignments AS assignment
+                ON assignment.order_id = owning_order.id
+               AND assignment.is_current = true
+              INNER JOIN rider_profiles AS rider
+                ON rider.id = assignment.rider_id
+              WHERE owning_order.id = conversation.order_id
+                AND owning_order.assigned_rider_id = rider.user_id
+                AND conversation.assigned_rider_id = rider.user_id
+            )
+        `);
+      }
+    }
     await queryRunner.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS
         uq_delivery_assignments_current_order

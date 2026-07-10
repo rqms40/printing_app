@@ -5,6 +5,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource, In, Repository } from 'typeorm';
 import { Client } from 'pg';
+import { io, Socket } from 'socket.io-client';
 
 import { AppModule } from '../src/app.module';
 import { Order, OrderStatus } from '../src/orders/entities/order.entity';
@@ -19,9 +20,18 @@ import { Notification } from '../src/notifications/entities/notification.entity'
 import { OrderStatusHistory } from '../src/orders/entities/order-status-history.entity';
 import { databaseOptionsFromEnv } from '../src/database/data-source';
 import { FirebaseService } from '../src/firebase/firebase.service';
+import {
+  Conversation,
+  ConversationStatus,
+} from '../src/chat/entities/conversation.entity';
+import {
+  ChatMessage,
+  SenderRole,
+} from '../src/chat/entities/chat-message.entity';
 
 describe('Rider dispatch workflow (e2e)', () => {
   let app: INestApplication<App>;
+  let baseUrl: string;
   let dataSource: DataSource;
   let jwtService: JwtService;
   let usersRepo: Repository<User>;
@@ -30,6 +40,9 @@ describe('Rider dispatch workflow (e2e)', () => {
   let assignmentsRepo: Repository<DeliveryAssignment>;
   let notificationsRepo: Repository<Notification>;
   let statusHistoryRepo: Repository<OrderStatusHistory>;
+  let conversationsRepo: Repository<Conversation>;
+  let chatMessagesRepo: Repository<ChatMessage>;
+  const sockets: Socket[] = [];
 
   const runId = Date.now().toString().slice(-10);
   const originalDatabaseName = process.env.DATABASE_NAME;
@@ -77,6 +90,8 @@ describe('Rider dispatch workflow (e2e)', () => {
       new ValidationPipe({ whitelist: true, transform: true }),
     );
     await app.init();
+    await app.listen(0);
+    baseUrl = await app.getUrl();
 
     dataSource = app.get(DataSource);
     jwtService = app.get(JwtService);
@@ -86,6 +101,12 @@ describe('Rider dispatch workflow (e2e)', () => {
     assignmentsRepo = dataSource.getRepository(DeliveryAssignment);
     notificationsRepo = dataSource.getRepository(Notification);
     statusHistoryRepo = dataSource.getRepository(OrderStatusHistory);
+    conversationsRepo = dataSource.getRepository(Conversation);
+    chatMessagesRepo = dataSource.getRepository(ChatMessage);
+  });
+
+  afterEach(() => {
+    for (const socket of sockets.splice(0)) socket.disconnect();
   });
 
   afterAll(async () => {
@@ -609,6 +630,12 @@ describe('Rider dispatch workflow (e2e)', () => {
     });
 
     await request(app.getHttpServer())
+      .patch('/api/orders/not-an-order-id/status')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: OrderStatus.FILE_VERIFIED })
+      .expect(400);
+
+    await request(app.getHttpServer())
       .post(`/api/admin/orders/${deliveryOrder.id}/assign`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ riderId: 'not-a-rider-id' })
@@ -661,6 +688,324 @@ describe('Rider dispatch workflow (e2e)', () => {
         orderId: In([deliveryOrder.id, pickupOrder.id]),
       }),
     ).resolves.toBe(0);
+  });
+
+  it('revokes declined rider chat atomically and authorizes the replacement rider', async () => {
+    const suffix = `${runId}-chat-revocation`;
+    const [customer, admin, oldRider, replacementRider] = await usersRepo.save([
+      usersRepo.create({
+        email: `customer-${suffix}@example.com`,
+        passwordHash: 'not-used',
+        role: UserRole.CUSTOMER,
+        isActive: true,
+      }),
+      usersRepo.create({
+        email: `admin-${suffix}@example.com`,
+        passwordHash: 'not-used',
+        role: UserRole.ADMIN,
+        isActive: true,
+      }),
+      usersRepo.create({
+        email: `old-rider-${suffix}@example.com`,
+        passwordHash: 'not-used',
+        role: UserRole.RIDER,
+        isActive: true,
+      }),
+      usersRepo.create({
+        email: `replacement-rider-${suffix}@example.com`,
+        passwordHash: 'not-used',
+        role: UserRole.RIDER,
+        isActive: true,
+      }),
+    ]);
+    const [oldProfile, replacementProfile] = await riderProfilesRepo.save([
+      riderProfilesRepo.create({
+        userId: oldRider.id,
+        vehicleType: 'bike',
+        isAvailable: true,
+      }),
+      riderProfilesRepo.create({
+        userId: replacementRider.id,
+        vehicleType: 'bike',
+        isAvailable: true,
+      }),
+    ]);
+    const order = await ordersRepo.save(
+      ordersRepo.create({
+        orderId: `CHAT-${runId}`,
+        userId: customer.id,
+        category: 'paper',
+        quantity: 1,
+        totalPrice: 20,
+        deliveryFee: 25,
+        paymentMethod: 'cod',
+        deliveryOption: 'delivery',
+        orderStatus: OrderStatus.READY_FOR_DISPATCH,
+      }),
+    );
+    const adminToken = jwtService.sign({
+      sub: admin.id,
+      email: admin.email,
+      role: admin.role,
+    });
+    const oldRiderToken = jwtService.sign({
+      sub: oldRider.id,
+      email: oldRider.email,
+      role: oldRider.role,
+    });
+    const replacementToken = jwtService.sign({
+      sub: replacementRider.id,
+      email: replacementRider.email,
+      role: replacementRider.role,
+    });
+
+    await request(app.getHttpServer())
+      .post(`/api/admin/orders/${order.id}/assign`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ riderId: oldProfile.id })
+      .expect(201);
+    const assignment = await assignmentsRepo.findOneOrFail({
+      where: { orderId: order.id, isCurrent: true },
+    });
+    const opened = await request(app.getHttpServer())
+      .post(`/api/chat/orders/${order.id}/conversation`)
+      .set('Authorization', `Bearer ${oldRiderToken}`)
+      .expect(201);
+    const oldConversationId = Number(opened.body.id);
+    await chatMessagesRepo.save(
+      chatMessagesRepo.create({
+        conversationId: oldConversationId,
+        senderId: oldRider.id,
+        senderRole: SenderRole.RIDER,
+        content: 'Audit message',
+      }),
+    );
+    await request(app.getHttpServer())
+      .get(`/api/chat/conversations/${oldConversationId}/messages`)
+      .set('Authorization', `Bearer ${oldRiderToken}`)
+      .expect(200);
+
+    const oldSocket = await connectChatSocket(baseUrl, oldRiderToken, sockets);
+    const oldSocketJoined = onceSocketEvent<{ conversationId: number }>(
+      oldSocket,
+      'joined',
+    );
+    oldSocket.emit('join-conversation', {
+      conversationId: oldConversationId,
+    });
+    await expect(oldSocketJoined).resolves.toEqual({
+      conversationId: oldConversationId,
+    });
+
+    await dataSource.query(`
+      CREATE FUNCTION fail_task3_chat_close() RETURNS trigger AS $$
+      BEGIN
+        IF NEW.id = ${oldConversationId} AND NEW.status::text = 'closed' THEN
+          RAISE EXCEPTION 'task3 chat close failure';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql
+    `);
+    await dataSource.query(`
+      CREATE TRIGGER fail_task3_chat_close_trigger
+      BEFORE UPDATE ON chat_conversations
+      FOR EACH ROW EXECUTE FUNCTION fail_task3_chat_close()
+    `);
+    try {
+      await request(app.getHttpServer())
+        .patch(`/api/riders/assignments/${assignment.id}/status`)
+        .set('Authorization', `Bearer ${oldRiderToken}`)
+        .send({ status: DeliveryStatus.DECLINED, declineReason: 'Too far' })
+        .expect(500);
+      await expectDeclineState({
+        orderId: order.id,
+        assignmentId: assignment.id,
+        conversationId: oldConversationId,
+        historyCount: 1,
+      });
+    } finally {
+      await dataSource.query(
+        `DROP TRIGGER fail_task3_chat_close_trigger ON chat_conversations`,
+      );
+      await dataSource.query(`DROP FUNCTION fail_task3_chat_close()`);
+    }
+
+    await dataSource.query(`
+      CREATE FUNCTION fail_task3_decline_history() RETURNS trigger AS $$
+      BEGIN
+        IF NEW.order_id = ${order.id}
+           AND NEW.to_status::text = 'ready_for_dispatch' THEN
+          RAISE EXCEPTION 'task3 decline history failure';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql
+    `);
+    await dataSource.query(`
+      CREATE TRIGGER fail_task3_decline_history_trigger
+      BEFORE INSERT ON order_status_history
+      FOR EACH ROW EXECUTE FUNCTION fail_task3_decline_history()
+    `);
+    try {
+      await request(app.getHttpServer())
+        .patch(`/api/riders/assignments/${assignment.id}/status`)
+        .set('Authorization', `Bearer ${oldRiderToken}`)
+        .send({ status: DeliveryStatus.DECLINED, declineReason: 'Too far' })
+        .expect(500);
+      await expectDeclineState({
+        orderId: order.id,
+        assignmentId: assignment.id,
+        conversationId: oldConversationId,
+        historyCount: 1,
+      });
+    } finally {
+      await dataSource.query(
+        `DROP TRIGGER fail_task3_decline_history_trigger ON order_status_history`,
+      );
+      await dataSource.query(`DROP FUNCTION fail_task3_decline_history()`);
+    }
+
+    const closedEvent = onceSocketEvent<{ conversationId: number }>(
+      oldSocket,
+      'conversation-closed',
+    );
+    await request(app.getHttpServer())
+      .patch(`/api/riders/assignments/${assignment.id}/status`)
+      .set('Authorization', `Bearer ${oldRiderToken}`)
+      .send({ status: DeliveryStatus.DECLINED, declineReason: 'Too far' })
+      .expect(200);
+    await expect(closedEvent).resolves.toEqual({
+      conversationId: oldConversationId,
+    });
+
+    await expect(
+      conversationsRepo.findOneOrFail({ where: { id: oldConversationId } }),
+    ).resolves.toMatchObject({
+      assignedRiderId: oldRider.id,
+      status: ConversationStatus.CLOSED,
+      closedAt: expect.any(Date),
+    });
+    await expect(
+      chatMessagesRepo.countBy({ conversationId: oldConversationId }),
+    ).resolves.toBe(1);
+    await request(app.getHttpServer())
+      .get(`/api/chat/conversations/${oldConversationId}/messages`)
+      .set('Authorization', `Bearer ${oldRiderToken}`)
+      .expect(403);
+    const oldSocketDenied = onceSocketEvent<{ message: string }>(
+      oldSocket,
+      'exception',
+    );
+    oldSocket.emit('join-conversation', {
+      conversationId: oldConversationId,
+    });
+    await expect(oldSocketDenied).resolves.toMatchObject({
+      message: 'Forbidden',
+    });
+
+    await request(app.getHttpServer())
+      .post(`/api/admin/orders/${order.id}/assign`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ riderId: replacementProfile.id })
+      .expect(201);
+    const replacementOpened = await request(app.getHttpServer())
+      .post(`/api/chat/orders/${order.id}/conversation`)
+      .set('Authorization', `Bearer ${replacementToken}`)
+      .expect(201);
+    const replacementConversationId = Number(replacementOpened.body.id);
+    expect(replacementConversationId).not.toBe(oldConversationId);
+    await request(app.getHttpServer())
+      .get(`/api/chat/conversations/${replacementConversationId}/messages`)
+      .set('Authorization', `Bearer ${replacementToken}`)
+      .expect(200);
+    const replacementSocket = await connectChatSocket(
+      baseUrl,
+      replacementToken,
+      sockets,
+    );
+    const replacementJoined = onceSocketEvent<{ conversationId: number }>(
+      replacementSocket,
+      'joined',
+    );
+    replacementSocket.emit('join-conversation', {
+      conversationId: replacementConversationId,
+    });
+    await expect(replacementJoined).resolves.toEqual({
+      conversationId: replacementConversationId,
+    });
+
+    await request(app.getHttpServer())
+      .patch(`/api/chat/conversations/${replacementConversationId}/close`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    const replacementAssignment = await assignmentsRepo.findOneOrFail({
+      where: { orderId: order.id, isCurrent: true },
+    });
+
+    await dataSource.query(`
+      CREATE FUNCTION delay_task3_chat_open() RETURNS trigger AS $$
+      BEGIN
+        IF NEW.order_id = ${order.id}
+           AND NEW.assigned_rider_id = ${replacementRider.id} THEN
+          PERFORM pg_sleep(1);
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql
+    `);
+    await dataSource.query(`
+      CREATE TRIGGER delay_task3_chat_open_trigger
+      BEFORE INSERT ON chat_conversations
+      FOR EACH ROW EXECUTE FUNCTION delay_task3_chat_open()
+    `);
+    let concurrentOpen: request.Response;
+    try {
+      const openPromise = request(app.getHttpServer())
+        .post(`/api/chat/orders/${order.id}/conversation`)
+        .set('Authorization', `Bearer ${replacementToken}`)
+        .then((response) => response);
+      await waitForActiveDatabaseQuery(
+        dataSource,
+        '%INSERT INTO "chat_conversations"%',
+      );
+      const declinePromise = request(app.getHttpServer())
+        .patch(`/api/riders/assignments/${replacementAssignment.id}/status`)
+        .set('Authorization', `Bearer ${replacementToken}`)
+        .send({
+          status: DeliveryStatus.DECLINED,
+          declineReason: 'Concurrent chat test',
+        })
+        .then((response) => response);
+
+      const [openResponse, declineResponse] = await Promise.all([
+        openPromise,
+        declinePromise,
+      ]);
+      expect(openResponse.status).toBe(201);
+      expect(declineResponse.status).toBe(200);
+      concurrentOpen = openResponse;
+    } finally {
+      await dataSource.query(
+        `DROP TRIGGER delay_task3_chat_open_trigger ON chat_conversations`,
+      );
+      await dataSource.query(`DROP FUNCTION delay_task3_chat_open()`);
+    }
+
+    const concurrentConversationId = Number(concurrentOpen.body.id);
+    await expect(
+      conversationsRepo.findOneOrFail({
+        where: { id: concurrentConversationId },
+      }),
+    ).resolves.toMatchObject({
+      assignedRiderId: replacementRider.id,
+      status: ConversationStatus.CLOSED,
+      closedAt: expect.any(Date),
+    });
+    await request(app.getHttpServer())
+      .get(`/api/chat/conversations/${concurrentConversationId}/messages`)
+      .set('Authorization', `Bearer ${replacementToken}`)
+      .expect(403);
   });
 
   it('rolls back the order update when status history insertion fails', async () => {
@@ -737,4 +1082,92 @@ describe('Rider dispatch workflow (e2e)', () => {
       await dataSource.query(`DROP FUNCTION fail_task3_status_history()`);
     }
   });
+
+  async function expectDeclineState({
+    orderId,
+    assignmentId,
+    conversationId,
+    historyCount,
+  }: {
+    orderId: number;
+    assignmentId: number;
+    conversationId: number;
+    historyCount: number;
+  }): Promise<void> {
+    await expect(
+      ordersRepo.findOneOrFail({ where: { id: orderId } }),
+    ).resolves.toMatchObject({
+      orderStatus: OrderStatus.RIDER_ASSIGNED,
+    });
+    await expect(
+      assignmentsRepo.findOneOrFail({ where: { id: assignmentId } }),
+    ).resolves.toMatchObject({
+      status: DeliveryStatus.ASSIGNED,
+      isCurrent: true,
+    });
+    await expect(
+      conversationsRepo.findOneOrFail({ where: { id: conversationId } }),
+    ).resolves.toMatchObject({
+      status: ConversationStatus.OPEN,
+      closedAt: null,
+    });
+    await expect(statusHistoryRepo.countBy({ orderId })).resolves.toBe(
+      historyCount,
+    );
+  }
 });
+
+async function connectChatSocket(
+  baseUrl: string,
+  token: string,
+  sockets: Socket[],
+): Promise<Socket> {
+  const socket = io(`${baseUrl}/ws/chat`, {
+    transports: ['websocket'],
+    auth: { token },
+    forceNew: true,
+    reconnection: false,
+  });
+  sockets.push(socket);
+  await onceSocketEvent(socket, 'connect');
+  return socket;
+}
+
+function onceSocketEvent<T = unknown>(
+  socket: Socket,
+  event: string,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error(`Timed out waiting for ${event}`)),
+      2_000,
+    );
+    socket.once(event, (payload: T) => {
+      clearTimeout(timeout);
+      resolve(payload);
+    });
+  });
+}
+
+async function waitForActiveDatabaseQuery(
+  dataSource: DataSource,
+  queryPattern: string,
+): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    const [row] = await dataSource.query<Array<{ active: boolean }>>(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM pg_stat_activity
+         WHERE datname = current_database()
+           AND pid <> pg_backend_pid()
+           AND state = 'active'
+           AND query LIKE $1
+       ) AS active`,
+      [queryPattern],
+    );
+    if (row?.active) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`Timed out waiting for active query: ${queryPattern}`);
+}

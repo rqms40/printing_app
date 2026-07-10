@@ -527,6 +527,20 @@ describe('production migration lifecycle (e2e)', () => {
           [orderId, riderId, status, assignedAt, proofSignatureData],
         );
       };
+      const insertRiderConversation = async (
+        orderId: number,
+        riderUserId: number,
+        status: 'open' | 'assigned' = 'open',
+      ): Promise<number> => {
+        const [conversation] = await dataSource.query<Array<{ id: number }>>(
+          `INSERT INTO chat_conversations
+             (customer_id, type, order_id, assigned_rider_id, status)
+           VALUES ($1, 'rider', $2, $3, $4)
+           RETURNING id`,
+          [users[0].id, orderId, riderUserId, status],
+        );
+        return conversation.id;
+      };
 
       const orderIds = {
         ready: await insertOrder('STATE-READY', 'ready_for_dispatch'),
@@ -604,8 +618,62 @@ describe('production migration lifecycle (e2e)', () => {
         'on_the_way',
         '2026-01-02T00:00:00Z',
       );
+      const chatIds = {
+        ready: await insertRiderConversation(orderIds.ready, users[1].id),
+        cancelled: await insertRiderConversation(
+          orderIds.cancelled,
+          users[1].id,
+          'assigned',
+        ),
+        declined: await insertRiderConversation(orderIds.declined, users[1].id),
+        pickup: await insertRiderConversation(orderIds.pickup, users[1].id),
+        deliveredCurrent: await insertRiderConversation(
+          orderIds.delivered,
+          users[1].id,
+        ),
+        deliveredStale: await insertRiderConversation(
+          orderIds.delivered,
+          users[2].id,
+          'assigned',
+        ),
+        compatibleCurrent: await insertRiderConversation(
+          orderIds.compatible,
+          users[2].id,
+        ),
+        compatibleStale: await insertRiderConversation(
+          orderIds.compatible,
+          users[1].id,
+        ),
+        exact: await insertRiderConversation(orderIds.exact, users[3].id),
+      };
+      await dataSource.query(
+        `INSERT INTO chat_messages
+           (conversation_id, sender_id, sender_role, content)
+         VALUES ($1, $2, 'rider', 'preserved migration audit message')`,
+        [chatIds.ready, users[1].id],
+      );
 
       await dataSource.runMigrations();
+
+      await expect(
+        dataSource.query(
+          `SELECT order_id, assigned_rider_id
+           FROM orders
+           WHERE order_id LIKE 'STATE-%'
+           ORDER BY order_id`,
+        ),
+      ).resolves.toEqual([
+        { order_id: 'STATE-CANCELLED', assigned_rider_id: null },
+        {
+          order_id: 'STATE-COMPATIBLE',
+          assigned_rider_id: users[2].id,
+        },
+        { order_id: 'STATE-DECLINED', assigned_rider_id: null },
+        { order_id: 'STATE-DELIVERED', assigned_rider_id: users[1].id },
+        { order_id: 'STATE-EXACT', assigned_rider_id: users[3].id },
+        { order_id: 'STATE-PICKUP', assigned_rider_id: null },
+        { order_id: 'STATE-READY', assigned_rider_id: null },
+      ]);
 
       await expect(
         dataSource.query(
@@ -690,6 +758,86 @@ describe('production migration lifecycle (e2e)', () => {
           is_current: false,
           rider_user_id: users[1].id,
           proof_signature_data: null,
+        },
+      ]);
+      await expect(
+        dataSource.query(
+          `SELECT owning_order.order_id,
+                  conversation.assigned_rider_id,
+                  conversation.status::text AS status,
+                  conversation.closed_at IS NOT NULL AS has_closed_at
+           FROM chat_conversations AS conversation
+           JOIN orders AS owning_order ON owning_order.id = conversation.order_id
+           WHERE owning_order.order_id LIKE 'STATE-%'
+           ORDER BY owning_order.order_id, conversation.assigned_rider_id`,
+        ),
+      ).resolves.toEqual([
+        {
+          order_id: 'STATE-CANCELLED',
+          assigned_rider_id: users[1].id,
+          status: 'closed',
+          has_closed_at: true,
+        },
+        {
+          order_id: 'STATE-COMPATIBLE',
+          assigned_rider_id: users[1].id,
+          status: 'closed',
+          has_closed_at: true,
+        },
+        {
+          order_id: 'STATE-COMPATIBLE',
+          assigned_rider_id: users[2].id,
+          status: 'open',
+          has_closed_at: false,
+        },
+        {
+          order_id: 'STATE-DECLINED',
+          assigned_rider_id: users[1].id,
+          status: 'closed',
+          has_closed_at: true,
+        },
+        {
+          order_id: 'STATE-DELIVERED',
+          assigned_rider_id: users[1].id,
+          status: 'open',
+          has_closed_at: false,
+        },
+        {
+          order_id: 'STATE-DELIVERED',
+          assigned_rider_id: users[2].id,
+          status: 'closed',
+          has_closed_at: true,
+        },
+        {
+          order_id: 'STATE-EXACT',
+          assigned_rider_id: users[3].id,
+          status: 'open',
+          has_closed_at: false,
+        },
+        {
+          order_id: 'STATE-PICKUP',
+          assigned_rider_id: users[1].id,
+          status: 'closed',
+          has_closed_at: true,
+        },
+        {
+          order_id: 'STATE-READY',
+          assigned_rider_id: users[1].id,
+          status: 'closed',
+          has_closed_at: true,
+        },
+      ]);
+      await expect(
+        dataSource.query(
+          `SELECT conversation_id, content
+           FROM chat_messages
+           WHERE conversation_id = $1`,
+          [chatIds.ready],
+        ),
+      ).resolves.toEqual([
+        {
+          conversation_id: chatIds.ready,
+          content: 'preserved migration audit message',
         },
       ]);
 

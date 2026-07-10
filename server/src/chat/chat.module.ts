@@ -25,6 +25,6 @@ import { Order } from '../orders/entities/order.entity';
   ],
   providers: [ChatGateway, ChatService, OpenRouterService],
   controllers: [ChatController],
-  exports: [ChatService],
+  exports: [ChatGateway, ChatService],
 })
 export class ChatModule {}

@@ -14,6 +14,12 @@ import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { BatchOrder } from '../orders/entities/batch-order.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
 import { User, UserRole } from '../users/entities/user.entity';
+import {
+  Conversation,
+  ConversationStatus,
+  ConversationType,
+} from '../chat/entities/conversation.entity';
+import { ChatGateway } from '../chat/chat.gateway';
 
 describe('RidersService', () => {
   let service: RidersService;
@@ -23,8 +29,10 @@ describe('RidersService', () => {
   let batchRepo: jest.Mocked<Partial<Repository<BatchOrder>>>;
   let historyRepo: jest.Mocked<Partial<Repository<OrderStatusHistory>>>;
   let userRepo: jest.Mocked<Partial<Repository<User>>>;
+  let conversationRepo: jest.Mocked<Partial<Repository<Conversation>>>;
   let dataSource: Partial<DataSource>;
   let locationGateway: Partial<LocationGateway>;
+  let chatGateway: { notifyConversationClosed: jest.Mock };
   let ordersService: {
     updateStatus: jest.Mock;
     publishStatusUpdate: jest.Mock;
@@ -117,6 +125,10 @@ describe('RidersService', () => {
         isActive: true,
       })),
     };
+    conversationRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      update: jest.fn(),
+    };
     const transaction = jest.fn(
       async (
         runInTransaction: (manager: EntityManager) => Promise<unknown>,
@@ -129,6 +141,7 @@ describe('RidersService', () => {
             if (entity?.name === 'RiderProfile') return profileRepo;
             if (entity?.name === 'OrderStatusHistory') return historyRepo;
             if (entity?.name === 'User') return userRepo;
+            if (entity?.name === 'Conversation') return conversationRepo;
             throw new Error(`Unexpected repository ${entity?.name}`);
           },
         } as unknown as EntityManager),
@@ -142,6 +155,9 @@ describe('RidersService', () => {
     };
     locationGateway = {
       broadcastLocation: jest.fn(),
+    };
+    chatGateway = {
+      notifyConversationClosed: jest.fn(),
     };
     ordersService = {
       updateStatus: jest.fn(),
@@ -158,6 +174,7 @@ describe('RidersService', () => {
         },
         { provide: LocationGateway, useValue: locationGateway },
         { provide: OrdersService, useValue: ordersService },
+        { provide: ChatGateway, useValue: chatGateway },
         { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
@@ -632,6 +649,63 @@ describe('RidersService', () => {
           notes: 'Rider declined assignment: Too far',
         }),
       );
+    });
+
+    it('closes the current rider chats in the decline transaction and revokes their rooms after commit', async () => {
+      const assignedAssignment = {
+        ...mockAssignment,
+        status: DeliveryStatus.ASSIGNED,
+        isCurrent: true,
+      } as DeliveryAssignment;
+      const assignedOrder = {
+        id: assignedAssignment.orderId,
+        orderId: 'ORD-1',
+        batchOrderId: null,
+        assignedRiderId: mockProfile.userId,
+        orderStatus: OrderStatus.RIDER_ASSIGNED,
+      } as Order;
+      const conversation = {
+        id: 501,
+        orderId: assignedOrder.id,
+        type: ConversationType.RIDER,
+        assignedRiderId: mockProfile.userId,
+        status: ConversationStatus.OPEN,
+      } as Conversation;
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.findOne.mockResolvedValue(assignedAssignment);
+      assignmentRepo.save.mockImplementation(
+        async (assignment) => assignment as DeliveryAssignment,
+      );
+      orderRepo.findOneOrFail.mockResolvedValue(assignedOrder);
+      orderRepo.update.mockResolvedValue({ affected: 1 } as never);
+      conversationRepo.find.mockResolvedValue([conversation]);
+
+      await service.updateDeliveryStatus(
+        mockProfile.userId,
+        assignedAssignment.id,
+        DeliveryStatus.DECLINED,
+        'Too far',
+      );
+
+      expect(conversationRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            orderId: assignedOrder.id,
+            type: ConversationType.RIDER,
+            assignedRiderId: mockProfile.userId,
+          }),
+          lock: { mode: 'pessimistic_write' },
+        }),
+      );
+      expect(conversationRepo.update).toHaveBeenCalledWith(
+        expect.objectContaining({ id: expect.anything() }),
+        expect.objectContaining({
+          status: ConversationStatus.CLOSED,
+          closedAt: expect.any(Date),
+        }),
+      );
+      expect(chatGateway.notifyConversationClosed).toHaveBeenCalledWith([501]);
+      expect(historyRepo.insert).toHaveBeenCalledTimes(1);
     });
 
     it('should transition from ASSIGNED to ACCEPTED', async () => {

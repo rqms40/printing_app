@@ -9,7 +9,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
-import { ChatService } from './chat.service';
+import { ChatService, type ChatActorRole } from './chat.service';
 import { SenderRole } from './entities/chat-message.entity';
 import { ConversationType, Conversation } from './entities/conversation.entity';
 
@@ -64,7 +64,8 @@ export class ChatGateway implements OnGatewayConnection {
     @ConnectedSocket() client: ChatSocket,
   ) {
     await this.assertCanAccessConversation(client, data.conversationId);
-    void client.join(`conversation:${data.conversationId}`);
+    await client.join(`conversation:${data.conversationId}`);
+    await this.assertCanAccessConversation(client, data.conversationId);
     return { event: 'joined', data: { conversationId: data.conversationId } };
   }
 
@@ -87,9 +88,7 @@ export class ChatGateway implements OnGatewayConnection {
     },
     @ConnectedSocket() client: ChatSocket,
   ) {
-    await this.assertCanAccessConversation(client, data.conversationId);
-    const userId = client.data.userId ?? 0;
-    const role = client.data.role ?? 'customer';
+    const role = this.getActor(client).role;
     const senderRole =
       role === 'admin'
         ? SenderRole.ADMIN
@@ -102,13 +101,18 @@ export class ChatGateway implements OnGatewayConnection {
       throw new WsException('Message must have content or attachment');
     }
 
-    const msg = await this.chatService.saveMessage(
+    const msg = await this.runAsActor(
+      client,
       data.conversationId,
-      userId,
-      senderRole,
-      trimmedContent,
-      data.attachmentFileId ?? null,
-      data.attachmentMimeType ?? null,
+      (userId, actorRole) =>
+        this.chatService.saveMessageForActor(
+          data.conversationId,
+          userId,
+          actorRole,
+          trimmedContent,
+          data.attachmentFileId ?? null,
+          data.attachmentMimeType ?? null,
+        ),
     );
     this.server
       .to(`conversation:${data.conversationId}`)
@@ -182,8 +186,13 @@ export class ChatGateway implements OnGatewayConnection {
     @ConnectedSocket() client: ChatSocket,
   ) {
     if (!client.data.userId) return;
-    await this.assertCanAccessConversation(client, data.conversationId);
-    await this.chatService.markMessagesRead(data.conversationId);
+    await this.runAsActor(client, data.conversationId, (userId, role) =>
+      this.chatService.markMessagesReadForActor(
+        data.conversationId,
+        userId,
+        role,
+      ),
+    );
     this.server
       .to(`conversation:${data.conversationId}`)
       .emit('messages-read', {
@@ -202,33 +211,58 @@ export class ChatGateway implements OnGatewayConnection {
     });
   }
 
+  notifyConversationClosed(conversationIds: number[]): void {
+    for (const conversationId of conversationIds) {
+      const room = `conversation:${conversationId}`;
+      this.server.to(room).emit('conversation-closed', { conversationId });
+      this.server.in(room).socketsLeave(room);
+    }
+  }
+
   private async assertCanAccessConversation(
     client: ChatSocket,
     conversationId: number,
   ): Promise<Conversation> {
+    return this.runAsActor(client, conversationId, (userId, role) =>
+      this.chatService.assertCanAccessConversationForActor(
+        conversationId,
+        userId,
+        role,
+      ),
+    );
+  }
+
+  private getActor(client: ChatSocket): {
+    userId: number;
+    role: ChatActorRole;
+  } {
     const userId = client.data.userId;
-    const role = client.data.role ?? 'customer';
     if (!userId) {
       throw new WsException('Unauthorized');
     }
-
-    const conversation =
-      await this.chatService.findConversation(conversationId);
-    if (!conversation) {
-      throw new WsException('Conversation not found');
-    }
-
-    const canAccess =
-      role === 'admin' ||
-      conversation.customerId === userId ||
-      (role === 'rider' &&
-        conversation.type === ConversationType.RIDER &&
-        conversation.assignedRiderId === userId);
-
-    if (!canAccess) {
+    const rawRole = client.data.role ?? 'customer';
+    if (rawRole !== 'admin' && rawRole !== 'customer' && rawRole !== 'rider') {
       throw new WsException('Forbidden');
     }
+    return { userId, role: rawRole };
+  }
 
-    return conversation;
+  private async runAsActor<T>(
+    client: ChatSocket,
+    conversationId: number,
+    action: (userId: number, role: ChatActorRole) => Promise<T>,
+  ): Promise<T> {
+    const actor = this.getActor(client);
+    try {
+      return await action(actor.userId, actor.role);
+    } catch (error) {
+      if (actor.role === 'rider') {
+        void client.leave(`conversation:${conversationId}`);
+      }
+      if (error instanceof WsException) throw error;
+      throw new WsException(
+        error instanceof Error ? error.message : 'Forbidden',
+      );
+    }
   }
 }
