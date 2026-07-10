@@ -90,6 +90,90 @@ export class AtomicCreditAccounting1777853500000 implements MigrationInterface {
     }
 
     if (hasCreditTransactions) {
+      if (await queryRunner.hasTable('orders')) {
+        await queryRunner.query(`
+          WITH individual_refund_candidates AS (
+            SELECT transaction_record.id,
+                   'ORDER-REFUND:' || order_record.order_id AS canonical_ref
+            FROM credit_transactions AS transaction_record
+            JOIN orders AS order_record
+              ON order_record.order_id = transaction_record.reference_id
+            WHERE order_record.batch_order_id IS NULL
+              AND transaction_record.user_id = order_record.user_id
+              AND transaction_record.type::text = 'top_up'
+              AND transaction_record.status::text = 'approved'
+              AND transaction_record."amountCredits" =
+                    order_record.total_price + order_record.delivery_fee
+              AND transaction_record."amountPhp" IS NULL
+              AND transaction_record.proof_of_payment_url IS NULL
+              AND transaction_record.created_at >= order_record.created_at
+              AND replace(replace(lower(order_record.payment_method), '_', ''), '-', '')
+                    IN ('credits', 'gridcredits')
+              AND (
+                SELECT COUNT(*)
+                FROM credit_transactions AS same_reference
+                WHERE same_reference.reference_id = order_record.order_id
+              ) = 1
+              AND NOT EXISTS (
+                SELECT 1
+                FROM credit_transactions AS stable_refund
+                WHERE stable_refund.reference_id =
+                  'ORDER-REFUND:' || order_record.order_id
+              )
+          )
+          UPDATE credit_transactions AS transaction_record
+          SET reference_id = candidate.canonical_ref
+          FROM individual_refund_candidates AS candidate
+          WHERE transaction_record.id = candidate.id
+        `);
+      }
+
+      if (
+        (await queryRunner.hasTable('orders')) &&
+        (await queryRunner.hasTable('batch_orders'))
+      ) {
+        await queryRunner.query(`
+          WITH batch_refund_candidates AS (
+            SELECT transaction_record.id,
+                   'BATCH-REFUND:' || batch_record.batch_ref AS canonical_ref
+            FROM credit_transactions AS transaction_record
+            JOIN orders AS order_record
+              ON order_record.order_id = transaction_record.reference_id
+            JOIN batch_orders AS batch_record
+              ON batch_record.id = order_record.batch_order_id
+            WHERE transaction_record.user_id = batch_record.user_id
+              AND transaction_record.type::text = 'top_up'
+              AND transaction_record.status::text = 'approved'
+              AND transaction_record."amountCredits" =
+                    batch_record.subtotal + batch_record.delivery_fee +
+                    batch_record.priority_fee +
+                    batch_record.extra_destination_fee
+              AND transaction_record."amountPhp" IS NULL
+              AND transaction_record.proof_of_payment_url IS NULL
+              AND transaction_record.created_at >= order_record.created_at
+              AND replace(replace(lower(batch_record.payment_method), '_', ''), '-', '')
+                    IN ('credits', 'gridcredits')
+              AND (
+                SELECT COUNT(*)
+                FROM credit_transactions AS batch_reference
+                JOIN orders AS referenced_order
+                  ON referenced_order.order_id = batch_reference.reference_id
+                WHERE referenced_order.batch_order_id = batch_record.id
+              ) = 1
+              AND NOT EXISTS (
+                SELECT 1
+                FROM credit_transactions AS stable_refund
+                WHERE stable_refund.reference_id =
+                  'BATCH-REFUND:' || batch_record.batch_ref
+              )
+          )
+          UPDATE credit_transactions AS transaction_record
+          SET reference_id = candidate.canonical_ref
+          FROM batch_refund_candidates AS candidate
+          WHERE transaction_record.id = candidate.id
+        `);
+      }
+
       await queryRunner.query(`
         CREATE UNIQUE INDEX IF NOT EXISTS
           uq_credit_transactions_refund_reference

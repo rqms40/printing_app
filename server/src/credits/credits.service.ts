@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import {
   CreditTransaction,
   CreditTransactionType,
@@ -17,6 +17,13 @@ import { FirebaseService } from '../firebase/firebase.service';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 import { RequestTopUpDto, UpdateSettingsDto } from './dto/credits.dto';
 import { User } from '../users/entities/user.entity';
+
+export interface CreditMutationResult {
+  transaction: CreditTransaction;
+  userId: number;
+  balance: number;
+  balanceChanged: boolean;
+}
 
 @Injectable()
 export class CreditsService {
@@ -300,7 +307,7 @@ export class CreditsService {
     amountCredits: number,
     referenceId?: string,
     manager?: EntityManager,
-  ): Promise<CreditTransaction> {
+  ): Promise<CreditMutationResult> {
     if (manager) {
       return this.subtractCreditsWithManager(
         userId,
@@ -309,7 +316,7 @@ export class CreditsService {
         manager,
       );
     }
-    return this.dataSource.transaction((transactionManager) =>
+    const mutation = await this.dataSource.transaction((transactionManager) =>
       this.subtractCreditsWithManager(
         userId,
         amountCredits,
@@ -317,6 +324,8 @@ export class CreditsService {
         transactionManager,
       ),
     );
+    this.publishCreditMutation(mutation);
+    return mutation;
   }
 
   private async subtractCreditsWithManager(
@@ -324,7 +333,7 @@ export class CreditsService {
     amountCredits: number,
     referenceId: string | undefined,
     manager: EntityManager,
-  ): Promise<CreditTransaction> {
+  ): Promise<CreditMutationResult> {
     const userRepo = manager.getRepository(User);
     const transactionRepo = manager.getRepository(CreditTransaction);
     const user = await userRepo.findOne({
@@ -347,11 +356,12 @@ export class CreditsService {
         referenceId,
       }),
     );
-    this.notificationsService.triggerCreditsUpdate(
-      user.id,
-      Number(user.credits),
-    );
-    return transaction;
+    return {
+      transaction,
+      userId: user.id,
+      balance: Number(user.credits),
+      balanceChanged: true,
+    };
   }
 
   async refundCredits(
@@ -359,23 +369,28 @@ export class CreditsService {
     amountCredits: number,
     referenceId?: string,
     manager?: EntityManager,
-  ): Promise<CreditTransaction> {
+    legacyReferenceIds: string[] = [],
+  ): Promise<CreditMutationResult> {
     if (manager) {
       return this.refundCreditsWithManager(
         userId,
         amountCredits,
         referenceId,
         manager,
+        legacyReferenceIds,
       );
     }
-    return this.dataSource.transaction((transactionManager) =>
+    const mutation = await this.dataSource.transaction((transactionManager) =>
       this.refundCreditsWithManager(
         userId,
         amountCredits,
         referenceId,
         transactionManager,
+        legacyReferenceIds,
       ),
     );
+    this.publishCreditMutation(mutation);
+    return mutation;
   }
 
   private async refundCreditsWithManager(
@@ -383,7 +398,8 @@ export class CreditsService {
     amountCredits: number,
     referenceId: string | undefined,
     manager: EntityManager,
-  ): Promise<CreditTransaction> {
+    legacyReferenceIds: string[],
+  ): Promise<CreditMutationResult> {
     const userRepo = manager.getRepository(User);
     const transactionRepo = manager.getRepository(CreditTransaction);
     const user = await userRepo.findOne({
@@ -392,38 +408,80 @@ export class CreditsService {
     });
     if (!user) throw new NotFoundException('User not found');
 
-    const existing = referenceId
-      ? await transactionRepo.findOne({ where: { referenceId } })
-      : null;
-    if (existing) {
+    const references = [referenceId, ...legacyReferenceIds].filter(
+      (reference): reference is string => Boolean(reference),
+    );
+    const uniqueReferences = [...new Set(references)];
+    const existing =
+      uniqueReferences.length === 0
+        ? []
+        : await transactionRepo.find({
+            where: { referenceId: In(uniqueReferences) },
+            order: { id: 'ASC' },
+          });
+    for (const transaction of existing) {
       if (
-        existing.userId !== userId ||
-        existing.type !== CreditTransactionType.TOP_UP ||
-        Number(existing.amountCredits) !== amountCredits ||
-        existing.status !== CreditTransactionStatus.APPROVED
+        transaction.userId !== userId ||
+        transaction.type !== CreditTransactionType.TOP_UP ||
+        transaction.status !== CreditTransactionStatus.APPROVED ||
+        transaction.amountPhp != null ||
+        transaction.proofOfPaymentUrl != null ||
+        !Number.isFinite(Number(transaction.amountCredits)) ||
+        Number(transaction.amountCredits) <= 0
       ) {
         throw new BadRequestException(
           'Credit refund ledger reference mismatch',
         );
       }
-      return existing;
     }
 
-    user.credits = Number(user.credits) + amountCredits;
+    const existingTotal = existing.reduce(
+      (sum, transaction) => sum + Number(transaction.amountCredits),
+      0,
+    );
+    const canonical = existing.find(
+      (transaction) => transaction.referenceId === referenceId,
+    );
+    if (
+      existingTotal > amountCredits ||
+      (canonical != null && existingTotal !== amountCredits)
+    ) {
+      throw new BadRequestException('Credit refund ledger reference mismatch');
+    }
+    if (existingTotal === amountCredits) {
+      return {
+        transaction: canonical ?? existing[0],
+        userId: user.id,
+        balance: Number(user.credits),
+        balanceChanged: false,
+      };
+    }
+
+    const remainingCredits = amountCredits - existingTotal;
+    user.credits = Number(user.credits) + remainingCredits;
     await userRepo.save(user);
     const transaction = await transactionRepo.save(
       transactionRepo.create({
         userId,
         type: CreditTransactionType.TOP_UP,
-        amountCredits,
+        amountCredits: remainingCredits,
         status: CreditTransactionStatus.APPROVED,
         referenceId,
       }),
     );
+    return {
+      transaction,
+      userId: user.id,
+      balance: Number(user.credits),
+      balanceChanged: true,
+    };
+  }
+
+  publishCreditMutation(mutation: CreditMutationResult | null): void {
+    if (!mutation?.balanceChanged) return;
     this.notificationsService.triggerCreditsUpdate(
-      user.id,
-      Number(user.credits),
+      mutation.userId,
+      mutation.balance,
     );
-    return transaction;
   }
 }

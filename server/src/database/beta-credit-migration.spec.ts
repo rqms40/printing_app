@@ -15,6 +15,10 @@ describe('BetaCreditLedgerAndRankIndex1777853400000', () => {
       .map(([statement]) => String(statement))
       .join('\n');
     expect(sql).toContain('ROW_NUMBER() OVER');
+    expect(sql).toContain("type::text = 'top_up'");
+    expect(sql).toContain("status::text = 'approved'");
+    expect(sql).toContain('"amountCredits" = 100');
+    expect(sql).toContain('THEN 0');
     expect(sql).toContain("reference_id LIKE 'BETA-ENROLLMENT:%'");
     expect(sql).toContain('SET reference_id = NULL');
     expect(sql).toContain('uq_credit_transactions_beta_enrollment_reference');

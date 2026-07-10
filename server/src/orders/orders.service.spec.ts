@@ -1120,12 +1120,57 @@ describe('OrdersService', () => {
 
       const result = await service.updateStatus(1, 'printing');
 
-      expect(repo.update).toHaveBeenCalledWith(1, { orderStatus: 'printing' });
+      expect(repo.update).toHaveBeenCalledWith(
+        { id: 1, orderStatus: mockOrder.orderStatus },
+        { orderStatus: 'printing' },
+      );
       expect(gateway.notifyOrderUpdate).toHaveBeenCalledWith(
         mockOrder.orderId,
         mockOrder,
       );
       expect(result).toEqual(mockOrder);
+    });
+
+    it('rejects transitions out of cancelled after acquiring the row lock', async () => {
+      const cancelled = {
+        ...mockOrder,
+        orderStatus: OrderStatus.CANCELLED,
+      } as Order;
+      repo.findOneOrFail.mockResolvedValue(cancelled);
+
+      await expect(
+        service.updateStatus(1, OrderStatus.PRINTING_IN_PROGRESS),
+      ).rejects.toThrow('Cancelled orders are terminal');
+
+      expect(repo.update).not.toHaveBeenCalled();
+      expect(gateway.notifyOrderUpdate).not.toHaveBeenCalled();
+    });
+
+    it('treats a repeated cancelled status as an event-free no-op', async () => {
+      const cancelled = {
+        ...mockOrder,
+        orderStatus: OrderStatus.CANCELLED,
+      } as Order;
+      repo.findOneOrFail.mockResolvedValue(cancelled);
+      repo.findOne.mockResolvedValue(cancelled);
+
+      await expect(
+        service.updateStatus(1, OrderStatus.CANCELLED),
+      ).resolves.toEqual(cancelled);
+
+      expect(repo.update).not.toHaveBeenCalled();
+      expect(gateway.notifyOrderUpdate).not.toHaveBeenCalled();
+    });
+
+    it('rejects a status write when the expected row was not affected', async () => {
+      repo.findOneOrFail.mockResolvedValue(mockOrder);
+      repo.update.mockResolvedValue({ affected: 0 } as any);
+
+      await expect(service.updateStatus(1, 'printing')).rejects.toThrow(
+        'Order changed during status update',
+      );
+
+      expect(gateway.notifyOrderUpdate).not.toHaveBeenCalled();
     });
   });
 
@@ -1210,11 +1255,15 @@ describe('OrdersService', () => {
         Number(creditOrder.totalPrice) + Number(creditOrder.deliveryFee),
         `ORDER-REFUND:${creditOrder.orderId}`,
         expect.anything(),
+        [creditOrder.orderId],
       );
-      expect(repo.update).toHaveBeenCalledWith(1, {
-        orderStatus: OrderStatus.CANCELLED,
-        paymentStatus: 'refunded',
-      });
+      expect(repo.update).toHaveBeenCalledWith(
+        { id: 1, orderStatus: creditOrder.orderStatus },
+        {
+          orderStatus: OrderStatus.CANCELLED,
+          paymentStatus: 'refunded',
+        },
+      );
     });
 
     it('refunds individual decimal-string charge components exactly once', async () => {
@@ -1236,6 +1285,7 @@ describe('OrdersService', () => {
         60,
         `ORDER-REFUND:${creditOrder.orderId}`,
         expect.anything(),
+        [creditOrder.orderId],
       );
     });
 
@@ -1257,6 +1307,7 @@ describe('OrdersService', () => {
         Number(creditOrder.totalPrice),
         `ORDER-REFUND:${creditOrder.orderId}`,
         expect.anything(),
+        [creditOrder.orderId],
       );
     });
 
@@ -1290,9 +1341,10 @@ describe('OrdersService', () => {
       await expect(service.cancelOrder(1, 1)).resolves.toEqual(gcashOrder);
 
       expect(creditsService.refundCredits).not.toHaveBeenCalled();
-      expect(repo.update).toHaveBeenCalledWith(1, {
-        orderStatus: OrderStatus.CANCELLED,
-      });
+      expect(repo.update).toHaveBeenCalledWith(
+        { id: 1, orderStatus: gcashOrder.orderStatus },
+        { orderStatus: OrderStatus.CANCELLED },
+      );
     });
   });
 
@@ -1337,6 +1389,7 @@ describe('OrdersService', () => {
         85,
         'BATCH-REFUND:BATCH-10001',
         expect.anything(),
+        ['ORD-10001', 'ORD-10002'],
       );
       expect(repo.update).toHaveBeenCalledWith(
         expect.objectContaining({ batchOrderId: batch.id }),
@@ -1345,6 +1398,40 @@ describe('OrdersService', () => {
           paymentStatus: 'refunded',
         }),
       );
+    });
+
+    it('rolls back when the bulk update does not affect every locked order', async () => {
+      const batch = {
+        id: 78,
+        batchRef: 'BATCH-10002',
+        userId: 1,
+        subtotal: 40,
+        deliveryFee: 0,
+        priorityFee: 0,
+        extraDestinationFee: 0,
+        paymentMethod: 'gcash',
+        slotBookingId: null,
+      } as BatchOrder;
+      const orders = [1, 2].map(
+        (id) =>
+          ({
+            ...mockOrder,
+            id,
+            orderId: `ORD-1001${id}`,
+            userId: 1,
+            batchOrderId: batch.id,
+            orderStatus: OrderStatus.ORDER_PLACED,
+          }) as Order,
+      );
+      repo.find.mockResolvedValue(orders);
+      (batchRepo.findOne as jest.Mock).mockResolvedValue(batch);
+      repo.update.mockResolvedValue({ affected: 1 } as any);
+
+      await expect(service.cancelBatch(batch.id, 1)).rejects.toThrow(
+        'Batch changed during cancellation',
+      );
+
+      expect(gateway.notifyOrderUpdate).not.toHaveBeenCalled();
     });
   });
 
@@ -1465,6 +1552,7 @@ describe('OrdersService', () => {
 describe('OrdersService.updateStatus — expiresAt stamping', () => {
   let service: OrdersService;
   const ordersRepo = {
+    findOne: jest.fn(),
     findOneOrFail: jest.fn(),
     update: jest.fn(),
     find: jest.fn(),
@@ -1503,6 +1591,13 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    ordersRepo.findOneOrFail.mockResolvedValue(makeOrder());
+    ordersRepo.update.mockResolvedValue({ affected: 1 });
+    const transaction = jest.fn(async (work) =>
+      work({
+        getRepository: () => ordersRepo,
+      }),
+    );
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrdersService,
@@ -1536,7 +1631,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         { provide: NotificationsService, useValue: mockNotifications },
         { provide: TamSurveysService, useValue: mockTamSurveysService },
         { provide: FilesService, useValue: mockFilesService },
-        { provide: DataSource, useValue: { transaction: jest.fn() } },
+        { provide: DataSource, useValue: { transaction } },
         {
           provide: getRepositoryToken(DeliveryDestination),
           useValue: { create: jest.fn(), save: jest.fn() },

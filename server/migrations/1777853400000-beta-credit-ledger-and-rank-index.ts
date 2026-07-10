@@ -16,7 +16,17 @@ export class BetaCreditLedgerAndRankIndex1777853400000 implements MigrationInter
           SELECT id,
                  ROW_NUMBER() OVER (
                    PARTITION BY reference_id
-                   ORDER BY id
+                   ORDER BY
+                     CASE
+                       WHEN reference_id =
+                              'BETA-ENROLLMENT:' || user_id::text
+                        AND type::text = 'top_up'
+                        AND status::text = 'approved'
+                        AND "amountCredits" = 100
+                       THEN 0
+                       ELSE 1
+                     END,
+                     id
                  ) AS occurrence
           FROM credit_transactions
           WHERE reference_id LIKE '${BETA_REFERENCE_PATTERN}'

@@ -22,6 +22,11 @@ describe('AtomicCreditAccounting1777853500000', () => {
     expect(sql).toContain('NOT EXISTS');
     expect(sql).not.toContain('UPDATE users SET credits');
     expect(sql).toContain('uq_credit_transactions_refund_reference');
+    expect(sql).toContain('individual_refund_candidates');
+    expect(sql).toContain('batch_refund_candidates');
+    expect(sql).toContain("'ORDER-REFUND:' || order_record.order_id");
+    expect(sql).toContain("'BATCH-REFUND:' || batch_record.batch_ref");
+    expect(sql).not.toContain('DELETE FROM credit_transactions');
     expect(sql).toContain("reference_id LIKE 'ORDER-REFUND:%'");
     expect(sql).toContain("reference_id LIKE 'BATCH-REFUND:%'");
   });

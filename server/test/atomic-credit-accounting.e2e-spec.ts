@@ -6,7 +6,7 @@ import { BetaModeSettings } from '../src/beta-mode/entities/beta-mode-settings.e
 import { CreditsService } from '../src/credits/credits.service';
 import { CreditSettings } from '../src/credits/entities/credit-settings.entity';
 import { CreditTransaction } from '../src/credits/entities/credit-transaction.entity';
-import { Order } from '../src/orders/entities/order.entity';
+import { Order, OrderStatus } from '../src/orders/entities/order.entity';
 import { OrderItem } from '../src/orders/entities/order-item.entity';
 import { OrderItemSpecValue } from '../src/orders/entities/order-item-spec-value.entity';
 import { BatchOrder } from '../src/orders/entities/batch-order.entity';
@@ -26,6 +26,8 @@ import { TamSurveysService } from '../src/tam-surveys/tam-surveys.service';
 import { DeliverySlotsService } from '../src/delivery-slots/delivery-slots.service';
 import { DeliverySettingsService } from '../src/delivery-slots/delivery-settings.service';
 import { DeliverySlotsGateway } from '../src/delivery-slots/delivery-slots.gateway';
+import { DeliverySlotTemplate } from '../src/delivery-slots/entities/delivery-slot-template.entity';
+import { DeliverySlotBooking } from '../src/delivery-slots/entities/delivery-slot-booking.entity';
 import { PrinterProfileService } from '../src/printer-profile/printer-profile.service';
 import { CatalogPricingService } from '../src/products/catalog-pricing.service';
 
@@ -234,10 +236,18 @@ describe('atomic credit accounting (e2e)', () => {
     const dataSource = await initializeDatabase(database);
     try {
       const fixture = await createBatchFixture(dataSource, database);
+      const creditEvent = jest.fn();
+      const slot = await attachFutureSlot(
+        dataSource,
+        fixture.batchId,
+        'successful-slot',
+      );
       const service = makeOrdersService(
         dataSource,
-        makeCreditsService(dataSource),
+        makeCreditsService(dataSource, creditEvent),
         40,
+        {},
+        { slotsService: slot.service, slotsGateway: slot.gateway },
       );
 
       await Promise.all([
@@ -268,6 +278,267 @@ describe('atomic credit accounting (e2e)', () => {
         { order_status: 'cancelled', payment_status: 'refunded' },
         { order_status: 'cancelled', payment_status: 'refunded' },
       ]);
+      expect(creditEvent).toHaveBeenCalledTimes(1);
+      expect(creditEvent).toHaveBeenCalledWith(fixture.userId, 85);
+      expect(slot.gateway.notifyDateChanged).toHaveBeenCalledTimes(1);
+      expect(slot.gateway.notifyDateChanged).toHaveBeenCalledWith(slot.date);
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
+  it('adopts a successful raw individual refund without crediting it again', async () => {
+    const database = await createDatabase('legacy_individual_refund');
+    const dataSource = await initializeDatabase(database);
+    try {
+      const [user] = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO users (email, password_hash, credits)
+         VALUES ($1, 'not-used', 60) RETURNING id`,
+        [`legacy-individual-refund-${database}@example.test`],
+      );
+      const [order] = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO orders (
+           order_id, user_id, category, total_price, delivery_fee,
+           payment_method, payment_status, order_status, delivery_option
+         ) VALUES (
+           'ORD-LEGACY-INDIVIDUAL', $1, 'paper', 40, 20,
+           'gridCredits', 'paid', 'order_placed', 'pickup'
+         ) RETURNING id`,
+        [user.id],
+      );
+      await dataSource.query(
+        `INSERT INTO credit_transactions (
+           user_id, type, "amountCredits", status, reference_id
+         ) VALUES ($1, 'top_up', 60, 'approved', 'ORD-LEGACY-INDIVIDUAL')`,
+        [user.id],
+      );
+      const service = makeOrdersService(
+        dataSource,
+        makeCreditsService(dataSource),
+        40,
+      );
+
+      await service.cancelOrder(order.id, user.id);
+      await service.cancelOrder(order.id, user.id);
+
+      await expect(
+        dataSource.query(`SELECT credits FROM users WHERE id = $1`, [user.id]),
+      ).resolves.toEqual([{ credits: '60.00' }]);
+      await expect(
+        dataSource.query(
+          `SELECT reference_id, "amountCredits" AS amount
+           FROM credit_transactions
+           WHERE reference_id IN (
+             'ORD-LEGACY-INDIVIDUAL',
+             'ORDER-REFUND:ORD-LEGACY-INDIVIDUAL'
+           ) ORDER BY id`,
+        ),
+      ).resolves.toEqual([
+        { reference_id: 'ORD-LEGACY-INDIVIDUAL', amount: '60.00' },
+      ]);
+      await expect(
+        dataSource.query(
+          `SELECT order_status, payment_status FROM orders WHERE id = $1`,
+          [order.id],
+        ),
+      ).resolves.toEqual([
+        { order_status: 'cancelled', payment_status: 'refunded' },
+      ]);
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
+  it('credits only the unrefunded remainder of a partially cancelled legacy batch', async () => {
+    const database = await createDatabase('legacy_batch_refund');
+    const dataSource = await initializeDatabase(database);
+    try {
+      const fixture = await createBatchFixture(dataSource, database);
+      const [firstOrder] = await dataSource.query<Array<{ id: number }>>(
+        `SELECT id FROM orders WHERE batch_order_id = $1 ORDER BY id LIMIT 1`,
+        [fixture.batchId],
+      );
+      await dataSource.query(`UPDATE users SET credits = 30 WHERE id = $1`, [
+        fixture.userId,
+      ]);
+      await dataSource.query(
+        `UPDATE orders
+         SET order_status = 'cancelled', payment_status = 'refunded'
+         WHERE id = $1`,
+        [firstOrder.id],
+      );
+      await dataSource.query(
+        `INSERT INTO credit_transactions (
+           user_id, type, "amountCredits", status, reference_id
+         ) VALUES ($1, 'top_up', 30, 'approved', 'ORD-10001')`,
+        [fixture.userId],
+      );
+      const service = makeOrdersService(
+        dataSource,
+        makeCreditsService(dataSource),
+        40,
+      );
+
+      await service.cancelBatch(fixture.batchId, fixture.userId);
+      await service.cancelBatch(fixture.batchId, fixture.userId);
+
+      await expect(
+        dataSource.query(`SELECT credits FROM users WHERE id = $1`, [
+          fixture.userId,
+        ]),
+      ).resolves.toEqual([{ credits: '85.00' }]);
+      await expect(
+        dataSource.query(
+          `SELECT reference_id, "amountCredits" AS amount
+           FROM credit_transactions
+           WHERE reference_id IN ('ORD-10001', $1)
+           ORDER BY id`,
+          [`BATCH-REFUND:${fixture.batchRef}`],
+        ),
+      ).resolves.toEqual([
+        { reference_id: 'ORD-10001', amount: '30.00' },
+        {
+          reference_id: `BATCH-REFUND:${fixture.batchRef}`,
+          amount: '55.00',
+        },
+      ]);
+      await expect(
+        dataSource.query(
+          `SELECT payment_status FROM batch_orders WHERE id = $1`,
+          [fixture.batchId],
+        ),
+      ).resolves.toEqual([{ payment_status: 'refunded' }]);
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
+  it('does not refund when a non-cancellable status transition wins the row lock', async () => {
+    const database = await createDatabase('status_wins_cancel_race');
+    const dataSource = await initializeDatabase(database);
+    try {
+      const fixture = await createBatchFixture(dataSource, database);
+      const [order] = await dataSource.query<Array<{ id: number }>>(
+        `SELECT id FROM orders WHERE batch_order_id = $1 ORDER BY id LIMIT 1`,
+        [fixture.batchId],
+      );
+      const blocker = dataSource.createQueryRunner();
+      await blocker.connect();
+      await blocker.startTransaction();
+      await blocker.query(`SELECT id FROM orders WHERE id = $1 FOR UPDATE`, [
+        order.id,
+      ]);
+      const service = makeOrdersService(
+        dataSource,
+        makeCreditsService(dataSource),
+        40,
+      );
+
+      const statusAttempt = service.updateStatus(
+        order.id,
+        OrderStatus.PRINTING_IN_PROGRESS,
+      );
+      await waitForOrderLockWaiters(dataSource, 1);
+      const cancelAttempt = service.cancelBatch(
+        fixture.batchId,
+        fixture.userId,
+      );
+      await waitForOrderLockWaiters(dataSource, 2);
+      await blocker.commitTransaction();
+      await blocker.release();
+      const [statusResult, cancelResult] = await Promise.allSettled([
+        statusAttempt,
+        cancelAttempt,
+      ]);
+
+      expect(statusResult.status).toBe('fulfilled');
+      expect(cancelResult).toMatchObject({ status: 'rejected' });
+      await expect(
+        dataSource.query(`SELECT credits FROM users WHERE id = $1`, [
+          fixture.userId,
+        ]),
+      ).resolves.toEqual([{ credits: '0.00' }]);
+      await expect(
+        dataSource.query(
+          `SELECT order_status, payment_status
+           FROM orders WHERE id = $1`,
+          [order.id],
+        ),
+      ).resolves.toEqual([
+        { order_status: 'printing_in_progress', payment_status: 'paid' },
+      ]);
+      await expect(
+        dataSource.query(
+          `SELECT COUNT(*)::int AS count FROM credit_transactions`,
+        ),
+      ).resolves.toEqual([{ count: 0 }]);
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
+  it('keeps cancellation terminal when cancellation wins the row lock', async () => {
+    const database = await createDatabase('cancel_wins_status_race');
+    const dataSource = await initializeDatabase(database);
+    try {
+      const fixture = await createBatchFixture(dataSource, database);
+      const [order] = await dataSource.query<Array<{ id: number }>>(
+        `SELECT id FROM orders WHERE batch_order_id = $1 ORDER BY id LIMIT 1`,
+        [fixture.batchId],
+      );
+      const blocker = dataSource.createQueryRunner();
+      await blocker.connect();
+      await blocker.startTransaction();
+      await blocker.query(`SELECT id FROM orders WHERE id = $1 FOR UPDATE`, [
+        order.id,
+      ]);
+      const service = makeOrdersService(
+        dataSource,
+        makeCreditsService(dataSource),
+        40,
+      );
+
+      const cancelAttempt = service.cancelBatch(
+        fixture.batchId,
+        fixture.userId,
+      );
+      await waitForOrderLockWaiters(dataSource, 1);
+      const statusAttempt = service.updateStatus(
+        order.id,
+        OrderStatus.PRINTING_IN_PROGRESS,
+      );
+      await waitForOrderLockWaiters(dataSource, 2);
+      await blocker.commitTransaction();
+      await blocker.release();
+      const [cancelResult, statusResult] = await Promise.allSettled([
+        cancelAttempt,
+        statusAttempt,
+      ]);
+
+      expect(cancelResult.status).toBe('fulfilled');
+      expect(statusResult).toMatchObject({ status: 'rejected' });
+      await expect(
+        dataSource.query(`SELECT credits FROM users WHERE id = $1`, [
+          fixture.userId,
+        ]),
+      ).resolves.toEqual([{ credits: '85.00' }]);
+      await expect(
+        dataSource.query(
+          `SELECT order_status, payment_status
+           FROM orders WHERE batch_order_id = $1 ORDER BY id`,
+          [fixture.batchId],
+        ),
+      ).resolves.toEqual([
+        { order_status: 'cancelled', payment_status: 'refunded' },
+        { order_status: 'cancelled', payment_status: 'refunded' },
+      ]);
+      await expect(
+        dataSource.query(
+          `SELECT COUNT(*)::int AS count
+           FROM credit_transactions WHERE reference_id = $1`,
+          [`BATCH-REFUND:${fixture.batchRef}`],
+        ),
+      ).resolves.toEqual([{ count: 1 }]);
     } finally {
       await dataSource.destroy();
     }
@@ -293,10 +564,18 @@ describe('atomic credit accounting (e2e)', () => {
         BEFORE UPDATE ON orders
         FOR EACH ROW EXECUTE FUNCTION reject_cancelled_order()
       `);
+      const creditEvent = jest.fn();
+      const slot = await attachFutureSlot(
+        dataSource,
+        fixture.batchId,
+        'rollback-slot',
+      );
       const service = makeOrdersService(
         dataSource,
-        makeCreditsService(dataSource),
+        makeCreditsService(dataSource, creditEvent),
         40,
+        {},
+        { slotsService: slot.service, slotsGateway: slot.gateway },
       );
 
       await expect(
@@ -326,6 +605,15 @@ describe('atomic credit accounting (e2e)', () => {
         { order_status: 'order_placed' },
         { order_status: 'order_placed' },
       ]);
+      expect(creditEvent).not.toHaveBeenCalled();
+      expect(slot.gateway.notifyDateChanged).not.toHaveBeenCalled();
+      await expect(
+        dataSource.query(
+          `SELECT COUNT(*)::int AS count
+           FROM delivery_slot_bookings WHERE batch_order_id = $1`,
+          [fixture.batchId],
+        ),
+      ).resolves.toEqual([{ count: 1 }]);
     } finally {
       await dataSource.destroy();
     }
@@ -386,13 +674,16 @@ describe('atomic credit accounting (e2e)', () => {
     }
   });
 
-  function makeCreditsService(dataSource: DataSource): CreditsService {
+  function makeCreditsService(
+    dataSource: DataSource,
+    creditEvent: jest.Mock = jest.fn(),
+  ): CreditsService {
     return new CreditsService(
       dataSource.getRepository(CreditTransaction),
       dataSource.getRepository(CreditSettings),
       {} as UsersService,
       {
-        triggerCreditsUpdate: jest.fn(),
+        triggerCreditsUpdate: creditEvent,
       } as unknown as NotificationsService,
       {} as FirebaseService,
       {} as NotificationsGateway,
@@ -418,6 +709,10 @@ describe('atomic credit accounting (e2e)', () => {
     creditsService: CreditsService,
     subtotal: number,
     itemOverrides: { pricingModel?: string } = {},
+    serviceOverrides: {
+      slotsService?: DeliverySlotsService;
+      slotsGateway?: DeliverySlotsGateway;
+    } = {},
   ): OrdersService {
     const usersService = {
       findById: (id: number) =>
@@ -462,13 +757,16 @@ describe('atomic credit accounting (e2e)', () => {
       {} as FilesService,
       {} as TamSurveysService,
       dataSource,
-      {
-        releaseSlot: jest.fn().mockResolvedValue(undefined),
-      } as unknown as DeliverySlotsService,
+      serviceOverrides.slotsService ??
+        ({
+          releaseSlot: jest.fn().mockResolvedValue(null),
+          publishReleasedSlot: jest.fn(),
+        } as unknown as DeliverySlotsService),
       {} as DeliverySettingsService,
-      {
-        notifyDateChanged: jest.fn(),
-      } as unknown as DeliverySlotsGateway,
+      serviceOverrides.slotsGateway ??
+        ({
+          notifyDateChanged: jest.fn(),
+        } as unknown as DeliverySlotsGateway),
       {} as PrinterProfileService,
       catalogPricingService,
       dataSource.getRepository(FileMetadata),
@@ -539,6 +837,68 @@ describe('atomic credit accounting (e2e)', () => {
       [user.id, batch.id],
     );
     return { userId: user.id, batchId: batch.id, batchRef: batch.batch_ref };
+  }
+
+  async function attachFutureSlot(
+    dataSource: DataSource,
+    batchId: number,
+    label: string,
+  ) {
+    const date = new Date(Date.now() + 48 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    const [template] = await dataSource.query<Array<{ id: number }>>(
+      `INSERT INTO delivery_slot_templates (
+         day_of_week, start_time, end_time, capacity, is_active, allows_pickup
+       ) VALUES (1, '09:00:00', '10:00:00', 10, true, true)
+       RETURNING id`,
+    );
+    const [booking] = await dataSource.query<Array<{ id: number }>>(
+      `INSERT INTO delivery_slot_bookings (
+         slot_template_id, date, batch_order_id, priority
+       ) VALUES ($1, $2, $3, false) RETURNING id`,
+      [template.id, date, batchId],
+    );
+    await dataSource.query(
+      `UPDATE batch_orders SET slot_booking_id = $1 WHERE id = $2`,
+      [booking.id, batchId],
+    );
+    const gateway = {
+      notifyDateChanged: jest.fn(),
+      notifySlotUpdated: jest.fn(),
+    } as unknown as DeliverySlotsGateway & {
+      notifyDateChanged: jest.Mock;
+    };
+    return {
+      date,
+      gateway,
+      service: new DeliverySlotsService(
+        dataSource.getRepository(DeliverySlotTemplate),
+        dataSource.getRepository(DeliverySlotBooking),
+        dataSource,
+        gateway,
+      ),
+      label,
+    };
+  }
+
+  async function waitForOrderLockWaiters(
+    dataSource: DataSource,
+    expected: number,
+  ): Promise<void> {
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      const [row] = await dataSource.query<Array<{ count: number }>>(
+        `SELECT COUNT(*)::int AS count
+         FROM pg_stat_activity
+         WHERE datname = current_database()
+           AND pid <> pg_backend_pid()
+           AND wait_event_type = 'Lock'`,
+      );
+      if (row.count >= expected) return;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    throw new Error(`Timed out waiting for ${expected} order lock waiters`);
   }
 
   function optionsForDatabase(database: string): DataSourceOptions {

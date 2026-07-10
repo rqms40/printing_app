@@ -252,7 +252,7 @@ describe('production migration lifecycle (e2e)', () => {
         `INSERT INTO credit_transactions
            (user_id, type, "amountCredits", status, reference_id)
          VALUES
-           ($1, 'top_up', 100, 'approved', $2),
+           ($1, 'top_up', 50, 'rejected', $2),
            ($1, 'top_up', 100, 'approved', $2),
            ($1, 'deduction', 10, 'approved', 'order_placed'),
            ($1, 'deduction', 10, 'approved', 'order_placed'),
@@ -293,6 +293,23 @@ describe('production migration lifecycle (e2e)', () => {
         order_references: 2,
         null_references: 3,
       });
+      await expect(
+        dataSource.query(
+          `SELECT user_id, type::text AS type, "amountCredits" AS amount,
+                  status::text AS status, reference_id
+           FROM credit_transactions
+           WHERE reference_id = $1`,
+          [`BETA-ENROLLMENT:${user.id}`],
+        ),
+      ).resolves.toEqual([
+        {
+          user_id: user.id,
+          type: 'top_up',
+          amount: '100.00',
+          status: 'approved',
+          reference_id: `BETA-ENROLLMENT:${user.id}`,
+        },
+      ]);
       await expect(
         dataSource.query(
           `SELECT id, credits, beta_credits_granted
@@ -379,6 +396,89 @@ describe('production migration lifecycle (e2e)', () => {
       ).resolves.toEqual([
         { count: 1, amount: '100.00', type: 'top_up', status: 'approved' },
       ]);
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
+  it('normalizes only unambiguous legacy raw refund references during adoption', async () => {
+    const database = await createDatabase('legacy_refund_adoption');
+    await createSynchronizedFixture(database, false);
+    const dataSource = await initializeMigrationDataSource(database);
+
+    try {
+      await dataSource.query(`
+        DROP INDEX IF EXISTS uq_credit_transactions_refund_reference
+      `);
+      const [user] = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO users (email, password_hash, credits)
+         VALUES ($1, 'not-used', 145) RETURNING id`,
+        [`legacy-refund-adoption-${database}@example.test`],
+      );
+      const [batch] = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO batch_orders (
+           batch_ref, user_id, subtotal, delivery_fee, total_price,
+           payment_method, payment_status, delivery_option,
+           priority_fee, extra_destination_fee
+         ) VALUES (
+           'BATCH-LEGACY-MIGRATION', $1, 40, 20, 85,
+           'gridCredits', 'paid', 'pickup', 15, 10
+         ) RETURNING id`,
+        [user.id],
+      );
+      await dataSource.query(
+        `INSERT INTO orders (
+           order_id, user_id, batch_order_id, category, total_price,
+           delivery_fee, payment_method, payment_status, order_status,
+           delivery_option
+         ) VALUES
+           ('ORD-LEGACY-MIGRATION-I', $1, NULL, 'paper', 40, 20,
+            'gridCredits', 'paid', 'order_placed', 'pickup'),
+           ('ORD-LEGACY-MIGRATION-B', $1, $2, 'paper', 40, 20,
+            'gridCredits', 'paid', 'order_placed', 'pickup')`,
+        [user.id, batch.id],
+      );
+      const inserted = await dataSource.query<
+        Array<{ id: number; reference_id: string; created_at: Date }>
+      >(
+        `INSERT INTO credit_transactions (
+           user_id, type, "amountCredits", status, reference_id
+         ) VALUES
+           ($1, 'top_up', 60, 'approved', 'ORD-LEGACY-MIGRATION-I'),
+           ($1, 'top_up', 85, 'approved', 'ORD-LEGACY-MIGRATION-B'),
+           ($1, 'deduction', 5, 'approved', 'ORD-UNRELATED-AUDIT')
+         RETURNING id, reference_id, created_at`,
+        [user.id],
+      );
+
+      await dataSource.runMigrations();
+
+      await expect(
+        dataSource.query(
+          `SELECT id, reference_id, created_at
+           FROM credit_transactions ORDER BY id`,
+        ),
+      ).resolves.toEqual([
+        {
+          ...inserted[0],
+          reference_id: 'ORDER-REFUND:ORD-LEGACY-MIGRATION-I',
+        },
+        {
+          ...inserted[1],
+          reference_id: 'BATCH-REFUND:BATCH-LEGACY-MIGRATION',
+        },
+        inserted[2],
+      ]);
+      await expect(
+        dataSource.query(`SELECT credits FROM users WHERE id = $1`, [user.id]),
+      ).resolves.toEqual([{ credits: '145.00' }]);
+      await expect(
+        dataSource.query(
+          `SELECT to_regclass(
+             'public.uq_credit_transactions_refund_reference'
+           ) IS NOT NULL AS refund_index`,
+        ),
+      ).resolves.toEqual([{ refund_index: true }]);
     } finally {
       await dataSource.destroy();
     }
