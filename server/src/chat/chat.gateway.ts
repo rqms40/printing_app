@@ -31,9 +31,17 @@ interface ChatSocketData {
   role?: UserRole;
 }
 
+interface ChatServerToClientEvents {
+  'session-ready': (payload: { userId: number }) => void;
+  'user-typing': (payload: {
+    conversationId: number;
+    senderRole: SenderRole;
+  }) => void;
+}
+
 type ChatSocket = Socket<
   Record<string, never>,
-  Record<string, never>,
+  ChatServerToClientEvents,
   Record<string, never>,
   ChatSocketData
 >;
@@ -66,6 +74,7 @@ export class ChatGateway implements OnGatewayConnection {
       await client.join('admin_inbox');
     }
     this.realtimeSessions.register(identity.id, client);
+    client.emit('session-ready', { userId: identity.id });
   }
 
   @SubscribeMessage('join-conversation')

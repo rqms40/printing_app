@@ -337,6 +337,7 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     );
     expect(assignmentFlow).toContain("assignment_eligible");
     expect(assignmentFlow).toContain("is_available");
+    expect(assignmentFlow).toContain("window.scrollTo(0, 0)");
 
     const liveAssertion = source.slice(
       source.lastIndexOf("async function assertLiveTrackingUi"),
@@ -2127,6 +2128,11 @@ async function advanceProductionAndAssign(options: {
     );
     await expect(admin.page.locator(".ant-modal-wrap:visible")).toHaveCount(0);
   }
+  await admin.page.evaluate(() => window.scrollTo(0, 0));
+  await expect(admin.page.getByText(customer.orderRef).first()).toBeVisible();
+  await expect(
+    admin.page.getByText("Ready for Dispatch", { exact: true }).first(),
+  ).toBeVisible();
   await capture(run, admin, productionStep, /Ready for Dispatch/i, {
     orderId: customer.orderId,
     orderRef: customer.orderRef,

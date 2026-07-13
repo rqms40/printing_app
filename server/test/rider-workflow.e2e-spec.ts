@@ -1588,7 +1588,13 @@ async function connectChatSocket(
     reconnection: false,
   });
   sockets.push(socket);
-  await onceSocketEvent(socket, 'connect');
+  const connected = onceSocketEvent<void>(socket, 'connect');
+  const sessionReady = onceSocketEvent<{ userId: number }>(
+    socket,
+    'session-ready',
+  );
+  await connected;
+  await sessionReady;
   return socket;
 }
 

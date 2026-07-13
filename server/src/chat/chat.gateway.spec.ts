@@ -95,6 +95,9 @@ describe('ChatGateway', () => {
       expect(socket.data.userId).toBe(42);
       expect(socket.data.role).toBe('customer');
       expect(realtimeSessions.register).toHaveBeenCalledWith(42, socket);
+      expect(socket.emit).toHaveBeenCalledWith('session-ready', {
+        userId: 42,
+      });
     });
 
     it('joins admin_inbox room for admin role', async () => {
