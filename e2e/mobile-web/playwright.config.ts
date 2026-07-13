@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { chromiumSecureContextArgs } from "./fixtures/browser-security";
 
 const port = Number(process.env.MOBILE_WEB_E2E_PORT ?? 8091);
 const baseURL = process.env.MOBILE_WEB_E2E_URL ?? `http://127.0.0.1:${port}`;
@@ -54,6 +55,17 @@ export default defineConfig({
             use: {
               ...devices["Desktop Chrome"],
               viewport: { width: 1440, height: 900 },
+              launchOptions: {
+                // The full bundled Chromium honors secure-origin test
+                // allowlists; chrome-headless-shell does not.
+                channel: "chromium",
+                args: [
+                  "--disable-background-timer-throttling",
+                  "--disable-renderer-backgrounding",
+                  "--disable-backgrounding-occluded-windows",
+                  ...chromiumSecureContextArgs(baseURL),
+                ],
+              },
             },
           },
         ]

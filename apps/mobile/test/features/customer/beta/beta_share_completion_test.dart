@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -10,6 +11,7 @@ import 'package:printing_app/features/customer/beta/providers/beta_testimonial_p
 import 'package:printing_app/features/customer/beta/screens/beta_locked_screen.dart';
 import 'package:printing_app/features/customer/beta/screens/beta_success_wall_screen.dart';
 import 'package:printing_app/features/customer/beta/widgets/beta_share_row.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class _FakeShareLauncher implements BetaShareLauncher {
   _FakeShareLauncher({required this.urlResult, required this.nativeResult});
@@ -57,6 +59,60 @@ class _HeldAuthNotifier extends AuthNotifier {
 
 void main() {
   group('BetaShareRow confirmed launch semantics', () {
+    test('system URL shares explicitly open in a new browser tab', () async {
+      LaunchMode? observedMode;
+      String? observedTarget;
+      final launcher = SystemBetaShareLauncher(
+        urlOpener:
+            (
+              uri, {
+              mode = LaunchMode.platformDefault,
+              webOnlyWindowName,
+            }) async {
+              observedMode = mode;
+              observedTarget = webOnlyWindowName;
+              return true;
+            },
+      );
+
+      final result = await launcher.openUrl(
+        Uri.parse('https://www.facebook.com/sharer/sharer.php'),
+      );
+
+      expect(result, ShareLaunchResult.opened);
+      expect(observedMode, LaunchMode.externalApplication);
+      expect(observedTarget, '_blank');
+    });
+
+    testWidgets('exposes one actionable control for each share destination', (
+      tester,
+    ) async {
+      final launcher = _FakeShareLauncher(
+        urlResult: ShareLaunchResult.opened,
+        nativeResult: ShareLaunchResult.opened,
+      );
+      await tester.pumpWidget(_wrap(BetaShareRow(launcher: launcher)));
+
+      for (final label in [
+        'Share to Facebook',
+        'Share to X (Twitter)',
+        'Share to WhatsApp',
+        'Share via other apps',
+      ]) {
+        final control = find.bySemanticsLabel(
+          RegExp('^${RegExp.escape(label)}'),
+        );
+        expect(control, findsOneWidget);
+        expect(
+          tester
+              .getSemantics(control)
+              .getSemanticsData()
+              .hasAction(SemanticsAction.tap),
+          isTrue,
+        );
+      }
+    });
+
     testWidgets('records a WhatsApp share only after the URL opens', (
       tester,
     ) async {

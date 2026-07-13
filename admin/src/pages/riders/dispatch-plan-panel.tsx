@@ -9,6 +9,8 @@ import {
 import type { DispatchPlan } from "@/types/dispatch-plan";
 
 const { Text } = Typography;
+const lockedDeliveryStatuses = new Set(["picked_up", "on_the_way", "arrived"]);
+const maximumDispatchStops = 5;
 
 export interface DispatchPanelRider {
   id: number;
@@ -20,6 +22,7 @@ export interface DispatchAssignmentOption {
   assignmentId: number;
   orderRef: string;
   customerName: string | null;
+  deliveryStatus?: string | null;
 }
 
 type PlanFailure = {
@@ -56,27 +59,53 @@ export function DispatchPlanPanel({
   rider: DispatchPanelRider;
   assignments: DispatchAssignmentOption[];
 }) {
+  const defaultSelectedIds = () =>
+    assignments
+      .filter(
+        (assignment) =>
+          !lockedDeliveryStatuses.has(assignment.deliveryStatus ?? ""),
+      )
+      .map((assignment) => assignment.assignmentId)
+      .slice(0, maximumDispatchStops);
   const [plan, setPlan] = useState<DispatchPlan | null>(null);
-  const [selectedIds, setSelectedIds] = useState<number[]>(() =>
-    assignments.map((assignment) => assignment.assignmentId),
-  );
+  const [selectedIds, setSelectedIds] = useState<number[]>(defaultSelectedIds);
   const [loading, setLoading] = useState(true);
   const [mutating, setMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [routingRetry, setRoutingRetry] = useState<"create" | "reoptimize" | null>(null);
+  const [routingRetry, setRoutingRetry] = useState<
+    "create" | "reoptimize" | null
+  >(null);
 
   const assignmentById = useMemo(
     () =>
       new Map(
-        assignments.map((assignment) => [
-          assignment.assignmentId,
-          assignment,
-        ]),
+        assignments.map((assignment) => [assignment.assignmentId, assignment]),
       ),
     [assignments],
   );
+  const lockedAssignmentIds = useMemo(() => {
+    const activePlanAssignments = new Set(
+      (plan?.stops ?? [])
+        .filter((stop) => stop.status === "pending")
+        .map((stop) => stop.assignment_id),
+    );
+    return new Set(
+      assignments
+        .filter(
+          (assignment) =>
+            activePlanAssignments.has(assignment.assignmentId) &&
+            lockedDeliveryStatuses.has(assignment.deliveryStatus ?? ""),
+        )
+        .map((assignment) => assignment.assignmentId),
+    );
+  }, [assignments, plan]);
+  const lockedAssignmentIdsKey = [...lockedAssignmentIds].sort().join(",");
   const assignmentIdsKey = assignments
-    .map((assignment) => assignment.assignmentId)
+    .map(
+      (assignment) =>
+        `${assignment.assignmentId}:${assignment.deliveryStatus ?? ""}`,
+    )
+    .sort()
     .join(",");
 
   const loadPlan = async () => {
@@ -94,11 +123,21 @@ export function DispatchPlanPanel({
   };
 
   useEffect(() => {
-    setSelectedIds(assignments.map((assignment) => assignment.assignmentId));
+    setSelectedIds(defaultSelectedIds());
     void loadPlan();
     // Rider/profile identity is the dispatch resource boundary.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rider.id, assignmentIdsKey]);
+
+  useEffect(() => {
+    if (lockedAssignmentIds.size === 0) return;
+    setSelectedIds((current) =>
+      [...new Set([...lockedAssignmentIds, ...current])].slice(
+        0,
+        maximumDispatchStops,
+      ),
+    );
+  }, [lockedAssignmentIds, lockedAssignmentIdsKey]);
 
   const createRoute = async () => {
     setMutating(true);
@@ -172,33 +211,66 @@ export function DispatchPlanPanel({
             />
           ) : null}
 
-          <Checkbox.Group
-            value={selectedIds}
-            onChange={(values) => setSelectedIds(values.map(Number))}
-            style={{ width: "100%" }}
-          >
-            <Space direction="vertical" style={{ width: "100%" }}>
-              {assignments.map((assignment) => (
-                <Checkbox
-                  key={assignment.assignmentId}
-                  value={assignment.assignmentId}
-                  aria-label={`Assignment ${assignment.orderRef}`}
-                >
-                  <Text strong>{assignment.customerName ?? "Customer"}</Text>
-                  {` · ${assignment.orderRef} · assignment #${assignment.assignmentId}`}
-                </Checkbox>
-              ))}
-            </Space>
-          </Checkbox.Group>
+          <Space direction="vertical" size="small" style={{ width: "100%" }}>
+            <Text type="secondary">
+              {selectedIds.length} {selectedIds.length === 1 ? "stop" : "stops"}{" "}
+              selected
+            </Text>
+            {assignments.length > maximumDispatchStops ? (
+              <Text type="secondary">
+                Maximum {maximumDispatchStops} stops per route
+              </Text>
+            ) : null}
+            <Checkbox.Group
+              value={selectedIds}
+              onChange={(values) => {
+                const requested = values.map(Number);
+                setSelectedIds(
+                  [
+                    ...new Set([
+                      ...lockedAssignmentIds,
+                      ...requested.filter(
+                        (value) => !lockedAssignmentIds.has(value),
+                      ),
+                    ]),
+                  ].slice(0, maximumDispatchStops),
+                );
+              }}
+              style={{ width: "100%" }}
+            >
+              <Space direction="vertical" style={{ width: "100%" }}>
+                {assignments.map((assignment) => (
+                  <Checkbox
+                    key={assignment.assignmentId}
+                    value={assignment.assignmentId}
+                    disabled={
+                      lockedAssignmentIds.has(assignment.assignmentId) ||
+                      (!selectedIds.includes(assignment.assignmentId) &&
+                        selectedIds.length >= maximumDispatchStops)
+                    }
+                    aria-label={`Assignment ${assignment.orderRef}`}
+                  >
+                    <Text strong>{assignment.customerName ?? "Customer"}</Text>
+                    {` · ${assignment.orderRef} · assignment #${assignment.assignmentId}`}
+                    {lockedAssignmentIds.has(assignment.assignmentId)
+                      ? " · in transit"
+                      : ""}
+                  </Checkbox>
+                ))}
+              </Space>
+            </Checkbox.Group>
+          </Space>
 
           {plan ? (
             <>
               <Space wrap>
                 <Text strong>
-                  {plan.provider.toUpperCase()} · {plan.profile} · v{plan.version}
+                  {plan.provider.toUpperCase()} · {plan.profile} · v
+                  {plan.version}
                 </Text>
                 <Text type="secondary">
-                  {formatDuration(plan.total_duration_seconds)} · {formatDistance(plan.total_distance_meters)}
+                  {formatDuration(plan.total_duration_seconds)} ·{" "}
+                  {formatDistance(plan.total_distance_meters)}
                 </Text>
               </Space>
               <Space direction="vertical" style={{ width: "100%" }}>
@@ -215,11 +287,14 @@ export function DispatchPlanPanel({
                       }}
                     >
                       <Text strong>
-                        #{stop.sequence} {assignment?.customerName ?? "Customer"}
+                        #{stop.sequence}{" "}
+                        {assignment?.customerName ?? "Customer"}
                       </Text>
                       <br />
                       <Text type="secondary">
-                        {stop.order_ref ?? assignment?.orderRef ?? `Assignment #${stop.assignment_id}`}
+                        {stop.order_ref ??
+                          assignment?.orderRef ??
+                          `Assignment #${stop.assignment_id}`}
                         {` · ${formatDuration(stop.leg_duration_seconds)} · ${formatDistance(stop.leg_distance_meters)}`}
                       </Text>
                     </div>

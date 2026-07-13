@@ -10,12 +10,14 @@ import { readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import AxeBuilder from "@axe-core/playwright";
 
 import {
   betaActors,
   closeBetaActorContexts,
   createBetaActorContexts,
   enableFlutterSemantics,
+  navigateMobile,
   type BetaActorRuntime,
 } from "../fixtures/beta-actors";
 import {
@@ -44,8 +46,11 @@ import {
   captureStep,
   evidenceStep,
   canonicalEvidenceFile,
+  configuredEvidenceOrigins,
   recordEvidenceArtifact,
   registerEvidenceSecrets,
+  requiredEvidenceNetworkIssues,
+  sanitizeEvidenceUrl,
   sanitizeEvidenceText,
   validateEvidenceViewport,
   generateVisualCustomerPassword,
@@ -56,8 +61,10 @@ import {
 import {
   betaAddresses,
   betaCheckpoint,
+  betaPreStoreLocation,
   betaRouteCheckpoints,
 } from "../fixtures/beta-locations";
+import { chromiumSecureContextArgs } from "../fixtures/browser-security";
 
 test.describe("GRIDGO visual beta workflow harness contract", () => {
   test("defines four actors and all evidence steps", () => {
@@ -84,6 +91,356 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     expect(
       new Set(Object.values(betaActors).map((actor) => actor.storageKey)).size,
     ).toBe(4);
+    expect(
+      new Set(Object.values(betaActors).map((actor) => actor.clientIp)).size,
+    ).toBe(4);
+  });
+
+  test("keeps every visual actor rendering while other contexts are active", () => {
+    const config = readFileSync(
+      path.resolve(dirname, "../playwright.config.ts"),
+      "utf8",
+    );
+    for (const flag of [
+      "--disable-background-timer-throttling",
+      "--disable-renderer-backgrounding",
+      "--disable-backgrounding-occluded-windows",
+    ]) {
+      expect(config).toContain(flag);
+    }
+    expect(config).toContain('channel: "chromium"');
+  });
+
+  test("grants simulated geolocation only to the configured LAN test origin", () => {
+    expect(chromiumSecureContextArgs("http://127.0.0.1:8088")).toEqual([]);
+    expect(chromiumSecureContextArgs("https://gridgo.test")).toEqual([]);
+    expect(chromiumSecureContextArgs("http://192.168.40.201:8088")).toEqual([
+      "--unsafely-treat-insecure-origin-as-secure=http://192.168.40.201:8088",
+    ]);
+  });
+
+  test("treats configured LAN mobile, admin, and API failures as required network issues", () => {
+    const requiredOrigins = configuredEvidenceOrigins({
+      mobileURL: "http://192.168.40.201:8088",
+      adminURL: "http://192.168.40.201:8189",
+      apiBaseURL: "http://192.168.40.201:3000/api",
+    });
+    expect([...requiredOrigins]).toEqual([
+      "http://192.168.40.201:8088",
+      "http://192.168.40.201:8189",
+      "http://192.168.40.201:3000",
+    ]);
+
+    const mobileTransportFailure = {
+      method: "GET",
+      url: "http://192.168.40.201:8088/main.dart.js",
+      failure: "net::ERR_CONNECTION_RESET",
+    };
+    const adminServerFailure = {
+      method: "GET",
+      url: "http://192.168.40.201:8189/assets/index.js",
+      status: 502,
+    };
+    const apiServerFailure = {
+      method: "POST",
+      url: "http://192.168.40.201:3000/api/orders",
+      status: 503,
+    };
+    const issues = requiredEvidenceNetworkIssues(
+      [
+        mobileTransportFailure,
+        adminServerFailure,
+        apiServerFailure,
+        {
+          method: "GET",
+          url: "https://c.basemaps.cartocdn.com/tile.png",
+          failure: "net::ERR_ABORTED",
+        },
+        {
+          method: "POST",
+          url: "http://192.168.40.201:3000/api/auth/login",
+          status: 403,
+        },
+      ],
+      requiredOrigins,
+    );
+
+    expect(issues.transportFailures).toEqual([mobileTransportFailure]);
+    expect(issues.serverResponses).toEqual([
+      adminServerFailure,
+      apiServerFailure,
+    ]);
+  });
+
+  test("provides Chromium geolocation at the configured visual origin", async ({
+    context,
+    page,
+  }) => {
+    test.skip(
+      process.env.GRIDGO_RUN_BETA_FLOW_VISUAL !== "1",
+      "live visual origin preflight is opt-in",
+    );
+    const mobileURL = process.env.MOBILE_WEB_E2E_URL;
+    expect(mobileURL, "configured mobile visual URL").toBeTruthy();
+    const origin = new URL(mobileURL!).origin;
+    const store = betaCheckpoint("store");
+    await context.grantPermissions(["geolocation"], { origin });
+    await context.setGeolocation(store);
+    await page.goto(mobileURL!);
+    const location = await page.evaluate(
+      () =>
+        new Promise<{ latitude: number; longitude: number }>(
+          (resolve, reject) =>
+            navigator.geolocation.getCurrentPosition(
+              ({ coords }) =>
+                resolve({
+                  latitude: coords.latitude,
+                  longitude: coords.longitude,
+                }),
+              reject,
+              { timeout: 10_000 },
+            ),
+        ),
+    );
+    expect(location.latitude).toBeCloseTo(store.latitude, 5);
+    expect(location.longitude).toBeCloseTo(store.longitude, 5);
+  });
+
+  test("enables Flutter semantics when the empty host already exists", async ({
+    page,
+  }) => {
+    await page.setContent(`
+      <flt-semantics-host></flt-semantics-host>
+      <flt-semantics-placeholder aria-label="Enable accessibility"></flt-semantics-placeholder>
+    `);
+    await page.locator("flt-semantics-placeholder").evaluate((placeholder) => {
+      placeholder.addEventListener("click", () => {
+        document
+          .querySelector("flt-semantics-host")
+          ?.append(document.createElement("flt-semantics"));
+        placeholder.remove();
+      });
+    });
+
+    await enableFlutterSemantics(page);
+
+    await expect(page.locator("flt-semantics-placeholder")).toHaveCount(0);
+    await expect(
+      page.locator("flt-semantics-host > flt-semantics"),
+    ).toHaveCount(1);
+  });
+
+  test("waits for Flutter's accessibility placeholder startup race", async ({
+    page,
+  }) => {
+    await page.setContent("<flt-semantics-host></flt-semantics-host>");
+    await page.evaluate(() => {
+      window.setTimeout(() => {
+        const placeholder = document.createElement("flt-semantics-placeholder");
+        placeholder.setAttribute("aria-label", "Enable accessibility");
+        placeholder.addEventListener("click", () => {
+          document
+            .querySelector("flt-semantics-host")
+            ?.append(document.createElement("flt-semantics"));
+          placeholder.remove();
+        });
+        document.body.append(placeholder);
+      }, 50);
+    });
+
+    await enableFlutterSemantics(page);
+
+    await expect(page.locator("flt-semantics-placeholder")).toHaveCount(0);
+    await expect(
+      page.locator("flt-semantics-host > flt-semantics"),
+    ).toHaveCount(1);
+  });
+
+  test("labels Flutter web slider focus targets for assistive technology", async ({
+    page,
+  }) => {
+    const bridge = readFileSync(
+      path.resolve(
+        dirname,
+        "../../../apps/mobile/web/flutter_semantics_accessibility.js",
+      ),
+      "utf8",
+    );
+    await page.setContent(`<script>${bridge}</script>`);
+    await page.evaluate(() => {
+      const semantics = document.createElement("flt-semantics");
+      semantics.setAttribute("aria-label", "Feedback rating for question 1");
+      const slider = document.createElement("input");
+      slider.type = "range";
+      slider.setAttribute("role", "slider");
+      semantics.append(slider);
+      document.body.append(semantics);
+    });
+
+    const slider = page.locator('input[type="range"][role="slider"]');
+    await expect(slider).toHaveAttribute(
+      "aria-label",
+      "Feedback rating for question 1",
+    );
+
+    await page.locator("flt-semantics").evaluate((semantics) => {
+      semantics.setAttribute("aria-label", "Feedback rating for question 2");
+    });
+    await expect(slider).toHaveAttribute(
+      "aria-label",
+      "Feedback rating for question 2",
+    );
+    const accessibility = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa"])
+      .analyze();
+    expect(accessibility.violations.filter(({ id }) => id === "label")).toEqual(
+      [],
+    );
+  });
+
+  test("asserts the required survey through its accessible route group", () => {
+    const source = readFileSync(fileURLToPath(import.meta.url), "utf8");
+    const reveal = source.slice(
+      source.lastIndexOf("async function revealAutomaticSurvey"),
+      source.lastIndexOf("async function assertPrivateQueueUi"),
+    );
+    expect(reveal).toContain('getByRole("group"');
+    expect(reveal).toContain("Question 1 of 14");
+    expect(reveal).not.toContain('goto("about:blank")');
+    expect(reveal).not.toContain("textContent()");
+
+    const completion = source.slice(
+      source.lastIndexOf("async function completeSurveyUi"),
+      source.lastIndexOf("async function launchSocialAndAbortExternal"),
+    );
+    expect(completion).toContain("await foregroundFlutterPage(page)");
+    expect(completion).toContain('getByRole("group"');
+    expect(completion).toContain('.getByRole("slider")');
+    expect(completion).toContain('.press("ArrowRight")');
+    expect(completion).toContain('toHaveAttribute("aria-valuetext"');
+    expect(completion).toContain("slider availability");
+    expect(completion).not.toContain("getByText(`Question");
+  });
+
+  test("proves beta checkout, rider eligibility, rendered maps, and immediate surveys", () => {
+    const source = readFileSync(fileURLToPath(import.meta.url), "utf8");
+    const orderFlow = source.slice(
+      source.lastIndexOf("async function placeCustomerOrder"),
+      source.lastIndexOf("async function advanceProductionAndAssign"),
+    );
+    expect(orderFlow).toContain("assertBetaOnlyPaymentOptions");
+    expect(orderFlow).toContain("assertStandardCheckoutPayload");
+
+    const assignmentFlow = source.slice(
+      source.lastIndexOf("async function advanceProductionAndAssign"),
+      source.lastIndexOf("async function loginMobile"),
+    );
+    expect(assignmentFlow).toContain("assignment_eligible");
+    expect(assignmentFlow).toContain("is_available");
+
+    const liveAssertion = source.slice(
+      source.lastIndexOf("async function assertLiveTrackingUi"),
+      source.lastIndexOf("async function foregroundFlutterPage"),
+    );
+    expect(liveAssertion).toContain("await foregroundFlutterPage(actor.page)");
+    expect(liveAssertion).toContain('getByRole("group"');
+    expect(liveAssertion).toContain("LIVE MAP");
+    expect(liveAssertion).toContain('.toContainText("Live delivery map")');
+    expect(liveAssertion).toContain("Live delivery map");
+
+    const shareFlow = source.slice(
+      source.lastIndexOf("async function launchSocialAndAbortExternal"),
+      source.lastIndexOf("async function uploadTestimonialAndHold"),
+    );
+    expect(shareFlow).toContain("route.request().url()");
+    expect(shareFlow).not.toContain('popup.url() === "about:blank"');
+
+    const liveJourney = source.slice(
+      source.lastIndexOf("test.describe.serial"),
+    );
+    expect(liveJourney).toContain("await positionRiderAtStoreBeforePickup");
+    const venDelivered = liveJourney.indexOf(
+      "load Ven required survey state immediately after delivery",
+    );
+    const markDelivered = liveJourney.indexOf(
+      "load Mark required survey state immediately after delivery",
+    );
+    expect(venDelivered).toBeGreaterThan(-1);
+    expect(markDelivered).toBeGreaterThan(venDelivered);
+  });
+
+  test("opens an assigned delivery detail before Juan accepts it", () => {
+    const source = readFileSync(fileURLToPath(import.meta.url), "utf8");
+    const helper = source.slice(
+      source.lastIndexOf("async function openRiderAssignment"),
+      source.lastIndexOf("async function assertRiderPlannedStopOrder"),
+    );
+    expect(helper).toContain("`/rider/deliveries/${assignmentId}`");
+    expect(helper).not.toContain("/active");
+  });
+
+  test("chooses testimonial photos through the browser file chooser", () => {
+    const source = readFileSync(fileURLToPath(import.meta.url), "utf8");
+    const helper = source.slice(
+      source.lastIndexOf("async function uploadTestimonialAndHold"),
+      source.lastIndexOf("test.describe.serial"),
+    );
+
+    expect(helper).toContain('waitForEvent("filechooser"');
+    expect(helper).toContain("await chooser.setFiles(uploadFixture)");
+    expect(helper).toContain("Tap to add a photo of your prints");
+    expect(helper).not.toContain('locator("input[type=file]")');
+  });
+
+  test("acknowledges only the expected beta-held login console response", () => {
+    const source = readFileSync(fileURLToPath(import.meta.url), "utf8");
+    const heldFlow = source.slice(
+      source.lastIndexOf("mark.testimonialFileId"),
+      source.lastIndexOf("await setBetaThroughAdmin"),
+    );
+
+    expect(heldFlow).toMatch(
+      /await acknowledgeExpectedHttpConsoleError\(\s*customer\.actor,\s*"\/api\/auth\/login",\s*403,\s*\)/,
+    );
+  });
+
+  test("does not leave an unhandled response waiter when a UI action fails", () => {
+    const apiSource = readFileSync(
+      path.resolve(dirname, "../fixtures/beta-api.ts"),
+      "utf8",
+    );
+    const helper = apiSource.slice(
+      apiSource.indexOf("export async function waitForStrict2xx"),
+      apiSource.indexOf("export function positiveId"),
+    );
+    expect(helper).toContain("await Promise.all([responsePromise, action()])");
+  });
+
+  test("mounts tracking before setting and refreshing geolocation", () => {
+    const apiSource = readFileSync(
+      path.resolve(dirname, "../fixtures/beta-api.ts"),
+      "utf8",
+    );
+    const helper = apiSource.slice(
+      apiSource.indexOf("export async function setAcknowledgedGeolocation"),
+      apiSource.indexOf("export type AssignmentRecord"),
+    );
+    const mount = helper.indexOf("await mountRiderTracking?.()");
+    const geolocation = helper.indexOf("setGeolocation(checkpoint)");
+    const refresh = helper.indexOf("await refreshRiderTracking?.()");
+    expect(mount).toBeGreaterThan(-1);
+    expect(geolocation).toBeGreaterThan(-1);
+    expect(refresh).toBeGreaterThan(-1);
+    expect(mount).toBeLessThan(geolocation);
+    expect(geolocation).toBeLessThan(refresh);
+    expect(helper).toContain("navigator.geolocation.getCurrentPosition");
+    expect(helper).toContain("postDataJSON()");
+    expect(helper).toContain("await Promise.all([");
+    expect(helper).toContain("responsePromise,");
+    expect(helper).toContain("locationUpdate,");
+    expect(helper).toContain("activationPromise,");
+    expect(helper).toContain('socket.on("locationUpdate"');
+    expect(helper).toContain("locationMatchesCheckpoint");
   });
 
   test("preserves the approved evidence meanings for steps 21 through 29", () => {
@@ -118,6 +475,14 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
       expect(checkpoint.longitude).toBeGreaterThan(124);
       expect(checkpoint.accuracy).toBeGreaterThan(0);
     }
+    const store = betaCheckpoint("store");
+    expect(
+      Math.hypot(
+        betaPreStoreLocation.latitude - store.latitude,
+        betaPreStoreLocation.longitude - store.longitude,
+      ),
+      "Juan must begin away from the first evidence checkpoint",
+    ).toBeGreaterThan(0.0001);
   });
 
   test("sanitizes tokens, credentials, and tokenized URLs from evidence", () => {
@@ -133,6 +498,49 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     expect(sanitized).not.toContain(rawPassword);
     expect(sanitized).toContain("[REDACTED]");
     expect(sanitized).toContain("safe=ok");
+
+    const sanitizedPresignedUrl = sanitizeEvidenceUrl(
+      "https://storage.grid.test/evidence.png?X-Amz-Signature=amz-secret&X-Amz-Credential=credential-secret&X-Amz-Security-Token=session-secret&code=oauth-code&refresh_token=refresh-secret&id_token=id-secret&safe=ok",
+    );
+    for (const secret of [
+      "amz-secret",
+      "credential-secret",
+      "session-secret",
+      "oauth-code",
+      "refresh-secret",
+      "id-secret",
+    ]) {
+      expect(sanitizedPresignedUrl).not.toContain(secret);
+    }
+    expect(sanitizedPresignedUrl).toContain("safe=ok");
+  });
+
+  test("requires the exact GRIDGO beta URL in the Facebook share request", () => {
+    expect(() =>
+      validateFacebookShareRequest(
+        "https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fgridgoprint.ph%2Fbeta",
+      ),
+    ).not.toThrow();
+    expect(() =>
+      validateFacebookShareRequest(
+        "https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fexample.test%2Fwrong",
+      ),
+    ).toThrow(/shared GRIDGO URL/);
+  });
+
+  test("keeps visual evidence provenance and ephemeral MinIO credentials explicit", () => {
+    const workflow = readFileSync(
+      path.resolve(dirname, "../../../.github/workflows/visual-evidence.yml"),
+      "utf8",
+    );
+    expect(workflow).toContain('"runLabel": raw_manifest.get("runLabel")');
+    expect(workflow).not.toContain('"runId": raw_manifest.get("runId")');
+    expect(workflow).toContain("MINIO_PUBLIC_URL: http://127.0.0.1:9000");
+    expect(workflow).toMatch(
+      /for variable in[^\n]*MINIO_ACCESS_KEY[^\n]*MINIO_SECRET_KEY/,
+    );
+    expect(workflow).toContain('"MINIO_ACCESS_KEY"');
+    expect(workflow).toContain('"MINIO_SECRET_KEY"');
   });
 
   test("keeps credentials independent from the run label and out of manifests", () => {
@@ -235,6 +643,14 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
       path.join(e2eRoot, "tests/beta-workflow-visual.spec.ts"),
       "utf8",
     );
+    const evidenceSource = readFileSync(
+      path.join(e2eRoot, "fixtures/beta-evidence.ts"),
+      "utf8",
+    );
+    const actorSource = readFileSync(
+      path.join(e2eRoot, "fixtures/beta-actors.ts"),
+      "utf8",
+    );
     expect(config).toContain('trace: visualWorkflow ? "off"');
     const manualTracingApi = ["context", "tracing", ""].join(".");
     expect(visualSource).not.toContain(manualTracingApi);
@@ -242,20 +658,15 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
       visualSource.lastIndexOf("async function assertLiveTrackingUi"),
       visualSource.lastIndexOf("async function assertPrivateQueueUi"),
     );
-    expect(liveAssertion).toContain('getByLabel("Live delivery map"');
-    expect(liveAssertion).toContain(
-      'getByLabel("Rider current location marker"',
-    );
+    expect(liveAssertion).toContain("Tracking real-time location");
+    expect(liveAssertion).not.toContain('getByText("Open live tracking"');
     expect(liveAssertion).not.toContain('locator("canvas")');
     expect(liveAssertion).not.toContain("actor.network.some");
     const privateAssertion = visualSource.slice(
       visualSource.lastIndexOf("async function assertPrivateQueueUi"),
       visualSource.lastIndexOf("async function loginAdmin"),
     );
-    expect(privateAssertion).toContain('getByLabel("Live delivery map"');
-    expect(privateAssertion).toContain(
-      'getByLabel("Rider current location marker"',
-    );
+    expect(privateAssertion).toContain("Tracking real-time location");
     const registrationFlow = visualSource.slice(
       visualSource.lastIndexOf("async function registerCustomerThroughUi"),
       visualSource.lastIndexOf("async function saveAddressThroughUi"),
@@ -272,12 +683,46 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     expect(registrationResponse).toBeGreaterThanOrEqual(0);
     expect(tokenRegistration).toBeGreaterThan(registrationResponse);
     expect(tokenRegistration).toBeLessThan(betaLookup);
+    expect(registrationFlow).toContain(
+      'actor.page.url().includes("/onboarding")',
+    );
+    expect(registrationFlow).toContain(
+      "await completeCustomerOnboarding(actor.page)",
+    );
+    const onboardingFlow = visualSource.slice(
+      visualSource.lastIndexOf("async function completeCustomerOnboarding"),
+      visualSource.lastIndexOf("async function capture("),
+    );
+    expect(onboardingFlow).toContain("pageIndex < 4");
+    expect(onboardingFlow).toContain('clickNamed(page, "Next")');
+    expect(onboardingFlow).toContain('clickNamed(page, "Get Started")');
+    const orderFlow = visualSource.slice(
+      visualSource.lastIndexOf("async function placeCustomerOrder"),
+      visualSource.lastIndexOf("async function advanceProductionAndAssign"),
+    );
+    expect(orderFlow).toContain("await beginFirstOrderTutorial(actor.page)");
+    expect(orderFlow).toContain(
+      "await completeCheckoutPipelineTutorial(actor.page)",
+    );
+    expect(orderFlow).not.toContain("dismissTutorials(actor.page)");
+    expect(orderFlow).toContain('waitForEvent("filechooser"');
+    expect(orderFlow).not.toContain("input[type=file]");
+    expect(visualSource).toContain('clickNamed(page, "Show me how →")');
+    expect(visualSource).toContain('clickNamed(page, "Add address →")');
     const captureHelper = visualSource.slice(
       visualSource.lastIndexOf("async function capture("),
       visualSource.lastIndexOf("async function assertLiveTrackingUi"),
     );
     expect(captureHelper).not.toContain("[11, 25, 27].includes(id)");
     expect(captureHelper).toContain("allowBlockingDialog = false");
+    expect(evidenceSource).toContain("accepted evidence loading state");
+    expect(evidenceSource).toContain("axeViolationSummary");
+    expect(actorSource).toContain("context.route");
+    expect(actorSource).not.toContain("extraHTTPHeaders");
+    expect(actorSource).toContain("element.click()");
+    expect(visualSource).toContain("navigateMobile");
+    const directMobileGoto = ["page.goto(`", "${mobileURL}", "/"].join("");
+    expect(visualSource).not.toContain(directMobileGoto);
     for (const file of [
       path.join(e2eRoot, "README.md"),
       path.join(repoRoot, "AGENTS.md"),
@@ -408,23 +853,35 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     ).toThrow();
   });
 
-  test("requires all 14 survey indexes and the exact requirement response", () => {
+  test("requires all 14 survey indexes and a durable held-account response", () => {
     expect(surveyQuestionIndexes).toEqual(
       Array.from({ length: 14 }, (_, index) => index),
     );
     expect(() =>
       validateSurveySubmission(
-        { requirementId: 81, success: true },
+        { surveyId: 91, success: true, logoutRequired: true },
         { requirementId: 81, answeredIndexes: surveyQuestionIndexes },
       ),
     ).not.toThrow();
     expect(() =>
       validateSurveySubmission(
-        { requirementId: 82, success: true },
+        { surveyId: 91, success: true, logoutRequired: true },
         {
           requirementId: 81,
           answeredIndexes: surveyQuestionIndexes.slice(0, 13),
         },
+      ),
+    ).toThrow();
+    expect(() =>
+      validateSurveySubmission(
+        { surveyId: 0, success: true, logoutRequired: true },
+        { requirementId: 81, answeredIndexes: surveyQuestionIndexes },
+      ),
+    ).toThrow();
+    expect(() =>
+      validateSurveySubmission(
+        { surveyId: 91, success: true, logoutRequired: false },
+        { requirementId: 81, answeredIndexes: surveyQuestionIndexes },
       ),
     ).toThrow();
   });
@@ -461,11 +918,69 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     ).toThrow();
   });
 
-  test("reactivates Flutter semantics after both full customer home navigations", () => {
+  test("routes both customer homes through the semantics-aware navigator", () => {
     const source = readFileSync(fileURLToPath(import.meta.url), "utf8");
     expect(source).toMatch(
-      /await actors\.ven\.page\.goto\(`\$\{mobileURL\}\/customer\/home`\);\s*await enableFlutterSemantics\(actors\.ven\.page\);\s*await actors\.mark\.page\.goto\(`\$\{mobileURL\}\/customer\/home`\);\s*await enableFlutterSemantics\(actors\.mark\.page\);/,
+      /await navigateMobile\(actors\.ven\.page, mobileURL, "\/customer\/home"\);\s*await navigateMobile\(actors\.mark\.page, mobileURL, "\/customer\/home"\);/,
     );
+  });
+
+  test("matches Flutter semantic labels that append descriptive punctuation", () => {
+    expect(
+      accessibleNamePattern("Mark beta route stop").test(
+        "Mark beta route stop. Mark beta route address, Davao City",
+      ),
+    ).toBe(true);
+  });
+
+  test("uses keyboard activation for response-verified rider actions", () => {
+    const source = readFileSync(fileURLToPath(import.meta.url), "utf8");
+    const riderHelper = source.slice(
+      source.lastIndexOf("async function riderAction"),
+      source.lastIndexOf("async function openRiderAssignment"),
+    );
+    expect(riderHelper).toContain("activateNamedButtonWithKeyboard");
+    expect(riderHelper).toContain("waitForStrict2xx");
+    const trackingHelper = source.slice(
+      source.lastIndexOf("async function mountRiderTracking"),
+      source.lastIndexOf("async function drawAndSubmitSignature"),
+    );
+    expect(trackingHelper).toContain(
+      'activateNamedButtonWithDomClick(actor.page, "Refresh GPS location")',
+    );
+  });
+
+  test("allows enough time for the complete four-role visual journey", () => {
+    expect(visualJourneyTimeoutMs).toBeGreaterThanOrEqual(10 * 60 * 1_000);
+  });
+
+  test("uses the Flutter login fields' actual accessible placeholders", () => {
+    const source = readFileSync(fileURLToPath(import.meta.url), "utf8");
+    expect(source).toMatch(
+      /fillNamed\(actor\.page, "you@example\.com", email\);\s*await fillNamed\(actor\.page, "Enter your password", password\);/,
+    );
+  });
+
+  test("clears each held client session before verifying restored login", () => {
+    const source = readFileSync(fileURLToPath(import.meta.url), "utf8");
+    expect(source).toMatch(
+      /await setBetaThroughAdmin\(actors\.admin, adminURL, false\);[\s\S]*for \(const customer of \[ven, mark\]\) \{\s*await clickNamed\(customer\.actor\.page, "Sign out"\);\s*const restored = await loginMobile/,
+    );
+  });
+
+  test("verifies restored customers on the actual home route and content", () => {
+    const source = readFileSync(fileURLToPath(import.meta.url), "utf8");
+    const restoredFlow = source.slice(
+      source.lastIndexOf("await setBetaThroughAdmin"),
+      source.lastIndexOf("assertCanonicalEvidenceComplete"),
+    );
+    expect(restoredFlow).toContain(
+      "/Good morning|Catch the next batch|GRIDGO Credits|Delivery Status/i",
+    );
+    expect(restoredFlow).toMatch(
+      /toHaveURL\(\s*\/#\\\/customer\\\/home/,
+    );
+    expect(restoredFlow).not.toContain("/Home|Orders|Hello|Hi/i");
   });
 });
 
@@ -493,27 +1008,94 @@ type CustomerRun = {
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadFixture = path.resolve(dirname, "../fixtures/beta-upload.png");
+const expectedGridShareURL = "https://gridgoprint.ph/beta";
+const visualJourneyTimeoutMs = 15 * 60 * 1_000;
 
 function apiPath(response: Response, suffix: string): boolean {
   return new URL(response.url()).pathname.endsWith(suffix);
 }
 
+function accessibleNamePattern(name: string | RegExp): RegExp {
+  if (name instanceof RegExp) return name;
+  return new RegExp(
+    `^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s|[.,:;!?…—–-]|$)`,
+    "i",
+  );
+}
+
 async function clickNamed(page: Page, name: string | RegExp): Promise<void> {
-  const buttons = await visibleLocators(page.getByRole("button", { name }));
+  const buttonLocator = page.getByRole("button", {
+    name: accessibleNamePattern(name),
+  });
+  const labelLocator = page.getByLabel(accessibleNamePattern(name));
+  const textLocator = page.getByText(name, {
+    exact: typeof name === "string",
+  });
+  await expect
+    .poll(
+      async () => {
+        const buttons = await visibleLocators(buttonLocator);
+        if (buttons.length > 0) return `buttons:${buttons.length}`;
+        const labels = await visibleLocators(labelLocator);
+        if (labels.length > 0) return `labels:${labels.length}`;
+        const texts = await visibleLocators(textLocator);
+        return `texts:${texts.length}`;
+      },
+      { message: `one visible control named ${String(name)}` },
+    )
+    .toMatch(/^(?:buttons|labels|texts):1$/);
+  const buttons = await visibleLocators(buttonLocator);
   if (buttons.length > 0) {
     expect(buttons, `one visible button named ${String(name)}`).toHaveLength(1);
-    await buttons[0].scrollIntoViewIfNeeded();
-    await buttons[0].click();
+    await buttons[0].click({ timeout: 15_000 });
     return;
   }
-  const texts = await visibleLocators(
-    page.getByText(name, { exact: typeof name === "string" }),
-  );
+  const labels = await visibleLocators(labelLocator);
+  if (labels.length > 0) {
+    expect(labels, `one visible label named ${String(name)}`).toHaveLength(1);
+    await clickFlutterLabelCenter(page, labels[0], name);
+    return;
+  }
+  const texts = await visibleLocators(textLocator);
   expect(texts, `one visible text control named ${String(name)}`).toHaveLength(
     1,
   );
-  await texts[0].scrollIntoViewIfNeeded();
-  await texts[0].click();
+  await texts[0].click({ timeout: 15_000 });
+}
+
+async function activateNamedButtonWithKeyboard(
+  page: Page,
+  name: string | RegExp,
+): Promise<void> {
+  const locator = page.getByRole("button", {
+    name: accessibleNamePattern(name),
+  });
+  await expect
+    .poll(async () => (await visibleLocators(locator)).length, {
+      message: `one keyboard action named ${String(name)}`,
+    })
+    .toBe(1);
+  const buttons = await visibleLocators(locator);
+  expect(buttons, `one keyboard action named ${String(name)}`).toHaveLength(1);
+  await buttons[0].focus();
+  await buttons[0].press("Enter");
+}
+
+async function activateNamedButtonWithDomClick(
+  page: Page,
+  name: string | RegExp,
+): Promise<void> {
+  const locator = page.getByRole("button", {
+    name: accessibleNamePattern(name),
+  });
+  await expect
+    .poll(async () => (await visibleLocators(locator)).length, {
+      message: `one semantic action named ${String(name)}`,
+    })
+    .toBe(1);
+  const buttons = await visibleLocators(locator);
+  expect(buttons, `one semantic action named ${String(name)}`).toHaveLength(1);
+  await buttons[0].evaluate((element) => (element as HTMLElement).click());
 }
 
 async function visibleLocators(locator: Locator): Promise<Locator[]> {
@@ -534,8 +1116,16 @@ async function clickOptional(
       buttons,
       `at most one visible optional button ${String(name)}`,
     ).toHaveLength(1);
-    await buttons[0].scrollIntoViewIfNeeded();
-    await buttons[0].click();
+    await buttons[0].click({ timeout: 15_000 });
+    return true;
+  }
+  const labels = await visibleLocators(page.getByLabel(name));
+  if (labels.length > 0) {
+    expect(
+      labels,
+      `at most one visible optional label ${String(name)}`,
+    ).toHaveLength(1);
+    await clickFlutterLabelCenter(page, labels[0], name);
     return true;
   }
   const texts = await visibleLocators(
@@ -546,9 +1136,20 @@ async function clickOptional(
     texts,
     `at most one visible optional text ${String(name)}`,
   ).toHaveLength(1);
-  await texts[0].scrollIntoViewIfNeeded();
-  await texts[0].click();
+  await texts[0].click({ timeout: 15_000 });
   return true;
+}
+
+async function clickFlutterLabelCenter(
+  page: Page,
+  label: Locator,
+  name: string | RegExp,
+): Promise<void> {
+  await label.scrollIntoViewIfNeeded({ timeout: 15_000 });
+  await page.waitForTimeout(50);
+  const box = await label.boundingBox();
+  expect(box, `measurable Flutter control ${String(name)}`).not.toBeNull();
+  await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
 }
 
 async function fillNamed(
@@ -556,24 +1157,110 @@ async function fillNamed(
   name: string | RegExp,
   value: string,
 ): Promise<void> {
-  const fields = await visibleLocators(
-    typeof name === "string"
-      ? page.getByLabel(name, { exact: true })
-      : page.getByLabel(name),
-  );
+  const textTargetLocator = page.getByText(name, {
+    exact: typeof name === "string",
+  });
+  const labelLocator = page.getByLabel(accessibleNamePattern(name));
+  const placeholderLocator = page.getByPlaceholder(name, {
+    exact: typeof name === "string",
+  });
+  await expect
+    .poll(
+      async () => {
+        const fields = await visibleLocators(labelLocator);
+        if (fields.length > 0) return `labels:${fields.length}`;
+        const placeholders = await visibleLocators(placeholderLocator);
+        return `placeholders:${placeholders.length}`;
+      },
+      { message: `one visible field named ${String(name)}` },
+    )
+    .toMatch(/^(?:labels|placeholders):1$/);
+  const fields = await visibleLocators(labelLocator);
   if (fields.length > 0) {
     expect(fields, `one visible field labeled ${String(name)}`).toHaveLength(1);
-    await fields[0].fill(value);
+    const targets = await visibleLocators(textTargetLocator);
+    expect(
+      targets.length,
+      `at most one visible text field target ${String(name)}`,
+    ).toBeLessThanOrEqual(1);
+    const interactionLocator =
+      targets.length === 1 ? textTargetLocator : labelLocator;
+    const interactionTarget = targets.length === 1 ? targets[0] : fields[0];
+    await interactionTarget.scrollIntoViewIfNeeded({ timeout: 15_000 });
+    await page.waitForTimeout(50);
+    const scrolledFields = await visibleLocators(interactionLocator);
+    expect(
+      scrolledFields,
+      `one re-resolved field target ${String(name)}`,
+    ).toHaveLength(1);
+    await enterFieldValue(page, scrolledFields[0], name, value);
     return;
   }
-  const placeholders = await visibleLocators(
-    page.getByPlaceholder(name, { exact: typeof name === "string" }),
-  );
+  const placeholders = await visibleLocators(placeholderLocator);
   expect(
     placeholders,
     `one visible field placeholder ${String(name)}`,
   ).toHaveLength(1);
-  await placeholders[0].fill(value);
+  const targets = await visibleLocators(textTargetLocator);
+  expect(
+    targets.length,
+    `at most one visible text field target ${String(name)}`,
+  ).toBeLessThanOrEqual(1);
+  const interactionLocator =
+    targets.length === 1 ? textTargetLocator : placeholderLocator;
+  const interactionTarget = targets.length === 1 ? targets[0] : placeholders[0];
+  await interactionTarget.scrollIntoViewIfNeeded({ timeout: 15_000 });
+  await page.waitForTimeout(50);
+  const scrolledPlaceholders = await visibleLocators(interactionLocator);
+  expect(
+    scrolledPlaceholders,
+    `one re-resolved field target ${String(name)}`,
+  ).toHaveLength(1);
+  await enterFieldValue(page, scrolledPlaceholders[0], name, value);
+}
+
+async function enterFieldValue(
+  page: Page,
+  target: Locator,
+  name: string | RegExp,
+  value: string,
+): Promise<void> {
+  const expectedName = accessibleNamePattern(name);
+  const currentActiveName = await page.evaluate(() => {
+    const active = document.activeElement;
+    return (
+      active?.getAttribute("aria-label") ??
+      active?.getAttribute("placeholder") ??
+      ""
+    );
+  });
+  if (!expectedName.test(currentActiveName)) {
+    const box = await target.boundingBox();
+    expect(box, "measurable Flutter field target").not.toBeNull();
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  }
+  const activeName = await page.evaluate(() => {
+    const active = document.activeElement;
+    return (
+      active?.getAttribute("aria-label") ??
+      active?.getAttribute("placeholder") ??
+      ""
+    );
+  });
+  expect(activeName, "focused Flutter field identity").toMatch(expectedName);
+  await page.keyboard.press("Control+A");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.insertText(value);
+  const activeValue = await page.evaluate(() => {
+    const active = document.activeElement;
+    return active instanceof HTMLInputElement ||
+      active instanceof HTMLTextAreaElement
+      ? active.value
+      : null;
+  });
+  expect(activeValue, "focused Flutter field value").toBe(value);
+  await page.keyboard.press("Tab");
+  await page.waitForTimeout(50);
 }
 
 function webMercatorPoint(latitude: number, longitude: number, zoom: number) {
@@ -605,6 +1292,9 @@ async function pinAddressThroughMap(
   const mapTop = coordinateBox!.y - 8;
   const mapBottom = instructionBox!.y + instructionBox!.height + 8;
   const mapCenterY = (mapTop + mapBottom) / 2;
+  // Start away from the fixed center pin so the marker cannot win Flutter's
+  // gesture arena and swallow a map-pan intended to move Ven's location.
+  const mapDragStartX = mapCenterX + 80;
   const desired = webMercatorPoint(target.latitude, target.longitude, 15);
   for (let attempt = 0; attempt < 6; attempt += 1) {
     const currentText = (await coordinate.textContent())?.trim() ?? "";
@@ -619,9 +1309,9 @@ async function pinAddressThroughMap(
     }
     const dragX = Math.max(-70, Math.min(70, deltaX));
     const dragY = Math.max(-70, Math.min(70, deltaY));
-    await page.mouse.move(mapCenterX, mapCenterY);
+    await page.mouse.move(mapDragStartX, mapCenterY);
     await page.mouse.down();
-    await page.mouse.move(mapCenterX - dragX, mapCenterY - dragY, {
+    await page.mouse.move(mapDragStartX - dragX, mapCenterY - dragY, {
       steps: 20,
     });
     await page.mouse.up();
@@ -652,15 +1342,28 @@ async function dismissTutorials(page: Page): Promise<void> {
   }
 }
 
+async function completeCustomerOnboarding(page: Page): Promise<void> {
+  for (let pageIndex = 0; pageIndex < 4; pageIndex += 1) {
+    await clickNamed(page, "Next");
+    await page.waitForTimeout(450);
+  }
+  await clickNamed(page, "Get Started");
+  await page.waitForURL(/\/customer\//);
+}
+
 async function capture(
   run: EvidenceRun,
   actor: BetaActorRuntime,
   id: number,
   state: string | RegExp,
   durableIds: DurableIds = {},
-  options: { variant?: string; allowBlockingDialog?: boolean } = {},
+  options: {
+    variant?: string;
+    allowBlockingDialog?: boolean;
+    assertState?: () => Promise<void>;
+  } = {},
 ): Promise<void> {
-  const { variant, allowBlockingDialog = false } = options;
+  const { variant, allowBlockingDialog = false, assertState } = options;
   await captureStep({
     run,
     page: actor.page,
@@ -674,46 +1377,122 @@ async function capture(
     allowBlockingDialog,
     assertionSummary: [`Visible state: ${String(state)}`],
     assertState: async () => {
+      if (assertState) {
+        await assertState();
+        return;
+      }
       await expect(actor.page.locator("body")).toContainText(state);
     },
   });
 }
 
+async function assertBetaOnlyPaymentOptions(page: Page): Promise<void> {
+  for (const method of ["GCash", "Maya", "Cash on Delivery"]) {
+    const option = page.getByRole("button", {
+      name: new RegExp(`^${method}\\. .*Unavailable during beta testing`, "i"),
+    });
+    await expect(
+      option,
+      `${method} must be visible but unavailable in beta`,
+    ).toBeVisible();
+    await expect(option, `${method} must be disabled in beta`).toBeDisabled();
+  }
+  await expect(
+    page.getByRole("button", { name: /^GRIDGO Credits\./i }),
+    "GRIDGO Credits must be the only enabled beta payment option",
+  ).toBeEnabled();
+}
+
+function assertStandardCheckoutPayload(payload: JsonRecord): void {
+  expect(payload.paymentMethod, "beta checkout payment method").toBe(
+    "gridCredits",
+  );
+  expect(payload.speedTier, "explicit checkout delivery mode").toBe("standard");
+}
+
 async function assertLiveTrackingUi(actor: BetaActorRuntime): Promise<void> {
+  // Background Flutter canvases may defer their semantics update until the page
+  // is foregrounded even though the pixels render when Playwright takes a
+  // failure screenshot. Bring the customer context forward before asserting
+  // the map so the accessibility tree and rendered state describe the same UI.
+  await foregroundFlutterPage(actor.page);
+  await expect(actor.page.locator("body")).toContainText(
+    /Tracking real-time location/i,
+    { timeout: 30_000 },
+  );
+  const map = actor.page.getByRole("group", {
+    name: /^LIVE MAP(?:\s+~\d+\s+min)?$/i,
+  });
+  await expect(map).toContainText("Live delivery map");
+  await expect(map, "rendered live delivery map semantics").toBeVisible({
+    timeout: 30_000,
+  });
+  const bounds = await map.boundingBox();
+  expect(bounds, "rendered live delivery map bounds").not.toBeNull();
+  expect(bounds!.width, "rendered live delivery map width").toBeGreaterThan(
+    100,
+  );
+  expect(bounds!.height, "rendered live delivery map height").toBeGreaterThan(
+    100,
+  );
+}
+
+async function positionRiderAtStoreBeforePickup(
+  actor: BetaActorRuntime,
+): Promise<{ latitude: number; longitude: number }> {
+  const store = betaCheckpoint("store");
+  await actor.context.setGeolocation(store);
+  const location = await actor.page.evaluate(
+    () =>
+      new Promise<{ latitude: number; longitude: number }>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(
+          (position) =>
+            resolve({
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+            }),
+          reject,
+          { enableHighAccuracy: true, timeout: 10_000 },
+        ),
+      ),
+  );
+  expect(location.latitude, "Juan reaches the store before pickup").toBeCloseTo(
+    store.latitude,
+    5,
+  );
+  expect(
+    location.longitude,
+    "Juan reaches the store before pickup",
+  ).toBeCloseTo(store.longitude, 5);
+  return location;
+}
+
+async function foregroundFlutterPage(page: Page): Promise<void> {
+  await page.bringToFront();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+  await page.waitForTimeout(350);
+}
+
+async function revealAutomaticSurvey(actor: BetaActorRuntime): Promise<void> {
+  await foregroundFlutterPage(actor.page);
+  await expect(actor.page).toHaveURL(/#\/customer\/survey\/required$/);
   await expect(
-    actor.page.getByText("Open live tracking", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    actor.page.getByText("Tracking real-time location", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    actor.page.getByText("Rider is on the way", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    actor.page.getByLabel("Live delivery map", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    actor.page.getByLabel("Rider current location marker", { exact: true }),
-  ).toBeVisible();
+    actor.page.getByRole("group", { name: /Question 1 of 14/i }),
+  ).toBeVisible({ timeout: 30_000 });
 }
 
 async function assertPrivateQueueUi(page: Page): Promise<void> {
-  await expect(page.getByText("2nd in queue", { exact: true })).toBeVisible();
   await expect(
-    page.getByText("Open live tracking", { exact: true }),
+    page.getByRole("button", { name: "Open live tracking", exact: true }),
   ).toHaveCount(0);
-  await expect(
-    page.getByText("Tracking real-time location", { exact: true }),
-  ).toHaveCount(0);
-  await expect(
-    page.getByText("Rider is on the way", { exact: true }),
-  ).toHaveCount(0);
-  await expect(
-    page.getByLabel("Live delivery map", { exact: true }),
-  ).toHaveCount(0);
-  await expect(
-    page.getByLabel("Rider current location marker", { exact: true }),
-  ).toHaveCount(0);
+  await expect(page.locator("body")).not.toContainText(
+    /Tracking real-time location/i,
+  );
   await expect(
     page.getByText(/-?\d{1,2}\.\d{4,}\s*,\s*-?\d{2,3}\.\d{4,}/),
   ).toHaveCount(0);
@@ -764,11 +1543,8 @@ async function setBetaThroughAdmin(
   await expect(
     actor.page.getByText("Beta Mode", { exact: true }),
   ).toBeVisible();
-  const toggles = await visibleLocators(
-    actor.page.locator("button[role=switch]"),
-  );
-  expect(toggles, "one visible beta-mode switch").toHaveLength(1);
-  const toggle = toggles[0];
+  const toggle = actor.page.getByRole("switch", { name: "Beta mode" });
+  await expect(toggle, "visible beta-mode switch").toBeVisible();
   const current = (await toggle.getAttribute("aria-checked")) === "true";
   if (run && enabled) {
     expect(current, "fresh release stack must begin with beta disabled").toBe(
@@ -802,6 +1578,7 @@ async function setBetaThroughAdmin(
       await responsePromise,
       `${enabled ? "enable" : "disable"} beta through admin UI`,
     );
+    await expect(actor.page.locator(".ant-modal-wrap")).toBeHidden();
   }
   await expect(toggle).toHaveAttribute("aria-checked", String(enabled));
   if (run && enabled) await capture(run, actor, 2, /Enabled|Beta Mode/i);
@@ -823,8 +1600,7 @@ async function registerCustomerThroughUi(options: {
 > {
   const { actor, name, email, password, mobileURL, run, registrationStep } =
     options;
-  await actor.page.goto(`${mobileURL}/auth/register`);
-  await enableFlutterSemantics(actor.page);
+  await navigateMobile(actor.page, mobileURL, "/auth/register");
   if (registrationStep === 3)
     await capture(
       run,
@@ -845,11 +1621,13 @@ async function registerCustomerThroughUi(options: {
   await clickNamed(actor.page, "Continue");
   await clickNamed(actor.page, "18–24");
   await clickNamed(actor.page, "Continue");
-  await fillNamed(actor.page, "Full Name", `${name} Beta Visual`);
-  await fillNamed(actor.page, "Email", email);
-  await fillNamed(actor.page, "Phone Number", "+639171234567");
-  await fillNamed(actor.page, "Password", password);
-  await fillNamed(actor.page, "Confirm Password", password);
+  // Flutter's web renderer exposes the input hints as accessible names even
+  // though the visible labels remain separate semantics nodes.
+  await fillNamed(actor.page, "Kai Reyes", `${name} Beta Visual`);
+  await fillNamed(actor.page, "kai@example.com", email);
+  await fillNamed(actor.page, "+63 917 123 4567", "+639171234567");
+  await fillNamed(actor.page, "Min. 8 characters", password);
+  await fillNamed(actor.page, "Re-enter your password", password);
   const auth = await waitForStrict2xx<AuthPayload>(
     actor.page,
     (response) =>
@@ -870,10 +1648,13 @@ async function registerCustomerThroughUi(options: {
   );
   expect(beta.isBetaUser).toBe(true);
   const betaRank = positiveId(beta.rank, `${name} beta rank`);
-  await actor.page.waitForURL(/\/customer\//);
+  await actor.page.waitForURL(/\/(?:onboarding|customer\/)/);
+  if (actor.page.url().includes("/onboarding")) {
+    await completeCustomerOnboarding(actor.page);
+  }
   await dismissTutorials(actor.page);
   if (registrationStep === 3) {
-    await capture(run, actor, 3, new RegExp(name, "i"), { userId });
+    await capture(run, actor, 3, /TODAY|NEXT BATCH/i, { userId });
   }
   return {
     actor,
@@ -887,20 +1668,26 @@ async function registerCustomerThroughUi(options: {
 }
 
 async function saveAddressThroughUi(
-  customer: Pick<CustomerRun, "actor" | "name">,
+  customer: Pick<CustomerRun, "actor" | "name" | "token">,
   mobileURL: string,
+  options: { navigate?: boolean } = {},
 ): Promise<number> {
   const { actor, name } = customer;
-  await actor.page.goto(`${mobileURL}/customer/addresses/new`);
-  await enableFlutterSemantics(actor.page);
+  if (options.navigate ?? true) {
+    await navigateMobile(actor.page, mobileURL, "/customer/addresses/new");
+  }
   const address = name === "Ven" ? betaAddresses.ven : betaAddresses.mark;
-  await fillNamed(actor.page, "Label", address.label);
-  await fillNamed(actor.page, "Full Address", address.fullAddress);
-  await fillNamed(actor.page, "Barangay", "Poblacion");
-  await fillNamed(actor.page, /City/, "Davao City");
+  await fillNamed(actor.page, "e.g. Home, Office", address.label);
+  await fillNamed(actor.page, "Street, Building, Unit", address.fullAddress);
+  await fillNamed(actor.page, "Barangay name", "Poblacion");
+  await fillNamed(actor.page, "City or Municipality", "Davao City");
   await fillNamed(actor.page, "Province", "Davao del Sur");
-  await fillNamed(actor.page, "Zip Code", "8000");
-  await fillNamed(actor.page, /Landmark/, `${name} deterministic beta pin`);
+  await fillNamed(actor.page, "e.g. 1229", "8000");
+  await fillNamed(
+    actor.page,
+    "e.g. Near Jollibee on Main St",
+    `${name} deterministic beta pin`,
+  );
   await pinAddressThroughMap(actor.page, address);
   const body = await waitForStrict2xx<JsonRecord>(
     actor.page,
@@ -911,7 +1698,75 @@ async function saveAddressThroughUi(
     `${name} saved-address UI action`,
   );
   assertAddressWithinTolerance(body, address);
-  return positiveId(body.id, `${name} address id`);
+  const addressId = positiveId(body.id, `${name} address id`);
+  const recent = await strictJson<JsonRecord[]>(
+    await actor.page.request.get(
+      `${process.env.GRIDGO_API_URL ?? "http://127.0.0.1:3000/api"}/addresses`,
+      { headers: { Authorization: `Bearer ${customer.token}` } },
+    ),
+    `${name} recent saved addresses`,
+  );
+  expect(recent[0], `${name} most-recent address`).toMatchObject({
+    id: addressId,
+    label: address.label,
+  });
+  assertAddressWithinTolerance(recent[0], address);
+  return addressId;
+}
+
+async function beginFirstOrderTutorial(page: Page): Promise<void> {
+  await expect(page.locator("body")).toContainText(/Let's print something/i);
+  await clickNamed(page, "Show me how →");
+  await expect(page.locator("body")).toContainText(
+    /Tap here to start your first print order/i,
+  );
+}
+
+async function closeNextBatchDialogIfShown(page: Page): Promise<void> {
+  let readyState = "waiting";
+  await expect
+    .poll(
+      async () => {
+        const close = await visibleLocators(
+          page.getByLabel("Close batch information"),
+        );
+        if (close.length === 1) {
+          readyState = "dialog";
+          return readyState;
+        }
+        const body = (await page.locator("body").textContent()) ?? "";
+        readyState = /Let's print something/i.test(body)
+          ? "ready"
+          : /See how it works|No deliveries scheduled today|Catch the next batch|batches are full|last batch has departed/i.test(
+                body,
+              )
+            ? "dialog"
+            : "waiting";
+        return readyState;
+      },
+      { message: "customer home or next-batch dialog is ready" },
+    )
+    .toMatch(/^(?:dialog|ready)$/);
+  if (readyState === "dialog") {
+    await activateNamedButtonWithDomClick(page, "Close batch information");
+    await expect(
+      page.getByRole("button", { name: /^Close batch information/i }),
+    ).toHaveCount(0);
+  }
+  await expect(page.locator("body")).toContainText(/Let's print something/i);
+}
+
+async function completeCheckoutPipelineTutorial(page: Page): Promise<void> {
+  for (const body of [
+    /Quick review of what you're printing/i,
+    /Choose Delivery, Pickup, or Multi-drop/i,
+    /Review the available payment option/i,
+    /That's the Place Order button/i,
+  ]) {
+    await expect(page.locator("body")).toContainText(body);
+    await clickNamed(page, /Got it/);
+    await page.waitForTimeout(450);
+  }
 }
 
 async function placeCustomerOrder(options: {
@@ -925,31 +1780,27 @@ async function placeCustomerOrder(options: {
 }): Promise<CustomerRun> {
   const { base, mobileURL, run, firstStep } = options;
   const { actor, name, userId } = base;
+  const expectedAddress =
+    name === "Ven" ? betaAddresses.ven : betaAddresses.mark;
   if (name === "Mark") {
-    await actor.page.goto(`${mobileURL}/customer/profile/account`);
+    await navigateMobile(actor.page, mobileURL, "/customer/profile/account");
     await expect(actor.page.locator("body")).toContainText(/Student/i);
     await expect(actor.page.locator("body")).toContainText(/Architecture/i);
-    await capture(run, actor, 4, /Mark Beta Visual/, { userId });
-    await actor.page.goto(`${mobileURL}/customer/home`);
-    await expect(actor.page.locator("body")).toContainText(
-      String(base.betaRank),
-    );
-    await expect(actor.page.locator("body")).toContainText(/100/);
-    await capture(run, actor, 5, /100|Beta #|GRIDGO Credits/i, {
+    await capture(run, actor, 4, /Account Details/i, { userId });
+    await navigateMobile(actor.page, mobileURL, "/customer/home");
+    await closeNextBatchDialogIfShown(actor.page);
+    await capture(run, actor, 5, /Let's print something/i, {
       userId,
       betaRank: base.betaRank,
     });
   } else {
-    await actor.page.goto(`${mobileURL}/customer/home`);
-    await expect(actor.page.locator("body")).toContainText(
-      String(base.betaRank),
-    );
-    await expect(actor.page.locator("body")).toContainText(/100/);
+    await navigateMobile(actor.page, mobileURL, "/customer/home");
+    await closeNextBatchDialogIfShown(actor.page);
     await capture(
       run,
       actor,
       18,
-      /100|Beta #|GRIDGO Credits/i,
+      /Let's print something/i,
       {
         userId,
         betaRank: base.betaRank,
@@ -958,48 +1809,102 @@ async function placeCustomerOrder(options: {
     );
   }
 
-  await actor.page.goto(`${mobileURL}/customer/order/new`);
-  await enableFlutterSemantics(actor.page);
-  await dismissTutorials(actor.page);
-  if (name === "Mark")
-    await capture(run, actor, 6, /Choose|Paper Printing/i, { userId });
-  await clickNamed(actor.page, /Paper Printing/i);
-  await actor.page.waitForURL(/paper-specs/);
+  await beginFirstOrderTutorial(actor.page);
+  if (name === "Mark") {
+    await capture(run, actor, 6, /Tap here to start your first print order/i, {
+      userId,
+    });
+  }
+  await clickNamed(actor.page, /Got it/);
+  await expect(actor.page.locator("body")).toContainText(
+    /Pick Paper Printing for documents, photos, and posters/i,
+  );
+  await clickNamed(actor.page, /Got it/);
+  await expect(actor.page.locator("body")).toContainText(
+    /Set your paper size, color mode, and copies/i,
+  );
   if (name === "Mark") await capture(run, actor, 7, /Paper Specs/i, { userId });
-  await clickNamed(actor.page, "Continue");
-  await actor.page.waitForURL(/upload/);
+  await clickNamed(actor.page, /Got it/);
+  await expect(actor.page.locator("body")).toContainText(
+    /Tap Continue when your specs look right/i,
+  );
+  await clickNamed(actor.page, /Got it/);
+  await expect(actor.page.locator("body")).toContainText(/Upload your file/i);
+  // The upload screen heading can paint one frame before its tutorial bubble.
+  // Let the overlay mount, then dismiss it when this account receives it.
+  await actor.page.waitForTimeout(600);
+  await clickOptional(actor.page, /Got it/);
+  await expect(
+    actor.page.getByText(/Tap to select file/i).first(),
+  ).toBeVisible();
   const uploadResponsePromise = actor.page.waitForResponse(
     (response) =>
       response.request().method() === "POST" &&
       apiPath(response, "/api/files/upload"),
+    { timeout: 60_000 },
   );
-  await actor.page.locator("input[type=file]").setInputFiles(uploadFixture);
+  const fileChooserPromise = actor.page.waitForEvent("filechooser", {
+    timeout: 15_000,
+  });
+  await clickNamed(actor.page, /Tap to select file/i);
+  const fileChooser = await fileChooserPromise;
+  await fileChooser.setFiles(uploadFixture);
   const uploadBody = await strictBrowserJson<JsonRecord>(
     await uploadResponsePromise,
     `${name} real print upload`,
   );
   const fileId = positiveId(uploadBody.id, `${name} file id`);
-  await clickOptional(actor.page, /Preview file/i);
+  let uploadTutorialState = "waiting";
+  await expect
+    .poll(async () => {
+      const body = (await actor.page.locator("body").textContent()) ?? "";
+      uploadTutorialState = /Drop a file here, or tap to browse/i.test(body)
+        ? "select-file"
+        : /File ready — tap Continue to checkout/i.test(body)
+          ? "file-ready"
+          : "waiting";
+      return uploadTutorialState;
+    })
+    .toMatch(/^(?:select-file|file-ready)$/);
+  if (uploadTutorialState === "select-file") {
+    await clickNamed(actor.page, /Got it/);
+  }
+  await expect(actor.page.locator("body")).toContainText(
+    /File ready — tap Continue to checkout/i,
+  );
   if (name === "Mark")
     await capture(run, actor, 8, /Preview|Coin|beta-upload/i, {
       userId,
       fileId,
     });
-  await clickOptional(actor.page, /Close|Done/i);
-  await clickNamed(actor.page, "Continue");
-  await actor.page.waitForURL(/checkout/);
-  await dismissTutorials(actor.page);
+  await clickNamed(actor.page, /Got it/);
+  await expect(actor.page.locator("body")).toContainText(
+    /Add a delivery address/i,
+  );
   if (name === "Mark")
-    await capture(run, actor, 9, /A4|Paper|Checkout/i, { userId, fileId });
+    await capture(run, actor, 9, /Add a delivery address/i, { userId, fileId });
 
-  const addressId = await saveAddressThroughUi(base, mobileURL);
+  await clickNamed(actor.page, "Add address →");
+  await expect(actor.page.locator("body")).toContainText(/Save Address/i);
+  const addressId = await saveAddressThroughUi(base, mobileURL, {
+    navigate: false,
+  });
+  await expect(actor.page.locator("body")).toContainText(
+    /Quick review of what you're printing/i,
+  );
+  await completeCheckoutPipelineTutorial(actor.page);
   if (name === "Mark") {
-    await actor.page.goto(`${mobileURL}/customer/addresses`);
+    await navigateMobile(actor.page, mobileURL, "/customer/addresses");
+    await expect(
+      actor.page.getByRole("button", {
+        name: accessibleNamePattern(`Edit ${expectedAddress.label}`),
+      }),
+    ).toBeVisible();
     await capture(
       run,
       actor,
       10,
-      /Mark beta route stop/i,
+      /Saved Addresses/i,
       {
         userId,
         fileId,
@@ -1008,21 +1913,57 @@ async function placeCustomerOrder(options: {
       { variant: "mark-saved-recent-address" },
     );
   }
-  await actor.page.goto(`${mobileURL}/customer/order/checkout`);
-  await enableFlutterSemantics(actor.page);
-  await dismissTutorials(actor.page);
+  await navigateMobile(actor.page, mobileURL, "/customer/order/checkout");
   if (name === "Mark")
-    await capture(run, actor, 10, /Mark beta route stop|Delivery/i, {
+    await capture(
+      run,
+      actor,
+      10,
+      /Pick a delivery address|Delivery/i,
+      { userId, fileId, addressId },
+      { variant: "mark-checkout-before-address" },
+    );
+  // Ven does not take the step-10 evidence pause, so give the same checkout
+  // coach mark time to mount before asserting the repeated tutorial.
+  await actor.page.waitForTimeout(600);
+  const multiDropTutorial =
+    /Tap Multi-drop to send prints to different addresses/i;
+  if (name === "Mark") {
+    await expect(actor.page.locator("body")).toContainText(multiDropTutorial);
+    await clickNamed(actor.page, /Got it/);
+  } else if (
+    multiDropTutorial.test(await actor.page.locator("body").innerText())
+  ) {
+    await clickNamed(actor.page, /Got it/);
+  }
+  await clickNamed(actor.page, "Pick a delivery address");
+  await expect(actor.page.locator("body")).toContainText(
+    /Choose a delivery address/i,
+  );
+  await clickNamed(actor.page, expectedAddress.label);
+  await expect(actor.page.locator("body")).toContainText(expectedAddress.label);
+  if (name === "Mark")
+    await capture(run, actor, 10, /Mark beta route stop/i, {
       userId,
       fileId,
       addressId,
     });
-  await clickOptional(actor.page, "Delivery");
-  await clickOptional(actor.page, /Priority|Standard/i);
-  await clickNamed(actor.page, /Choose payment method|GRIDGO Credits/i);
+  await clickNamed(actor.page, "Standard");
+  await clickNamed(actor.page, "Choose payment method");
   await expect(actor.page.locator("body")).toContainText(
     /Only GRIDGO Credits is available during beta testing/i,
   );
+  await actor.page.waitForTimeout(600);
+  const paymentTutorial = /Top up once and pay instantly/i;
+  if (name === "Mark") {
+    await expect(actor.page.locator("body")).toContainText(paymentTutorial);
+    await clickNamed(actor.page, /Got it/);
+  } else if (
+    paymentTutorial.test(await actor.page.locator("body").innerText())
+  ) {
+    await clickNamed(actor.page, /Got it/);
+  }
+  await assertBetaOnlyPaymentOptions(actor.page);
   await clickNamed(actor.page, /GRIDGO Credits/i);
   if (name === "Mark")
     await capture(
@@ -1073,6 +2014,11 @@ async function placeCustomerOrder(options: {
       { variant: "ven-order-summary" },
     );
 
+  const orderRequestPromise = actor.page.waitForRequest(
+    (request) =>
+      request.method() === "POST" &&
+      new URL(request.url()).pathname.endsWith("/api/orders/batch"),
+  );
   const orderBody = await waitForStrict2xx<JsonRecord>(
     actor.page,
     (response) =>
@@ -1081,6 +2027,8 @@ async function placeCustomerOrder(options: {
     () => clickNamed(actor.page, "Place Order"),
     `${name} credits checkout`,
   );
+  const orderPayload = (await orderRequestPromise).postDataJSON() as JsonRecord;
+  assertStandardCheckoutPayload(orderPayload);
   const { id: orderId, orderRef } = orderIdentity(orderBody);
   await expect(actor.page.locator("body")).toContainText(orderRef);
   if (name === "Mark") {
@@ -1091,8 +2039,19 @@ async function placeCustomerOrder(options: {
       orderId,
       orderRef,
     });
-    await actor.page.goto(`${mobileURL}/customer/orders`);
-    await capture(run, actor, 14, orderRef, {
+    await navigateMobile(actor.page, mobileURL, "/customer/orders");
+    await capture(
+      run,
+      actor,
+      14,
+      orderRef,
+      { userId, fileId, addressId, orderId, orderRef },
+      { variant: "mark-order-list" },
+    );
+    await actor.page
+      .getByRole("button", { name: new RegExp(`^Order ${orderRef}\\b`, "i") })
+      .click();
+    await capture(run, actor, 14, new RegExp(`Order #${orderRef}`, "i"), {
       userId,
       fileId,
       addressId,
@@ -1122,7 +2081,22 @@ async function advanceProductionAndAssign(options: {
 }): Promise<void> {
   const { admin, adminURL, customer, productionStep, assignmentStep, run } =
     options;
+  const ridersResponsePromise = admin.page.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" &&
+      apiPath(response, "/api/admin/riders"),
+  );
   await admin.page.goto(`${adminURL}/orders/show/${customer.orderId}`);
+  const riders = await strictBrowserJson<JsonRecord[]>(
+    await ridersResponsePromise,
+    `load eligible riders before assigning ${customer.name}`,
+  );
+  const juan = riders.find((rider) => /Juan/i.test(String(rider.full_name)));
+  expect(juan, "Juan must be returned by the admin rider API").toBeTruthy();
+  expect(juan).toMatchObject({
+    is_available: true,
+    assignment_eligible: true,
+  });
   await expect(admin.page.locator("body")).toContainText(customer.orderRef);
   for (const label of [
     "File Verified",
@@ -1131,20 +2105,27 @@ async function advanceProductionAndAssign(options: {
     "Quality Checked",
     "Ready for Dispatch",
   ]) {
+    await admin.page
+      .getByLabel(`Update status for ${customer.orderRef}`)
+      .first()
+      .click({ timeout: 15_000 });
+    await admin.page
+      .locator(".ant-select-dropdown:visible")
+      .getByText(label, { exact: true })
+      .click({ timeout: 15_000 });
     const responsePromise = admin.page.waitForResponse(
       (response) =>
         response.request().method() === "PATCH" &&
         apiPath(response, `/api/admin/orders/${customer.orderId}/status`),
     );
     await admin.page
-      .getByLabel(`Update status for ${customer.orderRef}`)
-      .click();
-    await admin.page.getByRole("option", { name: label }).click();
-    await admin.page.getByRole("button", { name: "OK" }).click();
+      .getByRole("button", { name: "OK" })
+      .click({ timeout: 15_000 });
     await strictBrowserJson(
       await responsePromise,
       `${customer.name} production transition ${label}`,
     );
+    await expect(admin.page.locator(".ant-modal-wrap:visible")).toHaveCount(0);
   }
   await capture(run, admin, productionStep, /Ready for Dispatch/i, {
     orderId: customer.orderId,
@@ -1167,6 +2148,8 @@ async function advanceProductionAndAssign(options: {
   expect(
     positiveId(assignmentBody.id, `${customer.name} assigned order id`),
   ).toBe(customer.orderId);
+  await expect(admin.page.locator(".ant-modal-wrap:visible")).toHaveCount(0);
+  await expect(admin.page.getByText(/Assigned rider: Juan/i)).toBeVisible();
   await capture(
     run,
     admin,
@@ -1183,10 +2166,9 @@ async function loginMobile(
   email: string,
   password: string,
 ): Promise<AuthPayload> {
-  await actor.page.goto(`${mobileURL}/auth/login`);
-  await enableFlutterSemantics(actor.page);
-  await fillNamed(actor.page, "Email", email);
-  await fillNamed(actor.page, "Password", password);
+  await navigateMobile(actor.page, mobileURL, "/auth/login");
+  await fillNamed(actor.page, "you@example.com", email);
+  await fillNamed(actor.page, "Enter your password", password);
   return waitForStrict2xx<AuthPayload>(
     actor.page,
     (response) =>
@@ -1207,7 +2189,7 @@ async function riderAction(
     (response) =>
       response.request().method() === "PATCH" &&
       apiPath(response, `/api/riders/assignments/${assignmentId}/status`),
-    () => clickNamed(actor.page, label),
+    () => activateNamedButtonWithKeyboard(actor.page, label),
     `Juan action ${String(label)} for assignment ${assignmentId}`,
   );
 }
@@ -1217,8 +2199,52 @@ async function openRiderAssignment(
   mobileURL: string,
   assignmentId: number,
 ): Promise<void> {
-  await actor.page.goto(`${mobileURL}/rider/deliveries/${assignmentId}/active`);
-  await enableFlutterSemantics(actor.page);
+  await navigateMobile(
+    actor.page,
+    mobileURL,
+    `/rider/deliveries/${assignmentId}`,
+  );
+}
+
+async function assertRiderPlannedStopOrder(
+  page: Page,
+  ven: CustomerRun,
+  mark: CustomerRun,
+): Promise<void> {
+  const plannedStops = page.getByRole("button", { name: /^STOP \d+/i });
+  await expect(plannedStops).toHaveCount(2);
+  await expect(
+    page.getByRole("button", {
+      name: new RegExp(`^STOP 1\\b.*Ven.*${ven.orderRef}`, "i"),
+    }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("button", {
+      name: new RegExp(`^STOP 2\\b.*Mark.*${mark.orderRef}`, "i"),
+    }),
+  ).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /^STOP 3\b/i })).toHaveCount(0);
+}
+
+async function mountRiderTracking(
+  actor: BetaActorRuntime,
+  mobileURL: string,
+  assignmentId: number,
+): Promise<void> {
+  await navigateMobile(actor.page, mobileURL, "/rider/deliveries");
+  await actor.page.waitForTimeout(250);
+  await navigateMobile(
+    actor.page,
+    mobileURL,
+    `/rider/deliveries/${assignmentId}/active`,
+  );
+  await expect(
+    actor.page.getByRole("button", { name: /^Refresh GPS location/i }),
+  ).toBeVisible();
+}
+
+async function refreshRiderTracking(actor: BetaActorRuntime): Promise<void> {
+  await activateNamedButtonWithDomClick(actor.page, "Refresh GPS location");
 }
 
 async function drawAndSubmitSignature(
@@ -1226,21 +2252,25 @@ async function drawAndSubmitSignature(
   assignmentId: number,
   beforeSubmit?: () => Promise<void>,
 ): Promise<void> {
-  const slider = actor.page.getByText("Swipe to confirm delivery");
-  const box = await slider.boundingBox();
-  expect(box, "delivery confirmation slider must be visible").not.toBeNull();
-  await actor.page.mouse.move(box!.x + 28, box!.y + box!.height / 2);
-  await actor.page.mouse.down();
-  await actor.page.mouse.move(
-    box!.x + box!.width - 20,
-    box!.y + box!.height / 2,
-    { steps: 12 },
-  );
-  await actor.page.mouse.up();
+  const viewport = actor.page.viewportSize();
+  expect(viewport, "rider proof viewport must be available").not.toBeNull();
+  const proofButton = actor.page.getByRole("button", {
+    name: /^Open proof of delivery/i,
+  });
+  // Arrival must reveal a keyboard/screen-reader-operable proof action without
+  // requiring an undiscoverable drag. The physical swipe remains covered by
+  // the Flutter component regression test.
+  await expect(proofButton).toHaveCount(1);
+  await expect(proofButton).toBeVisible();
+  await proofButton.click();
   await expect(actor.page.getByText("Proof of Delivery")).toBeVisible();
-  const sign = actor.page.getByText("Sign here");
-  const signBox = await sign.locator("..").boundingBox();
+  const sign = actor.page.getByLabel(/^Signature pad/i);
+  await expect(sign).toHaveCount(1);
+  await sign.scrollIntoViewIfNeeded({ timeout: 15_000 });
+  await expect(sign).toBeVisible();
+  const signBox = await sign.boundingBox();
   expect(signBox).not.toBeNull();
+  expect(signBox!.height).toBeGreaterThanOrEqual(180);
   await actor.page.mouse.move(signBox!.x + 30, signBox!.y + 50);
   await actor.page.mouse.down();
   await actor.page.mouse.move(
@@ -1254,6 +2284,12 @@ async function drawAndSubmitSignature(
     { steps: 10 },
   );
   await actor.page.mouse.up();
+  await expect(actor.page.getByText("Sign here", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(
+    actor.page.getByRole("button", { name: /^Submit proof/i }),
+  ).toBeEnabled();
   if (beforeSubmit) await beforeSubmit();
   await waitForStrict2xx<JsonRecord>(
     actor.page,
@@ -1267,32 +2303,59 @@ async function drawAndSubmitSignature(
 
 async function completeSurveyUi(customer: CustomerRun): Promise<void> {
   const page = customer.actor.page;
+  await foregroundFlutterPage(page);
   const requirementId = positiveId(
     customer.surveyRequirementId,
     `${customer.name} recorded survey requirement id`,
   );
-  await expect(page.locator("body")).toContainText(/survey|feedback/i);
   const answeredIndexes: number[] = [];
   for (const index of surveyQuestionIndexes) {
-    await expect(
-      page.getByText(`Question ${index + 1} of 14`, { exact: true }),
-    ).toBeVisible();
-    const sliders = await visibleLocators(page.getByRole("slider"));
+    const question = page.getByRole("group", {
+      name: new RegExp(`Question ${index + 1} of 14`, "i"),
+    });
+    await expect(question).toBeVisible();
+    const sliderLocator = question.getByRole("slider");
+    await expect
+      .poll(async () => (await visibleLocators(sliderLocator)).length, {
+        message: `${customer.name} question ${index + 1} slider availability`,
+      })
+      .toBe(1);
+    const sliders = await visibleLocators(sliderLocator);
     expect(sliders, `${customer.name} question ${index} slider`).toHaveLength(
       1,
     );
+    await expect(sliders[0]).toHaveAttribute(
+      "aria-label",
+      `Feedback rating for question ${index + 1}`,
+    );
+    await expect(question).toHaveAccessibleName(/NEUTRAL/i);
     await sliders[0].focus();
-    await sliders[0].press("End");
+    await sliders[0].press("ArrowRight");
+    await expect(sliders[0]).toHaveAttribute("aria-valuetext", "AGREE");
     await clickNamed(page, "Next");
     answeredIndexes.push(index);
   }
   expect(answeredIndexes).toEqual(surveyQuestionIndexes);
-  await page
-    .getByPlaceholder("Share your thoughts...", { exact: true })
-    .fill(`${customer.name} completed the full release workflow.`);
-  await page
-    .getByPlaceholder("Optional comments...", { exact: true })
-    .fill("All fourteen required questions were answered through the UI.");
+  await fillNamed(
+    page,
+    "Price feedback",
+    `${customer.name} would pay for this delivery convenience.`,
+  );
+  await fillNamed(
+    page,
+    "Upload process feedback",
+    `${customer.name} completed the upload without leaving the app.`,
+  );
+  await fillNamed(
+    page,
+    "Future feature feedback",
+    "Keep route updates and saved print presets.",
+  );
+  await fillNamed(
+    page,
+    "Additional delivery feedback",
+    "All fourteen required questions were answered through the UI.",
+  );
   const response = await waitForStrict2xx<JsonRecord>(
     page,
     (candidate) =>
@@ -1311,16 +2374,31 @@ async function launchSocialAndAbortExternal(
 ): Promise<void> {
   const { actor } = customer;
   const external = /facebook\.com|linkedin\.com|twitter\.com|x\.com/i;
-  await actor.context.route(external, (route) => route.abort("aborted"));
-  const popupPromise = actor.context.waitForEvent("page");
-  await clickNamed(actor.page, /Facebook|LinkedIn|X \(Twitter\)|More/i);
-  const popup = await popupPromise;
-  await popup.waitForLoadState("domcontentloaded").catch(() => undefined);
-  expect(
-    external.test(popup.url()) || popup.url() === "about:blank",
-    "social share must invoke a popup callback",
-  ).toBe(true);
-  await popup.close();
+  let requestedShareUrl: string | undefined;
+  await actor.context.route(external, async (route) => {
+    requestedShareUrl = route.request().url();
+    await route.abort("aborted");
+  });
+  const existingPages = new Set(actor.context.pages());
+  await clickNamed(actor.page, "Share to Facebook");
+  await expect
+    .poll(() => requestedShareUrl, {
+      message: "social share must request a supported provider URL",
+    })
+    .toMatch(external);
+  validateFacebookShareRequest(requestedShareUrl!);
+  for (const page of actor.context.pages()) {
+    if (!existingPages.has(page) && !page.isClosed()) await page.close();
+  }
+}
+
+function validateFacebookShareRequest(requestedShareUrl: string): void {
+  const requested = new URL(requestedShareUrl);
+  expect(requested.hostname).toBe("www.facebook.com");
+  expect(requested.pathname).toBe("/sharer/sharer.php");
+  expect(requested.searchParams.get("u"), "shared GRIDGO URL").toBe(
+    expectedGridShareURL,
+  );
 }
 
 async function uploadTestimonialAndHold(
@@ -1330,7 +2408,11 @@ async function uploadTestimonialAndHold(
   const page = customer.actor.page;
   await launchSocialAndAbortExternal(customer);
   if (afterShare) await afterShare();
-  await page.locator("input[type=file]").setInputFiles(uploadFixture);
+  const [chooser] = await Promise.all([
+    page.waitForEvent("filechooser", { timeout: 15_000 }),
+    clickNamed(page, "Tap to add a photo of your prints"),
+  ]);
+  await chooser.setFiles(uploadFixture);
   const uploadPromise = page.waitForResponse(
     (response) =>
       response.request().method() === "POST" &&
@@ -1353,11 +2435,33 @@ async function uploadTestimonialAndHold(
   return positiveId(upload.id, `${customer.name} testimonial file id`);
 }
 
+async function acknowledgeExpectedHttpConsoleError(
+  actor: BetaActorRuntime,
+  pathname: string,
+  status: number,
+): Promise<void> {
+  const matchingIndexes = () =>
+    actor.console.flatMap((entry, index) => {
+      if (entry.type !== "error" || entry.url == null) return [];
+      const matchesPath = new URL(entry.url).pathname === pathname;
+      const matchesStatus = new RegExp(`\\b${status}\\b`).test(entry.text);
+      return matchesPath && matchesStatus ? [index] : [];
+    });
+  await expect
+    .poll(() => matchingIndexes().length, {
+      message: `expected ${status} console response for ${pathname}`,
+      timeout: 5_000,
+    })
+    .toBe(1);
+  actor.console.splice(matchingIndexes()[0], 1);
+}
+
 test.describe.serial("opt-in four-context visual beta release workflow", () => {
   test("drives admin, Mark, Ven, and Juan through the screenshot-backed release journey", async ({
     browser,
     request,
   }, testInfo) => {
+    test.setTimeout(visualJourneyTimeoutMs);
     test.skip(
       process.env.GRIDGO_RUN_BETA_FLOW_VISUAL !== "1",
       "Set GRIDGO_RUN_BETA_FLOW_VISUAL=1 against a fresh isolated stack.",
@@ -1383,7 +2487,11 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
     const runLabel = randomUUID();
     const markPassword = generateVisualCustomerPassword();
     const venPassword = generateVisualCustomerPassword();
-    const run = beginEvidenceRun(runLabel);
+    const run = beginEvidenceRun(runLabel, {
+      mobileURL,
+      adminURL,
+      apiBaseURL,
+    });
     registerEvidenceSecrets(run, [
       adminPassword,
       riderPassword,
@@ -1394,6 +2502,7 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
     const actors = await createBetaActorContexts(browser, {
       mobileURL,
       adminURL,
+      apiBaseURL,
       protectedSecrets: run.protectedSecrets,
     });
     let adminAuth: AuthPayload | undefined;
@@ -1411,12 +2520,13 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
       const markBase = await registerCustomerThroughUi({
         actor: actors.mark,
         name: "Mark",
-        email: `${runLabel}-mark@example.test`,
+        email: `mark-${runLabel.slice(0, 8)}@example.test`,
         password: markPassword,
         mobileURL,
         run,
         registrationStep: 3,
       });
+      expect(markBase.betaRank, "fresh-stack Mark beta rank").toBe(1);
       const mark = await placeCustomerOrder({
         base: markBase,
         mobileURL,
@@ -1452,12 +2562,12 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
       );
       expect(markAssignment).toBeDefined();
       mark.assignmentId = positiveId(markAssignment!.id, "Mark assignment id");
-      await capture(run, actors.admin, 16, /Juan|Rider assigned/i, {
+      await capture(run, actors.admin, 16, /Assigned rider: Juan/i, {
         orderId: mark.orderId,
         orderRef: mark.orderRef,
         assignmentId: mark.assignmentId,
       });
-      await actors.juan.page.goto(`${mobileURL}/rider/deliveries`);
+      await navigateMobile(actors.juan.page, mobileURL, "/rider/deliveries");
       await expect(actors.juan.page.locator("body")).toContainText(
         mark.orderRef,
       );
@@ -1471,12 +2581,16 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
       const venBase = await registerCustomerThroughUi({
         actor: actors.ven,
         name: "Ven",
-        email: `${runLabel}-ven@example.test`,
+        email: `ven-${runLabel.slice(0, 8)}@example.test`,
         password: venPassword,
         mobileURL,
         run,
         registrationStep: 18,
       });
+      expect(venBase.betaRank, "Ven follows Mark in beta enrollment").toBe(
+        mark.betaRank + 1,
+      );
+      expect(venBase.betaRank, "fresh-stack Ven beta rank").toBe(2);
       const ven = await placeCustomerOrder({
         base: venBase,
         mobileURL,
@@ -1535,9 +2649,21 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         const label = await checkbox.getAttribute("aria-label");
         const keep =
           label?.includes(ven.orderRef) || label?.includes(mark.orderRef);
-        if ((await checkbox.isChecked()) !== Boolean(keep))
-          await checkbox.click();
+        if ((await checkbox.isChecked()) !== Boolean(keep)) {
+          await checkbox.locator("xpath=ancestor::label").click();
+        }
+        await expect(checkbox).toBeChecked({ checked: Boolean(keep) });
       }
+      await expect(
+        panel.getByText("2 stops selected", { exact: true }),
+      ).toBeVisible();
+      const planRequestPromise = actors.admin.page.waitForRequest(
+        (candidate) =>
+          candidate.method() === "POST" &&
+          /\/api\/admin\/riders\/\d+\/dispatch-plan$/.test(
+            new URL(candidate.url()).pathname,
+          ),
+      );
       const planBody = await waitForStrict2xx<JsonRecord>(
         actors.admin.page,
         (response) =>
@@ -1548,12 +2674,22 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         () => panel.getByRole("button", { name: /Create road route/i }).click(),
         "persist two-stop OSRM dispatch plan",
       );
+      const planRequestBody = (await planRequestPromise).postDataJSON() as {
+        assignmentIds?: number[];
+      };
+      expect(
+        [...(planRequestBody.assignmentIds ?? [])].sort((a, b) => a - b),
+        "admin dispatch request contains only Mark and Ven",
+      ).toEqual([mark.assignmentId, ven.assignmentId].sort((a, b) => a - b));
       validatePersistedDispatchPlan(planBody, {
         venAssignmentId: ven.assignmentId,
         markAssignmentId: mark.assignmentId,
       });
       const planId = positiveId(planBody.id, "dispatch plan id");
       const planVersion = positiveId(planBody.version, "dispatch plan version");
+
+      await navigateMobile(actors.juan.page, mobileURL, "/rider/home");
+      await assertRiderPlannedStopOrder(actors.juan.page, ven, mark);
 
       for (const customer of [ven, mark]) {
         await openRiderAssignment(
@@ -1570,6 +2706,16 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
           id: customer.assignmentId,
           status: "accepted",
         });
+      }
+      const storePickupLocation = await positionRiderAtStoreBeforePickup(
+        actors.juan,
+      );
+      for (const customer of [ven, mark]) {
+        await openRiderAssignment(
+          actors.juan,
+          mobileURL,
+          customer.assignmentId,
+        );
         const pickedUp = await riderAction(
           actors.juan,
           /Mark as picked up/i,
@@ -1605,27 +2751,15 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
           (assignment) => assignment.status === "on_the_way",
         ),
       ).toBe(true);
-      await actors.juan.page.goto(`${mobileURL}/rider/home`);
-      await expect(
-        actors.juan.page.getByText(ven.orderRef, { exact: true }),
-      ).toBeVisible();
-      await expect(
-        actors.juan.page.getByText(mark.orderRef, { exact: true }),
-      ).toBeVisible();
-      await expect(
-        actors.juan.page.getByText("STOP 1", { exact: true }),
-      ).toBeVisible();
-      await expect(
-        actors.juan.page.getByText("STOP 2", { exact: true }),
-      ).toBeVisible();
-      await expect(
-        actors.juan.page.getByText("STOP 3", { exact: true }),
-      ).toHaveCount(0);
+      await navigateMobile(actors.juan.page, mobileURL, "/rider/home");
+      await assertRiderPlannedStopOrder(actors.juan.page, ven, mark);
       await capture(run, actors.juan, 21, /Today's Route/i, {
         markOrderId: mark.orderId,
         venOrderId: ven.orderId,
         markAssignmentId: mark.assignmentId,
         venAssignmentId: ven.assignmentId,
+        latitude: storePickupLocation.latitude,
+        longitude: storePickupLocation.longitude,
       });
 
       await actors.admin.page.reload();
@@ -1672,16 +2806,19 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
       await expect(persistedPanel.getByTestId("dispatch-stop-2")).toContainText(
         mark.orderRef,
       );
+      await persistedPanel.evaluate((element) =>
+        element.scrollIntoView({ block: "center", inline: "nearest" }),
+      );
+      await expect(persistedPanel.getByTestId("dispatch-stop-1")).toBeVisible();
+      await expect(persistedPanel.getByTestId("dispatch-stop-2")).toBeVisible();
       await capture(run, actors.admin, 22, /OSRM/i, {
         dispatchPlanId: planId,
         dispatchPlanVersion: planVersion,
         markAssignmentId: mark.assignmentId,
         venAssignmentId: ven.assignmentId,
       });
-      await actors.ven.page.goto(`${mobileURL}/customer/home`);
-      await enableFlutterSemantics(actors.ven.page);
-      await actors.mark.page.goto(`${mobileURL}/customer/home`);
-      await enableFlutterSemantics(actors.mark.page);
+      await navigateMobile(actors.ven.page, mobileURL, "/customer/home");
+      await navigateMobile(actors.mark.page, mobileURL, "/customer/home");
       const markDocumentMarker = `mark-document-${runLabel}`;
       await actors.mark.page.evaluate((marker) => {
         Object.defineProperty(window, "__gridgoBetaDocumentMarker", {
@@ -1724,23 +2861,26 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
       });
       await assertPrivateQueueUi(actors.mark.page);
 
-      const venStoreLocation = await setAcknowledgedGeolocation({
+      const venFirstLiveLocation = await setAcknowledgedGeolocation({
         riderPage: actors.juan.page,
         apiBaseURL,
         customerToken: ven.token,
-        checkpoint: betaCheckpoint("store"),
+        checkpoint: betaCheckpoint("road-to-ven"),
         expectedAssignmentId: ven.assignmentId,
         expectedPlanVersion: planVersion,
+        mountRiderTracking: () =>
+          mountRiderTracking(actors.juan, mobileURL, ven.assignmentId),
+        refreshRiderTracking: () => refreshRiderTracking(actors.juan),
         assertCustomerMarker: async () => {
           await assertLiveTrackingUi(actors.ven);
         },
       });
-      await capture(run, actors.ven, 23, /Tracking real-time location/i, {
+      await capture(run, actors.ven, 23, /1st in queue/i, {
         orderId: ven.orderId,
         assignmentId: ven.assignmentId,
         dispatchPlanVersion: planVersion,
-        latitude: Number(venStoreLocation.latitude),
-        longitude: Number(venStoreLocation.longitude),
+        latitude: Number(venFirstLiveLocation.latitude),
+        longitude: Number(venFirstLiveLocation.longitude),
       });
 
       await assertLocationPrivacyDenied({
@@ -1754,7 +2894,7 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         dispatchPlanVersion: planVersion,
       });
 
-      for (const checkpointId of ["road-to-ven", "ven"] as const) {
+      for (const checkpointId of ["ven"] as const) {
         await setAcknowledgedGeolocation({
           riderPage: actors.juan.page,
           apiBaseURL,
@@ -1762,6 +2902,9 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
           checkpoint: betaCheckpoint(checkpointId),
           expectedAssignmentId: ven.assignmentId,
           expectedPlanVersion: planVersion,
+          mountRiderTracking: () =>
+            mountRiderTracking(actors.juan, mobileURL, ven.assignmentId),
+          refreshRiderTracking: () => refreshRiderTracking(actors.juan),
           assertCustomerMarker: async () => {
             await assertLiveTrackingUi(actors.ven);
           },
@@ -1783,6 +2926,42 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         orderId: ven.orderId,
         assignmentId: ven.assignmentId,
       });
+
+      const venState = await authenticatedGet<{
+        accountStatus: string;
+        holds: Array<{ requirementId: number; orderId: number }>;
+      }>(
+        request,
+        apiBaseURL,
+        "/users/me/account-state",
+        ven.token,
+        "load Ven required survey state immediately after delivery",
+      );
+      expect(venState).toMatchObject({
+        accountStatus: "survey_required",
+        holds: [{ orderId: ven.orderId }],
+      });
+      ven.surveyRequirementId = positiveId(
+        venState.holds[0].requirementId,
+        "Ven survey requirement id",
+      );
+      await revealAutomaticSurvey(actors.ven);
+      const assertRequiredSurvey = (page: Page) => async () => {
+        await expect(
+          page.getByRole("group", { name: /Question 1 of 14/i }),
+        ).toBeVisible();
+      };
+      await capture(
+        run,
+        actors.ven,
+        28,
+        /survey|feedback/i,
+        {
+          orderId: ven.orderId,
+          surveyRequirementId: ven.surveyRequirementId,
+        },
+        { assertState: assertRequiredSurvey(actors.ven.page) },
+      );
 
       expect(
         await actors.mark.page.evaluate(
@@ -1807,8 +2986,15 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         canTrackDelivery: true,
         deliveryAssignmentId: mark.assignmentId,
       });
+      // Mark stays on the same document while Juan completes Ven. Chromium
+      // throttles background CanvasKit frames, so foreground the preserved
+      // document and let Flutter publish its newly promoted semantics tree.
+      await foregroundFlutterPage(actors.mark.page);
       await expect(
-        actors.mark.page.getByText("Open live tracking", { exact: true }),
+        actors.mark.page.getByRole("button", {
+          name: "Open live tracking",
+          exact: true,
+        }),
       ).toBeVisible();
       const markPromotedLocation = await setAcknowledgedGeolocation({
         riderPage: actors.juan.page,
@@ -1817,6 +3003,9 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         checkpoint: betaCheckpoint("road-to-mark"),
         expectedAssignmentId: mark.assignmentId,
         expectedPlanVersion: planVersion,
+        mountRiderTracking: () =>
+          mountRiderTracking(actors.juan, mobileURL, mark.assignmentId),
+        refreshRiderTracking: () => refreshRiderTracking(actors.juan),
         assertCustomerMarker: async () => {
           await assertLiveTrackingUi(actors.mark);
         },
@@ -1844,6 +3033,9 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
           checkpoint: betaCheckpoint(checkpointId),
           expectedAssignmentId: mark.assignmentId,
           expectedPlanVersion: planVersion,
+          mountRiderTracking: () =>
+            mountRiderTracking(actors.juan, mobileURL, mark.assignmentId),
+          refreshRiderTracking: () => refreshRiderTracking(actors.juan),
           assertCustomerMarker: async () => {
             await assertLiveTrackingUi(actors.mark);
           },
@@ -1866,16 +3058,6 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         assignmentId: mark.assignmentId,
       });
 
-      const venState = await authenticatedGet<{
-        accountStatus: string;
-        holds: Array<{ requirementId: number; orderId: number }>;
-      }>(
-        request,
-        apiBaseURL,
-        "/users/me/account-state",
-        ven.token,
-        "load Ven required survey state",
-      );
       const markState = await authenticatedGet<{
         accountStatus: string;
         holds: Array<{ requirementId: number; orderId: number }>;
@@ -1884,34 +3066,17 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         apiBaseURL,
         "/users/me/account-state",
         mark.token,
-        "load Mark required survey state",
+        "load Mark required survey state immediately after delivery",
       );
-      expect(venState).toMatchObject({
-        accountStatus: "survey_required",
-        holds: [{ orderId: ven.orderId }],
-      });
       expect(markState).toMatchObject({
         accountStatus: "survey_required",
         holds: [{ orderId: mark.orderId }],
       });
-      ven.surveyRequirementId = positiveId(
-        venState.holds[0].requirementId,
-        "Ven survey requirement id",
-      );
       mark.surveyRequirementId = positiveId(
         markState.holds[0].requirementId,
         "Mark survey requirement id",
       );
-      await expect(actors.ven.page.locator("body")).toContainText(
-        /survey|feedback/i,
-      );
-      await expect(actors.mark.page.locator("body")).toContainText(
-        /survey|feedback/i,
-      );
-      await capture(run, actors.ven, 28, /survey|feedback/i, {
-        orderId: ven.orderId,
-        surveyRequirementId: ven.surveyRequirementId,
-      });
+      await revealAutomaticSurvey(actors.mark);
       await capture(
         run,
         actors.mark,
@@ -1921,7 +3086,10 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
           orderId: mark.orderId,
           surveyRequirementId: mark.surveyRequirementId,
         },
-        { variant: "mark-automatic-survey" },
+        {
+          variant: "mark-automatic-survey",
+          assertState: assertRequiredSurvey(actors.mark.page),
+        },
       );
       await completeSurveyUi(ven);
       await completeSurveyUi(mark);
@@ -1947,10 +3115,13 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
       );
 
       for (const customer of [ven, mark]) {
-        await customer.actor.page.goto(`${mobileURL}/auth/login`);
-        await enableFlutterSemantics(customer.actor.page);
-        await fillNamed(customer.actor.page, "Email", customer.email);
-        await fillNamed(customer.actor.page, "Password", customer.password);
+        await navigateMobile(customer.actor.page, mobileURL, "/auth/login");
+        await fillNamed(customer.actor.page, "you@example.com", customer.email);
+        await fillNamed(
+          customer.actor.page,
+          "Enter your password",
+          customer.password,
+        );
         const held = customer.actor.page.waitForResponse(
           (response) =>
             response.request().method() === "POST" &&
@@ -1966,6 +3137,11 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         });
         await expect(customer.actor.page.locator("body")).toContainText(
           /beta|held|thank/i,
+        );
+        await acknowledgeExpectedHttpConsoleError(
+          customer.actor,
+          "/api/auth/login",
+          403,
         );
         await capture(
           run,
@@ -1991,6 +3167,7 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         { variant: "beta-disabled" },
       );
       for (const customer of [ven, mark]) {
+        await clickNamed(customer.actor.page, "Sign out");
         const restored = await loginMobile(
           customer.actor,
           mobileURL,
@@ -2002,11 +3179,22 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
           run,
           customer.actor,
           29,
-          /Home|Orders|Hello|Hi/i,
+          /Good morning|Catch the next batch|GRIDGO Credits|Delivery Status/i,
           { userId: customer.userId, orderId: customer.orderId },
-          customer.name === "Mark"
-            ? undefined
-            : { variant: `${customer.name.toLowerCase()}-restored-login` },
+          {
+            variant:
+              customer.name === "Mark"
+                ? undefined
+                : `${customer.name.toLowerCase()}-restored-login`,
+            assertState: async () => {
+              await expect(customer.actor.page).toHaveURL(
+                /#\/customer\/home(?:\?|$)/,
+              );
+              await expect(customer.actor.page.locator("body")).toContainText(
+                /Good morning|Catch the next batch|GRIDGO Credits|Delivery Status/i,
+              );
+            },
+          },
         );
       }
       assertCanonicalEvidenceComplete(run.entries);

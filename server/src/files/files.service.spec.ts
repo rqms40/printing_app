@@ -236,6 +236,10 @@ describe('FilesService', () => {
 
     it('normalizes the legacy proof purpose before building the object key', async () => {
       const file = makeFile();
+      mockAnalysisService.analyze.mockResolvedValue({
+        widthPx: 1,
+        heightPx: 1,
+      });
       mockStorageService.upload.mockResolvedValue('http://x/y');
       mockFileRepo.create.mockImplementation(
         (value: Partial<FileMetadata>) => value as FileMetadata,
@@ -257,6 +261,24 @@ describe('FilesService', () => {
         expect.objectContaining({ purpose: 'proof_of_delivery' }),
       );
     });
+
+    it.each(['proof_of_delivery', 'beta_testimonial'])(
+      'rejects undecodable %s image bytes before object storage',
+      async (purpose) => {
+        const file = makeFile({ buffer: Buffer.from('not-an-image') });
+        mockAnalysisService.analyze.mockResolvedValue(null);
+        mockStorageService.upload.mockResolvedValue('http://x/y');
+        mockFileRepo.create.mockReturnValue({ id: 104 });
+        mockFileRepo.save.mockResolvedValue({ id: 104 });
+
+        await expect(service.storeMetadata(file, 7, purpose)).rejects.toThrow(
+          'Evidence upload must contain a valid image',
+        );
+
+        expect(mockStorageService.upload).not.toHaveBeenCalled();
+        expect(mockFileRepo.save).not.toHaveBeenCalled();
+      },
+    );
 
     it('rejects an arbitrary purpose before writing an object', async () => {
       const file = makeFile();

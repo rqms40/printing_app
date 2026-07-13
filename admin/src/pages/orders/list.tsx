@@ -542,8 +542,12 @@ export function OrderList() {
             width={50}
             render={(_: unknown, record: Order) => (
               <Tooltip title="View Details">
-                <EyeOutlined
-                  style={{ color: "#808080", fontSize: 16 }}
+                <Button
+                  type="text"
+                  size="small"
+                  aria-label={`View details for ${record.order_id}`}
+                  icon={<EyeOutlined />}
+                  style={{ color: "#A0A0A0" }}
                   onClick={(e) => {
                     e.stopPropagation();
                     navigate(`/orders/show/${record.id}`);

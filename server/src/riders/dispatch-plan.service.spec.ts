@@ -365,6 +365,54 @@ describe('DispatchPlanService', () => {
     expect(planRepo.save!.mock.calls).toContainEqual([active]);
   });
 
+  it('preserves an in-transit stop when re-optimization omits it', async () => {
+    const inTransitVen = {
+      ...ven,
+      status: DeliveryStatus.ON_THE_WAY,
+    } as DeliveryAssignment;
+    const active = {
+      id: 400,
+      riderId: rider.id,
+      version: 1,
+      status: DispatchPlanStatus.ACTIVE,
+      stops: [
+        {
+          assignmentId: inTransitVen.id,
+          assignment: inTransitVen,
+          sequence: 1,
+          status: DispatchStopStatus.PENDING,
+        },
+        {
+          assignmentId: mark.id,
+          assignment: mark,
+          sequence: 2,
+          status: DispatchStopStatus.PENDING,
+        },
+      ],
+      routingDataStale: false,
+    } as DispatchPlan;
+    planRepo.findOne!.mockResolvedValue(active);
+    assignmentRepo.find!.mockResolvedValue([mark, inTransitVen]);
+    provider.getMatrix.mockResolvedValueOnce({
+      durationsSeconds: [
+        [0, 500],
+        [500, 0],
+      ],
+      distancesMeters: [
+        [0, 4000],
+        [4000, 0],
+      ],
+    });
+
+    const result = await service.reoptimizePlan(rider.id, [mark.id]);
+
+    expect(result.stops.map((stop) => stop.assignmentId)).toEqual([
+      inTransitVen.id,
+      mark.id,
+    ]);
+    expect(active.status).toBe(DispatchPlanStatus.SUPERSEDED);
+  });
+
   it('retains an active plan and marks routing stale after failed re-optimization', async () => {
     const active = {
       id: 400,

@@ -85,5 +85,14 @@ void main() {
         findsOneWidget,
       );
     });
+
+    testWidgets('labels the refresh action', (tester) async {
+      await tester.pumpWidget(
+        _wrap(const DeliveriesScreen(), overrides: _stableOverrides()),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.byTooltip('Refresh assignments'), findsOneWidget);
+    });
   });
 }

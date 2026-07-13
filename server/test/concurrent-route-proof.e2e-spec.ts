@@ -33,6 +33,7 @@ import {
   DispatchStopStatus,
 } from '../src/riders/entities/dispatch-plan-stop.entity';
 import { orderDeliveryAssignmentsByRoute } from '../src/riders/delivery-route';
+import { TINY_PNG } from './support/tiny-png';
 
 type StopSeed = {
   label: string;
@@ -61,6 +62,13 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
   const sockets: Socket[] = [];
   const storageObjectKeys = new Set<string>();
   const runId = Date.now().toString().slice(-8);
+  const signatureProof = JSON.stringify({
+    format: 'gridgo-signature-v1',
+    points: [
+      [1, 1],
+      [2, 2],
+    ],
+  });
   const originalDatabaseName = process.env.DATABASE_NAME;
   const originalJwtSecret = process.env.JWT_SECRET;
   const isolatedDatabase = `gridgo_route_proof_${process.pid}_${runId}`;
@@ -213,9 +221,9 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
       .post('/api/files/upload')
       .set('Authorization', `Bearer ${riderToken}`)
       .field('purpose', 'proof_of_delivery')
-      .attach('file', Buffer.from('real-route-photo-bytes'), {
-        filename: `route-photo-${runId}.jpg`,
-        contentType: 'image/jpeg',
+      .attach('file', TINY_PNG, {
+        filename: `route-photo-${runId}.png`,
+        contentType: 'image/png',
       })
       .expect(201);
     const photoProof = photoUpload.body as {
@@ -448,16 +456,14 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
         status: DeliveryStatus.DELIVERED,
         proof: {
           type: ProofOfDeliveryType.SIGNATURE,
-          signatureData: `svg:route-signature-${runId}`,
+          signatureData: signatureProof,
         },
       })
       .expect(200)
       .expect((res) => {
         expect(res.body.status).toBe(DeliveryStatus.DELIVERED);
         expect(res.body.proofType).toBe(ProofOfDeliveryType.SIGNATURE);
-        expect(res.body.proofSignatureData).toBe(
-          `svg:route-signature-${runId}`,
-        );
+        expect(res.body.proofSignatureData).toBe(signatureProof);
       });
     await expect(markPromotion).resolves.toEqual({
       orderId: midAssignment.orderId,

@@ -31,8 +31,11 @@ class ActiveDeliveryScreen extends ConsumerStatefulWidget {
 }
 
 class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
+  static const _defaultSheetSize = 0.40;
+  static const _proofSheetSize = 0.58;
+
   bool _isAdvancing = false;
-  final _sheetController = DraggableScrollableController();
+  final _checkpointKey = GlobalKey();
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -139,12 +142,6 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
       );
       if (context.canPop()) context.pop();
     }
-  }
-
-  @override
-  void dispose() {
-    _sheetController.dispose();
-    super.dispose();
   }
 
   @override
@@ -267,108 +264,124 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
               ),
             ),
           ),
-          DraggableScrollableSheet(
-            controller: _sheetController,
-            initialChildSize: 0.28,
-            minChildSize: 0.22,
-            maxChildSize: 0.55,
-            snap: true,
-            snapSizes: const [0.22, 0.28, 0.55],
-            builder: (context, scrollController) {
-              return Container(
-                decoration: BoxDecoration(
-                  color: colors.surface,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(AppRadius.lg),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: colors.onBackground.withValues(alpha: 0.12),
-                      blurRadius: 20,
-                      offset: const Offset(0, -6),
-                    ),
-                  ],
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              height:
+                  MediaQuery.sizeOf(context).height *
+                  (view.status == DeliveryStatus.arrived
+                      ? _proofSheetSize
+                      : _defaultSheetSize),
+              decoration: BoxDecoration(
+                color: colors.surface,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(AppRadius.lg),
                 ),
-                child: ListView(
-                  controller: scrollController,
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.md,
-                    AppSpacing.sm,
-                    AppSpacing.md,
-                    AppSpacing.md,
+                boxShadow: [
+                  BoxShadow(
+                    color: colors.onBackground.withValues(alpha: 0.12),
+                    blurRadius: 20,
+                    offset: const Offset(0, -6),
                   ),
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: colors.disabled,
-                          borderRadius: AppRadius.borderFull,
-                        ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.md,
+                        AppSpacing.sm,
+                        AppSpacing.md,
+                        0,
                       ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    Text(
-                      order.customerName ?? 'Customer',
-                      style: AppTypography.h3.copyWith(
-                        color: colors.onBackground,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      destination?.fullAddress ?? 'Delivery address',
-                      style: AppTypography.body.copyWith(
-                        color: colors.onSurfaceDim,
-                      ),
-                    ),
-                    if (destination?.landmark != null) ...[
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        destination!.landmark!,
-                        style: AppTypography.bodyBold.copyWith(
-                          color: colors.onBackground,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: AppSpacing.md),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _QuickAction(
-                            label: 'Navigate',
-                            icon: HugeIcons.strokeRoundedRoute01,
-                            onTap: () => _navigateTo(view),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Center(
+                            child: Container(
+                              width: 40,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: colors.disabled,
+                                borderRadius: AppRadius.borderFull,
+                              ),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: _QuickAction(
-                            label: 'Call',
-                            icon: HugeIcons.strokeRoundedCall,
-                            onTap: () => _callCustomer(order.customerPhone),
+                          const SizedBox(height: AppSpacing.md),
+                          Text(
+                            order.customerName ?? 'Customer',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.h3.copyWith(
+                              color: colors.onBackground,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: _QuickAction(
-                            label: 'Chat',
-                            icon: HugeIcons.strokeRoundedMessage01,
-                            onTap: () => _openCustomerChat(context, view),
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            destination?.fullAddress ?? 'Delivery address',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.body.copyWith(
+                              color: colors.onSurfaceDim,
+                            ),
                           ),
-                        ),
-                      ],
+                          if (destination?.landmark != null) ...[
+                            const SizedBox(height: AppSpacing.xs),
+                            Text(
+                              destination!.landmark!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.bodyBold.copyWith(
+                                color: colors.onBackground,
+                              ),
+                            ),
+                          ],
+                          const Spacer(),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _QuickAction(
+                                  label: 'Navigate',
+                                  icon: HugeIcons.strokeRoundedRoute01,
+                                  onTap: () => _navigateTo(view),
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: _QuickAction(
+                                  label: 'Call',
+                                  icon: HugeIcons.strokeRoundedCall,
+                                  onTap: () =>
+                                      _callCustomer(order.customerPhone),
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: _QuickAction(
+                                  label: 'Chat',
+                                  icon: HugeIcons.strokeRoundedMessage01,
+                                  onTap: () => _openCustomerChat(context, view),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: AppSpacing.md),
-                    RiderCheckpointPanel(
-                      status: view.status,
-                      isLoading: _isAdvancing,
-                      onAdvance: () => _handleAdvance(view.id),
-                    ),
-                  ],
-                ),
-              );
-            },
+                  ),
+                  RiderCheckpointPanel(
+                    key: _checkpointKey,
+                    status: view.status,
+                    isLoading: _isAdvancing,
+                    onAdvance: () => _handleAdvance(view.id),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),

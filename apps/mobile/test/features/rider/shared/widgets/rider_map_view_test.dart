@@ -1,9 +1,11 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
+import 'package:printing_app/features/rider/shared/providers/rider_location_tracker_provider.dart';
 import 'package:printing_app/features/rider/shared/widgets/rider_map_view.dart';
 import 'package:printing_app/shared/models/route_geometry.dart';
 
@@ -20,7 +22,15 @@ RiderDispatchPlanStop _stop({GeoJsonLineString? geometry}) =>
       geometryMalformed: geometry == null,
     );
 
-Widget _app(RiderDispatchPlanStop stop) => ProviderScope(
+Widget _app(
+  RiderDispatchPlanStop stop, {
+  bool trackLocation = false,
+  RiderLocationTracker? tracker,
+}) => ProviderScope(
+  overrides: [
+    if (tracker != null)
+      riderLocationTrackerProvider.overrideWith((ref, args) => tracker),
+  ],
   child: MaterialApp(
     home: Scaffold(
       body: SizedBox(
@@ -29,7 +39,7 @@ Widget _app(RiderDispatchPlanStop stop) => ProviderScope(
           assignmentId: '101',
           destination: stop.destination,
           planStop: stop,
-          trackLocation: false,
+          trackLocation: trackLocation,
         ),
       ),
     ),
@@ -67,5 +77,31 @@ void main() {
 
     expect(find.byType(PolylineLayer), findsNothing);
     expect(find.text('Route geometry unavailable'), findsOneWidget);
+  });
+
+  testWidgets('live rider map exposes a manual GPS refresh control', (
+    tester,
+  ) async {
+    final tracker = RiderLocationTracker(
+      assignmentId: '101',
+      enabled: false,
+      autoStart: false,
+    );
+
+    await tester.pumpWidget(
+      _app(_stop(), trackLocation: true, tracker: tracker),
+    );
+    await tester.pump();
+
+    final refreshControl = find.bySemanticsLabel('Refresh GPS location');
+    expect(refreshControl, findsOneWidget);
+    final semantics = tester.getSemantics(refreshControl).getSemanticsData();
+    expect(semantics.hasAction(SemanticsAction.tap), isTrue);
+    expect(semantics.hasFlag(SemanticsFlag.isFocusable), isTrue);
+    final controlPosition = tester.widget<Positioned>(
+      find.byKey(const Key('rider-map-location-control')),
+    );
+    expect(controlPosition.top, isNotNull);
+    expect(controlPosition.bottom, isNull);
   });
 }

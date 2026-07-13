@@ -27,85 +27,111 @@ class AddressCard extends StatelessWidget {
         ? AppColors.dark
         : AppColors.light;
 
-    return AppCard(
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              HugeIcon(icon: HugeIcons.strokeRoundedLocation01, size: 18, color: colors.accent),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Row(
-                  children: [
-                    Text(
-                      address.label,
-                      style: AppTypography.bodyBold.copyWith(
-                        color: colors.onBackground,
+    final semanticsLabel = [
+      address.label,
+      if (address.isDefault) 'Default',
+      address.fullAddress,
+      if (address.landmark != null && address.landmark!.isNotEmpty)
+        'Landmark: ${address.landmark}',
+    ].join('. ');
+
+    return Semantics(
+      container: true,
+      label: semanticsLabel,
+      child: AppCard(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                HugeIcon(
+                  icon: HugeIcons.strokeRoundedLocation01,
+                  size: 18,
+                  color: colors.accent,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Text(
+                        address.label,
+                        style: AppTypography.bodyBold.copyWith(
+                          color: colors.onBackground,
+                        ),
                       ),
-                    ),
-                    if (address.isDefault) ...[
-                      const SizedBox(width: AppSpacing.sm),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.sm,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: colors.accent,
-                          borderRadius: AppRadius.borderFull,
-                        ),
-                        child: Text(
-                          'Default',
-                          style: AppTypography.caption.copyWith(
-                            color: colors.background,
-                            fontWeight: FontWeight.w600,
+                      if (address.isDefault) ...[
+                        const SizedBox(width: AppSpacing.sm),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.sm,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colors.accent,
+                            borderRadius: AppRadius.borderFull,
+                          ),
+                          child: Text(
+                            'Default',
+                            style: AppTypography.caption.copyWith(
+                              color: colors.background,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
-                ),
-              ),
-              if (onEdit != null)
-                IconButton(
-                  icon: HugeIcon(icon: HugeIcons.strokeRoundedEdit02, size: 18, color: colors.onSurfaceDim),
-                  onPressed: onEdit,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 32,
-                    minHeight: 32,
                   ),
                 ),
-              if (onDelete != null)
-                IconButton(
-                  icon: HugeIcon(icon: HugeIcons.strokeRoundedDelete02, size: 18, color: colors.error),
-                  onPressed: onDelete,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 32,
-                    minHeight: 32,
+                if (onEdit != null)
+                  IconButton(
+                    tooltip: 'Edit ${address.label}',
+                    icon: HugeIcon(
+                      icon: HugeIcons.strokeRoundedEdit02,
+                      size: 18,
+                      color: colors.onSurfaceDim,
+                    ),
+                    onPressed: onEdit,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
                   ),
-                ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            address.fullAddress,
-            style: AppTypography.body.copyWith(color: colors.onSurface),
-          ),
-          if (address.landmark != null && address.landmark!.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              address.landmark!,
-              style: AppTypography.caption.copyWith(
-                color: colors.onSurfaceDim,
-                fontStyle: FontStyle.italic,
-              ),
+                if (onDelete != null)
+                  IconButton(
+                    tooltip: 'Delete ${address.label}',
+                    icon: HugeIcon(
+                      icon: HugeIcons.strokeRoundedDelete02,
+                      size: 18,
+                      color: colors.error,
+                    ),
+                    onPressed: onDelete,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                  ),
+              ],
             ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              address.fullAddress,
+              style: AppTypography.body.copyWith(color: colors.onSurface),
+            ),
+            if (address.landmark != null && address.landmark!.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                address.landmark!,
+                style: AppTypography.caption.copyWith(
+                  color: colors.onSurfaceDim,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

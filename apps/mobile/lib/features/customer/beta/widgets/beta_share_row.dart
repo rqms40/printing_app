@@ -11,6 +11,13 @@ import 'package:printing_app/features/customer/beta/beta_constants.dart';
 
 enum ShareLaunchResult { opened, dismissed, failed }
 
+typedef BetaUrlOpener =
+    Future<bool> Function(
+      Uri uri, {
+      LaunchMode mode,
+      String? webOnlyWindowName,
+    });
+
 abstract interface class BetaShareLauncher {
   Future<ShareLaunchResult> openUrl(Uri uri);
 
@@ -23,12 +30,18 @@ abstract interface class BetaShareLauncher {
 }
 
 class SystemBetaShareLauncher implements BetaShareLauncher {
-  const SystemBetaShareLauncher();
+  const SystemBetaShareLauncher({this.urlOpener = launchUrl});
+
+  final BetaUrlOpener urlOpener;
 
   @override
   Future<ShareLaunchResult> openUrl(Uri uri) async {
     try {
-      return await launchUrl(uri, mode: LaunchMode.externalApplication)
+      return await urlOpener(
+            uri,
+            mode: LaunchMode.externalApplication,
+            webOnlyWindowName: '_blank',
+          )
           ? ShareLaunchResult.opened
           : ShareLaunchResult.failed;
     } catch (_) {

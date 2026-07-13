@@ -129,7 +129,7 @@ export class TamSurveysService {
     const usersRepo = manager.getRepository(User);
     const requirementsRepo = manager.getRepository(TamSurveyRequirement);
 
-    if (!(await this.isBetaModeEnabled(betaModeSettingsRepo))) return null;
+    if (!(await this.lockBetaModeEnabled(betaModeSettingsRepo))) return null;
 
     const user = await usersRepo.findOne({
       where: { id: order.userId },
@@ -340,6 +340,17 @@ export class TamSurveysService {
   ): Promise<boolean> {
     const settings = await repo.find();
     return settings[0]?.isEnabled ?? false;
+  }
+
+  private async lockBetaModeEnabled(
+    repo: Repository<BetaModeSettings>,
+  ): Promise<boolean> {
+    const settings = await repo.findOne({
+      where: {},
+      order: { id: 'ASC' },
+      lock: { mode: 'pessimistic_write' },
+    });
+    return settings?.isEnabled ?? false;
   }
 
   private validateSurveyData(

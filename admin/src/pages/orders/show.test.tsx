@@ -133,4 +133,28 @@ describe("OrderShow", () => {
     expect(await screen.findByText("Maria")).toBeInTheDocument();
     expect(screen.queryByText("Juan")).not.toBeInTheDocument();
   });
+
+  it("keeps the assigned rider identity visible on the order", async () => {
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({
+        data:
+          url === "/admin/riders"
+            ? riders
+            : {
+                ...baseOrder,
+                order_status: "ready_for_dispatch",
+                allowed_next_statuses: [],
+                assigned_rider_contact: {
+                  display_name: "Juan",
+                  delivery_assignment_id: 91,
+                  delivery_status: "assigned",
+                },
+              },
+      }),
+    );
+
+    render(<OrderShow />);
+
+    expect(await screen.findByText("Assigned rider: Juan")).toBeInTheDocument();
+  });
 });

@@ -134,10 +134,12 @@ export function validateSurveySubmission(
   expect(expected.answeredIndexes, "all required survey indexes").toEqual(
     surveyQuestionIndexes,
   );
+  positiveId(expected.requirementId, "submitted survey requirement id");
   expect(response.success, "survey response success").toBe(true);
-  expect(
-    positiveId(response.requirementId, "survey response requirement id"),
-  ).toBe(expected.requirementId);
+  positiveId(response.surveyId, "survey response survey id");
+  expect(response.logoutRequired, "completed beta survey holds account").toBe(
+    true,
+  );
 }
 
 export async function strictJson<T>(
@@ -168,9 +170,9 @@ export async function waitForStrict2xx<T>(
   action: () => Promise<void>,
   label: string,
 ): Promise<T> {
-  const responsePromise = page.waitForResponse(predicate);
-  await action();
-  return strictBrowserJson<T>(await responsePromise, label);
+  const responsePromise = page.waitForResponse(predicate, { timeout: 60_000 });
+  const [response] = await Promise.all([responsePromise, action()]);
+  return strictBrowserJson<T>(response, label);
 }
 
 export function positiveId(value: unknown, label: string): number {
@@ -219,6 +221,8 @@ export async function setAcknowledgedGeolocation(options: {
   checkpoint: BetaRouteCheckpoint;
   expectedAssignmentId: number;
   expectedPlanVersion: number;
+  mountRiderTracking?: () => Promise<void>;
+  refreshRiderTracking?: () => Promise<void>;
   assertCustomerMarker: () => Promise<void>;
 }): Promise<JsonRecord> {
   const {
@@ -228,6 +232,8 @@ export async function setAcknowledgedGeolocation(options: {
     checkpoint,
     expectedAssignmentId,
     expectedPlanVersion,
+    mountRiderTracking,
+    refreshRiderTracking,
     assertCustomerMarker,
   } = options;
   const socketRoot = apiBaseURL.replace(/\/api\/?$/, "");
@@ -238,58 +244,151 @@ export async function setAcknowledgedGeolocation(options: {
     reconnection: false,
   });
   const timeoutMs = 10_000;
-  const subscribed = new Promise<JsonRecord>((resolve, reject) => {
-    const timer = setTimeout(
-      () =>
-        reject(new Error("current-customer location subscription timed out")),
-      timeoutMs,
-    );
-    socket.once("subscribed", (payload: JsonRecord) => {
-      clearTimeout(timer);
-      resolve(payload);
-    });
-    socket.once("exception", (payload: unknown) => {
-      clearTimeout(timer);
-      reject(
-        new Error(
-          `current-customer subscription rejected: ${JSON.stringify(payload)}`,
-        ),
+  let subscriptionTimer: ReturnType<typeof setTimeout> | undefined;
+  let locationTimer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const subscribed = new Promise<JsonRecord>((resolve, reject) => {
+      subscriptionTimer = setTimeout(
+        () =>
+          reject(new Error("current-customer location subscription timed out")),
+        timeoutMs,
+      );
+      socket.once("subscribed", (payload: JsonRecord) => {
+        clearTimeout(subscriptionTimer);
+        resolve(payload);
+      });
+      socket.once("exception", (payload: unknown) => {
+        clearTimeout(subscriptionTimer);
+        reject(
+          new Error(
+            `current-customer subscription rejected: ${JSON.stringify(payload)}`,
+          ),
+        );
+      });
+      socket.once("connect_error", (error) => {
+        clearTimeout(subscriptionTimer);
+        reject(new Error(`current-customer socket failed: ${error.message}`));
+      });
+      socket.once("connect", () =>
+        socket.emit("subscribe", String(expectedAssignmentId)),
       );
     });
-    socket.once("connect_error", (error) => {
-      clearTimeout(timer);
-      reject(new Error(`current-customer socket failed: ${error.message}`));
+    const subscribedPayload = await subscribed;
+    expect(
+      positiveId(subscribedPayload.assignmentId, "subscribed assignment id"),
+    ).toBe(expectedAssignmentId);
+    expect(
+      positiveId(subscribedPayload.planVersion, "subscribed plan version"),
+    ).toBe(expectedPlanVersion);
+
+    let lastObservedLocation: JsonRecord | undefined;
+    let locationSettled = false;
+    let resolveLocation!: (payload: JsonRecord) => void;
+    let rejectLocation!: (error: Error) => void;
+    const locationUpdate = new Promise<JsonRecord>((resolve, reject) => {
+      resolveLocation = resolve;
+      rejectLocation = reject;
     });
-    socket.once("connect", () =>
-      socket.emit("subscribe", String(expectedAssignmentId)),
+    const locationMatchesCheckpoint = (payload: JsonRecord): boolean =>
+      Math.abs(Number(payload.latitude) - checkpoint.latitude) < 0.000001 &&
+      Math.abs(Number(payload.longitude) - checkpoint.longitude) < 0.000001;
+    const failLocation = (error: Error) => {
+      if (locationSettled) return;
+      locationSettled = true;
+      clearTimeout(locationTimer);
+      rejectLocation(error);
+    };
+    const onLocationUpdate = (payload: JsonRecord) => {
+      const assignmentId = Number(payload.assignmentId);
+      const planVersion = Number(payload.planVersion);
+      if (
+        assignmentId !== expectedAssignmentId ||
+        planVersion !== expectedPlanVersion
+      ) {
+        failLocation(
+          new Error(
+            `location identity mismatch: assignment=${assignmentId}, plan=${planVersion}`,
+          ),
+        );
+        return;
+      }
+      lastObservedLocation = payload;
+      if (!locationMatchesCheckpoint(payload) || locationSettled) return;
+      locationSettled = true;
+      clearTimeout(locationTimer);
+      socket.off("locationUpdate", onLocationUpdate);
+      resolveLocation(payload);
+    };
+    socket.on("locationUpdate", onLocationUpdate);
+    socket.once("disconnect", (reason) =>
+      failLocation(
+        new Error(`current-customer location socket disconnected: ${reason}`),
+      ),
     );
-  });
-  const subscribedPayload = await subscribed;
-  expect(
-    positiveId(subscribedPayload.assignmentId, "subscribed assignment id"),
-  ).toBe(expectedAssignmentId);
-  expect(
-    positiveId(subscribedPayload.planVersion, "subscribed plan version"),
-  ).toBe(expectedPlanVersion);
-  const locationUpdate = new Promise<JsonRecord>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error("authenticated location update timed out")),
-      timeoutMs,
+    socket.once("exception", (payload) =>
+      failLocation(
+        new Error(
+          `current-customer location stream rejected: ${JSON.stringify(payload)}`,
+        ),
+      ),
     );
-    socket.once("locationUpdate", (payload: JsonRecord) => {
-      clearTimeout(timer);
-      resolve(payload);
+    const responsePromise = riderPage.waitForResponse((response) => {
+      if (
+        response.request().method() !== "PATCH" ||
+        !new URL(response.url()).pathname.endsWith("/api/riders/location")
+      ) {
+        return false;
+      }
+      try {
+        const body = response.request().postDataJSON() as JsonRecord;
+        return (
+          Math.abs(Number(body.latitude) - checkpoint.latitude) < 0.000001 &&
+          Math.abs(Number(body.longitude) - checkpoint.longitude) < 0.000001
+        );
+      } catch {
+        return false;
+      }
     });
-  });
-  const responsePromise = riderPage.waitForResponse(
-    (response) =>
-      response.request().method() === "PATCH" &&
-      new URL(response.url()).pathname.endsWith("/api/riders/location"),
-  );
-  try {
-    await riderPage.context().setGeolocation(checkpoint);
+    const activationPromise = (async () => {
+      await mountRiderTracking?.();
+      await riderPage.context().setGeolocation(checkpoint);
+      const browserPosition = await riderPage.evaluate(
+        () =>
+          new Promise<{ latitude: number; longitude: number }>(
+            (resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(
+                (position) =>
+                  resolve({
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                  }),
+                reject,
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 10_000 },
+              );
+            },
+          ),
+      );
+      expect(browserPosition.latitude).toBeCloseTo(checkpoint.latitude, 5);
+      expect(browserPosition.longitude).toBeCloseTo(checkpoint.longitude, 5);
+      await refreshRiderTracking?.();
+      if (!locationSettled) {
+        locationTimer = setTimeout(() => {
+          const observed = lastObservedLocation
+            ? `; last assignment=${Number(lastObservedLocation.assignmentId)}, plan=${Number(lastObservedLocation.planVersion)}, latitude=${Number(lastObservedLocation.latitude)}, longitude=${Number(lastObservedLocation.longitude)}`
+            : "; no location payload observed";
+          failLocation(
+            new Error(`authenticated location update timed out${observed}`),
+          );
+        }, timeoutMs);
+      }
+    })();
+    const [response, location] = await Promise.all([
+      responsePromise,
+      locationUpdate,
+      activationPromise,
+    ]);
     const acknowledged = await strictBrowserJson<JsonRecord>(
-      await responsePromise,
+      response,
       `acknowledge rider checkpoint ${checkpoint.id}`,
     );
     positiveId(acknowledged.id, "acknowledged rider profile id");
@@ -307,7 +406,6 @@ export async function setAcknowledgedGeolocation(options: {
           acknowledged.longitude,
       ),
     ).toBeCloseTo(checkpoint.longitude, 5);
-    const location = await locationUpdate;
     validateLocationEvidence(location, {
       assignmentId: expectedAssignmentId,
       planVersion: expectedPlanVersion,
@@ -316,6 +414,8 @@ export async function setAcknowledgedGeolocation(options: {
     await assertCustomerMarker();
     return location;
   } finally {
+    clearTimeout(subscriptionTimer);
+    clearTimeout(locationTimer);
     socket.removeAllListeners();
     socket.disconnect();
   }

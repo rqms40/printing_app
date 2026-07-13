@@ -242,6 +242,29 @@ describe('OrdersGateway', () => {
     });
   });
 
+  describe('notifyRiderDispatchPlanUpdated', () => {
+    it('emits the persisted plan identity to the rider user room', () => {
+      const emitMock = jest.fn();
+      const toMock = jest.fn().mockReturnValue({ emit: emitMock });
+      gateway.server = { to: toMock } as unknown as Server;
+      const payload = {
+        riderProfileId: 10,
+        planId: 501,
+        planVersion: 4,
+        change: 'created' as const,
+      };
+
+      gateway.notifyRiderDispatchPlanUpdated(70, payload);
+
+      expect(toMock).toHaveBeenCalledTimes(1);
+      expect(toMock).toHaveBeenCalledWith('user_70');
+      expect(emitMock).toHaveBeenCalledWith(
+        'riderDispatchPlanUpdated',
+        payload,
+      );
+    });
+  });
+
   describe('notifyDeliveryQueueUpdated', () => {
     it('targets only the promoted customer user room', () => {
       const emitMock = jest.fn();

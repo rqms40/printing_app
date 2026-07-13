@@ -409,6 +409,27 @@ void main() {
       expect(find.text('Waiting for rider location...'), findsNothing);
       expect(find.text('Rider GPS reconnecting'), findsOneWidget);
       expect(find.text('Open live tracking'), findsOneWidget);
+      expect(_semanticsLabel('Open live tracking'), findsOneWidget);
+      expect(
+        tester
+            .widget<Semantics>(_semanticsLabel('Open live tracking'))
+            .container,
+        isTrue,
+      );
+      expect(
+        tester
+            .widget<Semantics>(
+              _semanticsLabel('Open current delivery details'),
+            )
+            .explicitChildNodes,
+        isTrue,
+      );
+      expect(
+        tester
+            .getSize(find.byKey(const Key('open-live-tracking-button')))
+            .height,
+        greaterThanOrEqualTo(44),
+      );
 
       final tileTop = tester.getTopLeft(find.byType(MapTrackingTile)).dy;
       final statusBottom =
@@ -432,6 +453,8 @@ void main() {
         orderId: 'ORD-001',
         deliveryAssignmentId: 'assign-001',
         orderStatus: OrderStatus.onTheWay,
+        queuePosition: 1,
+        queueSize: 2,
       );
       await tester.pumpWidget(
         _wrap(
@@ -449,15 +472,33 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('LIVE MAP'), findsOneWidget);
+      expect(find.textContaining('1st in queue'), findsOneWidget);
       expect(find.text('Order Dispatched'), findsOneWidget);
       expect(find.text('Rider is on the way'), findsOneWidget);
+      expect(
+        _semanticsLabel(
+          'Rider is on the way. Tracking real-time location',
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Live map starts after rider dispatch.'), findsNothing);
-      expect(_semanticsLabel('Live delivery map'), findsOneWidget);
-      expect(_semanticsLabel('Rider current location marker'), findsOneWidget);
+      final mapSemantics = tester.widget<Semantics>(
+        _semanticsLabel('Live delivery map'),
+      );
+      expect(mapSemantics.excludeSemantics, isTrue);
+      expect(
+        mapSemantics.properties.hint,
+        'Shows the rider current location and delivery route',
+      );
+      expect(
+        _semanticsLabel('Open current delivery details'),
+        findsOneWidget,
+      );
+      expect(_semanticsLabel('Rider current location marker'), findsNothing);
       expect(find.byKey(const Key('live-delivery-map')), findsOneWidget);
       expect(
-        find.byKey(const Key('rider-current-location-marker')),
-        findsOneWidget,
+        tester.widget<MarkerLayer>(find.byType(MarkerLayer)).markers,
+        hasLength(3),
       );
     },
   );

@@ -362,88 +362,101 @@ class _MethodRow extends StatelessWidget {
         ? colors.onSurfaceDim.withValues(alpha: 0.55)
         : colors.onSurfaceDim;
 
-    return Opacity(
-      opacity: _disabled ? 0.55 : 1.0,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: AppRadius.borderLg,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: BoxDecoration(
-            color: selected
-                ? colors.brand.withValues(alpha: 0.10)
-                : colors.background,
+    return Semantics(
+      button: true,
+      enabled: onTap != null,
+      selected: selected,
+      label: '${_label(method)}. ${_subtitle(method)}',
+      onTap: onTap,
+      child: ExcludeSemantics(
+        child: Opacity(
+          opacity: _disabled ? 0.55 : 1.0,
+          child: InkWell(
+            onTap: onTap,
             borderRadius: AppRadius.borderLg,
-            border: Border.all(
-              color: selected
-                  ? colors.brand.withValues(alpha: 0.6)
-                  : colors.outline.withValues(alpha: 0.35),
-              width: selected ? 1.5 : 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              PaymentMethodGlyph(method: method, size: 36),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _label(method),
-                      style: AppTypography.bodyBold.copyWith(
-                        color: labelColor,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _subtitle(method),
-                      style: AppTypography.caption.copyWith(
-                        color: subtitleColor,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 140),
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: selected
+                    ? colors.brand.withValues(alpha: 0.10)
+                    : colors.background,
+                borderRadius: AppRadius.borderLg,
+                border: Border.all(
+                  color: selected
+                      ? colors.brand.withValues(alpha: 0.6)
+                      : colors.outline.withValues(alpha: 0.35),
+                  width: selected ? 1.5 : 1,
                 ),
               ),
-              if (_disabled && _isCredits) ...[
-                GestureDetector(
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    context.push('/customer/profile/top-up');
-                  },
-                  child: Text(
-                    'Top up',
-                    style: AppTypography.caption.copyWith(
-                      color: colors.brand,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      decoration: TextDecoration.underline,
-                      decorationColor: colors.brand,
+              child: Row(
+                children: [
+                  PaymentMethodGlyph(method: method, size: 36),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _label(method),
+                          style: AppTypography.bodyBold.copyWith(
+                            color: labelColor,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _subtitle(method),
+                          style: AppTypography.caption.copyWith(
+                            color: subtitleColor,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              ] else ...[
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 140),
-                  width: 22,
-                  height: 22,
-                  decoration: BoxDecoration(
-                    color: selected ? colors.brand : Colors.transparent,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: selected ? colors.brand : colors.outline,
-                      width: 1.5,
+                  if (_disabled && _isCredits) ...[
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        context.push('/customer/profile/top-up');
+                      },
+                      child: Text(
+                        'Top up',
+                        style: AppTypography.caption.copyWith(
+                          color: colors.brand,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          decoration: TextDecoration.underline,
+                          decorationColor: colors.brand,
+                        ),
+                      ),
                     ),
-                  ),
-                  child: selected
-                      ? Icon(Icons.check, size: 14, color: colors.background)
-                      : null,
-                ),
-              ],
-            ],
+                  ] else ...[
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 140),
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: selected ? colors.brand : Colors.transparent,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: selected ? colors.brand : colors.outline,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: selected
+                          ? Icon(
+                              Icons.check,
+                              size: 14,
+                              color: colors.background,
+                            )
+                          : null,
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
       ),

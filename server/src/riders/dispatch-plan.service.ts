@@ -41,6 +41,12 @@ const PLAN_ELIGIBLE_STATUSES = [
   DeliveryStatus.ARRIVED,
 ];
 
+const IN_TRANSIT_STATUSES = new Set<DeliveryStatus>([
+  DeliveryStatus.PICKED_UP,
+  DeliveryStatus.ON_THE_WAY,
+  DeliveryStatus.ARRIVED,
+]);
+
 type PlanningAssignment = {
   assignment: DeliveryAssignment;
   point: GeoPoint;
@@ -132,7 +138,7 @@ export class DispatchPlanService {
   ): Promise<DispatchPlan> {
     const active = await this.getActivePlanForRider(riderId);
     if (!active) throw new NotFoundException('Active dispatch plan not found');
-    const ids = assignmentIds?.length
+    const requestedIds = assignmentIds?.length
       ? assignmentIds
       : (
           await this.assignmentRepo.find({
@@ -144,13 +150,26 @@ export class DispatchPlanService {
             order: { id: 'ASC' },
           })
         ).map((assignment) => assignment.id);
+    const anchoredIds = (active.stops ?? [])
+      .filter(
+        (stop) =>
+          stop.status === DispatchStopStatus.PENDING &&
+          stop.assignment != null &&
+          IN_TRANSIT_STATUSES.has(stop.assignment.status),
+      )
+      .sort((left, right) => left.sequence - right.sequence)
+      .map((stop) => stop.assignmentId);
+    const ids = [
+      ...anchoredIds,
+      ...requestedIds.filter((id) => !anchoredIds.includes(id)),
+    ];
     const planningAssignments = await this.loadPlanningAssignments(
       riderId,
       ids,
     );
     let prepared: PreparedPlan;
     try {
-      prepared = await this.preparePlan(planningAssignments);
+      prepared = await this.preparePlan(planningAssignments, anchoredIds);
     } catch (error) {
       if (error instanceof ServiceUnavailableException) {
         await this.planRepo.update(
@@ -397,20 +416,43 @@ export class DispatchPlanService {
 
   private async preparePlan(
     planningAssignments: PlanningAssignment[],
+    anchoredAssignmentIds: number[] = [],
   ): Promise<PreparedPlan> {
-    const points = [
-      this.origin,
-      ...planningAssignments.map(({ point }) => point),
-    ];
+    const assignmentById = new Map(
+      planningAssignments.map((item) => [item.assignment.id, item]),
+    );
+    const anchoredAssignments = anchoredAssignmentIds.map((id) => {
+      const item = assignmentById.get(id);
+      if (!item) {
+        throw new BadRequestException(
+          'Every in-transit dispatch stop must remain in the route',
+        );
+      }
+      return item;
+    });
+    const anchoredSet = new Set(anchoredAssignmentIds);
+    const optimizableAssignments = planningAssignments.filter(
+      ({ assignment }) => !anchoredSet.has(assignment.id),
+    );
     try {
-      const matrix = await this.routingProvider.getMatrix(points);
-      const solution = solveOpenRoute(matrix.durationsSeconds, [
-        0,
-        ...planningAssignments.map(({ assignment }) => assignment.id),
-      ]);
-      const assignments = solution.indices.slice(1).map((pointIndex) => {
-        return planningAssignments[pointIndex - 1];
-      });
+      let optimizedTail: PlanningAssignment[] = [];
+      if (optimizableAssignments.length > 0) {
+        const optimizationOrigin =
+          anchoredAssignments.at(-1)?.point ?? this.origin;
+        const matrixPoints = [
+          optimizationOrigin,
+          ...optimizableAssignments.map(({ point }) => point),
+        ];
+        const matrix = await this.routingProvider.getMatrix(matrixPoints);
+        const solution = solveOpenRoute(matrix.durationsSeconds, [
+          0,
+          ...optimizableAssignments.map(({ assignment }) => assignment.id),
+        ]);
+        optimizedTail = solution.indices.slice(1).map((pointIndex) => {
+          return optimizableAssignments[pointIndex - 1];
+        });
+      }
+      const assignments = [...anchoredAssignments, ...optimizedTail];
       const orderedPoints = [
         this.origin,
         ...assignments.map(({ point }) => point),

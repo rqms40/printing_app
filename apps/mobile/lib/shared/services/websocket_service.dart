@@ -81,10 +81,16 @@ class WebSocketService {
   static bool disableLocationSocketForTests = false;
 
   io.Socket? _ordersSocket;
+  Future<void>? _ordersConnectFuture;
+  int _ordersConnectionGeneration = 0;
+  int _ordersSocketCreateCountForTests = 0;
   io.Socket? _locationSocket;
   Future<void>? _locationConnectFuture;
   int _locationConnectionGeneration = 0;
   io.Socket? _notificationsSocket;
+  Future<void>? _notificationsConnectFuture;
+  int _notificationsConnectionGeneration = 0;
+  int _notificationsSocketCreateCountForTests = 0;
   io.Socket? _dailyGridSocket;
   io.Socket? _chatSocket;
   io.Socket? _slotsSocket;
@@ -121,7 +127,9 @@ class WebSocketService {
 
   // Callbacks registered for rider assignment updates
   final List<Function(Map<String, dynamic>)> _riderAssignmentListeners = [];
+  final List<Function(Map<String, dynamic>)> _riderDispatchPlanListeners = [];
   final List<Function(Map<String, dynamic>)> _deliveryQueueListeners = [];
+  final List<VoidCallback> _ordersConnectListeners = [];
 
   String get _baseUrl => kServerUrl;
 
@@ -133,14 +141,43 @@ class WebSocketService {
       onConnect?.call();
       return;
     }
-    if (_ordersSocket?.connected == true) return;
+    if (onConnect != null && !_ordersConnectListeners.contains(onConnect)) {
+      _ordersConnectListeners.add(onConnect);
+    }
+    if (_ordersSocket?.connected == true) {
+      onConnect?.call();
+      return;
+    }
+    final inFlight = _ordersConnectFuture;
+    if (inFlight != null) {
+      await inFlight;
+      return;
+    }
     if (_ordersSocket != null) {
       _ordersSocket!.connect();
       return;
     }
 
+    final generation = _ordersConnectionGeneration;
+    final connection = _connectOrdersSocket(generation);
+    _ordersConnectFuture = connection;
+    try {
+      await connection;
+    } finally {
+      if (identical(_ordersConnectFuture, connection)) {
+        _ordersConnectFuture = null;
+      }
+    }
+  }
+
+  Future<void> _connectOrdersSocket(int generation) async {
     final token = await TokenStorage.getToken();
-    _ordersSocket = io.io(
+    if (generation != _ordersConnectionGeneration ||
+        disableOrdersSocketForTests) {
+      return;
+    }
+    late final io.Socket socket;
+    socket = io.io(
       '$_baseUrl$_ordersNamespace',
       io.OptionBuilder()
           .setTransports(['websocket'])
@@ -148,23 +185,48 @@ class WebSocketService {
           .disableAutoConnect()
           .build(),
     );
-    _ordersSocket!.on('orderUpdate', (data) {
+    _ordersSocketCreateCountForTests++;
+    if (generation != _ordersConnectionGeneration) {
+      socket.dispose();
+      return;
+    }
+    _ordersSocket = socket;
+    socket.on('orderUpdate', (data) {
+      if (!identical(_ordersSocket, socket)) return;
       _dispatchOrderUpdate(data);
     });
-    _ordersSocket!.on('riderAssignment', (data) {
+    socket.on('riderAssignment', (data) {
+      if (!identical(_ordersSocket, socket)) return;
       _dispatchRiderAssignment(data);
     });
-    _ordersSocket!.on('deliveryQueueUpdated', _dispatchDeliveryQueueUpdated);
-    _ordersSocket!.on('survey-required', _dispatchSurveyRequired);
-    _ordersSocket!.on('connect', (_) {
-      debugPrint('WS Orders connected');
-      onConnect?.call();
+    socket.on('riderDispatchPlanUpdated', (data) {
+      if (!identical(_ordersSocket, socket)) return;
+      _dispatchRiderDispatchPlanUpdated(data);
     });
-    _ordersSocket!.on(
-      'connect_error',
-      (e) => debugPrint('WS Orders error: $e'),
-    );
-    _ordersSocket!.connect();
+    socket.on('deliveryQueueUpdated', (data) {
+      if (!identical(_ordersSocket, socket)) return;
+      _dispatchDeliveryQueueUpdated(data);
+    });
+    socket.on('survey-required', (data) {
+      if (!identical(_ordersSocket, socket)) return;
+      _dispatchSurveyRequired(data);
+    });
+    socket.on('connect', (_) {
+      if (!identical(_ordersSocket, socket)) return;
+      debugPrint('WS Orders connected');
+      for (final callback in List.of(_ordersConnectListeners)) {
+        try {
+          callback();
+        } catch (error) {
+          debugPrint('WS Orders connect handler error: $error');
+        }
+      }
+    });
+    socket.on('connect_error', (e) {
+      if (!identical(_ordersSocket, socket)) return;
+      debugPrint('WS Orders error: $e');
+    });
+    socket.connect();
   }
 
   void _dispatchOrderUpdate(dynamic data) {
@@ -204,8 +266,67 @@ class WebSocketService {
   }
 
   @visibleForTesting
+  void dispatchRiderDispatchPlanUpdatedForTests(dynamic data) {
+    _dispatchRiderDispatchPlanUpdated(data);
+  }
+
+  void _dispatchRiderDispatchPlanUpdated(dynamic data) {
+    final normalized = _normalize(data);
+    if (normalized is! Map<String, dynamic>) return;
+    final riderProfileId = _readStrictPositiveInt(normalized['riderProfileId']);
+    final planId = _readStrictPositiveInt(normalized['planId']);
+    final planVersion = _readStrictPositiveInt(normalized['planVersion']);
+    final change = normalized['change'];
+    if (riderProfileId == null ||
+        planId == null ||
+        planVersion == null ||
+        (change != 'created' && change != 'reoptimized')) {
+      return;
+    }
+    final payload = <String, dynamic>{
+      'riderProfileId': riderProfileId,
+      'planId': planId,
+      'planVersion': planVersion,
+      'change': change,
+    };
+    for (final callback in List.of(_riderDispatchPlanListeners)) {
+      try {
+        callback(payload);
+      } catch (error) {
+        debugPrint('WS riderDispatchPlanUpdated handler error: $error');
+      }
+    }
+  }
+
+  @visibleForTesting
   int get riderAssignmentListenerCountForTests =>
       _riderAssignmentListeners.length;
+
+  @visibleForTesting
+  int get riderDispatchPlanListenerCountForTests =>
+      _riderDispatchPlanListeners.length;
+
+  @visibleForTesting
+  int get deliveryQueueListenerCountForTests => _deliveryQueueListeners.length;
+
+  @visibleForTesting
+  int get ordersSocketCreateCountForTests => _ordersSocketCreateCountForTests;
+
+  @visibleForTesting
+  int get notificationsSocketCreateCountForTests =>
+      _notificationsSocketCreateCountForTests;
+
+  @visibleForTesting
+  int get notificationListenerCountForTests => _notificationListeners.length;
+
+  @visibleForTesting
+  int get creditsUpdateListenerCountForTests => _creditsUpdateListeners.length;
+
+  @visibleForTesting
+  void resetConnectionTestCountersForTests() {
+    _ordersSocketCreateCountForTests = 0;
+    _notificationsSocketCreateCountForTests = 0;
+  }
 
   /// Returns a removal handle — call it in dispose() to unregister the callback.
   VoidCallback listenForOrderUpdates(Function(dynamic) callback) {
@@ -223,6 +344,15 @@ class WebSocketService {
       _riderAssignmentListeners.add(callback);
     }
     return () => _riderAssignmentListeners.remove(callback);
+  }
+
+  VoidCallback listenForRiderDispatchPlanUpdates(
+    Function(Map<String, dynamic>) callback,
+  ) {
+    if (!_riderDispatchPlanListeners.contains(callback)) {
+      _riderDispatchPlanListeners.add(callback);
+    }
+    return () => _riderDispatchPlanListeners.remove(callback);
   }
 
   VoidCallback listenForDeliveryQueueUpdates(
@@ -582,13 +712,37 @@ class WebSocketService {
     }
     // Already connected — nothing to do
     if (_notificationsSocket?.connected == true) return;
+    final inFlight = _notificationsConnectFuture;
+    if (inFlight != null) {
+      await inFlight;
+      return;
+    }
     // Socket exists but disconnected — disconnect and recreate to ensure fresh token
     if (_notificationsSocket != null) {
-      _notificationsSocket!.disconnect();
+      _notificationsSocket!.dispose();
       _notificationsSocket = null;
     }
+
+    final generation = _notificationsConnectionGeneration;
+    final connection = _connectNotificationsSocket(generation);
+    _notificationsConnectFuture = connection;
+    try {
+      await connection;
+    } finally {
+      if (identical(_notificationsConnectFuture, connection)) {
+        _notificationsConnectFuture = null;
+      }
+    }
+  }
+
+  Future<void> _connectNotificationsSocket(int generation) async {
     final token = await TokenStorage.getToken();
-    _notificationsSocket = io.io(
+    if (generation != _notificationsConnectionGeneration ||
+        disableNotificationsSocketForTests) {
+      return;
+    }
+    late final io.Socket socket;
+    socket = io.io(
       '$_baseUrl/ws/notifications',
       io.OptionBuilder()
           .setTransports(['websocket'])
@@ -596,33 +750,49 @@ class WebSocketService {
           .disableAutoConnect()
           .build(),
     );
-    _notificationsSocket!.on('creditsUpdate', _dispatchCreditsUpdate);
-    _notificationsSocket!.on('newNotification', _dispatchNotification);
-    _notificationsSocket!.on(
-      'connect',
-      (_) => debugPrint('WS Notifications connected'),
-    );
-    _notificationsSocket!.on(
-      'connect_error',
-      (e) => debugPrint('WS Notifications error: $e'),
-    );
-    _notificationsSocket!.connect();
+    _notificationsSocketCreateCountForTests++;
+    if (generation != _notificationsConnectionGeneration) {
+      socket.dispose();
+      return;
+    }
+    _notificationsSocket = socket;
+    socket.on('creditsUpdate', (data) {
+      if (!identical(_notificationsSocket, socket)) return;
+      _dispatchCreditsUpdate(data);
+    });
+    socket.on('newNotification', (data) {
+      if (!identical(_notificationsSocket, socket)) return;
+      _dispatchNotification(data);
+    });
+    socket.on('connect', (_) {
+      if (!identical(_notificationsSocket, socket)) return;
+      debugPrint('WS Notifications connected');
+    });
+    socket.on('connect_error', (e) {
+      if (!identical(_notificationsSocket, socket)) return;
+      debugPrint('WS Notifications error: $e');
+    });
+    socket.connect();
   }
 
   /// Register a callback for incoming `creditsUpdate` events.
-  void listenForCreditsUpdate(Function(Map<String, dynamic>) callback) {
+  VoidCallback listenForCreditsUpdate(Function(Map<String, dynamic>) callback) {
     if (!_creditsUpdateListeners.contains(callback)) {
       _creditsUpdateListeners.add(callback);
     }
+    return () => _creditsUpdateListeners.remove(callback);
   }
 
   /// Register a callback for incoming `newNotification` events.
-  /// Safe to call before [connectNotifications] and across reconnects.
-  void listenForNewNotifications(Function(Map<String, dynamic>) callback) {
+  /// Safe to call before [connectNotifications] and across reconnects. The
+  /// returned handle must be called when the listener owner is disposed.
+  VoidCallback listenForNewNotifications(
+    Function(Map<String, dynamic>) callback,
+  ) {
     if (!_notificationListeners.contains(callback)) {
       _notificationListeners.add(callback);
     }
-    connectNotifications();
+    return () => _notificationListeners.remove(callback);
   }
 
   void _dispatchCreditsUpdate(dynamic data) {
@@ -929,9 +1099,17 @@ class WebSocketService {
   }
 
   void disconnect() {
-    _ordersSocket?.disconnect();
+    _ordersConnectionGeneration++;
+    _ordersConnectFuture = null;
+    final ordersSocket = _ordersSocket;
+    _ordersSocket = null;
+    ordersSocket?.dispose();
     _resetLocationSocket(clearListeners: true, resetTestCounters: true);
-    _notificationsSocket?.disconnect();
+    _notificationsConnectionGeneration++;
+    _notificationsConnectFuture = null;
+    final notificationsSocket = _notificationsSocket;
+    _notificationsSocket = null;
+    notificationsSocket?.dispose();
     _dailyGridSocket?.disconnect();
     _chatSocket?.disconnect();
     _chatSocket = null;
@@ -939,8 +1117,6 @@ class WebSocketService {
     _slotsSocket = null;
     // Null out so the next connection creates a fresh socket
     // with a new JWT — prevents stale-token room membership after logout.
-    _notificationsSocket = null;
-    _ordersSocket = null;
     _dailyGridSocket = null;
     _chatMessageListeners.clear();
     _botTypingListeners.clear();
@@ -948,7 +1124,9 @@ class WebSocketService {
     _slotUpdatedListeners.clear();
     _orderListeners.clear();
     _riderAssignmentListeners.clear();
+    _riderDispatchPlanListeners.clear();
     _deliveryQueueListeners.clear();
+    _ordersConnectListeners.clear();
     _surveyRequiredListeners.clear();
   }
 }

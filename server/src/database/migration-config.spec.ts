@@ -36,9 +36,7 @@ describe('createTypeOrmOptions migration configuration', () => {
       'utf8',
     );
 
-    expect(seedGuard).toContain("timestamp: '1777854100000'");
-    expect(seedGuard).toContain(
-      "name: 'PerOrderSurveyRequirements1777854100000'",
-    );
+    expect(seedGuard).toContain("timestamp: '1777854200000'");
+    expect(seedGuard).toContain("name: 'UniqueFcmTokenOwnership1777854200000'");
   });
 });

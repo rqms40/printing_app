@@ -41,6 +41,7 @@ import { formatDate } from '@/utils/format';
 const { Text, Title } = Typography;
 
 const BRAND = '#FFD700';
+const MUTED_TEXT = '#A0A0A0';
 
 export function betaModeConfirmation(checked: boolean) {
   return checked
@@ -331,7 +332,7 @@ export function BetaModePage() {
             <Text style={{ color: '#E0E0E0', fontSize: 13 }}>{row.email}</Text>
             {row.fullName ? (
               <div>
-                <Text style={{ color: '#777', fontSize: 12 }}>
+                <Text style={{ color: MUTED_TEXT, fontSize: 12 }}>
                   {row.fullName}
                 </Text>
               </div>
@@ -345,7 +346,7 @@ export function BetaModePage() {
         key: 'betaEnrolledAt',
         width: 130,
         render: (date: string | null) => (
-          <Text style={{ color: '#777', fontSize: 12 }}>
+          <Text style={{ color: MUTED_TEXT, fontSize: 12 }}>
             {date ? formatDate(date) : '—'}
           </Text>
         ),
@@ -373,7 +374,7 @@ export function BetaModePage() {
               style={{
                 background: '#1A1A1A',
                 border: '1px solid #2E2E2E',
-                color: '#555',
+                color: MUTED_TEXT,
                 margin: 0,
                 fontSize: 11,
               }}
@@ -420,7 +421,7 @@ export function BetaModePage() {
             Survey exempt{' '}
             <Tooltip title="When ON, future beta deliveries skip the mandatory feedback requirement. Existing completed-account holds remain until beta mode is disabled.">
               <span
-                style={{ color: '#666', cursor: 'help', fontSize: 11 }}
+                style={{ color: MUTED_TEXT, cursor: 'help', fontSize: 11 }}
               >
                 (?)
               </span>
@@ -431,6 +432,7 @@ export function BetaModePage() {
         width: 150,
         render: (_: unknown, row: BetaMemberRow) => (
           <Switch
+            aria-label={`Survey exemption for ${row.fullName ? `${row.fullName} (${row.email})` : row.email}`}
             size="small"
             checked={row.isBetaSurveyExempt}
             loading={busyId === row.id}
@@ -528,7 +530,7 @@ export function BetaModePage() {
             >
               Beta Mode
             </Title>
-            <Text style={{ color: '#666', fontSize: 13 }}>
+            <Text style={{ color: MUTED_TEXT, fontSize: 13 }}>
               Auto-enrolls new customers in rank order, grants one-time 100
               GRID Credits, and limits beta checkout to GRID Credits. Delivery
               completion requires the 14-question feedback survey and then
@@ -568,7 +570,7 @@ export function BetaModePage() {
             >
               Beta Members
             </Title>
-            <Text style={{ color: '#666', fontSize: 12 }}>
+            <Text style={{ color: MUTED_TEXT, fontSize: 12 }}>
               {total} total · toggle <strong>Survey exempt</strong> only when a
               member should skip mandatory feedback on future beta deliveries.
             </Text>
@@ -598,7 +600,7 @@ export function BetaModePage() {
         <div style={{ padding: '16px 24px 0' }}>
           <Input
             allowClear
-            prefix={<SearchOutlined style={{ color: '#666' }} />}
+            prefix={<SearchOutlined style={{ color: MUTED_TEXT }} />}
             placeholder="Search by email or name…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -621,7 +623,7 @@ export function BetaModePage() {
           style={{ background: '#141414' }}
           locale={{
             emptyText: (
-              <Text style={{ color: '#444' }}>
+              <Text style={{ color: MUTED_TEXT }}>
                 {debouncedSearch
                   ? 'No beta members match that search.'
                   : 'No beta members enrolled yet.'}
@@ -646,7 +648,7 @@ export function BetaModePage() {
             onChange={(p) => setPage(p)}
             showTotal={(t, range) => (
               <Text
-                style={{ color: '#666', fontSize: 12, marginRight: 12 }}
+                style={{ color: MUTED_TEXT, fontSize: 12, marginRight: 12 }}
               >
                 {range[0]}–{range[1]} of {t}
               </Text>
@@ -711,7 +713,11 @@ export function BetaModePage() {
             <Spin />
           </div>
         ) : (
-          <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+          <div
+            role="listbox"
+            aria-label="Eligible customers for beta enrollment"
+            style={{ maxHeight: 300, overflowY: 'auto' }}
+          >
             <List<AdminUser>
               dataSource={filteredModalUsers}
               renderItem={(user) => {
@@ -719,8 +725,22 @@ export function BetaModePage() {
                 const alreadyEnrolled = enrolledIds.has(user.id);
                 return (
                   <List.Item
+                    role="option"
+                    aria-label={`Select ${user.full_name ? `${user.full_name} (${user.email})` : user.email} for beta enrollment`}
+                    aria-disabled={alreadyEnrolled}
+                    aria-selected={isSelected}
+                    tabIndex={alreadyEnrolled ? -1 : 0}
                     onClick={() => {
                       if (!alreadyEnrolled) setSelectedUser(user);
+                    }}
+                    onKeyDown={(event) => {
+                      if (
+                        !alreadyEnrolled &&
+                        (event.key === 'Enter' || event.key === ' ')
+                      ) {
+                        event.preventDefault();
+                        setSelectedUser(user);
+                      }
                     }}
                     style={{
                       cursor: alreadyEnrolled ? 'not-allowed' : 'pointer',
@@ -759,7 +779,7 @@ export function BetaModePage() {
                         )}
                       </Text>
                       {user.full_name && (
-                        <Text style={{ color: '#666', fontSize: 12 }}>
+                        <Text style={{ color: MUTED_TEXT, fontSize: 12 }}>
                           {user.full_name}
                         </Text>
                       )}
@@ -769,7 +789,7 @@ export function BetaModePage() {
               }}
               locale={{
                 emptyText: (
-                  <Text style={{ color: '#444' }}>No users found</Text>
+                  <Text style={{ color: MUTED_TEXT }}>No users found</Text>
                 ),
               }}
             />

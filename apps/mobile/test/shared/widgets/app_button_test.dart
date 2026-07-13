@@ -24,8 +24,9 @@ void main() {
       return materials.first;
     }
 
-    testWidgets('primary button renders with accent background color',
-        (tester) async {
+    testWidgets('primary button renders with accent background color', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _wrap(
           AppButton(
@@ -82,16 +83,11 @@ void main() {
       expect(shape.side, equals(BorderSide.none));
     });
 
-    testWidgets('loading state shows CircularProgressIndicator',
-        (tester) async {
+    testWidgets('loading state shows CircularProgressIndicator', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-        _wrap(
-          AppButton(
-            label: 'Save',
-            onTap: () {},
-            isLoading: true,
-          ),
-        ),
+        _wrap(AppButton(label: 'Save', onTap: () {}, isLoading: true)),
       );
 
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
@@ -101,13 +97,7 @@ void main() {
 
     testWidgets('disabled button has reduced opacity', (tester) async {
       await tester.pumpWidget(
-        _wrap(
-          AppButton(
-            label: 'Go',
-            onTap: () {},
-            isDisabled: true,
-          ),
-        ),
+        _wrap(AppButton(label: 'Go', onTap: () {}, isDisabled: true)),
       );
 
       final opacity = tester.widget<AnimatedOpacity>(
@@ -121,16 +111,43 @@ void main() {
       var tapped = false;
 
       await tester.pumpWidget(
-        _wrap(
-          AppButton(
-            label: 'Tap Me',
-            onTap: () => tapped = true,
-          ),
-        ),
+        _wrap(AppButton(label: 'Tap Me', onTap: () => tapped = true)),
       );
 
       await tester.tap(find.text('Tap Me'));
       expect(tapped, isTrue);
+    });
+
+    testWidgets('press animation does not create a duplicate semantic action', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _wrap(AppButton(label: 'Start delivery', onTap: () {})),
+      );
+
+      final pressDetector = tester.widget<GestureDetector>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is GestureDetector &&
+              widget.onTapDown != null &&
+              widget.onTap == null,
+        ),
+      );
+      expect(pressDetector.excludeFromSemantics, isTrue);
+    });
+
+    testWidgets('treats its icon as decorative', (tester) async {
+      await tester.pumpWidget(
+        _wrap(AppButton(label: 'Accept', icon: Icons.check, onTap: () {})),
+      );
+
+      expect(
+        find.descendant(
+          of: find.byType(AppButton),
+          matching: find.byType(ExcludeSemantics),
+        ),
+        findsWidgets,
+      );
     });
 
     testWidgets('onTap does NOT fire when disabled', (tester) async {
@@ -150,30 +167,34 @@ void main() {
       expect(tapped, isFalse);
     });
 
-    testWidgets('brand button renders with brand background color in dark mode',
-        (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: ThemeData(brightness: Brightness.dark),
-          home: Scaffold(
-            body: Center(
-              child: AppButton(
-                label: 'Get Started',
-                onTap: () {},
-                variant: AppButtonVariant.brand,
+    testWidgets(
+      'brand button renders with brand background color in dark mode',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData(brightness: Brightness.dark),
+            home: Scaffold(
+              body: Center(
+                child: AppButton(
+                  label: 'Get Started',
+                  onTap: () {},
+                  variant: AppButtonVariant.brand,
+                ),
               ),
             ),
           ),
-        ),
-      );
+        );
 
-      final material = tester.widgetList<Material>(
-        find.descendant(
-          of: find.byType(AppButton),
-          matching: find.byType(Material),
-        ),
-      ).first;
-      expect(material.color, equals(AppColors.dark.brand));
-    });
+        final material = tester
+            .widgetList<Material>(
+              find.descendant(
+                of: find.byType(AppButton),
+                matching: find.byType(Material),
+              ),
+            )
+            .first;
+        expect(material.color, equals(AppColors.dark.brand));
+      },
+    );
   });
 }

@@ -103,10 +103,7 @@ class RiderCheckpointPanel extends StatelessWidget {
                 ],
               ),
             ] else if (status == DeliveryStatus.arrived)
-              _SwipeToConfirm(
-                onConfirmed: onAdvance,
-                isLoading: isLoading,
-              )
+              _SwipeToConfirm(onConfirmed: onAdvance, isLoading: isLoading)
             else
               AppButton(
                 label: riderCheckpointActionLabel(status),
@@ -158,8 +155,7 @@ class _ProgressRail extends StatelessWidget {
                 style: AppTypography.caption.copyWith(
                   fontSize: 9,
                   color: isActive ? colors.onBackground : colors.onSurfaceDim,
-                  fontWeight:
-                      isActive ? FontWeight.w600 : FontWeight.w400,
+                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
                 ),
               ),
             ],
@@ -197,72 +193,112 @@ class _SwipeToConfirmState extends State<_SwipeToConfirm> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxDrag = constraints.maxWidth - 56;
-        final progress = maxDrag <= 0 ? 0.0 : (_dragExtent / maxDrag).clamp(0.0, 1.0);
+        final progress = maxDrag <= 0
+            ? 0.0
+            : (_dragExtent / maxDrag).clamp(0.0, 1.0);
 
-        return Opacity(
-          opacity: widget.isLoading ? 0.6 : 1,
-          child: Container(
-            height: 56,
-            decoration: BoxDecoration(
-              color: colors.surfaceVariant,
-              borderRadius: AppRadius.borderFull,
-              border: Border.all(color: colors.outline.withValues(alpha: 0.5)),
-            ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                FractionallySizedBox(
-                  widthFactor: progress,
-                  alignment: Alignment.centerLeft,
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Opacity(
+              opacity: widget.isLoading ? 0.6 : 1,
+              child: Semantics(
+                button: true,
+                enabled: !widget.isLoading,
+                label: 'Swipe to confirm delivery',
+                hint: 'Swipe right to open proof of delivery',
+                onTap: widget.isLoading ? null : widget.onConfirmed,
+                child: ExcludeSemantics(
                   child: Container(
+                    key: const ValueKey('rider-delivery-confirm-slider'),
+                    width: double.infinity,
+                    height: 56,
                     decoration: BoxDecoration(
-                      color: colors.success.withValues(alpha: 0.22),
+                      color: colors.surfaceVariant,
                       borderRadius: AppRadius.borderFull,
+                      border: Border.all(
+                        color: colors.outline.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        FractionallySizedBox(
+                          widthFactor: progress,
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: colors.success.withValues(alpha: 0.22),
+                              borderRadius: AppRadius.borderFull,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          'Swipe to confirm delivery',
+                          style: AppTypography.button.copyWith(
+                            color: colors.onSurfaceDim,
+                          ),
+                        ),
+                        Positioned(
+                          left: _dragExtent + 4,
+                          child: GestureDetector(
+                            onHorizontalDragUpdate: widget.isLoading
+                                ? null
+                                : (details) {
+                                    setState(() {
+                                      _dragExtent =
+                                          (_dragExtent + details.delta.dx)
+                                              .clamp(0, maxDrag);
+                                    });
+                                  },
+                            onHorizontalDragEnd: widget.isLoading
+                                ? null
+                                : (_) {
+                                    final releasedProgress = maxDrag <= 0
+                                        ? 0.0
+                                        : (_dragExtent / maxDrag).clamp(
+                                            0.0,
+                                            1.0,
+                                          );
+                                    if (releasedProgress >= _threshold) {
+                                      widget.onConfirmed();
+                                    }
+                                    setState(() => _dragExtent = 0);
+                                  },
+                            child: Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: colors.accent,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.check_rounded,
+                                color: colors.accentOnColor,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                Text(
-                  'Swipe to confirm delivery',
-                  style: AppTypography.button.copyWith(
-                    color: colors.onSurfaceDim,
-                  ),
-                ),
-                Positioned(
-                  left: _dragExtent + 4,
-                  child: GestureDetector(
-                    onHorizontalDragUpdate: widget.isLoading
-                        ? null
-                        : (details) {
-                            setState(() {
-                              _dragExtent = (_dragExtent + details.delta.dx)
-                                  .clamp(0, maxDrag);
-                            });
-                          },
-                    onHorizontalDragEnd: widget.isLoading
-                        ? null
-                        : (_) {
-                            if (progress >= _threshold) {
-                              widget.onConfirmed();
-                            }
-                            setState(() => _dragExtent = 0);
-                          },
-                    child: Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: colors.accent,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.check_rounded,
-                        color: colors.accentOnColor,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
+            const SizedBox(height: AppSpacing.sm),
+            TextButton(
+              onPressed: widget.isLoading ? null : widget.onConfirmed,
+              style: TextButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+                foregroundColor: colors.onBackground,
+                shape: RoundedRectangleBorder(
+                  borderRadius: AppRadius.borderMd,
+                  side: BorderSide(color: colors.outline),
+                ),
+              ),
+              child: const Text('Open proof of delivery'),
+            ),
+          ],
         );
       },
     );

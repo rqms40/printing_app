@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,6 +21,7 @@ void main() {
   });
 
   testWidgets('lists 4 methods, returns chosen one', (tester) async {
+    final semantics = tester.ensureSemantics();
     PaymentMethod? picked;
     await tester.pumpWidget(
       ProviderScope(
@@ -42,11 +45,22 @@ void main() {
     expect(find.text('Maya'), findsOneWidget);
     expect(find.text('Cash on Delivery'), findsOneWidget);
     expect(find.text('GRIDGO Credits'), findsOneWidget);
+    final mayaControl = find.bySemanticsLabel(RegExp(r'^Maya\.'));
+    expect(mayaControl, findsOneWidget);
+    expect(
+      tester
+          .getSemantics(mayaControl)
+          .getSemanticsData()
+          .hasAction(ui.SemanticsAction.tap),
+      isTrue,
+      reason: 'enabled payment semantics must expose its selection action',
+    );
     await tester.tap(find.text('Maya'));
     await tester.pump();
     await tester.tap(find.text('Use this'));
     await tester.pumpAndSettle();
     expect(picked, PaymentMethod.maya);
+    semantics.dispose();
   });
 
   testWidgets('saving as default patches profile and updates auth state', (

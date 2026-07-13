@@ -17,7 +17,7 @@ import {
 } from 'typeorm';
 import { extname } from 'path';
 import { createReadStream } from 'fs';
-import { readFile, unlink } from 'fs/promises';
+import { readFile } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import type { Readable } from 'stream';
 import { FileMetadata, FilePurpose } from './entities/file-metadata.entity';
@@ -33,6 +33,7 @@ import {
   THREE_D_MAX_FILE_SIZE_BYTES,
   THREE_D_MAX_FILE_SIZE_MB,
 } from '../storage/storage.config';
+import { removeUploadedTempFile } from './upload-temp-file';
 
 @Injectable()
 export class FilesService {
@@ -74,6 +75,36 @@ export class FilesService {
         throw new BadRequestException(`File exceeds ${maxSizeMb} MB limit`);
       }
 
+      let evidenceAnalysis:
+        | Awaited<ReturnType<FileAnalysisService['analyze']>>
+        | undefined;
+      if (
+        normalizedPurpose === FilePurpose.PROOF_OF_DELIVERY ||
+        normalizedPurpose === FilePurpose.BETA_TESTIMONIAL
+      ) {
+        try {
+          const buffer = await this.readUploadBuffer(file);
+          evidenceAnalysis = await this.analysisService.analyze(
+            buffer,
+            file.mimetype,
+            file.originalname,
+          );
+        } catch {
+          evidenceAnalysis = null;
+        }
+        if (
+          !evidenceAnalysis ||
+          !Number.isInteger(evidenceAnalysis.widthPx) ||
+          !Number.isInteger(evidenceAnalysis.heightPx) ||
+          evidenceAnalysis.widthPx! <= 0 ||
+          evidenceAnalysis.heightPx! <= 0
+        ) {
+          throw new BadRequestException(
+            'Evidence upload must contain a valid image',
+          );
+        }
+      }
+
       const now = new Date();
       const datePath = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
       const objectKey = `uploads/${normalizedPurpose}/${datePath}/${randomUUID()}${fileExt}`;
@@ -99,18 +130,23 @@ export class FilesService {
         throw new InternalServerErrorException('File upload failed');
       });
 
-      const analysisPromise = this.readUploadBuffer(file)
-        .then((buffer) =>
-          this.analysisService.analyze(
-            buffer,
-            file.mimetype,
-            file.originalname,
-          ),
-        )
-        .catch((err: unknown) => {
-          this.logger.warn(`File analysis failed (non-fatal): ${String(err)}`);
-          return null;
-        });
+      const analysisPromise =
+        evidenceAnalysis !== undefined
+          ? Promise.resolve(evidenceAnalysis)
+          : this.readUploadBuffer(file)
+              .then((buffer) =>
+                this.analysisService.analyze(
+                  buffer,
+                  file.mimetype,
+                  file.originalname,
+                ),
+              )
+              .catch((err: unknown) => {
+                this.logger.warn(
+                  `File analysis failed (non-fatal): ${String(err)}`,
+                );
+                return null;
+              });
 
       const [url, analysis] = await Promise.all([
         uploadPromise,
@@ -159,7 +195,7 @@ export class FilesService {
       });
       return this.fileRepo.save(meta);
     } finally {
-      await this.removeDiskUpload(file);
+      await removeUploadedTempFile(file);
     }
   }
 
@@ -283,17 +319,6 @@ export class FilesService {
     return Promise.reject(
       new BadRequestException('Uploaded file is missing content'),
     );
-  }
-
-  private async removeDiskUpload(file: Express.Multer.File): Promise<void> {
-    if (this.hasMemoryBuffer(file) || !file.path) return;
-    try {
-      await unlink(file.path);
-    } catch (err) {
-      this.logger.warn(
-        `Failed to remove temporary upload ${file.path}: ${err}`,
-      );
-    }
   }
 
   async findById(id: number): Promise<FileMetadata> {

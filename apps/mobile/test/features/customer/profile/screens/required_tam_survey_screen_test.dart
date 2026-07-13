@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -230,6 +232,7 @@ void main() {
     testWidgets('auto-launches the face-slider flow without overview', (
       tester,
     ) async {
+      final semantics = tester.ensureSemantics();
       await tester.pumpWidget(_wrap());
       // First frame paints the placeholder, the post-frame callback then
       // pushes the face-slider modal route (~450ms transition).
@@ -238,12 +241,31 @@ void main() {
 
       await tester.pump(const Duration(milliseconds: 700));
 
+      expect(
+        find.bySemanticsLabel('Required beta feedback survey'),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsLabel(RegExp('Question 1 of 14')), findsOneWidget);
+      final rating = find.bySemanticsLabel(
+        RegExp('Feedback rating for question 1'),
+      );
+      expect(rating, findsOneWidget);
+      expect(tester.getSemantics(rating).flagsCollection.isSlider, isTrue);
+
       final slider = tester.widget<Slider>(find.byType(Slider));
       expect(slider.min, 0);
       expect(slider.max, 4);
       expect(slider.divisions, 4);
       expect(find.text('NEUTRAL'), findsOneWidget);
       expect(find.text('Question 1 of 14'), findsOneWidget);
+      final nextControl = find.bySemanticsLabel('Next');
+      expect(nextControl, findsOneWidget);
+      final nextSemantics = tester.getSemantics(nextControl);
+      expect(nextSemantics.flagsCollection.isButton, isTrue);
+      expect(
+        nextSemantics.getSemanticsData().hasAction(ui.SemanticsAction.tap),
+        isTrue,
+      );
 
       final sliderRect = tester.getRect(find.byType(Slider));
       await tester.tapAt(Offset(sliderRect.right - 8, sliderRect.center.dy));
@@ -258,6 +280,7 @@ void main() {
       expect(find.text('Question 2 of 14'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
+      semantics.dispose();
     });
 
     testWidgets('submits required survey payload and opens beta success wall', (
@@ -277,6 +300,7 @@ void main() {
       final textFields = find.byType(TextField, skipOffstage: false);
       await tester.ensureVisible(textFields.at(0));
       await tester.pump(const Duration(milliseconds: 300));
+      expect(find.bySemanticsLabel(RegExp(r'^Price feedback')), findsOneWidget);
       await tester.enterText(
         textFields.at(0),
         'Yes, the delivery convenience is worth the order price.',
@@ -284,6 +308,10 @@ void main() {
 
       await tester.ensureVisible(textFields.at(1));
       await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        find.bySemanticsLabel(RegExp(r'^Upload process feedback')),
+        findsOneWidget,
+      );
       await tester.enterText(
         textFields.at(1),
         'I nearly left while waiting for the 3D preview.',
@@ -291,10 +319,18 @@ void main() {
 
       await tester.ensureVisible(textFields.at(2));
       await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        find.bySemanticsLabel(RegExp(r'^Future feature feedback')),
+        findsOneWidget,
+      );
       await tester.enterText(textFields.at(2), 'Add saved presets.');
 
       await tester.ensureVisible(textFields.at(3));
       await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        find.bySemanticsLabel(RegExp(r'^Additional delivery feedback')),
+        findsOneWidget,
+      );
       await tester.enterText(
         textFields.at(3),
         'Fast delivery and clear updates.',

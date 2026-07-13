@@ -105,4 +105,24 @@ describe("RiderList", () => {
     expect(screen.queryByText(/Offline/)).not.toBeInTheDocument();
     expect(screen.queryByText(/On delivery/)).not.toBeInTheDocument();
   });
+
+  it("names the live-map toggle and uses readable muted rider text", async () => {
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({ data: url === "/admin/riders" ? riders : [] }),
+    );
+
+    render(<RiderList />);
+
+    const expand = await screen.findByRole("button", {
+      name: "Expand live tracking map",
+    });
+    fireEvent.click(expand);
+    expect(
+      screen.getByRole("button", { name: "Collapse live tracking map" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("juan@example.test")).toHaveStyle({
+      color: "#A0A0A0",
+    });
+    expect(screen.getByText("JUAN-1")).toHaveStyle({ color: "#A0A0A0" });
+  });
 });

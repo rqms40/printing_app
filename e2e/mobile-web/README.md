@@ -42,6 +42,11 @@ The live preflight expects `docker-compose.dev.yml` to already be running. It ve
 
 Run the opt-in destructive API workflow only against an isolated dev stack:
 
+Start that stack on loopback with `GRIDGO_TRUST_PROXY_HOPS=1`. The harness
+uses separate RFC 5737 client addresses for Admin, Mark, Ven, and Juan so the
+four simulated devices do not share one authentication-throttle identity.
+Production proxy trust remains disabled by default.
+
 ```sh
 GRIDGO_RUN_BETA_FLOW_DESTRUCTIVE=1 \
 MOBILE_WEB_E2E_NO_SERVER=1 \

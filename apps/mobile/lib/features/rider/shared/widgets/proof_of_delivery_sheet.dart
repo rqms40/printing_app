@@ -11,6 +11,14 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 
+Future<MultipartFile> buildProofPhotoMultipart(XFile picked) async {
+  final bytes = await picked.readAsBytes();
+  final filename = picked.name.trim().isEmpty
+      ? 'delivery-proof.jpg'
+      : picked.name;
+  return MultipartFile.fromBytes(bytes, filename: filename);
+}
+
 class ProofOfDeliverySheet extends StatefulWidget {
   const ProofOfDeliverySheet({super.key, required this.orderRef});
 
@@ -64,10 +72,7 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
 
       final form = FormData.fromMap({
         'purpose': 'proof_of_delivery',
-        'file': await MultipartFile.fromFile(
-          picked.path,
-          filename: picked.name,
-        ),
+        'file': await buildProofPhotoMultipart(picked),
       });
       final response = await ApiClient.instance.post<Map<String, dynamic>>(
         '/files/upload',
@@ -153,39 +158,46 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
             ),
             const SizedBox(height: AppSpacing.md),
             if (_mode == 'signature') ...[
-              Container(
-                height: 190,
-                decoration: BoxDecoration(
-                  color: colors.surfaceVariant,
-                  borderRadius: AppRadius.borderMd,
-                  border: Border.all(color: colors.outline),
-                ),
-                child: GestureDetector(
-                  onPanStart: (details) {
-                    setState(() {
-                      _points.add(details.localPosition);
-                    });
-                  },
-                  onPanUpdate: (details) {
-                    setState(() {
-                      _points.add(details.localPosition);
-                    });
-                  },
-                  onPanEnd: (_) => setState(() => _points.add(null)),
-                  child: CustomPaint(
-                    painter: _SignaturePainter(
-                      points: _points,
-                      color: colors.onBackground,
-                    ),
-                    child: Center(
-                      child: _hasSignature
-                          ? null
-                          : Text(
-                              'Sign here',
-                              style: AppTypography.body.copyWith(
-                                color: colors.onSurfaceDim,
+              Semantics(
+                container: true,
+                explicitChildNodes: true,
+                focusable: true,
+                label: 'Signature pad',
+                hint: 'Draw the recipient signature here',
+                child: Container(
+                  height: 190,
+                  decoration: BoxDecoration(
+                    color: colors.surfaceVariant,
+                    borderRadius: AppRadius.borderMd,
+                    border: Border.all(color: colors.outline),
+                  ),
+                  child: GestureDetector(
+                    onPanStart: (details) {
+                      setState(() {
+                        _points.add(details.localPosition);
+                      });
+                    },
+                    onPanUpdate: (details) {
+                      setState(() {
+                        _points.add(details.localPosition);
+                      });
+                    },
+                    onPanEnd: (_) => setState(() => _points.add(null)),
+                    child: CustomPaint(
+                      painter: _SignaturePainter(
+                        points: List<Offset?>.of(_points),
+                        color: colors.onBackground,
+                      ),
+                      child: Center(
+                        child: _hasSignature
+                            ? null
+                            : Text(
+                                'Sign here',
+                                style: AppTypography.body.copyWith(
+                                  color: colors.onSurfaceDim,
+                                ),
                               ),
-                            ),
+                      ),
                     ),
                   ),
                 ),

@@ -66,6 +66,7 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
                       ? 'You are online and ready for routes'
                       : 'Go online to receive new assignments',
                   trailing: IconButton(
+                    tooltip: 'Refresh assignments',
                     onPressed: state.isRefreshing
                         ? null
                         : () => notifier.refreshAssignments(),
@@ -78,10 +79,12 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
                               color: colors.accent,
                             ),
                           )
-                        : HugeIcon(
-                            icon: HugeIcons.strokeRoundedRefresh,
-                            color: colors.onBackground,
-                            size: 22,
+                        : ExcludeSemantics(
+                            child: HugeIcon(
+                              icon: HugeIcons.strokeRoundedRefresh,
+                              color: colors.onBackground,
+                              size: 22,
+                            ),
                           ),
                   ),
                 )

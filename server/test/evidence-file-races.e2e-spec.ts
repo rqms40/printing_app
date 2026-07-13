@@ -25,6 +25,11 @@ import { DeliveryDestination } from '../src/orders/entities/delivery-destination
 import { ROUTING_PROVIDER } from '../src/riders/routing/routing-provider';
 import { FakeRoutingProvider } from './support/fake-routing-provider';
 import { DispatchPlanService } from '../src/riders/dispatch-plan.service';
+import {
+  DispatchPlan,
+  DispatchPlanStatus,
+} from '../src/riders/entities/dispatch-plan.entity';
+import { TINY_PNG } from './support/tiny-png';
 
 describe('Evidence file deletion races (e2e)', () => {
   jest.setTimeout(120_000);
@@ -497,13 +502,16 @@ describe('Evidence file deletion races (e2e)', () => {
         arrivedAt: new Date(),
       }),
     );
-    if (await dispatchPlanService.getActivePlanForRider(riderProfile.id)) {
-      await dispatchPlanService.reoptimizePlan(riderProfile.id, [
-        assignment.id,
-      ]);
-    } else {
-      await dispatchPlanService.createPlan(riderProfile.id, [assignment.id]);
+    const activePlan = await dispatchPlanService.getActivePlanForRider(
+      riderProfile.id,
+    );
+    if (activePlan) {
+      await dataSource.getRepository(DispatchPlan).update(activePlan.id, {
+        status: DispatchPlanStatus.COMPLETED,
+        completedAt: new Date(),
+      });
     }
+    await dispatchPlanService.createPlan(riderProfile.id, [assignment.id]);
     return assignment;
   }
 
@@ -515,7 +523,7 @@ describe('Evidence file deletion races (e2e)', () => {
       .post('/api/files/upload')
       .set('Authorization', `Bearer ${sign(owner)}`)
       .field('purpose', purpose)
-      .attach('file', Buffer.from(`real-${purpose}-${runId}`), {
+      .attach('file', TINY_PNG, {
         filename: `${purpose}-${Date.now()}.png`,
         contentType: 'image/png',
       })

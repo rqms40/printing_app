@@ -27,8 +27,8 @@ services:
       - '0.0.0.0:9000:9000'
       - '0.0.0.0:9001:9001'
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY must be set}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY must be set}
     volumes:
       - miniodata:/data
     healthcheck:
@@ -66,12 +66,14 @@ services:
       DATABASE_SYNCHRONIZE: 'false'
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY must be set}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY must be set}
       MINIO_BUCKET: grid-print
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
       MINIO_USE_SSL: 'false'
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
-      ROUTING_BASE_URL: ${ROUTING_BASE_URL:-}
+      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:?MINIO_PUBLIC_URL must be externally reachable by app clients}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      ROUTING_BASE_URL: ${ROUTING_BASE_URL:?ROUTING_BASE_URL must point to an owned OSRM-compatible service}
       ROUTING_PROFILE: ${ROUTING_PROFILE:-driving}
       ROUTING_TIMEOUT_MS: ${ROUTING_TIMEOUT_MS:-5000}
       GRIDGO_STORE_LATITUDE: ${GRIDGO_STORE_LATITUDE:-7.064}

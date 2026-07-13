@@ -22,13 +22,15 @@ class EarningsData {
 
 class EarningsNotifier extends StateNotifier<EarningsData> {
   EarningsNotifier(this.ref)
-      : super(const EarningsData(
+    : super(
+        const EarningsData(
           total: 0,
           deliveries: 0,
           today: 0,
           thisWeek: 0,
           thisMonth: 0,
-        )) {
+        ),
+      ) {
     _fetchEarnings();
   }
 
@@ -37,6 +39,7 @@ class EarningsNotifier extends StateNotifier<EarningsData> {
   Future<void> _fetchEarnings() async {
     try {
       final response = await ApiClient.instance.get('/riders/earnings');
+      if (!mounted) return;
       final json = response.data as Map<String, dynamic>;
       final total = (json['total'] as num?)?.toDouble() ?? 0;
       final deliveries = (json['deliveries'] as num?)?.toInt() ?? 0;
@@ -49,10 +52,13 @@ class EarningsNotifier extends StateNotifier<EarningsData> {
         thisMonth: breakdown.thisMonth,
       );
     } catch (_) {
+      if (!mounted) return;
       final breakdown = _computeBreakdown();
       state = EarningsData(
         total: breakdown.thisMonth,
-        deliveries: ref.read(deliveriesProvider).completedAssignments
+        deliveries: ref
+            .read(deliveriesProvider)
+            .completedAssignments
             .where((v) => v.status == DeliveryStatus.delivered)
             .length,
         today: breakdown.today,
@@ -72,9 +78,10 @@ class EarningsNotifier extends StateNotifier<EarningsData> {
     double thisWeek = 0;
     double thisMonth = 0;
 
-    final delivered = ref.read(deliveriesProvider).views.where(
-          (v) => v.status == DeliveryStatus.delivered,
-        );
+    final delivered = ref
+        .read(deliveriesProvider)
+        .views
+        .where((v) => v.status == DeliveryStatus.delivered);
 
     for (final view in delivered) {
       final deliveredAt = view.assignment.deliveredAt;
@@ -92,6 +99,6 @@ class EarningsNotifier extends StateNotifier<EarningsData> {
 }
 
 final earningsProvider =
-    StateNotifierProvider<EarningsNotifier, EarningsData>(
-  (ref) => EarningsNotifier(ref),
-);
+    StateNotifierProvider.autoDispose<EarningsNotifier, EarningsData>(
+      (ref) => EarningsNotifier(ref),
+    );

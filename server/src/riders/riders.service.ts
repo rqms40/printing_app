@@ -67,6 +67,52 @@ type DeliveryProofMetadata = {
   proofSignatureData: string | null;
 };
 
+function hasValidSignatureStroke(signatureData: string): boolean {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(signatureData);
+  } catch {
+    return false;
+  }
+  if (typeof payload !== 'object' || payload === null) return false;
+
+  const candidate = payload as { format?: unknown; points?: unknown };
+  if (
+    candidate.format !== 'gridgo-signature-v1' ||
+    !Array.isArray(candidate.points)
+  ) {
+    return false;
+  }
+
+  let previousPoint: readonly [number, number] | null = null;
+  let hasStroke = false;
+  for (const entry of candidate.points) {
+    if (entry === null) {
+      previousPoint = null;
+      continue;
+    }
+    if (
+      !Array.isArray(entry) ||
+      entry.length !== 2 ||
+      typeof entry[0] !== 'number' ||
+      typeof entry[1] !== 'number' ||
+      !Number.isFinite(entry[0]) ||
+      !Number.isFinite(entry[1])
+    ) {
+      return false;
+    }
+    const point = [entry[0], entry[1]] as const;
+    if (
+      previousPoint &&
+      (previousPoint[0] !== point[0] || previousPoint[1] !== point[1])
+    ) {
+      hasStroke = true;
+    }
+    previousPoint = point;
+  }
+  return hasStroke;
+}
+
 export type RiderAssignmentResult = {
   order: Order;
   assignment: DeliveryAssignment;
@@ -404,8 +450,13 @@ export class RidersService {
     return [...planned, ...unplanned];
   }
 
-  createDispatchPlan(riderId: number, assignmentIds: number[]) {
-    return this.dispatchPlanService.createPlan(riderId, assignmentIds);
+  async createDispatchPlan(riderId: number, assignmentIds: number[]) {
+    const plan = await this.dispatchPlanService.createPlan(
+      riderId,
+      assignmentIds,
+    );
+    await this.publishDispatchPlanUpdated(plan, 'created');
+    return plan;
   }
 
   getDispatchPlanForRider(riderId: number) {
@@ -416,8 +467,42 @@ export class RidersService {
     return this.dispatchPlanService.getActivePlanForRiderUser(userId);
   }
 
-  reoptimizeDispatchPlan(riderId: number, assignmentIds?: number[]) {
-    return this.dispatchPlanService.reoptimizePlan(riderId, assignmentIds);
+  async reoptimizeDispatchPlan(riderId: number, assignmentIds?: number[]) {
+    const plan = await this.dispatchPlanService.reoptimizePlan(
+      riderId,
+      assignmentIds,
+    );
+    await this.publishDispatchPlanUpdated(plan, 'reoptimized');
+    return plan;
+  }
+
+  private async publishDispatchPlanUpdated(
+    plan: { id: number; riderId: number; version: number },
+    change: 'created' | 'reoptimized',
+  ): Promise<void> {
+    try {
+      const profile = await this.profileRepo.findOne({
+        where: { id: plan.riderId },
+      });
+      if (!profile) {
+        this.logger.warn(
+          `Dispatch plan ${plan.id} persisted without rider profile ${plan.riderId}`,
+        );
+        return;
+      }
+      await Promise.resolve(
+        this.ordersGateway.notifyRiderDispatchPlanUpdated(profile.userId, {
+          riderProfileId: profile.id,
+          planId: plan.id,
+          planVersion: plan.version,
+          change,
+        }),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Dispatch plan ${plan.id} WS notification failed for rider ${plan.riderId}: ${error}`,
+      );
+    }
   }
 
   async updateDeliveryStatus(
@@ -783,6 +868,9 @@ export class RidersService {
         Buffer.byteLength(signatureData, 'utf8') > MAX_SIGNATURE_PROOF_BYTES
       ) {
         throw new BadRequestException('Signature proof is too large');
+      }
+      if (!hasValidSignatureStroke(signatureData)) {
+        throw new BadRequestException('Invalid signature proof');
       }
       return {
         proofType: ProofOfDeliveryType.SIGNATURE,

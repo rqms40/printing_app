@@ -10,6 +10,7 @@ import { UsersService } from '../src/users/users.service';
 import { NotificationsService } from '../src/notifications/notifications.service';
 import { FirebaseService } from '../src/firebase/firebase.service';
 import { NotificationsGateway } from '../src/notifications/notifications.gateway';
+import { User } from '../src/users/entities/user.entity';
 
 type CountRow = { count: number };
 type LegacyCatalogRelationshipRow = {
@@ -80,6 +81,192 @@ describe('production migration lifecycle (e2e)', () => {
       );
       await expect(rowCount(dataSource, 'paper_specs')).resolves.toBe(1);
       await expect(rowCount(dataSource, 'three_d_specs')).resolves.toBe(1);
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
+  it('adopts multiple pending per-order survey requirements for one user', async () => {
+    const database = await createDatabase('per_order_pending_adoption');
+    await createSynchronizedFixture(database, false);
+    const dataSource = await initializeMigrationDataSource(database);
+
+    try {
+      const [user] = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO users (email, password_hash, role, is_beta_user)
+         VALUES ($1, 'not-used', 'customer', true)
+         RETURNING id`,
+        [`pending-adoption-${database}@example.test`],
+      );
+      const orders = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO orders
+           (order_id, user_id, category, total_price, delivery_fee,
+            payment_method, delivery_option)
+         VALUES
+           ($1, $3, 'paper', 10, 0, 'gridCredits', 'delivery'),
+           ($2, $3, 'paper', 10, 0, 'gridCredits', 'delivery')
+         RETURNING id`,
+        [`PENDING-A-${database}`, `PENDING-B-${database}`, user.id],
+      );
+      await dataSource.query(
+        `INSERT INTO tam_survey_requirements
+           (user_id, order_id, reason, status, required_at)
+         VALUES
+           ($1, $2, 'post_delivery', 'pending', NOW()),
+           ($1, $3, 'post_delivery', 'pending', NOW())`,
+        [user.id, orders[0].id, orders[1].id],
+      );
+
+      await dataSource.runMigrations();
+
+      await expect(
+        dataSource.query<Array<{ count: number }>>(
+          `SELECT count(*)::int AS count
+           FROM tam_survey_requirements
+           WHERE user_id = $1 AND status = 'pending'`,
+          [user.id],
+        ),
+      ).resolves.toEqual([{ count: 2 }]);
+      await expect(
+        dataSource.query<Array<{ indexname: string }>>(
+          `SELECT indexname FROM pg_indexes
+           WHERE schemaname = 'public'
+             AND indexname IN (
+               'uq_tam_survey_requirements_user_pending',
+               'uq_tam_survey_requirements_order_reason'
+             )
+           ORDER BY indexname`,
+        ),
+      ).resolves.toEqual([
+        { indexname: 'uq_tam_survey_requirements_order_reason' },
+      ]);
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
+  it('deduplicates adopted FCM tokens and enforces exclusive device ownership', async () => {
+    const database = await createDatabase('fcm_token_ownership_adoption');
+    await createSynchronizedFixture(database, false);
+    const dataSource = await initializeMigrationDataSource(database);
+
+    try {
+      await dataSource.query(`DROP INDEX IF EXISTS "uq_users_fcm_token"`);
+      const users = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO users (email, password_hash, fcm_token)
+         VALUES
+           ($1, 'not-used', 'shared-device-token'),
+           ($2, 'not-used', 'shared-device-token')
+         RETURNING id`,
+        [
+          `fcm-owner-a-${database}@example.test`,
+          `fcm-owner-b-${database}@example.test`,
+        ],
+      );
+      const [oversizedUser] = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO users (email, password_hash, fcm_token)
+         VALUES ($1, 'not-used', $2)
+         RETURNING id`,
+        [
+          `fcm-oversized-${database}@example.test`,
+          'oversized-device-token-'.repeat(160),
+        ],
+      );
+
+      await dataSource.runMigrations();
+
+      await expect(
+        dataSource.query(
+          `SELECT id, fcm_token FROM users
+           WHERE id = ANY($1::int[])
+           ORDER BY id`,
+          [users.map((user) => user.id)],
+        ),
+      ).resolves.toEqual([
+        { id: users[0].id, fcm_token: null },
+        { id: users[1].id, fcm_token: null },
+      ]);
+      await expect(
+        dataSource.query(`SELECT fcm_token FROM users WHERE id = $1`, [
+          oversizedUser.id,
+        ]),
+      ).resolves.toEqual([{ fcm_token: null }]);
+      await expect(
+        dataSource.query(
+          `SELECT indexdef FROM pg_indexes
+           WHERE schemaname = 'public' AND indexname = 'uq_users_fcm_token'`,
+        ),
+      ).resolves.toEqual([
+        {
+          indexdef: expect.stringMatching(
+            /CREATE UNIQUE INDEX .* ON public\.users.*fcm_token.*IS NOT NULL/i,
+          ),
+        },
+      ]);
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
+  it('preserves a compatible adopted FCM ownership index on rollback', async () => {
+    const database = await createDatabase('fcm_token_index_adoption');
+    await createSynchronizedFixture(database, false);
+    const dataSource = await initializeMigrationDataSource(database);
+
+    try {
+      await dataSource.runMigrations();
+      await dataSource.undoLastMigration();
+
+      await expect(
+        dataSource.query(
+          `SELECT to_regclass('public.uq_users_fcm_token') IS NOT NULL
+             AS index_preserved`,
+        ),
+      ).resolves.toEqual([{ index_preserved: true }]);
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
+  it('serializes concurrent cross-device FCM token swaps without deadlock', async () => {
+    const database = await createDatabase('fcm_token_concurrent_swap');
+    const dataSource = await initializeMigrationDataSource(database);
+
+    try {
+      await dataSource.runMigrations();
+      const users = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO users (email, password_hash)
+         VALUES ($1, 'not-used'), ($2, 'not-used')
+         RETURNING id`,
+        [
+          `fcm-swap-a-${database}@example.test`,
+          `fcm-swap-b-${database}@example.test`,
+        ],
+      );
+      const service = new UsersService(
+        dataSource.getRepository(User),
+        dataSource,
+      );
+      await service.updateFcmToken(users[0].id, 'device-token-a');
+      await service.updateFcmToken(users[1].id, 'device-token-b');
+
+      await expect(
+        Promise.all([
+          service.updateFcmToken(users[0].id, 'device-token-b'),
+          service.updateFcmToken(users[1].id, 'device-token-a'),
+        ]),
+      ).resolves.toEqual([undefined, undefined]);
+      await expect(
+        dataSource.query(
+          `SELECT id, fcm_token FROM users
+           WHERE id = ANY($1::int[])
+           ORDER BY id`,
+          [users.map((user) => user.id)],
+        ),
+      ).resolves.toEqual([
+        { id: users[0].id, fcm_token: 'device-token-b' },
+        { id: users[1].id, fcm_token: 'device-token-a' },
+      ]);
     } finally {
       await dataSource.destroy();
     }
@@ -226,8 +413,8 @@ describe('production migration lifecycle (e2e)', () => {
       ).resolves.toEqual([
         {
           beta_photo_file_id: null,
-          uploaded: true,
-          beta_shared_on_social: true,
+          uploaded: false,
+          beta_shared_on_social: false,
         },
       ]);
       await expect(
@@ -1340,7 +1527,7 @@ describe('production migration lifecycle (e2e)', () => {
     await staleMigration.connect();
     await staleMigration.query(
       `DELETE FROM migrations WHERE timestamp = $1 AND name = $2`,
-      ['1777854100000', 'PerOrderSurveyRequirements1777854100000'],
+      ['1777854200000', 'UniqueFcmTokenOwnership1777854200000'],
     );
     await staleMigration.end();
 

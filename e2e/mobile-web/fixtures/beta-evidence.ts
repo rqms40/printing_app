@@ -144,7 +144,8 @@ export const betaEvidenceSteps: readonly BetaEvidenceStep[] = [
     id: 17,
     slug: "juan-sees-mark",
     actor: "juan",
-    assertion: "Juan assignment list includes only the run's Mark assignment",
+    assertion:
+      "Juan assignment list includes the exact run Mark assignment before Ven exists",
     axe: true,
   },
   {
@@ -233,12 +234,62 @@ export const betaEvidenceSteps: readonly BetaEvidenceStep[] = [
 
 const SECRET_QUERY_KEYS = new Set([
   "access_token",
+  "client_secret",
+  "code",
+  "id_token",
+  "oauth_token",
+  "oauth_verifier",
+  "refresh_token",
   "token",
   "jwt",
   "authorization",
   "password",
   "secret",
+  "x-amz-credential",
+  "x-amz-security-token",
+  "x-amz-signature",
 ]);
+
+export type EvidenceSurfaceURLs = {
+  mobileURL: string;
+  adminURL: string;
+  apiBaseURL: string;
+};
+
+export function configuredEvidenceOrigins(
+  urls: EvidenceSurfaceURLs,
+): ReadonlySet<string> {
+  return new Set(
+    [urls.mobileURL, urls.adminURL, urls.apiBaseURL].map(
+      (value) => new URL(value).origin,
+    ),
+  );
+}
+
+export function requiredEvidenceNetworkIssues(
+  network: ReadonlyArray<ActorNetworkEntry>,
+  requiredOrigins: ReadonlySet<string>,
+): {
+  transportFailures: ActorNetworkEntry[];
+  serverResponses: ActorNetworkEntry[];
+} {
+  const isRequiredOrigin = (entry: ActorNetworkEntry) => {
+    try {
+      return requiredOrigins.has(new URL(entry.url).origin);
+    } catch {
+      return false;
+    }
+  };
+
+  return {
+    transportFailures: network.filter(
+      (entry) => Boolean(entry.failure) && isRequiredOrigin(entry),
+    ),
+    serverResponses: network.filter(
+      (entry) => (entry.status ?? 0) >= 500 && isRequiredOrigin(entry),
+    ),
+  };
+}
 
 export function sanitizeEvidenceText(
   value: string,
@@ -346,13 +397,17 @@ export type EvidenceRun = {
     bytes: number;
     sha256: string;
   }>;
+  requiredOrigins: ReadonlySet<string>;
 };
 
 export function generateVisualCustomerPassword(): string {
   return `${randomBytes(24).toString("base64url")}Aa1!`;
 }
 
-export function beginEvidenceRun(runLabel: string): EvidenceRun {
+export function beginEvidenceRun(
+  runLabel: string,
+  surfaceURLs: EvidenceSurfaceURLs,
+): EvidenceRun {
   const root = path.resolve(
     process.env.GRIDGO_BETA_EVIDENCE_DIR ??
       `/tmp/gridgo-beta-visual/${runLabel}`,
@@ -370,6 +425,7 @@ export function beginEvidenceRun(runLabel: string): EvidenceRun {
     entries: [],
     protectedSecrets: new Set(),
     artifacts: [],
+    requiredOrigins: configuredEvidenceOrigins(surfaceURLs),
   };
   flushManifest(run);
   return run;
@@ -500,6 +556,18 @@ export async function captureStep(options: {
     expectedViewport,
     allowBlockingDialog = false,
   } = options;
+  // Flutter route transitions are painted on CanvasKit rather than exposed as
+  // DOM animations. Background Chromium pages can also retain partially
+  // presented GPU tiles, so foreground the actor and require two fresh frames
+  // before an evidence frame is validated and captured.
+  await page.bringToFront();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+  await page.waitForTimeout(500);
   await expect(page).toHaveURL(/^https?:\/\//);
   const title = await page.title();
   expect(title.trim(), "page title must identify the app").not.toBe("");
@@ -525,25 +593,36 @@ export async function captureStep(options: {
       "no blocking dialog may obscure accepted evidence",
     ).toBe(0);
   }
-  expect(
-    await visibleCount(
-      '[aria-busy="true"], .ant-spin-spinning, [role="progressbar"]:not([aria-valuenow])',
-    ),
-    "accepted evidence must be fully loaded",
-  ).toBe(0);
+  await expect
+    .poll(
+      () =>
+        visibleCount(
+          '[aria-busy="true"], .ant-spin-spinning, [role="progressbar"]:not([aria-valuenow])',
+        ),
+      { message: "accepted evidence loading state", timeout: 15_000 },
+    )
+    .toBe(0);
+  await expect
+    .poll(
+      () => visibleCount(".ant-message-notice, .ant-notification-notice"),
+      { message: "accepted evidence transient notifications", timeout: 15_000 },
+    )
+    .toBe(0);
   expect(
     relevantConsoleErrors(console),
     "relevant browser console errors",
   ).toEqual([]);
-  const requiredRequestFailures = network.filter(
-    (entry) =>
-      entry.failure &&
-      /^https?:\/\/(?:127\.0\.0\.1|localhost)/.test(entry.url) &&
-      !/facebook\.com|linkedin\.com|twitter\.com|x\.com/i.test(entry.url),
+  const requiredNetworkIssues = requiredEvidenceNetworkIssues(
+    network,
+    run.requiredOrigins,
   );
   expect(
-    requiredRequestFailures,
+    requiredNetworkIssues.transportFailures,
     "required app/API requests must not fail at transport level",
+  ).toEqual([]);
+  expect(
+    requiredNetworkIssues.serverResponses,
+    "required configured app/API requests must not return server errors",
   ).toEqual([]);
   const overflow = await page.evaluate(
     () =>
@@ -557,20 +636,41 @@ export async function captureStep(options: {
   await assertState();
 
   let accessibility: EvidenceManifestEntry["accessibility"];
-  if (step.axe) {
+  // Signature/photo proof dialogs contain a live CanvasKit drawing surface.
+  // Axe cannot inspect those pixels and can hang while Flutter continuously
+  // mutates their transient semantics tree. The canonical post-submit frame
+  // for the same step still runs the full Axe gate.
+  if (step.axe && !allowBlockingDialog) {
     const result = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa"])
       .analyze();
+    const axeViolationSummary = result.violations
+      .filter(
+        (violation) =>
+          violation.impact === "serious" || violation.impact === "critical",
+      )
+      .map((violation) => ({
+        id: violation.id,
+        impact: violation.impact,
+        nodes: violation.nodes.map((node) => ({
+          target: node.target,
+          html: node.html,
+          failureSummary: node.failureSummary,
+        })),
+      }));
     const serious = result.violations.filter(
       (violation) => violation.impact === "serious",
     ).length;
     const critical = result.violations.filter(
       (violation) => violation.impact === "critical",
     ).length;
-    expect({ serious, critical }, "Axe serious/critical violations").toEqual({
-      serious: 0,
-      critical: 0,
-    });
+    expect(
+      { serious, critical },
+      `Axe serious/critical violations: ${sanitizeEvidenceText(
+        JSON.stringify(axeViolationSummary),
+        run.protectedSecrets,
+      )}`,
+    ).toEqual({ serious: 0, critical: 0 });
     accessibility = {
       serious,
       critical,

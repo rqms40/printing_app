@@ -1,5 +1,6 @@
 import {
   expect,
+  request as playwrightRequest,
   test,
   type APIRequestContext,
   type APIResponse,
@@ -43,6 +44,25 @@ type AccountState = {
 
 const apiBaseURL = process.env.GRIDGO_API_URL ?? "http://127.0.0.1:3000/api";
 const destructiveEnabled = process.env.GRIDGO_RUN_BETA_FLOW_DESTRUCTIVE === "1";
+const actorClientIp = {
+  admin: "198.51.100.10",
+  mark: "198.51.100.20",
+  ven: "198.51.100.30",
+  juan: "198.51.100.40",
+} as const;
+const signatureProof = JSON.stringify({
+  format: "gridgo-signature-v1",
+  points: [
+    [1, 1],
+    [2, 2],
+  ],
+});
+
+function actorRequest(ip: string) {
+  return playwrightRequest.newContext({
+    extraHTTPHeaders: { "X-Forwarded-For": ip },
+  });
+}
 
 const printTestPng = readFileSync(
   path.resolve(
@@ -354,12 +374,6 @@ async function submitTestimonial(
   customer: { email: string; password: string; auth: AuthResponse },
   identity: string,
 ): Promise<number> {
-  await responseJson(
-    await request.patch(`${apiBaseURL}/beta-mode/me/share`, {
-      headers: authHeaders(customer.auth.access_token),
-    }),
-    `record confirmed share callback for ${identity}`,
-  );
   const fileId = await uploadPurposeImage(
     request,
     customer.auth.access_token,
@@ -373,13 +387,17 @@ async function submitTestimonial(
     }),
     `submit beta testimonial for ${identity}`,
   );
+  await responseJson(
+    await request.patch(`${apiBaseURL}/beta-mode/me/share`, {
+      headers: authHeaders(customer.auth.access_token),
+    }),
+    `confirm persisted share after testimonial for ${identity}`,
+  );
   return fileId;
 }
 
 test.describe("destructive GRIDGO beta workflow", () => {
-  test("runs registration through delivery, survey, testimonial, and hold", async ({
-    request,
-  }, testInfo) => {
+  test("runs registration through delivery, survey, testimonial, and hold", async ({}, testInfo) => {
     test.skip(
       !destructiveEnabled,
       "Set GRIDGO_RUN_BETA_FLOW_DESTRUCTIVE=1 and provide admin/rider credentials.",
@@ -398,39 +416,46 @@ test.describe("destructive GRIDGO beta workflow", () => {
     expect(riderEmail, "GRIDGO_RIDER_EMAIL is required").toBeTruthy();
     expect(riderPassword, "GRIDGO_RIDER_PASSWORD is required").toBeTruthy();
 
-    const admin = await login(request, adminEmail!, adminPassword!);
-    const rider = await login(request, riderEmail!, riderPassword!);
+    const [adminRequest, markRequest, venRequest, riderRequest] =
+      await Promise.all([
+        actorRequest(actorClientIp.admin),
+        actorRequest(actorClientIp.mark),
+        actorRequest(actorClientIp.ven),
+        actorRequest(actorClientIp.juan),
+      ]);
+    const admin = await login(adminRequest, adminEmail!, adminPassword!);
+    const rider = await login(riderRequest, riderEmail!, riderPassword!);
     const createdIds: Record<string, number | string> = {};
 
     try {
       await responseJson(
-        await request.patch(`${apiBaseURL}/beta-mode/settings`, {
+        await adminRequest.patch(`${apiBaseURL}/beta-mode/settings`, {
           headers: authHeaders(admin.access_token),
           data: { isEnabled: true },
         }),
         "enable beta mode",
       );
       const publicStatus = await responseJson<{ isEnabled: boolean }>(
-        await request.get(`${apiBaseURL}/beta-mode/status`),
+        await adminRequest.get(`${apiBaseURL}/beta-mode/status`),
         "load public beta status",
       );
       expect(publicStatus.isEnabled).toBe(true);
 
       const riderProfile = await responseJson<{ id: number }>(
-        await request.get(`${apiBaseURL}/riders/profile`, {
+        await riderRequest.get(`${apiBaseURL}/riders/profile`, {
           headers: authHeaders(rider.access_token),
         }),
         "load rider profile",
       );
       await responseJson(
-        await request.patch(`${apiBaseURL}/riders/availability`, {
+        await riderRequest.patch(`${apiBaseURL}/riders/availability`, {
           headers: authHeaders(rider.access_token),
           data: { isAvailable: true },
         }),
         "make rider available",
       );
       await responseJson(
-        await request.patch(`${apiBaseURL}/riders/location`, {
+        await riderRequest.patch(`${apiBaseURL}/riders/location`, {
           headers: authHeaders(rider.access_token),
           data: { latitude: 7.064, longitude: 125.6079 },
         }),
@@ -439,7 +464,7 @@ test.describe("destructive GRIDGO beta workflow", () => {
 
       const runId = `${Date.now()}-${testInfo.workerIndex}`;
       const mark = await registerBetaCustomer(
-        request,
+        markRequest,
         `${runId}-mark`,
         `Mark Beta QA ${runId}`,
       );
@@ -449,7 +474,7 @@ test.describe("destructive GRIDGO beta workflow", () => {
         isBetaUser: boolean;
         rank: number;
       }>(
-        await request.get(`${apiBaseURL}/beta-mode/me`, {
+        await markRequest.get(`${apiBaseURL}/beta-mode/me`, {
           headers: authHeaders(mark.auth.access_token),
         }),
         "verify Mark beta enrollment",
@@ -461,13 +486,13 @@ test.describe("destructive GRIDGO beta workflow", () => {
       expect(markBeta.rank).toBeGreaterThan(0);
 
       const markFileId = await uploadPrintFile(
-        request,
+        markRequest,
         mark.auth.access_token,
         "mark",
       );
       createdIds.markFileId = markFileId;
       const markAddressId = await savePinnedAddress(
-        request,
+        markRequest,
         mark.auth.access_token,
         "Mark",
         7.0731,
@@ -476,7 +501,7 @@ test.describe("destructive GRIDGO beta workflow", () => {
       createdIds.markAddressId = markAddressId;
 
       const markOrder = await placeCreditOrder(
-        request,
+        markRequest,
         mark.auth.access_token,
         markFileId,
         markAddressId,
@@ -488,7 +513,7 @@ test.describe("destructive GRIDGO beta workflow", () => {
       // Ordering is intentional: Mark is fully registered and ordered before
       // Ven is registered, preserving deterministic beta rank and queue proof.
       const ven = await registerBetaCustomer(
-        request,
+        venRequest,
         `${runId}-ven`,
         `Ven Beta QA ${runId}`,
       );
@@ -498,7 +523,7 @@ test.describe("destructive GRIDGO beta workflow", () => {
         isBetaUser: boolean;
         rank: number;
       }>(
-        await request.get(`${apiBaseURL}/beta-mode/me`, {
+        await venRequest.get(`${apiBaseURL}/beta-mode/me`, {
           headers: authHeaders(ven.auth.access_token),
         }),
         "verify Ven beta enrollment",
@@ -509,13 +534,13 @@ test.describe("destructive GRIDGO beta workflow", () => {
       });
       expect(venBeta.rank).toBeGreaterThan(markBeta.rank);
       const venFileId = await uploadPrintFile(
-        request,
+        venRequest,
         ven.auth.access_token,
         "ven",
       );
       createdIds.venFileId = venFileId;
       const venAddressId = await savePinnedAddress(
-        request,
+        venRequest,
         ven.auth.access_token,
         "Ven",
         7.0641,
@@ -523,7 +548,7 @@ test.describe("destructive GRIDGO beta workflow", () => {
       );
       createdIds.venAddressId = venAddressId;
       const venOrder = await placeCreditOrder(
-        request,
+        venRequest,
         ven.auth.access_token,
         venFileId,
         venAddressId,
@@ -532,9 +557,12 @@ test.describe("destructive GRIDGO beta workflow", () => {
       createdIds.venOrderId = venOrder.id;
       createdIds.venOrderRef = venOrder.orderId;
 
-      for (const customer of [mark, ven]) {
+      for (const [customer, customerRequest] of [
+        [mark, markRequest],
+        [ven, venRequest],
+      ] as const) {
         const profile = await responseJson<AuthUser>(
-          await request.get(`${apiBaseURL}/users/profile`, {
+          await customerRequest.get(`${apiBaseURL}/users/profile`, {
             headers: authHeaders(customer.auth.access_token),
           }),
           "verify GRIDGO Credits debit",
@@ -552,7 +580,7 @@ test.describe("destructive GRIDGO beta workflow", () => {
           "ready_for_dispatch",
         ]) {
           await responseJson(
-            await request.patch(
+            await adminRequest.patch(
               `${apiBaseURL}/admin/orders/${order.id}/status`,
               {
                 headers: authHeaders(admin.access_token),
@@ -563,16 +591,60 @@ test.describe("destructive GRIDGO beta workflow", () => {
           );
         }
         await responseJson(
-          await request.post(`${apiBaseURL}/admin/orders/${order.id}/assign`, {
-            headers: authHeaders(admin.access_token),
-            data: { riderId: riderProfile.id },
-          }),
+          await adminRequest.post(
+            `${apiBaseURL}/admin/orders/${order.id}/assign`,
+            {
+              headers: authHeaders(admin.access_token),
+              data: { riderId: riderProfile.id },
+            },
+          ),
           `assign rider to ${order.orderId}`,
         );
       }
 
+      const unplannedAssignments = await responseJson<DeliveryAssignment[]>(
+        await riderRequest.get(`${apiBaseURL}/riders/assignments`, {
+          headers: authHeaders(rider.access_token),
+        }),
+        "load assigned deliveries before routing",
+      );
+      const assignedMark = unplannedAssignments.find(
+        (assignment) => assignment.order.id === markOrder.id,
+      );
+      const assignedVen = unplannedAssignments.find(
+        (assignment) => assignment.order.id === venOrder.id,
+      );
+      expect(assignedMark).toBeDefined();
+      expect(assignedVen).toBeDefined();
+
+      const dispatchPlan = await responseJson<{
+        provider: string;
+        routingDataStale: boolean;
+        stops: Array<{ assignmentId: number; sequence: number }>;
+      }>(
+        await adminRequest.post(
+          `${apiBaseURL}/admin/riders/${riderProfile.id}/dispatch-plan`,
+          {
+            headers: authHeaders(admin.access_token),
+            data: {
+              assignmentIds: [assignedMark!.id, assignedVen!.id],
+            },
+          },
+        ),
+        "persist optimized dispatch plan",
+      );
+      expect(dispatchPlan).toMatchObject({
+        provider: "osrm",
+        routingDataStale: false,
+      });
+      expect(
+        [...dispatchPlan.stops]
+          .sort((left, right) => left.sequence - right.sequence)
+          .map((stop) => stop.assignmentId),
+      ).toEqual([assignedVen!.id, assignedMark!.id]);
+
       const assignments = await responseJson<DeliveryAssignment[]>(
-        await request.get(`${apiBaseURL}/riders/assignments`, {
+        await riderRequest.get(`${apiBaseURL}/riders/assignments`, {
           headers: authHeaders(rider.access_token),
         }),
         "load routed assignments",
@@ -593,19 +665,19 @@ test.describe("destructive GRIDGO beta workflow", () => {
 
       for (const assignment of [venAssignment!, markAssignment!]) {
         await updateAssignment(
-          request,
+          riderRequest,
           rider.access_token,
           assignment.id,
           "accepted",
         );
         await updateAssignment(
-          request,
+          riderRequest,
           rider.access_token,
           assignment.id,
           "picked_up",
         );
         await updateAssignment(
-          request,
+          riderRequest,
           rider.access_token,
           assignment.id,
           "on_the_way",
@@ -613,7 +685,7 @@ test.describe("destructive GRIDGO beta workflow", () => {
       }
 
       const venQueued = await getCustomerOrder(
-        request,
+        venRequest,
         ven.auth.access_token,
         venOrder.id,
       );
@@ -624,7 +696,7 @@ test.describe("destructive GRIDGO beta workflow", () => {
         deliveryAssignmentId: venAssignment!.id,
       });
       const markQueued = await getCustomerOrder(
-        request,
+        markRequest,
         mark.auth.access_token,
         markOrder.id,
       );
@@ -635,7 +707,7 @@ test.describe("destructive GRIDGO beta workflow", () => {
         deliveryAssignmentId: null,
       });
 
-      const earlyArrival = await request.patch(
+      const earlyArrival = await riderRequest.patch(
         `${apiBaseURL}/riders/assignments/${markAssignment!.id}/status`,
         {
           headers: authHeaders(rider.access_token),
@@ -645,21 +717,21 @@ test.describe("destructive GRIDGO beta workflow", () => {
       expect(earlyArrival.status()).toBe(400);
 
       await updateAssignment(
-        request,
+        riderRequest,
         rider.access_token,
         venAssignment!.id,
         "arrived",
       );
       await updateAssignment(
-        request,
+        riderRequest,
         rider.access_token,
         venAssignment!.id,
         "delivered",
-        { type: "signature", signatureData: "beta-e2e-ven-signature" },
+        { type: "signature", signatureData: signatureProof },
       );
 
       const markCurrent = await getCustomerOrder(
-        request,
+        markRequest,
         mark.auth.access_token,
         markOrder.id,
       );
@@ -671,12 +743,12 @@ test.describe("destructive GRIDGO beta workflow", () => {
       });
 
       await updateAssignment(
-        request,
+        riderRequest,
         rider.access_token,
         markAssignment!.id,
         "arrived",
       );
-      const missingProof = await request.patch(
+      const missingProof = await riderRequest.patch(
         `${apiBaseURL}/riders/assignments/${markAssignment!.id}/status`,
         {
           headers: authHeaders(rider.access_token),
@@ -685,22 +757,22 @@ test.describe("destructive GRIDGO beta workflow", () => {
       );
       expect(missingProof.status()).toBe(400);
       const markProofFileId = await uploadPurposeImage(
-        request,
+        riderRequest,
         rider.access_token,
         "mark",
         "proof_of_delivery",
       );
       createdIds.markProofFileId = markProofFileId;
       await updateAssignment(
-        request,
+        riderRequest,
         rider.access_token,
         markAssignment!.id,
         "delivered",
         { type: "photo", fileId: markProofFileId },
       );
 
-      const venState = await accountState(request, ven.auth.access_token);
-      const markState = await accountState(request, mark.auth.access_token);
+      const venState = await accountState(venRequest, ven.auth.access_token);
+      const markState = await accountState(markRequest, mark.auth.access_token);
       expect(venState).toMatchObject({ accountStatus: "survey_required" });
       expect(markState).toMatchObject({ accountStatus: "survey_required" });
       expect(venState.holds[0].orderId).toBe(venOrder.id);
@@ -709,36 +781,49 @@ test.describe("destructive GRIDGO beta workflow", () => {
       createdIds.markSurveyRequirementId = markState.holds[0].requirementId;
 
       await submitRequiredSurvey(
-        request,
+        venRequest,
         ven.auth.access_token,
         venState.holds[0].requirementId,
       );
       await submitRequiredSurvey(
-        request,
+        markRequest,
         mark.auth.access_token,
         markState.holds[0].requirementId,
       );
 
-      for (const customer of [ven, mark]) {
-        const heldOrders = await request.get(`${apiBaseURL}/orders`, {
+      for (const [customer, customerRequest] of [
+        [ven, venRequest],
+        [mark, markRequest],
+      ] as const) {
+        const heldOrders = await customerRequest.get(`${apiBaseURL}/orders`, {
           headers: authHeaders(customer.auth.access_token),
         });
         expect(heldOrders.status()).toBe(401);
       }
 
-      const venTestimonialFileId = await submitTestimonial(request, ven, "ven");
+      const venTestimonialFileId = await submitTestimonial(
+        venRequest,
+        ven,
+        "ven",
+      );
       const markTestimonialFileId = await submitTestimonial(
-        request,
+        markRequest,
         mark,
         "mark",
       );
       createdIds.venTestimonialFileId = venTestimonialFileId;
       createdIds.markTestimonialFileId = markTestimonialFileId;
 
-      for (const customer of [ven, mark]) {
-        const heldLogin = await request.post(`${apiBaseURL}/auth/login`, {
-          data: { email: customer.email, password: customer.password },
-        });
+      for (const [customer, customerRequest] of [
+        [ven, venRequest],
+        [mark, markRequest],
+      ] as const) {
+        const heldLogin = await customerRequest.post(
+          `${apiBaseURL}/auth/login`,
+          {
+            data: { email: customer.email, password: customer.password },
+          },
+        );
         expect(heldLogin.status()).toBe(403);
         await expect(heldLogin.json()).resolves.toMatchObject({
           code: "beta_held",
@@ -750,15 +835,18 @@ test.describe("destructive GRIDGO beta workflow", () => {
       }
 
       await responseJson(
-        await request.patch(`${apiBaseURL}/beta-mode/settings`, {
+        await adminRequest.patch(`${apiBaseURL}/beta-mode/settings`, {
           headers: authHeaders(admin.access_token),
           data: { isEnabled: false },
         }),
         "disable beta mode before restored-login assertions",
       );
-      for (const customer of [mark, ven]) {
+      for (const [customer, customerRequest] of [
+        [mark, markRequest],
+        [ven, venRequest],
+      ] as const) {
         const restored = await login(
-          request,
+          customerRequest,
           customer.email,
           customer.password,
         );
@@ -766,7 +854,7 @@ test.describe("destructive GRIDGO beta workflow", () => {
       }
     } finally {
       await responseJson(
-        await request.patch(`${apiBaseURL}/beta-mode/settings`, {
+        await adminRequest.patch(`${apiBaseURL}/beta-mode/settings`, {
           headers: authHeaders(admin.access_token),
           data: { isEnabled: false },
         }),
@@ -776,6 +864,12 @@ test.describe("destructive GRIDGO beta workflow", () => {
         body: Buffer.from(`${JSON.stringify(createdIds, null, 2)}\n`),
         contentType: "application/json",
       });
+      await Promise.all([
+        adminRequest.dispose(),
+        markRequest.dispose(),
+        venRequest.dispose(),
+        riderRequest.dispose(),
+      ]);
     }
   });
 });

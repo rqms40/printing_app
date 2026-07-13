@@ -122,6 +122,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
   int _fetchGeneration = 0;
 
   void Function()? _removeRiderAssignmentListener;
+  void Function()? _removeRiderDispatchPlanListener;
 
   void _startRealtime() {
     unawaited(WebSocketService.instance.connectOrders());
@@ -129,11 +130,17 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         .listenForRiderAssignments((_) {
           unawaited(refreshAssignments());
         });
+    _removeRiderDispatchPlanListener = WebSocketService.instance
+        .listenForRiderDispatchPlanUpdates((_) {
+          unawaited(refreshAssignments());
+        });
   }
 
   @override
   void dispose() {
+    _fetchGeneration += 1;
     _removeRiderAssignmentListener?.call();
+    _removeRiderDispatchPlanListener?.call();
     super.dispose();
   }
 
@@ -168,7 +175,9 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         );
         final rawPlan = responses[1].data;
         plan = parseRiderDispatchPlan(rawPlan);
-        if (rawPlan != null && plan == null) {
+        final noPlanPayload =
+            rawPlan == null || (rawPlan is String && rawPlan.trim().isEmpty);
+        if (!noPlanPayload && plan == null) {
           throw const FormatException('Malformed rider dispatch plan');
         }
       } else {
@@ -194,7 +203,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
               history: historyViews,
               plan: plan,
             );
-      if (generation != _fetchGeneration) return;
+      if (!mounted || generation != _fetchGeneration) return;
       state = state.copyWith(
         views: merged,
         isLoading: false,
@@ -203,7 +212,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         dataStale: plan?.routingDataStale ?? false,
       );
     } catch (_) {
-      if (generation != _fetchGeneration) return;
+      if (!mounted || generation != _fetchGeneration) return;
       if (realFlow) {
         state = state.copyWith(
           isLoading: false,
@@ -252,11 +261,13 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         data: {'status': serverDeliveryStatus(DeliveryStatus.accepted)},
       );
     } catch (_) {
+      if (!mounted) return;
       state = state.copyWith(
         errorMessage: () => 'Unable to update delivery status',
       );
       return;
     }
+    if (!mounted) return;
     _updateAssignment(assignmentId, (a) {
       if (a.status != DeliveryStatus.assigned) return a;
       return a.copyWith(
@@ -277,11 +288,13 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         },
       );
     } catch (_) {
+      if (!mounted) return;
       state = state.copyWith(
         errorMessage: () => 'Unable to update delivery status',
       );
       return;
     }
+    if (!mounted) return;
     if (realFlow) {
       await refreshAssignments();
       return;
@@ -355,11 +368,14 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         data: data,
       );
     } catch (_) {
+      if (!mounted) return;
       state = state.copyWith(
         errorMessage: () => 'Unable to update delivery status',
       );
       return;
     }
+
+    if (!mounted) return;
 
     if (realFlow && nextStatus == DeliveryStatus.delivered) {
       await refreshAssignments();
@@ -426,6 +442,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
     String id,
     DeliveryAssignment Function(DeliveryAssignment) updater,
   ) {
+    if (!mounted) return;
     final updated = state.views.map((view) {
       if (view.id != id) return view;
       return RiderAssignmentView(
@@ -443,7 +460,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
 }
 
 final deliveriesProvider =
-    StateNotifierProvider<DeliveriesNotifier, DeliveriesState>(
+    StateNotifierProvider.autoDispose<DeliveriesNotifier, DeliveriesState>(
       (ref) => DeliveriesNotifier(),
     );
 

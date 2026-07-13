@@ -874,6 +874,9 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
         ? 0.0
         : routeProgressRatioForPoint(liveRiderPoint!, liveState.routePoints);
     final percent = (ratio * 100).round();
+    final queueLabel = liveState.queuePosition == null
+        ? null
+        : '${_ordinal(liveState.queuePosition!)} in queue';
 
     final assignedSlot = liveState.assignedSlot;
     final activeSlot = assignedSlot != null
@@ -948,7 +951,9 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
               colors: colors,
               icon: Icons.check_rounded,
               title: 'Order Dispatched',
-              subtitle: 'Ongoing Rider Delivery',
+              subtitle: queueLabel == null
+                  ? 'Ongoing Rider Delivery'
+                  : '$queueLabel · Ongoing Rider Delivery',
             ),
             const SizedBox(height: AppSpacing.xs),
             _StatusLine(
@@ -997,14 +1002,20 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
       ),
     );
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () {
-        if (liveState.orderId != null) {
-          context.push('/customer/orders/${liveState.orderId}');
-        }
-      },
-      child: child,
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      button: true,
+      label: 'Open current delivery details',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          if (liveState.orderId != null) {
+            context.push('/customer/orders/${liveState.orderId}');
+          }
+        },
+        child: child,
+      ),
     );
   }
 }
@@ -1096,25 +1107,34 @@ class _OpenTrackingButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => context.push('/customer/tracking'),
-      child: Container(
-        width: double.infinity,
-        height: 34,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: colors.brand,
-          borderRadius: AppRadius.borderFull,
-        ),
-        child: Text(
-          'Open live tracking',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: AppTypography.caption.copyWith(
-            color: Colors.black,
-            fontSize: 10,
-            fontWeight: FontWeight.w900,
+    return Semantics(
+      container: true,
+      button: true,
+      label: 'Open live tracking',
+      child: ExcludeSemantics(
+        child: SizedBox(
+          key: const Key('open-live-tracking-button'),
+          width: double.infinity,
+          height: 48,
+          child: TextButton(
+            onPressed: () => context.push('/customer/tracking'),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.black,
+              backgroundColor: colors.brand,
+              shape: RoundedRectangleBorder(
+                borderRadius: AppRadius.borderFull,
+              ),
+            ),
+            child: Text(
+              'Open live tracking',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.caption.copyWith(
+                color: Colors.black,
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
           ),
         ),
       ),
@@ -1142,49 +1162,55 @@ class _StatusLine extends StatelessWidget {
     final iconColor = darkIcon ? colors.brand : Colors.black;
     final iconBackground = darkIcon ? Colors.black : const Color(0xFF78EC75);
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Container(
-          width: 26,
-          height: 26,
-          decoration: BoxDecoration(
-            color: iconBackground,
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, size: 15, color: iconColor),
-        ),
-        const SizedBox(width: AppSpacing.xs),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTypography.caption.copyWith(
-                  color: colors.brand,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 10,
-                  height: 1.05,
-                ),
+    return Semantics(
+      container: true,
+      label: '$title. $subtitle',
+      child: ExcludeSemantics(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 26,
+              height: 26,
+              decoration: BoxDecoration(
+                color: iconBackground,
+                shape: BoxShape.circle,
               ),
-              Text(
-                subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTypography.caption.copyWith(
-                  color: colors.onSurface,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 9,
-                  height: 1.05,
-                ),
+              child: Icon(icon, size: 15, color: iconColor),
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.caption.copyWith(
+                      color: colors.brand,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 10,
+                      height: 1.05,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.caption.copyWith(
+                      color: colors.onSurface,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 9,
+                      height: 1.05,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -1256,8 +1282,9 @@ class _ActiveTile extends StatelessWidget {
         Semantics(
           key: const Key('live-delivery-map'),
           container: true,
-          explicitChildNodes: true,
+          excludeSemantics: true,
           label: 'Live delivery map',
+          hint: 'Shows the rider current location and delivery route',
           child: FlutterMap(
             options: MapOptions(
               initialCenter: riderPoint,
@@ -1274,11 +1301,7 @@ class _ActiveTile extends StatelessWidget {
                 markers: [
                   MapHelpers.shopMarker(point: state.shopPoint),
                   MapHelpers.destinationMarker(point: state.destPoint),
-                  MapHelpers.riderMarker(
-                    riderPoint,
-                    semanticKey: const Key('rider-current-location-marker'),
-                    semanticLabel: 'Rider current location marker',
-                  ),
+                  MapHelpers.riderMarker(riderPoint),
                 ],
               ),
               MapHelpers.attribution(

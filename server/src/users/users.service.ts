@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { User, UserRole } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import {
@@ -33,6 +33,7 @@ export type SocketIdentity = Pick<User, 'id' | 'role' | 'isActive'>;
 
 @Injectable()
 export class UsersService {
+  private static readonly MAX_FCM_TOKEN_BYTES = 2048;
   private static readonly VALID_PAYMENT_METHODS = [
     'gcash',
     'maya',
@@ -40,7 +41,10 @@ export class UsersService {
     'credits',
   ] as const;
 
-  constructor(@InjectRepository(User) private usersRepo: Repository<User>) {}
+  constructor(
+    @InjectRepository(User) private usersRepo: Repository<User>,
+    private readonly dataSource: DataSource,
+  ) {}
 
   async findByEmail(email: string): Promise<User | null> {
     return this.usersRepo.findOne({ where: { email } });
@@ -82,12 +86,45 @@ export class UsersService {
   }
 
   async updateFcmToken(userId: number, token: string): Promise<void> {
-    await this.usersRepo.update(userId, { fcmToken: token });
+    const normalizedToken = this.normalizeFcmToken(token);
+    await this.dataSource.transaction(async (manager) => {
+      // A Firebase registration token identifies a device/app installation,
+      // not an account. Serialize the complete ownership-transfer operation:
+      // token-scoped locks can deadlock when two devices swap accounts/tokens.
+      // Registration is infrequent, so one short global lock is the safest
+      // deterministic trade-off.
+      await manager.query(
+        'SELECT pg_advisory_xact_lock($1::bigint)',
+        [1777854200000],
+      );
+      const usersRepo = manager.getRepository(User);
+      await usersRepo.update({ fcmToken: normalizedToken }, { fcmToken: null });
+      await usersRepo.update(userId, { fcmToken: normalizedToken });
+    });
+  }
+
+  async clearFcmToken(userId: number, token: string): Promise<void> {
+    const normalizedToken = this.normalizeFcmToken(token);
+    await this.usersRepo.update(
+      { id: userId, fcmToken: normalizedToken },
+      { fcmToken: null },
+    );
   }
 
   async getFcmToken(userId: number): Promise<string | null> {
     const user = await this.findById(userId);
     return user?.fcmToken ?? null;
+  }
+
+  private normalizeFcmToken(token: string): string {
+    const normalized = token?.trim();
+    if (
+      !normalized ||
+      Buffer.byteLength(normalized, 'utf8') > UsersService.MAX_FCM_TOKEN_BYTES
+    ) {
+      throw new BadRequestException('invalid FCM token');
+    }
+    return normalized;
   }
 
   async updateProfile(id: number, data: Partial<User>): Promise<User> {

@@ -1112,39 +1112,48 @@ class _SurveyFlowScreenState extends State<_SurveyFlowScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: widget.canClose,
-      child: PageView.builder(
-        controller: _pageController,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: widget.questions.length + 1,
-        itemBuilder: (context, index) {
-          if (index < widget.questions.length) {
-            return _SurveyQuestionPage(
-              question: widget.questions[index],
-              questionNumber: index + 1,
-              totalQuestions: widget.questions.length,
-              initialValue: widget.answers[index],
-              canClose: widget.canClose,
-              onConfirm: (scale) {
-                widget.onAnswer(index, scale);
-                _nextPage();
-              },
-              onClose: () => Navigator.of(context).pop(),
-            );
-          } else {
-            return _OpenForumPage(
-              dynamicPrice: widget.dynamicPrice,
-              initialText: widget.initialComment,
-              canClose: widget.canClose,
-              onConfirm: (text) {
-                widget.onComment(text);
-                Navigator.of(context).pop();
-              },
-              onClose: () => Navigator.of(context).pop(),
-            );
-          }
-        },
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      scopesRoute: true,
+      namesRoute: true,
+      label: widget.canClose
+          ? 'GRIDGO feedback survey'
+          : 'Required beta feedback survey',
+      child: PopScope(
+        canPop: widget.canClose,
+        child: PageView.builder(
+          controller: _pageController,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: widget.questions.length + 1,
+          itemBuilder: (context, index) {
+            if (index < widget.questions.length) {
+              return _SurveyQuestionPage(
+                question: widget.questions[index],
+                questionNumber: index + 1,
+                totalQuestions: widget.questions.length,
+                initialValue: widget.answers[index],
+                canClose: widget.canClose,
+                onConfirm: (scale) {
+                  widget.onAnswer(index, scale);
+                  _nextPage();
+                },
+                onClose: () => Navigator.of(context).pop(),
+              );
+            } else {
+              return _OpenForumPage(
+                dynamicPrice: widget.dynamicPrice,
+                initialText: widget.initialComment,
+                canClose: widget.canClose,
+                onConfirm: (text) {
+                  widget.onComment(text);
+                  Navigator.of(context).pop();
+                },
+                onClose: () => Navigator.of(context).pop(),
+              );
+            }
+          },
+        ),
       ),
     );
   }
@@ -1270,6 +1279,20 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
   void _confirm() {
     HapticFeedback.mediumImpact();
     widget.onConfirm(_currentScale);
+  }
+
+  String? _sliderSemanticValue(int delta) {
+    final index = _currentScale.index + delta;
+    if (index < 0 || index >= LikertScale.values.length) return null;
+    return LikertScale.values[index].shortLabel.replaceAll('\n', ' ');
+  }
+
+  void _adjustSliderSemantics(int delta) {
+    final index = (_currentScale.index + delta).clamp(
+      0,
+      LikertScale.values.length - 1,
+    );
+    _onSliderChanged(index.toDouble());
   }
 
   @override
@@ -1419,23 +1442,39 @@ class _SurveyQuestionPageState extends State<_SurveyQuestionPage>
                   const SizedBox(height: AppSpacing.sm),
 
                   // The slider
-                  SliderTheme(
-                    data: SliderThemeData(
-                      trackHeight: 5,
-                      thumbShape: _CustomThumbShape(color: textColor),
-                      activeTrackColor: textColor,
-                      inactiveTrackColor: textColor.withValues(alpha: 0.22),
-                      overlayColor: textColor.withValues(alpha: 0.14),
-                      overlayShape: const RoundSliderOverlayShape(
-                        overlayRadius: 22,
+                  Semantics(
+                    container: true,
+                    excludeSemantics: true,
+                    slider: true,
+                    label:
+                        'Feedback rating for question ${widget.questionNumber}',
+                    value: _currentScale.shortLabel.replaceAll('\n', ' '),
+                    increasedValue: _sliderSemanticValue(1),
+                    decreasedValue: _sliderSemanticValue(-1),
+                    onIncrease: _currentScale == LikertScale.stronglyAgree
+                        ? null
+                        : () => _adjustSliderSemantics(1),
+                    onDecrease: _currentScale == LikertScale.stronglyDisagree
+                        ? null
+                        : () => _adjustSliderSemantics(-1),
+                    child: SliderTheme(
+                      data: SliderThemeData(
+                        trackHeight: 5,
+                        thumbShape: _CustomThumbShape(color: textColor),
+                        activeTrackColor: textColor,
+                        inactiveTrackColor: textColor.withValues(alpha: 0.22),
+                        overlayColor: textColor.withValues(alpha: 0.14),
+                        overlayShape: const RoundSliderOverlayShape(
+                          overlayRadius: 22,
+                        ),
                       ),
-                    ),
-                    child: Slider(
-                      min: 0,
-                      max: 4,
-                      divisions: 4,
-                      value: _sliderValue,
-                      onChanged: _onSliderChanged,
+                      child: Slider(
+                        min: 0,
+                        max: 4,
+                        divisions: 4,
+                        value: _sliderValue,
+                        onChanged: _onSliderChanged,
+                      ),
                     ),
                   ),
 
@@ -1753,39 +1792,47 @@ class _ConfirmButtonState extends State<_ConfirmButton> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) {
-        setState(() => _pressed = false);
-        widget.onTap();
-      },
-      onTapCancel: () => setState(() => _pressed = false),
-      child: AnimatedScale(
-        scale: _pressed ? 0.95 : 1.0,
-        duration: const Duration(milliseconds: 120),
-        child: Container(
-          height: 56,
-          decoration: BoxDecoration(
-            color: widget.bgColor,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: widget.textColor.withValues(alpha: 0.3),
-              width: 1.5,
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                widget.label,
-                style: AppTypography.button.copyWith(
-                  color: widget.textColor,
-                  letterSpacing: 1,
+    return Semantics(
+      container: true,
+      button: true,
+      label: widget.label,
+      onTap: widget.onTap,
+      child: ExcludeSemantics(
+        child: GestureDetector(
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapUp: (_) {
+            setState(() => _pressed = false);
+            widget.onTap();
+          },
+          onTapCancel: () => setState(() => _pressed = false),
+          child: AnimatedScale(
+            scale: _pressed ? 0.95 : 1.0,
+            duration: const Duration(milliseconds: 120),
+            child: Container(
+              height: 56,
+              decoration: BoxDecoration(
+                color: widget.bgColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: widget.textColor.withValues(alpha: 0.3),
+                  width: 1.5,
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
-              Icon(widget.icon, color: widget.textColor, size: 18),
-            ],
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    widget.label,
+                    style: AppTypography.button.copyWith(
+                      color: widget.textColor,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Icon(widget.icon, color: widget.textColor, size: 18),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -1952,16 +1999,21 @@ class _OpenForumPageState extends State<_OpenForumPage> {
                         color: textColor.withValues(alpha: 0.1),
                       ),
                     ),
-                    child: TextField(
-                      controller: _priceController,
-                      maxLines: null,
-                      expands: true,
-                      style: AppTypography.body.copyWith(color: textColor),
-                      decoration: InputDecoration(
-                        hintText: 'Share your thoughts...',
-                        hintStyle: AppTypography.body.copyWith(color: dimColor),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.all(AppSpacing.md),
+                    child: Semantics(
+                      label: 'Price feedback',
+                      child: TextField(
+                        controller: _priceController,
+                        maxLines: null,
+                        expands: true,
+                        style: AppTypography.body.copyWith(color: textColor),
+                        decoration: InputDecoration(
+                          hintText: 'Share your thoughts...',
+                          hintStyle: AppTypography.body.copyWith(
+                            color: dimColor,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.all(AppSpacing.md),
+                        ),
                       ),
                     ),
                   ),
@@ -1984,16 +2036,21 @@ class _OpenForumPageState extends State<_OpenForumPage> {
                         color: textColor.withValues(alpha: 0.1),
                       ),
                     ),
-                    child: TextField(
-                      controller: _uploadController,
-                      maxLines: null,
-                      expands: true,
-                      style: AppTypography.body.copyWith(color: textColor),
-                      decoration: InputDecoration(
-                        hintText: 'Share your thoughts...',
-                        hintStyle: AppTypography.body.copyWith(color: dimColor),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.all(AppSpacing.md),
+                    child: Semantics(
+                      label: 'Upload process feedback',
+                      child: TextField(
+                        controller: _uploadController,
+                        maxLines: null,
+                        expands: true,
+                        style: AppTypography.body.copyWith(color: textColor),
+                        decoration: InputDecoration(
+                          hintText: 'Share your thoughts...',
+                          hintStyle: AppTypography.body.copyWith(
+                            color: dimColor,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.all(AppSpacing.md),
+                        ),
                       ),
                     ),
                   ),
@@ -2016,16 +2073,21 @@ class _OpenForumPageState extends State<_OpenForumPage> {
                         color: textColor.withValues(alpha: 0.1),
                       ),
                     ),
-                    child: TextField(
-                      controller: _featureController,
-                      maxLines: null,
-                      expands: true,
-                      style: AppTypography.body.copyWith(color: textColor),
-                      decoration: InputDecoration(
-                        hintText: 'Share your thoughts...',
-                        hintStyle: AppTypography.body.copyWith(color: dimColor),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.all(AppSpacing.md),
+                    child: Semantics(
+                      label: 'Future feature feedback',
+                      child: TextField(
+                        controller: _featureController,
+                        maxLines: null,
+                        expands: true,
+                        style: AppTypography.body.copyWith(color: textColor),
+                        decoration: InputDecoration(
+                          hintText: 'Share your thoughts...',
+                          hintStyle: AppTypography.body.copyWith(
+                            color: dimColor,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.all(AppSpacing.md),
+                        ),
                       ),
                     ),
                   ),
@@ -2048,16 +2110,21 @@ class _OpenForumPageState extends State<_OpenForumPage> {
                         color: textColor.withValues(alpha: 0.1),
                       ),
                     ),
-                    child: TextField(
-                      controller: _deliveryController,
-                      maxLines: null,
-                      expands: true,
-                      style: AppTypography.body.copyWith(color: textColor),
-                      decoration: InputDecoration(
-                        hintText: 'Optional comments...',
-                        hintStyle: AppTypography.body.copyWith(color: dimColor),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.all(AppSpacing.md),
+                    child: Semantics(
+                      label: 'Additional delivery feedback',
+                      child: TextField(
+                        controller: _deliveryController,
+                        maxLines: null,
+                        expands: true,
+                        style: AppTypography.body.copyWith(color: textColor),
+                        decoration: InputDecoration(
+                          hintText: 'Optional comments...',
+                          hintStyle: AppTypography.body.copyWith(
+                            color: dimColor,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.all(AppSpacing.md),
+                        ),
                       ),
                     ),
                   ),

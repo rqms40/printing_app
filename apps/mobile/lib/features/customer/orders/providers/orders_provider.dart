@@ -738,6 +738,11 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   VoidCallback? _removeDeliveryQueueListener;
   bool _initialLoadReported = false;
   bool _sessionNeedsStart = false;
+  int _sessionGeneration = 0;
+  int _fetchGeneration = 0;
+
+  bool _isCurrentSession(int generation) =>
+      mounted && generation == _sessionGeneration;
 
   Future<void> _connectWebSocket() async {
     try {
@@ -760,8 +765,10 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   }
 
   Future<void> _refreshOrderById(String orderId) async {
+    final sessionGeneration = _sessionGeneration;
     try {
       final response = await ApiClient.instance.get('/orders/$orderId');
+      if (!_isCurrentSession(sessionGeneration)) return;
       final updated = _parseOrder(
         Map<String, dynamic>.from(response.data as Map),
       );
@@ -811,11 +818,17 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
 
   @override
   void dispose() {
+    _sessionGeneration += 1;
+    _fetchGeneration += 1;
+    _removeRealtimeListeners();
+    super.dispose();
+  }
+
+  void _removeRealtimeListeners() {
     _removeOrderUpdateListener?.call();
     _removeOrderUpdateListener = null;
     _removeDeliveryQueueListener?.call();
     _removeDeliveryQueueListener = null;
-    super.dispose();
   }
 
   /// Emits a `subscribe` event for every order currently in state.
@@ -847,17 +860,25 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       state.where((o) => terminalStatuses.contains(o.orderStatus)).toList();
 
   Future<void> _fetchOrders() async {
+    final sessionGeneration = _sessionGeneration;
+    final fetchGeneration = ++_fetchGeneration;
     try {
       final response = await ApiClient.instance.get('/orders');
       final data = response.data as List<dynamic>;
-      if (!mounted) return;
+      if (!_isCurrentSession(sessionGeneration) ||
+          fetchGeneration != _fetchGeneration) {
+        return;
+      }
       state = _groupBatchOrders(
         data.map((json) => _parseOrder(json as Map<String, dynamic>)).toList(),
       );
       errorMessage = null;
       debugPrint('OrdersProvider: Loaded ${state.length} orders from API');
     } catch (e) {
-      if (!mounted) return;
+      if (!_isCurrentSession(sessionGeneration) ||
+          fetchGeneration != _fetchGeneration) {
+        return;
+      }
       if (state.isEmpty && !realFlow) {
         debugPrint('OrdersProvider: API failed ($e), using MockData');
         state = List.of(MockData.orders);
@@ -867,6 +888,10 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
         errorMessage = 'Unable to refresh live orders';
         state = [...state];
       }
+    }
+    if (!_isCurrentSession(sessionGeneration) ||
+        fetchGeneration != _fetchGeneration) {
+      return;
     }
     // Subscribe to all loaded orders in case socket connected before fetch completed.
     _subscribeToAllOrders();
@@ -879,6 +904,9 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   Future<void> refreshOrders() async => _fetchOrders();
 
   void clear() {
+    _sessionGeneration += 1;
+    _fetchGeneration += 1;
+    _removeRealtimeListeners();
     state = const [];
     _initialLoadReported = false;
     _sessionNeedsStart = true;
@@ -893,6 +921,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   /// Add a new order to the top of the list. Returns the created [Order]
   /// (server-assigned fields populated) so callers can use the real DB id.
   Future<Order> addOrder(Order order) async {
+    final sessionGeneration = _sessionGeneration;
     try {
       final response = await ApiClient.instance.post(
         '/orders',
@@ -932,6 +961,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
         },
       );
       final newOrder = _parseOrder(response.data as Map<String, dynamic>);
+      if (!_isCurrentSession(sessionGeneration)) return newOrder;
       state = [newOrder, ...state];
       WebSocketService.instance.subscribeToOrder(newOrder.orderId);
       debugPrint('OrdersProvider: Order created via API: ${newOrder.orderId}');
@@ -944,11 +974,13 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
         }
       }
       if (realFlow) rethrow;
+      if (!_isCurrentSession(sessionGeneration)) return order;
       debugPrint('OrdersProvider: API create failed ($e), adding locally');
       state = [order, ...state];
       return order;
     } catch (e) {
       if (realFlow) rethrow;
+      if (!_isCurrentSession(sessionGeneration)) return order;
       debugPrint('OrdersProvider: API create failed ($e), adding locally');
       state = [order, ...state];
       return order;
@@ -971,6 +1003,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     List<int> itemDestinationIndices = const [],
     Map<String, dynamic>? temporaryAddress,
   }) async {
+    final sessionGeneration = _sessionGeneration;
     final addressId = _deliveryAddressIdValue(deliveryAddressId);
 
     final mappedItems = items.indexed.map((entry) {
@@ -1027,6 +1060,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       }).toList(),
     );
 
+    if (!_isCurrentSession(sessionGeneration)) return createdOrders;
     state = [...createdOrders, ...state];
     for (final order in createdOrders) {
       WebSocketService.instance.subscribeToOrder(order.orderId);

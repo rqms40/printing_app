@@ -30,6 +30,7 @@ jobs:
       COMPOSE_PROJECT_NAME: gridgo-ci-${{ github.run_id }}-${{ github.run_attempt }}
       GRIDGO_PUBLIC_HOST: 127.0.0.1
       GRIDGO_BIND_ADDR: 127.0.0.1
+      GRIDGO_TRUST_PROXY_HOPS: "1"
       GRIDGO_REAL_FLOW: "true"
       GRIDGO_ADMIN_EMAIL: admin@gridgo.ph
       GRIDGO_RIDER_EMAIL: juan@gridgo.ph
@@ -50,7 +51,7 @@ jobs:
         run: |
           umask 077
           : > server/.env
-          for variable in JWT_SECRET GRIDGO_SEED_CUSTOMER_PASSWORD GRIDGO_SEED_RIDER_PASSWORD GRIDGO_SEED_ADMIN_PASSWORD; do
+          for variable in JWT_SECRET GRIDGO_SEED_CUSTOMER_PASSWORD GRIDGO_SEED_RIDER_PASSWORD GRIDGO_SEED_ADMIN_PASSWORD MINIO_ACCESS_KEY MINIO_SECRET_KEY; do
             value="$(openssl rand -hex 32)"
             echo "::add-mask::$value"
             echo "$variable=$value" >> "$GITHUB_ENV"

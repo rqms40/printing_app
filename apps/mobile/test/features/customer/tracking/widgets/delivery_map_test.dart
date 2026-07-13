@@ -140,6 +140,25 @@ void main() {
       );
     });
 
+    testWidgets(
+      'does not recenter from a cached location for another assignment',
+      (tester) async {
+        final harness = _harness(
+          _active(assignmentId: '102', planVersion: 5),
+          locationAge: Duration.zero,
+        );
+
+        await tester.pumpWidget(harness.widget);
+        await _settle(tester);
+
+        final map = tester.widget<FlutterMap>(find.byType(FlutterMap));
+        final center = map.mapController!.camera.center;
+        expect(center.latitude, closeTo(7.073, 0.000001));
+        expect(center.longitude, closeTo(125.613, 0.000001));
+        expect(_semanticsLabel('Rider current location marker'), findsNothing);
+      },
+    );
+
     testWidgets('withholds live-map semantics from unauthorized later stops', (
       tester,
     ) async {

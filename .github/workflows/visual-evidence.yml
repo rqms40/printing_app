@@ -21,7 +21,9 @@ jobs:
       COMPOSE_PROJECT_NAME: gridgo-visual-${{ github.run_id }}-${{ github.run_attempt }}
       GRIDGO_PUBLIC_HOST: 127.0.0.1
       GRIDGO_BIND_ADDR: 127.0.0.1
+      GRIDGO_TRUST_PROXY_HOPS: "1"
       GRIDGO_REAL_FLOW: "true"
+      MINIO_PUBLIC_URL: http://127.0.0.1:9000
       GRIDGO_ADMIN_EMAIL: admin@gridgo.ph
       GRIDGO_RIDER_EMAIL: juan@gridgo.ph
       GRIDGO_BETA_EVIDENCE_DIR: ${{ github.workspace }}/beta-evidence
@@ -53,7 +55,7 @@ jobs:
         run: |
           umask 077
           : > server/.env
-          for variable in JWT_SECRET GRIDGO_SEED_CUSTOMER_PASSWORD GRIDGO_SEED_RIDER_PASSWORD GRIDGO_SEED_ADMIN_PASSWORD; do
+          for variable in JWT_SECRET GRIDGO_SEED_CUSTOMER_PASSWORD GRIDGO_SEED_RIDER_PASSWORD GRIDGO_SEED_ADMIN_PASSWORD MINIO_ACCESS_KEY MINIO_SECRET_KEY; do
             value="$(openssl rand -hex 32)"
             echo "::add-mask::$value"
             echo "$variable=$value" >> "$GITHUB_ENV"
@@ -159,7 +161,7 @@ jobs:
               shutil.copyfile(source_image, screenshots / entry["file"])
 
           manifest = {
-              "runId": raw_manifest.get("runId"),
+              "runLabel": raw_manifest.get("runLabel"),
               "generatedAt": raw_manifest.get("generatedAt"),
               "commitSha": os.environ["EXPECTED_SHA"],
               "entries": entries,
@@ -202,6 +204,8 @@ jobs:
               "GRIDGO_RIDER_PASSWORD",
               "GRIDGO_ADMIN_PASSWORD",
               "JWT_SECRET",
+              "MINIO_ACCESS_KEY",
+              "MINIO_SECRET_KEY",
           )
           secrets = []
           for name in secret_names:

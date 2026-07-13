@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -88,6 +90,20 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
     });
   }
 
+  RiderLocationTrackerArgs get _trackerArgs => RiderLocationTrackerArgs(
+    assignmentId: widget.assignmentId,
+    enabled: widget.trackLocation,
+  );
+
+  Future<void> _refreshGpsLocation() async {
+    if (widget.trackLocation) {
+      await ref
+          .read(riderLocationTrackerProvider(_trackerArgs).notifier)
+          .refreshNow();
+    }
+    _fitBounds();
+  }
+
   @override
   void dispose() {
     _pulseController.dispose();
@@ -103,14 +119,7 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
         : AppColors.light;
     final radius = widget.borderRadius ?? BorderRadius.zero;
 
-    final tracker = ref.watch(
-      riderLocationTrackerProvider(
-        RiderLocationTrackerArgs(
-          assignmentId: widget.assignmentId,
-          enabled: widget.trackLocation,
-        ),
-      ),
-    );
+    final tracker = ref.watch(riderLocationTrackerProvider(_trackerArgs));
     final riderPoint = tracker.point;
 
     final markers = <Marker>[
@@ -182,11 +191,15 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
               ),
             ),
           Positioned(
-            bottom: AppSpacing.md,
+            key: const Key('rider-map-location-control'),
+            top: MediaQuery.paddingOf(context).top + AppSpacing.xxxl,
             right: AppSpacing.md,
             child: _MapControlButton(
+              label: widget.trackLocation
+                  ? 'Refresh GPS location'
+                  : 'Recenter delivery map',
               icon: Icons.my_location_rounded,
-              onTap: _fitBounds,
+              onTap: () => unawaited(_refreshGpsLocation()),
             ),
           ),
         ],
@@ -264,8 +277,13 @@ class _GpsBadge extends StatelessWidget {
 }
 
 class _MapControlButton extends StatelessWidget {
-  const _MapControlButton({required this.icon, required this.onTap});
+  const _MapControlButton({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
 
+  final String label;
   final IconData icon;
   final VoidCallback onTap;
 
@@ -275,17 +293,25 @@ class _MapControlButton extends StatelessWidget {
         ? AppColors.dark
         : AppColors.light;
 
-    return Material(
-      color: colors.surface.withValues(alpha: 0.94),
-      shape: const CircleBorder(),
-      elevation: 2,
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Icon(icon, size: 22, color: colors.onBackground),
+    return Semantics(
+      button: true,
+      focusable: true,
+      label: label,
+      onTap: onTap,
+      child: ExcludeSemantics(
+        child: Material(
+          color: colors.surface.withValues(alpha: 0.94),
+          shape: const CircleBorder(),
+          elevation: 2,
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: Icon(icon, size: 22, color: colors.onBackground),
+            ),
+          ),
         ),
       ),
     );

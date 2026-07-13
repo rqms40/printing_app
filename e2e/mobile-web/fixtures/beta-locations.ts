@@ -20,6 +20,15 @@ export const betaAddresses = {
   },
 } as const;
 
+// Juan starts outside the first evidence checkpoint so Playwright's first
+// move to the store always produces a fresh browser geolocation event, even
+// when the rider tracker was already mounted on the home route.
+export const betaPreStoreLocation = {
+  latitude: 7.0637,
+  longitude: 125.60765,
+  accuracy: 5,
+} as const;
+
 // These points are acknowledged by the rider REST location endpoint. They are
 // deliberately deterministic and follow the store -> Ven -> Mark road order.
 export const betaRouteCheckpoints: readonly BetaRouteCheckpoint[] = [

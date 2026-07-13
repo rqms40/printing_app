@@ -52,6 +52,7 @@ class _DeliveryCardState extends State<DeliveryCard> {
     final isAssigned = widget.view.status == DeliveryStatus.assigned;
 
     return GestureDetector(
+      excludeFromSemantics: true,
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) {
         setState(() => _pressed = false);
@@ -76,100 +77,117 @@ class _DeliveryCardState extends State<DeliveryCard> {
           ),
           child: Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 52,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        color: visual.tint.withValues(alpha: 0.12),
-                        borderRadius: AppRadius.borderMd,
-                      ),
-                      child: Center(
-                        child: HugeIcon(
-                          icon: visual.icon,
-                          size: 24,
-                          color: visual.tint,
+              Semantics(
+                container: true,
+                button: widget.onTap != null,
+                label: [
+                  'Delivery ${order.orderRef}',
+                  if (destination?.fullAddress != null)
+                    destination!.fullAddress!,
+                  visual.label,
+                  formatCurrency(order.deliveryFee),
+                  if (widget.showRoutePosition &&
+                      widget.view.routePosition != null)
+                    'Route position ${widget.view.routePosition}',
+                ].join('. '),
+                onTap: widget.onTap,
+                child: ExcludeSemantics(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: visual.tint.withValues(alpha: 0.12),
+                            borderRadius: AppRadius.borderMd,
+                          ),
+                          child: Center(
+                            child: HugeIcon(
+                              icon: visual.icon,
+                              size: 24,
+                              color: visual.tint,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Expanded(
-                                child: Text(
-                                  order.orderRef,
-                                  style: AppTypography.bodyBold.copyWith(
-                                    color: colors.onBackground,
-                                  ),
-                                ),
-                              ),
-                              if (widget.showRoutePosition &&
-                                  widget.view.routePosition != null &&
-                                  widget.view.isInProgress)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: colors.surfaceVariant,
-                                    borderRadius: AppRadius.borderFull,
-                                  ),
-                                  child: Text(
-                                    '#${widget.view.routePosition}',
-                                    style: AppTypography.caption.copyWith(
-                                      color: colors.onSurfaceDim,
-                                      fontWeight: FontWeight.w600,
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      order.orderRef,
+                                      style: AppTypography.bodyBold.copyWith(
+                                        color: colors.onBackground,
+                                      ),
                                     ),
                                   ),
+                                  if (widget.showRoutePosition &&
+                                      widget.view.routePosition != null &&
+                                      widget.view.isInProgress)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: colors.surfaceVariant,
+                                        borderRadius: AppRadius.borderFull,
+                                      ),
+                                      child: Text(
+                                        '#${widget.view.routePosition}',
+                                        style: AppTypography.caption.copyWith(
+                                          color: colors.onSurfaceDim,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              if (destination?.fullAddress != null) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  destination!.fullAddress!,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTypography.caption.copyWith(
+                                    color: colors.onSurfaceDim,
+                                  ),
                                 ),
+                              ],
+                              const SizedBox(height: AppSpacing.sm),
+                              Row(
+                                children: [
+                                  StatusBadge(
+                                    label: visual.label,
+                                    variant: visual.badgeVariant,
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    formatCurrency(order.deliveryFee),
+                                    style: AppTypography.bodyBold.copyWith(
+                                      color: colors.onBackground,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
-                          if (destination?.fullAddress != null) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              destination!.fullAddress!,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTypography.caption.copyWith(
-                                color: colors.onSurfaceDim,
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: AppSpacing.sm),
-                          Row(
-                            children: [
-                              StatusBadge(
-                                label: visual.label,
-                                variant: visual.badgeVariant,
-                              ),
-                              const Spacer(),
-                              Text(
-                                formatCurrency(order.deliveryFee),
-                                style: AppTypography.bodyBold.copyWith(
-                                  color: colors.onBackground,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        HugeIcon(
+                          icon: HugeIcons.strokeRoundedArrowRight01,
+                          size: 18,
+                          color: colors.disabled,
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: AppSpacing.xs),
-                    HugeIcon(
-                      icon: HugeIcons.strokeRoundedArrowRight01,
-                      size: 18,
-                      color: colors.disabled,
-                    ),
-                  ],
+                  ),
                 ),
               ),
               if (isAssigned) ...[

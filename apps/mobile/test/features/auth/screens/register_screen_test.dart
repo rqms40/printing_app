@@ -89,6 +89,23 @@ void main() {
       expect(find.text('Full Name'), findsNothing);
     });
 
+    testWidgets('labels the privacy illustration and both back controls', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+
+      await tester.pumpWidget(_wrap(const RegisterScreen()));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(
+        find.bySemanticsLabel('Privacy and account consent illustration'),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsLabel('Back'), findsNWidgets(2));
+      semantics.dispose();
+    });
+
     testWidgets('blocks progression until the nickname step is filled', (
       tester,
     ) async {

@@ -193,6 +193,11 @@ npm test -- tests/beta-workflow.spec.ts
 
 Run the opt-in destructive API workflow only against an isolated dev stack:
 
+The isolated stack must be loopback-bound and started with
+`GRIDGO_TRUST_PROXY_HOPS=1`; the Playwright harness assigns Admin, Mark, Ven,
+and Juan separate RFC 5737 client addresses while preserving production's
+per-IP authentication throttle.
+
 ```bash
 cd e2e/mobile-web && \
   GRIDGO_RUN_BETA_FLOW_DESTRUCTIVE=1 \

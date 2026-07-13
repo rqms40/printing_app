@@ -6,15 +6,17 @@ x-api-env: &api-env
   DATABASE_NAME: grid_print
   DATABASE_USER: postgres
   DATABASE_PASSWORD: postgres
-  JWT_SECRET: ${JWT_SECRET:-gridgo-dev-secret-change-me}
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in the shell or --env-file}
   JWT_EXPIRATION: ${JWT_EXPIRATION:-1d}
   MINIO_ENDPOINT: minio
   MINIO_PORT: 9000
-  MINIO_ACCESS_KEY: minioadmin
-  MINIO_SECRET_KEY: minioadmin
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY must be set in the shell or --env-file}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY must be set in the shell or --env-file}
   MINIO_BUCKET: grid-print
+  MINIO_REGION: us-east-1
   MINIO_USE_SSL: "false"
-  MINIO_PUBLIC_URL: http://${GRIDGO_PUBLIC_HOST:-192.168.40.201}:${GRIDGO_MINIO_PORT:-9000}
+  MINIO_PUBLIC_URL: http://${GRIDGO_PUBLIC_HOST:?GRIDGO_PUBLIC_HOST must be the browser-reachable host}:${GRIDGO_MINIO_PORT:-9000}
+  GRIDGO_TRUST_PROXY_HOPS: ${GRIDGO_TRUST_PROXY_HOPS:-0}
   NODE_ENV: development
   DATABASE_SYNCHRONIZE: "false"
   ROUTING_BASE_URL: ${ROUTING_BASE_URL:-http://osrm:5000}
@@ -81,8 +83,8 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY must be set in the shell or --env-file}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY must be set in the shell or --env-file}
     ports:
       - "${GRIDGO_BIND_ADDR:-0.0.0.0}:${GRIDGO_MINIO_PORT:-9000}:9000"
       - "${GRIDGO_BIND_ADDR:-0.0.0.0}:${GRIDGO_MINIO_CONSOLE_PORT:-9001}:9001"
@@ -162,7 +164,7 @@ services:
       dockerfile: docker/mobile-web.Dockerfile
       args:
         FLUTTER_VERSION: ${FLUTTER_VERSION:-3.41.6}
-        SERVER_URL: http://${GRIDGO_PUBLIC_HOST:-192.168.40.201}:${GRIDGO_API_PORT:-3000}
+        SERVER_URL: http://${GRIDGO_PUBLIC_HOST:?GRIDGO_PUBLIC_HOST must be the browser-reachable host}:${GRIDGO_API_PORT:-3000}
         ENABLE_DEV_AUTH: ${GRIDGO_ENABLE_DEV_AUTH:-false}
         GRIDGO_REAL_FLOW: ${GRIDGO_REAL_FLOW:-true}
     ports:
@@ -176,8 +178,8 @@ services:
       context: .
       dockerfile: docker/admin-web.Dockerfile
       args:
-        VITE_API_URL: http://${GRIDGO_PUBLIC_HOST:-192.168.40.201}:${GRIDGO_API_PORT:-3000}/api
-        VITE_WS_URL: http://${GRIDGO_PUBLIC_HOST:-192.168.40.201}:${GRIDGO_API_PORT:-3000}
+        VITE_API_URL: http://${GRIDGO_PUBLIC_HOST:?GRIDGO_PUBLIC_HOST must be the browser-reachable host}:${GRIDGO_API_PORT:-3000}/api
+        VITE_WS_URL: http://${GRIDGO_PUBLIC_HOST:?GRIDGO_PUBLIC_HOST must be the browser-reachable host}:${GRIDGO_API_PORT:-3000}
     ports:
       - "${GRIDGO_BIND_ADDR:-0.0.0.0}:${GRIDGO_ADMIN_PORT:-8189}:80"
     depends_on:
@@ -189,7 +191,7 @@ services:
       context: .
       dockerfile: docker/landing-web.Dockerfile
       args:
-        VITE_API_URL: http://${GRIDGO_PUBLIC_HOST:-192.168.40.201}:${GRIDGO_API_PORT:-3000}/api
+        VITE_API_URL: http://${GRIDGO_PUBLIC_HOST:?GRIDGO_PUBLIC_HOST must be the browser-reachable host}:${GRIDGO_API_PORT:-3000}/api
         VITE_MOBILE_WEB_PORT: "${GRIDGO_MOBILE_PORT:-8088}"
     ports:
       - "${GRIDGO_BIND_ADDR:-0.0.0.0}:${GRIDGO_LANDING_PORT:-8090}:80"

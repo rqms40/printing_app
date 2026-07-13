@@ -12,10 +12,30 @@ const _customer = AuthUser(
   isProfileComplete: true,
 );
 
+const _rider = AuthUser(
+  id: '12',
+  email: 'juan@example.com',
+  fullName: 'Juan Reyes',
+  role: 'rider',
+  isProfileComplete: true,
+);
+
+const _admin = AuthUser(
+  id: '13',
+  email: 'admin@example.com',
+  fullName: 'GRID Admin',
+  role: 'admin',
+  isProfileComplete: true,
+);
+
 const _activeCustomer = AuthState(
   status: AuthStatus.authenticated,
   user: _customer,
 );
+
+const _activeRider = AuthState(status: AuthStatus.authenticated, user: _rider);
+
+const _activeAdmin = AuthState(status: AuthStatus.authenticated, user: _admin);
 
 const _justSubmittedCustomer = AuthState(
   status: AuthStatus.authenticated,
@@ -129,6 +149,29 @@ void main() {
         _redirect('/auth/login?redirect=$target', _activeCustomer),
         '/customer/home',
       );
+    });
+  });
+
+  group('authenticated role route ownership', () {
+    test('customer cannot directly open rider or admin routes', () {
+      expect(_redirect('/rider/home', _activeCustomer), '/customer/home');
+      expect(_redirect('/admin/dashboard', _activeCustomer), '/customer/home');
+    });
+
+    test('rider cannot directly open customer or admin routes', () {
+      expect(_redirect('/customer/orders/42', _activeRider), '/rider/home');
+      expect(_redirect('/admin/dashboard', _activeRider), '/rider/home');
+    });
+
+    test('admin cannot directly open customer or rider routes', () {
+      expect(_redirect('/customer/home', _activeAdmin), '/admin/dashboard');
+      expect(_redirect('/rider/deliveries', _activeAdmin), '/admin/dashboard');
+    });
+
+    test('each authenticated role keeps routes in its own surface', () {
+      expect(_redirect('/customer/orders', _activeCustomer), isNull);
+      expect(_redirect('/rider/deliveries', _activeRider), isNull);
+      expect(_redirect('/admin/queue', _activeAdmin), isNull);
     });
   });
 

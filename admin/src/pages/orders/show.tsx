@@ -280,6 +280,10 @@ export function OrderShow() {
     order.order_status === "ready_for_dispatch" &&
     order.delivery_option === "delivery" &&
     !order.assigned_rider_contact?.delivery_assignment_id;
+  const assignedRiderName =
+    order.assigned_rider_contact?.display_name ??
+    order.assigned_rider_contact?.full_name ??
+    order.assigned_rider_contact?.nickname;
 
   const handleStatusChange = (newStatus: OrderStatus) => {
     if (newStatus === "file_declined") {
@@ -402,6 +406,9 @@ export function OrderShow() {
                     ? `${getOrderTypeLabel(order)} · ${items.length} print jobs`
                     : getOrderTypeLabel(order)}
                 </Text>
+                {assignedRiderName && (
+                  <Tag color="green">Assigned rider: {assignedRiderName}</Tag>
+                )}
               </Space>
             </Col>
             <Col>

@@ -9,13 +9,15 @@ class _FakeLocationSource implements RiderLocationSource {
     this.permission = RiderLocationPermission.whileInUse,
     this.requestedPermission = RiderLocationPermission.whileInUse,
     this.serviceEnabled = true,
-    this.current = const RiderGpsPoint(latitude: 7.064, longitude: 125.608),
   });
 
   RiderLocationPermission permission;
   RiderLocationPermission requestedPermission;
   bool serviceEnabled;
-  RiderGpsPoint current;
+  RiderGpsPoint current = const RiderGpsPoint(
+    latitude: 7.064,
+    longitude: 125.608,
+  );
   final streamController = StreamController<RiderGpsPoint>.broadcast();
   int permissionChecks = 0;
 
@@ -200,6 +202,103 @@ void main() {
       expect(tracker.state.point, const LatLng(7.064, 125.608));
       expect(tracker.state.message, contains('server'));
     });
+
+    test(
+      'manual GPS refresh forces a new acknowledged device reading',
+      () async {
+        final source = _FakeLocationSource();
+        final calls = <LatLng>[];
+        final tracker = RiderLocationTracker(
+          assignmentId: '101',
+          enabled: true,
+          source: source,
+          postLocation: (point) async => calls.add(point),
+          autoStart: false,
+        );
+        addTearDown(() async {
+          tracker.dispose();
+          await source.close();
+        });
+
+        await tracker.start();
+        await _flush();
+        expect(calls, [const LatLng(7.064, 125.608)]);
+
+        source.current = const RiderGpsPoint(
+          latitude: 7.0645,
+          longitude: 125.6082,
+        );
+        await tracker.refreshNow();
+        await _flush();
+
+        expect(calls, [
+          const LatLng(7.064, 125.608),
+          const LatLng(7.0645, 125.6082),
+        ]);
+        expect(tracker.state.status, RiderGpsStatus.live);
+        expect(tracker.state.point, const LatLng(7.0645, 125.6082));
+      },
+    );
+
+    test(
+      'manual GPS refresh waits for its queued point to be acknowledged',
+      () async {
+        final source = _FakeLocationSource();
+        final calls = <LatLng>[];
+        final acknowledgements = <Completer<void>>[];
+        Future<void> post(LatLng point) async {
+          calls.add(point);
+          final acknowledgement = Completer<void>();
+          acknowledgements.add(acknowledgement);
+          await acknowledgement.future;
+        }
+
+        final tracker = RiderLocationTracker(
+          assignmentId: '101',
+          enabled: true,
+          source: source,
+          postLocation: post,
+          autoStart: false,
+        );
+        addTearDown(() async {
+          for (final acknowledgement in acknowledgements) {
+            if (!acknowledgement.isCompleted) acknowledgement.complete();
+          }
+          tracker.dispose();
+          await source.close();
+        });
+
+        await tracker.start();
+        await _flush();
+        expect(calls, [const LatLng(7.064, 125.608)]);
+
+        source.current = const RiderGpsPoint(
+          latitude: 7.0645,
+          longitude: 125.6082,
+        );
+        var refreshCompleted = false;
+        final refresh = tracker.refreshNow().then((_) => refreshCompleted = true);
+        await _flush();
+
+        expect(refreshCompleted, isFalse);
+        expect(tracker.state.status, RiderGpsStatus.uploading);
+        expect(calls, hasLength(1));
+
+        acknowledgements.first.complete();
+        await _flush();
+        expect(calls, [
+          const LatLng(7.064, 125.608),
+          const LatLng(7.0645, 125.6082),
+        ]);
+        expect(refreshCompleted, isFalse);
+        expect(tracker.state.status, RiderGpsStatus.uploading);
+
+        acknowledgements[1].complete();
+        await refresh;
+        expect(refreshCompleted, isTrue);
+        expect(tracker.state.status, RiderGpsStatus.live);
+      },
+    );
 
     test(
       'serializes acknowledged REST posts and throttles by time plus distance',

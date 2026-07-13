@@ -8,6 +8,7 @@ import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/auth/models/registration_draft.dart';
 import 'package:printing_app/features/customer/profile/models/account_state.dart';
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
+import 'package:printing_app/shared/models/address.dart';
 import 'package:printing_app/shared/widgets/app_bottom_nav.dart';
 import 'package:printing_app/shared/widgets/scaffold_with_nav.dart';
 
@@ -112,6 +113,22 @@ String _roleHome(String? role) => switch (role) {
   _ => '/customer/home',
 };
 
+String _effectiveRole(String? role) => switch (role) {
+  'rider' => 'rider',
+  'admin' => 'admin',
+  _ => 'customer',
+};
+
+bool _isProtectedPathOwnedByRole(String path, String? role) {
+  final owner = switch (path) {
+    final value when value.startsWith('/customer/') => 'customer',
+    final value when value.startsWith('/rider/') => 'rider',
+    final value when value.startsWith('/admin/') => 'admin',
+    _ => null,
+  };
+  return owner == null || owner == _effectiveRole(role);
+}
+
 bool _isSafeRoleDeepLink(String? rawLocation, String? role) {
   if (rawLocation == null || rawLocation.isEmpty) return false;
   final target = Uri.tryParse(rawLocation);
@@ -180,8 +197,13 @@ String? resolveAppRedirect({
 
   final isForcedSurvey = path == '/customer/survey/required';
   if (isForcedSurvey && !isAuth) return '/auth/login';
-  if (isAuth && accountState.status == AccountGateStatus.surveyRequired) {
+  if (isAuth &&
+      _effectiveRole(authState.user?.role) == 'customer' &&
+      accountState.status == AccountGateStatus.surveyRequired) {
     return isForcedSurvey ? null : '/customer/survey/required';
+  }
+  if (isAuth && !_isProtectedPathOwnedByRole(path, authState.user?.role)) {
+    return _roleHome(authState.user?.role);
   }
   if (isForcedSurvey &&
       isAuth &&
@@ -502,8 +524,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/customer/addresses/new',
-        pageBuilder: (_, state) =>
-            slideTransition(const AddressPickerScreen(), state),
+        pageBuilder: (_, state) {
+          final existingAddress = state.extra is Address
+              ? state.extra as Address
+              : null;
+          return slideTransition(
+            AddressPickerScreen(existingAddress: existingAddress),
+            state,
+          );
+        },
       ),
       GoRoute(
         path: '/customer/profile/account',

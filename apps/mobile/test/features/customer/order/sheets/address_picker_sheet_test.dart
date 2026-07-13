@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -47,6 +49,7 @@ class _FailingAddressNotifier extends AddressNotifier {
 
 void main() {
   testWidgets('shows saved addresses, returns chosen one', (tester) async {
+    final semantics = tester.ensureSemantics();
     final container = ProviderContainer(
       overrides: [
         addressProvider.overrideWith(
@@ -83,9 +86,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Office'), findsOneWidget);
+    final officeControl = find.bySemanticsLabel(RegExp(r'^Office\.'));
+    expect(officeControl, findsOneWidget);
+    expect(
+      tester
+          .getSemantics(officeControl)
+          .getSemanticsData()
+          .hasAction(ui.SemanticsAction.tap),
+      isTrue,
+      reason: 'saved-address semantics must expose its selection action',
+    );
     await tester.tap(find.text('Office'));
     await tester.pumpAndSettle();
     expect(picked?.id, '2');
+    semantics.dispose();
   });
 
   testWidgets('pin location flow saves and returns a reusable address', (

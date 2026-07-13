@@ -124,21 +124,33 @@ class _CheckoutPaymentCardState extends ConsumerState<CheckoutPaymentCard> {
             children: [
               KeyedSubtree(
                 key: widget.methodPickerKey,
-                child: InkWell(
-                  borderRadius: AppRadius.borderLg,
+                child: Semantics(
+                  button: true,
+                  label: method == null
+                      ? 'Choose payment method'
+                      : 'Change payment method. ${_labelFor(method)}',
                   onTap: () => _openPaymentSheet(context, method),
-                  child: Container(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    decoration: BoxDecoration(
-                      color: colors.background,
+                  child: ExcludeSemantics(
+                    child: InkWell(
                       borderRadius: AppRadius.borderLg,
-                      border: Border.all(
-                        color: colors.outline.withValues(alpha: 0.4),
+                      onTap: () => _openPaymentSheet(context, method),
+                      child: Container(
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        decoration: BoxDecoration(
+                          color: colors.background,
+                          borderRadius: AppRadius.borderLg,
+                          border: Border.all(
+                            color: colors.outline.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: method == null
+                            ? _EmptyPaymentRow(colors: colors)
+                            : _SelectedPaymentRow(
+                                method: method,
+                                colors: colors,
+                              ),
                       ),
                     ),
-                    child: method == null
-                        ? _EmptyPaymentRow(colors: colors)
-                        : _SelectedPaymentRow(method: method, colors: colors),
                   ),
                 ),
               ),

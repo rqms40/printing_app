@@ -20,6 +20,22 @@ describe('OsrmRoutingProvider', () => {
     );
   }
 
+  it.each(['', 'not-a-url', 'ftp://routing.test'])(
+    'fails fast for invalid production ROUTING_BASE_URL %p',
+    (baseUrl) => {
+      expect(
+        () =>
+          new OsrmRoutingProvider(
+            new ConfigService({
+              NODE_ENV: 'production',
+              ROUTING_BASE_URL: baseUrl,
+            }),
+            fetchMock,
+          ),
+      ).toThrow(/ROUTING_BASE_URL/);
+    },
+  );
+
   it('requests a duration/distance matrix with longitude before latitude', async () => {
     fetchMock.mockResolvedValue({
       ok: true,

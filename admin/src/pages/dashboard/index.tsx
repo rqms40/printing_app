@@ -211,7 +211,7 @@ const OperationsTab: React.FC<{ kpis: typeof mockKPIs }> = ({ kpis }) => (
             <ClockCircleOutlined style={{ color: "#FFDE58", fontSize: 26 }} />
           </div>
           <div>
-            <Text style={{ color: "#808080", fontSize: 13, display: "block", marginBottom: 4 }}>
+            <Text style={{ color: "#A0A0A0", fontSize: 13, display: "block", marginBottom: 4 }}>
               Average Turnaround Time (TAT)
             </Text>
             <Title level={2} style={{ color: "#F0F0F0", margin: 0, letterSpacing: "-0.5px" }}>
@@ -271,7 +271,7 @@ const OperationsTab: React.FC<{ kpis: typeof mockKPIs }> = ({ kpis }) => (
                 <Title level={3} style={{ color: "#F0F0F0", margin: "0 0 4px 0" }}>
                   {item.value}
                 </Title>
-                <Text style={{ color: "#808080", fontSize: 13 }}>{item.label}</Text>
+                <Text style={{ color: "#A0A0A0", fontSize: 13 }}>{item.label}</Text>
               </div>
               <div style={{ background: item.bg, padding: 10, borderRadius: 10 }}>{item.icon}</div>
             </div>

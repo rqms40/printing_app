@@ -191,6 +191,8 @@ class RiderLocationTracker extends StateNotifier<RiderLocationTrackerState> {
   DateTime? _lastAcknowledgedAt;
   LatLng? _pendingPoint;
   bool _posting = false;
+  bool _forcePendingPost = false;
+  Completer<void>? _drainCompleter;
   bool _started = false;
   bool _disposed = false;
 
@@ -235,6 +237,25 @@ class RiderLocationTracker extends StateNotifier<RiderLocationTrackerState> {
     }
   }
 
+  Future<void> refreshNow() async {
+    if (!enabled || _disposed) return;
+    try {
+      final point = (await _source.getCurrentPosition()).latLng;
+      if (_disposed) return;
+      state = state.withPoint(point, RiderGpsStatus.uploading);
+      _pendingPoint = point;
+      _forcePendingPost = true;
+      await _drainPosts();
+    } catch (error) {
+      if (_disposed) return;
+      state = RiderLocationTrackerState(
+        status: RiderGpsStatus.streamError,
+        point: state.point,
+        error: error,
+      );
+    }
+  }
+
   void _acceptPoint(LatLng point) {
     if (_disposed) return;
     final shouldPost = _shouldPost(point, _now());
@@ -257,20 +278,37 @@ class RiderLocationTracker extends StateNotifier<RiderLocationTrackerState> {
         movedMeters >= _minimumPostDistanceMeters;
   }
 
-  Future<void> _drainPosts() async {
-    if (_posting || _disposed) return;
+  Future<void> _drainPosts() {
+    if (_disposed) return Future<void>.value();
+    final activeDrain = _drainCompleter;
+    if (activeDrain != null) return activeDrain.future;
+
+    final completer = Completer<void>();
+    _drainCompleter = completer;
     _posting = true;
+    unawaited(_runDrain(completer));
+    return completer.future;
+  }
+
+  Future<void> _runDrain(Completer<void> completer) async {
     try {
       while (!_disposed && _pendingPoint != null) {
         final point = _pendingPoint!;
         _pendingPoint = null;
-        if (!_shouldPost(point, _now())) continue;
+        final forcePost = _forcePendingPost;
+        _forcePendingPost = false;
+        if (!forcePost && !_shouldPost(point, _now())) continue;
         try {
           await _postLocation(point);
           if (_disposed) return;
           _lastAcknowledgedPoint = point;
           _lastAcknowledgedAt = _now();
-          state = state.withPoint(state.point ?? point, RiderGpsStatus.live);
+          state = state.withPoint(
+            state.point ?? point,
+            _pendingPoint == null
+                ? RiderGpsStatus.live
+                : RiderGpsStatus.uploading,
+          );
         } catch (error) {
           if (_disposed) return;
           state = RiderLocationTrackerState(
@@ -282,6 +320,10 @@ class RiderLocationTracker extends StateNotifier<RiderLocationTrackerState> {
       }
     } finally {
       _posting = false;
+      if (identical(_drainCompleter, completer)) {
+        _drainCompleter = null;
+      }
+      if (!completer.isCompleted) completer.complete();
     }
   }
 
@@ -304,6 +346,7 @@ class RiderLocationTracker extends StateNotifier<RiderLocationTrackerState> {
     _disposed = true;
     unawaited(_subscription?.cancel());
     _pendingPoint = null;
+    _forcePendingPost = false;
     super.dispose();
   }
 }

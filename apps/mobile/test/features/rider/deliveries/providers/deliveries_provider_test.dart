@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:printing_app/features/rider/deliveries/providers/deliveries_provider.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
@@ -19,6 +20,7 @@ void main() {
   List<Map<String, dynamic>>? activeAssignmentsResponse;
   List<Map<String, dynamic>>? historyAssignmentsResponse;
   Map<String, dynamic>? dispatchPlanResponse;
+  var blankDispatchPlanResponse = false;
   var failDispatchPlan = false;
   var failPatchStatus = false;
   Map<String, dynamic>? lastStatusPatchData;
@@ -104,7 +106,7 @@ void main() {
             Response(
               requestOptions: options,
               statusCode: 200,
-              data: dispatchPlanResponse,
+              data: blankDispatchPlanResponse ? '' : dispatchPlanResponse,
             ),
           );
           return;
@@ -155,6 +157,7 @@ void main() {
     activeAssignmentsResponse = null;
     historyAssignmentsResponse = null;
     dispatchPlanResponse = null;
+    blankDispatchPlanResponse = false;
     failDispatchPlan = false;
     failPatchStatus = false;
     lastStatusPatchData = null;
@@ -200,6 +203,29 @@ void main() {
     });
 
     test(
+      'real-flow mode treats an empty no-plan response as no dispatch plan',
+      () async {
+        activeAssignmentsResponse = [
+          _assignmentJson(
+            id: '101',
+            status: DeliveryStatus.assigned,
+            updatedAt: '2026-02-01T09:00:00Z',
+          ),
+        ];
+        historyAssignmentsResponse = [];
+        blankDispatchPlanResponse = true;
+        final realNotifier = DeliveriesNotifier(realFlow: true);
+        addTearDown(realNotifier.dispose);
+
+        await _waitForBootstrap();
+
+        expect(realNotifier.state.views.single.id, '101');
+        expect(realNotifier.state.errorMessage, isNull);
+        expect(realNotifier.state.dataStale, isFalse);
+      },
+    );
+
+    test(
       'real-flow refresh retains one coherent plan when a source fails',
       () async {
         activeAssignmentsResponse = [
@@ -241,6 +267,50 @@ void main() {
           realNotifier.state.errorMessage,
           'Unable to load live assignments',
         );
+      },
+    );
+
+    test(
+      'dispatch-plan signal refreshes the rider into persisted stop order',
+      () async {
+        activeAssignmentsResponse = [
+          _assignmentJson(
+            id: '101',
+            status: DeliveryStatus.assigned,
+            updatedAt: '2026-02-01T09:00:00Z',
+          ),
+          _assignmentJson(
+            id: '102',
+            status: DeliveryStatus.assigned,
+            updatedAt: '2026-02-01T09:01:00Z',
+          ),
+        ];
+        historyAssignmentsResponse = [];
+        blankDispatchPlanResponse = true;
+        final realNotifier = DeliveriesNotifier(realFlow: true);
+        addTearDown(realNotifier.dispose);
+        await _waitForBootstrap();
+        expect(realNotifier.state.plannedRoute, isEmpty);
+
+        blankDispatchPlanResponse = false;
+        dispatchPlanResponse = _twoStopPlan();
+        WebSocketService.instance.dispatchRiderDispatchPlanUpdatedForTests({
+          'riderProfileId': 10,
+          'planId': 501,
+          'planVersion': 4,
+          'change': 'created',
+        });
+        await _waitForBootstrap();
+
+        expect(
+          realNotifier.state.plannedRoute.map((view) => view.id),
+          orderedEquals(['101', '102']),
+        );
+        expect(
+          realNotifier.state.routeStops.map((view) => view.routePosition),
+          orderedEquals([1, 2]),
+        );
+        expect(realNotifier.state.dataStale, isFalse);
       },
     );
 
@@ -966,6 +1036,8 @@ void main() {
 
       final baselineListenerCount =
           WebSocketService.instance.riderAssignmentListenerCountForTests;
+      final baselinePlanListenerCount =
+          WebSocketService.instance.riderDispatchPlanListenerCountForTests;
       final apiBackedNotifier = DeliveriesNotifier();
       await _waitForBootstrap();
 
@@ -973,12 +1045,20 @@ void main() {
         WebSocketService.instance.riderAssignmentListenerCountForTests,
         baselineListenerCount + 1,
       );
+      expect(
+        WebSocketService.instance.riderDispatchPlanListenerCountForTests,
+        baselinePlanListenerCount + 1,
+      );
 
       apiBackedNotifier.dispose();
 
       expect(
         WebSocketService.instance.riderAssignmentListenerCountForTests,
         baselineListenerCount,
+      );
+      expect(
+        WebSocketService.instance.riderDispatchPlanListenerCountForTests,
+        baselinePlanListenerCount,
       );
     });
 
@@ -1041,6 +1121,28 @@ void main() {
       );
       expect(reloaded.status, DeliveryStatus.assigned); // back to original
     });
+  });
+
+  test('provider releases rider data after its last listener leaves', () async {
+    final container = ProviderContainer(
+      overrides: [
+        deliveriesProvider.overrideWith(
+          (_) => DeliveriesNotifier(bootstrap: false),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    final subscription = container.listen(
+      deliveriesProvider,
+      (_, __) {},
+      fireImmediately: true,
+    );
+    final firstNotifier = container.read(deliveriesProvider.notifier);
+
+    subscription.close();
+    await container.pump();
+
+    expect(container.read(deliveriesProvider.notifier), isNot(firstNotifier));
   });
 
   group('DeliveriesState', () {

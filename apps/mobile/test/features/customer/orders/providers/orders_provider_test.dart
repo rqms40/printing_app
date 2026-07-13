@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -26,6 +27,7 @@ void main() {
   Map<String, dynamic>? batchAssignedSlot;
   var failOrdersGet = false;
   var ordersGetResponse = <Map<String, dynamic>>[];
+  final deferredOrdersGets = <Completer<List<Map<String, dynamic>>>>[];
   Map<String, dynamic>? orderByIdResponse;
   var orderByIdFetches = 0;
   final forceBetaLimitPaths = <String>{};
@@ -54,6 +56,21 @@ void main() {
           }
 
           if (options.path == '/orders' && options.method == 'GET') {
+            if (deferredOrdersGets.isNotEmpty) {
+              final response = deferredOrdersGets.removeAt(0);
+              unawaited(
+                response.future.then(
+                  (data) => handler.resolve(
+                    Response(
+                      requestOptions: options,
+                      statusCode: 200,
+                      data: data,
+                    ),
+                  ),
+                ),
+              );
+              return;
+            }
             if (failOrdersGet) {
               handler.reject(
                 DioException(
@@ -158,6 +175,7 @@ void main() {
     batchAssignedSlot = null;
     failOrdersGet = false;
     ordersGetResponse = [];
+    deferredOrdersGets.clear();
     orderByIdResponse = null;
     orderByIdFetches = 0;
     batchResponseOrders = [
@@ -482,6 +500,55 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(loadReports, 2);
+    });
+
+    test('session restart re-registers the delivery queue listener', () async {
+      WebSocketService.disableOrdersSocketForTests = true;
+      WebSocketService.instance.disconnect();
+      addTearDown(() {
+        WebSocketService.disableOrdersSocketForTests = false;
+        WebSocketService.instance.disconnect();
+      });
+      ordersGetResponse = [];
+      final notifier = OrdersNotifier(skipBootstrap: true);
+      addTearDown(notifier.dispose);
+
+      notifier.clear();
+      await notifier.startSession();
+      expect(WebSocketService.instance.deliveryQueueListenerCountForTests, 1);
+
+      WebSocketService.instance.disconnect();
+      notifier.clear();
+      await notifier.startSession();
+
+      expect(WebSocketService.instance.deliveryQueueListenerCountForTests, 1);
+    });
+
+    test('an old orders response cannot replace a new session', () async {
+      WebSocketService.disableOrdersSocketForTests = true;
+      addTearDown(() {
+        WebSocketService.disableOrdersSocketForTests = false;
+        WebSocketService.instance.disconnect();
+      });
+      final oldResponse = Completer<List<Map<String, dynamic>>>();
+      final newResponse = Completer<List<Map<String, dynamic>>>();
+      deferredOrdersGets.addAll([oldResponse, newResponse]);
+      final notifier = OrdersNotifier(skipBootstrap: true);
+      addTearDown(notifier.dispose);
+
+      final oldRefresh = notifier.refreshOrders();
+      notifier.clear();
+      final newRefresh = notifier.startSession();
+      newResponse.complete([
+        _orderJson(id: '8', orderId: 'ORD-VEN', fileName: 'ven.pdf'),
+      ]);
+      await newRefresh;
+      oldResponse.complete([
+        _orderJson(id: '7', orderId: 'ORD-MARK', fileName: 'mark.pdf'),
+      ]);
+      await oldRefresh;
+
+      expect(notifier.state.single.orderId, 'ORD-VEN');
     });
 
     test('failed refresh preserves existing real orders', () async {

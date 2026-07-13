@@ -11,11 +11,24 @@ import 'package:printing_app/features/customer/address/widgets/address_card.dart
 import 'package:printing_app/shared/widgets/confirmation_dialog.dart';
 import 'package:printing_app/shared/widgets/empty_state.dart';
 
-class AddressListScreen extends ConsumerWidget {
+class AddressListScreen extends ConsumerStatefulWidget {
   const AddressListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AddressListScreen> createState() => _AddressListScreenState();
+}
+
+class _AddressListScreenState extends ConsumerState<AddressListScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(addressProvider.notifier).refreshAddresses();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final addresses = ref.watch(addressProvider);
     final notifier = ref.read(addressProvider.notifier);
     final colors = Theme.of(context).brightness == Brightness.dark
@@ -118,7 +131,10 @@ class AddressListScreen extends ConsumerWidget {
                             child: AddressCard(
                               address: address,
                               onEdit: () {
-                                context.push('/customer/addresses/new');
+                                context.push(
+                                  '/customer/addresses/new',
+                                  extra: address,
+                                );
                               },
                               onDelete: () {
                                 ConfirmationDialog.show(

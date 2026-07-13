@@ -459,6 +459,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   child: SvgPicture.asset(
                     'assets/animations/undraw_certificate.svg',
                     height: 240,
+                    semanticsLabel: 'Privacy and account consent illustration',
                   ),
                 )
                 .animate()
@@ -829,20 +830,25 @@ class _WizardHeader extends StatelessWidget {
       children: [
         Row(
           children: [
-            GestureDetector(
-              onTap: canGoBack ? onBack : null,
-              child: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: colors.surface,
-                  borderRadius: AppRadius.borderFull,
-                  border: Border.all(color: colors.outline),
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  Icons.arrow_back_rounded,
-                  color: colors.onBackground,
+            Semantics(
+              label: 'Back',
+              button: true,
+              enabled: canGoBack,
+              child: GestureDetector(
+                onTap: canGoBack ? onBack : null,
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: colors.surface,
+                    borderRadius: AppRadius.borderFull,
+                    border: Border.all(color: colors.outline),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.arrow_back_rounded,
+                    color: colors.onBackground,
+                  ),
                 ),
               ),
             ),

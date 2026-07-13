@@ -268,11 +268,8 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
                     initialZoom: 13.5,
                     onMapReady: () {
                       _isMapReady = true;
-                      final latest = ref.read(liveRiderLocationProvider);
-                      if (latest != null) {
-                        _moveCameraTo(
-                          LatLng(latest.latitude, latest.longitude),
-                        );
+                      if (riderPoint != null) {
+                        _moveCameraTo(riderPoint);
                       }
                     },
                   ),

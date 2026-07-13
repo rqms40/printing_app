@@ -24,13 +24,31 @@ const EVIDENCE_REFERENCES = [
   },
 ] as const;
 
-export class EvidenceFileIntegrity1777853800000
-  implements MigrationInterface
-{
+export class EvidenceFileIntegrity1777853800000 implements MigrationInterface {
   name = 'EvidenceFileIntegrity1777853800000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     if (!(await queryRunner.hasTable('file_metadata'))) return;
+
+    if (
+      (await queryRunner.hasTable('users')) &&
+      (await queryRunner.hasColumn('users', 'beta_photo_file_id')) &&
+      (await queryRunner.hasColumn('users', 'beta_photo_uploaded_at')) &&
+      (await queryRunner.hasColumn('users', 'beta_shared_on_social'))
+    ) {
+      await queryRunner.query(`
+        UPDATE "users" AS beta_user
+        SET "beta_photo_file_id" = NULL,
+            "beta_photo_uploaded_at" = NULL,
+            "beta_shared_on_social" = FALSE
+        WHERE beta_user."beta_photo_file_id" IS NULL
+           OR NOT EXISTS (
+             SELECT 1
+             FROM "file_metadata" AS file_record
+             WHERE file_record."id" = beta_user."beta_photo_file_id"
+           )
+      `);
+    }
 
     for (const reference of EVIDENCE_REFERENCES) {
       if (

@@ -55,6 +55,13 @@ describe('RidersService', () => {
     advanceStop: jest.Mock;
     skipStopIfPlanned: jest.Mock;
   };
+  const validSignatureProof = JSON.stringify({
+    format: 'gridgo-signature-v1',
+    points: [
+      [1, 1],
+      [2, 2],
+    ],
+  });
 
   const mockProfile = {
     id: 10,
@@ -177,6 +184,7 @@ describe('RidersService', () => {
     };
     ordersGateway = {
       notifyDeliveryQueueUpdated: jest.fn(),
+      notifyRiderDispatchPlanUpdated: jest.fn(),
     };
     chatGateway = {
       notifyConversationClosed: jest.fn(),
@@ -693,7 +701,7 @@ describe('RidersService', () => {
           arrivedAssignment.id,
           DeliveryStatus.DELIVERED,
           undefined,
-          { type: 'signature', signatureData: 'svg:rollback' } as any,
+          { type: 'signature', signatureData: validSignatureProof } as any,
         ),
       ).rejects.toThrow('survey insert failed');
 
@@ -980,7 +988,7 @@ describe('RidersService', () => {
         venAssignment.id,
         DeliveryStatus.DELIVERED,
         undefined,
-        { type: 'signature', signatureData: 'svg:ven-proof' } as any,
+        { type: 'signature', signatureData: validSignatureProof } as any,
       );
 
       expect(ordersGateway.notifyDeliveryQueueUpdated).toHaveBeenCalledWith(
@@ -1068,7 +1076,7 @@ describe('RidersService', () => {
           arrived.id,
           DeliveryStatus.DELIVERED,
           undefined,
-          { type: 'signature', signatureData: 'svg:proof' } as any,
+          { type: 'signature', signatureData: validSignatureProof } as any,
         ),
       ).resolves.toMatchObject({ status: DeliveryStatus.DELIVERED });
 
@@ -1153,7 +1161,7 @@ describe('RidersService', () => {
             arrived.id,
             DeliveryStatus.DELIVERED,
             undefined,
-            { type: 'signature', signatureData: 'svg:proof' } as any,
+            { type: 'signature', signatureData: validSignatureProof } as any,
           ),
         ).resolves.toMatchObject({ status: DeliveryStatus.DELIVERED });
 
@@ -1230,13 +1238,13 @@ describe('RidersService', () => {
         100,
         DeliveryStatus.DELIVERED,
         undefined,
-        { type: 'signature', signatureData: 'svg:path-data' },
+        { type: 'signature', signatureData: validSignatureProof },
       );
 
       expect(result.status).toBe(DeliveryStatus.DELIVERED);
       expect(result.deliveredAt).toBeDefined();
       expect(result.proofType).toBe('signature');
-      expect(result.proofSignatureData).toBe('svg:path-data');
+      expect(result.proofSignatureData).toBe(validSignatureProof);
       expect(result.proofCapturedAt).toBeDefined();
       expect(result.proofCapturedByRiderId).toBe(mockProfile.id);
       expect(result.proofFileId).toBeNull();
@@ -1270,6 +1278,39 @@ describe('RidersService', () => {
 
       expect(assignmentRepo.save).not.toHaveBeenCalled();
     });
+
+    it.each([
+      'x',
+      JSON.stringify({
+        format: 'legacy-signature',
+        points: [
+          [1, 1],
+          [2, 2],
+        ],
+      }),
+      JSON.stringify({ format: 'gridgo-signature-v1', points: [[1, 1]] }),
+      JSON.stringify({
+        format: 'gridgo-signature-v1',
+        points: [[1, 1], null, [2, 2]],
+      }),
+      JSON.stringify({
+        format: 'gridgo-signature-v1',
+        points: [
+          [1, 1],
+          [1, 1],
+        ],
+      }),
+    ])(
+      'rejects malformed or empty signature proof %#',
+      async (signatureData) => {
+        await expect(
+          (service as any).validateProofOfDelivery({
+            type: 'signature',
+            signatureData,
+          }),
+        ).rejects.toThrow('Invalid signature proof');
+      },
+    );
 
     it.each([
       {
@@ -1456,7 +1497,7 @@ describe('RidersService', () => {
         100,
         DeliveryStatus.DELIVERED,
         undefined,
-        { type: 'signature', signatureData: 'svg:path-data' },
+        { type: 'signature', signatureData: validSignatureProof },
       );
       expect(delivered.status).toBe(DeliveryStatus.DELIVERED);
       expect(delivered.deliveredAt).toBeDefined();
@@ -1498,6 +1539,78 @@ describe('RidersService', () => {
       await expect(
         service.updateDeliveryStatus(1, 999, DeliveryStatus.ACCEPTED),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('dispatch plan realtime publication', () => {
+    const persistedPlan = { id: 501, riderId: 10, version: 4 } as any;
+
+    beforeEach(() => {
+      profileRepo.findOne.mockResolvedValue({
+        ...mockProfile,
+        id: 10,
+        userId: 70,
+      } as RiderProfile);
+    });
+
+    it('signals the rider after creating a persisted dispatch plan', async () => {
+      dispatchPlanService.createPlan.mockResolvedValue(persistedPlan);
+
+      await expect(service.createDispatchPlan(10, [101, 102])).resolves.toBe(
+        persistedPlan,
+      );
+
+      expect(ordersGateway.notifyRiderDispatchPlanUpdated).toHaveBeenCalledWith(
+        70,
+        {
+          riderProfileId: 10,
+          planId: 501,
+          planVersion: 4,
+          change: 'created',
+        },
+      );
+    });
+
+    it('signals the rider after re-optimizing a persisted dispatch plan', async () => {
+      dispatchPlanService.reoptimizePlan.mockResolvedValue(persistedPlan);
+
+      await expect(
+        service.reoptimizeDispatchPlan(10, [102, 101]),
+      ).resolves.toBe(persistedPlan);
+
+      expect(ordersGateway.notifyRiderDispatchPlanUpdated).toHaveBeenCalledWith(
+        70,
+        {
+          riderProfileId: 10,
+          planId: 501,
+          planVersion: 4,
+          change: 'reoptimized',
+        },
+      );
+    });
+
+    it('does not signal when dispatch-plan persistence fails', async () => {
+      dispatchPlanService.createPlan.mockRejectedValue(
+        new Error('routing persistence failed'),
+      );
+
+      await expect(service.createDispatchPlan(10, [101, 102])).rejects.toThrow(
+        'routing persistence failed',
+      );
+      expect(
+        ordersGateway.notifyRiderDispatchPlanUpdated,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('does not roll back a persisted plan when realtime publication fails', async () => {
+      dispatchPlanService.createPlan.mockResolvedValue(persistedPlan);
+      ordersGateway.notifyRiderDispatchPlanUpdated.mockImplementation(() => {
+        throw new Error('socket offline');
+      });
+
+      await expect(service.createDispatchPlan(10, [101, 102])).resolves.toBe(
+        persistedPlan,
+      );
     });
   });
 

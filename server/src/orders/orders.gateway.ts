@@ -20,6 +20,13 @@ export type DeliveryQueueUpdatedPayload = {
   planVersion: number;
 };
 
+export type RiderDispatchPlanUpdatedPayload = {
+  riderProfileId: number;
+  planId: number;
+  planVersion: number;
+  change: 'created' | 'reoptimized';
+};
+
 @WebSocketGateway({ namespace: '/ws/orders', cors: { origin: '*' } })
 export class OrdersGateway implements OnGatewayConnection {
   @WebSocketServer()
@@ -69,6 +76,15 @@ export class OrdersGateway implements OnGatewayConnection {
     payload: { assignmentId: number; orderId: number; orderRef: string },
   ) {
     this.server.to(`user_${riderUserId}`).emit('riderAssignment', payload);
+  }
+
+  notifyRiderDispatchPlanUpdated(
+    riderUserId: number,
+    payload: RiderDispatchPlanUpdatedPayload,
+  ) {
+    this.server
+      .to(`user_${riderUserId}`)
+      .emit('riderDispatchPlanUpdated', payload);
   }
 
   notifyDeliveryQueueUpdated(

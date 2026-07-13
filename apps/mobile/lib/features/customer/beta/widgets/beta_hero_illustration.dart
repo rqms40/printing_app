@@ -50,10 +50,12 @@ class BetaHeroIllustration extends StatelessWidget {
                   ],
                 ),
                 child: const Center(
-                  child: HugeIcon(
-                    icon: HugeIcons.strokeRoundedPrinter,
-                    size: 36,
-                    color: Color(0xFF0A0A0A),
+                  child: ExcludeSemantics(
+                    child: HugeIcon(
+                      icon: HugeIcons.strokeRoundedPrinter,
+                      size: 36,
+                      color: Color(0xFF0A0A0A),
+                    ),
                   ),
                 ),
               ),

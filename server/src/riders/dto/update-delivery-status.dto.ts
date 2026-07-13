@@ -65,7 +65,9 @@ export class ProofOfDeliveryDto {
   @MaxLength(1024)
   objectKey?: string;
 
-  @ApiPropertyOptional({ example: 'svg:path-data' })
+  @ApiPropertyOptional({
+    example: '{"format":"gridgo-signature-v1","points":[[12,18],[13,19]]}',
+  })
   @IsOptional()
   @IsString()
   @IsNotEmpty()

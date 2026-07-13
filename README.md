@@ -426,7 +426,7 @@ versioned migrations, and Swagger at `/docs`.
 | Namespace | Auth | Purpose |
 |---|---|---|
 | `/ws/orders` | JWT | Order status updates, survey-required events |
-| `/ws/location` | None | Real-time rider GPS per delivery assignment |
+| `/ws/location` | JWT + assignment authorization | Real-time rider GPS for the authorized current delivery stop |
 | `/ws/chat` | JWT | Customer ↔ admin, customer ↔ GridBot, rider ↔ admin |
 | `/ws/notifications` | JWT | In-app notifications + credits balance updates |
 | `/ws/daily-grid` | None | Push carousel card changes to all clients |
@@ -547,7 +547,9 @@ See `server/.env.example` for the full list. Key variables:
 | `OPENROUTER_API_KEY` | Yes | For GridBot AI |
 | `FIREBASE_SERVICE_ACCOUNT` | Yes | Path to Firebase service account JSON |
 | `PAYMONGO_SECRET_KEY` | No | Not yet active — payments are stubbed |
-| `OSRM_BASE_URL` | No | Defaults to `https://router.project-osrm.org` |
+| `ROUTING_BASE_URL` | Production | Owned OSRM-compatible endpoint; production startup fails fast when it is missing or invalid. The public OSRM demo is not used as a fallback. |
+| `ROUTING_PROFILE` | No | OSRM routing profile; defaults to `driving` |
+| `ROUTING_TIMEOUT_MS` | No | Routing request timeout; defaults to `5000` ms |
 
 ## Database
 
@@ -577,7 +579,7 @@ schema with `npm run migration:run` in development (or
 `npm run seed:if-empty` for demo data. `DATABASE_SYNCHRONIZE=true` is an
 explicit local-only escape hatch.
 
-## Development Status — v1.3.0
+## Development Status
 
 - [x] Phase 1 — UI shell (3 roles, full screen inventory, theme system)
 - [x] Phase 2 — Local logic (Hive drafts, dark mode, connectivity, offline mock fallback)

@@ -103,6 +103,9 @@ describe("OrderList", () => {
     expect(screen.getByText("File Declined")).toBeInTheDocument();
     expect(screen.queryByText("Cancelled")).not.toBeInTheDocument();
     expect(screen.queryByText("Rider Assigned")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "View details for ORD-MARK" }),
+    ).toBeInTheDocument();
   });
 
   it("requires a trimmed reason before submitting a server-provided file decline", async () => {

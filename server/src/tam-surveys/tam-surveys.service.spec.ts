@@ -141,6 +141,7 @@ describe('TamSurveysService', () => {
     };
     betaModeSettingsRepo = {
       find: jest.fn().mockResolvedValue([{ id: 1, isEnabled: true }]),
+      findOne: jest.fn().mockResolvedValue({ id: 1, isEnabled: true }),
     };
     userRepo = {
       findOne: jest.fn().mockResolvedValue(betaUser),
@@ -220,6 +221,25 @@ describe('TamSurveysService', () => {
     expect(result?.id).toBe(123);
   });
 
+  it('locks beta settings before creating a post-delivery requirement', async () => {
+    userRepo.findOne.mockResolvedValue(betaUser);
+    requirementRepo.findOne.mockResolvedValue(null);
+
+    await (service.createPostDeliveryRequirementIfNeeded as any)(
+      order,
+      transactionalManager,
+    );
+
+    expect(betaModeSettingsRepo.findOne).toHaveBeenCalledWith({
+      where: {},
+      order: { id: 'ASC' },
+      lock: { mode: 'pessimistic_write' },
+    });
+    expect(
+      betaModeSettingsRepo.findOne!.mock.invocationCallOrder[0],
+    ).toBeLessThan(userRepo.findOne.mock.invocationCallOrder[0]);
+  });
+
   it('does not create a requirement for a non-beta user', async () => {
     userRepo.findOne.mockResolvedValue({ ...betaUser, isBetaUser: false });
 
@@ -251,7 +271,10 @@ describe('TamSurveysService', () => {
   });
 
   it('does not create a requirement when beta mode is disabled', async () => {
-    betaModeSettingsRepo.find.mockResolvedValue([{ id: 1, isEnabled: false }]);
+    betaModeSettingsRepo.findOne.mockResolvedValue({
+      id: 1,
+      isEnabled: false,
+    } as BetaModeSettings);
     userRepo.findOne.mockResolvedValue(betaUser);
 
     const result = await service.createPostDeliveryRequirementIfNeeded(order);

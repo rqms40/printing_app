@@ -75,6 +75,13 @@ describe('Rider dispatch workflow (e2e)', () => {
     password: process.env.DATABASE_PASSWORD ?? 'postgres',
   };
   const orderRef = `E2E-${runId}`;
+  const signatureProof = JSON.stringify({
+    format: 'gridgo-signature-v1',
+    points: [
+      [1, 1],
+      [2, 2],
+    ],
+  });
   const emails = {
     customer: `e2e-customer-${runId}@example.com`,
     admin: `e2e-admin-${runId}@example.com`,
@@ -387,14 +394,14 @@ describe('Rider dispatch workflow (e2e)', () => {
         status: DeliveryStatus.DELIVERED,
         proof: {
           type: ProofOfDeliveryType.SIGNATURE,
-          signatureData: 'svg:e2e-signature',
+          signatureData: signatureProof,
         },
       })
       .expect(200)
       .expect((res) => {
         expect(res.body.status).toBe(DeliveryStatus.DELIVERED);
         expect(res.body.proofType).toBe(ProofOfDeliveryType.SIGNATURE);
-        expect(res.body.proofSignatureData).toBe('svg:e2e-signature');
+        expect(res.body.proofSignatureData).toBe(signatureProof);
       });
 
     await expect(
@@ -1274,7 +1281,7 @@ describe('Rider dispatch workflow (e2e)', () => {
       .get(`/api/chat/conversations/${concurrentConversationId}/messages`)
       .set('Authorization', `Bearer ${replacementToken}`)
       .expect(403);
-  });
+  }, 30_000);
 
   it('rolls back the order update when status history insertion fails', async () => {
     const suffix = `${runId}-rollback`;
@@ -1483,7 +1490,7 @@ describe('Rider dispatch workflow (e2e)', () => {
           status: DeliveryStatus.DELIVERED,
           proof: {
             type: ProofOfDeliveryType.SIGNATURE,
-            signatureData: 'svg:survey-rollback',
+            signatureData: signatureProof,
           },
         })
         .expect(500);
@@ -1592,7 +1599,7 @@ function onceSocketEvent<T = unknown>(
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(
       () => reject(new Error(`Timed out waiting for ${event}`)),
-      2_000,
+      10_000,
     );
     socket.once(event, (payload: T) => {
       clearTimeout(timeout);

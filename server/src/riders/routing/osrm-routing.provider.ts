@@ -58,9 +58,24 @@ export class OsrmRoutingProvider implements RoutingProvider {
     config: ConfigService,
     private readonly fetchImpl: Fetch = fetch,
   ) {
-    this.baseUrl = config
-      .get<string>('ROUTING_BASE_URL', 'http://osrm:5000')
-      .replace(/\/$/, '');
+    const configuredBaseUrl = config.get<string>('ROUTING_BASE_URL');
+    const production = config.get<string>('NODE_ENV') === 'production';
+    if (production && !configuredBaseUrl?.trim()) {
+      throw new Error(
+        'ROUTING_BASE_URL is required in production and must point to an owned OSRM-compatible service',
+      );
+    }
+    const baseUrl = configuredBaseUrl?.trim() || 'http://osrm:5000';
+    let parsedBaseUrl: URL;
+    try {
+      parsedBaseUrl = new URL(baseUrl);
+    } catch {
+      throw new Error('ROUTING_BASE_URL must be a valid HTTP(S) URL');
+    }
+    if (!['http:', 'https:'].includes(parsedBaseUrl.protocol)) {
+      throw new Error('ROUTING_BASE_URL must be a valid HTTP(S) URL');
+    }
+    this.baseUrl = baseUrl.replace(/\/$/, '');
     this.profile = config.get<string>('ROUTING_PROFILE', 'driving');
     const configuredTimeout = Number(
       config.get<string>('ROUTING_TIMEOUT_MS', '5000'),

@@ -43,6 +43,29 @@ describe('seed script', () => {
     );
   });
 
+  it('requires explicit JWT and MinIO credentials in deployment stacks', () => {
+    const devCompose = readFileSync(
+      join(__dirname, '..', '..', 'docker-compose.dev.yml'),
+      'utf8',
+    );
+    const productionCompose = readFileSync(
+      join(__dirname, '..', 'docker-compose.yml'),
+      'utf8',
+    );
+    const freshStack = workflowSource('ci-fresh-stack.yml');
+
+    for (const compose of [devCompose, productionCompose]) {
+      expect(compose).toContain('JWT_SECRET: ${JWT_SECRET:?');
+      expect(compose).toContain('MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?');
+      expect(compose).toContain('MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?');
+      expect(compose).not.toContain('minioadmin');
+    }
+    expect(productionCompose).toContain(
+      'MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:?',
+    );
+    expect(freshStack).toContain('MINIO_ACCESS_KEY MINIO_SECRET_KEY');
+  });
+
   it('isolates release signing from publication with job-level least privilege', () => {
     const release = workflowSource('release-apk.yml');
     const topLevel = release.slice(0, release.indexOf('jobs:'));

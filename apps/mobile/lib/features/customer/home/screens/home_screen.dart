@@ -47,9 +47,7 @@ bool shouldDeferHomeTutorial({
   required Iterable<OrderStatus> activeOrderStatuses,
 }) {
   return !ordersLoaded ||
-      activeOrderStatuses.any(
-        _activeDeliveryTutorialBlockingStatuses.contains,
-      );
+      activeOrderStatuses.any(_activeDeliveryTutorialBlockingStatuses.contains);
 }
 
 final homeTutorialReadyProvider = Provider<bool>((ref) {
@@ -232,19 +230,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           targetKey: _creditsTutorialKey,
           icon: HugeIcons.strokeRoundedCoins01,
           title: 'GRIDGO Credits',
-          body: 'Top up GRIDGO Credits and pay at checkout — no GCash OTP, no app-switching.',
+          body:
+              'Top up GRIDGO Credits and pay at checkout — no GCash OTP, no app-switching.',
           advanceOnSpotlightTap: false,
         ),
         TutorialStep(
           targetKey: _chatFabTutorialKey,
           icon: HugeIcons.strokeRoundedMessage01,
           title: 'Meet GridBot',
-          body: 'Need help? GridBot answers anything — order specs, pricing, delivery status. 24/7.',
+          body:
+              'Need help? GridBot answers anything — order specs, pricing, delivery status. 24/7.',
           shape: ShapeLightFocus.Circle,
           advanceOnSpotlightTap: false,
         ),
       ],
-      () => ref.read(tutorialProvider.notifier).markSeen(TutorialKey.homeFeatures),
+      () => ref
+          .read(tutorialProvider.notifier)
+          .markSeen(TutorialKey.homeFeatures),
     );
   }
 
@@ -270,165 +272,177 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           color: colors.background,
           child: SafeArea(
             child: RefreshIndicator(
-          color: colors.brand,
-          backgroundColor: colors.surface,
-          onRefresh: ref.read(ordersProvider.notifier).refreshOrders,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            clipBehavior:
-                Clip.none, // allows Daily Grid carousel to bleed to screen edge
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 28),
+              color: colors.brand,
+              backgroundColor: colors.surface,
+              onRefresh: ref.read(ordersProvider.notifier).refreshOrders,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                clipBehavior: Clip
+                    .none, // allows Daily Grid carousel to bleed to screen edge
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                child: Semantics(
+                  container: true,
+                  focused: false,
+                  label: 'Customer home content',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 28),
 
-                // ── Header ─────────────────────────────────────────────
-                Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                      // ── Header ─────────────────────────────────────────────
+                      Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              Text(
-                                _formattedDate(),
-                                style: AppTypography.overline.copyWith(
-                                  color: colors.onSurfaceDim,
-                                  fontSize: 10,
-                                  letterSpacing: 1.5,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              RichText(
-                                text: TextSpan(
-                                  style: AppTypography.h2.copyWith(
-                                    color: colors.onBackground,
-                                  ),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    TextSpan(text: '${_greeting()} '),
-                                    TextSpan(
-                                      text: firstName,
-                                      style: AppTypography.h2.copyWith(
-                                        color: colors.brand,
+                                    Text(
+                                      _formattedDate(),
+                                      style: AppTypography.overline.copyWith(
+                                        color: colors.onSurfaceDim,
+                                        fontSize: 10,
+                                        letterSpacing: 1.5,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    RichText(
+                                      text: TextSpan(
+                                        style: AppTypography.h2.copyWith(
+                                          color: colors.onBackground,
+                                        ),
+                                        children: [
+                                          TextSpan(text: '${_greeting()} '),
+                                          TextSpan(
+                                            text: firstName,
+                                            style: AppTypography.h2.copyWith(
+                                              color: colors.brand,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
+
+                              // Notification bell
+                              _NotificationWidget(
+                                colors: colors,
+                                unreadCount: unreadCount,
+                              ),
+
+                              const SizedBox(width: AppSpacing.xs),
+
+                              // Credits chip
+                              KeyedSubtree(
+                                key: _creditsTutorialKey,
+                                child: _CreditsWidget(
+                                  colors: colors,
+                                  credits: credits,
+                                ),
+                              ),
                             ],
+                          )
+                          .animate()
+                          .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                          .slideY(
+                            begin: 0.03,
+                            duration: 400.ms,
+                            curve: Curves.easeOut,
                           ),
-                        ),
 
-                        // Notification bell
-                        _NotificationWidget(
-                          colors: colors,
-                          unreadCount: unreadCount,
-                        ),
+                      const SizedBox(height: 28),
 
-                        const SizedBox(width: AppSpacing.xs),
-
-                        // Credits chip
-                        KeyedSubtree(
-                          key: _creditsTutorialKey,
-                          child: _CreditsWidget(colors: colors, credits: credits),
-                        ),
+                      if (cart.items.isNotEmpty) ...[
+                        _ResumeQueueCard(colors: colors, cart: cart)
+                            .animate()
+                            .fadeIn(duration: 300.ms, curve: Curves.easeOut)
+                            .slideY(
+                              begin: 0.02,
+                              duration: 300.ms,
+                              curve: Curves.easeOut,
+                            ),
+                        const SizedBox(height: AppSpacing.md),
                       ],
-                    )
-                    .animate()
-                    .fadeIn(duration: 400.ms, curve: Curves.easeOut)
-                    .slideY(
-                      begin: 0.03,
-                      duration: 400.ms,
-                      curve: Curves.easeOut,
-                    ),
 
-                const SizedBox(height: 28),
+                      // ── Hero banner ────────────────────────────────────────
+                      const HeroBanner(),
 
-                if (cart.items.isNotEmpty) ...[
-                  _ResumeQueueCard(colors: colors, cart: cart)
-                      .animate()
-                      .fadeIn(duration: 300.ms, curve: Curves.easeOut)
-                      .slideY(
-                        begin: 0.02,
-                        duration: 300.ms,
-                        curve: Curves.easeOut,
-                      ),
-                  const SizedBox(height: AppSpacing.md),
-                ],
+                      const SizedBox(height: AppSpacing.md),
 
-                // ── Hero banner ────────────────────────────────────────
-                const HeroBanner(),
-
-                const SizedBox(height: AppSpacing.md),
-
-                // ── Two-column: map + right tiles ─────────────────────
-                SizedBox(
-                  height: 324,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Left: map tile (50%)
-                      const Expanded(child: MapTrackingTile()),
-                      const SizedBox(width: AppSpacing.sm),
-                      // Right: 3 stacked tiles (50%)
-                      Expanded(
-                        child: Column(
+                      // ── Two-column: map + right tiles ─────────────────────
+                      SizedBox(
+                        height: 324,
+                        child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // 1: Start Printing (flex 2)
+                            // Left: map tile (50%)
+                            const Expanded(child: MapTrackingTile()),
+                            const SizedBox(width: AppSpacing.sm),
+                            // Right: 3 stacked tiles (50%)
                             Expanded(
-                              flex: 2,
-                              child: _StartPrintingTile(
-                                colors: colors,
-                                tutorialKey: _startPrintingTutorialKey,
-                                onTap: () => context.push('/customer/order/new'),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  // 1: Start Printing (flex 2)
+                                  Expanded(
+                                    flex: 2,
+                                    child: _StartPrintingTile(
+                                      colors: colors,
+                                      tutorialKey: _startPrintingTutorialKey,
+                                      onTap: () =>
+                                          context.push('/customer/order/new'),
+                                    ),
+                                  ),
+                                  const SizedBox(height: AppSpacing.sm),
+                                  // 2: The Data Grid (flex 2)
+                                  Expanded(
+                                    flex: 2,
+                                    child: _DataGridTile(colors: colors),
+                                  ),
+                                  const SizedBox(height: AppSpacing.sm),
+                                  // 3: The Feed (flex 3)
+                                  Expanded(
+                                    flex: 3,
+                                    child: _FeedTile(colors: colors),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(height: AppSpacing.sm),
-                            // 2: The Data Grid (flex 2)
-                            Expanded(
-                              flex: 2,
-                              child: _DataGridTile(colors: colors),
-                            ),
-                            const SizedBox(height: AppSpacing.sm),
-                            // 3: The Feed (flex 3)
-                            Expanded(flex: 3, child: _FeedTile(colors: colors)),
                           ],
                         ),
+                      ).animate().fadeIn(
+                        duration: 400.ms,
+                        delay: 100.ms,
+                        curve: Curves.easeOut,
                       ),
+
+                      const SizedBox(height: 28),
+
+                      // ── Daily Grid ─────────────────────────────────────────
+                      const DailyGridSection().animate().fadeIn(
+                        duration: 400.ms,
+                        delay: 200.ms,
+                        curve: Curves.easeOut,
+                      ),
+
+                      const SizedBox(height: 28),
+
+                      // ── Recent Orders ──────────────────────────────────────
+                      const RecentOrdersSection().animate().fadeIn(
+                        duration: 400.ms,
+                        delay: 300.ms,
+                        curve: Curves.easeOut,
+                      ),
+
+                      const SizedBox(height: AppSpacing.xxl),
                     ],
                   ),
-                ).animate().fadeIn(
-                  duration: 400.ms,
-                  delay: 100.ms,
-                  curve: Curves.easeOut,
                 ),
-
-                const SizedBox(height: 28),
-
-                // ── Daily Grid ─────────────────────────────────────────
-                const DailyGridSection().animate().fadeIn(
-                  duration: 400.ms,
-                  delay: 200.ms,
-                  curve: Curves.easeOut,
-                ),
-
-                const SizedBox(height: 28),
-
-                // ── Recent Orders ──────────────────────────────────────
-                const RecentOrdersSection().animate().fadeIn(
-                  duration: 400.ms,
-                  delay: 300.ms,
-                  curve: Curves.easeOut,
-                ),
-
-                const SizedBox(height: AppSpacing.xxl),
-              ],
+              ),
             ),
           ),
-        ),
-        ),
         ),
         Positioned(
           right: AppSpacing.xl,
@@ -437,7 +451,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             builder: (_, ref, _) {
               final unread =
                   ref.watch(chatUnreadCountProvider).asData?.value ?? 0;
-              return FloatingChatButton(unreadCount: unread, tutorialKey: _chatFabTutorialKey);
+              return FloatingChatButton(
+                unreadCount: unread,
+                tutorialKey: _chatFabTutorialKey,
+              );
             },
           ),
         ),
@@ -479,10 +496,7 @@ class _ResumeQueueCard extends StatelessWidget {
                 borderRadius: AppRadius.borderLg,
                 border: Border.all(color: colors.outline, width: 1),
               ),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Row(
                 children: [
                   Container(
@@ -976,10 +990,7 @@ class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
         final viewPadding = media.viewPadding;
 
         const sideMargin = 12.0;
-        final maxWidth = math.min(
-          360.0,
-          screenWidth - sideMargin * 2,
-        );
+        final maxWidth = math.min(360.0, screenWidth - sideMargin * 2);
 
         // Look up the bell's actual screen rect via its GlobalKey. Falls back
         // to a sensible top-right anchor (under the system status bar) so the
@@ -993,7 +1004,10 @@ class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
           final bellSize = bellBox.size;
           topPos = bellPos.dy + bellSize.height + 8;
           final desiredRight = screenWidth - (bellPos.dx + bellSize.width);
-          rightInset = desiredRight.clamp(sideMargin, screenWidth - maxWidth - sideMargin);
+          rightInset = desiredRight.clamp(
+            sideMargin,
+            screenWidth - maxWidth - sideMargin,
+          );
         } else {
           topPos = viewPadding.top + 64;
           rightInset = sideMargin;
@@ -1568,11 +1582,7 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
           shape: RoundedRectangleBorder(borderRadius: AppRadius.borderXl),
           title: Row(
             children: [
-              Icon(
-                Icons.star_rounded,
-                color: widget.colors.brand,
-                size: 20,
-              ),
+              Icon(Icons.star_rounded, color: widget.colors.brand, size: 20),
               const SizedBox(width: 8),
               Text(
                 '${item.rating.toStringAsFixed(1)} / 5.0',
@@ -1736,8 +1746,9 @@ class _FeedTileState extends ConsumerState<_FeedTile> {
                                     Icons.star_rounded,
                                     color: isFilled
                                         ? widget.colors.brand
-                                        : widget.colors.onSurfaceDim
-                                              .withValues(alpha: 0.4),
+                                        : widget.colors.onSurfaceDim.withValues(
+                                            alpha: 0.4,
+                                          ),
                                     size: starSize,
                                   );
                                 }),

@@ -110,6 +110,65 @@ describe('beta completion integrity (e2e)', () => {
     }
   });
 
+  it('serializes requirement creation behind a concurrent beta disable', async () => {
+    const database = await createDatabase('disable_requirement_race');
+    const dataSource = await initializeDatabase(database);
+    try {
+      const settingsRepo = dataSource.getRepository(BetaModeSettings);
+      const usersRepo = dataSource.getRepository(User);
+      const ordersRepo = dataSource.getRepository(Order);
+      await settingsRepo.save(settingsRepo.create({ isEnabled: true }));
+      const user = await usersRepo.save(
+        usersRepo.create({
+          email: `${database}@example.test`,
+          passwordHash: 'not-used',
+          role: UserRole.CUSTOMER,
+          isActive: true,
+          isBetaUser: true,
+          betaEnrolledAt: new Date(),
+        }),
+      );
+      const order = await ordersRepo.save(
+        makeOrder(ordersRepo, user.id, `${database}-order`),
+      );
+      await dataSource.query(`
+        CREATE FUNCTION delay_beta_disable() RETURNS trigger AS $$
+        BEGIN
+          PERFORM pg_sleep(1);
+          RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+        CREATE TRIGGER delay_beta_disable_update
+        BEFORE UPDATE ON beta_mode_settings
+        FOR EACH ROW WHEN (NEW.is_enabled = false)
+        EXECUTE FUNCTION delay_beta_disable()
+      `);
+
+      const disable = makeBetaService(dataSource).updateSettings(false);
+      await waitForActiveQuery(
+        database,
+        '%UPDATE "beta_mode_settings" SET "is_enabled"%',
+      );
+      const requirement =
+        await makeSurveyService(
+          dataSource,
+        ).createPostDeliveryRequirementIfNeeded(order);
+      await disable;
+
+      expect(requirement).toBeNull();
+      await expect(
+        dataSource.getRepository(TamSurveyRequirement).countBy({
+          userId: user.id,
+        }),
+      ).resolves.toBe(0);
+      await expect(settingsRepo.find()).resolves.toEqual([
+        expect.objectContaining({ isEnabled: false }),
+      ]);
+    } finally {
+      await dataSource.destroy();
+    }
+  });
+
   it('keeps per-order requirements, sequences the final hold, and preserves one testimonial', async () => {
     const database = await createDatabase('races');
     const dataSource = await initializeDatabase(database);
@@ -323,5 +382,27 @@ describe('beta completion integrity (e2e)', () => {
     );
     await admin.query(`DROP DATABASE IF EXISTS "${database}"`);
     createdDatabases.delete(database);
+  }
+
+  async function waitForActiveQuery(
+    database: string,
+    pattern: string,
+  ): Promise<void> {
+    const deadline = Date.now() + 4_000;
+    while (Date.now() < deadline) {
+      const rows = await admin.query<{ found: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM pg_stat_activity
+           WHERE datname = $1
+             AND pid <> pg_backend_pid()
+             AND state = 'active'
+             AND query ILIKE $2
+         ) AS found`,
+        [database, pattern],
+      );
+      if (rows.rows[0]?.found) return;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(`Timed out waiting for active query: ${pattern}`);
   }
 });
