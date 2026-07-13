@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   Post,
   Put,
@@ -16,6 +17,7 @@ import { UpdateStorageSettingsDto } from './dto/update-storage-settings.dto';
 import { UpdateTutorialKeysDto } from './dto/update-tutorial-keys.dto';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
 import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
+import { FcmTokenDto } from './dto/fcm-token.dto';
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -38,9 +40,18 @@ export class UsersController {
   @Post('fcm-token')
   async saveFcmToken(
     @Request() req: RequestWithUser,
-    @Body('token') token: string,
+    @Body() dto: FcmTokenDto,
   ) {
-    await this.usersService.updateFcmToken(req.user.sub, token);
+    await this.usersService.updateFcmToken(req.user.sub, dto.token);
+    return { success: true };
+  }
+
+  @Delete('fcm-token')
+  async clearFcmToken(
+    @Request() req: RequestWithUser,
+    @Body() dto: FcmTokenDto,
+  ) {
+    await this.usersService.clearFcmToken(req.user.sub, dto.token);
     return { success: true };
   }
 

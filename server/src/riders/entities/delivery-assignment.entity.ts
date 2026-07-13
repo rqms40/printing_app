@@ -28,6 +28,10 @@ export enum ProofOfDeliveryType {
 
 @Entity('delivery_assignments')
 @Index('idx_delivery_assignments_order', ['orderId'])
+@Index('uq_delivery_assignments_current_order', ['orderId'], {
+  unique: true,
+  where: '"is_current" = true',
+})
 @Index('idx_delivery_assignments_rider', ['riderId'])
 @Index('idx_delivery_assignments_status', ['status'])
 export class DeliveryAssignment {
@@ -43,6 +47,9 @@ export class DeliveryAssignment {
 
   @Column({ name: 'rider_id' })
   riderId: number;
+
+  @Column({ name: 'is_current', default: true })
+  isCurrent: boolean;
 
   @ManyToOne(() => RiderProfile)
   @JoinColumn({ name: 'rider_id' })

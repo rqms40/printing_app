@@ -1,27 +1,44 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { isBaselineOwned } from '../src/database/migration-ownership';
 
 export class AddDeliveryDestinationAddressSnapshot1777766600000 implements MigrationInterface {
   name = 'AddDeliveryDestinationAddressSnapshot1777766600000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`
-      ALTER TABLE "delivery_destinations"
-      ALTER COLUMN "address_id" DROP NOT NULL
-    `);
-    await queryRunner.query(`
-      ALTER TABLE "delivery_destinations"
-      ADD COLUMN IF NOT EXISTS "full_address" text,
-      ADD COLUMN IF NOT EXISTS "barangay" varchar(100),
-      ADD COLUMN IF NOT EXISTS "city" varchar(100),
-      ADD COLUMN IF NOT EXISTS "province" varchar(100),
-      ADD COLUMN IF NOT EXISTS "zip_code" varchar(10),
-      ADD COLUMN IF NOT EXISTS "landmark" text,
-      ADD COLUMN IF NOT EXISTS "latitude" numeric(10,7),
-      ADD COLUMN IF NOT EXISTS "longitude" numeric(10,7)
-    `);
+    if (!(await queryRunner.hasTable('delivery_destinations'))) {
+      return;
+    }
+    if (await queryRunner.hasColumn('delivery_destinations', 'address_id')) {
+      await queryRunner.query(`
+        ALTER TABLE "delivery_destinations"
+        ALTER COLUMN "address_id" DROP NOT NULL
+      `);
+    }
+    const columns = [
+      ['full_address', 'text'],
+      ['barangay', 'varchar(100)'],
+      ['city', 'varchar(100)'],
+      ['province', 'varchar(100)'],
+      ['zip_code', 'varchar(10)'],
+      ['landmark', 'text'],
+      ['latitude', 'numeric(10,7)'],
+      ['longitude', 'numeric(10,7)'],
+    ] as const;
+    for (const [column, type] of columns) {
+      if (!(await queryRunner.hasColumn('delivery_destinations', column))) {
+        await queryRunner.query(
+          `ALTER TABLE "delivery_destinations" ADD COLUMN "${column}" ${type}`,
+        );
+      }
+    }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    if (!(await isBaselineOwned(queryRunner))) return;
+
+    if (!(await queryRunner.hasTable('delivery_destinations'))) {
+      return;
+    }
     await queryRunner.query(`
       DELETE FROM "delivery_destinations" WHERE "address_id" IS NULL
     `);
@@ -36,9 +53,11 @@ export class AddDeliveryDestinationAddressSnapshot1777766600000 implements Migra
       DROP COLUMN IF EXISTS "barangay",
       DROP COLUMN IF EXISTS "full_address"
     `);
-    await queryRunner.query(`
-      ALTER TABLE "delivery_destinations"
-      ALTER COLUMN "address_id" SET NOT NULL
-    `);
+    if (await queryRunner.hasColumn('delivery_destinations', 'address_id')) {
+      await queryRunner.query(`
+        ALTER TABLE "delivery_destinations"
+        ALTER COLUMN "address_id" SET NOT NULL
+      `);
+    }
   }
 }

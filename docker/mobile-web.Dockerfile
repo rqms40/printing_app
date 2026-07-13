@@ -10,9 +10,11 @@ COPY apps/mobile ./
 
 ARG SERVER_URL
 ARG ENABLE_DEV_AUTH=false
+ARG GRIDGO_REAL_FLOW=true
 RUN flutter build web --release --no-tree-shake-icons \
     --dart-define=SERVER_URL=${SERVER_URL} \
-    --dart-define=ENABLE_DEV_AUTH=${ENABLE_DEV_AUTH}
+    --dart-define=ENABLE_DEV_AUTH=${ENABLE_DEV_AUTH} \
+    --dart-define=GRIDGO_REAL_FLOW=${GRIDGO_REAL_FLOW}
 
 FROM nginx:1.27-alpine
 

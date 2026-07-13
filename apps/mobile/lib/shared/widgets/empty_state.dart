@@ -67,7 +67,7 @@ class EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            visual,
+            ExcludeSemantics(child: visual),
             const SizedBox(height: AppSpacing.lg),
             Text(
               heading,

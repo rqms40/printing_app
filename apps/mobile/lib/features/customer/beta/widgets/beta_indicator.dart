@@ -7,10 +7,9 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/beta/providers/beta_status_provider.dart';
 
-const double _badgeWidth = 108;
-const double _badgeHeight = 26;
-const double _edgePadding = 12;
-const double _navOffset = 80; // ~66 nav + breathing room, above safe-area
+const double _badgeWidth = 116;
+const double _badgeHeight = 20;
+const double _edgePadding = 2;
 
 final betaIndicatorOffsetProvider = StateProvider<Offset?>((_) => null);
 
@@ -31,7 +30,12 @@ class BetaIndicatorOverlay extends ConsumerWidget {
 
     return Stack(
       children: [
-        child,
+        Padding(
+          padding: const EdgeInsets.only(
+            top: _badgeHeight + (_edgePadding * 2),
+          ),
+          child: child,
+        ),
         const Positioned.fill(child: _DraggableBetaBadge()),
       ],
     );
@@ -60,14 +64,17 @@ class _DraggableBetaBadgeState extends ConsumerState<_DraggableBetaBadge> {
   }
 
   Offset _defaultFor(Size size, EdgeInsets safeArea) => Offset(
-        _edgePadding,
-        size.height - _badgeHeight - _navOffset - safeArea.bottom,
-      );
+    (size.width - _badgeWidth) / 2,
+    (safeArea.top - _badgeHeight).clamp(
+      _edgePadding,
+      safeArea.top + _edgePadding,
+    ),
+  );
 
   Offset _clamp(Offset o, Size size) => Offset(
-        o.dx.clamp(0.0, size.width - _badgeWidth),
-        o.dy.clamp(0.0, size.height - _badgeHeight),
-      );
+    o.dx.clamp(0.0, size.width - _badgeWidth),
+    o.dy.clamp(0.0, size.height - _badgeHeight),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -110,16 +117,14 @@ class _DraggableBetaBadgeState extends ConsumerState<_DraggableBetaBadge> {
                           boxShadow: dragging
                               ? [
                                   BoxShadow(
-                                    color:
-                                        Colors.black.withValues(alpha: 0.35),
+                                    color: Colors.black.withValues(alpha: 0.35),
                                     blurRadius: 16,
                                     offset: const Offset(0, 6),
                                   ),
                                 ]
                               : [
                                   BoxShadow(
-                                    color:
-                                        Colors.black.withValues(alpha: 0.22),
+                                    color: Colors.black.withValues(alpha: 0.22),
                                     blurRadius: 8,
                                     offset: const Offset(0, 2),
                                   ),
@@ -152,8 +157,9 @@ class _DraggableBetaBadgeState extends ConsumerState<_DraggableBetaBadge> {
     _dragging.value = false;
     final cur = _pos.value;
     final snapLeft = cur.dx + _badgeWidth / 2 < size.width / 2;
-    final snappedX =
-        snapLeft ? _edgePadding : size.width - _badgeWidth - _edgePadding;
+    final snappedX = snapLeft
+        ? _edgePadding
+        : size.width - _badgeWidth - _edgePadding;
     final snapped = _clamp(Offset(snappedX, cur.dy), size);
     _pos.value = snapped;
     ref.read(betaIndicatorOffsetProvider.notifier).state = snapped;
@@ -176,93 +182,95 @@ class _BetaBadge extends ConsumerWidget {
         }
 
         final isDark = Theme.of(context).brightness == Brightness.dark;
-        final brandColor =
-            isDark ? AppColors.brandDark : AppColors.brandLight;
+        final brandColor = isDark ? AppColors.brandDark : AppColors.brandLight;
         final rankText = status.rank != null
             ? '#${status.rank!.toString().padLeft(3, '0')}'
             : null;
 
         return Material(
           color: Colors.transparent,
-          child: Container(
-            width: _badgeWidth,
-            height: _badgeHeight,
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.sm,
-              vertical: AppSpacing.xs,
-            ),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
-              borderRadius: AppRadius.borderFull,
-              border: Border.all(
-                color: AppColors.brandDark.withValues(alpha: 0.25),
-                width: 1,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'BETA',
-                  style: AppTypography.overline.copyWith(
-                    color: brandColor,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.xs,
-                  ),
-                  child: Text(
-                    '|',
-                    style: AppTypography.overline.copyWith(
-                      color: Colors.white.withValues(alpha: 0.25),
-                      fontSize: 10,
-                    ),
-                  ),
-                ),
-                Text(
-                  'V1',
-                  style: AppTypography.overline.copyWith(
-                    color: Colors.white.withValues(alpha: 0.7),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.6,
-                  ),
-                ),
-                if (rankText != null) ...[
-                  Padding(
+          child:
+              Container(
+                    width: _badgeWidth,
+                    height: _badgeHeight,
+                    alignment: Alignment.center,
                     padding: const EdgeInsets.symmetric(
                       horizontal: AppSpacing.xs,
                     ),
-                    child: Text(
-                      '·',
-                      style: AppTypography.overline.copyWith(
-                        color: Colors.white.withValues(alpha: 0.25),
-                        fontSize: 10,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1A1A),
+                      borderRadius: AppRadius.borderFull,
+                      border: Border.all(
+                        color: AppColors.brandDark.withValues(alpha: 0.25),
+                        width: 1,
                       ),
                     ),
-                  ),
-                  Text(
-                    rankText,
-                    style: AppTypography.overline.copyWith(
-                      color: Colors.white.withValues(alpha: 0.55),
-                      fontSize: 10,
-                      letterSpacing: 0.5,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'BETA',
+                            style: AppTypography.overline.copyWith(
+                              color: brandColor,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.xs,
+                            ),
+                            child: Text(
+                              '|',
+                              style: AppTypography.overline.copyWith(
+                                color: Colors.white.withValues(alpha: 0.25),
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            'V1',
+                            style: AppTypography.overline.copyWith(
+                              color: Colors.white.withValues(alpha: 0.7),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                          if (rankText != null) ...[
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.xs,
+                              ),
+                              child: Text(
+                                '·',
+                                style: AppTypography.overline.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.25),
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              rankText,
+                              style: AppTypography.overline.copyWith(
+                                color: Colors.white.withValues(alpha: 0.55),
+                                fontSize: 10,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
+                  )
+                  .animate(onPlay: (c) => c.repeat())
+                  .shimmer(
+                    duration: const Duration(seconds: 3),
+                    color: brandColor.withValues(alpha: 0.2),
                   ),
-                ],
-              ],
-            ),
-          )
-              .animate(onPlay: (c) => c.repeat())
-              .shimmer(
-                duration: const Duration(seconds: 3),
-                color: brandColor.withValues(alpha: 0.2),
-              ),
         );
       },
     );

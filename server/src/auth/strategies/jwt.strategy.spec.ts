@@ -51,6 +51,8 @@ describe('JwtStrategy account status enforcement', () => {
       email: 'held@test.com',
       role: 'customer',
       isActive: false,
+      isBetaUser: true,
+      isBetaSurveyExempt: false,
       accountHoldReason: 'beta_survey_complete',
     });
 
@@ -62,6 +64,25 @@ describe('JwtStrategy account status enforcement', () => {
       role: 'customer',
       betaTestimonialPending: true,
     });
+  });
+
+  it.each([
+    { role: 'rider', isBetaUser: true, isBetaSurveyExempt: false },
+    { role: 'admin', isBetaUser: true, isBetaSurveyExempt: false },
+    { role: 'customer', isBetaUser: false, isBetaSurveyExempt: false },
+    { role: 'customer', isBetaUser: true, isBetaSurveyExempt: true },
+  ])('rejects an invalid held identity %#', async (identity) => {
+    usersService.findById.mockResolvedValue({
+      id: 1,
+      email: 'invalid-held@test.com',
+      isActive: false,
+      accountHoldReason: 'beta_survey_complete',
+      ...identity,
+    });
+
+    await expect(
+      strategy.validate({ sub: 1, email: 'held@test.com', role: 'customer' }),
+    ).rejects.toThrow(UnauthorizedException);
   });
 
   it('rejects tokens for missing users', async () => {

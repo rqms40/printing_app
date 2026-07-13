@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +16,7 @@ import 'package:printing_app/features/customer/tracking/providers/live_rider_loc
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/location_update.dart';
 import 'package:printing_app/shared/providers/dio_provider.dart';
+import 'package:printing_app/shared/services/websocket_service.dart';
 
 import '../../order/providers/delivery_slot_provider_test.mocks.dart';
 
@@ -47,6 +50,7 @@ _TileHarness _harness({
   required LiveDeliveryMapState state,
   List<DeliverySlot> slots = const [],
   LocationUpdate? location,
+  LocationSocketHealth socketHealth = LocationSocketHealth.connected,
   Widget Function(Widget child)? childBuilder,
 }) {
   final mockWs = MockWebSocketService();
@@ -56,6 +60,11 @@ _TileHarness _harness({
   ).thenAnswer((invocation) async {
     capturedLocationHandler =
         invocation.namedArguments[#onLocationUpdate] as Function(dynamic)?;
+  });
+  when(mockWs.listenForLocationHealth(any)).thenAnswer((invocation) {
+    final callback =
+        invocation.positionalArguments.first as Function(LocationSocketHealth);
+    callback(socketHealth);
   });
   final container = ProviderContainer(
     overrides: [
@@ -110,6 +119,10 @@ Widget _wrapConstrained(
     ),
   ).widget;
 }
+
+Finder _semanticsLabel(String label) => find.byWidgetPredicate(
+  (widget) => widget is Semantics && widget.properties.label == label,
+);
 
 const _dailySlots = [
   DeliverySlot(
@@ -317,6 +330,7 @@ void main() {
           location: LocationUpdate(
             id: 'live',
             deliveryAssignmentId: 'other-assignment',
+            planVersion: 1,
             latitude: 7.20,
             longitude: 125.46,
             timestamp: DateTime.now(),
@@ -338,10 +352,7 @@ void main() {
       riderPoint: const LatLng(7.20, 125.46),
       shopPoint: const LatLng(7.19, 125.45),
       destPoint: const LatLng(7.21, 125.47),
-      routePoints: const [
-        LatLng(7.19, 125.45),
-        LatLng(7.21, 125.47),
-      ],
+      routePoints: const [LatLng(7.19, 125.45), LatLng(7.21, 125.47)],
       orderId: 'ORD-SECOND',
       deliveryAssignmentId: null,
       orderStatus: OrderStatus.onTheWay,
@@ -355,10 +366,20 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('2nd in queue'), findsOneWidget);
-    expect(find.text('Live tracking unlocks when you are next'), findsOneWidget);
+    expect(
+      find.text('Live tracking unlocks when you are next'),
+      findsOneWidget,
+    );
     expect(find.text('Open live tracking'), findsNothing);
     expect(find.byKey(const Key('pending-route-preview-map')), findsNothing);
-    verifyNever(harness.webSocket.subscribeToDelivery(any));
+    expect(_semanticsLabel('Live delivery map'), findsNothing);
+    expect(_semanticsLabel('Rider current location marker'), findsNothing);
+    expect(find.byKey(const Key('live-delivery-map')), findsNothing);
+    expect(
+      find.byKey(const Key('rider-current-location-marker')),
+      findsNothing,
+    );
+    verifyNever(harness.webSocket.subscribeToDeliveryPlan('assign-001', 1));
   });
 
   testWidgets(
@@ -388,6 +409,27 @@ void main() {
       expect(find.text('Waiting for rider location...'), findsNothing);
       expect(find.text('Rider GPS reconnecting'), findsOneWidget);
       expect(find.text('Open live tracking'), findsOneWidget);
+      expect(_semanticsLabel('Open live tracking'), findsOneWidget);
+      expect(
+        tester
+            .widget<Semantics>(_semanticsLabel('Open live tracking'))
+            .container,
+        isTrue,
+      );
+      expect(
+        tester
+            .widget<Semantics>(
+              _semanticsLabel('Open current delivery details'),
+            )
+            .explicitChildNodes,
+        isTrue,
+      );
+      expect(
+        tester
+            .getSize(find.byKey(const Key('open-live-tracking-button')))
+            .height,
+        greaterThanOrEqualTo(44),
+      );
 
       final tileTop = tester.getTopLeft(find.byType(MapTrackingTile)).dy;
       final statusBottom =
@@ -411,6 +453,8 @@ void main() {
         orderId: 'ORD-001',
         deliveryAssignmentId: 'assign-001',
         orderStatus: OrderStatus.onTheWay,
+        queuePosition: 1,
+        queueSize: 2,
       );
       await tester.pumpWidget(
         _wrap(
@@ -419,6 +463,7 @@ void main() {
           location: LocationUpdate(
             id: 'live',
             deliveryAssignmentId: 'assign-001',
+            planVersion: 1,
             latitude: 7.20,
             longitude: 125.46,
             timestamp: DateTime.now(),
@@ -427,9 +472,34 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('LIVE MAP'), findsOneWidget);
+      expect(find.textContaining('1st in queue'), findsOneWidget);
       expect(find.text('Order Dispatched'), findsOneWidget);
       expect(find.text('Rider is on the way'), findsOneWidget);
+      expect(
+        _semanticsLabel(
+          'Rider is on the way. Tracking real-time location',
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Live map starts after rider dispatch.'), findsNothing);
+      final mapSemantics = tester.widget<Semantics>(
+        _semanticsLabel('Live delivery map'),
+      );
+      expect(mapSemantics.excludeSemantics, isTrue);
+      expect(
+        mapSemantics.properties.hint,
+        'Shows the rider current location and delivery route',
+      );
+      expect(
+        _semanticsLabel('Open current delivery details'),
+        findsOneWidget,
+      );
+      expect(_semanticsLabel('Rider current location marker'), findsNothing);
+      expect(find.byKey(const Key('live-delivery-map')), findsOneWidget);
+      expect(
+        tester.widget<MarkerLayer>(find.byType(MarkerLayer)).markers,
+        hasLength(3),
+      );
     },
   );
 
@@ -455,6 +525,7 @@ void main() {
         location: LocationUpdate(
           id: 'live',
           deliveryAssignmentId: 'assign-001',
+          planVersion: 1,
           latitude: route.first.latitude,
           longitude: route.first.longitude,
           timestamp: DateTime.now(),
@@ -465,6 +536,40 @@ void main() {
 
     expect(find.text('~1 min'), findsOneWidget);
     expect(find.text('~40 min'), findsNothing);
+  });
+
+  testWidgets('malformed live route does not display a computed ETA', (
+    tester,
+  ) async {
+    final active = LiveDeliveryMapState.active(
+      shopPoint: const LatLng(7.19, 125.45),
+      destPoint: const LatLng(7.21, 125.47),
+      routePoints: const [],
+      orderId: 'ORD-001',
+      deliveryAssignmentId: 'assign-001',
+      orderStatus: OrderStatus.onTheWay,
+      routingHealth: RoutingHealth.malformed,
+      legDurationSeconds: 120,
+    );
+
+    await tester.pumpWidget(
+      _wrap(
+        active,
+        slots: _dailySlots,
+        location: LocationUpdate(
+          id: 'live',
+          deliveryAssignmentId: 'assign-001',
+          planVersion: 1,
+          latitude: 7.20,
+          longitude: 125.46,
+          timestamp: DateTime.now(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Route geometry degraded'), findsOneWidget);
+    expect(find.textContaining(' min'), findsNothing);
   });
 
   testWidgets('subscribes even when a fresh matching location is cached', (
@@ -485,6 +590,7 @@ void main() {
       location: LocationUpdate(
         id: 'live',
         deliveryAssignmentId: 'assign-001',
+        planVersion: 1,
         latitude: 7.20,
         longitude: 125.46,
         timestamp: DateTime.now(),
@@ -499,37 +605,105 @@ void main() {
         onLocationUpdate: anyNamed('onLocationUpdate'),
       ),
     ).called(1);
-    verify(harness.webSocket.subscribeToDelivery('assign-001')).called(1);
+    verify(
+      harness.webSocket.subscribeToDeliveryPlan('assign-001', 1),
+    ).called(1);
   });
 
-  testWidgets(
-    'uses subscribed assignment when socket payload omits assignment id',
-    (tester) async {
-      final active = LiveDeliveryMapState.active(
-        riderPoint: const LatLng(7.20, 125.46),
-        shopPoint: const LatLng(7.19, 125.45),
-        destPoint: const LatLng(7.21, 125.47),
-        routePoints: [const LatLng(7.19, 125.45), const LatLng(7.21, 125.47)],
-        orderId: 'ORD-001',
-        deliveryAssignmentId: 'assign-001',
-        orderStatus: OrderStatus.onTheWay,
-      );
-      final harness = _harness(state: active, slots: _dailySlots);
+  testWidgets('connect completion subscribes the newest map identity', (
+    tester,
+  ) async {
+    final first = LiveDeliveryMapState.active(
+      shopPoint: const LatLng(7.19, 125.45),
+      destPoint: const LatLng(7.21, 125.47),
+      routePoints: const [LatLng(7.19, 125.45), LatLng(7.21, 125.47)],
+      orderId: 'ORD-001',
+      deliveryAssignmentId: 'assign-001',
+      planVersion: 1,
+      orderStatus: OrderStatus.onTheWay,
+    );
+    final second = LiveDeliveryMapState.active(
+      shopPoint: const LatLng(7.19, 125.45),
+      destPoint: const LatLng(7.22, 125.48),
+      routePoints: const [LatLng(7.19, 125.45), LatLng(7.22, 125.48)],
+      orderId: 'ORD-002',
+      deliveryAssignmentId: 'assign-002',
+      planVersion: 2,
+      orderStatus: OrderStatus.onTheWay,
+    );
+    final desiredMapState = StateProvider<LiveDeliveryMapState>((_) => first);
+    final connectGate = Completer<void>();
+    final socket = MockWebSocketService();
+    when(
+      socket.connectLocation(onLocationUpdate: anyNamed('onLocationUpdate')),
+    ).thenAnswer((_) => connectGate.future);
+    when(socket.listenForLocationHealth(any)).thenAnswer((invocation) {
+      final callback =
+          invocation.positionalArguments.first
+              as Function(LocationSocketHealth);
+      callback(LocationSocketHealth.connecting);
+    });
+    final container = ProviderContainer(
+      overrides: [
+        dioProvider.overrideWithValue(MockDio()),
+        webSocketServiceProvider.overrideWithValue(socket),
+        liveDeliveryMapProvider.overrideWith(
+          (ref) async => ref.watch(desiredMapState),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
 
-      await tester.pumpWidget(harness.widget);
-      await tester.pumpAndSettle();
-      harness.locationHandler()?.call({
-        'latitude': 7.20,
-        'longitude': 125.46,
-        'timestamp': DateTime.now().toIso8601String(),
-      });
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(routerConfig: _router()),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
 
-      expect(find.text('LIVE MAP'), findsOneWidget);
-    },
-  );
+    container.read(desiredMapState.notifier).state = second;
+    await tester.pump();
+    await tester.pump();
+    connectGate.complete();
+    await tester.pumpAndSettle();
 
-  testWidgets('rejects stale socket payload timestamps', (tester) async {
+    verify(socket.subscribeToDeliveryPlan('assign-002', 2)).called(1);
+    verifyNever(socket.subscribeToDeliveryPlan('assign-001', 1));
+  });
+
+  testWidgets('discards socket payload when assignment identity is missing', (
+    tester,
+  ) async {
+    final active = LiveDeliveryMapState.active(
+      riderPoint: const LatLng(7.20, 125.46),
+      shopPoint: const LatLng(7.19, 125.45),
+      destPoint: const LatLng(7.21, 125.47),
+      routePoints: [const LatLng(7.19, 125.45), const LatLng(7.21, 125.47)],
+      orderId: 'ORD-001',
+      deliveryAssignmentId: 'assign-001',
+      orderStatus: OrderStatus.onTheWay,
+    );
+    final harness = _harness(state: active, slots: _dailySlots);
+
+    await tester.pumpWidget(harness.widget);
+    await tester.pumpAndSettle();
+    harness.locationHandler()?.call({
+      'planVersion': 1,
+      'latitude': 7.20,
+      'longitude': 125.46,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+    await tester.pumpAndSettle();
+
+    expect(find.text('LIVE MAP'), findsNothing);
+    expect(find.byKey(const Key('delivery-map-panel')), findsNothing);
+  });
+
+  testWidgets('preserves the last socket marker when it becomes offline', (
+    tester,
+  ) async {
     final active = LiveDeliveryMapState.active(
       riderPoint: const LatLng(7.20, 125.46),
       shopPoint: const LatLng(7.19, 125.45),
@@ -545,6 +719,7 @@ void main() {
     await tester.pumpAndSettle();
     harness.locationHandler()?.call({
       'assignmentId': 'assign-001',
+      'planVersion': 1,
       'latitude': 7.20,
       'longitude': 125.46,
       'timestamp': DateTime.now()
@@ -554,6 +729,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('LIVE MAP'), findsNothing);
+    expect(find.text('GPS OFFLINE'), findsOneWidget);
+    expect(find.byKey(const Key('delivery-map-panel')), findsOneWidget);
     expect(find.text('Order Dispatched'), findsOneWidget);
     expect(find.text('Rider is on the way'), findsOneWidget);
   });
@@ -577,6 +754,7 @@ void main() {
         location: LocationUpdate(
           id: 'live',
           deliveryAssignmentId: 'assign-001',
+          planVersion: 1,
           latitude: 7.20,
           longitude: 125.46,
           timestamp: DateTime.now().subtract(const Duration(minutes: 15)),
@@ -585,6 +763,8 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('LIVE MAP'), findsNothing);
+    expect(find.text('GPS OFFLINE'), findsOneWidget);
+    expect(find.byKey(const Key('delivery-map-panel')), findsOneWidget);
     expect(find.text('Order Dispatched'), findsOneWidget);
     expect(find.text('Rider is on the way'), findsOneWidget);
   });

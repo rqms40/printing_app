@@ -42,7 +42,7 @@ export function LoginPage() {
         <Text
           className="admin-login-brand-subtitle"
           style={{
-            color: "#555",
+            color: "#A0A0A0",
             fontSize: 13,
             marginTop: 8,
             letterSpacing: 1,
@@ -69,7 +69,7 @@ export function LoginPage() {
           <Text
             style={{
               display: "block",
-              color: "#666",
+              color: "#A0A0A0",
               fontSize: 13,
               marginBottom: 32,
             }}

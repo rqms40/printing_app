@@ -4,10 +4,29 @@ import 'package:printing_app/features/customer/address/providers/address_provide
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
-import 'package:printing_app/shared/services/routing_service.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
 enum LiveMapStatus { loading, active, idle }
+
+enum RoutingHealth { current, stale, malformed, unavailable }
+
+enum LocationHealth { live, stale, offline }
+
+final deliveryTrackingNowProvider = Provider<DateTime Function()>(
+  (ref) => DateTime.now,
+);
+
+LocationHealth classifyLocationHealth({
+  required DateTime updatedAt,
+  required DateTime now,
+  required bool connected,
+}) {
+  if (!connected) return LocationHealth.offline;
+  final age = now.difference(updatedAt);
+  if (age < const Duration(seconds: 15)) return LocationHealth.live;
+  if (age <= const Duration(seconds: 60)) return LocationHealth.stale;
+  return LocationHealth.offline;
+}
 
 const _urbanDeliveryMetersPerMinute = 220.0;
 
@@ -68,6 +87,10 @@ class LiveDeliveryMapState {
     this.queuePosition,
     this.queueSize,
     this.canTrackDelivery = false,
+    this.planVersion,
+    this.routingHealth = RoutingHealth.unavailable,
+    this.legDurationSeconds,
+    this.legDistanceMeters,
   });
 
   final LiveMapStatus status;
@@ -82,6 +105,10 @@ class LiveDeliveryMapState {
   final int? queuePosition;
   final int? queueSize;
   final bool canTrackDelivery;
+  final int? planVersion;
+  final RoutingHealth routingHealth;
+  final int? legDurationSeconds;
+  final int? legDistanceMeters;
 
   factory LiveDeliveryMapState.loading() => const LiveDeliveryMapState._(
     status: LiveMapStatus.loading,
@@ -96,7 +123,7 @@ class LiveDeliveryMapState {
   );
 
   factory LiveDeliveryMapState.active({
-    required LatLng riderPoint,
+    LatLng? riderPoint,
     required LatLng shopPoint,
     required LatLng destPoint,
     required List<LatLng> routePoints,
@@ -107,6 +134,10 @@ class LiveDeliveryMapState {
     int? queuePosition = 1,
     int? queueSize = 1,
     bool canTrackDelivery = true,
+    int? planVersion = 1,
+    RoutingHealth routingHealth = RoutingHealth.current,
+    int? legDurationSeconds,
+    int? legDistanceMeters,
   }) => LiveDeliveryMapState._(
     status: LiveMapStatus.active,
     shopPoint: shopPoint,
@@ -120,6 +151,10 @@ class LiveDeliveryMapState {
     queuePosition: queuePosition,
     queueSize: queueSize,
     canTrackDelivery: canTrackDelivery,
+    planVersion: planVersion,
+    routingHealth: routingHealth,
+    legDurationSeconds: legDurationSeconds,
+    legDistanceMeters: legDistanceMeters,
   );
 
   /// Index of the route point nearest to [riderPoint].
@@ -137,7 +172,7 @@ class LiveDeliveryMapState {
 /// Fixed shop/branch location in Davao City.
 const _shopPoint = LatLng(7.0640, 125.6079);
 
-/// Shared provider — reads active order + OSRM route.
+/// Shared provider — reads the customer-safe persisted route from the order.
 /// Does NOT watch locationProvider — consumers watch that directly so location
 /// updates never trigger the expensive FutureProvider recompute cycle.
 final liveDeliveryMapProvider =
@@ -145,9 +180,12 @@ final liveDeliveryMapProvider =
       final orders = ref.watch(activeOrdersProvider);
       final addresses = ref.watch(addressProvider);
 
-      // Find first order that is actively on the way
       final onTheWayOrder = orders
-          .where((o) => o.orderStatus == OrderStatus.onTheWay)
+          .where(
+            (o) =>
+                o.orderStatus == OrderStatus.onTheWay ||
+                o.orderStatus == OrderStatus.arrivedAtDestination,
+          )
           .firstOrNull;
 
       if (onTheWayOrder == null) return LiveDeliveryMapState.idle();
@@ -173,12 +211,20 @@ final liveDeliveryMapProvider =
 
       final destPoint = LatLng(latitude, longitude);
 
-      // Fetch route (cached by RoutingService). riderPoint is resolved by
-      // consumers watching locationProvider directly.
-      final routePoints = await RoutingService.getRoute(_shopPoint, destPoint);
+      final geometry = onTheWayOrder.deliveryRouteGeometry;
+      final routePoints = onTheWayOrder.canTrackDelivery && geometry != null
+          ? geometry.points
+          : const <LatLng>[];
+      final routingHealth = !onTheWayOrder.canTrackDelivery
+          ? RoutingHealth.unavailable
+          : onTheWayOrder.deliveryRouteGeometryMalformed || geometry == null
+          ? RoutingHealth.malformed
+          : onTheWayOrder.deliveryRoutingDataStale == true
+          ? RoutingHealth.stale
+          : RoutingHealth.current;
 
       return LiveDeliveryMapState.active(
-        riderPoint: _shopPoint, // placeholder; overridden by consumers
+        riderPoint: null,
         shopPoint: _shopPoint,
         destPoint: destPoint,
         routePoints: routePoints,
@@ -189,5 +235,9 @@ final liveDeliveryMapProvider =
         queuePosition: onTheWayOrder.deliveryQueuePosition,
         queueSize: onTheWayOrder.deliveryQueueSize,
         canTrackDelivery: onTheWayOrder.canTrackDelivery,
+        planVersion: onTheWayOrder.deliveryPlanVersion,
+        routingHealth: routingHealth,
+        legDurationSeconds: onTheWayOrder.deliveryLegDurationSeconds,
+        legDistanceMeters: onTheWayOrder.deliveryLegDistanceMeters,
       );
     });

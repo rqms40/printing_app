@@ -292,6 +292,8 @@ describe('AuthService', () => {
         betaPhotoUploadedAt: null,
         betaSharedOnSocial: false,
         betaCompletedAt,
+        isBetaUser: true,
+        isBetaSurveyExempt: false,
       });
 
       let thrown: unknown;
@@ -327,6 +329,8 @@ describe('AuthService', () => {
         betaPhotoUploadedAt: new Date(),
         betaSharedOnSocial: true,
         betaCompletedAt: null,
+        isBetaUser: true,
+        isBetaSurveyExempt: false,
       });
 
       let thrown: unknown;
@@ -352,6 +356,8 @@ describe('AuthService', () => {
         passwordHash: hashedPassword,
         isActive: false,
         accountHoldReason: 'beta_survey_complete',
+        isBetaUser: true,
+        isBetaSurveyExempt: false,
       });
       (betaModeService.getSettings as jest.Mock).mockResolvedValue({
         id: 1,
@@ -371,6 +377,42 @@ describe('AuthService', () => {
           accountHeldAt: null,
         }),
       );
+    });
+
+    it.each(['rider', 'admin'])(
+      'does not issue beta-held access to an inactive %s',
+      async (role) => {
+        const hashedPassword = await bcrypt.hash('password123', 10);
+        (usersService.findByEmail as jest.Mock).mockResolvedValue({
+          ...mockUser,
+          role,
+          passwordHash: hashedPassword,
+          isActive: false,
+          isBetaUser: true,
+          isBetaSurveyExempt: false,
+          accountHoldReason: 'beta_survey_complete',
+        });
+
+        await expect(
+          authService.login('test@example.com', 'password123'),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+      },
+    );
+
+    it('does not issue beta-held access to an exempt customer', async () => {
+      const hashedPassword = await bcrypt.hash('password123', 10);
+      (usersService.findByEmail as jest.Mock).mockResolvedValue({
+        ...mockUser,
+        passwordHash: hashedPassword,
+        isActive: false,
+        isBetaUser: true,
+        isBetaSurveyExempt: true,
+        accountHoldReason: 'beta_survey_complete',
+      });
+
+      await expect(
+        authService.login('test@example.com', 'password123'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
     });
   });
 });

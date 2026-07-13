@@ -114,6 +114,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(useButton);
     await tester.pumpAndSettle();
+    expect(find.text('Address was not saved'), findsOneWidget);
+    await tester.tap(find.text('Use once'));
+    await tester.pumpAndSettle();
 
     final drop = container.read(checkoutProvider).drops.single;
     expect(drop.addressId, isNull);

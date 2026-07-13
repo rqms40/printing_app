@@ -6,7 +6,12 @@ import 'package:printing_app/config/theme/app_colors.dart';
 /// Floating circular chat button. Shows an unread badge when [unreadCount] > 0.
 /// Pure icon — no "Chat" label.
 class FloatingChatButton extends StatelessWidget {
-  const FloatingChatButton({super.key, this.unreadCount = 0, this.orderId, this.tutorialKey});
+  const FloatingChatButton({
+    super.key,
+    this.unreadCount = 0,
+    this.orderId,
+    this.tutorialKey,
+  });
   final int unreadCount;
   final int? orderId;
   final GlobalKey? tutorialKey;
@@ -48,8 +53,13 @@ class FloatingChatButton extends StatelessWidget {
         ),
       ),
     );
+    final semanticButton = Semantics(
+      button: true,
+      label: 'Open customer chat',
+      child: ExcludeSemantics(child: button),
+    );
 
-    if (unreadCount <= 0) return button;
+    if (unreadCount <= 0) return semanticButton;
 
     final badgeLabel = unreadCount > 99 ? '99+' : '$unreadCount';
     final isWide = badgeLabel.length > 1;
@@ -57,7 +67,7 @@ class FloatingChatButton extends StatelessWidget {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        button,
+        semanticButton,
         Positioned(
           top: -2,
           right: -2,
@@ -70,10 +80,7 @@ class FloatingChatButton extends StatelessWidget {
             decoration: BoxDecoration(
               color: colors.error,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: colors.background,
-                width: 2,
-              ),
+              border: Border.all(color: colors.background, width: 2),
             ),
             alignment: Alignment.center,
             child: Text(

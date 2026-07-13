@@ -19,7 +19,6 @@ import {
   ExclamationCircleOutlined,
   EnvironmentOutlined,
   UserSwitchOutlined,
-  StopOutlined,
 } from "@ant-design/icons";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import { DivIcon, LatLngBounds, type LatLngExpression } from "leaflet";
@@ -28,7 +27,7 @@ import { useParams } from "react-router";
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import type { OrderStatus } from "@/types/enums";
-import { ORDER_STATUS_TRANSITIONS, ORDER_STATUS_LABELS } from "@/types/enums";
+import { ORDER_STATUS_LABELS } from "@/types/enums";
 import { StatusBadge } from "@/components/status-badge";
 import { FilePreviewModal } from "@/components/file-preview-modal";
 import { ShowPage } from "@/components/show-page";
@@ -223,6 +222,7 @@ export function OrderShow() {
       vehicle_type: string;
       plate_number: string | null;
       is_available?: boolean;
+      assignment_eligible?: boolean;
     }[]
   >([]);
   const [loading, setLoading] = useState(true);
@@ -243,7 +243,13 @@ export function OrderShow() {
         .catch(() => {}),
       apiClient
         .get("/admin/riders")
-        .then((r) => setAvailableRiders(normalizeAdminRiders(r.data)))
+        .then((r) =>
+          setAvailableRiders(
+            normalizeAdminRiders(r.data).filter(
+              (rider) => rider.assignment_eligible,
+            ),
+          ),
+        )
         .catch(() => {}),
     ]).finally(() => setLoading(false));
   }, [id]);
@@ -269,12 +275,21 @@ export function OrderShow() {
   const history = order.status_history ?? [];
   const items = getOrderLineItems(order);
   const destinations = getMappableDestinations(order);
-  const validNextStatuses = ORDER_STATUS_TRANSITIONS[order.order_status];
+  const validNextStatuses = order.allowed_next_statuses ?? [];
   const canAssignRider =
-    order.order_status === "ready_for_dispatch" ||
-    order.order_status === "rider_assigned";
+    order.order_status === "ready_for_dispatch" &&
+    order.delivery_option === "delivery" &&
+    !order.assigned_rider_contact?.delivery_assignment_id;
+  const assignedRiderName =
+    order.assigned_rider_contact?.display_name ??
+    order.assigned_rider_contact?.full_name ??
+    order.assigned_rider_contact?.nickname;
 
   const handleStatusChange = (newStatus: OrderStatus) => {
+    if (newStatus === "file_declined") {
+      setDeclineModalOpen(true);
+      return;
+    }
     modal.confirm({
       title: "Update Status",
       icon: <ExclamationCircleOutlined />,
@@ -391,6 +406,9 @@ export function OrderShow() {
                     ? `${getOrderTypeLabel(order)} · ${items.length} print jobs`
                     : getOrderTypeLabel(order)}
                 </Text>
+                {assignedRiderName && (
+                  <Tag color="green">Assigned rider: {assignedRiderName}</Tag>
+                )}
               </Space>
             </Col>
             <Col>
@@ -398,6 +416,7 @@ export function OrderShow() {
                 {validNextStatuses.length > 0 && (
                   <Select
                     placeholder="Update Status"
+                    aria-label={`Update status for ${order.order_id}`}
                     style={{ width: 200 }}
                     onChange={handleStatusChange}
                     options={validNextStatuses.map((s) => ({
@@ -409,22 +428,12 @@ export function OrderShow() {
                 {canAssignRider && (
                   <Button
                     icon={<UserSwitchOutlined />}
+                    aria-label={`Assign rider for ${order.order_id}`}
                     onClick={() => setRiderModalOpen(true)}
                   >
                     Assign Rider
                   </Button>
                 )}
-                {order.order_status !== "cancelled" &&
-                  order.order_status !== "delivered" &&
-                  order.order_status !== "file_declined" && (
-                    <Button
-                      danger
-                      icon={<StopOutlined />}
-                      onClick={() => setDeclineModalOpen(true)}
-                    >
-                      Decline
-                    </Button>
-                  )}
               </Space>
             </Col>
           </Row>
@@ -674,10 +683,7 @@ export function OrderShow() {
                     View photo proof
                   </Button>
                 ) : order.delivery_proof.type === "signature" ? (
-                  <Text code style={{ whiteSpace: "pre-wrap" }}>
-                    {order.delivery_proof.signature_data ??
-                      "Signature captured"}
-                  </Text>
+                  <Text>Signature captured</Text>
                 ) : (
                   "—"
                 )}
@@ -742,6 +748,9 @@ export function OrderShow() {
                     <br />
                     <Text type="secondary" style={{ fontSize: 12 }}>
                       {formatDateTime(h.created_at)}
+                      {h.changed_by_user_id
+                        ? ` · Actor #${h.changed_by_user_id}`
+                        : " · System"}
                       {h.notes && ` — ${h.notes}`}
                     </Text>
                   </div>

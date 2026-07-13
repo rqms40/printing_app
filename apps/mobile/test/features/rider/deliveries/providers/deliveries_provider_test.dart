@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:printing_app/features/rider/deliveries/providers/deliveries_provider.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
@@ -16,8 +19,15 @@ void main() {
 
   List<Map<String, dynamic>>? activeAssignmentsResponse;
   List<Map<String, dynamic>>? historyAssignmentsResponse;
+  Map<String, dynamic>? dispatchPlanResponse;
+  var blankDispatchPlanResponse = false;
+  var failDispatchPlan = false;
   var failPatchStatus = false;
   Map<String, dynamic>? lastStatusPatchData;
+  void Function(String status)? onStatusPatched;
+  final deferredActiveResponses = <Completer<List<Map<String, dynamic>>>>[];
+  final deferredHistoryResponses = <Completer<List<Map<String, dynamic>>>>[];
+  final deferredPlanResponses = <Completer<Map<String, dynamic>?>>[];
   Interceptor? riderApiInterceptor;
 
   setUpAll(() {
@@ -28,6 +38,11 @@ void main() {
     riderApiInterceptor = InterceptorsWrapper(
       onRequest: (options, handler) {
         if (options.path == '/riders/assignments' && options.method == 'GET') {
+          if (deferredActiveResponses.isNotEmpty) {
+            final response = deferredActiveResponses.removeAt(0);
+            _resolveDeferred(response.future, options, handler);
+            return;
+          }
           final data = activeAssignmentsResponse;
           if (data != null) {
             handler.resolve(
@@ -47,6 +62,11 @@ void main() {
         }
 
         if (options.path == '/riders/history' && options.method == 'GET') {
+          if (deferredHistoryResponses.isNotEmpty) {
+            final response = deferredHistoryResponses.removeAt(0);
+            _resolveDeferred(response.future, options, handler);
+            return;
+          }
           final data = historyAssignmentsResponse;
           if (data != null) {
             handler.resolve(
@@ -60,6 +80,33 @@ void main() {
               requestOptions: options,
               type: DioExceptionType.connectionError,
               error: 'offline',
+            ),
+          );
+          return;
+        }
+
+        if (options.path == '/riders/dispatch-plan' &&
+            options.method == 'GET') {
+          if (deferredPlanResponses.isNotEmpty) {
+            final response = deferredPlanResponses.removeAt(0);
+            _resolveDeferred(response.future, options, handler);
+            return;
+          }
+          if (failDispatchPlan) {
+            handler.reject(
+              DioException(
+                requestOptions: options,
+                type: DioExceptionType.connectionError,
+                error: 'dispatch plan offline',
+              ),
+            );
+            return;
+          }
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: blankDispatchPlanResponse ? '' : dispatchPlanResponse,
             ),
           );
           return;
@@ -87,6 +134,7 @@ void main() {
           handler.resolve(
             Response(requestOptions: options, statusCode: 200, data: {}),
           );
+          onStatusPatched?.call(lastStatusPatchData!['status'] as String);
           return;
         }
 
@@ -108,8 +156,15 @@ void main() {
   setUp(() {
     activeAssignmentsResponse = null;
     historyAssignmentsResponse = null;
+    dispatchPlanResponse = null;
+    blankDispatchPlanResponse = false;
+    failDispatchPlan = false;
     failPatchStatus = false;
     lastStatusPatchData = null;
+    onStatusPatched = null;
+    deferredActiveResponses.clear();
+    deferredHistoryResponses.clear();
+    deferredPlanResponses.clear();
   });
 
   group('DeliveriesNotifier', () {
@@ -132,6 +187,519 @@ void main() {
         MockData.deliveryAssignments.length,
       );
     });
+
+    test('real-flow mode never substitutes mock assignments', () async {
+      final realNotifier = DeliveriesNotifier(bootstrap: false, realFlow: true);
+      addTearDown(realNotifier.dispose);
+
+      await realNotifier.refreshAssignments();
+
+      expect(realNotifier.state.views, isEmpty);
+      expect(
+        realNotifier.state.errorMessage,
+        'Unable to load live assignments',
+      );
+      expect(realNotifier.state.dataStale, isTrue);
+    });
+
+    test(
+      'real-flow mode treats an empty no-plan response as no dispatch plan',
+      () async {
+        activeAssignmentsResponse = [
+          _assignmentJson(
+            id: '101',
+            status: DeliveryStatus.assigned,
+            updatedAt: '2026-02-01T09:00:00Z',
+          ),
+        ];
+        historyAssignmentsResponse = [];
+        blankDispatchPlanResponse = true;
+        final realNotifier = DeliveriesNotifier(realFlow: true);
+        addTearDown(realNotifier.dispose);
+
+        await _waitForBootstrap();
+
+        expect(realNotifier.state.views.single.id, '101');
+        expect(realNotifier.state.errorMessage, isNull);
+        expect(realNotifier.state.dataStale, isFalse);
+      },
+    );
+
+    test(
+      'real-flow refresh retains one coherent plan when a source fails',
+      () async {
+        activeAssignmentsResponse = [
+          _assignmentJson(
+            id: '101',
+            status: DeliveryStatus.onTheWay,
+            updatedAt: '2026-02-01T09:00:00Z',
+          ),
+        ];
+        historyAssignmentsResponse = [];
+        dispatchPlanResponse = {
+          'version': 4,
+          'originLatitude': '7.064',
+          'originLongitude': '125.6079',
+          'provider': 'osrm',
+          'profile': 'driving',
+          'routingDataStale': false,
+          'stops': [_planStop(101, sequence: 1, status: 'pending')],
+        };
+        final realNotifier = DeliveriesNotifier(realFlow: true);
+        addTearDown(realNotifier.dispose);
+        await _waitForBootstrap();
+        expect(realNotifier.state.views.single.id, '101');
+
+        activeAssignmentsResponse = [
+          _assignmentJson(
+            id: '102',
+            status: DeliveryStatus.onTheWay,
+            updatedAt: '2026-02-01T10:00:00Z',
+          ),
+        ];
+        failDispatchPlan = true;
+        await realNotifier.refreshAssignments();
+
+        expect(realNotifier.state.views.single.id, '101');
+        expect(realNotifier.state.views.single.planVersion, 4);
+        expect(realNotifier.state.dataStale, isTrue);
+        expect(
+          realNotifier.state.errorMessage,
+          'Unable to load live assignments',
+        );
+      },
+    );
+
+    test(
+      'dispatch-plan signal refreshes the rider into persisted stop order',
+      () async {
+        activeAssignmentsResponse = [
+          _assignmentJson(
+            id: '101',
+            status: DeliveryStatus.assigned,
+            updatedAt: '2026-02-01T09:00:00Z',
+          ),
+          _assignmentJson(
+            id: '102',
+            status: DeliveryStatus.assigned,
+            updatedAt: '2026-02-01T09:01:00Z',
+          ),
+        ];
+        historyAssignmentsResponse = [];
+        blankDispatchPlanResponse = true;
+        final realNotifier = DeliveriesNotifier(realFlow: true);
+        addTearDown(realNotifier.dispose);
+        await _waitForBootstrap();
+        expect(realNotifier.state.plannedRoute, isEmpty);
+
+        blankDispatchPlanResponse = false;
+        dispatchPlanResponse = _twoStopPlan();
+        WebSocketService.instance.dispatchRiderDispatchPlanUpdatedForTests({
+          'riderProfileId': 10,
+          'planId': 501,
+          'planVersion': 4,
+          'change': 'created',
+        });
+        await _waitForBootstrap();
+
+        expect(
+          realNotifier.state.plannedRoute.map((view) => view.id),
+          orderedEquals(['101', '102']),
+        );
+        expect(
+          realNotifier.state.routeStops.map((view) => view.routePosition),
+          orderedEquals([1, 2]),
+        );
+        expect(realNotifier.state.dataStale, isFalse);
+      },
+    );
+
+    test(
+      'real-flow missing order relation preserves the last coherent snapshot',
+      () async {
+        activeAssignmentsResponse = [
+          _assignmentJson(
+            id: '101',
+            status: DeliveryStatus.onTheWay,
+            updatedAt: '2026-02-01T09:00:00Z',
+          ),
+        ];
+        historyAssignmentsResponse = [];
+        dispatchPlanResponse = _singleStopPlan();
+        final realNotifier = DeliveriesNotifier(realFlow: true);
+        addTearDown(realNotifier.dispose);
+        await _waitForBootstrap();
+        expect(realNotifier.state.views.single.order.totalPrice, 120);
+
+        final assignmentWithoutOrder = _assignmentJson(
+          id: '101',
+          status: DeliveryStatus.onTheWay,
+          updatedAt: '2026-02-01T09:00:00Z',
+        );
+        assignmentWithoutOrder.remove('order');
+        activeAssignmentsResponse = [assignmentWithoutOrder];
+        await realNotifier.refreshAssignments();
+
+        expect(realNotifier.state.views.single.id, '101');
+        expect(realNotifier.state.views.single.order.totalPrice, 120);
+        expect(realNotifier.state.views.single.planVersion, 4);
+        expect(realNotifier.state.dataStale, isTrue);
+        expect(
+          realNotifier.state.errorMessage,
+          'Unable to load live assignments',
+        );
+      },
+    );
+
+    test(
+      'older refresh success cannot overwrite a newer route snapshot',
+      () async {
+        final oldActive = Completer<List<Map<String, dynamic>>>();
+        final newActive = Completer<List<Map<String, dynamic>>>();
+        final newHistory = Completer<List<Map<String, dynamic>>>();
+        final oldHistory = Completer<List<Map<String, dynamic>>>();
+        final newPlan = Completer<Map<String, dynamic>?>();
+        final oldPlan = Completer<Map<String, dynamic>?>();
+        deferredActiveResponses.addAll([oldActive, newActive]);
+        deferredHistoryResponses.addAll([newHistory, oldHistory]);
+        deferredPlanResponses.addAll([newPlan, oldPlan]);
+        final realNotifier = DeliveriesNotifier(
+          bootstrap: false,
+          realFlow: true,
+        );
+        addTearDown(realNotifier.dispose);
+
+        final olderRefresh = realNotifier.refreshAssignments();
+        await Future<void>.delayed(Duration.zero);
+        final newerRefresh = realNotifier.refreshAssignments();
+        await Future<void>.delayed(Duration.zero);
+
+        newActive.complete([
+          _assignmentJson(
+            id: '102',
+            status: DeliveryStatus.onTheWay,
+            updatedAt: '2026-02-01T10:00:00Z',
+          ),
+        ]);
+        await Future<void>.delayed(Duration.zero);
+        newHistory.complete([
+          _assignmentJson(
+            id: '101',
+            status: DeliveryStatus.delivered,
+            updatedAt: '2026-02-01T10:00:00Z',
+          ),
+        ]);
+        newPlan.complete(_twoStopPlan(firstStatus: 'completed'));
+        await newerRefresh;
+        expect(realNotifier.state.viewById('102')?.routePosition, 1);
+
+        oldActive.complete([
+          _assignmentJson(
+            id: '101',
+            status: DeliveryStatus.onTheWay,
+            updatedAt: '2026-02-01T09:00:00Z',
+          ),
+        ]);
+        await Future<void>.delayed(Duration.zero);
+        oldHistory.complete([]);
+        oldPlan.complete(_singleStopPlan());
+        await olderRefresh;
+
+        expect(
+          realNotifier.state.plannedRoute.map((view) => view.id),
+          orderedEquals(['101', '102']),
+        );
+        expect(
+          realNotifier.state.viewById('101')?.planStop?.status,
+          RiderDispatchStopStatus.completed,
+        );
+        expect(realNotifier.state.viewById('102')?.routePosition, 1);
+        expect(realNotifier.state.errorMessage, isNull);
+        expect(realNotifier.state.dataStale, isFalse);
+      },
+    );
+
+    test('older refresh failure cannot stale a newer route snapshot', () async {
+      final oldActive = Completer<List<Map<String, dynamic>>>();
+      final newActive = Completer<List<Map<String, dynamic>>>();
+      final newHistory = Completer<List<Map<String, dynamic>>>();
+      final newPlan = Completer<Map<String, dynamic>?>();
+      deferredActiveResponses.addAll([oldActive, newActive]);
+      deferredHistoryResponses.add(newHistory);
+      deferredPlanResponses.add(newPlan);
+      final realNotifier = DeliveriesNotifier(bootstrap: false, realFlow: true);
+      addTearDown(realNotifier.dispose);
+
+      final olderRefresh = realNotifier.refreshAssignments();
+      await Future<void>.delayed(Duration.zero);
+      final newerRefresh = realNotifier.refreshAssignments();
+      await Future<void>.delayed(Duration.zero);
+
+      newActive.complete([
+        _assignmentJson(
+          id: '102',
+          status: DeliveryStatus.onTheWay,
+          updatedAt: '2026-02-01T10:00:00Z',
+        ),
+      ]);
+      await Future<void>.delayed(Duration.zero);
+      newHistory.complete([
+        _assignmentJson(
+          id: '101',
+          status: DeliveryStatus.delivered,
+          updatedAt: '2026-02-01T10:00:00Z',
+        ),
+      ]);
+      newPlan.complete(_twoStopPlan(firstStatus: 'completed'));
+      await newerRefresh;
+
+      oldActive.completeError(
+        DioException(
+          requestOptions: RequestOptions(path: '/riders/assignments'),
+          type: DioExceptionType.connectionError,
+          error: 'older request failed',
+        ),
+      );
+      await olderRefresh;
+
+      expect(realNotifier.state.viewById('102')?.routePosition, 1);
+      expect(realNotifier.state.errorMessage, isNull);
+      expect(realNotifier.state.dataStale, isFalse);
+    });
+
+    test(
+      'real-flow malformed non-null plan retains the last valid plan',
+      () async {
+        activeAssignmentsResponse = [
+          _assignmentJson(
+            id: '101',
+            status: DeliveryStatus.onTheWay,
+            updatedAt: '2026-02-01T09:00:00Z',
+          ),
+        ];
+        historyAssignmentsResponse = [];
+        dispatchPlanResponse = {
+          'version': 4,
+          'originLatitude': '7.064',
+          'originLongitude': '125.6079',
+          'provider': 'osrm',
+          'profile': 'driving',
+          'routingDataStale': false,
+          'stops': [_planStop(101, sequence: 1, status: 'pending')],
+        };
+        final realNotifier = DeliveriesNotifier(realFlow: true);
+        addTearDown(realNotifier.dispose);
+        await _waitForBootstrap();
+        expect(realNotifier.state.views.single.planVersion, 4);
+
+        dispatchPlanResponse = {'version': 'broken', 'stops': 'not-a-list'};
+        await realNotifier.refreshAssignments();
+
+        expect(realNotifier.state.views.single.id, '101');
+        expect(realNotifier.state.views.single.planVersion, 4);
+        expect(realNotifier.state.dataStale, isTrue);
+        expect(
+          realNotifier.state.errorMessage,
+          'Unable to load live assignments',
+        );
+      },
+    );
+
+    test(
+      'real-flow rejects a plan stop without a real assignment relation',
+      () async {
+        activeAssignmentsResponse = [
+          _assignmentJson(
+            id: '101',
+            status: DeliveryStatus.onTheWay,
+            updatedAt: '2026-02-01T09:00:00Z',
+          ),
+        ];
+        historyAssignmentsResponse = [];
+        dispatchPlanResponse = {
+          'version': 4,
+          'originLatitude': '7.064',
+          'originLongitude': '125.6079',
+          'provider': 'osrm',
+          'profile': 'driving',
+          'routingDataStale': false,
+          'stops': [
+            _planStop(101, sequence: 1, status: 'pending'),
+            _planStop(999, sequence: 2, status: 'pending'),
+          ],
+        };
+
+        final realNotifier = DeliveriesNotifier(
+          bootstrap: false,
+          realFlow: true,
+        );
+        addTearDown(realNotifier.dispose);
+        await realNotifier.refreshAssignments();
+
+        expect(realNotifier.state.views, isEmpty);
+        expect(realNotifier.state.dataStale, isTrue);
+        expect(
+          realNotifier.state.errorMessage,
+          'Unable to load live assignments',
+        );
+      },
+    );
+
+    test(
+      'delivering Ven reloads persisted snapshots and promotes Mark',
+      () async {
+        activeAssignmentsResponse = [
+          _assignmentJson(
+            id: '101',
+            status: DeliveryStatus.arrived,
+            updatedAt: '2026-02-01T09:00:00Z',
+          ),
+          _assignmentJson(
+            id: '102',
+            status: DeliveryStatus.assigned,
+            updatedAt: '2026-02-01T09:01:00Z',
+          ),
+        ];
+        historyAssignmentsResponse = [];
+        dispatchPlanResponse = _twoStopPlan();
+        onStatusPatched = (status) {
+          if (status != 'delivered') return;
+          activeAssignmentsResponse = [
+            _assignmentJson(
+              id: '102',
+              status: DeliveryStatus.onTheWay,
+              updatedAt: '2026-02-01T10:00:00Z',
+            ),
+          ];
+          historyAssignmentsResponse = [
+            _assignmentJson(
+              id: '101',
+              status: DeliveryStatus.delivered,
+              updatedAt: '2026-02-01T10:00:00Z',
+            ),
+          ];
+          dispatchPlanResponse = _twoStopPlan(firstStatus: 'completed');
+        };
+        final realNotifier = DeliveriesNotifier(realFlow: true);
+        addTearDown(realNotifier.dispose);
+        await _waitForBootstrap();
+
+        await realNotifier.completeDeliveryWithProof('101', {
+          'type': 'signature',
+          'signatureData': 'svg:path-data',
+        });
+
+        expect(
+          realNotifier.state.plannedRoute.map((view) => view.id),
+          orderedEquals(['101', '102']),
+        );
+        expect(
+          realNotifier.state.viewById('101')?.planStop?.status,
+          RiderDispatchStopStatus.completed,
+        );
+        expect(realNotifier.state.viewById('102')?.routePosition, 1);
+        expect(
+          realNotifier.state.viewById('102')?.status,
+          DeliveryStatus.onTheWay,
+        );
+        expect(realNotifier.state.dataStale, isFalse);
+        expect(realNotifier.state.errorMessage, isNull);
+      },
+    );
+
+    test('declining the current stop reloads the persisted route', () async {
+      activeAssignmentsResponse = [
+        _assignmentJson(
+          id: '101',
+          status: DeliveryStatus.assigned,
+          updatedAt: '2026-02-01T09:00:00Z',
+        ),
+        _assignmentJson(
+          id: '102',
+          status: DeliveryStatus.assigned,
+          updatedAt: '2026-02-01T09:01:00Z',
+        ),
+      ];
+      historyAssignmentsResponse = [];
+      dispatchPlanResponse = _twoStopPlan();
+      onStatusPatched = (status) {
+        if (status != 'declined') return;
+        activeAssignmentsResponse = [
+          _assignmentJson(
+            id: '102',
+            status: DeliveryStatus.assigned,
+            updatedAt: '2026-02-01T10:00:00Z',
+          ),
+        ];
+        historyAssignmentsResponse = [
+          _assignmentJson(
+            id: '101',
+            status: DeliveryStatus.declined,
+            updatedAt: '2026-02-01T10:00:00Z',
+          ),
+        ];
+        dispatchPlanResponse = _twoStopPlan(firstStatus: 'skipped');
+      };
+      final realNotifier = DeliveriesNotifier(realFlow: true);
+      addTearDown(realNotifier.dispose);
+      await _waitForBootstrap();
+
+      await realNotifier.declineAssignment('101');
+
+      expect(
+        realNotifier.state.viewById('101')?.planStop?.status,
+        RiderDispatchStopStatus.skipped,
+      );
+      expect(realNotifier.state.viewById('102')?.routePosition, 1);
+      expect(realNotifier.state.dataStale, isFalse);
+      expect(realNotifier.state.errorMessage, isNull);
+    });
+
+    test(
+      'route mutation reload failure preserves the last coherent plan as stale',
+      () async {
+        activeAssignmentsResponse = [
+          _assignmentJson(
+            id: '101',
+            status: DeliveryStatus.arrived,
+            updatedAt: '2026-02-01T09:00:00Z',
+          ),
+          _assignmentJson(
+            id: '102',
+            status: DeliveryStatus.assigned,
+            updatedAt: '2026-02-01T09:01:00Z',
+          ),
+        ];
+        historyAssignmentsResponse = [];
+        dispatchPlanResponse = _twoStopPlan();
+        onStatusPatched = (status) {
+          if (status == 'delivered') failDispatchPlan = true;
+        };
+        final realNotifier = DeliveriesNotifier(realFlow: true);
+        addTearDown(realNotifier.dispose);
+        await _waitForBootstrap();
+
+        await realNotifier.completeDeliveryWithProof('101', {
+          'type': 'signature',
+          'signatureData': 'svg:path-data',
+        });
+
+        expect(
+          realNotifier.state.viewById('101')?.status,
+          DeliveryStatus.arrived,
+        );
+        expect(
+          realNotifier.state.viewById('101')?.planStop?.status,
+          RiderDispatchStopStatus.pending,
+        );
+        expect(realNotifier.state.viewById('102')?.routePosition, 2);
+        expect(realNotifier.state.dataStale, isTrue);
+        expect(
+          realNotifier.state.errorMessage,
+          'Unable to load live assignments',
+        );
+      },
+    );
 
     test('filteredAssignments excludes declined by default', () {
       final filtered = notifier.state.filteredAssignments;
@@ -366,6 +934,49 @@ void main() {
       );
     });
 
+    test('uses persisted plan order and keeps its completed legs', () async {
+      activeAssignmentsResponse = [
+        _assignmentJson(
+          id: '102',
+          status: DeliveryStatus.onTheWay,
+          updatedAt: '2026-02-03T09:00:00Z',
+        ),
+      ];
+      historyAssignmentsResponse = [
+        _assignmentJson(
+          id: '101',
+          status: DeliveryStatus.delivered,
+          updatedAt: '2026-02-02T09:00:00Z',
+        ),
+      ];
+      dispatchPlanResponse = {
+        'version': 4,
+        'originLatitude': '7.0640000',
+        'originLongitude': '125.6079000',
+        'provider': 'osrm',
+        'profile': 'driving',
+        'routingDataStale': false,
+        'stops': [
+          _planStop(101, sequence: 1, status: 'completed'),
+          _planStop(102, sequence: 2, status: 'pending'),
+        ],
+      };
+
+      final apiBackedNotifier = DeliveriesNotifier();
+      addTearDown(apiBackedNotifier.dispose);
+      await _waitForBootstrap();
+
+      expect(
+        apiBackedNotifier.state.plannedRoute.map((view) => view.id),
+        orderedEquals(['101', '102']),
+      );
+      expect(apiBackedNotifier.state.plannedRoute.first.planSequence, 1);
+      expect(apiBackedNotifier.state.plannedRoute.first.routePosition, isNull);
+      expect(apiBackedNotifier.state.plannedRoute.last.planSequence, 2);
+      expect(apiBackedNotifier.state.plannedRoute.last.routePosition, 1);
+      expect(apiBackedNotifier.state.plannedRoute.last.planVersion, 4);
+    });
+
     test(
       'refreshes assignments when realtime rider assignment event arrives',
       () async {
@@ -425,6 +1036,8 @@ void main() {
 
       final baselineListenerCount =
           WebSocketService.instance.riderAssignmentListenerCountForTests;
+      final baselinePlanListenerCount =
+          WebSocketService.instance.riderDispatchPlanListenerCountForTests;
       final apiBackedNotifier = DeliveriesNotifier();
       await _waitForBootstrap();
 
@@ -432,12 +1045,20 @@ void main() {
         WebSocketService.instance.riderAssignmentListenerCountForTests,
         baselineListenerCount + 1,
       );
+      expect(
+        WebSocketService.instance.riderDispatchPlanListenerCountForTests,
+        baselinePlanListenerCount + 1,
+      );
 
       apiBackedNotifier.dispose();
 
       expect(
         WebSocketService.instance.riderAssignmentListenerCountForTests,
         baselineListenerCount,
+      );
+      expect(
+        WebSocketService.instance.riderDispatchPlanListenerCountForTests,
+        baselinePlanListenerCount,
       );
     });
 
@@ -502,6 +1123,28 @@ void main() {
     });
   });
 
+  test('provider releases rider data after its last listener leaves', () async {
+    final container = ProviderContainer(
+      overrides: [
+        deliveriesProvider.overrideWith(
+          (_) => DeliveriesNotifier(bootstrap: false),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    final subscription = container.listen(
+      deliveriesProvider,
+      (_, __) {},
+      fireImmediately: true,
+    );
+    final firstNotifier = container.read(deliveriesProvider.notifier);
+
+    subscription.close();
+    await container.pump();
+
+    expect(container.read(deliveriesProvider.notifier), isNot(firstNotifier));
+  });
+
   group('DeliveriesState', () {
     test('copyWith preserves unchanged fields', () {
       const state = DeliveriesState(
@@ -544,6 +1187,30 @@ void main() {
   });
 }
 
+void _resolveDeferred<T>(
+  Future<T> future,
+  RequestOptions options,
+  RequestInterceptorHandler handler,
+) {
+  future.then(
+    (data) => handler.resolve(
+      Response<T>(requestOptions: options, statusCode: 200, data: data),
+    ),
+    onError: (Object error, StackTrace stackTrace) {
+      handler.reject(
+        error is DioException
+            ? error
+            : DioException(
+                requestOptions: options,
+                type: DioExceptionType.connectionError,
+                error: error,
+                stackTrace: stackTrace,
+              ),
+      );
+    },
+  );
+}
+
 Future<void> _waitForBootstrap() async {
   await Future<void>.delayed(const Duration(milliseconds: 50));
 }
@@ -578,8 +1245,66 @@ Map<String, dynamic> _assignmentJson({
     'status': serverDeliveryStatus(status),
     'createdAt': '2026-01-01T09:00:00Z',
     'updatedAt': updatedAt,
+    'order': {
+      'id': 'order-$id',
+      'orderId': 'ORD-$id',
+      'category': 'paper',
+      'quantity': 1,
+      'totalPrice': 120,
+      'deliveryFee': 40,
+      'destination': {
+        'fullAddress': '$id destination',
+        'city': 'Davao City',
+        'latitude': '7.0731',
+        'longitude': '125.6128',
+      },
+    },
   };
 }
+
+Map<String, dynamic> _planStop(
+  int assignmentId, {
+  required int sequence,
+  required String status,
+}) => {
+  'assignmentId': assignmentId,
+  'sequence': sequence,
+  'status': status,
+  'destinationLatitude': '7.0731000',
+  'destinationLongitude': '125.6128000',
+  'legDurationSeconds': 12,
+  'legDistanceMeters': 77,
+  'legGeometry': {
+    'type': 'LineString',
+    'coordinates': [
+      [125.6079, 7.064],
+      [125.6128, 7.0731],
+    ],
+  },
+};
+
+Map<String, dynamic> _twoStopPlan({String firstStatus = 'pending'}) => {
+  'version': 4,
+  'originLatitude': '7.064',
+  'originLongitude': '125.6079',
+  'provider': 'osrm',
+  'profile': 'driving',
+  'routingDataStale': false,
+  'stops': [
+    _planStop(101, sequence: 1, status: firstStatus),
+    _planStop(102, sequence: 2, status: 'pending'),
+  ],
+};
+
+Map<String, dynamic> _singleStopPlan() => {
+  'version': 4,
+  'originLatitude': '7.064',
+  'originLongitude': '125.6079',
+  'provider': 'osrm',
+  'profile': 'driving',
+  'routingDataStale': false,
+  'stops': [_planStop(101, sequence: 1, status: 'pending')],
+};
 
 DeliveryAssignment _assignment({
   required String id,

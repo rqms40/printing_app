@@ -4,6 +4,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 import {
   AgeRange,
@@ -87,6 +88,10 @@ export class User {
   @Column({ name: 'is_profile_complete', default: false })
   isProfileComplete: boolean;
 
+  @Index('uq_users_fcm_token', {
+    unique: true,
+    where: '"fcm_token" IS NOT NULL',
+  })
   @Column({ name: 'fcm_token', nullable: true, type: 'text' })
   fcmToken: string | null;
 

@@ -18,4 +18,15 @@ describe("LoginPage", () => {
     expect(screen.getByPlaceholderText("admin@gridgo.ph")).toHaveValue("");
     expect(screen.getByPlaceholderText("Enter password")).toHaveValue("");
   });
+
+  it("uses accessible contrast for muted login guidance", () => {
+    render(<LoginPage />);
+
+    expect(screen.getByText("Printing Services")).toHaveStyle({
+      color: "#A0A0A0",
+    });
+    expect(screen.getByText("Enter your credentials to continue")).toHaveStyle({
+      color: "#A0A0A0",
+    });
+  });
 });

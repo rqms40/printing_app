@@ -55,6 +55,7 @@ class RiderProfileNotifier extends StateNotifier<RiderProfileState> {
   Future<void> _load() async {
     try {
       final response = await ApiClient.instance.get('/riders/profile');
+      if (!mounted) return;
       final json = response.data as Map<String, dynamic>;
       final user = json['user'] as Map<String, dynamic>?;
       state = RiderProfileState(
@@ -66,13 +67,17 @@ class RiderProfileNotifier extends StateNotifier<RiderProfileState> {
             json['vehicleType'] as String? ?? json['vehicle_type'] as String?,
         plateNumber:
             json['plateNumber'] as String? ?? json['plate_number'] as String?,
-        licenseNumber: json['licenseNumber'] as String? ??
+        licenseNumber:
+            json['licenseNumber'] as String? ??
             json['license_number'] as String?,
         isAvailable:
-            json['isAvailable'] as bool? ?? json['is_available'] as bool? ?? false,
+            json['isAvailable'] as bool? ??
+            json['is_available'] as bool? ??
+            false,
         isLoading: false,
       );
     } catch (_) {
+      if (!mounted) return;
       final mock = MockData.riderProfileJuan;
       final user = MockData.riderJuan;
       state = RiderProfileState(
@@ -102,20 +107,20 @@ class RiderProfileNotifier extends StateNotifier<RiderProfileState> {
     required String vehicleType,
     required String plateNumber,
   }) async {
+    if (!mounted) return false;
     try {
       await ApiClient.instance.patch(
         '/riders/profile',
-        data: {
-          'vehicleType': vehicleType,
-          'plateNumber': plateNumber,
-        },
+        data: {'vehicleType': vehicleType, 'plateNumber': plateNumber},
       );
+      if (!mounted) return false;
       state = state.copyWith(
         vehicleType: vehicleType,
         plateNumber: plateNumber,
       );
       return true;
     } catch (_) {
+      if (!mounted) return false;
       return false;
     }
   }
@@ -124,6 +129,6 @@ class RiderProfileNotifier extends StateNotifier<RiderProfileState> {
 }
 
 final riderProfileProvider =
-    StateNotifierProvider<RiderProfileNotifier, RiderProfileState>(
-  (ref) => RiderProfileNotifier(),
-);
+    StateNotifierProvider.autoDispose<RiderProfileNotifier, RiderProfileState>(
+      (ref) => RiderProfileNotifier(),
+    );

@@ -23,6 +23,8 @@ import { DeliverySlotsModule } from '../delivery-slots/delivery-slots.module';
 import { PrinterProfileModule } from '../printer-profile/printer-profile.module';
 import { TamSurveysModule } from '../tam-surveys/tam-surveys.module';
 import { ProductsModule } from '../products/products.module';
+import { DispatchPlan } from '../riders/entities/dispatch-plan.entity';
+import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.module';
 
 @Module({
   imports: [
@@ -36,6 +38,7 @@ import { ProductsModule } from '../products/products.module';
       Address,
       DeliveryDestination,
       FileMetadata,
+      DispatchPlan,
     ]),
     JwtModule.registerAsync({
       inject: [ConfigService],
@@ -52,6 +55,7 @@ import { ProductsModule } from '../products/products.module';
     DeliverySlotsModule,
     PrinterProfileModule,
     ProductsModule,
+    RealtimeSessionsModule,
   ],
   providers: [OrdersService, OrdersGateway],
   controllers: [OrdersController, ExternalDeliveriesController],

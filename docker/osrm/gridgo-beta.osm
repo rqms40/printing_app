@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="GRIDGO deterministic beta fixture">
+  <bounds minlat="7.0635" minlon="125.6070" maxlat="7.0736" maxlon="125.6133"/>
+  <node id="1" version="1" lat="7.0640000" lon="125.6079000"/>
+  <node id="2" version="1" lat="7.0640000" lon="125.6076000"/>
+  <node id="3" version="1" lat="7.0641000" lon="125.6076000"/>
+  <node id="4" version="1" lat="7.0641000" lon="125.6079000"/>
+  <node id="5" version="1" lat="7.0655000" lon="125.6085000"/>
+  <node id="6" version="1" lat="7.0680000" lon="125.6100000"/>
+  <node id="7" version="1" lat="7.0705000" lon="125.6114000"/>
+  <node id="8" version="1" lat="7.0731000" lon="125.6128000"/>
+  <way id="101" version="1">
+    <nd ref="1"/>
+    <nd ref="2"/>
+    <nd ref="3"/>
+    <nd ref="4"/>
+    <nd ref="5"/>
+    <nd ref="6"/>
+    <nd ref="7"/>
+    <nd ref="8"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="GRIDGO Beta Test Road"/>
+    <tag k="maxspeed" v="30"/>
+    <tag k="oneway" v="no"/>
+  </way>
+</osm>

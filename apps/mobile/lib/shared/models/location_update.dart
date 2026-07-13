@@ -2,6 +2,7 @@ class LocationUpdate {
   const LocationUpdate({
     required this.id,
     required this.deliveryAssignmentId,
+    this.planVersion,
     required this.latitude,
     required this.longitude,
     this.speed,
@@ -11,6 +12,7 @@ class LocationUpdate {
 
   final String id;
   final String deliveryAssignmentId;
+  final int? planVersion;
   final double latitude;
   final double longitude;
   final double? speed;
@@ -20,6 +22,7 @@ class LocationUpdate {
   LocationUpdate copyWith({
     String? id,
     String? deliveryAssignmentId,
+    int? planVersion,
     double? latitude,
     double? longitude,
     double? speed,
@@ -29,6 +32,7 @@ class LocationUpdate {
     return LocationUpdate(
       id: id ?? this.id,
       deliveryAssignmentId: deliveryAssignmentId ?? this.deliveryAssignmentId,
+      planVersion: planVersion ?? this.planVersion,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
       speed: speed ?? this.speed,
@@ -38,6 +42,5 @@ class LocationUpdate {
   }
 
   @override
-  String toString() =>
-      'LocationUpdate($latitude, $longitude @ $timestamp)';
+  String toString() => 'LocationUpdate($latitude, $longitude @ $timestamp)';
 }

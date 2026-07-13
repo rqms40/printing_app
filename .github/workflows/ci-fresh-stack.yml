@@ -1,0 +1,157 @@
+name: Fresh Stack CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "apps/mobile/**"
+      - "admin/**"
+      - "apps/Landing-page/**"
+      - "server/**"
+      - "e2e/mobile-web/**"
+      - "docker/**"
+      - "docker-compose.dev.yml"
+      - ".github/workflows/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fresh-stack-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  fresh-stack:
+    name: Fresh Stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      COMPOSE_PROJECT_NAME: gridgo-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      GRIDGO_PUBLIC_HOST: 127.0.0.1
+      GRIDGO_BIND_ADDR: 127.0.0.1
+      GRIDGO_TRUST_PROXY_HOPS: "1"
+      GRIDGO_REAL_FLOW: "true"
+      GRIDGO_ADMIN_EMAIL: admin@gridgo.ph
+      GRIDGO_RIDER_EMAIL: juan@gridgo.ph
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: e2e/mobile-web/package-lock.json
+
+      - name: Generate and mask ephemeral stack credentials
+        shell: bash
+        run: |
+          umask 077
+          : > server/.env
+          for variable in JWT_SECRET GRIDGO_SEED_CUSTOMER_PASSWORD GRIDGO_SEED_RIDER_PASSWORD GRIDGO_SEED_ADMIN_PASSWORD MINIO_ACCESS_KEY MINIO_SECRET_KEY; do
+            value="$(openssl rand -hex 32)"
+            echo "::add-mask::$value"
+            echo "$variable=$value" >> "$GITHUB_ENV"
+            echo "$variable=$value" >> server/.env
+          done
+          set -a
+          source server/.env
+          set +a
+          echo "GRIDGO_ADMIN_PASSWORD=$GRIDGO_SEED_ADMIN_PASSWORD" >> "$GITHUB_ENV"
+          echo "GRIDGO_RIDER_PASSWORD=$GRIDGO_SEED_RIDER_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Install locked Playwright dependencies
+        working-directory: e2e/mobile-web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Build stack images once
+        run: docker compose -f docker-compose.dev.yml build
+
+      - name: Start disposable infrastructure
+        run: docker compose -f docker-compose.dev.yml up -d --no-build --wait postgres minio osrm
+
+      - name: Migrate and seed the empty database
+        run: |
+          docker compose -f docker-compose.dev.yml run --rm --no-deps migrate
+          docker compose -f docker-compose.dev.yml run --rm --no-deps seed
+
+      - name: Start API and verify health
+        run: |
+          docker compose -f docker-compose.dev.yml up -d --no-build --no-deps api
+          for _ in {1..60}; do
+            if curl -fsS http://127.0.0.1:3000/api/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -f docker-compose.dev.yml logs --no-color api
+          exit 1
+
+      - name: Start and verify browser surfaces
+        run: |
+          docker compose -f docker-compose.dev.yml up -d --no-build --no-deps mobile admin landing
+          for url in http://127.0.0.1:8088 http://127.0.0.1:8189 http://127.0.0.1:8090; do
+            ready=0
+            for _ in {1..60}; do
+              if curl -fsS "$url" > /dev/null; then
+                ready=1
+                break
+              fi
+              sleep 2
+            done
+            if [[ "$ready" != 1 ]]; then
+              echo "Surface did not become ready: $url" >&2
+              exit 1
+            fi
+          done
+
+      - name: Run live beta preflight
+        working-directory: e2e/mobile-web
+        env:
+          GRIDGO_RUN_BETA_FLOW_E2E: "1"
+          MOBILE_WEB_E2E_NO_SERVER: "1"
+          MOBILE_WEB_E2E_URL: http://127.0.0.1:8088
+          GRIDGO_ADMIN_URL: http://127.0.0.1:8189
+          GRIDGO_API_URL: http://127.0.0.1:3000/api
+        run: npm test -- tests/beta-workflow.spec.ts --project=chromium-desktop
+
+      - name: Run destructive beta API workflow
+        working-directory: e2e/mobile-web
+        env:
+          GRIDGO_RUN_BETA_FLOW_DESTRUCTIVE: "1"
+          MOBILE_WEB_E2E_NO_SERVER: "1"
+          GRIDGO_API_URL: http://127.0.0.1:3000/api
+        run: npm test -- tests/beta-workflow-destructive.spec.ts --project=chromium-desktop
+
+      - name: Collect failure evidence
+        if: failure()
+        run: |
+          mkdir -p ci-artifacts
+          docker compose -f docker-compose.dev.yml ps --all > ci-artifacts/compose-ps.txt
+          docker compose -f docker-compose.dev.yml logs --no-color > ci-artifacts/compose.log
+          if [[ -d e2e/mobile-web/test-results ]]; then
+            cp -R e2e/mobile-web/test-results ci-artifacts/test-results
+          fi
+          if [[ -d e2e/mobile-web/playwright-report ]]; then
+            cp -R e2e/mobile-web/playwright-report ci-artifacts/playwright-report
+          fi
+
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fresh-stack-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ci-artifacts
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Remove disposable stack and credentials
+        if: always()
+        run: |
+          docker compose -f docker-compose.dev.yml down -v --remove-orphans || true
+          rm -f server/.env

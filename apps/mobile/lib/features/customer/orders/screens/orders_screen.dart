@@ -58,6 +58,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
 
     final activeOrders = ref.watch(activeOrdersProvider);
     final completedOrders = ref.watch(completedOrdersProvider);
+    final ordersNotifier = ref.read(ordersProvider.notifier);
+    final errorMessage = ordersNotifier.errorMessage;
 
     final activeCount = activeOrders.length;
     final completedCount = completedOrders.length;
@@ -70,40 +72,61 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.only(
-                left: AppSpacing.xl,
-                right: AppSpacing.xl,
-                top: AppSpacing.lg,
-                bottom: AppSpacing.md,
-              ),
-              child: Text(
-                'My Orders',
-                style: AppTypography.h1.copyWith(color: colors.onBackground),
-              ),
-            ).animate()
+                  padding: const EdgeInsets.only(
+                    left: AppSpacing.xl,
+                    right: AppSpacing.xl,
+                    top: AppSpacing.lg,
+                    bottom: AppSpacing.md,
+                  ),
+                  child: Text(
+                    'My Orders',
+                    style: AppTypography.h1.copyWith(
+                      color: colors.onBackground,
+                    ),
+                  ),
+                )
+                .animate()
                 .fadeIn(duration: 350.ms, curve: Curves.easeOut)
                 .slideY(begin: 0.02, duration: 350.ms, curve: Curves.easeOut),
 
             // Pill tab selector
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-              child: PillTabBar(
-                tabs: [
-                  PillTab(label: 'Active', count: activeCount),
-                  PillTab(label: 'Completed', count: completedCount),
-                ],
-                selectedIndex: _selectedTab,
-                onTabChanged: (i) => setState(() => _selectedTab = i),
-              ),
-            ).animate()
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.xl,
+                  ),
+                  child: PillTabBar(
+                    tabs: [
+                      PillTab(label: 'Active', count: activeCount),
+                      PillTab(label: 'Completed', count: completedCount),
+                    ],
+                    selectedIndex: _selectedTab,
+                    onTabChanged: (i) => setState(() => _selectedTab = i),
+                  ),
+                )
+                .animate()
                 .fadeIn(duration: 350.ms, delay: 60.ms, curve: Curves.easeOut)
                 .slideY(
-                    begin: 0.02,
-                    duration: 350.ms,
-                    delay: 60.ms,
-                    curve: Curves.easeOut),
+                  begin: 0.02,
+                  duration: 350.ms,
+                  delay: 60.ms,
+                  curve: Curves.easeOut,
+                ),
 
             const SizedBox(height: AppSpacing.md),
+
+            if (errorMessage != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                child: MaterialBanner(
+                  content: Text(errorMessage),
+                  actions: [
+                    TextButton(
+                      onPressed: ordersNotifier.refreshOrders,
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
 
             // Content
             Expanded(
@@ -182,19 +205,23 @@ class _OrdersList extends StatelessWidget {
           padding: EdgeInsets.only(
             bottom: index < orders.length - 1 ? AppSpacing.sm : AppSpacing.xxl,
           ),
-          child: OrderCard(
-            order: order,
-            onTap: () => context.push('/customer/orders/${order.id}'),
-          ).animate().fadeIn(
-                duration: 350.ms,
-                delay: (index * 50).ms,
-                curve: Curves.easeOut,
-              ).slideY(
-                begin: 0.02,
-                duration: 350.ms,
-                delay: (index * 50).ms,
-                curve: Curves.easeOut,
-              ),
+          child:
+              OrderCard(
+                    order: order,
+                    onTap: () => context.push('/customer/orders/${order.id}'),
+                  )
+                  .animate()
+                  .fadeIn(
+                    duration: 350.ms,
+                    delay: (index * 50).ms,
+                    curve: Curves.easeOut,
+                  )
+                  .slideY(
+                    begin: 0.02,
+                    duration: 350.ms,
+                    delay: (index * 50).ms,
+                    curve: Curves.easeOut,
+                  ),
         );
       },
     );

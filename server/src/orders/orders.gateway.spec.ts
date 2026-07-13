@@ -2,6 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import { OrdersGateway } from './orders.gateway';
+import { UsersService } from '../users/users.service';
+import { UserRole } from '../users/entities/user.entity';
+import { RealtimeSessionRegistry } from '../common/realtime/realtime-session-registry';
 
 const makeClient = (
   token?: string,
@@ -9,6 +12,7 @@ const makeClient = (
   handshake: { auth: Record<string, unknown> };
 } => ({
   handshake: { auth: token ? { token } : {} },
+  data: {},
   join: jest.fn().mockResolvedValue(undefined),
   disconnect: jest.fn(),
 });
@@ -16,12 +20,27 @@ const makeClient = (
 describe('OrdersGateway', () => {
   let gateway: OrdersGateway;
   let jwtService: jest.Mocked<Pick<JwtService, 'verifyAsync'>>;
+  let usersService: { findSocketIdentity: jest.Mock };
+  let realtimeSessions: { register: jest.Mock };
 
   beforeEach(async () => {
     jwtService = { verifyAsync: jest.fn() };
+    usersService = {
+      findSocketIdentity: jest.fn().mockImplementation(async (id: number) => ({
+        id,
+        role: UserRole.CUSTOMER,
+        isActive: true,
+      })),
+    };
+    realtimeSessions = { register: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [OrdersGateway, { provide: JwtService, useValue: jwtService }],
+      providers: [
+        OrdersGateway,
+        { provide: JwtService, useValue: jwtService },
+        { provide: UsersService, useValue: usersService },
+        { provide: RealtimeSessionRegistry, useValue: realtimeSessions },
+      ],
     }).compile();
 
     gateway = module.get<OrdersGateway>(OrdersGateway);
@@ -31,6 +50,11 @@ describe('OrdersGateway', () => {
 
   describe('handleConnection', () => {
     it('joins admin_orders room when JWT has role=admin', async () => {
+      usersService.findSocketIdentity.mockResolvedValue({
+        id: 1,
+        role: UserRole.ADMIN,
+        isActive: true,
+      });
       (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
         sub: 1,
         role: 'admin',
@@ -42,6 +66,7 @@ describe('OrdersGateway', () => {
       expect(jwtService.verifyAsync).toHaveBeenCalledWith('valid-admin-token');
       expect(client.join).toHaveBeenCalledWith('admin_orders');
       expect(client.disconnect).not.toHaveBeenCalled();
+      expect(realtimeSessions.register).toHaveBeenCalledWith(1, client);
     });
 
     it('joins the authenticated user room for non-admin JWTs', async () => {
@@ -76,6 +101,84 @@ describe('OrdersGateway', () => {
       await gateway.handleConnection(client as unknown as Socket);
 
       expect(client.disconnect).toHaveBeenCalled();
+    });
+
+    it.each([
+      ['missing', null],
+      ['inactive', { id: 8, role: UserRole.CUSTOMER, isActive: false }],
+    ])('disconnects a %s database identity', async (_label, identity) => {
+      (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
+        sub: 8,
+        role: UserRole.CUSTOMER,
+      });
+      usersService.findSocketIdentity.mockResolvedValue(identity);
+      const client = makeClient('signed-token');
+
+      await gateway.handleConnection(client as unknown as Socket);
+
+      expect(client.disconnect).toHaveBeenCalled();
+      expect(client.join).not.toHaveBeenCalled();
+    });
+
+    it('disconnects when the signed role differs from the database role', async () => {
+      (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
+        sub: 8,
+        role: UserRole.ADMIN,
+      });
+      usersService.findSocketIdentity.mockResolvedValue({
+        id: 8,
+        role: UserRole.CUSTOMER,
+        isActive: true,
+      });
+      const client = makeClient('role-confused-token');
+
+      await gateway.handleConnection(client as unknown as Socket);
+
+      expect(client.disconnect).toHaveBeenCalled();
+      expect(client.join).not.toHaveBeenCalled();
+    });
+
+    it.each([undefined, null, 0, -1, 1.5, '8'])(
+      'disconnects an invalid signed subject %p',
+      async (sub) => {
+        (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
+          sub,
+          role: UserRole.CUSTOMER,
+        });
+        const client = makeClient('invalid-subject-token');
+
+        await gateway.handleConnection(client as unknown as Socket);
+
+        expect(client.disconnect).toHaveBeenCalled();
+        expect(usersService.findSocketIdentity).not.toHaveBeenCalled();
+        expect(client.join).not.toHaveBeenCalled();
+      },
+    );
+
+    it('awaits room membership before accepting the connection', async () => {
+      (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
+        sub: 2,
+        role: UserRole.CUSTOMER,
+      });
+      let completeJoin!: () => void;
+      const joinPending = new Promise<void>((resolve) => {
+        completeJoin = resolve;
+      });
+      const client = makeClient('customer-token');
+      client.join.mockReturnValue(joinPending as never);
+
+      let connected = false;
+      const connection = gateway
+        .handleConnection(client as unknown as Socket)
+        .then(() => {
+          connected = true;
+        });
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(connected).toBe(false);
+
+      completeJoin();
+      await connection;
+      expect(connected).toBe(true);
     });
   });
 
@@ -136,6 +239,52 @@ describe('OrdersGateway', () => {
 
       expect(toMock).toHaveBeenCalledWith('user_70');
       expect(emitMock).toHaveBeenCalledWith('riderAssignment', payload);
+    });
+  });
+
+  describe('notifyRiderDispatchPlanUpdated', () => {
+    it('emits the persisted plan identity to the rider user room', () => {
+      const emitMock = jest.fn();
+      const toMock = jest.fn().mockReturnValue({ emit: emitMock });
+      gateway.server = { to: toMock } as unknown as Server;
+      const payload = {
+        riderProfileId: 10,
+        planId: 501,
+        planVersion: 4,
+        change: 'created' as const,
+      };
+
+      gateway.notifyRiderDispatchPlanUpdated(70, payload);
+
+      expect(toMock).toHaveBeenCalledTimes(1);
+      expect(toMock).toHaveBeenCalledWith('user_70');
+      expect(emitMock).toHaveBeenCalledWith(
+        'riderDispatchPlanUpdated',
+        payload,
+      );
+    });
+  });
+
+  describe('notifyDeliveryQueueUpdated', () => {
+    it('targets only the promoted customer user room', () => {
+      const emitMock = jest.fn();
+      const toMock = jest.fn().mockReturnValue({ emit: emitMock });
+      gateway.server = { to: toMock } as unknown as Server;
+      const payload = {
+        orderId: 42,
+        orderRef: 'ORD-10042',
+        queuePosition: 1,
+        queueSize: 1,
+        canTrackDelivery: true,
+        assignmentId: 99,
+        planVersion: 3,
+      };
+
+      gateway.notifyDeliveryQueueUpdated(70, payload);
+
+      expect(toMock).toHaveBeenCalledTimes(1);
+      expect(toMock).toHaveBeenCalledWith('user_70');
+      expect(emitMock).toHaveBeenCalledWith('deliveryQueueUpdated', payload);
     });
   });
 });

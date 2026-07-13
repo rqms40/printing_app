@@ -42,19 +42,26 @@ class NextBatchInfo {
   final String? nextSlotStart;
   final String? nextSlotEnd;
 
-  int get bookedTotal =>
-      upcoming.fold(0, (acc, s) => acc + s.bookedCount);
+  int get bookedTotal => upcoming.fold(0, (acc, s) => acc + s.bookedCount);
   int get capacityTotal => upcoming.fold(0, (acc, s) => acc + s.capacity);
 }
 
 String _formatDateLabel(DateTime d) {
   const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
-  const days = [
-    'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun',
-  ];
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   return '${days[d.weekday - 1]}, ${months[d.month - 1]} ${d.day}';
 }
 
@@ -84,15 +91,18 @@ DateTime _parseDateTime(String date, String hms) {
   );
 }
 
-List<UpcomingSlot> _toUpcoming(Iterable<DeliverySlot> slots) => slots
-    .map((s) => UpcomingSlot(
-          startTime: s.startTime,
-          endTime: s.endTime,
-          bookedCount: s.bookedCount,
-          capacity: s.capacity,
-        ))
-    .toList()
-  ..sort((a, b) => a.startTime.compareTo(b.startTime));
+List<UpcomingSlot> _toUpcoming(Iterable<DeliverySlot> slots) =>
+    slots
+        .map(
+          (s) => UpcomingSlot(
+            startTime: s.startTime,
+            endTime: s.endTime,
+            bookedCount: s.bookedCount,
+            capacity: s.capacity,
+          ),
+        )
+        .toList()
+      ..sort((a, b) => a.startTime.compareTo(b.startTime));
 
 /// Returns information for the dialog whenever today is constrained
 /// (mid-day, full, day-over, or weekend). Capacity is scoped only to the
@@ -148,8 +158,7 @@ final nextBatchInfoProvider = Provider.autoDispose<NextBatchInfo?>((ref) {
   final upcomingToday = slots.where((s) {
     final start = _parseDateTime(today, s.startTime);
     return start.isAfter(now) && !s.isFull;
-  }).toList()
-    ..sort((a, b) => a.startTime.compareTo(b.startTime));
+  }).toList()..sort((a, b) => a.startTime.compareTo(b.startTime));
 
   final NextBatchReason reason;
   if (allEnded) {
@@ -163,7 +172,9 @@ final nextBatchInfoProvider = Provider.autoDispose<NextBatchInfo?>((ref) {
 
   // Prefer today's upcoming slots; fall back to tomorrow.
   final useToday = upcomingToday.isNotEmpty;
-  final upcoming = useToday ? _toUpcoming(upcomingToday) : _toUpcoming(tomSlots);
+  final upcoming = useToday
+      ? _toUpcoming(upcomingToday)
+      : _toUpcoming(tomSlots);
   final relevantDate = useToday
       ? today
       : (tomSlots.isNotEmpty ? tomorrow : dayAfter);
@@ -233,6 +244,7 @@ class _NextBatchDialogState extends State<NextBatchDialog> {
   @override
   Widget build(BuildContext context) {
     final info = widget.info;
+    void closeDialog() => Navigator.of(context).pop();
 
     // Force dark sheet so brand yellow has high contrast.
     const sheetBg = Color(0xFF111111);
@@ -327,13 +339,21 @@ class _NextBatchDialogState extends State<NextBatchDialog> {
                         ],
                       ),
                     ),
-                    IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      splashRadius: 20,
-                      icon: const Icon(
-                        Icons.close_rounded,
-                        color: onSheetDim,
-                        size: 22,
+                    Semantics(
+                      button: true,
+                      label: 'Close batch information',
+                      onTap: closeDialog,
+                      child: ExcludeSemantics(
+                        child: IconButton(
+                          onPressed: closeDialog,
+                          splashRadius: 20,
+                          tooltip: 'Close batch information',
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: onSheetDim,
+                            size: 22,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -415,9 +435,7 @@ class _NextBatchDialogState extends State<NextBatchDialog> {
                         brand: brand,
                         label: isLast
                             ? 'Got it'
-                            : (_page == 0
-                                ? 'See how it works'
-                                : 'Next'),
+                            : (_page == 0 ? 'See how it works' : 'Next'),
                         onTap: _next,
                       ),
                     ),
@@ -574,15 +592,13 @@ class _SheetPageStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     final remaining = capacity - booked;
     final pct = capacity == 0 ? 0.0 : (booked / capacity).clamp(0.0, 1.0);
-    final capacityLabel =
-        relevantIsToday ? 'REMAINING TODAY' : "TOMORROW'S CAPACITY";
+    final capacityLabel = relevantIsToday
+        ? 'REMAINING TODAY'
+        : "TOMORROW'S CAPACITY";
     final summary = switch (reason) {
-      NextBatchReason.allFull =>
-        'Every batch today is fully booked.',
-      NextBatchReason.dayOver =>
-        "Today's last batch has departed.",
-      NextBatchReason.weekend =>
-        'No batch runs scheduled today.',
+      NextBatchReason.allFull => 'Every batch today is fully booked.',
+      NextBatchReason.dayOver => "Today's last batch has departed.",
+      NextBatchReason.weekend => 'No batch runs scheduled today.',
       NextBatchReason.midDay =>
         'You missed earlier batches today, but more are still open.',
     };
@@ -594,10 +610,7 @@ class _SheetPageStatus extends StatelessWidget {
         children: [
           Text(
             summary,
-            style: AppTypography.body.copyWith(
-              color: onSheet,
-              height: 1.4,
-            ),
+            style: AppTypography.body.copyWith(color: onSheet, height: 1.4),
           ),
           const SizedBox(height: AppSpacing.md),
           // Hero next-slot strip
@@ -671,9 +684,7 @@ class _SheetPageStatus extends StatelessWidget {
                     const SizedBox(width: 6),
                     Text(
                       'then ${_format12h(s.startTime)} – ${_format12h(s.endTime)}',
-                      style: AppTypography.caption.copyWith(
-                        color: onSheetDim,
-                      ),
+                      style: AppTypography.caption.copyWith(color: onSheetDim),
                     ),
                     const Spacer(),
                     if (s.isFull)
@@ -1039,14 +1050,10 @@ class _SheetBullet extends StatelessWidget {
         Expanded(
           child: Text(
             text,
-            style: AppTypography.caption.copyWith(
-              color: onSheet,
-              height: 1.5,
-            ),
+            style: AppTypography.caption.copyWith(color: onSheet, height: 1.5),
           ),
         ),
       ],
     );
   }
 }
-

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,15 +8,10 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/features/rider/shared/providers/rider_location_tracker_provider.dart';
-import 'package:printing_app/shared/services/routing_service.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
-/// Cockpit route map: dark tiles, numbered stop pins, a rider car, the route
-/// polyline, and time/day + optimizing caption overlays. Fills its parent.
-///
-/// The map is rendered immediately (never hidden behind a loading spinner), and
-/// the camera is fit to the stops/shop only — never the routing geometry — so a
-/// far-away routing fallback can never blank out the view.
+/// Rider home cockpit map. The server's persisted plan is the only source of
+/// dispatch ordering and geometry; this widget never calls a routing service.
 class RiderRouteMapTile extends ConsumerStatefulWidget {
   const RiderRouteMapTile({
     super.key,
@@ -37,95 +30,44 @@ class RiderRouteMapTile extends ConsumerStatefulWidget {
 
 class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
   final _mapController = MapController();
-  List<LatLng> _routePoints = [];
 
-  @override
-  void initState() {
-    super.initState();
-    _loadRoute();
+  List<RiderAssignmentView> get _planned =>
+      widget.stops.where((stop) => stop.planStop != null).toList()..sort(
+        (left, right) => left.planSequence!.compareTo(right.planSequence!),
+      );
+
+  List<LatLng> get _framePoints {
+    final points = <LatLng>[MapHelpers.shopPoint];
+    for (final stop in _planned) {
+      final geometry = stop.planStop?.geometry;
+      if (geometry != null) points.addAll(geometry.points);
+      points.add(stop.planStop!.destination);
+    }
+    if (points.length == 1) points.add(MapHelpers.davaoCenter);
+    return points;
+  }
+
+  bool get _hasMalformedGeometry =>
+      _planned.any((stop) => stop.planStop?.geometryMalformed ?? false);
+
+  int? get _planVersion => _planned.firstOrNull?.planVersion;
+
+  void _fitCamera() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _mapController.fitCamera(
+        CameraFit.bounds(
+          bounds: LatLngBounds.fromPoints(_framePoints),
+          padding: const EdgeInsets.all(48),
+        ),
+      );
+    });
   }
 
   @override
   void didUpdateWidget(covariant RiderRouteMapTile oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_routeKey(oldWidget.activeStop) != _routeKey(widget.activeStop)) {
-      unawaited(_loadRoute());
-    } else {
-      _fitCamera();
-    }
-  }
-
-  String? _routeKey(RiderAssignmentView? stop) {
-    if (stop == null) return null;
-    final point = stop.order.destination?.latLng;
-    return '${stop.id}:${point?.latitude}:${point?.longitude}';
-  }
-
-  LatLng get _destination {
-    final latLng = widget.activeStop?.order.destination?.latLng;
-    if (latLng != null) return latLng;
-    if (widget.stops.isNotEmpty) {
-      return widget.stops.first.order.destination?.latLng ??
-          MapHelpers.davaoCenter;
-    }
-    return MapHelpers.davaoCenter;
-  }
-
-  bool get _hasActiveRoute => widget.activeStop != null;
-
-  /// Points used to frame the camera — shop + every stop with coordinates +
-  /// the destination. Deliberately excludes the routing geometry so a stale or
-  /// fallback route can't drag the camera off to another city.
-  List<LatLng> get _framePoints {
-    final pts = <LatLng>[MapHelpers.shopPoint, _destination];
-    for (final s in widget.stops) {
-      final p = s.order.destination?.latLng;
-      if (p != null) pts.add(p);
-    }
-    return pts;
-  }
-
-  /// A synthetic rider position 40% of the way from the shop to the
-  /// destination, so the car always sits on-screen near the route.
-  LatLng get _carPoint {
-    final dest = _destination;
-    return LatLng(
-      MapHelpers.shopPoint.latitude +
-          (dest.latitude - MapHelpers.shopPoint.latitude) * 0.4,
-      MapHelpers.shopPoint.longitude +
-          (dest.longitude - MapHelpers.shopPoint.longitude) * 0.4,
-    );
-  }
-
-  Future<void> _loadRoute() async {
-    if (!_hasActiveRoute) {
-      if (!mounted) return;
-      setState(() => _routePoints = const []);
-      _fitCamera();
-      return;
-    }
-
-    final points = await RoutingService.getRoute(
-      MapHelpers.shopPoint,
-      _destination,
-    );
-    if (!mounted) return;
-    setState(() => _routePoints = points);
     _fitCamera();
-  }
-
-  void _fitCamera() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final pts = _framePoints;
-      if (pts.length < 2) return;
-      _mapController.fitCamera(
-        CameraFit.bounds(
-          bounds: LatLngBounds.fromPoints(pts),
-          padding: const EdgeInsets.all(48),
-        ),
-      );
-    });
   }
 
   @override
@@ -134,32 +76,14 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
     super.dispose();
   }
 
-  /// Whether the loaded route is plausibly near our stops (guards against the
-  /// far-away fallback route the routing service returns when offline).
-  bool get _routeIsNearby {
-    if (_routePoints.isEmpty) return false;
-    final dest = _destination;
-    final first = _routePoints.first;
-    const distance = Distance();
-    // Within ~80km of the destination → treat as a real local route.
-    return distance(first, dest) < 80000;
-  }
-
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
     final colors = brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
-    final now = DateTime.now();
-    final timeLabel = DateFormat('h:mm a').format(now);
-    final dayLabel = DateFormat('EEEE').format(now);
-
-    // Live rider GPS for the active delivery (streamed from geolocator and
-    // broadcast to the backend). Falls back to a synthetic point when there is
-    // no active, trackable delivery.
     final active = widget.activeStop;
-    final livePoint = active != null
+    final gps = active != null
         ? ref.watch(
             riderLocationTrackerProvider(
               RiderLocationTrackerArgs(
@@ -169,7 +93,15 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
             ),
           )
         : null;
-    final carPoint = livePoint ?? _carPoint;
+    final livePoint = gps?.point;
+    final routeCaption = _hasMalformedGeometry
+        ? 'Route geometry degraded'
+        : _planVersion == null
+        ? 'No persisted dispatch plan'
+        : 'Persisted route · Plan v$_planVersion';
+    final caption = active?.shouldTrackLocation == true && gps != null
+        ? '$routeCaption · ${gps.message}'
+        : routeCaption;
 
     return GestureDetector(
       onTap: widget.onTap,
@@ -183,9 +115,10 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
               FlutterMap(
                 mapController: _mapController,
                 options: MapOptions(
-                  initialCenter: _destination,
+                  initialCenter: _framePoints.last,
                   initialZoom: 12.5,
                   backgroundColor: colors.surfaceDim,
+                  onMapReady: _fitCamera,
                   onTap: (_, _) => widget.onTap(),
                   interactionOptions: const InteractionOptions(
                     flags: InteractiveFlag.none,
@@ -196,18 +129,33 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
                     brightness,
                     cachingProvider: const DisabledMapCachingProvider(),
                   ),
-                  if (_hasActiveRoute && _routeIsNearby)
-                    MapHelpers.routePolyline(_routePoints),
+                  for (var i = 0; i < _planned.length; i++)
+                    if (_planned[i].planStop?.geometry case final geometry?)
+                      MapHelpers.persistedRouteLeg(
+                        key: Key('route-leg-$i'),
+                        points: geometry.points,
+                        isCompleted:
+                            _planned[i].planStop!.status ==
+                            RiderDispatchStopStatus.completed,
+                        isCurrent: _planned[i].isCurrentPlanStop,
+                      ),
                   MarkerLayer(
                     markers: [
-                      ..._stopMarkers(colors),
-                      if (active != null) _carMarker(colors, carPoint),
+                      MapHelpers.shopMarker(),
+                      for (final stop in _planned)
+                        Marker(
+                          point: stop.planStop!.destination,
+                          width: 34,
+                          height: 46,
+                          alignment: Alignment.topCenter,
+                          child: _numberBadge(stop.planSequence!, colors),
+                        ),
+                      if (livePoint != null) _carMarker(livePoint),
                     ],
                   ),
+                  MapHelpers.attribution(includeRouting: true),
                 ],
               ),
-
-              // Time + day — top-left, plain on the dark map.
               Positioned(
                 top: 14,
                 left: 14,
@@ -215,7 +163,7 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      timeLabel,
+                      DateFormat('h:mm a').format(DateTime.now()),
                       style: AppTypography.h1.copyWith(
                         color: Colors.white,
                         fontSize: 30,
@@ -228,7 +176,7 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      dayLabel,
+                      DateFormat('EEEE').format(DateTime.now()),
                       style: AppTypography.h2.copyWith(
                         color: Colors.white,
                         fontSize: 20,
@@ -242,17 +190,17 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
                   ],
                 ),
               ),
-
-              // Optimizing caption — bottom-center.
               Positioned(
                 left: 16,
                 right: 16,
                 bottom: 10,
                 child: Text(
-                  '*Optimizing your delivery sequence...',
+                  caption,
                   textAlign: TextAlign.center,
                   style: AppTypography.caption.copyWith(
-                    color: Colors.white.withValues(alpha: 0.85),
+                    color: _hasMalformedGeometry
+                        ? Colors.orangeAccent
+                        : Colors.white.withValues(alpha: 0.85),
                     fontStyle: FontStyle.italic,
                     fontSize: 11,
                     shadows: const [
@@ -268,86 +216,41 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
     );
   }
 
-  List<Marker> _stopMarkers(AppColorSet colors) {
-    final markers = <Marker>[];
-    var n = 1;
-    for (final stop in widget.stops) {
-      final point = stop.order.destination?.latLng;
-      if (point == null) {
-        n++;
-        continue;
-      }
-      markers.add(
-        Marker(
-          point: point,
-          width: 34,
-          height: 46,
-          alignment: Alignment.topCenter,
-          child: _numberBadge(n, colors),
+  Widget _numberBadge(int number, AppColorSet colors) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          color: const Color(0xFF141414),
+          shape: BoxShape.circle,
+          border: Border.all(color: kRouteColor, width: 1.8),
         ),
-      );
-      n++;
-    }
-    return markers;
-  }
-
-  Widget _numberBadge(int number, AppColorSet colors) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: const Color(0xFF141414),
-            shape: BoxShape.circle,
-            border: Border.all(color: kRouteColor, width: 1.8),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x99000000),
-                blurRadius: 6,
-                offset: Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Center(
-            child: Text(
-              '$number',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 12,
-                height: 1,
-              ),
+        child: Center(
+          child: Text(
+            '$number',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
             ),
           ),
         ),
-        Container(
-          width: 2.6,
-          height: 14,
-          decoration: BoxDecoration(
-            color: kRouteColor,
-            borderRadius: BorderRadius.circular(4),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Marker _carMarker(AppColorSet colors, LatLng point) {
-    return Marker(
-      point: point,
-      width: 44,
-      height: 44,
-      child: Transform.rotate(
-        angle: -0.6,
-        child: const Icon(
-          Icons.local_taxi_rounded,
-          color: kRouteColor,
-          size: 34,
-          shadows: [Shadow(color: Color(0xCC000000), blurRadius: 8)],
-        ),
       ),
-    );
-  }
+      Container(width: 2.6, height: 14, color: kRouteColor),
+    ],
+  );
+
+  Marker _carMarker(LatLng point) => Marker(
+    point: point,
+    width: 44,
+    height: 44,
+    child: const Icon(
+      Icons.local_taxi_rounded,
+      color: kRouteColor,
+      size: 34,
+      shadows: [Shadow(color: Color(0xCC000000), blurRadius: 8)],
+    ),
+  );
 }

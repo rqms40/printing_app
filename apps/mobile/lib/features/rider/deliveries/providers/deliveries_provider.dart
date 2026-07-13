@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/features/rider/shared/rider_assignment_parser.dart';
 import 'package:printing_app/shared/models/delivery_assignment.dart';
@@ -17,6 +18,7 @@ class DeliveriesState {
     this.isRefreshing = false,
     this.errorMessage,
     this.filterStatus,
+    this.dataStale = false,
   });
 
   final List<RiderAssignmentView> views;
@@ -24,6 +26,7 @@ class DeliveriesState {
   final bool isRefreshing;
   final String? errorMessage;
   final DeliveryStatus? filterStatus;
+  final bool dataStale;
 
   List<DeliveryAssignment> get assignments =>
       views.map((v) => v.assignment).toList();
@@ -34,8 +37,22 @@ class DeliveriesState {
   List<RiderAssignmentView> get inProgressAssignments =>
       views.where((v) => v.isInProgress).toList();
 
-  List<RiderAssignmentView> get routeStops =>
-      [...inProgressAssignments, ...newAssignments].take(5).toList();
+  List<RiderAssignmentView> get plannedRoute =>
+      views.where((view) => view.planStop != null).toList()..sort(
+        (left, right) => left.planSequence!.compareTo(right.planSequence!),
+      );
+
+  List<RiderAssignmentView> get routeStops {
+    if (plannedRoute.isNotEmpty) {
+      return plannedRoute
+          .where(
+            (view) => view.planStop?.status == RiderDispatchStopStatus.pending,
+          )
+          .take(5)
+          .toList();
+    }
+    return [...inProgressAssignments, ...newAssignments].take(5).toList();
+  }
 
   List<RiderAssignmentView> get completedAssignments => views
       .where(
@@ -73,6 +90,7 @@ class DeliveriesState {
     bool? isRefreshing,
     String? Function()? errorMessage,
     DeliveryStatus? Function()? filterStatus,
+    bool? dataStale,
   }) {
     return DeliveriesState(
       views: views ?? this.views,
@@ -80,22 +98,31 @@ class DeliveriesState {
       isRefreshing: isRefreshing ?? this.isRefreshing,
       errorMessage: errorMessage != null ? errorMessage() : this.errorMessage,
       filterStatus: filterStatus != null ? filterStatus() : this.filterStatus,
+      dataStale: dataStale ?? this.dataStale,
     );
   }
 }
 
 class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
-  DeliveriesNotifier({DeliveriesState? initialState, bool bootstrap = true})
-    : super(
-        initialState ?? DeliveriesState(views: const [], isLoading: bootstrap),
-      ) {
+  DeliveriesNotifier({
+    DeliveriesState? initialState,
+    bool bootstrap = true,
+    bool? realFlow,
+  }) : realFlow = realFlow ?? AppConstants.realFlow,
+       super(
+         initialState ?? DeliveriesState(views: const [], isLoading: bootstrap),
+       ) {
     if (bootstrap) {
       _fetchAll();
       _startRealtime();
     }
   }
 
+  final bool realFlow;
+  int _fetchGeneration = 0;
+
   void Function()? _removeRiderAssignmentListener;
+  void Function()? _removeRiderDispatchPlanListener;
 
   void _startRealtime() {
     unawaited(WebSocketService.instance.connectOrders());
@@ -103,15 +130,22 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         .listenForRiderAssignments((_) {
           unawaited(refreshAssignments());
         });
+    _removeRiderDispatchPlanListener = WebSocketService.instance
+        .listenForRiderDispatchPlanUpdates((_) {
+          unawaited(refreshAssignments());
+        });
   }
 
   @override
   void dispose() {
+    _fetchGeneration += 1;
     _removeRiderAssignmentListener?.call();
+    _removeRiderDispatchPlanListener?.call();
     super.dispose();
   }
 
   Future<void> _fetchAll({bool refreshing = false}) async {
+    final generation = ++_fetchGeneration;
     state = state.copyWith(
       isLoading: !refreshing && state.views.isEmpty,
       isRefreshing: refreshing,
@@ -123,22 +157,71 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         '/riders/assignments',
       );
       final activeData = activeResponse.data as List<dynamic>;
-      final activeViews = parseAssignmentViews(activeData);
+      final activeViews = parseAssignmentViews(
+        activeData,
+        allowMockFallback: !realFlow,
+      );
 
       List<RiderAssignmentView> historyViews = [];
-      try {
-        final historyResponse = await ApiClient.instance.get('/riders/history');
-        final historyData = historyResponse.data as List<dynamic>;
-        historyViews = parseAssignmentViews(historyData);
-      } catch (_) {}
+      RiderDispatchPlan? plan;
+      if (realFlow) {
+        final responses = await Future.wait([
+          ApiClient.instance.get('/riders/history'),
+          ApiClient.instance.get('/riders/dispatch-plan'),
+        ]);
+        historyViews = parseAssignmentViews(
+          responses[0].data as List<dynamic>,
+          allowMockFallback: false,
+        );
+        final rawPlan = responses[1].data;
+        plan = parseRiderDispatchPlan(rawPlan);
+        final noPlanPayload =
+            rawPlan == null || (rawPlan is String && rawPlan.trim().isEmpty);
+        if (!noPlanPayload && plan == null) {
+          throw const FormatException('Malformed rider dispatch plan');
+        }
+      } else {
+        try {
+          final historyResponse = await ApiClient.instance.get(
+            '/riders/history',
+          );
+          final historyData = historyResponse.data as List<dynamic>;
+          historyViews = parseAssignmentViews(historyData);
+        } catch (_) {}
+        try {
+          final planResponse = await ApiClient.instance.get(
+            '/riders/dispatch-plan',
+          );
+          plan = parseRiderDispatchPlan(planResponse.data);
+        } catch (_) {}
+      }
 
-      final merged = _mergeViews(activeViews, historyViews);
+      final merged = plan == null
+          ? _mergeViews(activeViews, historyViews)
+          : mergeRiderAssignmentViewsWithPlan(
+              active: activeViews,
+              history: historyViews,
+              plan: plan,
+            );
+      if (!mounted || generation != _fetchGeneration) return;
       state = state.copyWith(
         views: merged,
         isLoading: false,
         isRefreshing: false,
+        errorMessage: () => null,
+        dataStale: plan?.routingDataStale ?? false,
       );
     } catch (_) {
+      if (!mounted || generation != _fetchGeneration) return;
+      if (realFlow) {
+        state = state.copyWith(
+          isLoading: false,
+          isRefreshing: false,
+          errorMessage: () => 'Unable to load live assignments',
+          dataStale: true,
+        );
+        return;
+      }
       final mockViews = MockData.deliveryAssignments
           .asMap()
           .entries
@@ -155,6 +238,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         isLoading: false,
         isRefreshing: false,
         errorMessage: () => 'Showing offline demo data',
+        dataStale: true,
       );
     }
   }
@@ -177,11 +261,13 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         data: {'status': serverDeliveryStatus(DeliveryStatus.accepted)},
       );
     } catch (_) {
+      if (!mounted) return;
       state = state.copyWith(
         errorMessage: () => 'Unable to update delivery status',
       );
       return;
     }
+    if (!mounted) return;
     _updateAssignment(assignmentId, (a) {
       if (a.status != DeliveryStatus.assigned) return a;
       return a.copyWith(
@@ -202,9 +288,15 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         },
       );
     } catch (_) {
+      if (!mounted) return;
       state = state.copyWith(
         errorMessage: () => 'Unable to update delivery status',
       );
+      return;
+    }
+    if (!mounted) return;
+    if (realFlow) {
+      await refreshAssignments();
       return;
     }
     _updateAssignment(assignmentId, (a) {
@@ -276,9 +368,17 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         data: data,
       );
     } catch (_) {
+      if (!mounted) return;
       state = state.copyWith(
         errorMessage: () => 'Unable to update delivery status',
       );
+      return;
+    }
+
+    if (!mounted) return;
+
+    if (realFlow && nextStatus == DeliveryStatus.delivered) {
+      await refreshAssignments();
       return;
     }
 
@@ -342,12 +442,17 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
     String id,
     DeliveryAssignment Function(DeliveryAssignment) updater,
   ) {
+    if (!mounted) return;
     final updated = state.views.map((view) {
       if (view.id != id) return view;
       return RiderAssignmentView(
         assignment: updater(view.assignment),
         order: view.order,
         routePosition: view.routePosition,
+        planVersion: view.planVersion,
+        planState: view.planState,
+        planStop: view.planStop,
+        routingDataStale: view.routingDataStale,
       );
     }).toList();
     state = state.copyWith(views: updated);
@@ -355,7 +460,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
 }
 
 final deliveriesProvider =
-    StateNotifierProvider<DeliveriesNotifier, DeliveriesState>(
+    StateNotifierProvider.autoDispose<DeliveriesNotifier, DeliveriesState>(
       (ref) => DeliveriesNotifier(),
     );
 

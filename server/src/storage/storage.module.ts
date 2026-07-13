@@ -15,6 +15,9 @@ const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 32 });
 const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 32 });
 
 function makeClient(config: ConfigService, usePublicUrl = false): Client {
+  const region = config.get<string>('MINIO_REGION', 'us-east-1');
+  const accessKey = config.getOrThrow<string>('MINIO_ACCESS_KEY');
+  const secretKey = config.getOrThrow<string>('MINIO_SECRET_KEY');
   const publicUrl = usePublicUrl
     ? config.get<string>('MINIO_PUBLIC_URL')
     : undefined;
@@ -25,8 +28,9 @@ function makeClient(config: ConfigService, usePublicUrl = false): Client {
       endPoint: parsed.hostname,
       port: parsed.port ? parseInt(parsed.port, 10) : useSSL ? 443 : 80,
       useSSL,
-      accessKey: config.get<string>('MINIO_ACCESS_KEY', 'minioadmin'),
-      secretKey: config.get<string>('MINIO_SECRET_KEY', 'minioadmin'),
+      region,
+      accessKey,
+      secretKey,
       transportAgent: useSSL ? httpsAgent : httpAgent,
     });
   }
@@ -35,8 +39,9 @@ function makeClient(config: ConfigService, usePublicUrl = false): Client {
     endPoint: config.get<string>('MINIO_ENDPOINT', 'localhost'),
     port: config.get<number>('MINIO_PORT', 9000),
     useSSL,
-    accessKey: config.get<string>('MINIO_ACCESS_KEY', 'minioadmin'),
-    secretKey: config.get<string>('MINIO_SECRET_KEY', 'minioadmin'),
+    region,
+    accessKey,
+    secretKey,
     transportAgent: useSSL ? httpsAgent : httpAgent,
   });
 }

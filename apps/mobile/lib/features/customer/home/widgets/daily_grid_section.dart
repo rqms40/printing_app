@@ -205,21 +205,30 @@ class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'The Daily Grid',
-                    style: AppTypography.h2.copyWith(
-                      color: colors.onBackground,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'The Daily Grid',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.h2.copyWith(
+                        color: colors.onBackground,
+                      ),
                     ),
-                  ),
-                  Text(
-                    'Ready-to-print essentials.',
-                    style: AppTypography.caption.copyWith(color: colors.brand),
-                  ),
-                ],
+                    Text(
+                      'Ready-to-print essentials.',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.caption.copyWith(
+                        color: colors.brand,
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: AppSpacing.sm),
               GestureDetector(
                 onTap: () => context.push('/customer/order/new'),
                 child: Text(
@@ -282,8 +291,11 @@ class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
         child: SizedBox(
           width: constraints.maxWidth + AppSpacing.xl,
           height: _kCardH,
-          child: Row(
-            children: List.generate(3, (i) {
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: 3,
+            itemBuilder: (context, i) {
               final viewportWidth =
                   (constraints.maxWidth + AppSpacing.xl) * 0.47;
               return Padding(
@@ -326,7 +338,7 @@ class _DailyGridSectionState extends ConsumerState<DailyGridSection> {
                   ),
                 ),
               );
-            }),
+            },
           ),
         ),
       ),
@@ -469,17 +481,19 @@ class _CirclePhoto extends StatelessWidget {
           ),
         ],
       ),
-      child: ClipOval(
-        child: imageUrl != null && imageUrl!.isNotEmpty
-            ? CachedNetworkImage(
-                imageUrl: imageUrl!,
-                fit: BoxFit.cover,
-                color: Colors.black.withValues(alpha: 0.20),
-                colorBlendMode: BlendMode.darken,
-                placeholder: (_, _) => _placeholder(),
-                errorWidget: (_, _, _) => _placeholder(),
-              )
-            : _placeholder(),
+      child: ExcludeSemantics(
+        child: ClipOval(
+          child: imageUrl != null && imageUrl!.isNotEmpty
+              ? CachedNetworkImage(
+                  imageUrl: imageUrl!,
+                  fit: BoxFit.cover,
+                  color: Colors.black.withValues(alpha: 0.20),
+                  colorBlendMode: BlendMode.darken,
+                  placeholder: (_, _) => _placeholder(),
+                  errorWidget: (_, _, _) => _placeholder(),
+                )
+              : _placeholder(),
+        ),
       ),
     );
   }

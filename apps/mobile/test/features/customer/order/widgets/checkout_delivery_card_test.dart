@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +10,7 @@ import 'package:printing_app/features/customer/order/widgets/checkout_delivery_c
 
 void main() {
   testWidgets('renders three mode tabs', (tester) async {
+    final semantics = tester.ensureSemantics();
     final container = ProviderContainer();
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -19,6 +22,17 @@ void main() {
     expect(find.text('Delivery'), findsNWidgets(2));
     expect(find.text('Pickup'), findsOneWidget);
     expect(find.text('Multi-drop'), findsOneWidget);
+    final addressControl = find.bySemanticsLabel('Pick a delivery address');
+    expect(addressControl, findsOneWidget);
+    expect(
+      tester
+          .getSemantics(addressControl)
+          .getSemanticsData()
+          .hasAction(ui.SemanticsAction.tap),
+      isTrue,
+      reason: 'the web semantics button must activate the address picker',
+    );
+    semantics.dispose();
   });
 
   testWidgets('tapping Pickup switches mode and shows shop card', (

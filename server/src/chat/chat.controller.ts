@@ -8,13 +8,12 @@ import {
   Query,
   Request,
   UseGuards,
-  NotFoundException,
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
-import { ChatService } from './chat.service';
+import { ChatService, type ChatActorRole } from './chat.service';
 import { ChatGateway } from './chat.gateway';
 import { UsersService } from '../users/users.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
@@ -22,7 +21,7 @@ import { ConversationType } from './entities/conversation.entity';
 import type { Conversation } from './entities/conversation.entity';
 import type { ChatMessage } from './entities/chat-message.entity';
 
-type JwtUser = { sub: number; role: string; email: string };
+type JwtUser = { sub: number; role: ChatActorRole; email: string };
 
 @Controller('chat')
 @UseGuards(JwtAuthGuard)
@@ -96,19 +95,14 @@ export class ChatController {
     @Query('limit') limit = '50',
     @Request() req: { user: JwtUser },
   ): Promise<ChatMessage[]> {
-    const conv = await this.chatService.findConversation(+id);
-    if (!conv) throw new NotFoundException();
-    const canAccess =
-      req.user.role === 'admin' ||
-      conv.customerId === req.user.sub ||
-      (req.user.role === 'rider' &&
-        conv.type === ConversationType.RIDER &&
-        conv.assignedRiderId === req.user.sub);
-    if (!canAccess) {
-      throw new ForbiddenException();
-    }
     const cappedLimit = Math.min(+limit, 100);
-    return this.chatService.getMessages(+id, +page, cappedLimit);
+    return this.chatService.getMessagesForActor(
+      +id,
+      req.user.sub,
+      req.user.role,
+      +page,
+      cappedLimit,
+    );
   }
 
   @Get('admin/conversations')
@@ -134,7 +128,9 @@ export class ChatController {
   @Patch('conversations/:id/close')
   @UseGuards(RolesGuard)
   @Roles('admin')
-  closeConversation(@Param('id') id: string): Promise<Conversation> {
-    return this.chatService.closeConversation(+id);
+  async closeConversation(@Param('id') id: string): Promise<Conversation> {
+    const conversation = await this.chatService.closeConversation(+id);
+    this.chatGateway.notifyConversationClosed([conversation.id]);
+    return conversation;
   }
 }

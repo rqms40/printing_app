@@ -5,34 +5,54 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
+import { UsersService } from '../users/users.service';
+import { UserRole } from '../users/entities/user.entity';
+import { RealtimeSessionRegistry } from '../common/realtime/realtime-session-registry';
+import { authenticateRealtimeSocket } from '../common/realtime/realtime-socket-auth';
+
+export type DeliveryQueueUpdatedPayload = {
+  orderId: number;
+  orderRef: string;
+  queuePosition: 1;
+  queueSize: number;
+  canTrackDelivery: boolean;
+  assignmentId: number | null;
+  planVersion: number;
+};
+
+export type RiderDispatchPlanUpdatedPayload = {
+  riderProfileId: number;
+  planId: number;
+  planVersion: number;
+  change: 'created' | 'reoptimized';
+};
 
 @WebSocketGateway({ namespace: '/ws/orders', cors: { origin: '*' } })
 export class OrdersGateway implements OnGatewayConnection {
   @WebSocketServer()
   server: Server;
 
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly usersService: UsersService,
+    private readonly realtimeSessions: RealtimeSessionRegistry,
+  ) {}
 
   async handleConnection(client: Socket) {
-    const token = client.handshake.auth?.token as string | undefined;
-    if (!token) {
+    const identity = await authenticateRealtimeSocket(
+      this.jwtService,
+      this.usersService,
+      client,
+    );
+    if (!identity) {
       client.disconnect();
       return;
     }
-    try {
-      const payload = await this.jwtService.verifyAsync<{
-        role?: string;
-        sub?: number;
-      }>(token);
-      if (payload.sub != null) {
-        void client.join(`user_${payload.sub}`);
-      }
-      if (payload.role === 'admin') {
-        void client.join('admin_orders');
-      }
-    } catch {
-      client.disconnect();
+    await client.join(`user_${identity.id}`);
+    if (identity.role === UserRole.ADMIN) {
+      await client.join('admin_orders');
     }
+    this.realtimeSessions.register(identity.id, client);
   }
 
   // Called by OrdersService when status changes
@@ -56,5 +76,21 @@ export class OrdersGateway implements OnGatewayConnection {
     payload: { assignmentId: number; orderId: number; orderRef: string },
   ) {
     this.server.to(`user_${riderUserId}`).emit('riderAssignment', payload);
+  }
+
+  notifyRiderDispatchPlanUpdated(
+    riderUserId: number,
+    payload: RiderDispatchPlanUpdatedPayload,
+  ) {
+    this.server
+      .to(`user_${riderUserId}`)
+      .emit('riderDispatchPlanUpdated', payload);
+  }
+
+  notifyDeliveryQueueUpdated(
+    userId: number,
+    payload: DeliveryQueueUpdatedPayload,
+  ) {
+    this.server.to(`user_${userId}`).emit('deliveryQueueUpdated', payload);
   }
 }

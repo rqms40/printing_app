@@ -9,17 +9,90 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/beta/beta_constants.dart';
 
+enum ShareLaunchResult { opened, dismissed, failed }
+
+typedef BetaUrlOpener =
+    Future<bool> Function(
+      Uri uri, {
+      LaunchMode mode,
+      String? webOnlyWindowName,
+    });
+
+abstract interface class BetaShareLauncher {
+  Future<ShareLaunchResult> openUrl(Uri uri);
+
+  Future<ShareLaunchResult> shareNative({
+    required String text,
+    required String subject,
+  });
+
+  Future<bool> copyText(String text);
+}
+
+class SystemBetaShareLauncher implements BetaShareLauncher {
+  const SystemBetaShareLauncher({this.urlOpener = launchUrl});
+
+  final BetaUrlOpener urlOpener;
+
+  @override
+  Future<ShareLaunchResult> openUrl(Uri uri) async {
+    try {
+      return await urlOpener(
+            uri,
+            mode: LaunchMode.externalApplication,
+            webOnlyWindowName: '_blank',
+          )
+          ? ShareLaunchResult.opened
+          : ShareLaunchResult.failed;
+    } catch (_) {
+      return ShareLaunchResult.failed;
+    }
+  }
+
+  @override
+  Future<ShareLaunchResult> shareNative({
+    required String text,
+    required String subject,
+  }) async {
+    try {
+      final result = await Share.share(text, subject: subject);
+      return switch (result.status) {
+        ShareResultStatus.success => ShareLaunchResult.opened,
+        ShareResultStatus.dismissed => ShareLaunchResult.dismissed,
+        ShareResultStatus.unavailable => ShareLaunchResult.failed,
+      };
+    } catch (_) {
+      return ShareLaunchResult.failed;
+    }
+  }
+
+  @override
+  Future<bool> copyText(String text) async {
+    try {
+      await Clipboard.setData(ClipboardData(text: text));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
 /// Two-row share component:
 ///   Row 1 — 4 equal-width platform chips (Facebook / X / WhatsApp / More)
 ///   Row 2 — copy-link field with "Copied ✓" confirmation
 class BetaShareRow extends StatefulWidget {
   const BetaShareRow({
     super.key,
+    this.launcher = const SystemBetaShareLauncher(),
+    this.onShareConfirmed,
     this.onShare,
     this.onCopyLink,
     this.onOpenChannel,
   });
 
+  final BetaShareLauncher launcher;
+  final FutureOr<void> Function()? onShareConfirmed;
+  @Deprecated('Use onShareConfirmed, which runs only after a verified launch.')
   final VoidCallback? onShare;
   final VoidCallback? onCopyLink;
   final VoidCallback? onOpenChannel;
@@ -45,7 +118,6 @@ class _BetaShareRowState extends State<BetaShareRow> {
       'https://www.facebook.com/sharer/sharer.php?u=$encodedUrl&quote=$encodedText',
     );
     await _tryLaunch(ctx, uri, 'Facebook');
-    widget.onShare?.call();
   }
 
   Future<void> _launchTwitter(BuildContext ctx) async {
@@ -55,45 +127,53 @@ class _BetaShareRowState extends State<BetaShareRow> {
       'https://twitter.com/intent/tweet?text=$encodedText&url=$encodedUrl&hashtags=GRIDGOprint,Davao',
     );
     await _tryLaunch(ctx, uri, 'X (Twitter)');
-    widget.onShare?.call();
   }
 
   Future<void> _launchWhatsApp(BuildContext ctx) async {
     final encodedMsg = Uri.encodeComponent('$kBetaShareText $kBetaShareUrl');
     final uri = Uri.parse('https://wa.me/?text=$encodedMsg');
     await _tryLaunch(ctx, uri, 'WhatsApp');
-    widget.onShare?.call();
   }
 
   Future<void> _shareNative() async {
-    await Share.share(
-      '$kBetaShareText $kBetaShareUrl',
+    final result = await widget.launcher.shareNative(
+      text: '$kBetaShareText $kBetaShareUrl',
       subject: 'GRIDGO Print',
     );
-    widget.onShare?.call();
+    if (result == ShareLaunchResult.opened) {
+      await _recordConfirmedShare();
+    }
   }
 
   Future<void> _tryLaunch(BuildContext ctx, Uri uri, String appName) async {
     final messenger = ScaffoldMessenger.maybeOf(ctx);
-    try {
-      final ok = await canLaunchUrl(uri);
-      if (ok) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        messenger?.showSnackBar(
-            SnackBar(content: Text('Could not open $appName')));
-      }
-    } catch (_) {
-      messenger
-          ?.showSnackBar(SnackBar(content: Text('Could not open $appName')));
+    final result = await widget.launcher.openUrl(uri);
+    if (result == ShareLaunchResult.opened) {
+      await _recordConfirmedShare();
+    } else if (result == ShareLaunchResult.failed) {
+      messenger?.showSnackBar(
+        SnackBar(content: Text('Could not open $appName')),
+      );
     }
+  }
+
+  Future<void> _recordConfirmedShare() async {
+    widget.onShare?.call();
+    await widget.onShareConfirmed?.call();
   }
 
   Future<void> _copyLink(BuildContext ctx) async {
     final messenger = ScaffoldMessenger.maybeOf(ctx);
-    await Clipboard.setData(const ClipboardData(text: kBetaShareUrl));
+    final copied = await widget.launcher.copyText(kBetaShareUrl);
+    if (!copied) {
+      messenger?.showSnackBar(
+        const SnackBar(content: Text('Could not copy the link.')),
+      );
+      return;
+    }
     messenger?.showSnackBar(
-        const SnackBar(content: Text('Link copied — paste it anywhere!')));
+      const SnackBar(content: Text('Link copied — paste it anywhere!')),
+    );
     setState(() => _copied = true);
     _resetTimer?.cancel();
     _resetTimer = Timer(const Duration(seconds: 2), () {
@@ -137,8 +217,9 @@ class _BetaShareRowState extends State<BetaShareRow> {
                   icon: HugeIcons.strokeRoundedNewTwitter,
                   label: 'X',
                   // X brand is black-on-white; invert to near-white on dark.
-                  brandColor:
-                      isDark ? const Color(0xFFE0E0E0) : const Color(0xFF111111),
+                  brandColor: isDark
+                      ? const Color(0xFFE0E0E0)
+                      : const Color(0xFF111111),
                   colors: colors,
                   onTap: () => _launchTwitter(context),
                 ),
@@ -226,15 +307,15 @@ class _BetaShareRowState extends State<BetaShareRow> {
                       bottomRight: Radius.circular(11),
                     ),
                   ),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 0,
+                  ),
                   child: Center(
                     child: Text(
                       _copied ? 'Copied ✓' : 'Copy',
                       style: AppTypography.caption.copyWith(
-                        color: _copied
-                            ? const Color(0xFF4CAF50)
-                            : colors.brand,
+                        color: _copied ? const Color(0xFF4CAF50) : colors.brand,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -297,11 +378,7 @@ class _PlatformChip extends StatelessWidget {
                     shape: BoxShape.circle,
                   ),
                   child: Center(
-                    child: HugeIcon(
-                      icon: icon,
-                      size: 22,
-                      color: brandColor,
-                    ),
+                    child: HugeIcon(icon: icon, size: 22, color: brandColor),
                   ),
                 ),
                 const SizedBox(height: 6),

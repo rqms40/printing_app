@@ -1,0 +1,49 @@
+name: Landing CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "apps/Landing-page/**"
+      - ".github/workflows/ci-landing.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  landing:
+    name: Landing
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/Landing-page
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/Landing-page/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Community CTA contract
+        run: npm run test:community-cta
+
+      - name: Video contract
+        run: npm run test:video
+
+      - name: Support copy contract
+        run: npm run test:support-copy
+
+      - name: Production build
+        run: npm run build

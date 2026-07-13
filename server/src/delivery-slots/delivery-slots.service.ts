@@ -126,24 +126,30 @@ export class DeliverySlotsService {
     return manager.save(booking);
   }
 
-  async releaseSlot(manager: EntityManager, bookingId: number): Promise<void> {
+  async releaseSlot(
+    manager: EntityManager,
+    bookingId: number,
+  ): Promise<string | null> {
     const booking = await manager.findOne(DeliverySlotBooking, {
       where: { id: bookingId },
-      relations: ['slotTemplate'],
+      lock: { mode: 'pessimistic_write' },
     });
-    if (!booking) return;
-    const slotStart = new Date(
-      `${booking.date}T${booking.slotTemplate.startTime}`,
-    );
+    if (!booking) return null;
+    const slotTemplate = await manager.findOne(DeliverySlotTemplate, {
+      where: { id: booking.slotTemplateId },
+    });
+    if (!slotTemplate) return null;
+    const slotStart = new Date(`${booking.date}T${slotTemplate.startTime}`);
     if (Date.now() >= slotStart.getTime()) {
       throw new CancellationClosedException();
     }
     const releasedDate = booking.date;
     await manager.remove(booking);
-    // Broadcast so admin views drop the row in real time. Fires after the
-    // remove() above; the parent transaction may still roll back, in which
-    // case subscribers harmlessly re-fetch and find the booking still there.
-    this.gateway.notifyDateChanged(releasedDate);
+    return releasedDate;
+  }
+
+  publishReleasedSlot(date: string | null): void {
+    if (date) this.gateway.notifyDateChanged(date);
   }
 
   async getTodaySnapshot(date: string) {

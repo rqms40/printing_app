@@ -5,6 +5,14 @@ import {
   CreateDateColumn,
 } from 'typeorm';
 
+export enum FilePurpose {
+  GENERAL = 'general',
+  PAPER = 'paper',
+  PROOF_OF_DELIVERY = 'proof_of_delivery',
+  BETA_TESTIMONIAL = 'beta_testimonial',
+  LEGACY = 'legacy',
+}
+
 @Entity('file_metadata')
 export class FileMetadata {
   @PrimaryGeneratedColumn()
@@ -60,6 +68,14 @@ export class FileMetadata {
 
   @Column({ name: 'uploaded_by', nullable: true })
   uploadedBy: number;
+
+  @Column({
+    type: 'enum',
+    enum: FilePurpose,
+    enumName: 'file_metadata_purpose_enum',
+    default: FilePurpose.GENERAL,
+  })
+  purpose: FilePurpose;
 
   @Column({
     name: 'expires_at',

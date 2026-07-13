@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -14,30 +16,56 @@ import 'package:printing_app/features/customer/profile/screens/tam_survey_screen
 import 'package:printing_app/shared/services/api_client.dart';
 
 class _FakeAccountStateNotifier extends AccountStateNotifier {
-  _FakeAccountStateNotifier() {
-    state = AccountState(
-      status: AccountGateStatus.surveyRequired,
-      holds: [
-        SurveyRequirementHold(
-          requirementId: 123,
-          orderId: 55,
-          orderRef: 'ORD-10055',
-          requiredAt: DateTime.utc(2026, 4, 30, 12),
-        ),
-      ],
-    );
+  _FakeAccountStateNotifier({AccountState? refreshedState})
+    : _refreshedState = refreshedState {
+    state = _surveyRequiredState(requirementId: 123, orderId: 55);
   }
 
+  final AccountState? _refreshedState;
+  var refreshCalls = 0;
+
   @override
-  Future<void> refresh() async {}
+  Future<void> refresh() async {
+    refreshCalls += 1;
+    if (_refreshedState != null) state = _refreshedState;
+  }
+}
+
+AccountState _surveyRequiredState({
+  required int requirementId,
+  required int orderId,
+}) {
+  return AccountState(
+    status: AccountGateStatus.surveyRequired,
+    holds: [
+      SurveyRequirementHold(
+        requirementId: requirementId,
+        orderId: orderId,
+        orderRef: 'ORD-${10000 + orderId}',
+        requiredAt: DateTime.utc(2026, 4, 30, 12),
+      ),
+    ],
+  );
 }
 
 class _TestAuthNotifier extends AuthNotifier {
   var logoutCalls = 0;
+  var completionSubmittedCalls = 0;
+  var refreshProfileCalls = 0;
+
+  @override
+  void markBetaCompletionSubmitted() {
+    completionSubmittedCalls += 1;
+  }
 
   @override
   Future<void> logout() async {
     logoutCalls += 1;
+  }
+
+  @override
+  Future<void> refreshProfile() async {
+    refreshProfileCalls += 1;
   }
 }
 
@@ -53,7 +81,10 @@ Widget _wrap({_TestAuthNotifier? authNotifier}) {
   );
 }
 
-Widget _wrapWithRouter(_TestAuthNotifier authNotifier) {
+Widget _wrapWithRouter(
+  _TestAuthNotifier authNotifier, {
+  _FakeAccountStateNotifier? accountNotifier,
+}) {
   final router = GoRouter(
     initialLocation: '/required',
     routes: [
@@ -69,17 +100,37 @@ Widget _wrapWithRouter(_TestAuthNotifier authNotifier) {
         path: '/customer/beta/success-wall',
         builder: (_, _) => const Scaffold(body: Text('Beta Success Wall')),
       ),
+      GoRoute(
+        path: '/customer/home',
+        builder: (_, _) => const Scaffold(body: Text('Customer Home')),
+      ),
     ],
   );
 
   return ProviderScope(
     overrides: [
-      accountStateProvider.overrideWith((ref) => _FakeAccountStateNotifier()),
+      accountStateProvider.overrideWith(
+        (ref) => accountNotifier ?? _FakeAccountStateNotifier(),
+      ),
       ordersProvider.overrideWith((ref) => OrdersNotifier(skipBootstrap: true)),
       authProvider.overrideWith((ref) => authNotifier),
     ],
     child: MaterialApp.router(routerConfig: router),
   );
+}
+
+Future<void> _completeRequiredSurvey(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 700));
+
+  for (var i = 0; i < 14; i += 1) {
+    await tester.tap(find.byKey(const ValueKey('tam-flow-next')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 700));
+  }
+
+  await tester.tap(find.byKey(const ValueKey('tam-open-forum-submit')));
+  await tester.pump(const Duration(milliseconds: 100));
 }
 
 void main() {
@@ -88,6 +139,7 @@ void main() {
   Map<String, dynamic>? lastSurveyPayload;
   String? lastSurveyPath;
   var normalSurveyPostCalls = 0;
+  Map<String, dynamic> requiredSurveyResponse = const {};
   Interceptor? apiInterceptor;
 
   setUpAll(() {
@@ -104,7 +156,11 @@ void main() {
           lastSurveyPath = options.path;
           lastSurveyPayload = Map<String, dynamic>.from(options.data as Map);
           handler.resolve(
-            Response(requestOptions: options, statusCode: 201, data: {}),
+            Response(
+              requestOptions: options,
+              statusCode: 201,
+              data: requiredSurveyResponse,
+            ),
           );
           return;
         }
@@ -132,6 +188,7 @@ void main() {
     lastSurveyPath = null;
     lastSurveyPayload = null;
     normalSurveyPostCalls = 0;
+    requiredSurveyResponse = {'logoutRequired': true};
   });
 
   group('RequiredTamSurveyScreen', () {
@@ -175,6 +232,7 @@ void main() {
     testWidgets('auto-launches the face-slider flow without overview', (
       tester,
     ) async {
+      final semantics = tester.ensureSemantics();
       await tester.pumpWidget(_wrap());
       // First frame paints the placeholder, the post-frame callback then
       // pushes the face-slider modal route (~450ms transition).
@@ -183,12 +241,31 @@ void main() {
 
       await tester.pump(const Duration(milliseconds: 700));
 
+      expect(
+        find.bySemanticsLabel('Required beta feedback survey'),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsLabel(RegExp('Question 1 of 14')), findsOneWidget);
+      final rating = find.bySemanticsLabel(
+        RegExp('Feedback rating for question 1'),
+      );
+      expect(rating, findsOneWidget);
+      expect(tester.getSemantics(rating).flagsCollection.isSlider, isTrue);
+
       final slider = tester.widget<Slider>(find.byType(Slider));
       expect(slider.min, 0);
       expect(slider.max, 4);
       expect(slider.divisions, 4);
       expect(find.text('NEUTRAL'), findsOneWidget);
       expect(find.text('Question 1 of 14'), findsOneWidget);
+      final nextControl = find.bySemanticsLabel('Next');
+      expect(nextControl, findsOneWidget);
+      final nextSemantics = tester.getSemantics(nextControl);
+      expect(nextSemantics.flagsCollection.isButton, isTrue);
+      expect(
+        nextSemantics.getSemanticsData().hasAction(ui.SemanticsAction.tap),
+        isTrue,
+      );
 
       final sliderRect = tester.getRect(find.byType(Slider));
       await tester.tapAt(Offset(sliderRect.right - 8, sliderRect.center.dy));
@@ -203,6 +280,7 @@ void main() {
       expect(find.text('Question 2 of 14'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
+      semantics.dispose();
     });
 
     testWidgets('submits required survey payload and opens beta success wall', (
@@ -222,6 +300,7 @@ void main() {
       final textFields = find.byType(TextField, skipOffstage: false);
       await tester.ensureVisible(textFields.at(0));
       await tester.pump(const Duration(milliseconds: 300));
+      expect(find.bySemanticsLabel(RegExp(r'^Price feedback')), findsOneWidget);
       await tester.enterText(
         textFields.at(0),
         'Yes, the delivery convenience is worth the order price.',
@@ -229,6 +308,10 @@ void main() {
 
       await tester.ensureVisible(textFields.at(1));
       await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        find.bySemanticsLabel(RegExp(r'^Upload process feedback')),
+        findsOneWidget,
+      );
       await tester.enterText(
         textFields.at(1),
         'I nearly left while waiting for the 3D preview.',
@@ -236,10 +319,18 @@ void main() {
 
       await tester.ensureVisible(textFields.at(2));
       await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        find.bySemanticsLabel(RegExp(r'^Future feature feedback')),
+        findsOneWidget,
+      );
       await tester.enterText(textFields.at(2), 'Add saved presets.');
 
       await tester.ensureVisible(textFields.at(3));
       await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        find.bySemanticsLabel(RegExp(r'^Additional delivery feedback')),
+        findsOneWidget,
+      );
       await tester.enterText(
         textFields.at(3),
         'Fast delivery and clear updates.',
@@ -265,7 +356,58 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       expect(authNotifier.logoutCalls, 0);
+      expect(authNotifier.completionSubmittedCalls, 1);
       expect(find.text('Beta Success Wall'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('opens the next pending order survey without holding account', (
+      tester,
+    ) async {
+      requiredSurveyResponse = {'logoutRequired': false};
+      final authNotifier = _TestAuthNotifier();
+      final accountNotifier = _FakeAccountStateNotifier(
+        refreshedState: _surveyRequiredState(requirementId: 124, orderId: 56),
+      );
+
+      await tester.pumpWidget(
+        _wrapWithRouter(authNotifier, accountNotifier: accountNotifier),
+      );
+      await _completeRequiredSurvey(tester);
+      await tester.pump(const Duration(milliseconds: 700));
+      await tester.pump(const Duration(milliseconds: 700));
+
+      expect(lastSurveyPath, '/tam-surveys/requirements/123/submit');
+      expect(accountNotifier.refreshCalls, 1);
+      expect(authNotifier.completionSubmittedCalls, 0);
+      expect(authNotifier.refreshProfileCalls, 0);
+      expect(find.text('Question 1 of 14'), findsOneWidget);
+      expect(find.text('Beta Success Wall'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('returns home when beta is off and no survey remains', (
+      tester,
+    ) async {
+      requiredSurveyResponse = {'logoutRequired': false};
+      final authNotifier = _TestAuthNotifier();
+      final accountNotifier = _FakeAccountStateNotifier(
+        refreshedState: const AccountState(status: AccountGateStatus.active),
+      );
+
+      await tester.pumpWidget(
+        _wrapWithRouter(authNotifier, accountNotifier: accountNotifier),
+      );
+      await _completeRequiredSurvey(tester);
+      await tester.pumpAndSettle();
+
+      expect(accountNotifier.refreshCalls, 1);
+      expect(authNotifier.completionSubmittedCalls, 0);
+      expect(authNotifier.refreshProfileCalls, 1);
+      expect(find.text('Customer Home'), findsOneWidget);
+      expect(find.text('Beta Success Wall'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
     });

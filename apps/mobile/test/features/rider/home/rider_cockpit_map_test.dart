@@ -9,48 +9,30 @@ import 'package:printing_app/features/rider/home/widgets/rider_stop_rail.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/shared/models/delivery_assignment.dart';
 import 'package:printing_app/shared/models/enums.dart';
-import 'package:printing_app/shared/services/routing_service.dart';
+import 'package:printing_app/shared/models/route_geometry.dart';
 
 void main() {
-  setUp(() {
-    RoutingService.debugRouteFetcher = (start, end) async => [
-      start,
-      LatLng(
-        start.latitude + (end.latitude - start.latitude) / 2,
-        start.longitude + (end.longitude - start.longitude) / 2,
-      ),
-      end,
-    ];
-  });
-
-  tearDown(() {
-    RoutingService.debugRouteFetcher = null;
-  });
-
   testWidgets('overlays the stop rail on the route map without overflow', (
     tester,
   ) async {
-    await tester.runAsync(() async {
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: ThemeData(brightness: Brightness.dark),
-          home: const Scaffold(
-            body: SizedBox(
-              height: 380,
-              child: RiderCockpitMap(
-                mapStops: [],
-                activeStop: null,
-                completedCount: 0,
-                currentStopIndex: 0,
-                onMapTap: _noop,
-              ),
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(brightness: Brightness.dark),
+        home: const Scaffold(
+          body: SizedBox(
+            height: 380,
+            child: RiderCockpitMap(
+              mapStops: [],
+              activeStop: null,
+              completedCount: 0,
+              currentStopIndex: 0,
+              onMapTap: _noop,
             ),
           ),
         ),
-      );
-      await tester.pump(const Duration(milliseconds: 100));
-    });
-    await tester.pump();
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.byType(RiderRouteMapTile), findsOneWidget);
     expect(find.byType(RiderStopRail), findsOneWidget);
@@ -67,7 +49,9 @@ void main() {
             body: SizedBox(
               height: 380,
               child: RiderCockpitMap(
-                mapStops: [_view(status: DeliveryStatus.assigned)],
+                mapStops: [
+                  _view(status: DeliveryStatus.assigned, withPlan: false),
+                ],
                 activeStop: null,
                 completedCount: 0,
                 currentStopIndex: 0,
@@ -129,7 +113,7 @@ void main() {
             body: SizedBox(
               height: 380,
               child: RiderCockpitMap(
-                mapStops: [active],
+                mapStops: const [],
                 activeStop: null,
                 completedCount: 0,
                 currentStopIndex: 0,
@@ -172,7 +156,10 @@ void main() {
 
 void _noop() {}
 
-RiderAssignmentView _view({required DeliveryStatus status}) {
+RiderAssignmentView _view({
+  required DeliveryStatus status,
+  bool withPlan = true,
+}) {
   final now = DateTime.utc(2026, 6, 25, 9);
   return RiderAssignmentView(
     assignment: DeliveryAssignment(
@@ -196,5 +183,27 @@ RiderAssignmentView _view({required DeliveryStatus status}) {
         longitude: 125.6130,
       ),
     ),
+    routePosition: withPlan ? 1 : null,
+    planVersion: withPlan ? 1 : null,
+    planStop: withPlan
+        ? RiderDispatchPlanStop(
+            assignmentId: 'assignment-${status.name}',
+            sequence: 1,
+            status: RiderDispatchStopStatus.pending,
+            destinationLatitude: 7.0820,
+            destinationLongitude: 125.6130,
+            legDurationSeconds: 180,
+            legDistanceMeters: 2500,
+            geometry: GeoJsonLineString.tryParse({
+              'type': 'LineString',
+              'coordinates': [
+                [125.6079, 7.064],
+                [125.61, 7.073],
+                [125.613, 7.082],
+              ],
+            }),
+            geometryMalformed: false,
+          )
+        : null,
   );
 }

@@ -1,7 +1,7 @@
 name: printing_app
 description: "GRIDGO - Premium printing service delivery app"
 publish_to: 'none'
-version: 1.5.2+16
+version: 1.6.0+17
 
 environment:
   sdk: ^3.11.4
@@ -52,10 +52,6 @@ dependencies:
 
   # 3D math (Matrix4 scale operations)
   vector_math: ^2.2.0
-
-  # Polyline decoding (for OSRM route geometry)
-  google_polyline_algorithm: ^3.1.0
-  http: ^1.2.2
 
   # HTTP client
   dio: ^5.7.0

@@ -115,161 +115,172 @@ class _OrderCardState extends State<OrderCard> {
     final isBatch = widget.order.isBatchOrder;
     final typeLabel = widget.order.orderTypeShortLabel.toUpperCase();
 
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) {
-        setState(() => _pressed = false);
-        widget.onTap?.call();
-      },
-      onTapCancel: () => setState(() => _pressed = false),
-      child: AnimatedScale(
-        scale: _pressed ? 0.98 : 1.0,
-        duration: const Duration(milliseconds: 100),
-        curve: Curves.easeOut,
-        child: Container(
-          decoration: BoxDecoration(
-            color: colors.surface,
-            borderRadius: AppRadius.borderMd,
-            boxShadow: isDark ? null : AppShadows.subtle,
-            border: Border.all(
-              color: colors.outline.withValues(alpha: 0.5),
-              width: 0.5,
-            ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            child: Row(
-              children: [
-                // Status icon with semantic background
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: visual.background,
-                    borderRadius: AppRadius.borderMd,
-                  ),
-                  child: Center(
-                    child: HugeIcon(
-                      icon: visual.icon,
-                      size: 22,
-                      color: visual.foreground,
-                    ),
-                  ),
+    return Semantics(
+      container: true,
+      button: widget.onTap != null,
+      label:
+          'Order ${widget.order.orderId}. $typeLabel. '
+          '${visual.statusLabel}. ${formatCurrency(widget.order.totalPrice)}. '
+          '${formatDate(widget.order.createdAt)}.',
+      onTap: widget.onTap,
+      child: ExcludeSemantics(
+        child: GestureDetector(
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapUp: (_) {
+            setState(() => _pressed = false);
+            widget.onTap?.call();
+          },
+          onTapCancel: () => setState(() => _pressed = false),
+          child: AnimatedScale(
+            scale: _pressed ? 0.98 : 1.0,
+            duration: const Duration(milliseconds: 100),
+            curve: Curves.easeOut,
+            child: Container(
+              decoration: BoxDecoration(
+                color: colors.surface,
+                borderRadius: AppRadius.borderMd,
+                boxShadow: isDark ? null : AppShadows.subtle,
+                border: Border.all(
+                  color: colors.outline.withValues(alpha: 0.5),
+                  width: 0.5,
                 ),
-                const SizedBox(width: AppSpacing.md),
-
-                // Content
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Order ID + category tag
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              widget.order.orderId,
-                              style: AppTypography.bodyBold.copyWith(
-                                color: colors.onBackground,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: colors.surfaceVariant,
-                              borderRadius: AppRadius.borderSm,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                HugeIcon(
-                                  icon: _categoryIcon(),
-                                  size: 10,
-                                  color: colors.onSurfaceDim,
-                                ),
-                                const SizedBox(width: 3),
-                                Text(
-                                  typeLabel,
-                                  style: AppTypography.caption.copyWith(
-                                    color: colors.onSurfaceDim,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: Row(
+                  children: [
+                    // Status icon with semantic background
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: visual.background,
+                        borderRadius: AppRadius.borderMd,
                       ),
-                      const SizedBox(height: 6),
-
-                      if (isBatch) ...[
-                        Text(
-                          '${widget.order.itemCount} ${widget.order.itemCount == 1 ? 'item' : 'items'} · ${widget.order.itemSummary}',
-                          style: AppTypography.caption.copyWith(
-                            color: colors.onSurfaceDim,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      child: Center(
+                        child: HugeIcon(
+                          icon: visual.icon,
+                          size: 22,
+                          color: visual.foreground,
                         ),
-                        const SizedBox(height: 6),
-                      ],
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
 
-                      // Status label + date
-                      Row(
+                    // Content
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: visual.foreground,
-                              shape: BoxShape.circle,
-                            ),
+                          // Order ID + category tag
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  widget.order.orderId,
+                                  style: AppTypography.bodyBold.copyWith(
+                                    color: colors.onBackground,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: colors.surfaceVariant,
+                                  borderRadius: AppRadius.borderSm,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    HugeIcon(
+                                      icon: _categoryIcon(),
+                                      size: 10,
+                                      color: colors.onSurfaceDim,
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      typeLabel,
+                                      style: AppTypography.caption.copyWith(
+                                        color: colors.onSurfaceDim,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              '${visual.statusLabel} \u2022 ${formatDate(widget.order.createdAt)}',
+                          const SizedBox(height: 6),
+
+                          if (isBatch) ...[
+                            Text(
+                              '${widget.order.itemCount} ${widget.order.itemCount == 1 ? 'item' : 'items'} · ${widget.order.itemSummary}',
                               style: AppTypography.caption.copyWith(
                                 color: colors.onSurfaceDim,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
+                            const SizedBox(height: 6),
+                          ],
+
+                          // Status label + date
+                          Row(
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: visual.foreground,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  '${visual.statusLabel} \u2022 ${formatDate(widget.order.createdAt)}',
+                                  style: AppTypography.caption.copyWith(
+                                    color: colors.onSurfaceDim,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
-
-                // Price + chevron
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      formatCurrency(widget.order.totalPrice),
-                      style: AppTypography.bodyBold.copyWith(
-                        color: colors.onBackground,
-                      ),
                     ),
-                    const SizedBox(height: 4),
-                    HugeIcon(
-                      icon: HugeIcons.strokeRoundedArrowRight01,
-                      size: 16,
-                      color: colors.disabled,
+
+                    // Price + chevron
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          formatCurrency(widget.order.totalPrice),
+                          style: AppTypography.bodyBold.copyWith(
+                            color: colors.onBackground,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        HugeIcon(
+                          icon: HugeIcons.strokeRoundedArrowRight01,
+                          size: 16,
+                          color: colors.disabled,
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
           ),
         ),

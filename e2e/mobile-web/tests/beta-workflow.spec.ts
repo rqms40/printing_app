@@ -54,14 +54,16 @@ const betaWorkflowSteps: BetaWorkflowStep[] = [
     actor: "customer:mark",
     surface: "api",
     action: "Verify beta tester enrollment and starting credits.",
-    expected: "Customer is automatically assigned a beta number and 100 GRIDGO credits.",
+    expected:
+      "Customer is automatically assigned a beta number and 100 GRIDGO credits.",
   },
   {
     id: 6,
     actor: "customer:mark",
     surface: "mobile-customer",
     action: "Complete the order tutorial.",
-    expected: "Tutorial does not block active delivery state later in the session.",
+    expected:
+      "Tutorial does not block active delivery state later in the session.",
   },
   {
     id: 7,
@@ -75,7 +77,8 @@ const betaWorkflowSteps: BetaWorkflowStep[] = [
     actor: "customer:mark",
     surface: "mobile-customer",
     action: "Upload a file and open preview.",
-    expected: "A real uploaded file metadata id is used and preview behavior is clear.",
+    expected:
+      "A real uploaded file metadata id is used and preview behavior is clear.",
   },
   {
     id: 9,
@@ -89,7 +92,8 @@ const betaWorkflowSteps: BetaWorkflowStep[] = [
     actor: "customer:mark",
     surface: "mobile-customer",
     action: "Select and pin a delivery address.",
-    expected: "Pinned address is usable for the order and saved to recent addresses.",
+    expected:
+      "Pinned address is usable for the order and saved to recent addresses.",
   },
   {
     id: 11,
@@ -124,7 +128,8 @@ const betaWorkflowSteps: BetaWorkflowStep[] = [
     actor: "admin",
     surface: "admin-web",
     action: "Update Mark order production status.",
-    expected: "Customer-facing status advances through the production pipeline.",
+    expected:
+      "Customer-facing status advances through the production pipeline.",
   },
   {
     id: 16,
@@ -144,8 +149,10 @@ const betaWorkflowSteps: BetaWorkflowStep[] = [
     id: 18,
     actor: "customer:ven",
     surface: "mobile-customer",
-    action: "Register and repeat Mark's customer order flow through placing an order.",
-    expected: "Ven receives beta credits, completes checkout, and has a visible order.",
+    action:
+      "Register and repeat Mark's customer order flow through placing an order.",
+    expected:
+      "Ven receives beta credits, completes checkout, and has a visible order.",
   },
   {
     id: 19,
@@ -180,14 +187,16 @@ const betaWorkflowSteps: BetaWorkflowStep[] = [
     actor: "customer:mark",
     surface: "mobile-customer",
     action: "Open home while second in the route queue.",
-    expected: "Mark sees second-in-queue state and no live map until he is next.",
+    expected:
+      "Mark sees second-in-queue state and no live map until he is next.",
   },
   {
     id: 24,
     actor: "rider:juan",
     surface: "mobile-rider",
     action: "Arrive at Ven and capture proof of delivery.",
-    expected: "Signature or photo proof is required before delivery completion.",
+    expected:
+      "Signature or photo proof is required before delivery completion.",
   },
   {
     id: 25,
@@ -222,39 +231,46 @@ const betaWorkflowSteps: BetaWorkflowStep[] = [
     actor: "customer:mark",
     surface: "mobile-customer",
     action: "Submit survey and return to auth while beta is still enabled.",
-    expected: "Share/photo wall is shown, then login is blocked with beta-held messaging until beta mode is off.",
+    expected:
+      "Share/photo wall is shown, then login is blocked with beta-held messaging until beta mode is off.",
   },
 ];
 
 const regressionIssues: RegressionIssue[] = [
   {
     issue: 72,
-    title: "Mobile web checkout submits mock upload with invalid fileMetadataId",
+    title:
+      "Mobile web checkout submits mock upload with invalid fileMetadataId",
     affectedSteps: [8, 9, 13],
   },
   {
     issue: 73,
-    title: "Batch order reference generation collides when refs are non-contiguous",
+    title:
+      "Batch order reference generation collides when refs are non-contiguous",
     affectedSteps: [13],
   },
   {
     issue: 74,
-    title: "Beta mode registration should auto-enroll customer testers with 100 credits",
+    title:
+      "Beta mode registration should auto-enroll customer testers with 100 credits",
     affectedSteps: [3, 4, 5, 18],
   },
   {
     issue: 75,
-    title: "Beta checkout should only allow GRIDGO Credits while beta mode is enabled",
+    title:
+      "Beta checkout should only allow GRIDGO Credits while beta mode is enabled",
     affectedSteps: [11],
   },
   {
     issue: 76,
-    title: "Customer delivery tracking should show queue position and hide map access for later stops",
+    title:
+      "Customer delivery tracking should show queue position and hide map access for later stops",
     affectedSteps: [21, 22, 23, 25],
   },
   {
     issue: 77,
-    title: "Customer education overlays block active delivery status and tracking controls",
+    title:
+      "Customer education overlays block active delivery status and tracking controls",
     affectedSteps: [6, 22, 23, 25],
   },
   {
@@ -264,7 +280,8 @@ const regressionIssues: RegressionIssue[] = [
   },
   {
     issue: 79,
-    title: "Checkout pinned temporary address should be saved to recent addresses",
+    title:
+      "Checkout pinned temporary address should be saved to recent addresses",
     affectedSteps: [10],
   },
 ];
@@ -281,10 +298,20 @@ test.describe("GRIDGO beta workflow regression contract", () => {
       Array.from({ length: 29 }, (_, index) => index + 1),
     );
     expect(new Set(betaWorkflowSteps.map((step) => step.actor))).toEqual(
-      new Set<FlowActor>(["admin", "customer:mark", "customer:ven", "rider:juan"]),
+      new Set<FlowActor>([
+        "admin",
+        "customer:mark",
+        "customer:ven",
+        "rider:juan",
+      ]),
     );
     expect(new Set(betaWorkflowSteps.map((step) => step.surface))).toEqual(
-      new Set<FlowSurface>(["admin-web", "mobile-customer", "mobile-rider", "api"]),
+      new Set<FlowSurface>([
+        "admin-web",
+        "mobile-customer",
+        "mobile-rider",
+        "api",
+      ]),
     );
     expect(betaWorkflowSteps[0]).toMatchObject({
       actor: "admin",
@@ -296,9 +323,7 @@ test.describe("GRIDGO beta workflow regression contract", () => {
   test("keeps audited regressions tied to GitHub issues", () => {
     expect(
       regressionIssues.map((gap) => gap.issue).sort((a, b) => a - b),
-    ).toEqual([
-      72, 73, 74, 75, 76, 77, 78, 79,
-    ]);
+    ).toEqual([72, 73, 74, 75, 76, 77, 78, 79]);
     for (const gap of regressionIssues) {
       expect(gap.title).toBeTruthy();
       expect(gap.affectedSteps.length).toBeGreaterThan(0);
@@ -319,13 +344,75 @@ test.describe("GRIDGO beta workflow regression contract", () => {
   });
 
   test("documents the beta workflow command in the mobile web E2E README", () => {
-    const readme = readFileSync(path.join(repoRoot, "e2e/mobile-web/README.md"), "utf8");
+    const readme = readFileSync(
+      path.join(repoRoot, "e2e/mobile-web/README.md"),
+      "utf8",
+    );
 
     expect(readme).toContain("Beta Workflow Regression");
     expect(readme).toContain("npm test -- tests/beta-workflow.spec.ts");
     expect(readme).toContain("GRIDGO_RUN_BETA_FLOW_E2E=1");
     expect(readme).toContain("GRIDGO_RUN_BETA_FLOW_DESTRUCTIVE=1");
     expect(readme).toContain("beta-workflow-destructive.spec.ts");
+  });
+
+  test("persists an optimized dispatch plan before asserting rider queue order", () => {
+    const destructiveFlow = readFileSync(
+      path.join(
+        repoRoot,
+        "e2e/mobile-web/tests/beta-workflow-destructive.spec.ts",
+      ),
+      "utf8",
+    );
+
+    expect(destructiveFlow).toContain("persist optimized dispatch plan");
+    expect(destructiveFlow).toContain("assignmentIds:");
+  });
+
+  test("records social sharing only after testimonial evidence exists", () => {
+    const destructiveFlow = readFileSync(
+      path.join(
+        repoRoot,
+        "e2e/mobile-web/tests/beta-workflow-destructive.spec.ts",
+      ),
+      "utf8",
+    );
+    const testimonialIndex = destructiveFlow.indexOf(
+      "submit beta testimonial for ${identity}",
+    );
+    const shareIndex = destructiveFlow.indexOf(
+      "confirm persisted share after testimonial for ${identity}",
+    );
+
+    expect(testimonialIndex).toBeGreaterThan(-1);
+    expect(shareIndex).toBeGreaterThan(testimonialIndex);
+  });
+
+  test("isolates Admin, Mark, Ven, and Juan as four trusted-proxy clients", () => {
+    const destructiveFlow = readFileSync(
+      path.join(
+        repoRoot,
+        "e2e/mobile-web/tests/beta-workflow-destructive.spec.ts",
+      ),
+      "utf8",
+    );
+    const visualActors = readFileSync(
+      path.join(repoRoot, "e2e/mobile-web/fixtures/beta-actors.ts"),
+      "utf8",
+    );
+    const actorAddresses = [
+      "198.51.100.10",
+      "198.51.100.20",
+      "198.51.100.30",
+      "198.51.100.40",
+    ];
+
+    for (const address of actorAddresses) {
+      expect(destructiveFlow).toContain(address);
+      expect(visualActors).toContain(address);
+    }
+    expect(destructiveFlow).toContain('"X-Forwarded-For"');
+    expect(visualActors).toContain('"X-Forwarded-For"');
   });
 });
 
@@ -339,7 +426,8 @@ test.describe("opt-in live beta workflow preflight", () => {
     page,
     request,
   }) => {
-    const apiBaseURL = process.env.GRIDGO_API_URL ?? "http://127.0.0.1:3000/api";
+    const apiBaseURL =
+      process.env.GRIDGO_API_URL ?? "http://127.0.0.1:3000/api";
 
     const health = await request.get(`${apiBaseURL}/health`);
     expect(health.ok()).toBe(true);
@@ -358,8 +446,7 @@ test.describe("opt-in live beta workflow preflight", () => {
     await expect(page).toHaveTitle("GRIDGO");
     await expect(page.getByText("DEV LOGIN", { exact: true })).toHaveCount(0);
 
-    const adminURL =
-      process.env.GRIDGO_ADMIN_URL ?? "http://127.0.0.1:8189";
+    const adminURL = process.env.GRIDGO_ADMIN_URL ?? "http://127.0.0.1:8189";
     await page.setViewportSize({ width: 393, height: 727 });
     await page.goto(adminURL);
     await expect(page).toHaveTitle("GRIDGO Admin");
@@ -373,7 +460,9 @@ test.describe("opt-in live beta workflow preflight", () => {
 
     test.info().annotations.push({
       type: "beta-workflow",
-      description: betaWorkflowSteps.map((step) => `${step.id}. ${step.action}`).join("\n"),
+      description: betaWorkflowSteps
+        .map((step) => `${step.id}. ${step.action}`)
+        .join("\n"),
     });
   });
 });

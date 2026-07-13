@@ -6,19 +6,63 @@ x-api-env: &api-env
   DATABASE_NAME: grid_print
   DATABASE_USER: postgres
   DATABASE_PASSWORD: postgres
-  JWT_SECRET: ${JWT_SECRET:-gridgo-dev-secret-change-me}
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in the shell or --env-file}
   JWT_EXPIRATION: ${JWT_EXPIRATION:-1d}
   MINIO_ENDPOINT: minio
   MINIO_PORT: 9000
-  MINIO_ACCESS_KEY: minioadmin
-  MINIO_SECRET_KEY: minioadmin
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY must be set in the shell or --env-file}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY must be set in the shell or --env-file}
   MINIO_BUCKET: grid-print
+  MINIO_REGION: us-east-1
   MINIO_USE_SSL: "false"
-  MINIO_PUBLIC_URL: http://${GRIDGO_PUBLIC_HOST:-192.168.40.201}:${GRIDGO_MINIO_PORT:-9000}
+  MINIO_PUBLIC_URL: http://${GRIDGO_PUBLIC_HOST:?GRIDGO_PUBLIC_HOST must be the browser-reachable host}:${GRIDGO_MINIO_PORT:-9000}
+  GRIDGO_TRUST_PROXY_HOPS: ${GRIDGO_TRUST_PROXY_HOPS:-0}
   NODE_ENV: development
+  DATABASE_SYNCHRONIZE: "false"
+  ROUTING_BASE_URL: ${ROUTING_BASE_URL:-http://osrm:5000}
+  ROUTING_PROFILE: ${ROUTING_PROFILE:-driving}
+  ROUTING_TIMEOUT_MS: ${ROUTING_TIMEOUT_MS:-5000}
+  GRIDGO_STORE_LATITUDE: ${GRIDGO_STORE_LATITUDE:-7.064}
+  GRIDGO_STORE_LONGITUDE: ${GRIDGO_STORE_LONGITUDE:-125.6079}
   PORT: 3000
 
 services:
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend:v5.27.1@sha256:855614a38f464b0558a2ad6eaa7cb8c139f39887da9b38b485ce453c6e6e6124
+    command:
+      - bash
+      - -euc
+      - >-
+        rm -f /data/gridgo-beta.osrm* /data/gridgo-beta.osm;
+        cp /fixtures/gridgo-beta.osm /data/gridgo-beta.osm;
+        osrm-extract -p /opt/car.lua /data/gridgo-beta.osm;
+        osrm-partition /data/gridgo-beta.osrm;
+        osrm-customize /data/gridgo-beta.osrm;
+        exec osrm-routed --algorithm mld /data/gridgo-beta.osrm
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /data:size=64m
+      - /tmp:size=16m,mode=1777
+    volumes:
+      - ./docker/osrm/gridgo-beta.osm:/fixtures/gridgo-beta.osm:ro
+    ports:
+      - "127.0.0.1:${GRIDGO_OSRM_PORT:-5000}:5000"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          bash -ec 'exec 3<>/dev/tcp/127.0.0.1/5000;
+          printf "GET /table/v1/driving/125.6079,7.064;125.6079,7.0641?annotations=duration,distance HTTP/1.0\r\n\r\n" >&3;
+          response="$$(timeout 2 cat <&3 || true)";
+          grep -q '"'"'"code"'"'":"'"'"Ok"'"'"' <<<"$$response"'
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   postgres:
     image: postgres:15-alpine
     environment:
@@ -39,8 +83,8 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY must be set in the shell or --env-file}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY must be set in the shell or --env-file}
     ports:
       - "${GRIDGO_BIND_ADDR:-0.0.0.0}:${GRIDGO_MINIO_PORT:-9000}:9000"
       - "${GRIDGO_BIND_ADDR:-0.0.0.0}:${GRIDGO_MINIO_CONSOLE_PORT:-9001}:9001"
@@ -52,18 +96,37 @@ services:
       timeout: 5s
       retries: 20
 
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/server-dev.Dockerfile
+    command: npm run migration:run
+    env_file:
+      - path: server/.env
+        required: false
+    environment:
+      <<: *api-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   seed:
     build:
       context: .
       dockerfile: docker/server-dev.Dockerfile
     command: npm run seed:if-empty
     env_file:
-      - server/.env
+      - path: server/.env
+        required: false
     environment:
       <<: *api-env
+      GRIDGO_SEED_CUSTOMER_PASSWORD: ${GRIDGO_SEED_CUSTOMER_PASSWORD}
+      GRIDGO_SEED_RIDER_PASSWORD: ${GRIDGO_SEED_RIDER_PASSWORD}
+      GRIDGO_SEED_ADMIN_PASSWORD: ${GRIDGO_SEED_ADMIN_PASSWORD}
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       minio:
         condition: service_healthy
     restart: "no"
@@ -74,7 +137,8 @@ services:
       dockerfile: docker/server-dev.Dockerfile
     command: npm run start
     env_file:
-      - server/.env
+      - path: server/.env
+        required: false
     environment:
       <<: *api-env
     ports:
@@ -82,6 +146,8 @@ services:
     depends_on:
       seed:
         condition: service_completed_successfully
+      osrm:
+        condition: service_healthy
     healthcheck:
       test:
         [
@@ -98,8 +164,9 @@ services:
       dockerfile: docker/mobile-web.Dockerfile
       args:
         FLUTTER_VERSION: ${FLUTTER_VERSION:-3.41.6}
-        SERVER_URL: http://${GRIDGO_PUBLIC_HOST:-192.168.40.201}:${GRIDGO_API_PORT:-3000}
+        SERVER_URL: http://${GRIDGO_PUBLIC_HOST:?GRIDGO_PUBLIC_HOST must be the browser-reachable host}:${GRIDGO_API_PORT:-3000}
         ENABLE_DEV_AUTH: ${GRIDGO_ENABLE_DEV_AUTH:-false}
+        GRIDGO_REAL_FLOW: ${GRIDGO_REAL_FLOW:-true}
     ports:
       - "${GRIDGO_BIND_ADDR:-0.0.0.0}:${GRIDGO_MOBILE_PORT:-8088}:80"
     depends_on:
@@ -111,8 +178,8 @@ services:
       context: .
       dockerfile: docker/admin-web.Dockerfile
       args:
-        VITE_API_URL: http://${GRIDGO_PUBLIC_HOST:-192.168.40.201}:${GRIDGO_API_PORT:-3000}/api
-        VITE_WS_URL: http://${GRIDGO_PUBLIC_HOST:-192.168.40.201}:${GRIDGO_API_PORT:-3000}
+        VITE_API_URL: http://${GRIDGO_PUBLIC_HOST:?GRIDGO_PUBLIC_HOST must be the browser-reachable host}:${GRIDGO_API_PORT:-3000}/api
+        VITE_WS_URL: http://${GRIDGO_PUBLIC_HOST:?GRIDGO_PUBLIC_HOST must be the browser-reachable host}:${GRIDGO_API_PORT:-3000}
     ports:
       - "${GRIDGO_BIND_ADDR:-0.0.0.0}:${GRIDGO_ADMIN_PORT:-8189}:80"
     depends_on:
@@ -124,7 +191,7 @@ services:
       context: .
       dockerfile: docker/landing-web.Dockerfile
       args:
-        VITE_API_URL: http://${GRIDGO_PUBLIC_HOST:-192.168.40.201}:${GRIDGO_API_PORT:-3000}/api
+        VITE_API_URL: http://${GRIDGO_PUBLIC_HOST:?GRIDGO_PUBLIC_HOST must be the browser-reachable host}:${GRIDGO_API_PORT:-3000}/api
         VITE_MOBILE_WEB_PORT: "${GRIDGO_MOBILE_PORT:-8088}"
     ports:
       - "${GRIDGO_BIND_ADDR:-0.0.0.0}:${GRIDGO_LANDING_PORT:-8090}:80"

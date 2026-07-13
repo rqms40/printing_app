@@ -2,12 +2,13 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Order } from '../orders/entities/order.entity';
-import { User } from '../users/entities/user.entity';
+import { User, UserRole } from '../users/entities/user.entity';
 import {
   SubmitSurveyRequirementDto,
   SubmitTamSurveyDto,
@@ -19,9 +20,13 @@ import {
 } from './entities/tam-survey-requirement.entity';
 import { TamSurvey } from './entities/tam-survey.entity';
 import { BetaModeSettings } from '../beta-mode/entities/beta-mode-settings.entity';
+import { RealtimeSessionRegistry } from '../common/realtime/realtime-session-registry';
 
 const REQUIRED_SURVEY_QUESTION_COUNT = 14;
 const POSTGRES_UNIQUE_VIOLATION = '23505';
+const REQUIREMENT_UNIQUE_CONSTRAINTS = new Set([
+  'uq_tam_survey_requirements_order_reason',
+]);
 export const BETA_SURVEY_COMPLETE_HOLD_REASON = 'beta_survey_complete';
 
 export type AccountStateResponse = {
@@ -37,6 +42,8 @@ export type AccountStateResponse = {
 
 @Injectable()
 export class TamSurveysService {
+  private readonly logger = new Logger(TamSurveysService.name);
+
   constructor(
     @InjectRepository(TamSurvey)
     private readonly tamSurveysRepo: Repository<TamSurvey>,
@@ -47,6 +54,7 @@ export class TamSurveysService {
     @InjectRepository(BetaModeSettings)
     private readonly betaModeSettingsRepo: Repository<BetaModeSettings>,
     private readonly dataSource: DataSource,
+    private readonly realtimeSessions: RealtimeSessionRegistry,
   ) {}
 
   async createVoluntarySurvey(
@@ -97,13 +105,45 @@ export class TamSurveysService {
 
   async createPostDeliveryRequirementIfNeeded(
     order: Pick<Order, 'id' | 'orderId' | 'userId'>,
+    manager?: EntityManager,
   ): Promise<TamSurveyRequirement | null> {
-    if (!(await this.isBetaModeEnabled())) return null;
+    if (!manager) {
+      try {
+        return await this.dataSource.transaction((transactionManager) =>
+          this.createPostDeliveryRequirementIfNeeded(order, transactionManager),
+        );
+      } catch (error) {
+        if (!this.isRequirementUniqueViolation(error)) throw error;
+        const racedRequirement = await this.requirementsRepo.findOne({
+          where: {
+            orderId: order.id,
+            reason: TamSurveyRequirementReason.POST_DELIVERY,
+          },
+        });
+        if (!racedRequirement) throw error;
+        return racedRequirement;
+      }
+    }
 
-    const user = await this.usersRepo.findOne({ where: { id: order.userId } });
-    if (!user?.isBetaUser) return null;
+    const betaModeSettingsRepo = manager.getRepository(BetaModeSettings);
+    const usersRepo = manager.getRepository(User);
+    const requirementsRepo = manager.getRepository(TamSurveyRequirement);
 
-    const existing = await this.requirementsRepo.findOne({
+    if (!(await this.lockBetaModeEnabled(betaModeSettingsRepo))) return null;
+
+    const user = await usersRepo.findOne({
+      where: { id: order.userId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (
+      user?.role !== UserRole.CUSTOMER ||
+      !user.isBetaUser ||
+      user.isBetaSurveyExempt
+    ) {
+      return null;
+    }
+
+    const existing = await requirementsRepo.findOne({
       where: {
         orderId: order.id,
         reason: TamSurveyRequirementReason.POST_DELIVERY,
@@ -111,7 +151,7 @@ export class TamSurveysService {
     });
     if (existing) return existing;
 
-    const requirement = this.requirementsRepo.create({
+    const requirement = requirementsRepo.create({
       userId: order.userId,
       orderId: order.id,
       reason: TamSurveyRequirementReason.POST_DELIVERY,
@@ -121,21 +161,9 @@ export class TamSurveysService {
       submittedAt: null,
     });
 
-    try {
-      return await this.requirementsRepo.save(requirement);
-    } catch (error) {
-      if (!this.isUniqueViolation(error)) throw error;
-
-      const racedRequirement = await this.requirementsRepo.findOne({
-        where: {
-          orderId: order.id,
-          reason: TamSurveyRequirementReason.POST_DELIVERY,
-        },
-      });
-      if (!racedRequirement) throw error;
-
-      return racedRequirement;
-    }
+    // Let a failed statement abort the surrounding Postgres transaction. The
+    // user lock serializes requirements for separate orders from the same user.
+    return requirementsRepo.save(requirement);
   }
 
   async getAccountState(userId: number): Promise<AccountStateResponse> {
@@ -147,9 +175,13 @@ export class TamSurveysService {
     // mode is on and they have pending requirements.
     const user = await this.usersRepo.findOne({
       where: { id: userId },
-      select: ['id', 'isBetaSurveyExempt'],
+      select: ['id', 'role', 'isBetaUser', 'isBetaSurveyExempt'],
     });
-    if (user?.isBetaSurveyExempt) {
+    if (
+      user?.role !== UserRole.CUSTOMER ||
+      !user.isBetaUser ||
+      user.isBetaSurveyExempt
+    ) {
       return { accountStatus: 'active', holds: [] };
     }
 
@@ -185,11 +217,24 @@ export class TamSurveysService {
     userId: number,
     requirementId: number,
     dto: SubmitSurveyRequirementDto,
-  ): Promise<{ success: true; surveyId: number; logoutRequired: true }> {
-    return this.dataSource.transaction(async (manager) => {
+  ): Promise<{ success: true; surveyId: number; logoutRequired: boolean }> {
+    const result = await this.dataSource.transaction(async (manager) => {
       const requirementsRepo = manager.getRepository(TamSurveyRequirement);
       const tamSurveysRepo = manager.getRepository(TamSurvey);
       const usersRepo = manager.getRepository(User);
+      const betaModeSettingsRepo = manager.getRepository(BetaModeSettings);
+
+      const user = await usersRepo.findOne({
+        where: { id: userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!user) throw new NotFoundException('User not found');
+
+      const holdPolicyApplies =
+        user.role === UserRole.CUSTOMER &&
+        user.isBetaUser &&
+        !user.isBetaSurveyExempt &&
+        (await this.isBetaModeEnabled(betaModeSettingsRepo));
 
       const requirement = await requirementsRepo.findOne({
         where: { id: requirementId },
@@ -200,6 +245,27 @@ export class TamSurveysService {
       }
       if (requirement.userId !== userId) {
         throw new ForbiddenException('You can only submit your own survey');
+      }
+      if (
+        requirement.status === TamSurveyRequirementStatus.SUBMITTED &&
+        requirement.surveyId != null
+      ) {
+        const remainingPending = await requirementsRepo.count({
+          where: {
+            userId,
+            reason: TamSurveyRequirementReason.POST_DELIVERY,
+            status: TamSurveyRequirementStatus.PENDING,
+          },
+        });
+        return {
+          success: true as const,
+          surveyId: requirement.surveyId,
+          logoutRequired:
+            holdPolicyApplies &&
+            remainingPending === 0 &&
+            user.isActive === false &&
+            user.accountHoldReason === BETA_SURVEY_COMPLETE_HOLD_REASON,
+        };
       }
       if (requirement.status !== TamSurveyRequirementStatus.PENDING) {
         throw new BadRequestException('Survey requirement already submitted');
@@ -220,30 +286,71 @@ export class TamSurveysService {
       requirement.submittedAt = new Date();
       await requirementsRepo.save(requirement);
 
-      const holdAt = new Date();
-      await usersRepo.update(userId, {
-        isActive: false,
-        accountHoldReason: BETA_SURVEY_COMPLETE_HOLD_REASON,
-        accountHeldAt: holdAt,
-        betaCompletedAt: holdAt,
+      const remainingPending = await requirementsRepo.count({
+        where: {
+          userId,
+          reason: TamSurveyRequirementReason.POST_DELIVERY,
+          status: TamSurveyRequirementStatus.PENDING,
+        },
       });
+      const shouldHold = holdPolicyApplies && remainingPending === 0;
 
-      return { success: true, surveyId: savedSurvey.id, logoutRequired: true };
+      if (shouldHold) {
+        const holdAt = new Date();
+        await usersRepo.update(userId, {
+          isActive: false,
+          accountHoldReason: BETA_SURVEY_COMPLETE_HOLD_REASON,
+          accountHeldAt: holdAt,
+          betaCompletedAt: holdAt,
+        });
+      }
+
+      return {
+        success: true as const,
+        surveyId: savedSurvey.id,
+        logoutRequired: shouldHold,
+      };
     });
+    if (result.logoutRequired) {
+      try {
+        this.realtimeSessions.disconnectUser(userId);
+      } catch (error) {
+        this.logger.warn(
+          `Post-commit socket revocation failed for user ${userId}: ${error instanceof Error ? error.message : 'unknown error'}`,
+        );
+      }
+    }
+    return result;
   }
 
-  private isUniqueViolation(error: unknown): boolean {
+  private isRequirementUniqueViolation(error: unknown): boolean {
     return (
       typeof error === 'object' &&
       error !== null &&
       'code' in error &&
-      error.code === POSTGRES_UNIQUE_VIOLATION
+      error.code === POSTGRES_UNIQUE_VIOLATION &&
+      'constraint' in error &&
+      typeof error.constraint === 'string' &&
+      REQUIREMENT_UNIQUE_CONSTRAINTS.has(error.constraint)
     );
   }
 
-  private async isBetaModeEnabled(): Promise<boolean> {
-    const settings = await this.betaModeSettingsRepo.find();
+  private async isBetaModeEnabled(
+    repo: Repository<BetaModeSettings> = this.betaModeSettingsRepo,
+  ): Promise<boolean> {
+    const settings = await repo.find();
     return settings[0]?.isEnabled ?? false;
+  }
+
+  private async lockBetaModeEnabled(
+    repo: Repository<BetaModeSettings>,
+  ): Promise<boolean> {
+    const settings = await repo.findOne({
+      where: {},
+      order: { id: 'ASC' },
+      lock: { mode: 'pessimistic_write' },
+    });
+    return settings?.isEnabled ?? false;
   }
 
   private validateSurveyData(
@@ -256,7 +363,7 @@ export class TamSurveysService {
 
     const result: Record<string, number> = {};
     for (const [key, rawValue] of Object.entries(data)) {
-      if (!/^\d+$/.test(key)) {
+      if (!/^(0|[1-9]\d*)$/.test(key)) {
         throw new BadRequestException(`Invalid survey question key: ${key}`);
       }
       const index = Number(key);

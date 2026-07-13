@@ -1,6 +1,11 @@
 import { spawn } from 'node:child_process';
 import { Client } from 'pg';
 
+const requiredMigration = {
+  timestamp: '1777854200000',
+  name: 'UniqueFcmTokenOwnership1777854200000',
+};
+
 const client = new Client({
   host: process.env.DATABASE_HOST || 'localhost',
   port: Number(process.env.DATABASE_PORT || 5432),
@@ -26,15 +31,32 @@ function runSeed() {
 async function main() {
   await client.connect();
   try {
-    const table = await client.query(
-      "SELECT to_regclass('public.users') AS table_name",
+    const tables = await client.query(
+      `SELECT
+         to_regclass('public.users') AS users_table,
+         to_regclass('public.migrations') AS migrations_table`,
     );
-    if (table.rows[0]?.table_name) {
-      const count = await client.query('SELECT count(*)::int AS count FROM users');
-      if (Number(count.rows[0]?.count || 0) > 0) {
-        console.log('GRIDGO seed skipped: users table already has data.');
-        return;
-      }
+    if (!tables.rows[0]?.users_table || !tables.rows[0]?.migrations_table) {
+      throw new Error('Run npm run migration:run before seeding');
+    }
+
+    const migration = await client.query(
+      `SELECT EXISTS (
+         SELECT 1 FROM migrations
+         WHERE timestamp = $1 AND name = $2
+       ) AS applied`,
+      [requiredMigration.timestamp, requiredMigration.name],
+    );
+    if (!migration.rows[0]?.applied) {
+      throw new Error('Run npm run migration:run before seeding');
+    }
+
+    const count = await client.query(
+      'SELECT count(*)::int AS count FROM users',
+    );
+    if (Number(count.rows[0]?.count || 0) > 0) {
+      console.log('GRIDGO seed skipped: users table already has data.');
+      return;
     }
   } finally {
     await client.end();

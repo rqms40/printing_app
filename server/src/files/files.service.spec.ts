@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   InternalServerErrorException,
   NotFoundException,
@@ -10,9 +11,10 @@ import { mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { FilesService } from './files.service';
-import { FileMetadata } from './entities/file-metadata.entity';
+import { FileMetadata, FilePurpose } from './entities/file-metadata.entity';
 import { StorageService } from '../storage/storage.service';
 import { FileAnalysisService } from './file-analysis.service';
+import { DataSource, EntityManager } from 'typeorm';
 
 const mockFileRepo = {
   create: jest.fn(),
@@ -27,6 +29,7 @@ const mockFileRepo = {
 const mockStorageService = {
   upload: jest.fn(),
   getPresignedUrl: jest.fn(),
+  objectExists: jest.fn(),
   delete: jest.fn(),
 };
 
@@ -59,6 +62,7 @@ const makeFileMeta = (overrides: Partial<FileMetadata> = {}): FileMetadata =>
     url: 'http://localhost:9000/grid-print/uploads/general/2026/04/21/uuid.jpg',
     objectKey: 'uploads/general/2026/04/21/uuid.jpg',
     uploadedBy: 42,
+    purpose: FilePurpose.GENERAL,
     expiresAt: null,
     createdAt: new Date(),
     widthPt: null,
@@ -73,16 +77,32 @@ const makeFileMeta = (overrides: Partial<FileMetadata> = {}): FileMetadata =>
 
 describe('FilesService', () => {
   let service: FilesService;
+  let dataSource: { transaction: jest.Mock };
+  let transactionQuery: jest.Mock;
+  let transactionManager: EntityManager;
 
   beforeEach(async () => {
     jest.clearAllMocks();
     mockAnalysisService.analyze.mockResolvedValue(null);
+    mockStorageService.objectExists.mockResolvedValue(true);
+    transactionQuery = jest.fn().mockResolvedValue([{ referenced: false }]);
+    transactionManager = {
+      getRepository: jest.fn(() => mockFileRepo),
+      query: transactionQuery,
+    } as unknown as EntityManager;
+    dataSource = {
+      transaction: jest.fn(
+        async (work: (manager: EntityManager) => Promise<unknown>) =>
+          work(transactionManager),
+      ),
+    };
     const module = await Test.createTestingModule({
       providers: [
         FilesService,
         { provide: getRepositoryToken(FileMetadata), useValue: mockFileRepo },
         { provide: StorageService, useValue: mockStorageService },
         { provide: FileAnalysisService, useValue: mockAnalysisService },
+        { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
     service = module.get<FilesService>(FilesService);
@@ -117,6 +137,7 @@ describe('FilesService', () => {
             /^uploads\/general\/\d{4}\/\d{2}\/\d{2}\/.+\.jpg$/,
           ),
           uploadedBy: 42,
+          purpose: 'general',
         }),
       );
       expect(result).toEqual(savedMeta);
@@ -211,6 +232,63 @@ describe('FilesService', () => {
         'image/tiff',
         'poster.tif',
       );
+    });
+
+    it('normalizes the legacy proof purpose before building the object key', async () => {
+      const file = makeFile();
+      mockAnalysisService.analyze.mockResolvedValue({
+        widthPx: 1,
+        heightPx: 1,
+      });
+      mockStorageService.upload.mockResolvedValue('http://x/y');
+      mockFileRepo.create.mockImplementation(
+        (value: Partial<FileMetadata>) => value as FileMetadata,
+      );
+      mockFileRepo.save.mockImplementation(
+        async (value: FileMetadata) => value,
+      );
+
+      await service.storeMetadata(file, 7, ' proof-of-delivery ');
+
+      expect(mockStorageService.upload).toHaveBeenCalledWith(
+        file.buffer,
+        expect.stringMatching(
+          /^uploads\/proof_of_delivery\/\d{4}\/\d{2}\/\d{2}\/.+\.jpg$/,
+        ),
+        'image/jpeg',
+      );
+      expect(mockFileRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ purpose: 'proof_of_delivery' }),
+      );
+    });
+
+    it.each(['proof_of_delivery', 'beta_testimonial'])(
+      'rejects undecodable %s image bytes before object storage',
+      async (purpose) => {
+        const file = makeFile({ buffer: Buffer.from('not-an-image') });
+        mockAnalysisService.analyze.mockResolvedValue(null);
+        mockStorageService.upload.mockResolvedValue('http://x/y');
+        mockFileRepo.create.mockReturnValue({ id: 104 });
+        mockFileRepo.save.mockResolvedValue({ id: 104 });
+
+        await expect(service.storeMetadata(file, 7, purpose)).rejects.toThrow(
+          'Evidence upload must contain a valid image',
+        );
+
+        expect(mockStorageService.upload).not.toHaveBeenCalled();
+        expect(mockFileRepo.save).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects an arbitrary purpose before writing an object', async () => {
+      const file = makeFile();
+
+      await expect(
+        service.storeMetadata(file, 7, '../../rider-proof'),
+      ).rejects.toThrow('File purpose not allowed');
+
+      expect(mockStorageService.upload).not.toHaveBeenCalled();
+      expect(mockFileRepo.save).not.toHaveBeenCalled();
     });
 
     it('accepts a TIFF upload with generic binary MIME (paper-print fallback)', async () => {
@@ -395,6 +473,230 @@ describe('FilesService', () => {
     });
   });
 
+  describe('resolveDeliveryProofFile', () => {
+    const getRepository = jest.fn(() => mockFileRepo);
+    const manager = {
+      getRepository,
+    } as unknown as EntityManager;
+
+    const resolveProof = (fileId: number, riderUserId: number) =>
+      service.resolveDeliveryProofFile(fileId, riderUserId, manager);
+
+    it('rejects a proof file owned by another user', async () => {
+      mockFileRepo.findOne.mockResolvedValue(
+        makeFileMeta({
+          id: 44,
+          uploadedBy: 999,
+          objectKey: 'uploads/proof_of_delivery/44.png',
+          mimeType: 'image/png',
+          purpose: 'proof_of_delivery',
+        } as Partial<FileMetadata>),
+      );
+
+      await expect(resolveProof(44, 7)).rejects.toThrow(
+        'Proof file does not belong to this rider',
+      );
+    });
+
+    it('rejects the wrong proof purpose', async () => {
+      mockFileRepo.findOne.mockResolvedValue(
+        makeFileMeta({
+          id: 44,
+          uploadedBy: 7,
+          objectKey: 'uploads/general/44.png',
+          mimeType: 'image/png',
+          purpose: 'general',
+        } as Partial<FileMetadata>),
+      );
+
+      await expect(resolveProof(44, 7)).rejects.toThrow(
+        'File is not a proof of delivery',
+      );
+    });
+
+    it('rejects a proof file with a non-image MIME type', async () => {
+      mockFileRepo.findOne.mockResolvedValue(
+        makeFileMeta({
+          id: 44,
+          uploadedBy: 7,
+          objectKey: 'uploads/proof_of_delivery/44.pdf',
+          mimeType: 'application/pdf',
+          purpose: 'proof_of_delivery',
+        } as Partial<FileMetadata>),
+      );
+
+      await expect(resolveProof(44, 7)).rejects.toThrow(
+        'Proof file must be PNG, JPEG, or WebP',
+      );
+    });
+
+    it('rejects a missing or purged proof record', async () => {
+      mockFileRepo.findOne.mockResolvedValue(null);
+
+      await expect(resolveProof(404, 7)).rejects.toThrow(
+        'Proof file not found',
+      );
+    });
+
+    it('rejects a proof record without a real object key', async () => {
+      mockFileRepo.findOne.mockResolvedValue(
+        makeFileMeta({
+          id: 44,
+          uploadedBy: 7,
+          objectKey: null,
+          mimeType: 'image/webp',
+          purpose: 'proof_of_delivery',
+        } as Partial<FileMetadata>),
+      );
+
+      await expect(resolveProof(44, 7)).rejects.toThrow(
+        'Proof file has no storage object',
+      );
+    });
+
+    it('rejects proof metadata whose configured-bucket object is missing', async () => {
+      mockFileRepo.findOne.mockResolvedValue(
+        makeFileMeta({
+          id: 44,
+          uploadedBy: 7,
+          objectKey: 'uploads/proof_of_delivery/missing.webp',
+          mimeType: 'image/webp',
+          purpose: 'proof_of_delivery',
+        } as Partial<FileMetadata>),
+      );
+      mockStorageService.objectExists.mockResolvedValue(false);
+
+      await expect(resolveProof(44, 7)).rejects.toThrow(
+        'Proof file storage object not found',
+      );
+    });
+
+    it('fails closed on proof storage errors without leaking the object key', async () => {
+      const key = 'uploads/proof_of_delivery/private-key.webp';
+      mockFileRepo.findOne.mockResolvedValue(
+        makeFileMeta({
+          id: 44,
+          uploadedBy: 7,
+          objectKey: key,
+          mimeType: 'image/webp',
+          purpose: 'proof_of_delivery',
+        } as Partial<FileMetadata>),
+      );
+      mockStorageService.objectExists.mockRejectedValue(
+        new Error(`MinIO failed for ${key}`),
+      );
+
+      let caught: Error | null = null;
+      try {
+        await resolveProof(44, 7);
+      } catch (error) {
+        caught = error as Error;
+      }
+      expect(caught?.message).toBe('Could not verify evidence storage');
+      expect(caught?.message).not.toContain(key);
+    });
+
+    it('returns owned proof metadata with the audited server object key', async () => {
+      const file = makeFileMeta({
+        id: 44,
+        uploadedBy: 7,
+        objectKey: 'uploads/proof_of_delivery/44.webp',
+        mimeType: 'image/webp',
+        purpose: 'proof_of_delivery',
+      } as Partial<FileMetadata>);
+      mockFileRepo.findOne.mockResolvedValue(file);
+
+      await expect(resolveProof(44, 7)).resolves.toBe(file);
+      expect(getRepository).toHaveBeenCalledWith(FileMetadata);
+    });
+  });
+
+  describe('resolveBetaTestimonialFile', () => {
+    const manager = {
+      getRepository: jest.fn(() => mockFileRepo),
+    } as unknown as EntityManager;
+    const resolveTestimonial = (fileId: number, userId: number) =>
+      service.resolveBetaTestimonialFile(fileId, userId, manager);
+
+    it('locks and returns owned testimonial evidence that exists in storage', async () => {
+      const file = makeFileMeta({
+        id: 52,
+        uploadedBy: 7,
+        objectKey: 'uploads/beta_testimonial/52.png',
+        mimeType: 'image/png',
+        purpose: 'beta_testimonial',
+      } as Partial<FileMetadata>);
+      mockFileRepo.findOne.mockResolvedValue(file);
+
+      await expect(resolveTestimonial(52, 7)).resolves.toBe(file);
+      expect(mockFileRepo.findOne).toHaveBeenCalledWith({
+        where: { id: 52 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      expect(mockStorageService.objectExists).toHaveBeenCalledWith(
+        file.objectKey,
+      );
+    });
+
+    it('rejects a testimonial owned by another user', async () => {
+      mockFileRepo.findOne.mockResolvedValue(
+        makeFileMeta({
+          id: 52,
+          uploadedBy: 99,
+          objectKey: 'uploads/beta_testimonial/52.png',
+          mimeType: 'image/png',
+          purpose: 'beta_testimonial',
+        } as Partial<FileMetadata>),
+      );
+
+      await expect(resolveTestimonial(52, 7)).rejects.toThrow(
+        'File does not belong to this user',
+      );
+    });
+
+    it('rejects testimonial metadata whose configured-bucket object is missing', async () => {
+      mockFileRepo.findOne.mockResolvedValue(
+        makeFileMeta({
+          id: 52,
+          uploadedBy: 7,
+          objectKey: 'uploads/beta_testimonial/missing.png',
+          mimeType: 'image/png',
+          purpose: 'beta_testimonial',
+        } as Partial<FileMetadata>),
+      );
+      mockStorageService.objectExists.mockResolvedValue(false);
+
+      await expect(resolveTestimonial(52, 7)).rejects.toThrow(
+        'A beta testimonial photo is required',
+      );
+    });
+
+    it('fails closed on storage errors without exposing the testimonial key', async () => {
+      const key = 'uploads/beta_testimonial/private-key.png';
+      mockFileRepo.findOne.mockResolvedValue(
+        makeFileMeta({
+          id: 52,
+          uploadedBy: 7,
+          objectKey: key,
+          mimeType: 'image/png',
+          purpose: 'beta_testimonial',
+        } as Partial<FileMetadata>),
+      );
+      mockStorageService.objectExists.mockRejectedValue(
+        new Error(`MinIO failed for ${key}`),
+      );
+
+      let caught: Error | null = null;
+      try {
+        await resolveTestimonial(52, 7);
+      } catch (error) {
+        caught = error as Error;
+      }
+      expect(caught?.message).toBe('Could not verify evidence storage');
+      expect(caught?.message).not.toContain(key);
+    });
+  });
+
   describe('getPresignedUrl', () => {
     it('returns presigned URL when owner requests own file', async () => {
       const fileMeta = makeFileMeta();
@@ -464,6 +766,132 @@ describe('FilesService', () => {
     });
   });
 
+  describe('deleteOwnedFile', () => {
+    it('locks and audits references, removes storage, then deletes metadata in one transaction', async () => {
+      const file = makeFileMeta({
+        id: 9,
+        uploadedBy: 7,
+        objectKey: 'uploads/general/9.png',
+        previewGlbObjectKey: 'uploads/general/9.png.preview.glb',
+      });
+      mockFileRepo.findOne.mockResolvedValue(file);
+      mockFileRepo.delete.mockResolvedValue({ affected: 1 });
+      mockStorageService.delete.mockResolvedValue(undefined);
+
+      await service.deleteOwnedFile(file.id, 7, false);
+
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(mockFileRepo.findOne).toHaveBeenCalledWith({
+        where: { id: file.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      expect(transactionQuery).toHaveBeenCalledWith(
+        expect.stringContaining('delivery_assignments'),
+        [file.id],
+      );
+      expect(transactionQuery.mock.calls[0][0]).toContain('users');
+      expect(transactionQuery.mock.calls[0][0]).toContain('orders');
+      expect(transactionQuery.mock.calls[0][0]).toContain('order_items');
+      expect(mockFileRepo.delete).toHaveBeenCalledWith(file.id);
+      expect(
+        mockStorageService.delete.mock.invocationCallOrder[1],
+      ).toBeLessThan(mockFileRepo.delete.mock.invocationCallOrder[0]);
+    });
+
+    it('retains metadata on storage failure and succeeds when the caller retries', async () => {
+      const file = makeFileMeta({
+        id: 9,
+        uploadedBy: 7,
+        objectKey: 'uploads/general/9.png',
+      });
+      mockFileRepo.findOne.mockResolvedValue(file);
+      mockFileRepo.delete.mockResolvedValue({ affected: 1 });
+      mockStorageService.delete
+        .mockRejectedValueOnce(new Error(`MinIO failed for ${file.objectKey}`))
+        .mockResolvedValueOnce(undefined);
+
+      await expect(service.deleteOwnedFile(file.id, 7, false)).rejects.toThrow(
+        'Could not delete stored file; retry later',
+      );
+      expect(mockFileRepo.delete).not.toHaveBeenCalled();
+
+      await expect(
+        service.deleteOwnedFile(file.id, 7, false),
+      ).resolves.toBeUndefined();
+      expect(mockStorageService.delete).toHaveBeenCalledTimes(2);
+      expect(mockFileRepo.delete).toHaveBeenCalledWith(file.id);
+    });
+
+    it('retries both original and preview cleanup after a partial storage failure', async () => {
+      const file = makeFileMeta({
+        id: 9,
+        uploadedBy: 7,
+        objectKey: 'uploads/general/9.glb',
+        previewGlbObjectKey: 'uploads/general/9.glb.preview.glb',
+      });
+      mockFileRepo.findOne.mockResolvedValue(file);
+      mockFileRepo.delete.mockResolvedValue({ affected: 1 });
+      mockStorageService.delete
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('preview storage unavailable'))
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce(undefined);
+
+      await expect(service.deleteOwnedFile(file.id, 7, false)).rejects.toThrow(
+        'Could not delete stored file; retry later',
+      );
+      expect(mockFileRepo.delete).not.toHaveBeenCalled();
+
+      await expect(
+        service.deleteOwnedFile(file.id, 7, false),
+      ).resolves.toBeUndefined();
+      expect(mockStorageService.delete.mock.calls).toEqual([
+        [file.objectKey],
+        [file.previewGlbObjectKey],
+        [file.objectKey],
+        [file.previewGlbObjectKey],
+      ]);
+      expect(mockFileRepo.delete).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries idempotent object cleanup when metadata deletion fails after storage succeeds', async () => {
+      const file = makeFileMeta({
+        id: 9,
+        uploadedBy: 7,
+        objectKey: 'uploads/general/9.png',
+      });
+      mockFileRepo.findOne.mockResolvedValue(file);
+      mockStorageService.delete.mockResolvedValue(undefined);
+      mockFileRepo.delete
+        .mockRejectedValueOnce(new Error('database unavailable after cleanup'))
+        .mockResolvedValueOnce({ affected: 1 });
+
+      await expect(service.deleteOwnedFile(file.id, 7, false)).rejects.toThrow(
+        'Could not finalize file deletion; retry later',
+      );
+      expect(mockStorageService.delete).toHaveBeenCalledTimes(1);
+
+      await expect(
+        service.deleteOwnedFile(file.id, 7, false),
+      ).resolves.toBeUndefined();
+      expect(mockStorageService.delete).toHaveBeenCalledTimes(2);
+      expect(mockFileRepo.delete).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects deletion of referenced evidence and leaves storage untouched', async () => {
+      const file = makeFileMeta({ id: 9, uploadedBy: 7 });
+      mockFileRepo.findOne.mockResolvedValue(file);
+      transactionQuery.mockResolvedValue([{ referenced: true }]);
+
+      await expect(service.deleteOwnedFile(file.id, 7, false)).rejects.toThrow(
+        new ConflictException('Referenced files cannot be deleted'),
+      );
+
+      expect(mockFileRepo.delete).not.toHaveBeenCalled();
+      expect(mockStorageService.delete).not.toHaveBeenCalled();
+    });
+  });
+
   describe('getMyUploads', () => {
     it('uses two-branch OR where clause to exclude expired files', async () => {
       mockFileRepo.find.mockResolvedValue([]);
@@ -495,27 +923,157 @@ describe('FilesService', () => {
         sevenDaysMs + (after.getTime() - before.getTime()) + 1000,
       );
     });
+
+    it('uses a supplied transaction manager instead of the global repository', async () => {
+      const transactionRepo = { update: jest.fn().mockResolvedValue({}) };
+      const getRepository = jest.fn(() => transactionRepo);
+      const manager = {
+        getRepository,
+      } as unknown as EntityManager;
+
+      await service.stampExpiry(5, 7, manager);
+
+      expect(getRepository).toHaveBeenCalledWith(FileMetadata);
+      expect(transactionRepo.update).toHaveBeenCalledWith(5, {
+        expiresAt: expect.any(Date),
+      });
+      expect(mockFileRepo.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('deleteExpired', () => {
-    it('deletes MinIO objects and db rows for expired files', async () => {
+    it('skips referenced evidence instead of purging its row or object', async () => {
       const fakeQb = {
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         getMany: jest.fn().mockResolvedValue([
           {
-            id: 1,
-            objectKey: 'key/a.pdf',
-            expiresAt: new Date(Date.now() - 1000),
-          },
-          {
-            id: 2,
-            objectKey: 'key/b.pdf',
+            id: 8,
+            objectKey: 'uploads/proof_of_delivery/8.png',
             expiresAt: new Date(Date.now() - 1000),
           },
         ]),
       };
       mockFileRepo.createQueryBuilder.mockReturnValue(fakeQb);
+      mockFileRepo.findOne.mockResolvedValue(
+        makeFileMeta({
+          id: 8,
+          objectKey: 'uploads/proof_of_delivery/8.png',
+          expiresAt: new Date(Date.now() - 1000),
+          purpose: FilePurpose.PROOF_OF_DELIVERY,
+        }),
+      );
+      transactionQuery.mockResolvedValue([{ referenced: true }]);
+
+      await expect(service.deleteExpired()).resolves.toEqual({
+        found: 1,
+        deleted: 0,
+        failed: 0,
+        skipped: 1,
+      });
+      expect(mockFileRepo.delete).not.toHaveBeenCalled();
+      expect(mockStorageService.delete).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      FilePurpose.PROOF_OF_DELIVERY,
+      FilePurpose.BETA_TESTIMONIAL,
+      FilePurpose.LEGACY,
+    ])(
+      'retains expired %s evidence even when it is not referenced',
+      async (purpose) => {
+        const expiredFile = makeFileMeta({
+          id: 8,
+          objectKey: `uploads/${purpose}/8.png`,
+          expiresAt: new Date(Date.now() - 1000),
+          purpose,
+        });
+        const fakeQb = {
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([expiredFile]),
+        };
+        mockFileRepo.createQueryBuilder.mockReturnValue(fakeQb);
+        mockFileRepo.findOne.mockResolvedValue(expiredFile);
+        transactionQuery.mockResolvedValue([{ referenced: false }]);
+
+        await expect(service.deleteExpired()).resolves.toEqual({
+          found: 1,
+          deleted: 0,
+          failed: 0,
+          skipped: 1,
+        });
+        expect(mockFileRepo.delete).not.toHaveBeenCalled();
+        expect(mockStorageService.delete).not.toHaveBeenCalled();
+      },
+    );
+
+    it('clears ordinary order references while preserving filename and URL audit fields', async () => {
+      const expiredFile = makeFileMeta({
+        id: 4,
+        objectKey: 'uploads/paper/4.pdf',
+        expiresAt: new Date(Date.now() - 1000),
+        purpose: FilePurpose.PAPER,
+      });
+      const fakeQb = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([expiredFile]),
+      };
+      mockFileRepo.createQueryBuilder.mockReturnValue(fakeQb);
+      mockFileRepo.findOne.mockResolvedValue(expiredFile);
+      transactionQuery.mockResolvedValue([
+        {
+          referenced: true,
+          deliveryProofReferenced: false,
+          testimonialReferenced: false,
+          orderReferenced: true,
+          orderItemReferenced: true,
+        },
+      ]);
+      mockStorageService.delete.mockResolvedValue(undefined);
+      mockFileRepo.delete.mockResolvedValue({ affected: 1 });
+
+      await expect(service.deleteExpired()).resolves.toEqual({
+        found: 1,
+        deleted: 1,
+        failed: 0,
+        skipped: 0,
+      });
+
+      const sql = transactionQuery.mock.calls
+        .map(([statement]) => String(statement))
+        .join('\n');
+      expect(sql).toContain('UPDATE "orders"');
+      expect(sql).toContain('SET "file_metadata_id" = NULL');
+      expect(sql).toContain('UPDATE "order_items"');
+      expect(sql).not.toContain('SET "file_name"');
+      expect(sql).not.toContain('SET "file_url"');
+      expect(mockFileRepo.delete).toHaveBeenCalledWith(expiredFile.id);
+    });
+
+    it('deletes MinIO objects and db rows for expired files', async () => {
+      const files = [
+        makeFileMeta({
+          id: 1,
+          objectKey: 'key/a.pdf',
+          expiresAt: new Date(Date.now() - 1000),
+        }),
+        makeFileMeta({
+          id: 2,
+          objectKey: 'key/b.pdf',
+          expiresAt: new Date(Date.now() - 1000),
+        }),
+      ];
+      const fakeQb = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(files),
+      };
+      mockFileRepo.createQueryBuilder.mockReturnValue(fakeQb);
+      mockFileRepo.findOne
+        .mockResolvedValueOnce(files[0])
+        .mockResolvedValueOnce(files[1]);
       mockStorageService.delete.mockResolvedValue(undefined);
       mockFileRepo.delete.mockResolvedValue({});
 
@@ -523,48 +1081,65 @@ describe('FilesService', () => {
 
       expect(mockStorageService.delete).toHaveBeenCalledTimes(2);
       expect(mockFileRepo.delete).toHaveBeenCalledTimes(2);
-      expect(result).toEqual({ found: 2, deleted: 2, skipped: 0 });
+      expect(result).toEqual({
+        found: 2,
+        deleted: 2,
+        failed: 0,
+        skipped: 0,
+      });
     });
 
-    it('skips a record when MinIO deletion fails', async () => {
+    it('retains expired metadata for a later purge retry when storage cleanup fails', async () => {
+      const expiredFile = makeFileMeta({
+        id: 1,
+        objectKey: 'key/a.pdf',
+        expiresAt: new Date(Date.now() - 1000),
+      });
       const fakeQb = {
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([
-          {
-            id: 1,
-            objectKey: 'key/a.pdf',
-            expiresAt: new Date(Date.now() - 1000),
-          },
-        ]),
+        getMany: jest.fn().mockResolvedValue([expiredFile]),
       };
       mockFileRepo.createQueryBuilder.mockReturnValue(fakeQb);
+      mockFileRepo.findOne.mockResolvedValue(expiredFile);
       mockStorageService.delete.mockRejectedValue(new Error('MinIO down'));
 
       const result = await service.deleteExpired();
 
       expect(mockFileRepo.delete).not.toHaveBeenCalled();
-      expect(result).toEqual({ found: 1, deleted: 0, skipped: 1 });
+      expect(result).toEqual({
+        found: 1,
+        deleted: 0,
+        failed: 1,
+        skipped: 0,
+      });
     });
 
     it('deletes db row even when objectKey is null', async () => {
+      const expiredFile = makeFileMeta({
+        id: 3,
+        objectKey: null,
+        expiresAt: new Date(Date.now() - 1000),
+      });
       const fakeQb = {
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
-        getMany: jest
-          .fn()
-          .mockResolvedValue([
-            { id: 3, objectKey: null, expiresAt: new Date(Date.now() - 1000) },
-          ]),
+        getMany: jest.fn().mockResolvedValue([expiredFile]),
       };
       mockFileRepo.createQueryBuilder.mockReturnValue(fakeQb);
+      mockFileRepo.findOne.mockResolvedValue(expiredFile);
       mockFileRepo.delete.mockResolvedValue({});
 
       const result = await service.deleteExpired();
 
       expect(mockStorageService.delete).not.toHaveBeenCalled();
       expect(mockFileRepo.delete).toHaveBeenCalledWith(3);
-      expect(result).toEqual({ found: 1, deleted: 1, skipped: 0 });
+      expect(result).toEqual({
+        found: 1,
+        deleted: 1,
+        failed: 0,
+        skipped: 0,
+      });
     });
   });
 });

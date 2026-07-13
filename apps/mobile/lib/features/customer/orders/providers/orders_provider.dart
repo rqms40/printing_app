@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/features/customer/beta/exceptions/beta_order_limit_exception.dart';
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
 import 'package:printing_app/features/customer/order/models/checkout_state.dart';
@@ -12,6 +13,7 @@ import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/models/paper_specs.dart';
 import 'package:printing_app/shared/models/three_d_specs.dart';
+import 'package:printing_app/shared/models/route_geometry.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
@@ -43,6 +45,17 @@ int _readInt(dynamic value, int fallback) {
   if (value is num) return value.toInt();
   if (value is String) return int.tryParse(value) ?? fallback;
   return fallback;
+}
+
+int? _readBoundedInt(dynamic value, {required int minimum}) {
+  final parsed = value is int
+      ? value
+      : value is num && value.isFinite && value == value.roundToDouble()
+      ? value.toInt()
+      : value is String
+      ? int.tryParse(value)
+      : null;
+  return parsed != null && parsed >= minimum ? parsed : null;
 }
 
 double _readDouble(dynamic value, double fallback) {
@@ -358,6 +371,40 @@ Order _parseOrder(Map<String, dynamic> json) {
             .map((item) => _parseOrderLineItem(Map<String, dynamic>.from(item)))
             .toList()
       : const <OrderLineItem>[];
+  final rawDeliveryGeometry = _readJsonValue(
+    json,
+    'deliveryRouteGeometry',
+    'delivery_route_geometry',
+  );
+  final deliveryGeometry = GeoJsonLineString.tryParse(rawDeliveryGeometry);
+  final rawRoutingStale = _readJsonValue(
+    json,
+    'deliveryRoutingDataStale',
+    'delivery_routing_data_stale',
+  );
+  final rawPlanVersion = _readJsonValue(
+    json,
+    'deliveryPlanVersion',
+    'delivery_plan_version',
+  );
+  final planVersion = _readBoundedInt(rawPlanVersion, minimum: 1);
+  final rawLegDuration = _readJsonValue(
+    json,
+    'deliveryLegDurationSeconds',
+    'delivery_leg_duration_seconds',
+  );
+  final legDuration = _readBoundedInt(rawLegDuration, minimum: 0);
+  final rawLegDistance = _readJsonValue(
+    json,
+    'deliveryLegDistanceMeters',
+    'delivery_leg_distance_meters',
+  );
+  final legDistance = _readBoundedInt(rawLegDistance, minimum: 0);
+  final hasMalformedRouteContract =
+      (rawDeliveryGeometry != null && deliveryGeometry == null) ||
+      (rawPlanVersion != null && planVersion == null) ||
+      (rawLegDuration != null && legDuration == null) ||
+      (rawLegDistance != null && legDistance == null);
 
   return Order(
     id: _readJsonValue(json, 'id')?.toString() ?? '',
@@ -480,17 +527,22 @@ Order _parseOrder(Map<String, dynamic> json) {
         _readJsonValue(json, 'deliveryQueueSize', 'delivery_queue_size') == null
         ? null
         : _readInt(
-            _readJsonValue(
-              json,
-              'deliveryQueueSize',
-              'delivery_queue_size',
-            ),
+            _readJsonValue(json, 'deliveryQueueSize', 'delivery_queue_size'),
             0,
           ),
     canTrackDelivery: _readBool(
       _readJsonValue(json, 'canTrackDelivery', 'can_track_delivery'),
       false,
     ),
+    deliveryPlanState: _normalizeOptionalText(
+      _readJsonValue(json, 'deliveryPlanState', 'delivery_plan_state'),
+    ),
+    deliveryPlanVersion: planVersion,
+    deliveryRouteGeometry: deliveryGeometry,
+    deliveryRouteGeometryMalformed: hasMalformedRouteContract,
+    deliveryLegDurationSeconds: legDuration,
+    deliveryLegDistanceMeters: legDistance,
+    deliveryRoutingDataStale: rawRoutingStale is bool ? rawRoutingStale : null,
     assignedRider: _parseAssignedRider(json),
     estimatedCompletionAt: _parseDateNullable(
       _readJsonValue(json, 'estimatedCompletionAt', 'estimated_completion_at'),
@@ -669,7 +721,9 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     bool skipBootstrap = false,
     this.onCompletionUpdate,
     this.onInitialLoadComplete,
-  }) : super(initialState) {
+    bool? realFlow,
+  }) : realFlow = realFlow ?? AppConstants.realFlow,
+       super(initialState) {
     if (!skipBootstrap) {
       _fetchOrders();
       _connectWebSocket();
@@ -678,19 +732,62 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
 
   final Future<void> Function()? onCompletionUpdate;
   final VoidCallback? onInitialLoadComplete;
+  final bool realFlow;
+  String? errorMessage;
   VoidCallback? _removeOrderUpdateListener;
+  VoidCallback? _removeDeliveryQueueListener;
   bool _initialLoadReported = false;
   bool _sessionNeedsStart = false;
+  int _sessionGeneration = 0;
+  int _fetchGeneration = 0;
+
+  bool _isCurrentSession(int generation) =>
+      mounted && generation == _sessionGeneration;
 
   Future<void> _connectWebSocket() async {
     try {
       _removeOrderUpdateListener = WebSocketService.instance
           .listenForOrderUpdates(_handleOrderUpdate);
+      _removeDeliveryQueueListener ??= WebSocketService.instance
+          .listenForDeliveryQueueUpdates(_handleDeliveryQueueUpdate);
       await WebSocketService.instance.connectOrders(
         onConnect: _subscribeToAllOrders,
       );
     } catch (e) {
       debugPrint('WebSocket connection failed: $e');
+    }
+  }
+
+  void _handleDeliveryQueueUpdate(Map<String, dynamic> data) {
+    final orderId = data['orderId']?.toString();
+    if (orderId == null || orderId.isEmpty) return;
+    unawaited(_refreshOrderById(orderId));
+  }
+
+  Future<void> _refreshOrderById(String orderId) async {
+    final sessionGeneration = _sessionGeneration;
+    try {
+      final response = await ApiClient.instance.get('/orders/$orderId');
+      if (!_isCurrentSession(sessionGeneration)) return;
+      final updated = _parseOrder(
+        Map<String, dynamic>.from(response.data as Map),
+      );
+      if (!mounted) return;
+      final index = state.indexWhere(
+        (order) => order.id == updated.id || order.orderId == updated.orderId,
+      );
+      if (index < 0) {
+        await _fetchOrders();
+        return;
+      }
+      final next = [...state];
+      next[index] = updated;
+      state = _groupBatchOrders(next);
+      _subscribeToAllOrders();
+    } catch (error) {
+      debugPrint(
+        'OrdersProvider: queue promotion refetch failed for $orderId: $error',
+      );
     }
   }
 
@@ -721,9 +818,17 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
 
   @override
   void dispose() {
+    _sessionGeneration += 1;
+    _fetchGeneration += 1;
+    _removeRealtimeListeners();
+    super.dispose();
+  }
+
+  void _removeRealtimeListeners() {
     _removeOrderUpdateListener?.call();
     _removeOrderUpdateListener = null;
-    super.dispose();
+    _removeDeliveryQueueListener?.call();
+    _removeDeliveryQueueListener = null;
   }
 
   /// Emits a `subscribe` event for every order currently in state.
@@ -755,22 +860,38 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       state.where((o) => terminalStatuses.contains(o.orderStatus)).toList();
 
   Future<void> _fetchOrders() async {
+    final sessionGeneration = _sessionGeneration;
+    final fetchGeneration = ++_fetchGeneration;
     try {
       final response = await ApiClient.instance.get('/orders');
       final data = response.data as List<dynamic>;
-      if (!mounted) return;
+      if (!_isCurrentSession(sessionGeneration) ||
+          fetchGeneration != _fetchGeneration) {
+        return;
+      }
       state = _groupBatchOrders(
         data.map((json) => _parseOrder(json as Map<String, dynamic>)).toList(),
       );
+      errorMessage = null;
       debugPrint('OrdersProvider: Loaded ${state.length} orders from API');
     } catch (e) {
-      if (!mounted) return;
-      if (state.isEmpty) {
+      if (!_isCurrentSession(sessionGeneration) ||
+          fetchGeneration != _fetchGeneration) {
+        return;
+      }
+      if (state.isEmpty && !realFlow) {
         debugPrint('OrdersProvider: API failed ($e), using MockData');
         state = List.of(MockData.orders);
+        errorMessage = 'Showing offline demo orders';
       } else {
         debugPrint('OrdersProvider: API failed ($e), preserving current state');
+        errorMessage = 'Unable to refresh live orders';
+        state = [...state];
       }
+    }
+    if (!_isCurrentSession(sessionGeneration) ||
+        fetchGeneration != _fetchGeneration) {
+      return;
     }
     // Subscribe to all loaded orders in case socket connected before fetch completed.
     _subscribeToAllOrders();
@@ -783,6 +904,9 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   Future<void> refreshOrders() async => _fetchOrders();
 
   void clear() {
+    _sessionGeneration += 1;
+    _fetchGeneration += 1;
+    _removeRealtimeListeners();
     state = const [];
     _initialLoadReported = false;
     _sessionNeedsStart = true;
@@ -797,6 +921,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   /// Add a new order to the top of the list. Returns the created [Order]
   /// (server-assigned fields populated) so callers can use the real DB id.
   Future<Order> addOrder(Order order) async {
+    final sessionGeneration = _sessionGeneration;
     try {
       final response = await ApiClient.instance.post(
         '/orders',
@@ -836,6 +961,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
         },
       );
       final newOrder = _parseOrder(response.data as Map<String, dynamic>);
+      if (!_isCurrentSession(sessionGeneration)) return newOrder;
       state = [newOrder, ...state];
       WebSocketService.instance.subscribeToOrder(newOrder.orderId);
       debugPrint('OrdersProvider: Order created via API: ${newOrder.orderId}');
@@ -847,10 +973,14 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
           throw const BetaOrderLimitException();
         }
       }
+      if (realFlow) rethrow;
+      if (!_isCurrentSession(sessionGeneration)) return order;
       debugPrint('OrdersProvider: API create failed ($e), adding locally');
       state = [order, ...state];
       return order;
     } catch (e) {
+      if (realFlow) rethrow;
+      if (!_isCurrentSession(sessionGeneration)) return order;
       debugPrint('OrdersProvider: API create failed ($e), adding locally');
       state = [order, ...state];
       return order;
@@ -873,6 +1003,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     List<int> itemDestinationIndices = const [],
     Map<String, dynamic>? temporaryAddress,
   }) async {
+    final sessionGeneration = _sessionGeneration;
     final addressId = _deliveryAddressIdValue(deliveryAddressId);
 
     final mappedItems = items.indexed.map((entry) {
@@ -929,6 +1060,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       }).toList(),
     );
 
+    if (!_isCurrentSession(sessionGeneration)) return createdOrders;
     state = [...createdOrders, ...state];
     for (final order in createdOrders) {
       WebSocketService.instance.subscribeToOrder(order.orderId);

@@ -1,10 +1,20 @@
-import { ForbiddenException } from '@nestjs/common';
+import {
+  ExecutionContext,
+  ForbiddenException,
+  INestApplication,
+} from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { readdir, unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import request from 'supertest';
 import { FilesController } from './files.controller';
 import { FileMetadata } from './entities/file-metadata.entity';
 import { PaperSizeValidatorService } from './paper-size-validator.service';
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
-import type { FilesService } from './files.service';
+import { FilesService } from './files.service';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 const makeFile = (overrides: Partial<FileMetadata> = {}) =>
   ({
@@ -75,15 +85,15 @@ describe('FilesController', () => {
     );
   });
 
-  it('allows beta-held users to upload only testimonial photos', () => {
+  it('allows beta-held users to upload only testimonial photos', async () => {
     const request = makeRequest(42, 'customer', true);
 
-    expect(() =>
+    await expect(
       controller.uploadFile({} as Express.Multer.File, request, 'general'),
-    ).toThrow(ForbiddenException);
+    ).rejects.toThrow(ForbiddenException);
 
-    void controller.uploadFile(
-      {} as Express.Multer.File,
+    await controller.uploadFile(
+      { buffer: Buffer.alloc(0) } as Express.Multer.File,
       request,
       'beta_testimonial',
     );
@@ -93,6 +103,89 @@ describe('FilesController', () => {
       'beta_testimonial',
     );
   });
+
+  it('keeps the held-user rejection when no multipart file is present', async () => {
+    await expect(
+      controller.uploadFile(
+        undefined as unknown as Express.Multer.File,
+        makeRequest(42, 'customer', true),
+        'general',
+      ),
+    ).rejects.toThrow(ForbiddenException);
+  });
+});
+
+describe('FilesController upload HTTP cleanup', () => {
+  let app: INestApplication;
+  const filesService = { storeMetadata: jest.fn() };
+  const uploadTmpDir = join(tmpdir(), 'gridgo-uploads');
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [FilesController],
+      providers: [
+        { provide: FilesService, useValue: filesService },
+        { provide: PaperSizeValidatorService, useValue: {} },
+        { provide: PrinterProfileService, useValue: {} },
+      ],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({
+        canActivate(context: ExecutionContext) {
+          const httpRequest = context
+            .switchToHttp()
+            .getRequest<RequestWithUser>();
+          httpRequest.user = {
+            sub: 42,
+            email: 'held@example.test',
+            role: 'customer',
+            betaTestimonialPending: true,
+          };
+          return true;
+        },
+      })
+      .compile();
+
+    app = moduleRef.createNestApplication();
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('removes the Multer disk file when a held user submits the wrong purpose', async () => {
+    const suffix = `.held-cleanup-${process.pid}-${Date.now()}`;
+    const before = new Set(await readUploadTmpDir());
+
+    await request(app.getHttpServer())
+      .post('/files/upload')
+      .field('purpose', 'general')
+      .attach('file', Buffer.from('held upload cleanup'), {
+        filename: `rejected${suffix}`,
+        contentType: 'application/octet-stream',
+      })
+      .expect(403);
+
+    const leaked = (await readUploadTmpDir()).filter(
+      (fileName) => fileName.endsWith(suffix) && !before.has(fileName),
+    );
+    await Promise.all(
+      leaked.map((fileName) => unlink(join(uploadTmpDir, fileName))),
+    );
+
+    expect(leaked).toEqual([]);
+    expect(filesService.storeMetadata).not.toHaveBeenCalled();
+  });
+
+  async function readUploadTmpDir(): Promise<string[]> {
+    try {
+      return await readdir(uploadTmpDir);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      throw error;
+    }
+  }
 });
 
 describe('FilesController inspect with 3D bounds', () => {

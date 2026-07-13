@@ -18,7 +18,12 @@ import 'package:printing_app/features/customer/beta/widgets/beta_share_row.dart'
 import 'package:url_launcher/url_launcher.dart';
 
 class BetaSuccessWallScreen extends ConsumerStatefulWidget {
-  const BetaSuccessWallScreen({super.key});
+  const BetaSuccessWallScreen({
+    super.key,
+    this.shareLauncher = const SystemBetaShareLauncher(),
+  });
+
+  final BetaShareLauncher shareLauncher;
 
   @override
   ConsumerState<BetaSuccessWallScreen> createState() =>
@@ -34,8 +39,6 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen>
   String? _photoFileName;
   final GlobalKey _shareImageKey = GlobalKey();
   bool _isSavingShareImage = false;
-
-  final bool _sharedOnSocial = true;
 
   // Staggered entrance controller
   late final AnimationController _enter;
@@ -114,13 +117,14 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen>
           _photoFileName = null;
         });
       }
-      ref.read(betaTestimonialProvider.notifier).clearError();
+      ref.read(betaTestimonialProvider.notifier).resetForNewPhoto();
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-                'Could not open the photo library. Please check permissions.'),
+              'Could not open the photo library. Please check permissions.',
+            ),
           ),
         );
       }
@@ -130,11 +134,12 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen>
   Future<void> _submit() async {
     final notifier = ref.read(betaTestimonialProvider.notifier);
     try {
+      final sharedOnSocial = ref.read(betaTestimonialProvider).sharedOnSocial;
       await notifier.submit(
         photo: kIsWeb ? null : _photoFile,
         photoBytes: kIsWeb ? _photoBytes : null,
         photoFileName: kIsWeb ? _photoFileName : null,
-        sharedOnSocial: _sharedOnSocial,
+        sharedOnSocial: sharedOnSocial,
       );
       await ref.read(authProvider.notifier).logout();
       if (mounted) context.go('/auth/login');
@@ -145,6 +150,22 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen>
           context,
         ).showSnackBar(SnackBar(content: Text(errMsg)));
       }
+    }
+  }
+
+  Future<void> _recordConfirmedShare() async {
+    try {
+      await ref
+          .read(betaTestimonialProvider.notifier)
+          .recordConfirmedShare(photoAlreadyUploaded: false);
+    } catch (_) {
+      if (!mounted) return;
+      final message =
+          ref.read(betaTestimonialProvider).error ??
+          'Share opened, but confirmation could not be saved yet.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
@@ -340,7 +361,10 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen>
                                   ),
                                 ),
                                 const SizedBox(height: 14),
-                                const BetaShareRow(),
+                                BetaShareRow(
+                                  launcher: widget.shareLauncher,
+                                  onShareConfirmed: _recordConfirmedShare,
+                                ),
                                 if (AppConstants.hasCommunityUrl) ...[
                                   const SizedBox(height: 14),
                                   _CommunityJoinCard(onTap: _openCommunity),
@@ -374,9 +398,9 @@ class _BetaSuccessWallScreenState extends ConsumerState<BetaSuccessWallScreen>
                                                 height: 20,
                                                 child:
                                                     CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                  color: Color(0xFF0A0A0A),
-                                                ),
+                                                      strokeWidth: 2,
+                                                      color: Color(0xFF0A0A0A),
+                                                    ),
                                               )
                                             : Text(
                                                 'Upload photo & complete beta',

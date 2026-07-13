@@ -22,6 +22,10 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 200));
     });
 
+    tearDown(() {
+      notifier.dispose();
+    });
+
     test('initializes with MockData addresses (API fallback)', () {
       expect(notifier.state, isNotEmpty);
       expect(notifier.state.length, MockData.addresses.length);
@@ -30,6 +34,16 @@ void main() {
     test('canAddMore is true when under max limit', () {
       // MockData has 3 addresses, max is 5
       expect(notifier.canAddMore, true);
+    });
+
+    test('clear removes every address from the previous session', () {
+      expect(notifier.state, isNotEmpty);
+
+      notifier.clear();
+
+      expect(notifier.state, isEmpty);
+      expect(notifier.canAddMore, isTrue);
+      expect(notifier.errorMessage, isNull);
     });
 
     test('addAddress appends to list', () async {
@@ -136,36 +150,40 @@ void main() {
       // Add addresses until we hit the limit
       for (var i = 0; i < 5; i++) {
         if (!notifier.canAddMore) break;
-        await notifier.addAddress(Address(
-          id: 'addr_fill_$i',
-          userId: 'usr_001',
-          label: 'Fill $i',
-          fullAddress: 'Address $i',
-          city: 'City',
-          latitude: 14.0 + i * 0.01,
-          longitude: 121.0 + i * 0.01,
-          isDefault: false,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        ));
+        await notifier.addAddress(
+          Address(
+            id: 'addr_fill_$i',
+            userId: 'usr_001',
+            label: 'Fill $i',
+            fullAddress: 'Address $i',
+            city: 'City',
+            latitude: 14.0 + i * 0.01,
+            longitude: 121.0 + i * 0.01,
+            isDefault: false,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
       }
 
       // Now at max — try adding one more
       expect(notifier.canAddMore, false);
       final countAtMax = notifier.state.length;
 
-      await notifier.addAddress(Address(
-        id: 'addr_over_limit',
-        userId: 'usr_001',
-        label: 'Over Limit',
-        fullAddress: 'Should not be added',
-        city: 'City',
-        latitude: 14.0,
-        longitude: 121.0,
-        isDefault: false,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ));
+      await notifier.addAddress(
+        Address(
+          id: 'addr_over_limit',
+          userId: 'usr_001',
+          label: 'Over Limit',
+          fullAddress: 'Should not be added',
+          city: 'City',
+          latitude: 14.0,
+          longitude: 121.0,
+          isDefault: false,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
 
       expect(notifier.state.length, countAtMax); // unchanged
     });

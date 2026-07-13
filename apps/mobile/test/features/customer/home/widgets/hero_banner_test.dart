@@ -5,17 +5,12 @@ import 'package:printing_app/features/customer/home/widgets/hero_banner.dart';
 void main() {
   testWidgets('renders GRIDGO once with only GO in yellow', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: HeroBanner(),
-        ),
-      ),
+      const MaterialApp(home: Scaffold(body: HeroBanner())),
     );
     await tester.pump(const Duration(milliseconds: 500));
 
     final wordmarkFinder = find.byWidgetPredicate(
-      (widget) =>
-          widget is RichText && widget.text.toPlainText() == 'GRIDGO',
+      (widget) => widget is RichText && widget.text.toPlainText() == 'GRIDGO',
     );
 
     expect(wordmarkFinder, findsOneWidget);
@@ -26,6 +21,8 @@ void main() {
     expect(spans.map((span) => span.text).join(), 'GRIDGO');
     expect(spans.last.text, 'GO');
     expect(spans.last.style?.color, const Color(0xFFFFDE58));
+    final background = tester.widget<Image>(find.byType(Image));
+    expect(background.excludeFromSemantics, isTrue);
   });
 }
 

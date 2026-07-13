@@ -86,6 +86,7 @@ export interface Order {
   payment_method: PaymentMethod;
   payment_status: PaymentStatus;
   order_status: OrderStatus;
+  allowed_next_statuses?: OrderStatus[];
   decline_reason?: string;
   cancellation_reason?: string;
   cancelled_at?: string;
@@ -133,7 +134,7 @@ export interface OrderStatusHistory {
   order_id: string;
   from_status: OrderStatus;
   to_status: OrderStatus;
-  changed_by_user_id?: string;
-  notes?: string;
+  changed_by_user_id?: string | null;
+  notes?: string | null;
   created_at: string;
 }

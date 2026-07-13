@@ -4,7 +4,7 @@
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i8;
-import 'dart:ui' as _i11;
+import 'dart:ui' as _i12;
 
 import 'package:dio/src/adapter.dart' as _i4;
 import 'package:dio/src/cancel_token.dart' as _i9;
@@ -14,8 +14,9 @@ import 'package:dio/src/options.dart' as _i2;
 import 'package:dio/src/response.dart' as _i6;
 import 'package:dio/src/transformer.dart' as _i5;
 import 'package:mockito/mockito.dart' as _i1;
+import 'package:mockito/src/dummies.dart' as _i11;
 import 'package:printing_app/features/customer/chat/models/chat_message.dart'
-    as _i12;
+    as _i13;
 import 'package:printing_app/shared/services/websocket_service.dart' as _i10;
 
 // ignore_for_file: type=lint
@@ -1109,6 +1110,21 @@ class MockWebSocketService extends _i1.Mock implements _i10.WebSocketService {
           as bool);
 
   @override
+  String get surveyRequiredNamespaceForTests =>
+      (super.noSuchMethod(
+            Invocation.getter(#surveyRequiredNamespaceForTests),
+            returnValue: _i11.dummyValue<String>(
+              this,
+              Invocation.getter(#surveyRequiredNamespaceForTests),
+            ),
+            returnValueForMissingStub: _i11.dummyValue<String>(
+              this,
+              Invocation.getter(#surveyRequiredNamespaceForTests),
+            ),
+          )
+          as String);
+
+  @override
   int get orderListenerCountForTests =>
       (super.noSuchMethod(
             Invocation.getter(#orderListenerCountForTests),
@@ -1118,7 +1134,106 @@ class MockWebSocketService extends _i1.Mock implements _i10.WebSocketService {
           as int);
 
   @override
-  _i8.Future<void> connectOrders({_i11.VoidCallback? onConnect}) =>
+  int get riderAssignmentListenerCountForTests =>
+      (super.noSuchMethod(
+            Invocation.getter(#riderAssignmentListenerCountForTests),
+            returnValue: 0,
+            returnValueForMissingStub: 0,
+          )
+          as int);
+
+  @override
+  int get riderDispatchPlanListenerCountForTests =>
+      (super.noSuchMethod(
+            Invocation.getter(#riderDispatchPlanListenerCountForTests),
+            returnValue: 0,
+            returnValueForMissingStub: 0,
+          )
+          as int);
+
+  @override
+  int get deliveryQueueListenerCountForTests =>
+      (super.noSuchMethod(
+            Invocation.getter(#deliveryQueueListenerCountForTests),
+            returnValue: 0,
+            returnValueForMissingStub: 0,
+          )
+          as int);
+
+  @override
+  int get ordersSocketCreateCountForTests =>
+      (super.noSuchMethod(
+            Invocation.getter(#ordersSocketCreateCountForTests),
+            returnValue: 0,
+            returnValueForMissingStub: 0,
+          )
+          as int);
+
+  @override
+  int get notificationsSocketCreateCountForTests =>
+      (super.noSuchMethod(
+            Invocation.getter(#notificationsSocketCreateCountForTests),
+            returnValue: 0,
+            returnValueForMissingStub: 0,
+          )
+          as int);
+
+  @override
+  int get notificationListenerCountForTests =>
+      (super.noSuchMethod(
+            Invocation.getter(#notificationListenerCountForTests),
+            returnValue: 0,
+            returnValueForMissingStub: 0,
+          )
+          as int);
+
+  @override
+  int get creditsUpdateListenerCountForTests =>
+      (super.noSuchMethod(
+            Invocation.getter(#creditsUpdateListenerCountForTests),
+            returnValue: 0,
+            returnValueForMissingStub: 0,
+          )
+          as int);
+
+  @override
+  int get locationReconnectAttempts =>
+      (super.noSuchMethod(
+            Invocation.getter(#locationReconnectAttempts),
+            returnValue: 0,
+            returnValueForMissingStub: 0,
+          )
+          as int);
+
+  @override
+  _i10.LocationSocketHealth get locationHealthForTests =>
+      (super.noSuchMethod(
+            Invocation.getter(#locationHealthForTests),
+            returnValue: _i10.LocationSocketHealth.disconnected,
+            returnValueForMissingStub: _i10.LocationSocketHealth.disconnected,
+          )
+          as _i10.LocationSocketHealth);
+
+  @override
+  int get locationSubscribeEmitCountForTests =>
+      (super.noSuchMethod(
+            Invocation.getter(#locationSubscribeEmitCountForTests),
+            returnValue: 0,
+            returnValueForMissingStub: 0,
+          )
+          as int);
+
+  @override
+  int get locationSocketRecreateRequestsForTests =>
+      (super.noSuchMethod(
+            Invocation.getter(#locationSocketRecreateRequestsForTests),
+            returnValue: 0,
+            returnValueForMissingStub: 0,
+          )
+          as int);
+
+  @override
+  _i8.Future<void> connectOrders({_i12.VoidCallback? onConnect}) =>
       (super.noSuchMethod(
             Invocation.method(#connectOrders, [], {#onConnect: onConnect}),
             returnValue: _i8.Future<void>.value(),
@@ -1133,7 +1248,26 @@ class MockWebSocketService extends _i1.Mock implements _i10.WebSocketService {
   );
 
   @override
-  _i11.VoidCallback listenForOrderUpdates(
+  void dispatchRiderAssignmentForTests(dynamic data) => super.noSuchMethod(
+    Invocation.method(#dispatchRiderAssignmentForTests, [data]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void dispatchRiderDispatchPlanUpdatedForTests(dynamic data) =>
+      super.noSuchMethod(
+        Invocation.method(#dispatchRiderDispatchPlanUpdatedForTests, [data]),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void resetConnectionTestCountersForTests() => super.noSuchMethod(
+    Invocation.method(#resetConnectionTestCountersForTests, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i12.VoidCallback listenForOrderUpdates(
     dynamic Function(dynamic)? callback,
   ) =>
       (super.noSuchMethod(
@@ -1141,7 +1275,40 @@ class MockWebSocketService extends _i1.Mock implements _i10.WebSocketService {
             returnValue: () {},
             returnValueForMissingStub: () {},
           )
-          as _i11.VoidCallback);
+          as _i12.VoidCallback);
+
+  @override
+  _i12.VoidCallback listenForRiderAssignments(
+    dynamic Function(Map<String, dynamic>)? callback,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#listenForRiderAssignments, [callback]),
+            returnValue: () {},
+            returnValueForMissingStub: () {},
+          )
+          as _i12.VoidCallback);
+
+  @override
+  _i12.VoidCallback listenForRiderDispatchPlanUpdates(
+    dynamic Function(Map<String, dynamic>)? callback,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#listenForRiderDispatchPlanUpdates, [callback]),
+            returnValue: () {},
+            returnValueForMissingStub: () {},
+          )
+          as _i12.VoidCallback);
+
+  @override
+  _i12.VoidCallback listenForDeliveryQueueUpdates(
+    dynamic Function(Map<String, dynamic>)? callback,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#listenForDeliveryQueueUpdates, [callback]),
+            returnValue: () {},
+            returnValueForMissingStub: () {},
+          )
+          as _i12.VoidCallback);
 
   @override
   void subscribeToOrder(String? orderId) => super.noSuchMethod(
@@ -1169,14 +1336,94 @@ class MockWebSocketService extends _i1.Mock implements _i10.WebSocketService {
   );
 
   @override
-  void sendRiderLocation(Map<String, dynamic>? location) => super.noSuchMethod(
-    Invocation.method(#sendRiderLocation, [location]),
+  void subscribeToDeliveryPlan(String? assignmentId, int? planVersion) =>
+      super.noSuchMethod(
+        Invocation.method(#subscribeToDeliveryPlan, [
+          assignmentId,
+          planVersion,
+        ]),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  _i12.VoidCallback listenForLocationUpdates(
+    dynamic Function(Map<String, dynamic>)? callback,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#listenForLocationUpdates, [callback]),
+            returnValue: () {},
+            returnValueForMissingStub: () {},
+          )
+          as _i12.VoidCallback);
+
+  @override
+  void listenForLocationHealth(
+    dynamic Function(_i10.LocationSocketHealth)? callback,
+  ) => super.noSuchMethod(
+    Invocation.method(#listenForLocationHealth, [callback]),
     returnValueForMissingStub: null,
   );
 
   @override
+  void removeLocationHealthListener(
+    dynamic Function(_i10.LocationSocketHealth)? callback,
+  ) => super.noSuchMethod(
+    Invocation.method(#removeLocationHealthListener, [callback]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void removeLocationUpdateListener(dynamic Function(dynamic)? callback) =>
+      super.noSuchMethod(
+        Invocation.method(#removeLocationUpdateListener, [callback]),
+        returnValueForMissingStub: null,
+      );
+
+  @override
   void disconnectLocation() => super.noSuchMethod(
     Invocation.method(#disconnectLocation, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void dispatchLocationSocketConnectedForTests() => super.noSuchMethod(
+    Invocation.method(#dispatchLocationSocketConnectedForTests, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void dispatchLocationReconnectFailedForTests() => super.noSuchMethod(
+    Invocation.method(#dispatchLocationReconnectFailedForTests, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void dispatchLocationSubscribedForTests(dynamic data) => super.noSuchMethod(
+    Invocation.method(#dispatchLocationSubscribedForTests, [data]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void dispatchLocationUpdateForTests(dynamic data) => super.noSuchMethod(
+    Invocation.method(#dispatchLocationUpdateForTests, [data]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void dispatchDeliveryQueueUpdatedForTests(dynamic data) => super.noSuchMethod(
+    Invocation.method(#dispatchDeliveryQueueUpdatedForTests, [data]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void dispatchSurveyRequiredForTests(dynamic data) => super.noSuchMethod(
+    Invocation.method(#dispatchSurveyRequiredForTests, [data]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void clearDeliveryQueueListenersForTests() => super.noSuchMethod(
+    Invocation.method(#clearDeliveryQueueListenersForTests, []),
     returnValueForMissingStub: null,
   );
 
@@ -1194,15 +1441,40 @@ class MockWebSocketService extends _i1.Mock implements _i10.WebSocketService {
           as _i8.Future<void>);
 
   @override
-  void listenForNewNotifications(
+  _i12.VoidCallback listenForCreditsUpdate(
     dynamic Function(Map<String, dynamic>)? callback,
-  ) => super.noSuchMethod(
-    Invocation.method(#listenForNewNotifications, [callback]),
-    returnValueForMissingStub: null,
-  );
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#listenForCreditsUpdate, [callback]),
+            returnValue: () {},
+            returnValueForMissingStub: () {},
+          )
+          as _i12.VoidCallback);
 
   @override
-  _i8.Future<void> connectDailyGrid({required _i11.VoidCallback? onUpdated}) =>
+  _i12.VoidCallback listenForNewNotifications(
+    dynamic Function(Map<String, dynamic>)? callback,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#listenForNewNotifications, [callback]),
+            returnValue: () {},
+            returnValueForMissingStub: () {},
+          )
+          as _i12.VoidCallback);
+
+  @override
+  _i12.VoidCallback listenForSurveyRequired(
+    dynamic Function(Map<String, dynamic>)? callback,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#listenForSurveyRequired, [callback]),
+            returnValue: () {},
+            returnValueForMissingStub: () {},
+          )
+          as _i12.VoidCallback);
+
+  @override
+  _i8.Future<void> connectDailyGrid({required _i12.VoidCallback? onUpdated}) =>
       (super.noSuchMethod(
             Invocation.method(#connectDailyGrid, [], {#onUpdated: onUpdated}),
             returnValue: _i8.Future<void>.value(),
@@ -1268,9 +1540,9 @@ class MockWebSocketService extends _i1.Mock implements _i10.WebSocketService {
   );
 
   @override
-  _i11.VoidCallback listenForChatMessages(
+  _i12.VoidCallback listenForChatMessages(
     int? conversationId,
-    dynamic Function(_i12.ChatMessage)? callback,
+    dynamic Function(_i13.ChatMessage)? callback,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#listenForChatMessages, [
@@ -1280,25 +1552,25 @@ class MockWebSocketService extends _i1.Mock implements _i10.WebSocketService {
             returnValue: () {},
             returnValueForMissingStub: () {},
           )
-          as _i11.VoidCallback);
+          as _i12.VoidCallback);
 
   @override
-  _i11.VoidCallback listenForBotTyping(dynamic Function(int)? callback) =>
+  _i12.VoidCallback listenForBotTyping(dynamic Function(int)? callback) =>
       (super.noSuchMethod(
             Invocation.method(#listenForBotTyping, [callback]),
             returnValue: () {},
             returnValueForMissingStub: () {},
           )
-          as _i11.VoidCallback);
+          as _i12.VoidCallback);
 
   @override
-  _i11.VoidCallback listenForMessagesRead(dynamic Function(int)? callback) =>
+  _i12.VoidCallback listenForMessagesRead(dynamic Function(int)? callback) =>
       (super.noSuchMethod(
             Invocation.method(#listenForMessagesRead, [callback]),
             returnValue: () {},
             returnValueForMissingStub: () {},
           )
-          as _i11.VoidCallback);
+          as _i12.VoidCallback);
 
   @override
   _i8.Future<bool> connectDeliverySlots() =>
@@ -1322,7 +1594,7 @@ class MockWebSocketService extends _i1.Mock implements _i10.WebSocketService {
   );
 
   @override
-  _i11.VoidCallback listenForSlotUpdates(
+  _i12.VoidCallback listenForSlotUpdates(
     dynamic Function(Map<String, dynamic>)? cb,
   ) =>
       (super.noSuchMethod(
@@ -1330,7 +1602,7 @@ class MockWebSocketService extends _i1.Mock implements _i10.WebSocketService {
             returnValue: () {},
             returnValueForMissingStub: () {},
           )
-          as _i11.VoidCallback);
+          as _i12.VoidCallback);
 
   @override
   void disconnectDeliverySlots() => super.noSuchMethod(

@@ -64,6 +64,7 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   StreamSubscription<Map<String, dynamic>>? _fcmSub;
+  void Function()? _removeWsNotificationListener;
 
   Future<void> _playNotificationSound() async {
     try {
@@ -72,6 +73,11 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
   }
 
   bool _loadedFromApi = false;
+  int _sessionGeneration = 0;
+  int _fetchGeneration = 0;
+
+  bool _isCurrentSession(int generation) =>
+      mounted && generation == _sessionGeneration;
 
   void _listenToFcmMessages() {
     _fcmSub?.cancel();
@@ -85,20 +91,25 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
   }
 
   void _listenToWsNotifications() {
-    WebSocketService.instance.connectNotifications();
-    WebSocketService.instance.listenForNewNotifications((data) {
-      final notif = _parseNotification(data);
-      // Deduplicate: don't add if already present
-      if (!state.any((n) => n.id == notif.id)) {
-        state = [notif, ...state];
-        _playNotificationSound();
-      }
-    });
+    _removeWsNotificationListener ??= WebSocketService.instance
+        .listenForNewNotifications((data) {
+          final notif = _parseNotification(data);
+          // Deduplicate: don't add if already present
+          if (!state.any((n) => n.id == notif.id)) {
+            state = [notif, ...state];
+            _playNotificationSound();
+          }
+        });
+    unawaited(WebSocketService.instance.connectNotifications());
   }
 
   @override
   void dispose() {
+    _sessionGeneration += 1;
+    _fetchGeneration += 1;
     _fcmSub?.cancel();
+    _removeWsNotificationListener?.call();
+    _removeWsNotificationListener = null;
     _audioPlayer.dispose();
     super.dispose();
   }
@@ -108,14 +119,22 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
   bool get usesApiFallback => !_loadedFromApi;
 
   Future<void> _fetchNotifications() async {
+    final sessionGeneration = _sessionGeneration;
+    final fetchGeneration = ++_fetchGeneration;
     try {
       final data = await _api.fetchNotifications();
-      if (!mounted) return;
+      if (!_isCurrentSession(sessionGeneration) ||
+          fetchGeneration != _fetchGeneration) {
+        return;
+      }
       _loadedFromApi = true;
       state = data.map(_parseNotification).toList()
         ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     } catch (_) {
-      if (!mounted) return;
+      if (!_isCurrentSession(sessionGeneration) ||
+          fetchGeneration != _fetchGeneration) {
+        return;
+      }
       // Offline fallback
       _loadedFromApi = false;
       state =
@@ -147,9 +166,9 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
   }
 
   Future<void> clearNotifications() async {
-    try {
-      await _api.markAllAsRead();
-    } catch (_) {}
+    _sessionGeneration += 1;
+    _fetchGeneration += 1;
+    _loadedFromApi = false;
     state = [];
   }
 }

@@ -31,6 +31,52 @@
 $ npm install
 ```
 
+## Database migrations and seed data
+
+TypeORM migrations are the default schema path in every environment. Configure
+the `DATABASE_*` variables, then migrate before starting the API or loading demo
+data:
+
+```bash
+npm run migration:run
+npm run seed:if-empty
+```
+
+`npm run schema:fresh-check` runs those commands in the same order. The seed
+command is safe to rerun: it verifies that the latest migration is recorded,
+skips a populated `users` table, and fails with a clear instruction when the
+schema is not fully migrated.
+
+Create and manage migrations with:
+
+```bash
+npm run migration:generate -- migrations/descriptive-name
+npm run migration:run
+npm run migration:revert
+```
+
+The production image uses the compiled data source through
+`npm run migration:run:prod`. `server/docker-compose.yml` runs that command as
+a one-shot migration service and starts the API only after it succeeds. The
+production Compose path never loads demo seed data automatically.
+
+Before starting either Compose stack, supply non-empty `JWT_SECRET`,
+`MINIO_ACCESS_KEY`, and `MINIO_SECRET_KEY` values. The production stack also
+requires `MINIO_PUBLIC_URL` to be the externally reachable MinIO origin and
+`ROUTING_BASE_URL` to point at the owned routing service. For example:
+
+```bash
+docker compose --env-file .env -f docker-compose.yml up --build
+```
+
+The integrated repository development stack additionally requires an explicit
+`GRIDGO_PUBLIC_HOST` such as `192.168.40.201`; it uses that host when building
+the browser clients and their MinIO URLs.
+
+Schema synchronization is disabled by default. `DATABASE_SYNCHRONIZE=true` is
+an explicit local-only escape hatch for inspecting entity metadata; do not use
+it instead of migrations for shared or production databases.
+
 ## Compile and run the project
 
 ```bash

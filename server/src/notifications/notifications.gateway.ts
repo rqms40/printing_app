@@ -6,32 +6,37 @@ import {
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { Notification } from './entities/notification.entity';
+import { UsersService } from '../users/users.service';
+import { RealtimeSessionRegistry } from '../common/realtime/realtime-session-registry';
+import { authenticateRealtimeSocket } from '../common/realtime/realtime-socket-auth';
+import { UserRole } from '../users/entities/user.entity';
 
 @WebSocketGateway({ namespace: '/ws/notifications', cors: { origin: '*' } })
 export class NotificationsGateway implements OnGatewayConnection {
   @WebSocketServer()
   server: Server;
 
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly usersService: UsersService,
+    private readonly realtimeSessions: RealtimeSessionRegistry,
+  ) {}
 
   async handleConnection(client: Socket) {
-    const token = client.handshake.auth?.token as string | undefined;
-    if (!token) {
+    const identity = await authenticateRealtimeSocket(
+      this.jwtService,
+      this.usersService,
+      client,
+    );
+    if (!identity) {
       client.disconnect();
       return;
     }
-    try {
-      const payload = await this.jwtService.verifyAsync<{
-        role?: string;
-        sub?: number;
-      }>(token);
-      if (payload.role === 'admin') {
-        void client.join('admin_notifications');
-      }
-      void client.join(`user_${payload.sub}`);
-    } catch {
-      client.disconnect();
+    if (identity.role === UserRole.ADMIN) {
+      await client.join('admin_notifications');
     }
+    await client.join(`user_${identity.id}`);
+    this.realtimeSessions.register(identity.id, client);
   }
 
   broadcastToAdmins(notif: Notification): void {

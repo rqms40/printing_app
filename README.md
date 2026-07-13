@@ -26,7 +26,7 @@ graph TB
     end
 
     subgraph Data
-        E[(PostgreSQL 15<br/>30 tables)]
+        E[(PostgreSQL 15<br/>Versioned schema)]
         F[Redis 7<br/>Provisioned]
         G[MinIO<br/>File Storage]
     end
@@ -179,7 +179,7 @@ printing_app/
 │   │   │   ├── file-inspector/        # PDF viewer + STL/OBJ/GLB CAD viewer (Three.js)
 │   │   │   └── notification-bell/     # Real-time badge with dropdown
 │   │   └── providers/                 # Auth, data, chat-ws, delivery-slot-ws, notification-ws
-│   └── src/                           # 23 Vitest test files (not currently run in CI)
+│   └── src/                           # Vitest test suite (run in Admin CI)
 │
 ├── server/                            # NestJS 11 backend
 │   ├── src/
@@ -204,7 +204,7 @@ printing_app/
 │   │   ├── storage/                   # MinIO/S3 storage service
 │   │   ├── health/                    # Health check + DB probe at GET /api/health
 │   │   └── common/                    # Guards, filters, exception handler
-│   ├── migrations/                    # 10 TypeORM migrations (prod schema management)
+│   ├── migrations/                    # Versioned TypeORM production schema management
 │   ├── src/seed.ts                    # Demo data (3 users, catalog, slots, orders)
 │   ├── docker-compose.yml             # PostgreSQL 15 + Redis 7 + MinIO
 │   ├── Dockerfile                     # Multi-stage node:20-alpine production build
@@ -214,7 +214,7 @@ printing_app/
 │   └── api-types/                     # Planned shared API types (skeleton only, not yet implemented)
 │
 ├── docs/                              # PRD, architecture docs, implementation plans
-├── .github/workflows/                 # 4 CI/CD workflows
+├── .github/workflows/                 # Surface, integration, evidence, and release gates
 ├── Makefile                           # Common dev commands
 └── README.md
 ```
@@ -238,7 +238,7 @@ printing_app/
 | **Landing 3D** | @react-three/fiber 9 + Three.js | Scroll-driven phone model WebGL scene |
 | **Landing animation** | Framer Motion 12 | Scroll-triggered entry animations |
 | **Backend** | NestJS 11 + TypeScript 5.7 | Modular REST + WebSocket API |
-| **Database** | PostgreSQL 15 + TypeORM 0.3 | 30 tables, 10 migrations, `synchronize: true` in dev |
+| **Database** | PostgreSQL 15 + TypeORM 0.3 | Versioned migrations; synchronization disabled by default |
 | **Auth** | Passport.js + JWT | 7-day tokens, bcrypt hashing, 3 roles |
 | **File storage** | MinIO (S3-compatible) | Presigned URLs, GLB preview conversion |
 | **Push** | Firebase Cloud Messaging (Admin SDK 13) | Mobile push notifications |
@@ -252,7 +252,7 @@ printing_app/
 | **Local storage (mobile)** | Hive + SharedPreferences + flutter_secure_storage | Draft persistence, JWT, tutorial state |
 | **Scheduling** | @nestjs/schedule | File purge cron, marketing notification broadcaster |
 | **API docs** | Swagger/OpenAPI | Available at `GET /docs` |
-| **CI/CD** | GitHub Actions (4 workflows) | Lint · test · build · APK release |
+| **CI/CD** | GitHub Actions | Surface CI · fresh-stack E2E · visual evidence · gated APK release |
 | **Containers** | Docker + Compose | postgres:15 + redis:7-alpine + minio |
 
 > **Redis note:** Redis 7 is provisioned in docker-compose but no Redis client is installed in the server package. It is reserved for a future caching or job-queue feature.
@@ -261,12 +261,21 @@ printing_app/
 
 ### Option A: One-command Docker dev stack (recommended)
 
-Runs the API, seeded PostgreSQL, MinIO, mobile web, admin dashboard, and landing
-page together. This is the easiest path when testing the Flutter web app from a
-browser at `http://192.168.40.201:8088`.
+Runs the API, PostgreSQL migration and seed jobs, MinIO, mobile web, admin
+dashboard, and landing page together. This is the easiest path when testing the
+Flutter web app from a browser at `http://192.168.40.201:8088`.
+
+First add three role-specific seed password variables to the ignored
+`server/.env` file. Keep each value unique and do not commit or print them:
+
+- `GRIDGO_SEED_CUSTOMER_PASSWORD`
+- `GRIDGO_SEED_RIDER_PASSWORD`
+- `GRIDGO_SEED_ADMIN_PASSWORD`
+
+Then start Compose with that ignored file as its interpolation source:
 
 ```bash
-GRIDGO_PUBLIC_HOST=192.168.40.201 docker compose -f docker-compose.dev.yml up --build
+GRIDGO_PUBLIC_HOST=192.168.40.201 docker compose --env-file server/.env -f docker-compose.dev.yml up --build
 ```
 
 | Surface | URL |
@@ -282,7 +291,8 @@ For local-only browser testing, use `GRIDGO_PUBLIC_HOST=127.0.0.1`.
 If a default port is already taken, override only that port, for example
 `GRIDGO_ADMIN_PORT=8289`.
 
-The stack seeds demo data only when the database is empty. To stop it:
+The stack seeds demo data only when the database is empty. Seed output never
+prints passwords. To stop it:
 
 ```bash
 docker compose -f docker-compose.dev.yml down
@@ -292,10 +302,8 @@ To reset all Docker dev data and seed fresh demo records:
 
 ```bash
 docker compose -f docker-compose.dev.yml down -v
-GRIDGO_PUBLIC_HOST=192.168.40.201 docker compose -f docker-compose.dev.yml up --build
+GRIDGO_PUBLIC_HOST=192.168.40.201 docker compose --env-file server/.env -f docker-compose.dev.yml up --build
 ```
-
-Demo credentials are the same as below; all use password `password123`.
 
 ### Option B: Manual local services
 
@@ -323,8 +331,8 @@ docker-compose up -d          # starts postgres:15, redis:7, minio
 ```bash
 cd server
 npm install
-npm run migration:run   # apply the 10 TypeORM migrations
-npm run seed            # load demo data (users, catalog, orders, slots)
+npm run migration:run   # apply pending TypeORM migrations
+npm run seed:if-empty   # load demo data only when users is empty
 npm run start:dev       # http://localhost:3000/docs  (Swagger)
 ```
 
@@ -352,13 +360,11 @@ npm install
 npm run dev              # http://localhost:5174
 ```
 
-### Demo Credentials
+### Seeded Demo Accounts
 
-| Role | Email | Password |
-|------|-------|----------|
-| Customer | maria@gridgo.ph | password123 |
-| Rider | juan@gridgo.ph | password123 |
-| Admin | admin@gridgo.ph | password123 |
+The seed creates customer, rider, and admin demo identities. Their passwords
+come only from the three role-specific `GRIDGO_SEED_*_PASSWORD` variables
+listed above; no demo password is stored or documented in the repository.
 
 > The mobile app has dev bypass buttons on the login screen for quick testing without a running server.
 
@@ -412,14 +418,15 @@ Refine v4 + React 18 + Ant Design 5 web dashboard. ~25 pages with 4 concurrent W
 
 ### Server (`server/`)
 
-NestJS 11 backend — REST API + 6 WebSocket namespaces, **59 spec files** (Jest), **10 migrations**, Swagger at `/docs`.
+NestJS 11 backend — REST API + 6 WebSocket namespaces, Jest coverage,
+versioned migrations, and Swagger at `/docs`.
 
 **WebSocket namespaces (Socket.IO)**
 
 | Namespace | Auth | Purpose |
 |---|---|---|
 | `/ws/orders` | JWT | Order status updates, survey-required events |
-| `/ws/location` | None | Real-time rider GPS per delivery assignment |
+| `/ws/location` | JWT + assignment authorization | Real-time rider GPS for the authorized current delivery stop |
 | `/ws/chat` | JWT | Customer ↔ admin, customer ↔ GridBot, rider ↔ admin |
 | `/ws/notifications` | JWT | In-app notifications + credits balance updates |
 | `/ws/daily-grid` | None | Push carousel card changes to all clients |
@@ -448,10 +455,10 @@ React 19 + Vite 8 + Tailwind CSS v4 marketing site. Runs on port 5174.
 # Mobile — 424 tests (unit / widget / integration)
 cd apps/mobile && fvm flutter test
 
-# Server — 59 spec files (Jest + ts-jest, real PostgreSQL in CI)
+# Server — Jest + ts-jest, with real PostgreSQL in CI
 cd server && npm test
 cd server && npm run test:cov      # with coverage
-cd server && npm run test:e2e      # end-to-end (not run in CI)
+cd server && npm run test:e2e      # end-to-end (also run in Migration CI)
 
 # Admin — 23 test files (Vitest + Testing Library)
 cd admin && npm test
@@ -462,20 +469,30 @@ cd server && npm run lint
 cd admin && npx tsc --noEmit
 ```
 
-> **Note:** Admin Vitest tests are **not currently run in `ci-admin.yml`** — the workflow only runs `tsc --noEmit` + `vite build`. The `npm test` script works locally.
-
 ## CI/CD
 
 | Workflow | Trigger | Steps |
 |---------|---------|-------|
-| `ci-mobile.yml` | push/PR to `apps/mobile/**` | Flutter 3.41.6 → analyze → test (424) → web build |
-| `ci-server.yml` | push/PR to `server/**` | Node 24 + postgres:15 → lint → build → Jest tests |
-| `ci-admin.yml` | push/PR to `admin/**` | Node 24 → `tsc --noEmit` → `vite build` |
-| `release-apk.yml` | push of `v*` tag | Flutter test → build signed APK → GitHub Release |
+| `ci-server.yml` | every push to `main`; scoped PRs | `Server`: lint/build/unit; `Migration`: empty DB migrate/seed/API/E2E |
+| `ci-admin.yml` | every push to `main`; scoped PRs | Type check → Vitest → production build |
+| `ci-mobile.yml` | every push to `main`; scoped PRs | Flutter analyze → tests → real-flow web build |
+| `ci-landing.yml` | every push to `main`; scoped PRs | Lint → three content contracts → production build |
+| `ci-mobile-web-e2e.yml` | every push to `main`; scoped PRs | Non-mutating beta workflow contract |
+| `ci-fresh-stack.yml` | every push to `main`; scoped PRs | Disposable loopback stack → live preflight → destructive API workflow |
+| `visual-evidence.yml` | manual exact-SHA dispatch | Four-actor screenshots → manifest/hash validation → evidence acceptance |
+| `release-apk.yml` | semantic `v*` tag | Exact-main CI/evidence gate → analyze/tests → signed APK → GitHub Release |
 
 **Secrets required for APK release:** `GOOGLE_SERVICES_JSON`, `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`
 
-**Releases:** Tags `v1.0.0` through `v1.3.0` exist. Pushing a `v*` tag triggers the signed APK build and attaches it to a GitHub Release with auto-generated release notes.
+Release tags must exactly match the app's semantic version and point at the
+current `origin/main` commit. The tag workflow waits for successful push runs
+named `Server`, `Migration`, `Admin`, `Mobile`, `Landing`, `Mobile Web E2E`,
+and `Fresh Stack` for that same SHA. It also requires a nonexpired accepted
+visual-evidence artifact whose manifest and file hashes match the SHA.
+
+`Evidence Accepted` uses the `beta-release-evidence` GitHub environment. A
+repository administrator must configure required reviewers for that
+environment where the GitHub plan supports protected environments.
 
 ## Deployment
 
@@ -483,7 +500,7 @@ cd admin && npx tsc --noEmit
 
 ```bash
 # Full Docker dev stack
-GRIDGO_PUBLIC_HOST=192.168.40.201 docker compose -f docker-compose.dev.yml up --build
+GRIDGO_PUBLIC_HOST=192.168.40.201 docker compose --env-file server/.env -f docker-compose.dev.yml up --build
 
 # Or run pieces manually:
 cd server && docker-compose up -d      # postgres + redis + minio
@@ -500,12 +517,15 @@ cd server
 docker-compose up -d --build        # builds API image from Dockerfile
 ```
 
+The production Compose stack runs a one-shot migration service from the built
+image before the API starts. It does not load demo seed data.
+
 The `server/Dockerfile` is a multi-stage `node:20-alpine` build. Key production checklist:
 - Set a strong `JWT_SECRET` (default is `grid-jwt-secret-change-in-production`)
 - Set real `OPENROUTER_API_KEY`
 - Configure real PayMongo keys when ready
-- Set `NODE_ENV=production` (disables TypeORM `synchronize`, enables Helmet)
-- Run migrations: `npm run migration:run`
+- Keep `DATABASE_SYNCHRONIZE=false` (the default) and set `NODE_ENV=production`
+- Outside Compose, run compiled migrations: `npm run migration:run:prod`
 - Replace MinIO with S3/R2 if deploying to cloud (change `MINIO_*` env vars)
 
 > **No cloud deployment is configured.** The project currently runs on a local LAN. No Render/Railway/Fly.io/Vercel/GCP config exists.
@@ -519,16 +539,21 @@ See `server/.env.example` for the full list. Key variables:
 | Variable | Required | Notes |
 |----------|----------|-------|
 | `JWT_SECRET` | Yes | Change from default before any deployment |
+| `GRIDGO_SEED_CUSTOMER_PASSWORD` | Development seed | Customer demo password; ignored env file only |
+| `GRIDGO_SEED_RIDER_PASSWORD` | Development seed | Rider demo password; ignored env file only |
+| `GRIDGO_SEED_ADMIN_PASSWORD` | Development seed | Admin demo password; ignored env file only |
 | `DATABASE_*` | Yes | Host, port, name, user, password |
 | `MINIO_*` | Yes | Endpoint, keys, bucket, public URL |
 | `OPENROUTER_API_KEY` | Yes | For GridBot AI |
 | `FIREBASE_SERVICE_ACCOUNT` | Yes | Path to Firebase service account JSON |
 | `PAYMONGO_SECRET_KEY` | No | Not yet active — payments are stubbed |
-| `OSRM_BASE_URL` | No | Defaults to `https://router.project-osrm.org` |
+| `ROUTING_BASE_URL` | Production | Owned OSRM-compatible endpoint; production startup fails fast when it is missing or invalid. The public OSRM demo is not used as a fallback. |
+| `ROUTING_PROFILE` | No | OSRM routing profile; defaults to `driving` |
+| `ROUTING_TIMEOUT_MS` | No | Routing request timeout; defaults to `5000` ms |
 
 ## Database
 
-PostgreSQL 15 via TypeORM. **30 tables**, **10 migrations**.
+PostgreSQL 15 via TypeORM with versioned production migrations.
 
 **Core tables:** `users` · `orders` · `batch_orders` · `order_items` · `order_item_spec_values` · `order_status_history` · `delivery_destinations` · `addresses`
 
@@ -548,13 +573,17 @@ PostgreSQL 15 via TypeORM. **30 tables**, **10 migrations**.
 
 **Config:** `daily_grid_cards` · `printer_profiles`
 
-TypeORM `synchronize: true` in development (schema auto-synced). In production, run migrations manually via `npm run migration:run`. Seed script: `npm run seed`.
+TypeORM synchronization is disabled by default in every environment. Apply the
+schema with `npm run migration:run` in development (or
+`npm run migration:run:prod` from the built image), then use
+`npm run seed:if-empty` for demo data. `DATABASE_SYNCHRONIZE=true` is an
+explicit local-only escape hatch.
 
-## Development Status — v1.3.0
+## Development Status
 
 - [x] Phase 1 — UI shell (3 roles, full screen inventory, theme system)
 - [x] Phase 2 — Local logic (Hive drafts, dark mode, connectivity, offline mock fallback)
-- [x] Phase 3 — NestJS backend (30 DB tables, 10 migrations, Swagger)
+- [x] Phase 3 — NestJS backend (versioned DB migrations, Swagger)
 - [x] Phase 4 — Flutter ↔ API integration (Dio interceptors, JWT auth)
 - [x] Phase 5 — Admin dashboard (Refine + Ant Design, ~25 pages, 4 WebSocket connections)
 - [x] Phase 6 — Cart-style batch checkout (multi-item single-transaction orders)
@@ -573,7 +602,7 @@ TypeORM `synchronize: true` in development (schema auto-synced). In production, 
 - [x] Test suite (424 Flutter · 59 server spec files · 23 admin test files)
 - [ ] PayMongo live integration (currently stubbed — sandbox → production)
 - [ ] Production cloud deployment (no provider configured yet)
-- [ ] Admin CI: enable Vitest run in `ci-admin.yml`
+- [x] Admin CI runs Vitest and the production build
 - [ ] Redis activation (provisioned, not yet used — planned for caching/queuing)
 - [ ] Align Node.js versions (Dockerfile: 20, CI: 24, dev: 22)
 - [ ] Wire landing page CTAs to real download/signup endpoints

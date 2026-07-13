@@ -34,6 +34,7 @@ class AppButton extends StatefulWidget {
   final bool isLoading;
   final bool isDisabled;
   final bool isFullWidth;
+
   /// Can be [IconData] (Material) or HugeIcons SVG data (List).
   final dynamic icon;
 
@@ -50,14 +51,14 @@ class _AppButtonState extends State<AppButton> {
         : AppColors.light;
   }
 
-  bool get _effectivelyDisabled =>
-      widget.isDisabled || widget.onTap == null;
+  bool get _effectivelyDisabled => widget.isDisabled || widget.onTap == null;
 
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
 
     return GestureDetector(
+      excludeFromSemantics: true,
       onTapDown: _effectivelyDisabled
           ? null
           : (_) => setState(() => _isPressed = true),
@@ -88,8 +89,9 @@ class _AppButtonState extends State<AppButton> {
                     : widget.onTap,
                 borderRadius: AppRadius.borderMd,
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.lg,
+                  ),
                   child: Center(
                     widthFactor: widget.isFullWidth ? null : 1.0,
                     child: _buildContent(colors),
@@ -166,9 +168,11 @@ class _AppButtonState extends State<AppButton> {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          widget.icon is IconData
-              ? Icon(widget.icon as IconData, size: 18, color: textColor)
-              : HugeIcon(icon: widget.icon, size: 18, color: textColor),
+          ExcludeSemantics(
+            child: widget.icon is IconData
+                ? Icon(widget.icon as IconData, size: 18, color: textColor)
+                : HugeIcon(icon: widget.icon, size: 18, color: textColor),
+          ),
           const SizedBox(width: AppSpacing.sm),
           textWidget,
         ],

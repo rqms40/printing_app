@@ -193,6 +193,11 @@ npm test -- tests/beta-workflow.spec.ts
 
 Run the opt-in destructive API workflow only against an isolated dev stack:
 
+The isolated stack must be loopback-bound and started with
+`GRIDGO_TRUST_PROXY_HOPS=1`; the Playwright harness assigns Admin, Mark, Ven,
+and Juan separate RFC 5737 client addresses while preserving production's
+per-IP authentication throttle.
+
 ```bash
 cd e2e/mobile-web && \
   GRIDGO_RUN_BETA_FLOW_DESTRUCTIVE=1 \
@@ -202,10 +207,27 @@ cd e2e/mobile-web && \
   GRIDGO_ADMIN_PASSWORD=<dev-admin-password> \
   GRIDGO_RIDER_EMAIL=<dev-rider-email> \
   GRIDGO_RIDER_PASSWORD=<dev-rider-password> \
-  npm test -- tests/beta-workflow-destructive.spec.ts
+npm test -- tests/beta-workflow-destructive.spec.ts
 ```
 
-The live preflight assumes `docker-compose.dev.yml` is already running. The destructive workflow creates two customers, uploads, addresses, orders, delivery assignments, proofs, surveys, and a testimonial. Do not run destructive customer/rider/admin beta scenarios on shared data unless the issue or user explicitly asks for a live workflow run. Keep Mark, Ven, and Juan as separate role paths and preserve the queue/privacy expectations documented in the tests.
+Run the sequential four-context screenshot-backed release audit only after the
+controller recreates the isolated dev stack:
+
+```bash
+cd e2e/mobile-web && \
+  GRIDGO_RUN_BETA_FLOW_VISUAL=1 \
+  MOBILE_WEB_E2E_NO_SERVER=1 \
+  MOBILE_WEB_E2E_URL=http://127.0.0.1:8088 \
+  GRIDGO_ADMIN_URL=http://127.0.0.1:8189 \
+  GRIDGO_API_URL=http://127.0.0.1:3000/api \
+  GRIDGO_ADMIN_EMAIL=<dev-admin-email> \
+  GRIDGO_ADMIN_PASSWORD=<dev-admin-password> \
+  GRIDGO_RIDER_EMAIL=<dev-rider-email> \
+  GRIDGO_RIDER_PASSWORD=<dev-rider-password> \
+npm run test:beta:visual
+```
+
+The live preflight assumes `docker-compose.dev.yml` is already running. The destructive workflow creates two customers, uploads, addresses, orders, delivery assignments, proofs, surveys, and testimonials. The visual workflow writes numbered screenshots, sanitized logs, hashes, a manifest, and videos outside committed source. Authenticated Playwright traces are deliberately disabled because retained request headers can expose bearer tokens. Do not run destructive customer/rider/admin beta scenarios on shared data unless the issue or user explicitly asks for a live workflow run. Keep Mark, Ven, and Juan as separate role paths and preserve the queue/privacy expectations documented in the tests.
 
 ## Surface-Specific Guidance
 

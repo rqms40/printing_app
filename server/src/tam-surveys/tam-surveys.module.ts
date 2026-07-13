@@ -8,6 +8,7 @@ import { TamSurveysService } from './tam-surveys.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { User } from '../users/entities/user.entity';
 import { BetaModeSettings } from '../beta-mode/entities/beta-mode-settings.entity';
+import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { BetaModeSettings } from '../beta-mode/entities/beta-mode-settings.entit
       User,
     ]),
     forwardRef(() => NotificationsModule),
+    RealtimeSessionsModule,
   ],
   controllers: [TamSurveysController],
   providers: [TamSurveysService],
