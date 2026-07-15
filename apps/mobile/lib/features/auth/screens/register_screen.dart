@@ -489,13 +489,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     SizedBox(
                       width: 24,
                       height: 24,
-                      child: Checkbox(
-                        value: _consentChecked,
-                        onChanged: (v) => setState(() {
-                          _consentChecked = v ?? false;
-                          _stepError = null;
-                        }),
-                        activeColor: colors.brand,
+                      child: Semantics(
+                        label: 'Accept terms and conditions',
+                        checked: _consentChecked,
+                        child: Checkbox(
+                          value: _consentChecked,
+                          onChanged: (v) => setState(() {
+                            _consentChecked = v ?? false;
+                            _stepError = null;
+                          }),
+                          activeColor: colors.brand,
+                        ),
                       ),
                     ),
                     const SizedBox(width: AppSpacing.sm),
