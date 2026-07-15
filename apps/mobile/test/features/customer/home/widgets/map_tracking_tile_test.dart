@@ -381,6 +381,31 @@ void main() {
     verifyNever(harness.webSocket.subscribeToDeliveryPlan('assign-001', 1));
   });
 
+  testWidgets('queued tile keeps the queue label visible at tile height', (
+    tester,
+  ) async {
+    final queued = LiveDeliveryMapState.active(
+      riderPoint: const LatLng(7.20, 125.46),
+      shopPoint: const LatLng(7.19, 125.45),
+      destPoint: const LatLng(7.21, 125.47),
+      routePoints: const [LatLng(7.19, 125.45), LatLng(7.21, 125.47)],
+      orderId: 'ORD-SECOND',
+      deliveryAssignmentId: null,
+      orderStatus: OrderStatus.onTheWay,
+      queuePosition: 2,
+      queueSize: 2,
+      canTrackDelivery: false,
+    );
+    await tester.pumpWidget(
+      _wrapConstrained(queued, slots: _dailySlots, height: 380),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('You are 2nd of 2 in queue'), findsOneWidget);
+    expect(find.text('Order Dispatched'), findsOneWidget);
+  });
+
   testWidgets(
     'uses pending space for a route preview map when GPS is pending',
     (tester) async {

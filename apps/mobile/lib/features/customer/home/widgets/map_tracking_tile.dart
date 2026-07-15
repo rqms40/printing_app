@@ -932,7 +932,8 @@ class _QueuedDeliveryStatusTile extends StatelessWidget {
                     children: [
                       Text(
                         queueLabel,
-                        maxLines: 2,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: AppTypography.caption.copyWith(
                           color: colors.brand,
                           fontSize: 12,
@@ -953,15 +954,6 @@ class _QueuedDeliveryStatusTile extends StatelessWidget {
                   ),
                 ),
               ],
-            ),
-            const Spacer(),
-            Text(
-              'Your position updates after each completed stop.',
-              style: AppTypography.caption.copyWith(
-                color: colors.onSurfaceDim,
-                fontSize: 10,
-                height: 1.2,
-              ),
             ),
           ],
         ),
