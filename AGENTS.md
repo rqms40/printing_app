@@ -6,7 +6,8 @@ This file applies to the whole `printing_app` repository. Keep nested overrides 
 
 ## Primary Operating Model
 
-- Codex/GPT is the default planner, implementer, reviewer, and final integrator for this repo.
+- The agent harness running the session — Claude Code or Codex — is the main orchestrator for this repo. The orchestrator owns requirements, decisions, issue updates, final review, and integration, and delegates work to other models by the Model Routing table below.
+- Claude Code sessions additionally load `CLAUDE.md` (Claude-specific orientation) and the `.claude/skills/agent-delegation` skill; both defer to this file as the single source of truth.
 - GitHub Issues are the main tracker. Trello is mirrored only; do not manually archive or delete Trello cards.
 - Before implementation, compare the issue against the current codebase. Imported Trello issues may be fixed, partial, duplicated, stale, unclear, or assigned to the wrong surface.
 - Preserve Trello markers in issue bodies: `Trello-Card-ID` and `Trello-ShortLink`.
@@ -59,10 +60,43 @@ Close an issue only when the current code clearly satisfies it. When closing, ad
 7. Run the smallest relevant checks first, then broader checks before marking the work ready.
 8. If review or tests fail, fix and repeat the review loop before reporting completion.
 
+## Model Routing
+
+Route delegated work by difficulty and surface. Availability wins over preference: if a preferred model is unavailable, fall back to the next row that fits.
+
+| Task type | Route to |
+| --- | --- |
+| Hard/deep work: backend (NestJS, TypeORM, migrations, dispatch planning, beta/credits logic), security-sensitive changes, tricky debugging | Codex `gpt-5.6-sol`, reasoning effort `high` or `xhigh` |
+| Moderately hard: cross-surface contract changes, refactors, non-trivial features | Codex `gpt-5.6-sol`, reasoning effort `medium` |
+| Routine/mechanical: small fixes, test scaffolding, docs, scripted or repetitive edits | Codex `gpt-5.6-terra` (default effort) |
+| UI/frontend design, visual polish, UX writing — whenever Claude is available | Claude (Claude Code session or Claude subagent) |
+| Second opinion, adversarial review, UX critique, checklist generation | Grok 4.5 via the `grok` CLI — never the source of truth |
+
+Prefer `gpt-5.6-sol` over `terra` whenever the work is backend and deep, even if it looks small.
+
+This repo is checked out at different paths on different devices — for example `/Users/admin/personal/mobile/printing_app` (macOS) and `/home/jd/projects/printing_app` (Linux, user `jd`). Commands below use `<repo-root>` for the absolute path of the current device's checkout; when already inside the repo, `--cwd "$(pwd)"` works everywhere.
+
+Non-interactive Codex delegation:
+
+```bash
+# Hard/deep (backend, security, migrations)
+codex exec -m gpt-5.6-sol -c model_reasoning_effort="xhigh" \
+  --cwd <repo-root> \
+  "<task: smallest reviewable scope, expected checks, report format>"
+
+# Moderately hard
+codex exec -m gpt-5.6-sol -c model_reasoning_effort="medium" \
+  --cwd <repo-root> "<task>"
+
+# Routine/mechanical
+codex exec -m gpt-5.6-terra \
+  --cwd <repo-root> "<task>"
+```
+
 ## Agent Orchestration
 
-- Keep the main Codex/GPT thread responsible for requirements, decisions, issue updates, final review, and integration.
-- Use parallel Codex subagents for read-heavy work: repo exploration, issue triage, attachment inspection, test-log analysis, security review, and independent code review.
+- Keep the main orchestrator thread responsible for requirements, decisions, issue updates, final review, and integration.
+- Use parallel subagents for read-heavy work: repo exploration, issue triage, attachment inspection, test-log analysis, security review, and independent code review.
 - Use parallel implementation only when scopes are independent and file ownership is clear. Prefer separate branches or worktrees for implementation agents.
 - A delegated agent should return a short report with inspected files, findings, confidence, and recommended next action.
 - Verify delegated findings locally before changing code, closing issues, or reporting results.
@@ -70,7 +104,7 @@ Close an issue only when the current code clearly satisfies it. When closing, ad
 
 ## Grok 4.5 Delegation
 
-Grok 4.5 is available through the local `grok` CLI and the local `delegate-to-grok` Codex skill. Use it as an optional second model, not as the source of truth.
+Grok 4.5 is available through the local `grok` CLI. Use it as an optional second model, not as the source of truth.
 
 Best uses for Grok:
 
@@ -81,28 +115,18 @@ Best uses for Grok:
 - comparing competing implementation approaches
 - Grok subagent exploration when the user explicitly asks for Grok agents
 
-Default read-only delegation:
+Default read-only delegation (`<repo-root>` = this device's checkout path, per Model Routing above):
 
 ```bash
-python3 ~/.codex/skills/delegate-to-grok/scripts/grok_delegate.py \
-  --cwd /home/jd/projects/printing_app \
+grok --cwd <repo-root> \
+  --model grok-4.5 \
   "Read-only review. Do not edit files. Review issue #XX and list risks, missing tests, and recommended next steps."
-```
-
-Allow Grok subagents only when useful for breadth:
-
-```bash
-python3 ~/.codex/skills/delegate-to-grok/scripts/grok_delegate.py \
-  --cwd /home/jd/projects/printing_app \
-  --subagents \
-  --max-turns 4 \
-  "Read-only multi-agent review. Split by mobile, admin, and backend. Return a concise merged report."
 ```
 
 Use Grok for implementation only when the user explicitly asks for it. Isolate it in a worktree and review the diff before accepting anything:
 
 ```bash
-grok --cwd /home/jd/projects/printing_app \
+grok --cwd <repo-root> \
   --worktree=grok-issue-XX \
   --model grok-4.5 \
   --max-turns 8 \
