@@ -426,5 +426,38 @@ void main() {
       );
       expect(calls, 0);
     });
+
+    test('stream points expose heading, speed, and accuracy', () async {
+      final source = _FakeLocationSource();
+      final tracker = RiderLocationTracker(
+        assignmentId: '101',
+        enabled: true,
+        source: source,
+        postLocation: (_) async {},
+        autoStart: false,
+      );
+      addTearDown(() async {
+        tracker.dispose();
+        await source.close();
+      });
+
+      await tracker.start();
+      await _flush();
+      source.streamController.add(
+        const RiderGpsPoint(
+          latitude: 7.1,
+          longitude: 125.6,
+          speed: 4.2,
+          heading: 90,
+          accuracyMeters: 12.5,
+        ),
+      );
+      await _flush();
+
+      expect(tracker.state.point, const LatLng(7.1, 125.6));
+      expect(tracker.state.headingDegrees, 90);
+      expect(tracker.state.speedMetersPerSecond, 4.2);
+      expect(tracker.state.accuracyMeters, 12.5);
+    });
   });
 }
