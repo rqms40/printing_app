@@ -282,6 +282,12 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
   bool get _isQueued =>
       _hasActiveDelivery && liveState?.canTrackDelivery == false;
 
+  bool get _queuedShowsSlotBar {
+    final assignedSlot = liveState?.assignedSlot;
+    return assignedSlot != null &&
+        slots.any((s) => s.templateId == assignedSlot.slotTemplateId);
+  }
+
   bool get _shouldShowMapPanel =>
       !_hasActiveDelivery || liveRiderPoint != null || _isQueued;
 
@@ -324,7 +330,9 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
         // The queued tile needs enough height for its slot bar, dispatched
         // line, and the stop-position badge; the compressed active ratio
         // clips the badge below the visible area (and off the a11y tree).
-        ? 196.0
+        // Without a matching slot bar the card shrinks so the freed space
+        // goes to the map panel instead of trailing as an empty gap.
+        ? (_queuedShowsSlotBar ? 196.0 : 152.0)
         : _hasActiveDelivery
         ? ((((maxHeight - (_panelGap * 2)) / 7) * 4) + _panelGap)
         : _idleStatusHeight(
@@ -827,7 +835,7 @@ class _QueuedDeliveryStatusTile extends StatelessWidget {
         ? 0.0
         : (activeSlot.bookedCount / activeSlot.capacity).clamp(0.0, 1.0);
 
-    return ClipRRect(
+    final child = ClipRRect(
       borderRadius: AppRadius.borderXl,
       child: Container(
         padding: const EdgeInsets.all(AppSpacing.md),
@@ -897,77 +905,55 @@ class _QueuedDeliveryStatusTile extends StatelessWidget {
               subtitle: 'Ongoing Rider Delivery',
             ),
             const SizedBox(height: AppSpacing.xs),
-            Semantics(
-              container: true,
-              label: '$queueLabel. Standby for your turn',
-              child: ExcludeSemantics(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 30,
-                      height: 30,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: colors.brand, width: 1.6),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'STOP',
-                            style: AppTypography.overline.copyWith(
-                              color: colors.onSurfaceDim,
-                              fontSize: 5.5,
-                              height: 1,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                          Text(
-                            position == null ? '—' : '$position',
-                            style: AppTypography.bodyBold.copyWith(
-                              color: colors.onSurface,
-                              fontSize: 12,
-                              height: 1.05,
-                            ),
-                          ),
-                        ],
-                      ),
+            _StatusLine(
+              colors: colors,
+              leading: _QueueStopBadge(colors: colors, position: position),
+              title: queueLabel,
+              subtitle: 'Standby for your turn',
+            ),
+            const Spacer(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Flexible(
+                  child: Text(
+                    'View order details',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.caption.copyWith(
+                      color: colors.brand,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      height: 1,
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            queueLabel,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTypography.caption.copyWith(
-                              color: colors.brand,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              height: 1.15,
-                            ),
-                          ),
-                          Text(
-                            'Standby for your turn',
-                            maxLines: 1,
-                            style: AppTypography.caption.copyWith(
-                              color: colors.onSurfaceDim,
-                              fontSize: 10,
-                              height: 1.2,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+                const SizedBox(width: 3),
+                Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 11,
+                  color: colors.brand,
+                ),
+              ],
             ),
           ],
         ),
+      ),
+    );
+
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      button: true,
+      label: 'Open current delivery details',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          if (liveState.orderId != null) {
+            context.push('/customer/orders/${liveState.orderId}');
+          }
+        },
+        child: child,
       ),
     );
   }
@@ -1104,7 +1090,7 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
                   'GPS offline — showing last location',
                 LocationHealth.offline => 'Awaiting an authenticated GPS ping',
               },
-              darkIcon: true,
+              outlined: true,
             ),
             if (liveState.routingHealth != RoutingHealth.current) ...[
               const SizedBox(height: AppSpacing.xs),
@@ -1115,7 +1101,7 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
                     ? 'Route data stale'
                     : 'Route geometry degraded',
                 subtitle: 'Stop order remains server verified',
-                darkIcon: true,
+                outlined: true,
               ),
             ],
             if (!hasLiveRiderPoint) ...[
@@ -1125,7 +1111,7 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
                 icon: Icons.gps_fixed_rounded,
                 title: 'Rider GPS reconnecting',
                 subtitle: 'Live map resumes automatically',
-                darkIcon: true,
+                outlined: true,
               ),
               const SizedBox(height: AppSpacing.sm),
               Expanded(
@@ -1279,26 +1265,99 @@ class _OpenTrackingButton extends StatelessWidget {
   }
 }
 
-class _StatusLine extends StatelessWidget {
-  const _StatusLine({
+/// One diameter for every status circle in the delivery tiles, so rows
+/// share a left edge and their text columns line up.
+const _statusCircleSize = 26.0;
+const _statusCircleStroke = 1.5;
+const _statusDoneGreen = Color(0xFF78EC75);
+
+/// Filled green = step done; brand outline = step pending/in progress.
+class _StatusCircle extends StatelessWidget {
+  const _StatusCircle({
     required this.colors,
     required this.icon,
-    required this.title,
-    required this.subtitle,
-    this.darkIcon = false,
+    this.outlined = false,
   });
 
   final AppColorSet colors;
   final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool darkIcon;
+  final bool outlined;
 
   @override
   Widget build(BuildContext context) {
-    final iconColor = darkIcon ? colors.brand : Colors.black;
-    final iconBackground = darkIcon ? Colors.black : const Color(0xFF78EC75);
+    return Container(
+      width: _statusCircleSize,
+      height: _statusCircleSize,
+      decoration: BoxDecoration(
+        color: outlined ? Colors.transparent : _statusDoneGreen,
+        shape: BoxShape.circle,
+        border: outlined
+            ? Border.all(color: colors.brand, width: _statusCircleStroke)
+            : null,
+      ),
+      child: Icon(
+        icon,
+        size: 15,
+        color: outlined ? colors.brand : Colors.black,
+      ),
+    );
+  }
+}
 
+/// Outlined circle holding the customer's stop number in the rider's route,
+/// or an hourglass while the queue position is still unknown.
+class _QueueStopBadge extends StatelessWidget {
+  const _QueueStopBadge({required this.colors, required this.position});
+
+  final AppColorSet colors;
+  final int? position;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: _statusCircleSize,
+      height: _statusCircleSize,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: colors.brand, width: _statusCircleStroke),
+      ),
+      child: position == null
+          ? Icon(Icons.hourglass_top_rounded, size: 14, color: colors.brand)
+          : Text(
+              '$position',
+              style: AppTypography.bodyBold.copyWith(
+                color: colors.brand,
+                fontSize: 12,
+                height: 1,
+              ),
+            ),
+    );
+  }
+}
+
+class _StatusLine extends StatelessWidget {
+  const _StatusLine({
+    required this.colors,
+    required this.title,
+    required this.subtitle,
+    this.icon,
+    this.outlined = false,
+    this.leading,
+  });
+
+  final AppColorSet colors;
+  final IconData? icon;
+  final String title;
+  final String subtitle;
+  final bool outlined;
+
+  /// Replaces the default status circle (e.g. the queue stop badge) while
+  /// keeping the row's text styles and alignment identical.
+  final Widget? leading;
+
+  @override
+  Widget build(BuildContext context) {
     return Semantics(
       container: true,
       label: '$title. $subtitle',
@@ -1306,16 +1365,9 @@ class _StatusLine extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Container(
-              width: 26,
-              height: 26,
-              decoration: BoxDecoration(
-                color: iconBackground,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 15, color: iconColor),
-            ),
-            const SizedBox(width: AppSpacing.xs),
+            leading ??
+                _StatusCircle(colors: colors, icon: icon!, outlined: outlined),
+            const SizedBox(width: AppSpacing.sm),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
