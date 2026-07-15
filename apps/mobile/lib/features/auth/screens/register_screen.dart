@@ -474,66 +474,81 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   'A quick 5-plate setup and your GRIDGO account is ready.',
             ),
             const SizedBox(height: AppSpacing.xl),
-            InkWell(
-              key: const Key('consent-checkbox'),
-              onTap: () => setState(() {
-                _consentChecked = !_consentChecked;
-                _stepError = null;
-              }),
-              borderRadius: AppRadius.borderLg,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: Semantics(
-                        label: 'Accept terms and conditions',
-                        checked: _consentChecked,
-                        child: Checkbox(
-                          value: _consentChecked,
-                          onChanged: (v) => setState(() {
-                            _consentChecked = v ?? false;
-                            _stepError = null;
-                          }),
-                          activeColor: colors.brand,
-                        ),
-                      ),
+            // One checkbox semantics node for the whole row (label + toggle),
+            // with the inner controls excluded so screen readers and axe see a
+            // single labeled checkbox rather than nested interactive elements.
+            Semantics(
+              container: true,
+              checked: _consentChecked,
+              label: 'I agree to keep my data mine and accept the terms',
+              child: ExcludeSemantics(
+                child: InkWell(
+                  key: const Key('consent-checkbox'),
+                  onTap: () => setState(() {
+                    _consentChecked = !_consentChecked;
+                    _stepError = null;
+                  }),
+                  borderRadius: AppRadius.borderLg,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.sm,
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Text.rich(
-                        TextSpan(
-                          text:
-                              'I agree to keep my data mine and accept the ',
-                          style: AppTypography.body.copyWith(
-                            color: colors.onSurface,
-                            height: 1.4,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: Checkbox(
+                            value: _consentChecked,
+                            onChanged: (v) => setState(() {
+                              _consentChecked = v ?? false;
+                              _stepError = null;
+                            }),
+                            activeColor: colors.brand,
                           ),
-                          children: [
-                            WidgetSpan(
-                              alignment: PlaceholderAlignment.middle,
-                              child: GestureDetector(
-                                onTap: () => context.push(
-                                  '/customer/profile/terms',
-                                ),
-                                child: Text(
-                                  'Terms & Conditions',
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(
+                              text:
+                                  'I agree to keep my data mine and accept the ',
+                              style: AppTypography.body.copyWith(
+                                color: colors.onSurface,
+                                height: 1.4,
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: 'Terms & Conditions',
                                   style: AppTypography.bodyBold.copyWith(
                                     color: colors.brand,
                                     decoration: TextDecoration.underline,
                                   ),
                                 ),
-                              ),
+                                const TextSpan(text: '.'),
+                              ],
                             ),
-                            const TextSpan(text: '.'),
-                          ],
+                          ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: () => context.push('/customer/profile/terms'),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(48, 44),
+                  padding: EdgeInsets.zero,
+                ),
+                child: Text(
+                  'Read the Terms & Conditions',
+                  style: AppTypography.bodyBold.copyWith(color: colors.brand),
                 ),
               ),
             ),
