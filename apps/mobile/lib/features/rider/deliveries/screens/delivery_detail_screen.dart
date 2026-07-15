@@ -19,6 +19,7 @@ import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/status_badge.dart';
 import 'package:printing_app/utils/formatters.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:printing_app/features/rider/shared/widgets/rider_decline_dialog.dart';
 
 /// Assignment overview before or after active navigation.
 class DeliveryDetailScreen extends ConsumerStatefulWidget {
@@ -319,9 +320,13 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
               setState(() => _isAdvancing = false);
               context.pushReplacement('/rider/deliveries/${view.id}/active');
             },
-            onDecline: () => ref
-                .read(deliveriesProvider.notifier)
-                .declineAssignment(view.id),
+            onDecline: () async {
+              final reason = await showRiderDeclineDialog(context);
+              if (reason == null) return;
+              await ref
+                  .read(deliveriesProvider.notifier)
+                  .declineAssignment(view.id, reason: reason);
+            },
           ),
         ],
       ),

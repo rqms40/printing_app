@@ -85,7 +85,7 @@ void main() {
     expect(proofControl, findsOneWidget);
     expect(tester.getRect(proofControl).bottom, lessThanOrEqualTo(844));
     expect(
-      find.widgetWithText(TextButton, 'Open proof of delivery').hitTestable(),
+      find.text('Swipe to open proof of delivery').hitTestable(),
       findsOneWidget,
     );
   });
@@ -118,7 +118,7 @@ void main() {
     expect(proofControl, findsOneWidget);
     expect(tester.getRect(proofControl).bottom, lessThanOrEqualTo(844));
     expect(
-      find.widgetWithText(TextButton, 'Open proof of delivery').hitTestable(),
+      find.text('Swipe to open proof of delivery').hitTestable(),
       findsOneWidget,
     );
   });

@@ -285,13 +285,16 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
     });
   }
 
-  Future<void> declineAssignment(String assignmentId) async {
+  Future<void> declineAssignment(
+    String assignmentId, {
+    String reason = 'Rider declined',
+  }) async {
     try {
       await ApiClient.instance.patch(
         '/riders/assignments/$assignmentId/status',
         data: {
           'status': serverDeliveryStatus(DeliveryStatus.declined),
-          'declineReason': 'Rider declined',
+          'declineReason': reason,
         },
       );
     } catch (_) {

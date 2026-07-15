@@ -19,6 +19,7 @@ import 'package:printing_app/shared/widgets/pill_tab_bar.dart';
 import 'package:printing_app/shared/widgets/skeleton_screens.dart';
 import 'package:printing_app/utils/formatters.dart';
 import 'package:printing_app/features/rider/shared/widgets/rider_stale_route_banner.dart';
+import 'package:printing_app/features/rider/shared/widgets/rider_decline_dialog.dart';
 
 /// Rider delivery queue — new, in-progress, and completed assignments.
 class DeliveriesScreen extends ConsumerStatefulWidget {
@@ -232,8 +233,17 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
                                             },
                                             onAccept: () => notifier
                                                 .acceptAssignment(view.id),
-                                            onDecline: () => notifier
-                                                .declineAssignment(view.id),
+                                            onDecline: () async {
+                                              final reason =
+                                                  await showRiderDeclineDialog(
+                                                    context,
+                                                  );
+                                              if (reason == null) return;
+                                              await notifier.declineAssignment(
+                                                view.id,
+                                                reason: reason,
+                                              );
+                                            },
                                           )
                                           .animate()
                                           .fadeIn(
