@@ -210,14 +210,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final auth = ref.read(authProvider);
     if (auth.status != AuthStatus.authenticated) return;
 
-    // Peak-end: when this signup enrolled into an active beta, reveal the
-    // founding number + credit grant before the normal onboarding. Invalidate
-    // first so we read the authenticated /beta-mode/me (with the rank), not a
-    // stale pre-login public status.
-    ref.invalidate(betaStatusProvider);
-    final beta = await ref.read(betaStatusProvider.future);
-    if (!mounted) return;
-    if (beta != null && beta.globallyEnabled && beta.rank != null) {
+    // Peak-end: an active beta auto-enrolls every new customer, so when beta is
+    // globally on, go straight to the reveal. Navigate synchronously (no await)
+    // so this wins against the router's auth-change redirect to /onboarding,
+    // which would otherwise dispose this screen first. The reveal screen
+    // fetches the authenticated rank itself.
+    final beta = ref.read(betaStatusProvider).valueOrNull;
+    if (beta?.globallyEnabled == true) {
       context.go('/auth/beta-welcome');
     }
     // Otherwise the router redirect handles /onboarding as before.

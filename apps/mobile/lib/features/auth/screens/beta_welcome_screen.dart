@@ -15,11 +15,26 @@ import 'package:printing_app/shared/widgets/app_button.dart';
 /// tester's founding number stamps in like a print serial and the 100-credit
 /// grant lands like ink on paper. This is registration's peak-and-end moment,
 /// turning the previously invisible server enrollment into something felt.
-class BetaWelcomeScreen extends ConsumerWidget {
+class BetaWelcomeScreen extends ConsumerStatefulWidget {
   const BetaWelcomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<BetaWelcomeScreen> createState() => _BetaWelcomeScreenState();
+}
+
+class _BetaWelcomeScreenState extends ConsumerState<BetaWelcomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Refresh so we read the authenticated /beta-mode/me (with the rank),
+    // not any stale pre-login public status still cached in the provider.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.invalidate(betaStatusProvider);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     const dark = AppColors.dark; // reveal is always the dark press-proof look
     final beta = ref.watch(betaStatusProvider).valueOrNull;
     final credits = ref.watch(
