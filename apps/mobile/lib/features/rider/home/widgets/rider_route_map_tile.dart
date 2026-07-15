@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/rider/home/widgets/rider_route_summary_chip.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/features/rider/shared/providers/rider_location_tracker_provider.dart';
 import 'package:printing_app/features/rider/shared/widgets/rider_vehicle_marker.dart';
@@ -164,35 +164,9 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
               Positioned(
                 top: 14,
                 left: 14,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      DateFormat('h:mm a').format(DateTime.now()),
-                      style: AppTypography.h1.copyWith(
-                        color: Colors.white,
-                        fontSize: 30,
-                        fontWeight: FontWeight.w800,
-                        height: 1,
-                        shadows: const [
-                          Shadow(color: Color(0xCC000000), blurRadius: 10),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      DateFormat('EEEE').format(DateTime.now()),
-                      style: AppTypography.h2.copyWith(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        height: 1.05,
-                        shadows: const [
-                          Shadow(color: Color(0xCC000000), blurRadius: 10),
-                        ],
-                      ),
-                    ),
-                  ],
+                child: RiderRouteSummaryChip(
+                  key: const Key('route-summary'),
+                  stops: _planned,
                 ),
               ),
               Positioned(

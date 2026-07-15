@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_stop_timeline.dart';
+import 'package:printing_app/features/rider/home/widgets/rider_route_summary_chip.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/features/rider/shared/providers/rider_location_tracker_provider.dart';
 import 'package:printing_app/features/rider/shared/rider_theme.dart';
@@ -76,7 +76,6 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
     final active = widget.activeStop;
     final gps = active != null
         ? ref.watch(
@@ -156,28 +155,9 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
             Positioned(
               top: 14,
               left: 14,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    DateFormat('h:mm a').format(now),
-                    style: AppTypography.h1.copyWith(
-                      color: RiderTheme.textPrimary,
-                      fontSize: 30,
-                      fontWeight: FontWeight.w800,
-                      height: 1,
-                    ),
-                  ),
-                  Text(
-                    DateFormat('EEEE').format(now),
-                    style: AppTypography.body.copyWith(
-                      color: RiderTheme.textPrimary,
-                      fontSize: 21,
-                      fontWeight: FontWeight.w700,
-                      height: 1.05,
-                    ),
-                  ),
-                ],
+              child: RiderRouteSummaryChip(
+                key: const Key('route-summary'),
+                stops: _planned,
               ),
             ),
             Positioned(
