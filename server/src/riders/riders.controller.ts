@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
   Param,
   Body,
@@ -62,6 +63,11 @@ export class RidersController {
   @Get('dispatch-plan')
   getDispatchPlan(@Request() req: RequestWithUser) {
     return this.ridersService.getDispatchPlan(req.user.sub);
+  }
+
+  @Post('dispatch-plan/re-optimize')
+  reoptimizeDispatchPlan(@Request() req: RequestWithUser) {
+    return this.ridersService.reoptimizeOwnDispatchPlan(req.user.sub);
   }
 
   @Patch('assignments/:id/status')

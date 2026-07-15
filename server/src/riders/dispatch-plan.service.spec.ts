@@ -427,14 +427,93 @@ describe('DispatchPlanService', () => {
       new ServiceUnavailableException({ code: 'routing_unavailable' }),
     );
 
-    await expect(
-      service.reoptimizePlan(rider.id, [mark.id, ven.id]),
-    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    const error: unknown = await service
+      .reoptimizePlan(rider.id, [mark.id, ven.id])
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ServiceUnavailableException);
+    if (!(error instanceof ServiceUnavailableException)) {
+      throw new Error('Expected ServiceUnavailableException');
+    }
+    expect(error.getStatus()).toBe(503);
+    expect(error.getResponse()).toEqual(
+      expect.objectContaining({
+        code: 'routing_unavailable',
+        preservedPlan: expect.objectContaining({
+          id: active.id,
+          version: active.version,
+          stops: active.stops,
+          routingDataStale: true,
+        }),
+      }),
+    );
     expect(planRepo.update!.mock.calls).toContainEqual([
       { id: active.id, status: DispatchPlanStatus.ACTIVE },
       { routingDataStale: true },
     ]);
     expect(active.status).toBe(DispatchPlanStatus.ACTIVE);
+    expect(active.version).toBe(1);
+    expect(active.stops).toEqual([]);
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('keeps routing_unavailable when marking preserved routing stale fails', async () => {
+    const active = {
+      id: 400,
+      riderId: rider.id,
+      version: 1,
+      status: DispatchPlanStatus.ACTIVE,
+      stops: [],
+      routingDataStale: false,
+    } as DispatchPlan;
+    planRepo.findOne!.mockResolvedValue(active);
+    provider.getMatrix.mockRejectedValue(
+      new ServiceUnavailableException({ code: 'routing_unavailable' }),
+    );
+    planRepo.update!.mockRejectedValue(new Error('database unavailable'));
+
+    const error: unknown = await service
+      .reoptimizePlan(rider.id, [mark.id, ven.id])
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ServiceUnavailableException);
+    if (!(error instanceof ServiceUnavailableException)) {
+      throw new Error('Expected ServiceUnavailableException');
+    }
+    expect(error.getStatus()).toBe(503);
+    expect(error.getResponse()).toEqual(
+      expect.objectContaining({
+        code: 'routing_unavailable',
+        preservedPlan: expect.objectContaining({
+          id: active.id,
+          version: active.version,
+          stops: active.stops,
+          routingDataStale: false,
+        }),
+      }),
+    );
+    expect(active.status).toBe(DispatchPlanStatus.ACTIVE);
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects rider pending stops selected from a superseded plan snapshot', async () => {
+    const active = {
+      id: 401,
+      riderId: rider.id,
+      version: 2,
+      status: DispatchPlanStatus.ACTIVE,
+      stops: [],
+    } as DispatchPlan;
+    planRepo.findOne!.mockResolvedValue(active);
+
+    await expect(
+      service.reoptimizePlan(rider.id, [mark.id], 400),
+    ).rejects.toThrow('Active dispatch plan changed; retry re-optimization');
+
+    expect(assignmentRepo.find).not.toHaveBeenCalled();
+    expect(provider.getMatrix.mock.calls).toHaveLength(0);
+    expect(provider.getRoute.mock.calls).toHaveLength(0);
+    expect(dataSource.transaction).not.toHaveBeenCalled();
   });
 
   it('fetches routing before entering the persistence transaction', async () => {
