@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:printing_app/shared/services/notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -38,6 +39,19 @@ void main() {
       );
     },
   );
+
+  test('APNs-unavailable token deletion succeeds without leaving work pending',
+      () async {
+    final deleted = await NotificationService.requestTokenDeletionForTest(
+      () async => throw FirebaseException(
+        plugin: 'firebase_messaging',
+        code: 'apns-token-not-set',
+      ),
+    );
+
+    expect(deleted, isTrue);
+    expect(await NotificationService.hasPendingTokenDeletionForTest(), isFalse);
+  });
 
   test(
     'successful reconnect retry resumes notification initialization',
