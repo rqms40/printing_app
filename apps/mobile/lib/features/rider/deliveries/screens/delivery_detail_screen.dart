@@ -79,11 +79,20 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
     context.push(uri.toString());
   }
 
+  void _showLaunchFailure(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _callCustomer(String? phone) async {
     if (phone == null || phone.isEmpty) return;
     final uri = Uri.parse('tel:$phone');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
+    } else {
+      _showLaunchFailure('Could not open — no app available');
     }
   }
 
@@ -95,6 +104,8 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
     );
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      _showLaunchFailure('Could not open — no app available');
     }
   }
 

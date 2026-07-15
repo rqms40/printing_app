@@ -26,7 +26,7 @@ void main() {
       find.byKey(const ValueKey('rider-stop-timeline-check')),
       findsOneWidget,
     );
-    expect(find.text('STOP'), findsNWidgets(5));
+    expect(find.text('STOP'), findsNothing);
     expect(find.text('1'), findsOneWidget);
     expect(find.text('5'), findsOneWidget);
     expect(find.text('6'), findsNothing);

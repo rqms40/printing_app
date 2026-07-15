@@ -172,6 +172,40 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
                 ),
               ),
               Positioned(
+                top: 14,
+                right: 14,
+                child: Container(
+                  key: const Key('route-open-pill'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xE6111111),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: kRouteColor, width: 1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.activeStop != null ? 'Open delivery' : 'View route',
+                        style: AppTypography.caption.copyWith(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        color: Colors.white,
+                        size: 14,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned(
                 left: 16,
                 right: 16,
                 bottom: 10,

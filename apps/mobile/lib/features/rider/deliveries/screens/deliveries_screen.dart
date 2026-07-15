@@ -63,7 +63,7 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             RiderPageHeader(
-                  title: 'Orders',
+                  title: 'Deliveries',
                   subtitle: profile.isAvailable
                       ? 'You are online and ready for routes'
                       : 'Go online to receive new assignments',

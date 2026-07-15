@@ -41,10 +41,21 @@ class RiderHomeScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _call(String? phone) async {
-    if (phone == null || phone.isEmpty) return;
+  Future<void> _call(BuildContext context, String? phone) async {
+    if (phone == null || phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No phone number on file')),
+      );
+      return;
+    }
     final uri = Uri.parse('tel:$phone');
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open — no app available')),
+      );
+    }
   }
 
   @override
@@ -127,7 +138,7 @@ class RiderHomeScreen extends ConsumerWidget {
                           '/rider/deliveries/${active.id}/active',
                         ),
                         onMessage: () => _openChat(context, ref, active),
-                        onCall: () => _call(active.order.customerPhone),
+                        onCall: () => _call(context, active.order.customerPhone),
                       )
                     else
                       Padding(
@@ -136,7 +147,7 @@ class RiderHomeScreen extends ConsumerWidget {
                           vertical: AppSpacing.sm,
                         ),
                         child: Text(
-                          'No active stop — check Orders for assignments.',
+                          'No active stop — check Deliveries for assignments.',
                           style: AppTypography.caption.copyWith(
                             color: colors.onSurfaceDim,
                           ),

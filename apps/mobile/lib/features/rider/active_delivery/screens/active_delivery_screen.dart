@@ -85,10 +85,24 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
     context.push(uri.toString());
   }
 
+  void _showLaunchFailure(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _callCustomer(String? phone) async {
-    if (phone == null || phone.isEmpty) return;
+    if (phone == null || phone.isEmpty) {
+      _showLaunchFailure('No phone number on file');
+      return;
+    }
     final uri = Uri.parse('tel:$phone');
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      _showLaunchFailure('Could not open — no app available');
+    }
   }
 
   Future<void> _navigateTo(RiderAssignmentView view) async {
@@ -100,6 +114,8 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
     );
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      _showLaunchFailure('Could not open — no app available');
     }
   }
 
@@ -164,8 +180,8 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
           heading: 'No active delivery',
           body: 'Accept an assignment to start live navigation.',
           icon: HugeIcons.strokeRoundedDeliveryTruck02,
-          ctaLabel: 'Back to deliveries',
-          onCtaTap: () => context.go('/rider/home'),
+          ctaLabel: 'Back to Deliveries',
+          onCtaTap: () => context.go('/rider/deliveries'),
         ),
       );
     }

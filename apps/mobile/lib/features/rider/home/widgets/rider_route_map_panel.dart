@@ -170,6 +170,9 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
                 totalStops: _planned.length.clamp(1, 5),
                 completedCount: completedCount.clamp(0, 5),
                 currentStopIndex: currentSequence,
+                stopStatuses: [
+                  for (final stop in _planned) stop.planStop!.status,
+                ],
               ),
             ),
             Positioned(

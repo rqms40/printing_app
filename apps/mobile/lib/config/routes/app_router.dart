@@ -642,7 +642,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             NavItem(
               icon: HugeIcons.strokeRoundedLeftToRightListDash,
               activeIcon: HugeIcons.strokeRoundedLeftToRightListDash,
-              label: 'Orders',
+              label: 'Deliveries',
             ),
             NavItem(
               icon: HugeIcons.strokeRoundedNotification02,
