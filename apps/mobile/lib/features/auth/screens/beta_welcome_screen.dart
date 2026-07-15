@@ -7,6 +7,8 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/beta/providers/beta_status_provider.dart';
+import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
+import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 
 /// The "press proof" reveal shown right after a beta-eligible signup: the
@@ -106,7 +108,14 @@ class BetaWelcomeScreen extends ConsumerWidget {
                 label: 'Start printing',
                 variant: AppButtonVariant.brand,
                 isFullWidth: true,
-                onTap: () => context.go('/onboarding'),
+                onTap: () {
+                  // The reveal is the beta tester's welcome, so skip the
+                  // separate onboarding carousel and go straight to printing.
+                  ref
+                      .read(tutorialProvider.notifier)
+                      .markSeen(TutorialKey.onboarding);
+                  context.go('/customer/home');
+                },
               ),
             ],
           ),

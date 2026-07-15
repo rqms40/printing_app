@@ -14,7 +14,7 @@ void main() {
     final router = GoRouter(
       routes: [
         GoRoute(path: '/', builder: (_, _) => const BetaWelcomeScreen()),
-        GoRoute(path: '/onboarding', builder: (_, _) => const Scaffold()),
+        GoRoute(path: '/customer/home', builder: (_, _) => const Scaffold()),
       ],
     );
     await tester.pumpWidget(

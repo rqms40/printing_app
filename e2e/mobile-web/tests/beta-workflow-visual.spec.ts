@@ -1700,14 +1700,15 @@ async function registerCustomerThroughUi(options: {
   );
   expect(beta.isBetaUser).toBe(true);
   const betaRank = positiveId(beta.rank, `${name} beta rank`);
-  // Beta-eligible signups land on the press-proof reveal before onboarding.
+  // Beta-eligible signups land on the press-proof reveal, whose "Start
+  // printing" is the tester's welcome and goes straight to the customer home
+  // (the onboarding carousel is skipped for beta testers).
   await actor.page.waitForURL(/\/(?:auth\/beta-welcome|onboarding|customer\/)/);
   if (actor.page.url().includes("/auth/beta-welcome")) {
     await expect(actor.page.locator("body")).toContainText(/FOUNDING TESTER/i);
     await clickNamed(actor.page, "Start printing");
-    await actor.page.waitForURL(/\/(?:onboarding|customer\/)/);
-  }
-  if (actor.page.url().includes("/onboarding")) {
+    await actor.page.waitForURL(/\/customer\//);
+  } else if (actor.page.url().includes("/onboarding")) {
     await completeCustomerOnboarding(actor.page);
   }
   await dismissTutorials(actor.page);
