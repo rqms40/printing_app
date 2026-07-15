@@ -5,6 +5,7 @@ import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/routes/page_transitions.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
+import 'package:printing_app/features/customer/beta/providers/beta_status_provider.dart';
 import 'package:printing_app/features/auth/models/registration_draft.dart';
 import 'package:printing_app/features/customer/profile/models/account_state.dart';
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
@@ -104,6 +105,7 @@ class _AuthChangeNotifier extends ChangeNotifier {
   _AuthChangeNotifier(this._ref) {
     _ref.listen(authProvider, (_, _) => notifyListeners());
     _ref.listen(accountStateProvider, (_, _) => notifyListeners());
+    _ref.listen(betaStatusProvider, (_, _) => notifyListeners());
   }
   final Ref _ref;
 }
@@ -166,6 +168,7 @@ String? resolveAppRedirect({
   required AuthState authState,
   required AccountState accountState,
   required bool seenOnboarding,
+  bool betaGloballyEnabled = false,
 }) {
   final path = uri.path;
   final isAuth = authState.status == AuthStatus.authenticated;
@@ -239,7 +242,16 @@ String? resolveAppRedirect({
     if (_isSafeRoleDeepLink(requested, authState.user?.role)) {
       return requested;
     }
-    return seenOnboarding ? _roleHome(authState.user?.role) : '/onboarding';
+    if (seenOnboarding) return _roleHome(authState.user?.role);
+    // A freshly-registered customer in an active beta gets the press-proof
+    // reveal instead of the generic onboarding carousel. Routing this here
+    // (not via a post-register context.go) makes it deterministic rather than
+    // racing the auth-change redirect.
+    if (betaGloballyEnabled &&
+        _effectiveRole(authState.user?.role) == 'customer') {
+      return '/auth/beta-welcome';
+    }
+    return '/onboarding';
   }
 
   return null;
@@ -262,11 +274,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       final seenOnboarding = ref.read(
         tutorialSeenProvider(TutorialKey.onboarding),
       );
+      final betaGloballyEnabled =
+          ref.read(betaStatusProvider).valueOrNull?.globallyEnabled ?? false;
       return resolveAppRedirect(
         uri: state.uri,
         authState: authState,
         accountState: accountState,
         seenOnboarding: seenOnboarding,
+        betaGloballyEnabled: betaGloballyEnabled,
       );
     },
     routes: [

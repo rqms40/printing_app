@@ -14,7 +14,6 @@ import 'package:printing_app/features/auth/widgets/gender_identity_selector.dart
 import 'package:printing_app/features/auth/widgets/password_strength_meter.dart';
 import 'package:printing_app/features/auth/widgets/password_visibility_toggle.dart';
 import 'package:printing_app/features/auth/widgets/registration_step_header.dart';
-import 'package:printing_app/features/customer/beta/providers/beta_status_provider.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
 
 /// The redesigned 5-step registration flow. Account moves to position 2 so a
@@ -206,20 +205,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           printingPreferences: draft.printingPreferences,
         );
 
-    if (!mounted) return;
-    final auth = ref.read(authProvider);
-    if (auth.status != AuthStatus.authenticated) return;
-
-    // Peak-end: an active beta auto-enrolls every new customer, so when beta is
-    // globally on, go straight to the reveal. Navigate synchronously (no await)
-    // so this wins against the router's auth-change redirect to /onboarding,
-    // which would otherwise dispose this screen first. The reveal screen
-    // fetches the authenticated rank itself.
-    final beta = ref.read(betaStatusProvider).valueOrNull;
-    if (beta?.globallyEnabled == true) {
-      context.go('/auth/beta-welcome');
-    }
-    // Otherwise the router redirect handles /onboarding as before.
+    // The router's post-registration redirect decides the destination: for a
+    // beta-enabled signup it routes to the press-proof reveal, otherwise to
+    // onboarding. Keeping that in the router (not a context.go here) makes it
+    // deterministic instead of racing the auth-change redirect.
   }
 
   @override
