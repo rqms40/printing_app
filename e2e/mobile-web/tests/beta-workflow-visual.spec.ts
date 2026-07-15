@@ -2427,6 +2427,9 @@ async function completeSurveyUi(customer: CustomerRun): Promise<void> {
       `Feedback rating for question ${index + 1}`,
     );
     await expect(question).toHaveAccessibleName(/NEUTRAL/i);
+    // The slider is briefly disabled while the question animates in; wait for
+    // it to be interactive before driving it, or the keypress is dropped.
+    await expect(sliders[0]).toBeEnabled();
     await sliders[0].focus();
     await sliders[0].press("ArrowRight");
     await expect(sliders[0]).toHaveAttribute("aria-valuetext", "AGREE");
