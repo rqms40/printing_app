@@ -897,68 +897,74 @@ class _QueuedDeliveryStatusTile extends StatelessWidget {
               subtitle: 'Ongoing Rider Delivery',
             ),
             const SizedBox(height: AppSpacing.xs),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: colors.brand, width: 1.6),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'STOP',
-                        style: AppTypography.overline.copyWith(
-                          color: colors.onSurfaceDim,
-                          fontSize: 5.5,
-                          height: 1,
-                          letterSpacing: 0.8,
-                        ),
+            Semantics(
+              container: true,
+              label: '$queueLabel. Standby for your turn',
+              child: ExcludeSemantics(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: colors.brand, width: 1.6),
                       ),
-                      Text(
-                        position == null ? '—' : '$position',
-                        style: AppTypography.bodyBold.copyWith(
-                          color: colors.onSurface,
-                          fontSize: 12,
-                          height: 1.05,
-                        ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'STOP',
+                            style: AppTypography.overline.copyWith(
+                              color: colors.onSurfaceDim,
+                              fontSize: 5.5,
+                              height: 1,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                          Text(
+                            position == null ? '—' : '$position',
+                            style: AppTypography.bodyBold.copyWith(
+                              color: colors.onSurface,
+                              fontSize: 12,
+                              height: 1.05,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            queueLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.caption.copyWith(
+                              color: colors.brand,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              height: 1.15,
+                            ),
+                          ),
+                          Text(
+                            'Standby for your turn',
+                            maxLines: 1,
+                            style: AppTypography.caption.copyWith(
+                              color: colors.onSurfaceDim,
+                              fontSize: 10,
+                              height: 1.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        queueLabel,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTypography.caption.copyWith(
-                          color: colors.brand,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          height: 1.15,
-                        ),
-                      ),
-                      Text(
-                        'Standby for your turn',
-                        maxLines: 1,
-                        style: AppTypography.caption.copyWith(
-                          color: colors.onSurfaceDim,
-                          fontSize: 10,
-                          height: 1.2,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ),
