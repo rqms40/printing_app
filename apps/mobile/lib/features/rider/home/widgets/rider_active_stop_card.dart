@@ -3,6 +3,7 @@ import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
+import 'package:printing_app/features/rider/shared/rider_eta.dart';
 
 /// Active stop card (cockpit bottom): avatar, customer, order summary, ref,
 /// message + call actions. Theme-following.
@@ -106,6 +107,16 @@ class RiderActiveStopCard extends StatelessWidget {
                               height: 1.1,
                             ),
                           ),
+                          if (view.planStop != null)
+                            Text(
+                              '${formatEtaMinutes(view.planStop!.legDurationSeconds)} · '
+                              '${formatDistanceMeters(view.planStop!.legDistanceMeters)}',
+                              style: AppTypography.caption.copyWith(
+                                color: colors.onSurfaceDim,
+                                fontSize: 10,
+                                height: 1.2,
+                              ),
+                            ),
                         ],
                       ),
                     ),

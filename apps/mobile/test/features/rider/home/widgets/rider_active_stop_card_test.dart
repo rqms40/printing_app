@@ -39,11 +39,41 @@ void main() {
     expect(messaged, isTrue);
     expect(called, isTrue);
   });
+
+  testWidgets('shows the plan leg ETA and distance when the stop is planned', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(brightness: Brightness.dark),
+        home: Scaffold(
+          body: RiderActiveStopCard(
+            view: _view(
+              planStop: const RiderDispatchPlanStop(
+                assignmentId: 'assignment-1',
+                sequence: 1,
+                status: RiderDispatchStopStatus.pending,
+                destinationLatitude: 7.2,
+                destinationLongitude: 125.5,
+                legDurationSeconds: 540,
+                legDistanceMeters: 2300,
+                geometry: null,
+                geometryMalformed: false,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('~9 min · 2.3 km'), findsOneWidget);
+  });
 }
 
-RiderAssignmentView _view() {
+RiderAssignmentView _view({RiderDispatchPlanStop? planStop}) {
   final now = DateTime.utc(2026, 6, 17, 10);
   return RiderAssignmentView(
+    planStop: planStop,
     assignment: DeliveryAssignment(
       id: 'assignment-1',
       orderId: 'order-1',
