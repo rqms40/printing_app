@@ -65,8 +65,8 @@ describe("BetaModePage", () => {
   it("states every enable consequence and exposes a stable switch label", async () => {
     const confirmation = betaModeConfirmation(true);
     expect(confirmation.content).toContain("auto-enrolled in order");
-    expect(confirmation.content).toContain("one-time 100 GRID Credits");
-    expect(confirmation.content).toContain("GRID Credits only");
+    expect(confirmation.content).toContain("one-time 100 GRIDGO Credits");
+    expect(confirmation.content).toContain("GRIDGO Credits only");
     expect(confirmation.content).toContain("mandatory 14-question feedback");
     expect(confirmation.content).toContain("held from login");
     expect(confirmation.content).toContain("history is retained");
