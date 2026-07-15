@@ -1227,39 +1227,51 @@ async function enterFieldValue(
   value: string,
 ): Promise<void> {
   const expectedName = accessibleNamePattern(name);
-  const currentActiveName = await page.evaluate(() => {
-    const active = document.activeElement;
-    return (
-      active?.getAttribute("aria-label") ??
-      active?.getAttribute("placeholder") ??
-      ""
-    );
-  });
-  if (!expectedName.test(currentActiveName)) {
-    const box = await target.boundingBox();
-    expect(box, "measurable Flutter field target").not.toBeNull();
-    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  const readActiveName = () =>
+    page.evaluate(() => {
+      const active = document.activeElement;
+      return (
+        active?.getAttribute("aria-label") ??
+        active?.getAttribute("placeholder") ??
+        ""
+      );
+    });
+  // Flutter web syncs the semantic <input> asynchronously with framework
+  // state and can recreate the input node after focus transitions, so a
+  // single focus + insertText + immediate readback races in both
+  // directions (DOM empty, or DOM filled while the framework missed it).
+  // Each attempt re-establishes focus on the (possibly recreated) node,
+  // types real key events, and polls until the DOM value settles.
+  let accepted = false;
+  for (let attempt = 0; attempt < 4 && !accepted; attempt += 1) {
+    if (!expectedName.test(await readActiveName())) {
+      const box = await target.boundingBox();
+      expect(box, "measurable Flutter field target").not.toBeNull();
+      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+      await page.waitForTimeout(100);
+    }
+    if (!expectedName.test(await readActiveName())) continue;
+    await page.keyboard.press("Control+A");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.type(value, { delay: 10 });
+    accepted = await page
+      .waitForFunction(
+        (expected) => {
+          const active = document.activeElement;
+          const current =
+            active instanceof HTMLInputElement ||
+            active instanceof HTMLTextAreaElement
+              ? active.value
+              : null;
+          return current === expected;
+        },
+        value,
+        { timeout: 3_000 },
+      )
+      .then(() => true)
+      .catch(() => false);
   }
-  const activeName = await page.evaluate(() => {
-    const active = document.activeElement;
-    return (
-      active?.getAttribute("aria-label") ??
-      active?.getAttribute("placeholder") ??
-      ""
-    );
-  });
-  expect(activeName, "focused Flutter field identity").toMatch(expectedName);
-  await page.keyboard.press("Control+A");
-  await page.keyboard.press("Backspace");
-  await page.keyboard.insertText(value);
-  const activeValue = await page.evaluate(() => {
-    const active = document.activeElement;
-    return active instanceof HTMLInputElement ||
-      active instanceof HTMLTextAreaElement
-      ? active.value
-      : null;
-  });
-  expect(activeValue, "focused Flutter field value").toBe(value);
+  expect(accepted, `focused Flutter field value ${String(name)}`).toBe(true);
   await page.keyboard.press("Tab");
   await page.waitForTimeout(50);
 }
@@ -1443,29 +1455,53 @@ async function positionRiderAtStoreBeforePickup(
 ): Promise<{ latitude: number; longitude: number }> {
   const store = betaCheckpoint("store");
   await actor.context.setGeolocation(store);
-  const location = await actor.page.evaluate(
-    () =>
-      new Promise<{ latitude: number; longitude: number }>((resolve, reject) =>
-        navigator.geolocation.getCurrentPosition(
-          (position) =>
-            resolve({
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-            }),
-          reject,
-          { enableHighAccuracy: true, timeout: 10_000 },
-        ),
-      ),
-  );
-  expect(location.latitude, "Juan reaches the store before pickup").toBeCloseTo(
-    store.latitude,
-    5,
-  );
+  // Retry transient GeolocationPositionError while the override propagates.
+  let location: { latitude: number; longitude: number } | null = null;
+  let lastGeolocationError = "";
+  for (let attempt = 0; attempt < 3 && !location; attempt += 1) {
+    // Re-foreground: hidden pages get geolocation suspended (four contexts
+    // share one browser and only one page is visible at a time).
+    await actor.page.bringToFront();
+    try {
+      location = await actor.page.evaluate(
+        () =>
+          new Promise<{ latitude: number; longitude: number }>(
+            (resolve, reject) =>
+              navigator.geolocation.getCurrentPosition(
+                (position) =>
+                  resolve({
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                  }),
+                (error) =>
+                  reject(
+                    new Error(
+                      `geolocation error ${error.code}: ${error.message}`,
+                    ),
+                  ),
+                { enableHighAccuracy: true, timeout: 10_000 },
+              ),
+          ),
+      );
+    } catch (error) {
+      lastGeolocationError = String(error);
+      await actor.page.waitForTimeout(1_000);
+      await actor.context.setGeolocation(store);
+    }
+  }
   expect(
-    location.longitude,
+    location,
+    `Juan geolocation resolves (${lastGeolocationError})`,
+  ).not.toBeNull();
+  expect(
+    location!.latitude,
+    "Juan reaches the store before pickup",
+  ).toBeCloseTo(store.latitude, 5);
+  expect(
+    location!.longitude,
     "Juan reaches the store before pickup",
   ).toBeCloseTo(store.longitude, 5);
-  return location;
+  return location!;
 }
 
 async function foregroundFlutterPage(page: Page): Promise<void> {
@@ -1716,6 +1752,9 @@ async function saveAddressThroughUi(
 }
 
 async function beginFirstOrderTutorial(page: Page): Promise<void> {
+  // The next-batch dialog is time-of-day dependent (midDay/missed variants),
+  // so returning to home can surface it at any point in the journey.
+  await closeNextBatchDialogIfShown(page);
   await expect(page.locator("body")).toContainText(/Let's print something/i);
   await clickNamed(page, "Show me how →");
   await expect(page.locator("body")).toContainText(
@@ -1790,10 +1829,24 @@ async function placeCustomerOrder(options: {
     await capture(run, actor, 4, /Account Details/i, { userId });
     await navigateMobile(actor.page, mobileURL, "/customer/home");
     await closeNextBatchDialogIfShown(actor.page);
-    await capture(run, actor, 5, /Let's print something/i, {
-      userId,
-      betaRank: base.betaRank,
-    });
+    await capture(
+      run,
+      actor,
+      5,
+      /Let's print something/i,
+      {
+        userId,
+        betaRank: base.betaRank,
+      },
+      {
+        // The session next-batch dialog fires whenever the slot fetch lands,
+        // so it can pop between a close check and this capture — close it
+        // inside the assertion so the two act atomically.
+        assertState: async () => {
+          await closeNextBatchDialogIfShown(actor.page);
+        },
+      },
+    );
   } else {
     await navigateMobile(actor.page, mobileURL, "/customer/home");
     await closeNextBatchDialogIfShown(actor.page);
@@ -1806,7 +1859,12 @@ async function placeCustomerOrder(options: {
         userId,
         betaRank: base.betaRank,
       },
-      { variant: "ven-beta-credits" },
+      {
+        variant: "ven-beta-credits",
+        assertState: async () => {
+          await closeNextBatchDialogIfShown(actor.page);
+        },
+      },
     );
   }
 
