@@ -794,8 +794,11 @@ class _QueuedDeliveryStatusTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final position = liveState.queuePosition;
+    final size = liveState.queueSize;
     final label = position == null
         ? 'Waiting in delivery queue'
+        : size != null && size > 1
+        ? '${_ordinal(position)} of $size in queue'
         : '${_ordinal(position)} in queue';
     return ClipRRect(
       borderRadius: AppRadius.borderXl,
@@ -874,8 +877,11 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
         ? 0.0
         : routeProgressRatioForPoint(liveRiderPoint!, liveState.routePoints);
     final percent = (ratio * 100).round();
+    final queueSize = liveState.queueSize;
     final queueLabel = liveState.queuePosition == null
         ? null
+        : queueSize != null && queueSize > 1
+        ? '${_ordinal(liveState.queuePosition!)} of $queueSize in queue'
         : '${_ordinal(liveState.queuePosition!)} in queue';
 
     final assignedSlot = liveState.assignedSlot;
@@ -1269,8 +1275,14 @@ class _ActiveTile extends StatelessWidget {
         state.routePoints.length >= 2 &&
         (state.routingHealth == RoutingHealth.current ||
             state.routingHealth == RoutingHealth.stale);
+    // Prefer the server's road-time leg duration over the client-side
+    // geometry estimate; the dispatch plan is the source of truth.
+    final serverEtaMinutes = state.legDurationSeconds != null
+        ? (state.legDurationSeconds! / 60).ceil()
+        : null;
     final eta = canShowRouteEta
-        ? estimateRouteEtaMinutes(riderPoint, state.routePoints)
+        ? (serverEtaMinutes ??
+              estimateRouteEtaMinutes(riderPoint, state.routePoints))
         : null;
     final colors = brightness == Brightness.dark
         ? AppColors.dark
