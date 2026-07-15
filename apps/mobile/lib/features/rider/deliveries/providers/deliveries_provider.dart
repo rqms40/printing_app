@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
+
 import 'package:latlong2/latlong.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -283,6 +285,25 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         updatedAt: DateTime.now(),
       );
     });
+  }
+
+  /// Rider-triggered re-optimize of their own remaining route. Returns a
+  /// user-facing error message, or null on success.
+  Future<String?> requestReplan() async {
+    try {
+      await ApiClient.instance.post('/riders/dispatch-plan/re-optimize');
+      await refreshAssignments();
+      return null;
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final code = data is Map ? data['code'] : null;
+      if (e.response?.statusCode == 503 || code == 'routing_unavailable') {
+        return 'Road routing unavailable — keeping your current route';
+      }
+      return 'Could not request a new plan';
+    } catch (_) {
+      return 'Could not request a new plan';
+    }
   }
 
   Future<void> declineAssignment(
