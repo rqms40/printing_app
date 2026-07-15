@@ -325,6 +325,13 @@ export function BetaModePage() {
   const columns = useMemo(
     () => [
       {
+        title: 'Rank',
+        dataIndex: 'rank',
+        key: 'rank',
+        width: 80,
+        render: (rank: number) => `#${String(rank).padStart(3, '0')}`,
+      },
+      {
         title: 'Member',
         key: 'member',
         render: (_: unknown, row: BetaMemberRow) => (

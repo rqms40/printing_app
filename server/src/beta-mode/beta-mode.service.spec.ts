@@ -33,6 +33,7 @@ describe('BetaModeService', () => {
     find: jest.Mock;
     update: jest.Mock;
     createQueryBuilder: jest.Mock;
+    manager: { query: jest.Mock };
   };
   let creditsService: { grantBetaEnrollmentCredits: jest.Mock };
   let dataSource: { transaction: jest.Mock };
@@ -76,6 +77,7 @@ describe('BetaModeService', () => {
       find: jest.fn(),
       update: jest.fn().mockResolvedValue(undefined),
       createQueryBuilder: jest.fn().mockReturnValue(mockQB),
+      manager: { query: jest.fn().mockResolvedValue([]) },
     };
     creditsService = {
       grantBetaEnrollmentCredits: jest.fn().mockResolvedValue(undefined),
@@ -435,17 +437,29 @@ describe('BetaModeService', () => {
   });
 
   it('uses user id as the secondary order for paginated beta members', async () => {
+    const rankedQuery = {
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      getQuery: jest.fn().mockReturnValue('SELECT ranked beta users'),
+      getParameters: jest.fn().mockReturnValue({}),
+    };
     const countQuery = { getCount: jest.fn().mockResolvedValue(0) };
     const memberQuery = {
+      innerJoin: jest.fn().mockReturnThis(),
+      setParameters: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       clone: jest.fn().mockReturnValue(countQuery),
+      addSelect: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
       addOrderBy: jest.fn().mockReturnThis(),
       offset: jest.fn().mockReturnThis(),
       limit: jest.fn().mockReturnThis(),
-      getMany: jest.fn().mockResolvedValue([]),
+      getRawAndEntities: jest.fn().mockResolvedValue({ entities: [], raw: [] }),
     };
-    userRepo.createQueryBuilder.mockReturnValueOnce(memberQuery);
+    userRepo.createQueryBuilder
+      .mockReturnValueOnce(rankedQuery)
+      .mockReturnValueOnce(memberQuery);
 
     await service.searchBetaMembers({ page: 1, limit: 10 });
 
@@ -454,6 +468,64 @@ describe('BetaModeService', () => {
       'ASC',
     );
     expect(memberQuery.addOrderBy).toHaveBeenCalledWith('u.id', 'ASC');
+  });
+
+  it('keeps the global enrollment rank when search matches only the third member', async () => {
+    const enrolledUsers = [
+      makeUser({
+        id: 1,
+        email: 'first@test.com',
+        betaEnrolledAt: new Date('2026-01-01'),
+      }),
+      makeUser({
+        id: 2,
+        email: 'second@test.com',
+        betaEnrolledAt: new Date('2026-01-02'),
+      }),
+      makeUser({
+        id: 3,
+        email: 'match@test.com',
+        betaEnrolledAt: new Date('2026-01-03'),
+      }),
+    ];
+    const rankedQuery = {
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      getQuery: jest.fn().mockReturnValue('SELECT ranked beta users'),
+      getParameters: jest.fn().mockReturnValue({}),
+    };
+    const countQuery = { getCount: jest.fn().mockResolvedValue(1) };
+    const memberQuery = {
+      innerJoin: jest.fn().mockReturnThis(),
+      setParameters: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      clone: jest.fn().mockReturnValue(countQuery),
+      addSelect: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      offset: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      getRawAndEntities: jest.fn().mockResolvedValue({
+        entities: [enrolledUsers[2]],
+        raw: [{ rank: '3' }],
+      }),
+    };
+    userRepo.createQueryBuilder
+      .mockReturnValueOnce(rankedQuery)
+      .mockReturnValueOnce(memberQuery);
+
+    const result = await service.searchBetaMembers({
+      search: 'match',
+      page: 1,
+      limit: 10,
+    });
+
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toEqual(
+      expect.objectContaining({ id: 3, email: 'match@test.com', rank: 3 }),
+    );
   });
 
   // ── submitTestimonial ──────────────────────────────────────────────────────

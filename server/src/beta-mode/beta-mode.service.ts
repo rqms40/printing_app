@@ -12,6 +12,7 @@ import { FilesService } from '../files/files.service';
 import { CreditsService } from '../credits/credits.service';
 
 export interface BetaMemberRow {
+  rank: number;
   id: number;
   email: string;
   fullName: string | null;
@@ -183,8 +184,23 @@ export class BetaModeService {
     const offset = (page - 1) * limit;
     const search = opts.search?.trim();
 
+    const rankedUsers = this.userRepo
+      .createQueryBuilder('ranked')
+      .select('ranked.id', 'id')
+      .addSelect(
+        'ROW_NUMBER() OVER (ORDER BY ranked.beta_enrolled_at ASC, ranked.id ASC)',
+        'rank',
+      )
+      .where('ranked.is_beta_user = true');
+
     const qb = this.userRepo
       .createQueryBuilder('u')
+      .innerJoin(
+        `(${rankedUsers.getQuery()})`,
+        'beta_rank',
+        'beta_rank.id = u.id',
+      )
+      .setParameters(rankedUsers.getParameters())
       .where('u.is_beta_user = true');
 
     if (search) {
@@ -200,12 +216,13 @@ export class BetaModeService {
     }
 
     const total = await qb.clone().getCount();
-    const users = await qb
+    const { entities: users, raw } = await qb
+      .addSelect('beta_rank.rank', 'rank')
       .orderBy('u.beta_enrolled_at', 'ASC')
       .addOrderBy('u.id', 'ASC')
       .offset(offset)
       .limit(limit)
-      .getMany();
+      .getRawAndEntities<{ rank: string }>();
 
     let pendingCounts: Record<number, number> = {};
     if (users.length > 0) {
@@ -226,7 +243,8 @@ export class BetaModeService {
     }
 
     return {
-      rows: users.map((u) => ({
+      rows: users.map((u, index) => ({
+        rank: Number(raw[index].rank),
         id: u.id,
         email: u.email,
         fullName: u.fullName,
