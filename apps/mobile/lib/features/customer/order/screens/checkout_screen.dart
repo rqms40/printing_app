@@ -6,6 +6,8 @@ import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/address/providers/address_provider.dart';
+import 'package:printing_app/features/customer/beta/exceptions/beta_order_limit_exception.dart';
+import 'package:printing_app/features/customer/beta/widgets/beta_order_limit_sheet.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_delivery_card.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_footer.dart';
@@ -395,11 +397,18 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         '/customer/order/success',
         extra: {'orderRefs': refs, 'firstOrderId': firstNumericId},
       );
+    } on BetaOrderLimitException {
+      if (!context.mounted) return;
+      await BetaOrderLimitSheet.show(context);
     } on DioException catch (e) {
       if (!context.mounted) return;
       final data = e.response?.data;
       String msg = 'Could not place order. Please try again.';
-      if (data is Map && data['message'] is String) {
+      if (data is Map && data['code'] == 'beta_credits_only') {
+        msg =
+            'Beta checkout uses GRIDGO Credits only. '
+            'Switch your payment method to GRIDGO Credits.';
+      } else if (data is Map && data['message'] is String) {
         msg = data['message'] as String;
       }
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
