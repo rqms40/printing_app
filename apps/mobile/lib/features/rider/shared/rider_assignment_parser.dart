@@ -353,6 +353,12 @@ RiderDispatchPlan? parseRiderDispatchPlan(dynamic value) {
     routingDataStale:
         json['routingDataStale'] == true || json['routing_data_stale'] == true,
     stops: List.unmodifiable(stops),
+    totalDurationSeconds: _readInt(
+      json['totalDurationSeconds'] ?? json['total_duration_seconds'],
+    ),
+    totalDistanceMeters: _readInt(
+      json['totalDistanceMeters'] ?? json['total_distance_meters'],
+    ),
   );
 }
 

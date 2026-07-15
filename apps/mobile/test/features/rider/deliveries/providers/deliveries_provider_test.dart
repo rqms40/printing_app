@@ -17,6 +17,17 @@ import '../../../../helpers/test_setup.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('parseRiderDispatchPlan reads plan totals', () {
+    final plan = parseRiderDispatchPlan({
+      ..._twoStopPlan(),
+      'totalDurationSeconds': 540,
+      'totalDistanceMeters': 2300,
+    });
+    expect(plan!.totalDurationSeconds, 540);
+    expect(plan.totalDistanceMeters, 2300);
+    expect(parseRiderDispatchPlan(_twoStopPlan())!.totalDurationSeconds, null);
+  });
+
   List<Map<String, dynamic>>? activeAssignmentsResponse;
   List<Map<String, dynamic>>? historyAssignmentsResponse;
   Map<String, dynamic>? dispatchPlanResponse;
