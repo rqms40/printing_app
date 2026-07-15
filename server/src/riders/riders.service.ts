@@ -467,10 +467,39 @@ export class RidersService {
     return this.dispatchPlanService.getActivePlanForRiderUser(userId);
   }
 
-  async reoptimizeDispatchPlan(riderId: number, assignmentIds?: number[]) {
+  async reoptimizeOwnDispatchPlan(userId: number) {
+    const profile = await this.getProfile(userId);
+    const active = await this.dispatchPlanService.getActivePlanForRider(
+      profile.id,
+    );
+    if (!active) throw new NotFoundException('Active dispatch plan not found');
+
+    const pendingAssignmentIds = (active.stops ?? [])
+      .filter((stop) => stop.status === DispatchStopStatus.PENDING)
+      .sort((left, right) => left.sequence - right.sequence)
+      .map((stop) => stop.assignmentId);
+    if (pendingAssignmentIds.length === 0) {
+      throw new NotFoundException(
+        'Active dispatch plan has no remaining stops',
+      );
+    }
+
+    return this.reoptimizeDispatchPlan(
+      profile.id,
+      pendingAssignmentIds,
+      active.id,
+    );
+  }
+
+  async reoptimizeDispatchPlan(
+    riderId: number,
+    assignmentIds?: number[],
+    expectedActivePlanId?: number,
+  ) {
     const plan = await this.dispatchPlanService.reoptimizePlan(
       riderId,
       assignmentIds,
+      expectedActivePlanId,
     );
     await this.publishDispatchPlanUpdated(plan, 'reoptimized');
     return plan;
