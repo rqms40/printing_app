@@ -1643,34 +1643,38 @@ async function registerCustomerThroughUi(options: {
       run,
       actor,
       3,
-      /Your data, your rules/,
+      /Register your\s+print account|WELCOME/i,
       {},
       { variant: "mark-registration-entry" },
     );
-  await clickNamed(actor.page, "Agree & Continue");
-  await actor.page.locator("input").last().fill(name);
+  // Step 1 — welcome + explicit consent.
+  await clickNamed(actor.page, /I agree to keep my data mine/);
   await clickNamed(actor.page, "Continue");
-  await clickNamed(actor.page, "Student");
-  await clickNamed(actor.page, "Continue");
-  await clickNamed(actor.page, "Architecture");
-  await clickNamed(actor.page, "Continue");
-  await clickNamed(actor.page, "Male");
-  await clickNamed(actor.page, "Continue");
-  await clickNamed(actor.page, "18–24");
-  await clickNamed(actor.page, "Continue");
-  // Flutter's web renderer exposes the input hints as accessible names even
-  // though the visible labels remain separate semantics nodes.
+  // Step 2 — account (moved up). Flutter's web renderer exposes the input
+  // hints as accessible names even though the visible labels remain separate
+  // semantics nodes.
   await fillNamed(actor.page, "Kai Reyes", `${name} Beta Visual`);
   await fillNamed(actor.page, "kai@example.com", email);
   await fillNamed(actor.page, "+63 917 123 4567", "+639171234567");
   await fillNamed(actor.page, "Min. 8 characters", password);
   await fillNamed(actor.page, "Re-enter your password", password);
+  await clickNamed(actor.page, "Continue");
+  // Step 3 — nickname.
+  await actor.page.locator("input").last().fill(name);
+  await clickNamed(actor.page, "Continue");
+  // Step 4 — craft (category + field on one plate).
+  await clickNamed(actor.page, "Student");
+  await clickNamed(actor.page, "Architecture");
+  await clickNamed(actor.page, "Continue");
+  // Step 5 — profile (gender + age, skippable). Fill them, then create.
+  await clickNamed(actor.page, "Male");
+  await clickNamed(actor.page, "18–24");
   const auth = await waitForStrict2xx<AuthPayload>(
     actor.page,
     (response) =>
       response.request().method() === "POST" &&
       apiPath(response, "/api/auth/register"),
-    () => clickNamed(actor.page, "Create Account"),
+    () => clickNamed(actor.page, "Create account"),
     `${name} UI registration`,
   );
   registerEvidenceSecrets(run, [auth.access_token]);
@@ -1685,7 +1689,13 @@ async function registerCustomerThroughUi(options: {
   );
   expect(beta.isBetaUser).toBe(true);
   const betaRank = positiveId(beta.rank, `${name} beta rank`);
-  await actor.page.waitForURL(/\/(?:onboarding|customer\/)/);
+  // Beta-eligible signups land on the press-proof reveal before onboarding.
+  await actor.page.waitForURL(/\/(?:auth\/beta-welcome|onboarding|customer\/)/);
+  if (actor.page.url().includes("/auth/beta-welcome")) {
+    await expect(actor.page.locator("body")).toContainText(/FOUNDING TESTER/i);
+    await clickNamed(actor.page, "Start printing");
+    await actor.page.waitForURL(/\/(?:onboarding|customer\/)/);
+  }
   if (actor.page.url().includes("/onboarding")) {
     await completeCustomerOnboarding(actor.page);
   }
