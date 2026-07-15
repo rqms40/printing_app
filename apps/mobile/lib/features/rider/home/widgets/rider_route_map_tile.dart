@@ -8,6 +8,7 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/features/rider/shared/providers/rider_location_tracker_provider.dart';
+import 'package:printing_app/features/rider/shared/widgets/rider_vehicle_marker.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
 /// Rider home cockpit map. The server's persisted plan is the only source of
@@ -150,7 +151,11 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
                           alignment: Alignment.topCenter,
                           child: _numberBadge(stop.planSequence!, colors),
                         ),
-                      if (livePoint != null) _carMarker(livePoint),
+                      if (livePoint != null)
+                        riderVehicleMarker(
+                          point: livePoint,
+                          headingDegrees: gps?.headingDegrees,
+                        ),
                     ],
                   ),
                   MapHelpers.attribution(includeRouting: true),
@@ -242,15 +247,4 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
     ],
   );
 
-  Marker _carMarker(LatLng point) => Marker(
-    point: point,
-    width: 44,
-    height: 44,
-    child: const Icon(
-      Icons.local_taxi_rounded,
-      color: kRouteColor,
-      size: 34,
-      shadows: [Shadow(color: Color(0xCC000000), blurRadius: 8)],
-    ),
-  );
 }

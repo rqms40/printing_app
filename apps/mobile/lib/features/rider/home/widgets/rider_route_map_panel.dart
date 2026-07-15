@@ -8,6 +8,7 @@ import 'package:printing_app/features/rider/home/widgets/rider_stop_timeline.dar
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/features/rider/shared/providers/rider_location_tracker_provider.dart';
 import 'package:printing_app/features/rider/shared/rider_theme.dart';
+import 'package:printing_app/features/rider/shared/widgets/rider_vehicle_marker.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
 /// Expanded rider route cockpit backed only by the persisted server plan.
@@ -140,7 +141,11 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
                             stop.planStop!.destination,
                             stop.planSequence!,
                           ),
-                        if (livePoint != null) _riderCarMarker(livePoint),
+                        if (livePoint != null)
+                          riderVehicleMarker(
+                            point: livePoint,
+                            headingDegrees: gps?.headingDegrees,
+                          ),
                       ],
                     ),
                     MapHelpers.attribution(includeRouting: true),
@@ -245,10 +250,4 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
     ),
   );
 
-  Marker _riderCarMarker(LatLng point) => Marker(
-    point: point,
-    width: 42,
-    height: 42,
-    child: const Icon(Icons.local_taxi_rounded, color: kRouteColor, size: 34),
-  );
 }

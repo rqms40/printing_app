@@ -10,6 +10,7 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/features/rider/shared/providers/rider_location_tracker_provider.dart';
+import 'package:printing_app/features/rider/shared/widgets/rider_vehicle_marker.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
 /// Rider delivery map backed only by the persisted server dispatch leg.
@@ -125,7 +126,6 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
     final markers = <Marker>[
       MapHelpers.shopMarker(point: _shop),
       MapHelpers.destinationMarker(point: _destination),
-      if (riderPoint != null) MapHelpers.riderMarker(riderPoint),
     ];
 
     return ClipRRect(
@@ -154,6 +154,27 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
                   isCurrent: true,
                 ),
               MarkerLayer(markers: markers),
+              if (riderPoint != null)
+                AnimatedVehiclePosition(
+                  point: riderPoint,
+                  builder: (context, animated) => Stack(
+                    children: [
+                      if (tracker.accuracyMeters != null)
+                        riderAccuracyCircle(
+                          point: animated,
+                          accuracyMeters: tracker.accuracyMeters!,
+                        ),
+                      MarkerLayer(
+                        markers: [
+                          riderVehicleMarker(
+                            point: animated,
+                            headingDegrees: tracker.headingDegrees,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               MapHelpers.attribution(includeRouting: _routePoints.isNotEmpty),
             ],
           ),

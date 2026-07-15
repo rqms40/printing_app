@@ -133,6 +133,7 @@ void main() {
     expect(find.byKey(const Key('route-leg-1')), findsOneWidget);
     expect(find.text('Persisted route · Plan v1'), findsOneWidget);
     expect(find.textContaining('Optimizing'), findsNothing);
+    expect(find.byIcon(Icons.local_taxi_rounded), findsNothing);
     _expectRequiredAttribution(tester);
   });
 
@@ -170,6 +171,7 @@ void main() {
     expect(find.byKey(const Key('route-leg-1')), findsOneWidget);
     expect(find.text('Persisted route · Plan v1'), findsOneWidget);
     expect(find.textContaining('Optimizing'), findsNothing);
+    expect(find.byIcon(Icons.local_taxi_rounded), findsNothing);
     _expectRequiredAttribution(tester);
   });
 
