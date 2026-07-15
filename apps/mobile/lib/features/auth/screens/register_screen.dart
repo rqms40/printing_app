@@ -211,7 +211,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     if (auth.status != AuthStatus.authenticated) return;
 
     // Peak-end: when this signup enrolled into an active beta, reveal the
-    // founding number + credit grant before the normal onboarding.
+    // founding number + credit grant before the normal onboarding. Invalidate
+    // first so we read the authenticated /beta-mode/me (with the rank), not a
+    // stale pre-login public status.
+    ref.invalidate(betaStatusProvider);
     final beta = await ref.read(betaStatusProvider.future);
     if (!mounted) return;
     if (beta != null && beta.globallyEnabled && beta.rank != null) {
