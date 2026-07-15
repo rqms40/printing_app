@@ -365,7 +365,7 @@ void main() {
     await tester.pumpWidget(harness.widget);
     await tester.pumpAndSettle();
 
-    expect(find.text('2nd in queue'), findsOneWidget);
+    expect(find.text('2nd of 2 in queue'), findsOneWidget);
     expect(
       find.text('Live tracking unlocks when you are next'),
       findsOneWidget,
@@ -472,7 +472,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('LIVE MAP'), findsOneWidget);
-      expect(find.textContaining('1st in queue'), findsOneWidget);
+      expect(find.textContaining('1st of 2 in queue'), findsOneWidget);
       expect(find.text('Order Dispatched'), findsOneWidget);
       expect(find.text('Rider is on the way'), findsOneWidget);
       expect(
@@ -536,6 +536,44 @@ void main() {
 
     expect(find.text('~1 min'), findsOneWidget);
     expect(find.text('~40 min'), findsNothing);
+  });
+
+  testWidgets('prefers server leg duration over the geometry estimate', (
+    tester,
+  ) async {
+    final route = List.generate(
+      40,
+      (i) => LatLng(7.0640 + (i * 0.00001), 125.6079),
+    );
+    final active = LiveDeliveryMapState.active(
+      riderPoint: route.first,
+      shopPoint: route.first,
+      destPoint: route.last,
+      routePoints: route,
+      orderId: 'ORD-001',
+      deliveryAssignmentId: 'assign-001',
+      orderStatus: OrderStatus.onTheWay,
+      legDurationSeconds: 540,
+    );
+
+    await tester.pumpWidget(
+      _wrap(
+        active,
+        slots: _dailySlots,
+        location: LocationUpdate(
+          id: 'live',
+          deliveryAssignmentId: 'assign-001',
+          planVersion: 1,
+          latitude: route.first.latitude,
+          longitude: route.first.longitude,
+          timestamp: DateTime.now(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('~9 min'), findsOneWidget);
+    expect(find.text('~1 min'), findsNothing);
   });
 
   testWidgets('malformed live route does not display a computed ETA', (
