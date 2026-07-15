@@ -320,7 +320,12 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
         .toDouble();
     if (maxStatusHeight <= 0) return maxHeight;
 
-    final desiredHeight = _hasActiveDelivery
+    final desiredHeight = _isQueued
+        // The queued tile needs enough height for its slot bar, dispatched
+        // line, and the stop-position badge; the compressed active ratio
+        // clips the badge below the visible area (and off the a11y tree).
+        ? 196.0
+        : _hasActiveDelivery
         ? ((((maxHeight - (_panelGap * 2)) / 7) * 4) + _panelGap)
         : _idleStatusHeight(
             visibleSlotCount: visibleSlotCount,
