@@ -181,6 +181,9 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
         children: [
           Positioned.fill(
             child: RiderMapView(
+                    planOrigin: ref.watch(
+                      deliveriesProvider.select((s) => s.planOrigin),
+                    ),
               assignmentId: view.id,
               destination: destination?.latLng,
               planStop: view.planStop,

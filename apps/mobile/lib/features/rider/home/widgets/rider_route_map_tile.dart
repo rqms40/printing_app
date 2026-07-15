@@ -18,11 +18,13 @@ class RiderRouteMapTile extends ConsumerStatefulWidget {
     super.key,
     required this.stops,
     required this.activeStop,
+    this.planOrigin,
     required this.onTap,
   });
 
   final List<RiderAssignmentView> stops;
   final RiderAssignmentView? activeStop;
+  final LatLng? planOrigin;
   final VoidCallback onTap;
 
   @override
@@ -38,7 +40,7 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
       );
 
   List<LatLng> get _framePoints {
-    final points = <LatLng>[MapHelpers.shopPoint];
+    final points = <LatLng>[widget.planOrigin ?? MapHelpers.shopPoint];
     for (final stop in _planned) {
       final geometry = stop.planStop?.geometry;
       if (geometry != null) points.addAll(geometry.points);
@@ -142,7 +144,7 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
                       ),
                   MarkerLayer(
                     markers: [
-                      MapHelpers.shopMarker(),
+                      MapHelpers.shopMarker(point: widget.planOrigin ?? MapHelpers.shopPoint),
                       for (final stop in _planned)
                         Marker(
                           point: stop.planStop!.destination,

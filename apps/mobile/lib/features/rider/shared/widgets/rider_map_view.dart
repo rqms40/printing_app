@@ -25,6 +25,7 @@ class RiderMapView extends ConsumerStatefulWidget {
     this.showLiveBadge = true,
     this.showRoute = true,
     this.borderRadius,
+    this.planOrigin,
   });
 
   final String assignmentId;
@@ -34,6 +35,7 @@ class RiderMapView extends ConsumerStatefulWidget {
   final bool interactive;
   final bool showLiveBadge;
   final bool showRoute;
+  final LatLng? planOrigin;
   final BorderRadius? borderRadius;
 
   @override
@@ -45,7 +47,7 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
   final _mapController = MapController();
   late final AnimationController _pulseController;
 
-  LatLng get _shop => MapHelpers.shopPoint;
+  LatLng get _shop => widget.planOrigin ?? MapHelpers.shopPoint;
 
   LatLng get _destination =>
       widget.planStop?.destination ??

@@ -165,6 +165,9 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
               children: [
                 Positioned.fill(
                   child: RiderMapView(
+                    planOrigin: ref.watch(
+                      deliveriesProvider.select((s) => s.planOrigin),
+                    ),
                     assignmentId: view.id,
                     destination: destLatLng,
                     planStop: view.planStop,

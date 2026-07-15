@@ -100,6 +100,7 @@ class RiderHomeScreen extends ConsumerWidget {
                       height: 380,
                       child: RiderCockpitMap(
                         mapStops: mapStops,
+                        planOrigin: state.planOrigin,
                         activeStop: active,
                         completedCount: completedCount,
                         currentStopIndex: currentStopIndex,

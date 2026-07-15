@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:latlong2/latlong.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
@@ -19,6 +21,7 @@ class DeliveriesState {
     this.errorMessage,
     this.filterStatus,
     this.dataStale = false,
+    this.planOrigin,
   });
 
   final List<RiderAssignmentView> views;
@@ -27,6 +30,7 @@ class DeliveriesState {
   final String? errorMessage;
   final DeliveryStatus? filterStatus;
   final bool dataStale;
+  final LatLng? planOrigin;
 
   List<DeliveryAssignment> get assignments =>
       views.map((v) => v.assignment).toList();
@@ -91,6 +95,7 @@ class DeliveriesState {
     String? Function()? errorMessage,
     DeliveryStatus? Function()? filterStatus,
     bool? dataStale,
+    LatLng? Function()? planOrigin,
   }) {
     return DeliveriesState(
       views: views ?? this.views,
@@ -99,6 +104,7 @@ class DeliveriesState {
       errorMessage: errorMessage != null ? errorMessage() : this.errorMessage,
       filterStatus: filterStatus != null ? filterStatus() : this.filterStatus,
       dataStale: dataStale ?? this.dataStale,
+      planOrigin: planOrigin != null ? planOrigin() : this.planOrigin,
     );
   }
 }
@@ -210,6 +216,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         isRefreshing: false,
         errorMessage: () => null,
         dataStale: plan?.routingDataStale ?? false,
+        planOrigin: () => plan?.origin,
       );
     } catch (_) {
       if (!mounted || generation != _fetchGeneration) return;
