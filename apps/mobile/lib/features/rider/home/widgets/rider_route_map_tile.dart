@@ -172,8 +172,8 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
                 ),
               ),
               Positioned(
-                top: 14,
-                right: 14,
+                top: 52,
+                left: 14,
                 child: Container(
                   key: const Key('route-open-pill'),
                   padding: const EdgeInsets.symmetric(
