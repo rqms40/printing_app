@@ -79,8 +79,8 @@ class _AuthFormState extends State<AuthForm> {
 
     if (password.isEmpty) {
       passwordErr = 'Password is required';
-    } else if (password.length < 6) {
-      passwordErr = 'Password must be at least 6 characters';
+    } else if (password.length < 8) {
+      passwordErr = 'Password must be at least 8 characters';
     }
 
     if (widget.isRegister) {

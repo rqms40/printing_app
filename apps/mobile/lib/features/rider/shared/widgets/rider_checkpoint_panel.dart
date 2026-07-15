@@ -205,8 +205,8 @@ class _SwipeToConfirmState extends State<_SwipeToConfirm> {
               child: Semantics(
                 button: true,
                 enabled: !widget.isLoading,
-                label: 'Swipe to confirm delivery',
-                hint: 'Swipe right to open proof of delivery',
+                label: 'Swipe to open proof of delivery',
+                hint: 'Opens the proof form to finish this delivery',
                 onTap: widget.isLoading ? null : widget.onConfirmed,
                 child: ExcludeSemantics(
                   child: Container(
@@ -234,7 +234,7 @@ class _SwipeToConfirmState extends State<_SwipeToConfirm> {
                           ),
                         ),
                         Text(
-                          'Swipe to confirm delivery',
+                          'Swipe to open proof of delivery',
                           style: AppTypography.button.copyWith(
                             color: colors.onSurfaceDim,
                           ),
@@ -284,19 +284,6 @@ class _SwipeToConfirmState extends State<_SwipeToConfirm> {
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextButton(
-              onPressed: widget.isLoading ? null : widget.onConfirmed,
-              style: TextButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-                foregroundColor: colors.onBackground,
-                shape: RoundedRectangleBorder(
-                  borderRadius: AppRadius.borderMd,
-                  side: BorderSide(color: colors.outline),
-                ),
-              ),
-              child: const Text('Open proof of delivery'),
             ),
           ],
         );

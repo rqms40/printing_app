@@ -28,12 +28,14 @@ class RiderGpsPoint {
     required this.longitude,
     this.speed,
     this.heading,
+    this.accuracyMeters,
   });
 
   final double latitude;
   final double longitude;
   final double? speed;
   final double? heading;
+  final double? accuracyMeters;
 
   LatLng get latLng => LatLng(latitude, longitude);
 }
@@ -77,6 +79,7 @@ class GeolocatorRiderLocationSource implements RiderLocationSource {
     longitude: position.longitude,
     speed: position.speed,
     heading: position.heading,
+    accuracyMeters: position.accuracy,
   );
 
   static RiderLocationPermission _permission(LocationPermission permission) =>
@@ -96,11 +99,17 @@ class RiderLocationTrackerState {
     required this.status,
     this.point,
     this.error,
+    this.headingDegrees,
+    this.speedMetersPerSecond,
+    this.accuracyMeters,
   });
 
   final RiderGpsStatus status;
   final LatLng? point;
   final Object? error;
+  final double? headingDegrees;
+  final double? speedMetersPerSecond;
+  final double? accuracyMeters;
 
   String get message => switch (status) {
     RiderGpsStatus.disabled => 'GPS sharing starts when dispatch begins',
@@ -120,10 +129,16 @@ class RiderLocationTrackerState {
     LatLng value,
     RiderGpsStatus nextStatus, {
     Object? nextError,
+    double? headingDegrees,
+    double? speedMetersPerSecond,
+    double? accuracyMeters,
   }) => RiderLocationTrackerState(
     status: nextStatus,
     point: value,
     error: nextError,
+    headingDegrees: headingDegrees ?? this.headingDegrees,
+    speedMetersPerSecond: speedMetersPerSecond ?? this.speedMetersPerSecond,
+    accuracyMeters: accuracyMeters ?? this.accuracyMeters,
   );
 }
 
@@ -220,10 +235,10 @@ class RiderLocationTracker extends StateNotifier<RiderLocationTrackerState> {
       }
       if (_disposed) return;
       _setStatus(RiderGpsStatus.locating);
-      _acceptPoint((await _source.getCurrentPosition()).latLng);
+      _acceptPoint(await _source.getCurrentPosition());
       if (_disposed) return;
       _subscription = _source.positionStream.listen(
-        (position) => _acceptPoint(position.latLng),
+        _acceptPoint,
         onError: _handleStreamError,
       );
     } catch (error) {
@@ -256,12 +271,16 @@ class RiderLocationTracker extends StateNotifier<RiderLocationTrackerState> {
     }
   }
 
-  void _acceptPoint(LatLng point) {
+  void _acceptPoint(RiderGpsPoint gps) {
     if (_disposed) return;
+    final point = gps.latLng;
     final shouldPost = _shouldPost(point, _now());
     state = state.withPoint(
       point,
       shouldPost ? RiderGpsStatus.uploading : RiderGpsStatus.live,
+      headingDegrees: gps.heading,
+      speedMetersPerSecond: gps.speed,
+      accuracyMeters: gps.accuracyMeters,
     );
     if (!shouldPost) return;
     _pendingPoint = point;

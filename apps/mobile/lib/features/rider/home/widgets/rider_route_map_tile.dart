@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/rider/home/widgets/rider_route_summary_chip.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/features/rider/shared/providers/rider_location_tracker_provider.dart';
+import 'package:printing_app/features/rider/shared/widgets/rider_vehicle_marker.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
 /// Rider home cockpit map. The server's persisted plan is the only source of
@@ -17,11 +18,13 @@ class RiderRouteMapTile extends ConsumerStatefulWidget {
     super.key,
     required this.stops,
     required this.activeStop,
+    this.planOrigin,
     required this.onTap,
   });
 
   final List<RiderAssignmentView> stops;
   final RiderAssignmentView? activeStop;
+  final LatLng? planOrigin;
   final VoidCallback onTap;
 
   @override
@@ -37,7 +40,7 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
       );
 
   List<LatLng> get _framePoints {
-    final points = <LatLng>[MapHelpers.shopPoint];
+    final points = <LatLng>[widget.planOrigin ?? MapHelpers.shopPoint];
     for (final stop in _planned) {
       final geometry = stop.planStop?.geometry;
       if (geometry != null) points.addAll(geometry.points);
@@ -141,7 +144,7 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
                       ),
                   MarkerLayer(
                     markers: [
-                      MapHelpers.shopMarker(),
+                      MapHelpers.shopMarker(point: widget.planOrigin ?? MapHelpers.shopPoint),
                       for (final stop in _planned)
                         Marker(
                           point: stop.planStop!.destination,
@@ -150,7 +153,11 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
                           alignment: Alignment.topCenter,
                           child: _numberBadge(stop.planSequence!, colors),
                         ),
-                      if (livePoint != null) _carMarker(livePoint),
+                      if (livePoint != null)
+                        riderVehicleMarker(
+                          point: livePoint,
+                          headingDegrees: gps?.headingDegrees,
+                        ),
                     ],
                   ),
                   MapHelpers.attribution(includeRouting: true),
@@ -159,35 +166,43 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
               Positioned(
                 top: 14,
                 left: 14,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      DateFormat('h:mm a').format(DateTime.now()),
-                      style: AppTypography.h1.copyWith(
-                        color: Colors.white,
-                        fontSize: 30,
-                        fontWeight: FontWeight.w800,
-                        height: 1,
-                        shadows: const [
-                          Shadow(color: Color(0xCC000000), blurRadius: 10),
-                        ],
+                child: RiderRouteSummaryChip(
+                  key: const Key('route-summary'),
+                  stops: _planned,
+                ),
+              ),
+              Positioned(
+                top: 52,
+                left: 14,
+                child: Container(
+                  key: const Key('route-open-pill'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xE6111111),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: kRouteColor, width: 1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.activeStop != null ? 'Open delivery' : 'View route',
+                        style: AppTypography.caption.copyWith(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      DateFormat('EEEE').format(DateTime.now()),
-                      style: AppTypography.h2.copyWith(
+                      const Icon(
+                        Icons.chevron_right_rounded,
                         color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        height: 1.05,
-                        shadows: const [
-                          Shadow(color: Color(0xCC000000), blurRadius: 10),
-                        ],
+                        size: 14,
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               Positioned(
@@ -242,15 +257,4 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
     ],
   );
 
-  Marker _carMarker(LatLng point) => Marker(
-    point: point,
-    width: 44,
-    height: 44,
-    child: const Icon(
-      Icons.local_taxi_rounded,
-      color: kRouteColor,
-      size: 34,
-      shadows: [Shadow(color: Color(0xCC000000), blurRadius: 8)],
-    ),
-  );
 }

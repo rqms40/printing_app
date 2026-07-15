@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_stop_timeline.dart';
+import 'package:printing_app/features/rider/home/widgets/rider_route_summary_chip.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/features/rider/shared/providers/rider_location_tracker_provider.dart';
 import 'package:printing_app/features/rider/shared/rider_theme.dart';
+import 'package:printing_app/features/rider/shared/widgets/rider_vehicle_marker.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
 /// Expanded rider route cockpit backed only by the persisted server plan.
@@ -16,10 +17,12 @@ class RiderRouteMapPanel extends ConsumerStatefulWidget {
     super.key,
     required this.stops,
     required this.activeStop,
+    this.planOrigin,
   });
 
   final List<RiderAssignmentView> stops;
   final RiderAssignmentView? activeStop;
+  final LatLng? planOrigin;
 
   @override
   ConsumerState<RiderRouteMapPanel> createState() => _RiderRouteMapPanelState();
@@ -34,7 +37,7 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
       );
 
   List<LatLng> get _framePoints {
-    final points = <LatLng>[MapHelpers.shopPoint];
+    final points = <LatLng>[widget.planOrigin ?? MapHelpers.shopPoint];
     for (final stop in _planned) {
       final geometry = stop.planStop?.geometry;
       if (geometry != null) points.addAll(geometry.points);
@@ -75,7 +78,6 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
     final active = widget.activeStop;
     final gps = active != null
         ? ref.watch(
@@ -134,13 +136,17 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
                         ),
                     MarkerLayer(
                       markers: [
-                        MapHelpers.shopMarker(),
+                        MapHelpers.shopMarker(point: widget.planOrigin ?? MapHelpers.shopPoint),
                         for (final stop in _planned)
                           _numberedStopMarker(
                             stop.planStop!.destination,
                             stop.planSequence!,
                           ),
-                        if (livePoint != null) _riderCarMarker(livePoint),
+                        if (livePoint != null)
+                          riderVehicleMarker(
+                            point: livePoint,
+                            headingDegrees: gps?.headingDegrees,
+                          ),
                       ],
                     ),
                     MapHelpers.attribution(includeRouting: true),
@@ -151,28 +157,9 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
             Positioned(
               top: 14,
               left: 14,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    DateFormat('h:mm a').format(now),
-                    style: AppTypography.h1.copyWith(
-                      color: RiderTheme.textPrimary,
-                      fontSize: 30,
-                      fontWeight: FontWeight.w800,
-                      height: 1,
-                    ),
-                  ),
-                  Text(
-                    DateFormat('EEEE').format(now),
-                    style: AppTypography.body.copyWith(
-                      color: RiderTheme.textPrimary,
-                      fontSize: 21,
-                      fontWeight: FontWeight.w700,
-                      height: 1.05,
-                    ),
-                  ),
-                ],
+              child: RiderRouteSummaryChip(
+                key: const Key('route-summary'),
+                stops: _planned,
               ),
             ),
             Positioned(
@@ -183,6 +170,9 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
                 totalStops: _planned.length.clamp(1, 5),
                 completedCount: completedCount.clamp(0, 5),
                 currentStopIndex: currentSequence,
+                stopStatuses: [
+                  for (final stop in _planned) stop.planStop!.status,
+                ],
               ),
             ),
             Positioned(
@@ -245,10 +235,4 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
     ),
   );
 
-  Marker _riderCarMarker(LatLng point) => Marker(
-    point: point,
-    width: 42,
-    height: 42,
-    child: const Icon(Icons.local_taxi_rounded, color: kRouteColor, size: 34),
-  );
 }

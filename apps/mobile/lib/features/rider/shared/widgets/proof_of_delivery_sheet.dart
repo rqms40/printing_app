@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -33,6 +34,8 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
   var _mode = 'signature';
   var _isUploading = false;
   String? _error;
+  XFile? _pendingPhoto;
+  Uint8List? _pendingPhotoBytes;
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -55,21 +58,29 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
     ).pop({'type': 'signature', 'signatureData': jsonEncode(payload)});
   }
 
-  Future<void> _capturePhoto() async {
+  Future<void> _pickPhoto() async {
+    setState(() => _error = null);
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.camera,
+      imageQuality: 82,
+    );
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    if (!mounted) return;
+    setState(() {
+      _pendingPhoto = picked;
+      _pendingPhotoBytes = bytes;
+    });
+  }
+
+  Future<void> _uploadPendingPhoto() async {
+    final picked = _pendingPhoto;
+    if (picked == null) return;
     setState(() {
       _error = null;
       _isUploading = true;
     });
     try {
-      final picked = await ImagePicker().pickImage(
-        source: ImageSource.camera,
-        imageQuality: 82,
-      );
-      if (picked == null) {
-        if (mounted) setState(() => _isUploading = false);
-        return;
-      }
-
       final form = FormData.fromMap({
         'purpose': 'proof_of_delivery',
         'file': await buildProofPhotoMultipart(picked),
@@ -92,7 +103,9 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = 'Could not upload proof photo. Try a signature or retake it.';
+        _error =
+            'Could not upload proof photo. Retry the upload, retake it, '
+            'or use a signature.';
         _isUploading = false;
       });
     }
@@ -222,13 +235,43 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
                   ),
                 ],
               ),
-            ] else ...[
+            ] else if (_pendingPhotoBytes == null) ...[
               AppButton(
                 label: 'Take photo proof',
                 icon: HugeIcons.strokeRoundedCamera01,
-                isLoading: _isUploading,
                 isFullWidth: true,
-                onTap: _isUploading ? null : _capturePhoto,
+                onTap: _pickPhoto,
+              ),
+            ] else ...[
+              ClipRRect(
+                borderRadius: AppRadius.borderMd,
+                child: Image.memory(
+                  _pendingPhotoBytes!,
+                  key: const Key('proof-photo-preview'),
+                  height: 190,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Row(
+                children: [
+                  Expanded(
+                    child: AppButton(
+                      label: 'Retake',
+                      variant: AppButtonVariant.secondary,
+                      onTap: _isUploading ? null : _pickPhoto,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: AppButton(
+                      label: _error == null ? 'Use photo' : 'Retry upload',
+                      isLoading: _isUploading,
+                      onTap: _isUploading ? null : _uploadPendingPhoto,
+                    ),
+                  ),
+                ],
               ),
             ],
             if (_error != null) ...[

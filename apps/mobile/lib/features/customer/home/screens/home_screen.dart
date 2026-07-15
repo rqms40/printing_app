@@ -385,9 +385,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  // 1: Start Printing (flex 2)
+                                  // 1: Start Printing (flex 5)
                                   Expanded(
-                                    flex: 2,
+                                    flex: 5,
                                     child: _StartPrintingTile(
                                       colors: colors,
                                       tutorialKey: _startPrintingTutorialKey,
@@ -396,15 +396,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: AppSpacing.sm),
-                                  // 2: The Data Grid (flex 2)
+                                  // 2: The Data Grid (flex 5)
                                   Expanded(
-                                    flex: 2,
+                                    flex: 5,
                                     child: _DataGridTile(colors: colors),
                                   ),
                                   const SizedBox(height: AppSpacing.sm),
-                                  // 3: The Feed (flex 3)
+                                  // 3: The Feed (flex 9)
                                   Expanded(
-                                    flex: 3,
+                                    flex: 9,
                                     child: _FeedTile(colors: colors),
                                   ),
                                 ],
@@ -1387,7 +1387,8 @@ class _NotificationDropdown extends ConsumerWidget {
 }
 
 // ── Shared yellow-border tile shell ─────────────────────────────────────────
-/// Icon panel on the LEFT (big, yellow-tinted bg), text + chevron on the RIGHT.
+/// Icon chip on the LEFT (solid brand square when emphasized, tinted
+/// otherwise — same motif as the resume-queue card), text + chevron RIGHT.
 class _YellowBorderTile extends StatefulWidget {
   const _YellowBorderTile({
     required this.colors,
@@ -1396,6 +1397,7 @@ class _YellowBorderTile extends StatefulWidget {
     this.subtitle,
     this.onTap,
     this.tutorialKey,
+    this.emphasized = false,
   });
 
   final AppColorSet colors;
@@ -1404,6 +1406,9 @@ class _YellowBorderTile extends StatefulWidget {
   final String? subtitle;
   final VoidCallback? onTap;
   final GlobalKey? tutorialKey;
+
+  /// Marks the primary action of the pair: solid brand chip + black icon.
+  final bool emphasized;
 
   @override
   State<_YellowBorderTile> createState() => _YellowBorderTileState();
@@ -1428,6 +1433,7 @@ class _YellowBorderTileState extends State<_YellowBorderTile> {
         child: Container(
           key: widget.tutorialKey,
           width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
             color: widget.colors.surface,
             borderRadius: AppRadius.borderXl,
@@ -1436,70 +1442,75 @@ class _YellowBorderTileState extends State<_YellowBorderTile> {
               width: 0.5,
             ),
           ),
-          child: ClipRRect(
-            borderRadius: AppRadius.borderXl,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // ── Left icon panel — no bg tint, no divider ─────────
-                SizedBox(
-                  width: 52,
-                  child: Center(
-                    child: HugeIcon(
-                      icon: widget.icon,
-                      size: 26,
-                      color: widget.colors.brand,
-                    ),
-                  ),
-                ),
-
-                // ── Right text area ──────────────────────────────────
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.sm,
-                      vertical: AppSpacing.xs,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          widget.title,
-                          style: AppTypography.bodyBold.copyWith(
-                            color: widget.colors.onBackground,
-                            fontSize: 12,
-                            height: 1.2,
-                          ),
+          child: Row(
+            children: [
+              // ── Icon chip ────────────────────────────────────────
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: widget.emphasized
+                      ? widget.colors.brand
+                      : widget.colors.brand.withValues(alpha: 0.10),
+                  borderRadius: AppRadius.borderMd,
+                  border: widget.emphasized
+                      ? null
+                      : Border.all(
+                          color: widget.colors.brand.withValues(alpha: 0.25),
+                          width: 0.75,
                         ),
-                        if (widget.subtitle != null) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            widget.subtitle!,
-                            style: AppTypography.caption.copyWith(
-                              color: widget.colors.onSurfaceDim,
-                              fontSize: 10,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ],
-                    ),
+                ),
+                child: Center(
+                  child: HugeIcon(
+                    icon: widget.icon,
+                    size: 20,
+                    color: widget.emphasized
+                        ? Colors.black
+                        : widget.colors.brand,
                   ),
                 ),
+              ),
 
-                // Chevron
-                Padding(
-                  padding: const EdgeInsets.only(right: AppSpacing.sm),
-                  child: Icon(
-                    Icons.chevron_right_rounded,
-                    size: 14,
-                    color: widget.colors.disabled,
-                  ),
+              const SizedBox(width: 10),
+
+              // ── Text ─────────────────────────────────────────────
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      widget.title,
+                      style: AppTypography.bodyBold.copyWith(
+                        color: widget.colors.onBackground,
+                        fontSize: 12,
+                        height: 1.2,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (widget.subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.subtitle!,
+                        style: AppTypography.caption.copyWith(
+                          color: widget.colors.onSurfaceDim,
+                          fontSize: 10,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
                 ),
-              ],
-            ),
+              ),
+
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 16,
+                color: widget.colors.disabled,
+              ),
+            ],
           ),
         ),
       ),
@@ -1527,6 +1538,7 @@ class _StartPrintingTile extends StatelessWidget {
     subtitle: 'New order',
     onTap: onTap,
     tutorialKey: tutorialKey,
+    emphasized: true,
   );
 }
 
@@ -1539,6 +1551,7 @@ class _DataGridTile extends StatelessWidget {
     colors: colors,
     icon: HugeIcons.strokeRoundedCloudUpload,
     title: 'The Data Grid',
+    subtitle: 'Your uploads',
     onTap: () => context.push('/customer/uploads'),
   );
 }

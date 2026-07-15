@@ -39,12 +39,16 @@ class RiderDispatchPlan {
     required this.profile,
     required this.routingDataStale,
     required this.stops,
+    this.totalDurationSeconds,
+    this.totalDistanceMeters,
   });
 
   final int version;
   final LatLng origin;
   final String provider;
   final String profile;
+  final int? totalDurationSeconds;
+  final int? totalDistanceMeters;
   final bool routingDataStale;
   final List<RiderDispatchPlanStop> stops;
 }

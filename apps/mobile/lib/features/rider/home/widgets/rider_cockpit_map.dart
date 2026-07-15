@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_route_map_tile.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_stop_rail.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
@@ -10,6 +11,7 @@ class RiderCockpitMap extends StatelessWidget {
     super.key,
     required this.mapStops,
     required this.activeStop,
+    this.planOrigin,
     required this.completedCount,
     required this.currentStopIndex,
     required this.onMapTap,
@@ -17,6 +19,7 @@ class RiderCockpitMap extends StatelessWidget {
 
   final List<RiderAssignmentView> mapStops;
   final RiderAssignmentView? activeStop;
+  final LatLng? planOrigin;
   final int completedCount;
   final int currentStopIndex;
   final VoidCallback onMapTap;
@@ -27,6 +30,7 @@ class RiderCockpitMap extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         RiderRouteMapTile(
+          planOrigin: planOrigin,
           stops: mapStops,
           activeStop: activeStop,
           onTap: onMapTap,

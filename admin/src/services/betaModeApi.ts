@@ -38,6 +38,7 @@ export async function unenrollUser(userId: number): Promise<void> {
 }
 
 export interface BetaMemberRow {
+  rank: number;
   id: number;
   email: string;
   fullName: string | null;

@@ -3,6 +3,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -94,6 +95,7 @@ function numericPoint(latitude: unknown, longitude: unknown): GeoPoint | null {
 
 @Injectable()
 export class DispatchPlanService {
+  private readonly logger = new Logger(DispatchPlanService.name);
   private readonly origin: GeoPoint;
   private readonly routingProfile: string;
 
@@ -135,9 +137,15 @@ export class DispatchPlanService {
   async reoptimizePlan(
     riderId: number,
     assignmentIds?: number[],
+    expectedActivePlanId?: number,
   ): Promise<DispatchPlan> {
     const active = await this.getActivePlanForRider(riderId);
     if (!active) throw new NotFoundException('Active dispatch plan not found');
+    if (expectedActivePlanId != null && active.id !== expectedActivePlanId) {
+      throw new ConflictException(
+        'Active dispatch plan changed; retry re-optimization',
+      );
+    }
     const requestedIds = assignmentIds?.length
       ? assignmentIds
       : (
@@ -172,10 +180,28 @@ export class DispatchPlanService {
       prepared = await this.preparePlan(planningAssignments, anchoredIds);
     } catch (error) {
       if (error instanceof ServiceUnavailableException) {
-        await this.planRepo.update(
-          { id: active.id, status: DispatchPlanStatus.ACTIVE },
-          { routingDataStale: true },
-        );
+        let routingDataStale = active.routingDataStale;
+        try {
+          await this.planRepo.update(
+            { id: active.id, status: DispatchPlanStatus.ACTIVE },
+            { routingDataStale: true },
+          );
+          routingDataStale = true;
+        } catch (staleMarkerError) {
+          this.logger.warn(
+            `Failed to mark dispatch plan ${active.id} routing stale after routing failure: ${staleMarkerError}`,
+          );
+        }
+        const response = error.getResponse();
+        const payload =
+          typeof response === 'object' && response !== null
+            ? (response as Record<string, unknown>)
+            : { message: response };
+        throw new ServiceUnavailableException({
+          code: 'routing_unavailable',
+          ...payload,
+          preservedPlan: { ...active, routingDataStale },
+        });
       }
       throw error;
     }

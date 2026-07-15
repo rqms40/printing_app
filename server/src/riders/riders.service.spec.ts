@@ -1,7 +1,11 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  NotFoundException,
+  BadRequestException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { RidersService } from './riders.service';
 import { RiderProfile } from './entities/rider-profile.entity';
 import {
@@ -1611,6 +1615,110 @@ describe('RidersService', () => {
       await expect(service.createDispatchPlan(10, [101, 102])).resolves.toBe(
         persistedPlan,
       );
+    });
+  });
+
+  describe('rider-scoped dispatch plan re-optimization', () => {
+    const activePlan = {
+      id: 500,
+      riderId: 10,
+      version: 3,
+      status: DispatchPlanStatus.ACTIVE,
+      routingDataStale: false,
+      stops: [
+        {
+          assignmentId: 103,
+          sequence: 3,
+          status: DispatchStopStatus.PENDING,
+        },
+        {
+          assignmentId: 102,
+          sequence: 2,
+          status: DispatchStopStatus.COMPLETED,
+        },
+        {
+          assignmentId: 101,
+          sequence: 1,
+          status: DispatchStopStatus.PENDING,
+        },
+      ],
+    };
+    const reoptimizedPlan = {
+      ...activePlan,
+      id: 501,
+      version: 4,
+    };
+
+    beforeEach(() => {
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      dispatchPlanService.getActivePlanForRider.mockResolvedValue(activePlan);
+      dispatchPlanService.reoptimizePlan.mockResolvedValue(reoptimizedPlan);
+    });
+
+    it('re-optimizes only the caller rider profile pending stops', async () => {
+      await expect(
+        service.reoptimizeOwnDispatchPlan(mockProfile.userId),
+      ).resolves.toBe(reoptimizedPlan);
+
+      expect(profileRepo.findOne).toHaveBeenNthCalledWith(1, {
+        where: { userId: mockProfile.userId },
+        relations: ['user'],
+      });
+      expect(dispatchPlanService.getActivePlanForRider).toHaveBeenCalledWith(
+        mockProfile.id,
+      );
+      expect(dispatchPlanService.reoptimizePlan).toHaveBeenCalledWith(
+        mockProfile.id,
+        [101, 103],
+        activePlan.id,
+      );
+    });
+
+    it('returns 404 when the caller rider profile has no active plan', async () => {
+      dispatchPlanService.getActivePlanForRider.mockResolvedValue(null);
+
+      await expect(
+        service.reoptimizeOwnDispatchPlan(mockProfile.userId),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(dispatchPlanService.reoptimizePlan).not.toHaveBeenCalled();
+      expect(
+        ordersGateway.notifyRiderDispatchPlanUpdated,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('keeps routing_unavailable and the active plan on routing failure', async () => {
+      const preservedPlan = structuredClone(activePlan);
+      const routingError = new ServiceUnavailableException({
+        code: 'routing_unavailable',
+        message: 'Road routing is temporarily unavailable',
+        preservedPlan: { ...activePlan, routingDataStale: true },
+      });
+      dispatchPlanService.reoptimizePlan.mockRejectedValue(routingError);
+
+      const error: unknown = await service
+        .reoptimizeOwnDispatchPlan(mockProfile.userId)
+        .catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(ServiceUnavailableException);
+      if (!(error instanceof ServiceUnavailableException)) {
+        throw new Error('Expected ServiceUnavailableException');
+      }
+      expect(error.getStatus()).toBe(503);
+      expect(error.getResponse()).toEqual(
+        expect.objectContaining({
+          code: 'routing_unavailable',
+          preservedPlan: expect.objectContaining({
+            id: activePlan.id,
+            version: activePlan.version,
+            stops: activePlan.stops,
+          }),
+        }),
+      );
+      expect(activePlan).toEqual(preservedPlan);
+      expect(
+        ordersGateway.notifyRiderDispatchPlanUpdated,
+      ).not.toHaveBeenCalled();
     });
   });
 

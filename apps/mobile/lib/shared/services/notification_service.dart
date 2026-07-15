@@ -325,7 +325,14 @@ class NotificationService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_pendingTokenDeletionKey, true);
       await previousDeletion;
-      await (deleteAction ?? _deleteTokenNow).call();
+      try {
+        await (deleteAction ?? _deleteTokenNow).call();
+      } on FirebaseException catch (error) {
+        // iOS Simulator has no APNs token. In that state there is no FCM
+        // token to revoke, so retaining a failed deletion blocks sign-in.
+        if (error.code != 'apns-token-not-set') rethrow;
+        debugPrint('FCM token deletion skipped: APNs token is unavailable.');
+      }
       if (deletionGeneration == _tokenDeletionGeneration) {
         _completedTokenDeletionGeneration = deletionGeneration;
         await prefs.remove(_pendingTokenDeletionKey);

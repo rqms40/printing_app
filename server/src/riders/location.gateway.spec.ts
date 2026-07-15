@@ -190,7 +190,7 @@ describe('LocationGateway', () => {
     expect(join).not.toHaveBeenCalled();
   });
 
-  it('checks customer ownership before revealing persisted queue position', async () => {
+  it('rejects an assignment subscription the customer does not own before revealing queue state', async () => {
     jwtService.verifyAsync.mockResolvedValue({
       sub: 99,
       role: UserRole.CUSTOMER,
@@ -210,13 +210,110 @@ describe('LocationGateway', () => {
     });
 
     await expect((gateway as any).handleSubscribe('1', client)).rejects.toThrow(
-      'Forbidden',
+      'Live tracking is not available for this stop',
     );
 
     expect(
       dispatchPlanService.getCurrentPendingStopForRider,
     ).not.toHaveBeenCalled();
     expect(client.join).not.toHaveBeenCalled();
+  });
+
+  it('gives a customer the same rejection for a missing and an unowned delivery', async () => {
+    const client = {
+      handshake: { auth: { token: 'customer-token' } },
+      data: { userId: 99, role: UserRole.CUSTOMER },
+      join: jest.fn(),
+      disconnect: jest.fn(),
+    };
+    jest.spyOn(gateway as any, 'authenticateSocket').mockResolvedValue({
+      id: 99,
+      role: UserRole.CUSTOMER,
+    });
+
+    assignmentRepo.findOne.mockResolvedValueOnce(null);
+    const missing = await (gateway as any)
+      .handleSubscribe('4242', client)
+      .catch((e: Error) => e.message);
+
+    assignmentRepo.findOne.mockResolvedValueOnce({
+      id: 4242,
+      riderId: 5,
+      status: DeliveryStatus.ON_THE_WAY,
+      order: { userId: 10 },
+      rider: { userId: 50 },
+    });
+    const unowned = await (gateway as any)
+      .handleSubscribe('4242', client)
+      .catch((e: Error) => e.message);
+
+    expect(missing).toBe('Live tracking is not available for this stop');
+    expect(unowned).toBe(missing);
+  });
+
+  it('delivers no locationUpdate to the customer at queue position 2', async () => {
+    const joinedRooms = new Set<string>();
+    const publishedEvents: Array<{
+      room: string;
+      event: string;
+      payload: unknown;
+    }> = [];
+    const receivedEvents: Array<{ event: string; payload: unknown }> = [];
+    const client = {
+      handshake: { auth: { token: 'later-customer-token' } },
+      data: { userId: 10, role: UserRole.CUSTOMER },
+      join: jest.fn(async (room: string) => {
+        joinedRooms.add(room);
+      }),
+      emit: jest.fn(),
+      disconnect: jest.fn(),
+    };
+    assignmentRepo.findOne.mockResolvedValue({
+      id: 2,
+      riderId: 5,
+      status: DeliveryStatus.ON_THE_WAY,
+      order: { userId: 10 },
+      rider: { userId: 50 },
+    });
+    dispatchPlanService.getCurrentPendingStopForRider.mockResolvedValue({
+      stop: { assignmentId: 1 },
+      planVersion: 7,
+    });
+    (gateway as any).server = {
+      to: (room: string) => ({
+        emit: (event: string, payload: unknown) => {
+          publishedEvents.push({ room, event, payload });
+          if (joinedRooms.has(room)) receivedEvents.push({ event, payload });
+        },
+      }),
+    };
+
+    await expect((gateway as any).handleSubscribe('2', client)).rejects.toThrow(
+      'Live tracking is not available for this stop',
+    );
+    expect(client.join).not.toHaveBeenCalled();
+
+    gateway.broadcastLocation('1', {
+      assignmentId: '1',
+      planVersion: 7,
+      latitude: 7.064,
+      longitude: 125.6079,
+      timestamp: '2026-07-15T12:00:00.000Z',
+    });
+
+    expect(publishedEvents).toEqual([
+      {
+        room: 'delivery_1',
+        event: 'locationUpdate',
+        payload: expect.objectContaining({
+          assignmentId: '1',
+          latitude: 7.064,
+          longitude: 125.6079,
+        }),
+      },
+    ]);
+    expect(receivedEvents).toEqual([]);
+    expect(client.emit).not.toHaveBeenCalled();
   });
 
   it('rechecks account activity and role before every subscription', async () => {

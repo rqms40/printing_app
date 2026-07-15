@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:printing_app/features/rider/shared/widgets/rider_checkpoint_panel.dart';
 import 'package:printing_app/shared/models/enums.dart';
@@ -21,7 +22,7 @@ void main() {
       ),
     );
 
-    final control = find.bySemanticsLabel('Swipe to confirm delivery');
+    final control = find.bySemanticsLabel('Swipe to open proof of delivery');
     expect(control, findsOneWidget);
     final semantics = tester.getSemantics(control).getSemanticsData();
     expect(semantics.hasAction(SemanticsAction.tap), isTrue);
@@ -56,11 +57,21 @@ void main() {
       ),
     );
 
-    final button = find.widgetWithText(TextButton, 'Open proof of delivery');
-    expect(button, findsOneWidget);
-    await tester.tap(button);
+    // The duplicate proof button was removed; the slider's Semantics onTap
+    // is the accessible activation path.
+    final semantics = tester.getSemantics(
+      find.bySemanticsLabel('Swipe to open proof of delivery'),
+    );
+    tester.binding.pipelineOwner.semanticsOwner!.performAction(
+      semantics.id,
+      SemanticsAction.tap,
+    );
     await tester.pump();
 
     expect(confirmed, isTrue);
+    expect(
+      find.widgetWithText(TextButton, 'Open proof of delivery'),
+      findsNothing,
+    );
   });
 }

@@ -8,8 +8,11 @@ import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/features/rider/deliveries/providers/deliveries_provider.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
+import 'package:printing_app/features/rider/shared/off_route.dart';
 import 'package:printing_app/features/rider/shared/providers/rider_location_tracker_provider.dart';
+import 'package:printing_app/features/rider/shared/widgets/rider_vehicle_marker.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
 /// Rider delivery map backed only by the persisted server dispatch leg.
@@ -24,6 +27,7 @@ class RiderMapView extends ConsumerStatefulWidget {
     this.showLiveBadge = true,
     this.showRoute = true,
     this.borderRadius,
+    this.planOrigin,
   });
 
   final String assignmentId;
@@ -33,6 +37,7 @@ class RiderMapView extends ConsumerStatefulWidget {
   final bool interactive;
   final bool showLiveBadge;
   final bool showRoute;
+  final LatLng? planOrigin;
   final BorderRadius? borderRadius;
 
   @override
@@ -42,9 +47,13 @@ class RiderMapView extends ConsumerStatefulWidget {
 class _RiderMapViewState extends ConsumerState<RiderMapView>
     with SingleTickerProviderStateMixin {
   final _mapController = MapController();
+  bool _followCamera = false;
+  int _offRouteFixes = 0;
+  bool _offRouteDismissed = false;
+  bool _replanInFlight = false;
   late final AnimationController _pulseController;
 
-  LatLng get _shop => MapHelpers.shopPoint;
+  LatLng get _shop => widget.planOrigin ?? MapHelpers.shopPoint;
 
   LatLng get _destination =>
       widget.planStop?.destination ??
@@ -113,6 +122,24 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(riderLocationTrackerProvider(_trackerArgs), (previous, next) {
+      final point = next.point;
+      if (point == null || point == previous?.point) return;
+      if (_followCamera) {
+        _mapController.move(point, _mapController.camera.zoom);
+      }
+      final leg = _routePoints;
+      if (widget.trackLocation && leg.length >= 2) {
+        final off = isOffRoute(point, leg);
+        final fixes = off ? _offRouteFixes + 1 : 0;
+        if (fixes != _offRouteFixes) {
+          setState(() {
+            _offRouteFixes = fixes;
+            if (!off) _offRouteDismissed = false;
+          });
+        }
+      }
+    });
     final brightness = Theme.of(context).brightness;
     final colors = brightness == Brightness.dark
         ? AppColors.dark
@@ -125,7 +152,6 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
     final markers = <Marker>[
       MapHelpers.shopMarker(point: _shop),
       MapHelpers.destinationMarker(point: _destination),
-      if (riderPoint != null) MapHelpers.riderMarker(riderPoint),
     ];
 
     return ClipRRect(
@@ -143,6 +169,11 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
                     : InteractiveFlag.none,
               ),
               onMapReady: _fitBounds,
+              onPositionChanged: (camera, hasGesture) {
+                if (hasGesture && _followCamera) {
+                  setState(() => _followCamera = false);
+                }
+              },
             ),
             children: [
               MapHelpers.tileLayer(brightness),
@@ -154,6 +185,27 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
                   isCurrent: true,
                 ),
               MarkerLayer(markers: markers),
+              if (riderPoint != null)
+                AnimatedVehiclePosition(
+                  point: riderPoint,
+                  builder: (context, animated) => Stack(
+                    children: [
+                      if (tracker.accuracyMeters != null)
+                        riderAccuracyCircle(
+                          point: animated,
+                          accuracyMeters: tracker.accuracyMeters!,
+                        ),
+                      MarkerLayer(
+                        markers: [
+                          riderVehicleMarker(
+                            point: animated,
+                            headingDegrees: tracker.headingDegrees,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               MapHelpers.attribution(includeRouting: _routePoints.isNotEmpty),
             ],
           ),
@@ -202,8 +254,89 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
               onTap: () => unawaited(_refreshGpsLocation()),
             ),
           ),
+          if (widget.trackLocation &&
+              _offRouteFixes >= 3 &&
+              !_offRouteDismissed)
+            Positioned(
+              key: const Key('off-route-banner'),
+              top: MediaQuery.paddingOf(context).top + AppSpacing.md,
+              left: AppSpacing.md,
+              right: AppSpacing.md,
+              child: Material(
+                color: const Color(0xF23D2E00),
+                borderRadius: AppRadius.borderMd,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.fork_right_rounded,
+                        color: Color(0xFFFFDE58),
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Off route — request a new plan?',
+                          style: AppTypography.caption.copyWith(
+                            color: const Color(0xFFFFF3C4),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _replanInFlight
+                            ? null
+                            : () => unawaited(_requestReplan()),
+                        child: Text(
+                          _replanInFlight ? 'Requesting…' : 'Request replan',
+                        ),
+                      ),
+                      IconButton(
+                        iconSize: 16,
+                        color: const Color(0xFFFFF3C4),
+                        onPressed: () =>
+                            setState(() => _offRouteDismissed = true),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          if (widget.trackLocation)
+            Positioned(
+              key: const Key('camera-follow-toggle'),
+              top: MediaQuery.paddingOf(context).top + AppSpacing.xxxl + 56,
+              right: AppSpacing.md,
+              child: _MapControlButton(
+                label: _followCamera
+                    ? 'Stop following my position'
+                    : 'Follow my position',
+                icon: _followCamera
+                    ? Icons.navigation_rounded
+                    : Icons.navigation_outlined,
+                onTap: () => setState(() => _followCamera = !_followCamera),
+              ),
+            ),
         ],
       ),
+    );
+  }
+
+  Future<void> _requestReplan() async {
+    setState(() => _replanInFlight = true);
+    final error = await ref.read(deliveriesProvider.notifier).requestReplan();
+    if (!mounted) return;
+    setState(() {
+      _replanInFlight = false;
+      if (error == null) {
+        _offRouteFixes = 0;
+        _offRouteDismissed = false;
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(error ?? 'Route updated with a new plan')),
     );
   }
 }

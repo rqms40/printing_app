@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/features/rider/shared/rider_theme.dart';
 
 /// Vertical stop timeline from rider-UI.png (right edge of map).
@@ -7,12 +8,18 @@ class RiderStopTimeline extends StatelessWidget {
     super.key,
     required this.totalStops,
     required this.completedCount,
+    this.stopStatuses,
     required this.currentStopIndex,
     this.onCollapse,
   });
 
   final int totalStops;
   final int completedCount;
+
+  /// Per-stop plan statuses (1-indexed by stop number). When provided, a
+  /// node is "done" only if its own stop is completed — a skipped stop is
+  /// never shaded as done just because later stops finished.
+  final List<RiderDispatchStopStatus>? stopStatuses;
   final int currentStopIndex;
   final VoidCallback? onCollapse;
 
@@ -38,7 +45,11 @@ class RiderStopTimeline extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: List.generate(stops, (index) {
                   final stopNumber = index + 1;
-                  final isDone = stopNumber <= completedCount;
+                  final isDone =
+                      stopStatuses != null && stopNumber <= stopStatuses!.length
+                      ? stopStatuses![stopNumber - 1] ==
+                            RiderDispatchStopStatus.completed
+                      : stopNumber <= completedCount;
                   final isCurrent = stopNumber == currentStopIndex;
                   return _TimelineNode(
                     key: ValueKey('rider-stop-node-$stopNumber'),
@@ -126,15 +137,6 @@ class _TimelineNode extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'STOP',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 4.5,
-                    fontWeight: FontWeight.w900,
-                    height: 1,
-                  ),
-                ),
                 Text(
                   label,
                   style: TextStyle(

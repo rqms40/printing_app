@@ -48,7 +48,7 @@ export function betaModeConfirmation(checked: boolean) {
     ? {
         title: 'Enable Beta Mode?',
         content:
-          'New customer accounts are auto-enrolled in order and receive a one-time 100 GRID Credits grant. Beta checkout accepts GRID Credits only. After delivery, the mandatory 14-question feedback survey is shown; completed beta accounts are held from login until beta mode is disabled. Enrollment and credit history is retained.',
+          'New customer accounts are auto-enrolled in order and receive a one-time 100 GRIDGO Credits grant. Beta checkout accepts GRIDGO Credits only. After delivery, the mandatory 14-question feedback survey is shown; completed beta accounts are held from login until beta mode is disabled. Enrollment and credit history is retained.',
         okText: 'Enable',
         okButtonProps: { danger: false },
       }
@@ -325,6 +325,13 @@ export function BetaModePage() {
   const columns = useMemo(
     () => [
       {
+        title: 'Rank',
+        dataIndex: 'rank',
+        key: 'rank',
+        width: 80,
+        render: (rank: number) => `#${String(rank).padStart(3, '0')}`,
+      },
+      {
         title: 'Member',
         key: 'member',
         render: (_: unknown, row: BetaMemberRow) => (
@@ -532,7 +539,7 @@ export function BetaModePage() {
             </Title>
             <Text style={{ color: MUTED_TEXT, fontSize: 13 }}>
               Auto-enrolls new customers in rank order, grants one-time 100
-              GRID Credits, and limits beta checkout to GRID Credits. Delivery
+              GRIDGO Credits, and limits beta checkout to GRIDGO Credits. Delivery
               completion requires the 14-question feedback survey and then
               holds completed accounts until beta mode is disabled. Disabling
               restores access immediately while retaining enrollment, credit,

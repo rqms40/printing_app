@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 
 /// Vertical numbered stop rail overlaid on the cockpit map's right edge.
@@ -9,11 +10,16 @@ class RiderStopRail extends StatefulWidget {
     super.key,
     required this.totalStops,
     required this.completedCount,
+    this.stopStatuses,
     required this.currentStopIndex,
   });
 
   final int totalStops;
   final int completedCount;
+
+  /// Per-stop plan statuses (1-indexed). When provided, done-shading follows
+  /// each stop's own status instead of a completed count.
+  final List<RiderDispatchStopStatus>? stopStatuses;
   final int currentStopIndex;
 
   @override
@@ -63,7 +69,12 @@ class _RiderStopRailState extends State<RiderStopRail> {
                       _StopNode(
                         colors: colors,
                         number: i,
-                        done: i <= widget.completedCount,
+                        done:
+                            widget.stopStatuses != null &&
+                                i <= widget.stopStatuses!.length
+                            ? widget.stopStatuses![i - 1] ==
+                                  RiderDispatchStopStatus.completed
+                            : i <= widget.completedCount,
                         current: i == widget.currentStopIndex,
                       ),
                     ],
@@ -159,15 +170,6 @@ class _StopNode extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'STOP',
-              style: TextStyle(
-                color: fg,
-                fontSize: 4.5,
-                fontWeight: FontWeight.w900,
-                height: 1,
-              ),
-            ),
             Text(
               '$number',
               style: TextStyle(

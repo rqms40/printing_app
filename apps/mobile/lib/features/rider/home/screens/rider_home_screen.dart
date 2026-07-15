@@ -17,6 +17,7 @@ import 'package:printing_app/features/rider/home/widgets/rider_recent_deliveries
 import 'package:printing_app/features/rider/home/widgets/rider_today_route_section.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:printing_app/features/rider/shared/widgets/rider_stale_route_banner.dart';
 
 /// Rider home — mirrors the customer home layout with rider content.
 class RiderHomeScreen extends ConsumerWidget {
@@ -40,10 +41,21 @@ class RiderHomeScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _call(String? phone) async {
-    if (phone == null || phone.isEmpty) return;
+  Future<void> _call(BuildContext context, String? phone) async {
+    if (phone == null || phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No phone number on file')),
+      );
+      return;
+    }
     final uri = Uri.parse('tel:$phone');
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open — no app available')),
+      );
+    }
   }
 
   @override
@@ -93,10 +105,13 @@ class RiderHomeScreen extends ConsumerWidget {
                     const HeroBanner(),
                     const SizedBox(height: AppSpacing.sm + 2),
 
+                    if (state.dataStale) const RiderStaleRouteBanner(),
+
                     SizedBox(
                       height: 380,
                       child: RiderCockpitMap(
                         mapStops: mapStops,
+                        planOrigin: state.planOrigin,
                         activeStop: active,
                         completedCount: completedCount,
                         currentStopIndex: currentStopIndex,
@@ -123,7 +138,7 @@ class RiderHomeScreen extends ConsumerWidget {
                           '/rider/deliveries/${active.id}/active',
                         ),
                         onMessage: () => _openChat(context, ref, active),
-                        onCall: () => _call(active.order.customerPhone),
+                        onCall: () => _call(context, active.order.customerPhone),
                       )
                     else
                       Padding(
@@ -132,7 +147,7 @@ class RiderHomeScreen extends ConsumerWidget {
                           vertical: AppSpacing.sm,
                         ),
                         child: Text(
-                          'No active stop — check Orders for assignments.',
+                          'No active stop — check Deliveries for assignments.',
                           style: AppTypography.caption.copyWith(
                             color: colors.onSurfaceDim,
                           ),

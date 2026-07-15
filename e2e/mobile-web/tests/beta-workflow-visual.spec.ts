@@ -684,9 +684,7 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     expect(registrationResponse).toBeGreaterThanOrEqual(0);
     expect(tokenRegistration).toBeGreaterThan(registrationResponse);
     expect(tokenRegistration).toBeLessThan(betaLookup);
-    expect(registrationFlow).toContain(
-      'actor.page.url().includes("/onboarding")',
-    );
+    expect(registrationFlow).toContain('postSignup === "onboarding"');
     expect(registrationFlow).toContain(
       "await completeCustomerOnboarding(actor.page)",
     );
@@ -1227,39 +1225,51 @@ async function enterFieldValue(
   value: string,
 ): Promise<void> {
   const expectedName = accessibleNamePattern(name);
-  const currentActiveName = await page.evaluate(() => {
-    const active = document.activeElement;
-    return (
-      active?.getAttribute("aria-label") ??
-      active?.getAttribute("placeholder") ??
-      ""
-    );
-  });
-  if (!expectedName.test(currentActiveName)) {
-    const box = await target.boundingBox();
-    expect(box, "measurable Flutter field target").not.toBeNull();
-    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  const readActiveName = () =>
+    page.evaluate(() => {
+      const active = document.activeElement;
+      return (
+        active?.getAttribute("aria-label") ??
+        active?.getAttribute("placeholder") ??
+        ""
+      );
+    });
+  // Flutter web syncs the semantic <input> asynchronously with framework
+  // state and can recreate the input node after focus transitions, so a
+  // single focus + insertText + immediate readback races in both
+  // directions (DOM empty, or DOM filled while the framework missed it).
+  // Each attempt re-establishes focus on the (possibly recreated) node,
+  // types real key events, and polls until the DOM value settles.
+  let accepted = false;
+  for (let attempt = 0; attempt < 4 && !accepted; attempt += 1) {
+    if (!expectedName.test(await readActiveName())) {
+      const box = await target.boundingBox();
+      expect(box, "measurable Flutter field target").not.toBeNull();
+      await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+      await page.waitForTimeout(100);
+    }
+    if (!expectedName.test(await readActiveName())) continue;
+    await page.keyboard.press("Control+A");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.type(value, { delay: 10 });
+    accepted = await page
+      .waitForFunction(
+        (expected) => {
+          const active = document.activeElement;
+          const current =
+            active instanceof HTMLInputElement ||
+            active instanceof HTMLTextAreaElement
+              ? active.value
+              : null;
+          return current === expected;
+        },
+        value,
+        { timeout: 3_000 },
+      )
+      .then(() => true)
+      .catch(() => false);
   }
-  const activeName = await page.evaluate(() => {
-    const active = document.activeElement;
-    return (
-      active?.getAttribute("aria-label") ??
-      active?.getAttribute("placeholder") ??
-      ""
-    );
-  });
-  expect(activeName, "focused Flutter field identity").toMatch(expectedName);
-  await page.keyboard.press("Control+A");
-  await page.keyboard.press("Backspace");
-  await page.keyboard.insertText(value);
-  const activeValue = await page.evaluate(() => {
-    const active = document.activeElement;
-    return active instanceof HTMLInputElement ||
-      active instanceof HTMLTextAreaElement
-      ? active.value
-      : null;
-  });
-  expect(activeValue, "focused Flutter field value").toBe(value);
+  expect(accepted, `focused Flutter field value ${String(name)}`).toBe(true);
   await page.keyboard.press("Tab");
   await page.waitForTimeout(50);
 }
@@ -1344,6 +1354,15 @@ async function dismissTutorials(page: Page): Promise<void> {
 }
 
 async function completeCustomerOnboarding(page: Page): Promise<void> {
+  // The onboarding carousel can arrive mid-transition (e.g. right after the
+  // beta reveal navigates here), so wait for its first page to render, then
+  // re-assert Flutter's accessibility tree — the multi-navigation through the
+  // reveal can leave it un-enabled so the Next button never surfaces.
+  await expect(page.locator("body")).toContainText(/PRINT WITH EASE/i, {
+    timeout: 30_000,
+  });
+  await enableFlutterSemantics(page);
+  await page.waitForTimeout(700);
   for (let pageIndex = 0; pageIndex < 4; pageIndex += 1) {
     await clickNamed(page, "Next");
     await page.waitForTimeout(450);
@@ -1443,29 +1462,53 @@ async function positionRiderAtStoreBeforePickup(
 ): Promise<{ latitude: number; longitude: number }> {
   const store = betaCheckpoint("store");
   await actor.context.setGeolocation(store);
-  const location = await actor.page.evaluate(
-    () =>
-      new Promise<{ latitude: number; longitude: number }>((resolve, reject) =>
-        navigator.geolocation.getCurrentPosition(
-          (position) =>
-            resolve({
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-            }),
-          reject,
-          { enableHighAccuracy: true, timeout: 10_000 },
-        ),
-      ),
-  );
-  expect(location.latitude, "Juan reaches the store before pickup").toBeCloseTo(
-    store.latitude,
-    5,
-  );
+  // Retry transient GeolocationPositionError while the override propagates.
+  let location: { latitude: number; longitude: number } | null = null;
+  let lastGeolocationError = "";
+  for (let attempt = 0; attempt < 3 && !location; attempt += 1) {
+    // Re-foreground: hidden pages get geolocation suspended (four contexts
+    // share one browser and only one page is visible at a time).
+    await actor.page.bringToFront();
+    try {
+      location = await actor.page.evaluate(
+        () =>
+          new Promise<{ latitude: number; longitude: number }>(
+            (resolve, reject) =>
+              navigator.geolocation.getCurrentPosition(
+                (position) =>
+                  resolve({
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                  }),
+                (error) =>
+                  reject(
+                    new Error(
+                      `geolocation error ${error.code}: ${error.message}`,
+                    ),
+                  ),
+                { enableHighAccuracy: true, timeout: 10_000 },
+              ),
+          ),
+      );
+    } catch (error) {
+      lastGeolocationError = String(error);
+      await actor.page.waitForTimeout(1_000);
+      await actor.context.setGeolocation(store);
+    }
+  }
   expect(
-    location.longitude,
+    location,
+    `Juan geolocation resolves (${lastGeolocationError})`,
+  ).not.toBeNull();
+  expect(
+    location!.latitude,
+    "Juan reaches the store before pickup",
+  ).toBeCloseTo(store.latitude, 5);
+  expect(
+    location!.longitude,
     "Juan reaches the store before pickup",
   ).toBeCloseTo(store.longitude, 5);
-  return location;
+  return location!;
 }
 
 async function foregroundFlutterPage(page: Page): Promise<void> {
@@ -1607,34 +1650,40 @@ async function registerCustomerThroughUi(options: {
       run,
       actor,
       3,
-      /Your data, your rules/,
+      /Register your\s+print account|WELCOME/i,
       {},
       { variant: "mark-registration-entry" },
     );
-  await clickNamed(actor.page, "Agree & Continue");
-  await actor.page.locator("input").last().fill(name);
+  // Step 1 — welcome + explicit consent.
+  await clickNamed(actor.page, /I agree to keep my data mine/);
   await clickNamed(actor.page, "Continue");
-  await clickNamed(actor.page, "Student");
-  await clickNamed(actor.page, "Continue");
-  await clickNamed(actor.page, "Architecture");
-  await clickNamed(actor.page, "Continue");
-  await clickNamed(actor.page, "Male");
-  await clickNamed(actor.page, "Continue");
-  await clickNamed(actor.page, "18–24");
-  await clickNamed(actor.page, "Continue");
-  // Flutter's web renderer exposes the input hints as accessible names even
-  // though the visible labels remain separate semantics nodes.
+  // Step 2 — account (moved up). Flutter's web renderer exposes the input
+  // hints as accessible names even though the visible labels remain separate
+  // semantics nodes.
   await fillNamed(actor.page, "Kai Reyes", `${name} Beta Visual`);
   await fillNamed(actor.page, "kai@example.com", email);
   await fillNamed(actor.page, "+63 917 123 4567", "+639171234567");
   await fillNamed(actor.page, "Min. 8 characters", password);
   await fillNamed(actor.page, "Re-enter your password", password);
+  await clickNamed(actor.page, "Continue");
+  // Step 3 — nickname (uses the robust filler; a plain .fill() does not
+  // reliably update the Flutter text controller on web).
+  await fillNamed(actor.page, "e.g. Kai", name);
+  await clickNamed(actor.page, "Continue");
+  // Step 4 — craft (category + field on one plate).
+  await expect(actor.page.locator("body")).toContainText(/YOUR LANE/i);
+  await clickNamed(actor.page, "Student");
+  await clickNamed(actor.page, "Architecture");
+  await clickNamed(actor.page, "Continue");
+  // Step 5 — profile (gender + age, skippable). Fill them, then create.
+  await clickNamed(actor.page, "Male");
+  await clickNamed(actor.page, "18–24");
   const auth = await waitForStrict2xx<AuthPayload>(
     actor.page,
     (response) =>
       response.request().method() === "POST" &&
       apiPath(response, "/api/auth/register"),
-    () => clickNamed(actor.page, "Create Account"),
+    () => clickNamed(actor.page, "Create account"),
     `${name} UI registration`,
   );
   registerEvidenceSecrets(run, [auth.access_token]);
@@ -1649,8 +1698,27 @@ async function registerCustomerThroughUi(options: {
   );
   expect(beta.isBetaUser).toBe(true);
   const betaRank = positiveId(beta.rank, `${name} beta rank`);
-  await actor.page.waitForURL(/\/(?:onboarding|customer\/)/);
-  if (actor.page.url().includes("/onboarding")) {
+  // Beta-eligible signups land on the press-proof reveal, whose "Start
+  // printing" is the tester's welcome and goes straight to the customer home
+  // (the onboarding carousel is skipped for beta testers). Detect by settled
+  // content, not the URL: the auth-change redirect can flash /onboarding
+  // before the reveal navigation settles.
+  let postSignup = "pending";
+  await expect
+    .poll(async () => {
+      const body = (await actor.page.locator("body").textContent()) ?? "";
+      if (/FOUNDING TESTER/i.test(body)) return (postSignup = "reveal");
+      if (/PRINT WITH EASE/i.test(body)) return (postSignup = "onboarding");
+      if (actor.page.url().includes("/customer/")) {
+        return (postSignup = "home");
+      }
+      return "pending";
+    })
+    .toMatch(/^(?:reveal|onboarding|home)$/);
+  if (postSignup === "reveal") {
+    await clickNamed(actor.page, "Start printing");
+    await actor.page.waitForURL(/\/customer\//);
+  } else if (postSignup === "onboarding") {
     await completeCustomerOnboarding(actor.page);
   }
   await dismissTutorials(actor.page);
@@ -1716,6 +1784,9 @@ async function saveAddressThroughUi(
 }
 
 async function beginFirstOrderTutorial(page: Page): Promise<void> {
+  // The next-batch dialog is time-of-day dependent (midDay/missed variants),
+  // so returning to home can surface it at any point in the journey.
+  await closeNextBatchDialogIfShown(page);
   await expect(page.locator("body")).toContainText(/Let's print something/i);
   await clickNamed(page, "Show me how →");
   await expect(page.locator("body")).toContainText(
@@ -1790,10 +1861,24 @@ async function placeCustomerOrder(options: {
     await capture(run, actor, 4, /Account Details/i, { userId });
     await navigateMobile(actor.page, mobileURL, "/customer/home");
     await closeNextBatchDialogIfShown(actor.page);
-    await capture(run, actor, 5, /Let's print something/i, {
-      userId,
-      betaRank: base.betaRank,
-    });
+    await capture(
+      run,
+      actor,
+      5,
+      /Let's print something/i,
+      {
+        userId,
+        betaRank: base.betaRank,
+      },
+      {
+        // The session next-batch dialog fires whenever the slot fetch lands,
+        // so it can pop between a close check and this capture — close it
+        // inside the assertion so the two act atomically.
+        assertState: async () => {
+          await closeNextBatchDialogIfShown(actor.page);
+        },
+      },
+    );
   } else {
     await navigateMobile(actor.page, mobileURL, "/customer/home");
     await closeNextBatchDialogIfShown(actor.page);
@@ -1806,7 +1891,12 @@ async function placeCustomerOrder(options: {
         userId,
         betaRank: base.betaRank,
       },
-      { variant: "ven-beta-credits" },
+      {
+        variant: "ven-beta-credits",
+        assertState: async () => {
+          await closeNextBatchDialogIfShown(actor.page);
+        },
+      },
     );
   }
 
@@ -2261,11 +2351,13 @@ async function drawAndSubmitSignature(
   const viewport = actor.page.viewportSize();
   expect(viewport, "rider proof viewport must be available").not.toBeNull();
   const proofButton = actor.page.getByRole("button", {
-    name: /^Open proof of delivery/i,
+    name: /open proof of delivery/i,
   });
   // Arrival must reveal a keyboard/screen-reader-operable proof action without
-  // requiring an undiscoverable drag. The physical swipe remains covered by
-  // the Flutter component regression test.
+  // requiring an undiscoverable drag. Since the rider map uplift the slider
+  // itself is that action ("Swipe to open proof of delivery" exposes a
+  // semantics button with onTap); the physical swipe remains covered by the
+  // Flutter component regression test.
   await expect(proofButton).toHaveCount(1);
   await expect(proofButton).toBeVisible();
   await proofButton.click();
@@ -2335,6 +2427,9 @@ async function completeSurveyUi(customer: CustomerRun): Promise<void> {
       `Feedback rating for question ${index + 1}`,
     );
     await expect(question).toHaveAccessibleName(/NEUTRAL/i);
+    // The slider is briefly disabled while the question animates in; wait for
+    // it to be interactive before driving it, or the keypress is dropped.
+    await expect(sliders[0]).toBeEnabled();
     await sliders[0].focus();
     await sliders[0].press("ArrowRight");
     await expect(sliders[0]).toHaveAttribute("aria-valuetext", "AGREE");
@@ -2881,7 +2976,7 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
           await assertLiveTrackingUi(actors.ven);
         },
       });
-      await capture(run, actors.ven, 23, /1st in queue/i, {
+      await capture(run, actors.ven, 23, /1st (?:of \d+ )?in queue/i, {
         orderId: ven.orderId,
         assignmentId: ven.assignmentId,
         dispatchPlanVersion: planVersion,
@@ -2895,7 +2990,7 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         assignmentId: mark.assignmentId,
       });
       await assertPrivateQueueUi(actors.mark.page);
-      await capture(run, actors.mark, 24, /2nd in queue/i, {
+      await capture(run, actors.mark, 24, /2nd (?:of \d+ )?in queue/i, {
         orderId: mark.orderId,
         dispatchPlanVersion: planVersion,
       });

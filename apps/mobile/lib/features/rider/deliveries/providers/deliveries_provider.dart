@@ -1,5 +1,9 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
+
+import 'package:latlong2/latlong.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
@@ -19,6 +23,7 @@ class DeliveriesState {
     this.errorMessage,
     this.filterStatus,
     this.dataStale = false,
+    this.planOrigin,
   });
 
   final List<RiderAssignmentView> views;
@@ -27,6 +32,7 @@ class DeliveriesState {
   final String? errorMessage;
   final DeliveryStatus? filterStatus;
   final bool dataStale;
+  final LatLng? planOrigin;
 
   List<DeliveryAssignment> get assignments =>
       views.map((v) => v.assignment).toList();
@@ -91,6 +97,7 @@ class DeliveriesState {
     String? Function()? errorMessage,
     DeliveryStatus? Function()? filterStatus,
     bool? dataStale,
+    LatLng? Function()? planOrigin,
   }) {
     return DeliveriesState(
       views: views ?? this.views,
@@ -99,6 +106,7 @@ class DeliveriesState {
       errorMessage: errorMessage != null ? errorMessage() : this.errorMessage,
       filterStatus: filterStatus != null ? filterStatus() : this.filterStatus,
       dataStale: dataStale ?? this.dataStale,
+      planOrigin: planOrigin != null ? planOrigin() : this.planOrigin,
     );
   }
 }
@@ -210,6 +218,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         isRefreshing: false,
         errorMessage: () => null,
         dataStale: plan?.routingDataStale ?? false,
+        planOrigin: () => plan?.origin,
       );
     } catch (_) {
       if (!mounted || generation != _fetchGeneration) return;
@@ -278,13 +287,35 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
     });
   }
 
-  Future<void> declineAssignment(String assignmentId) async {
+  /// Rider-triggered re-optimize of their own remaining route. Returns a
+  /// user-facing error message, or null on success.
+  Future<String?> requestReplan() async {
+    try {
+      await ApiClient.instance.post('/riders/dispatch-plan/re-optimize');
+      await refreshAssignments();
+      return null;
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final code = data is Map ? data['code'] : null;
+      if (e.response?.statusCode == 503 || code == 'routing_unavailable') {
+        return 'Road routing unavailable — keeping your current route';
+      }
+      return 'Could not request a new plan';
+    } catch (_) {
+      return 'Could not request a new plan';
+    }
+  }
+
+  Future<void> declineAssignment(
+    String assignmentId, {
+    String reason = 'Rider declined',
+  }) async {
     try {
       await ApiClient.instance.patch(
         '/riders/assignments/$assignmentId/status',
         data: {
           'status': serverDeliveryStatus(DeliveryStatus.declined),
-          'declineReason': 'Rider declined',
+          'declineReason': reason,
         },
       );
     } catch (_) {

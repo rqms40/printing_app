@@ -90,11 +90,20 @@ export class LocationGateway implements OnGatewayConnection {
       where: { id: numericId, isCurrent: true },
       relations: ['order', 'rider'],
     });
-    if (!assignment) throw new WsException('Delivery not found');
+    // One opaque rejection for "no such current delivery" and "not your
+    // delivery" so an authenticated customer cannot enumerate which
+    // assignment ids are currently live.
+    const unavailable = new WsException(
+      'Live tracking is not available for this stop',
+    );
+    if (!assignment) {
+      if (role === UserRole.CUSTOMER) throw unavailable;
+      throw new WsException('Delivery not found');
+    }
 
     if (role === UserRole.CUSTOMER) {
       if (assignment.order?.userId !== userId) {
-        throw new WsException('Forbidden');
+        throw unavailable;
       }
       if (
         ![DeliveryStatus.ON_THE_WAY, DeliveryStatus.ARRIVED].includes(

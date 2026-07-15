@@ -5,6 +5,7 @@ import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/routes/page_transitions.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
+import 'package:printing_app/features/customer/beta/providers/beta_status_provider.dart';
 import 'package:printing_app/features/auth/models/registration_draft.dart';
 import 'package:printing_app/features/customer/profile/models/account_state.dart';
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
@@ -21,6 +22,7 @@ import 'package:printing_app/features/splash/screens/splash_screen.dart';
 // Auth screens
 // ---------------------------------------------------------------------------
 import 'package:printing_app/features/auth/screens/login_screen.dart';
+import 'package:printing_app/features/auth/screens/beta_welcome_screen.dart';
 import 'package:printing_app/features/auth/screens/register_screen.dart';
 import 'package:printing_app/features/auth/screens/profile_setup_screen.dart';
 
@@ -103,6 +105,7 @@ class _AuthChangeNotifier extends ChangeNotifier {
   _AuthChangeNotifier(this._ref) {
     _ref.listen(authProvider, (_, _) => notifyListeners());
     _ref.listen(accountStateProvider, (_, _) => notifyListeners());
+    _ref.listen(betaStatusProvider, (_, _) => notifyListeners());
   }
   final Ref _ref;
 }
@@ -165,6 +168,7 @@ String? resolveAppRedirect({
   required AuthState authState,
   required AccountState accountState,
   required bool seenOnboarding,
+  bool betaGloballyEnabled = false,
 }) {
   final path = uri.path;
   final isAuth = authState.status == AuthStatus.authenticated;
@@ -193,6 +197,12 @@ String? resolveAppRedirect({
   }
   if (isOnBetaLocked) {
     return isAuth ? _roleHome(authState.user?.role) : '/auth/login';
+  }
+
+  // The post-signup beta reveal is shown to freshly-authenticated testers
+  // before onboarding; allow it through like /onboarding.
+  if (path == '/auth/beta-welcome') {
+    return isAuth ? null : '/auth/login';
   }
 
   final isForcedSurvey = path == '/customer/survey/required';
@@ -232,7 +242,16 @@ String? resolveAppRedirect({
     if (_isSafeRoleDeepLink(requested, authState.user?.role)) {
       return requested;
     }
-    return seenOnboarding ? _roleHome(authState.user?.role) : '/onboarding';
+    if (seenOnboarding) return _roleHome(authState.user?.role);
+    // A freshly-registered customer in an active beta gets the press-proof
+    // reveal instead of the generic onboarding carousel. Routing this here
+    // (not via a post-register context.go) makes it deterministic rather than
+    // racing the auth-change redirect.
+    if (betaGloballyEnabled &&
+        _effectiveRole(authState.user?.role) == 'customer') {
+      return '/auth/beta-welcome';
+    }
+    return '/onboarding';
   }
 
   return null;
@@ -255,11 +274,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       final seenOnboarding = ref.read(
         tutorialSeenProvider(TutorialKey.onboarding),
       );
+      final betaGloballyEnabled =
+          ref.read(betaStatusProvider).valueOrNull?.globallyEnabled ?? false;
       return resolveAppRedirect(
         uri: state.uri,
         authState: authState,
         accountState: accountState,
         seenOnboarding: seenOnboarding,
+        betaGloballyEnabled: betaGloballyEnabled,
       );
     },
     routes: [
@@ -282,6 +304,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/auth/register',
         pageBuilder: (_, state) =>
             fadeTransition(const RegisterScreen(), state),
+      ),
+      GoRoute(
+        path: '/auth/beta-welcome',
+        pageBuilder: (_, state) =>
+            fadeTransition(const BetaWelcomeScreen(), state),
       ),
       GoRoute(
         path: '/auth/profile-setup',
@@ -642,7 +669,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             NavItem(
               icon: HugeIcons.strokeRoundedLeftToRightListDash,
               activeIcon: HugeIcons.strokeRoundedLeftToRightListDash,
-              label: 'Orders',
+              label: 'Deliveries',
             ),
             NavItem(
               icon: HugeIcons.strokeRoundedNotification02,
