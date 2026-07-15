@@ -21,6 +21,7 @@ import 'package:printing_app/features/splash/screens/splash_screen.dart';
 // Auth screens
 // ---------------------------------------------------------------------------
 import 'package:printing_app/features/auth/screens/login_screen.dart';
+import 'package:printing_app/features/auth/screens/beta_welcome_screen.dart';
 import 'package:printing_app/features/auth/screens/register_screen.dart';
 import 'package:printing_app/features/auth/screens/profile_setup_screen.dart';
 
@@ -195,6 +196,12 @@ String? resolveAppRedirect({
     return isAuth ? _roleHome(authState.user?.role) : '/auth/login';
   }
 
+  // The post-signup beta reveal is shown to freshly-authenticated testers
+  // before onboarding; allow it through like /onboarding.
+  if (path == '/auth/beta-welcome') {
+    return isAuth ? null : '/auth/login';
+  }
+
   final isForcedSurvey = path == '/customer/survey/required';
   if (isForcedSurvey && !isAuth) return '/auth/login';
   if (isAuth &&
@@ -282,6 +289,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/auth/register',
         pageBuilder: (_, state) =>
             fadeTransition(const RegisterScreen(), state),
+      ),
+      GoRoute(
+        path: '/auth/beta-welcome',
+        pageBuilder: (_, state) =>
+            fadeTransition(const BetaWelcomeScreen(), state),
       ),
       GoRoute(
         path: '/auth/profile-setup',

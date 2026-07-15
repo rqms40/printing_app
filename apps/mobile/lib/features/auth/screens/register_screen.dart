@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
@@ -12,19 +11,18 @@ import 'package:printing_app/features/auth/models/registration_draft.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/auth/widgets/age_range_selector.dart';
 import 'package:printing_app/features/auth/widgets/gender_identity_selector.dart';
+import 'package:printing_app/features/auth/widgets/password_strength_meter.dart';
 import 'package:printing_app/features/auth/widgets/password_visibility_toggle.dart';
+import 'package:printing_app/features/auth/widgets/registration_step_header.dart';
+import 'package:printing_app/features/customer/beta/providers/beta_status_provider.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
-import 'package:printing_app/features/auth/widgets/onboarding_hero.dart';
 
-enum _RegisterStep {
-  privacy,
-  nickname,
-  category,
-  field,
-  gender,
-  ageRange,
-  account,
-}
+/// The redesigned 5-step registration flow. Account moves to position 2 so a
+/// real account exists early (goal-gradient); category+field and gender+age
+/// each collapse into one screen; gender/age are skippable.
+enum _RegisterStep { welcome, account, nickname, craft, profile }
+
+final _emailPattern = RegExp(r'^[\w.+-]+@[\w-]+\.[\w.-]+$');
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -42,13 +40,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _confirmPasswordController = TextEditingController();
 
   RegistrationDraft _draft = const RegistrationDraft();
-  _RegisterStep _step = _RegisterStep.privacy;
+  _RegisterStep _step = _RegisterStep.welcome;
+  bool _consentChecked = false;
   String? _stepError;
   String? _fullNameError;
   String? _emailError;
   String? _phoneError;
   String? _passwordError;
   String? _confirmPasswordError;
+  PasswordStrength _passwordStrength = PasswordStrength.empty;
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -75,59 +75,60 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     });
 
     switch (_step) {
-      case _RegisterStep.privacy:
+      case _RegisterStep.welcome:
+        if (!_consentChecked) {
+          setState(() => _stepError = 'Please accept the terms to continue');
+          return;
+        }
         setState(() {
           _draft = _draft.copyWith(hasAcceptedPrivacy: true);
+          _step = _RegisterStep.account;
+        });
+        return;
+      case _RegisterStep.account:
+        if (!_validateAccountStep()) return;
+        setState(() {
+          _draft = _draft.copyWith(
+            fullName: _fullNameController.text.trim(),
+            email: _emailController.text.trim(),
+            phoneNumber: _phoneController.text.trim(),
+            password: _passwordController.text,
+            confirmPassword: _confirmPasswordController.text,
+          );
           _step = _RegisterStep.nickname;
         });
         return;
       case _RegisterStep.nickname:
         final nickname = _nicknameController.text.trim();
         if (nickname.isEmpty) {
-          setState(() => _stepError = 'Nickname is required');
+          setState(() => _stepError = 'Pick a nickname so we can greet you');
           return;
         }
         setState(() {
           _draft = _draft.copyWith(nickname: nickname);
-          _step = _RegisterStep.category;
+          _step = _RegisterStep.craft;
         });
         return;
-      case _RegisterStep.category:
+      case _RegisterStep.craft:
         if (!_draft.hasCategory) {
           setState(() => _stepError = 'Choose a category to continue');
           return;
         }
-        setState(() => _step = _RegisterStep.field);
-        return;
-      case _RegisterStep.field:
         if (!_draft.hasField) {
           setState(() => _stepError = 'Choose a field to continue');
           return;
         }
-        setState(() => _step = _RegisterStep.gender);
+        setState(() => _step = _RegisterStep.profile);
         return;
-      case _RegisterStep.gender:
-        if (!_draft.hasGender) {
-          setState(() => _stepError = 'Choose one to continue');
-          return;
-        }
-        setState(() => _step = _RegisterStep.ageRange);
-        return;
-      case _RegisterStep.ageRange:
-        if (!_draft.hasAgeRange) {
-          setState(() => _stepError = 'Choose your age range to continue');
-          return;
-        }
-        setState(() => _step = _RegisterStep.account);
-        return;
-      case _RegisterStep.account:
+      case _RegisterStep.profile:
+        // Gender and age are optional — submit whatever is set.
         _submit();
         return;
     }
   }
 
   void _back(BuildContext context) {
-    if (_step == _RegisterStep.privacy) {
+    if (_step == _RegisterStep.welcome) {
       context.pop();
       return;
     }
@@ -156,7 +157,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
     if (email.isEmpty) {
       emailError = 'Email is required';
-    } else if (!email.contains('@')) {
+    } else if (!_emailPattern.hasMatch(email)) {
       emailError = 'Enter a valid email';
     }
     if (phone.isEmpty) {
@@ -189,32 +190,34 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 
   Future<void> _submit() async {
-    if (!_validateAccountStep()) return;
-
-    final nextDraft = _draft.copyWith(
-      fullName: _fullNameController.text.trim(),
-      email: _emailController.text.trim(),
-      phoneNumber: _phoneController.text.trim(),
-      password: _passwordController.text,
-      confirmPassword: _confirmPasswordController.text,
-    );
-
-    setState(() => _draft = nextDraft);
-
+    final draft = _draft;
     await ref
         .read(authProvider.notifier)
         .register(
-          nextDraft.email,
-          nextDraft.password,
-          fullName: nextDraft.fullName,
-          nickname: nextDraft.nickname,
-          phone: nextDraft.phoneNumber,
-          gender: nextDraft.gender,
-          ageRange: nextDraft.ageRange,
-          profileCategory: nextDraft.profileCategory!,
-          profileField: nextDraft.profileField!,
-          printingPreferences: nextDraft.printingPreferences,
+          draft.email,
+          draft.password,
+          fullName: draft.fullName,
+          nickname: draft.nickname,
+          phone: draft.phoneNumber,
+          gender: draft.gender,
+          ageRange: draft.ageRange,
+          profileCategory: draft.profileCategory!,
+          profileField: draft.profileField!,
+          printingPreferences: draft.printingPreferences,
         );
+
+    if (!mounted) return;
+    final auth = ref.read(authProvider);
+    if (auth.status != AuthStatus.authenticated) return;
+
+    // Peak-end: when this signup enrolled into an active beta, reveal the
+    // founding number + credit grant before the normal onboarding.
+    final beta = await ref.read(betaStatusProvider.future);
+    if (!mounted) return;
+    if (beta != null && beta.globallyEnabled && beta.rank != null) {
+      context.go('/auth/beta-welcome');
+    }
+    // Otherwise the router redirect handles /onboarding as before.
   }
 
   @override
@@ -282,21 +285,22 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _WizardHeader(
-                          stepIndex: _stepIndex,
-                          stepCount: _RegisterStep.values.length,
-                          onBack: () => _back(context),
-                          canGoBack: true,
-                          colors: colors,
-                        )
-                        .animate()
-                        .fadeIn(duration: 320.ms, curve: Curves.easeOut)
-                        .slideY(
-                          begin: 0.02,
-                          duration: 320.ms,
-                          curve: Curves.easeOut,
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: IconButton(
+                        onPressed: () => _back(context),
+                        icon: Icon(
+                          Icons.arrow_back_rounded,
+                          color: colors.onBackground,
                         ),
-                    const SizedBox(height: AppSpacing.xl),
+                        tooltip: 'Back',
+                        style: IconButton.styleFrom(
+                          minimumSize: const Size(48, 48),
+                          backgroundColor: colors.surface,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
                     Expanded(
                       child: LayoutBuilder(
                         builder: (context, constraints) {
@@ -361,7 +365,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                       ),
                                     ),
                                   ],
-                                  if (_step == _RegisterStep.account &&
+                                  if (_step == _RegisterStep.profile &&
                                       authState.errorMessage != null) ...[
                                     const SizedBox(height: AppSpacing.md),
                                     Text(
@@ -380,39 +384,45 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       ),
                     ),
                     const SizedBox(height: AppSpacing.md),
-                    if (_step != _RegisterStep.account)
-                      Row(
-                        children: [
-                          Expanded(
-                            child: AppButton(
-                              label: 'Back',
-                              onTap: () => _back(context),
-                              variant: AppButtonVariant.secondary,
-                              isFullWidth: true,
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.md),
-                          Expanded(
-                            child: AppButton(
-                              label: _step == _RegisterStep.privacy
-                                  ? 'Agree & Continue'
-                                  : 'Continue',
-                              onTap: _next,
-                              variant: AppButtonVariant.brand,
-                              isFullWidth: true,
-                            ),
-                          ),
-                        ],
-                      )
-                    else
+                    if (_step == _RegisterStep.profile) ...[
                       AppButton(
-                        label: 'Create Account',
-                        onTap: _submit,
+                        label: 'Create account',
+                        onTap: _next,
                         isLoading: authState.isLoading,
                         variant: AppButtonVariant.brand,
                         isFullWidth: true,
                       ),
-                    const SizedBox(height: AppSpacing.lg),
+                      const SizedBox(height: AppSpacing.sm),
+                      Center(
+                        child: TextButton(
+                          key: const Key('register-skip-profile'),
+                          onPressed: authState.isLoading
+                              ? null
+                              : () {
+                                  setState(() {
+                                    _draft = _draft.copyWith(
+                                      gender: null,
+                                      ageRange: null,
+                                    );
+                                  });
+                                  _submit();
+                                },
+                          child: Text(
+                            'Skip for now',
+                            style: AppTypography.bodyBold.copyWith(
+                              color: colors.onSurfaceDim,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ] else
+                      AppButton(
+                        label: 'Continue',
+                        onTap: _next,
+                        variant: AppButtonVariant.brand,
+                        isFullWidth: true,
+                      ),
+                    const SizedBox(height: AppSpacing.md),
                     Center(
                       child: GestureDetector(
                         onTap: () => context.pop(),
@@ -449,310 +459,98 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     AppColorSet colors,
     AuthState authState,
   ) {
+    const total = 5;
     switch (_step) {
-      case _RegisterStep.privacy:
+      case _RegisterStep.welcome:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 48),
-            Center(
-                  child: SvgPicture.asset(
-                    'assets/animations/undraw_certificate.svg',
-                    height: 240,
-                    semanticsLabel: 'Privacy and account consent illustration',
-                  ),
-                )
-                .animate()
-                .fadeIn(duration: 500.ms, curve: Curves.easeOut)
-                .slideY(
-                  begin: 0.05,
-                  end: 0,
-                  duration: 500.ms,
-                  curve: Curves.easeOutCubic,
-                ),
-            const SizedBox(height: 64),
-            Center(
-                  child: Text(
-                    'Your data, your rules.',
-                    textAlign: TextAlign.center,
-                    style: AppTypography.display.copyWith(
-                      color: colors.onBackground,
-                    ),
-                  ),
-                )
-                .animate()
-                .fadeIn(delay: 100.ms, duration: 500.ms, curve: Curves.easeOut)
-                .slideY(
-                  begin: 0.05,
-                  end: 0,
-                  delay: 100.ms,
-                  duration: 500.ms,
-                  curve: Curves.easeOutCubic,
-                ),
+            const RegistrationStepHeader(
+              index: 0,
+              total: total,
+              plateLabel: 'WELCOME',
+              title: 'Register your\nprint account.',
+              subtitle:
+                  'A quick 5-plate setup and your GRIDGO account is ready.',
+            ),
             const SizedBox(height: AppSpacing.xl),
-            Center(
-                  child: GestureDetector(
-                    onTap: () => context.push('/customer/profile/terms'),
-                    child: Text(
-                      'View Terms & Conditions',
-                      style: AppTypography.body.copyWith(
-                        color: colors.onSurfaceDim,
-                        decoration: TextDecoration.underline,
+            InkWell(
+              key: const Key('consent-checkbox'),
+              onTap: () => setState(() {
+                _consentChecked = !_consentChecked;
+                _stepError = null;
+              }),
+              borderRadius: AppRadius.borderLg,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: Checkbox(
+                        value: _consentChecked,
+                        onChanged: (v) => setState(() {
+                          _consentChecked = v ?? false;
+                          _stepError = null;
+                        }),
+                        activeColor: colors.brand,
                       ),
                     ),
-                  ),
-                )
-                .animate()
-                .fadeIn(delay: 200.ms, duration: 500.ms, curve: Curves.easeOut)
-                .slideY(
-                  begin: 0.05,
-                  end: 0,
-                  delay: 200.ms,
-                  duration: 500.ms,
-                  curve: Curves.easeOutCubic,
-                ),
-          ],
-        );
-      case _RegisterStep.nickname:
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-                  child: SizedBox(
-                    height: 300,
-                    width: 300,
-                    child: Stack(
-                      children: [
-                        SvgPicture.asset(
-                          'assets/animations/undraw_friendly-guy-avatar_body.svg',
-                        ),
-                        SvgPicture.asset(
-                              'assets/animations/undraw_friendly-guy-avatar_arm.svg',
-                            )
-                            .animate(
-                              onPlay: (controller) =>
-                                  controller.repeat(reverse: true),
-                            )
-                            .rotate(
-                              begin: 0,
-                              end: 0.05,
-                              alignment: const Alignment(-0.35, 0.35),
-                              duration: 1500.ms,
-                              curve: Curves.easeInOut,
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text.rich(
+                        TextSpan(
+                          text:
+                              'I agree to keep my data mine and accept the ',
+                          style: AppTypography.body.copyWith(
+                            color: colors.onSurface,
+                            height: 1.4,
+                          ),
+                          children: [
+                            WidgetSpan(
+                              alignment: PlaceholderAlignment.middle,
+                              child: GestureDetector(
+                                onTap: () => context.push(
+                                  '/customer/profile/terms',
+                                ),
+                                child: Text(
+                                  'Terms & Conditions',
+                                  style: AppTypography.bodyBold.copyWith(
+                                    color: colors.brand,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                ),
+                              ),
                             ),
-                      ],
-                    ),
-                  ),
-                )
-                .animate()
-                .fadeIn(duration: 500.ms, curve: Curves.easeOut)
-                .slideY(
-                  begin: 0.05,
-                  end: 0,
-                  duration: 500.ms,
-                  curve: Curves.easeOutCubic,
-                ),
-            const SizedBox(height: 64),
-            Center(
-                  child: Text(
-                    'What should we call you?',
-                    textAlign: TextAlign.center,
-                    style: AppTypography.display.copyWith(
-                      color: colors.onBackground,
-                    ),
-                  ),
-                )
-                .animate()
-                .fadeIn(delay: 100.ms, duration: 500.ms, curve: Curves.easeOut)
-                .slideY(
-                  begin: 0.05,
-                  end: 0,
-                  delay: 100.ms,
-                  duration: 500.ms,
-                  curve: Curves.easeOutCubic,
-                ),
-            const SizedBox(height: AppSpacing.sm),
-            Center(
-                  child: Text(
-                    'This is how we\'ll greet you throughout the app.',
-                    textAlign: TextAlign.center,
-                    style: AppTypography.bodyLarge.copyWith(
-                      color: colors.onSurfaceDim,
-                      height: 1.5,
-                    ),
-                  ),
-                )
-                .animate()
-                .fadeIn(delay: 200.ms, duration: 500.ms, curve: Curves.easeOut)
-                .slideY(
-                  begin: 0.05,
-                  end: 0,
-                  delay: 200.ms,
-                  duration: 500.ms,
-                  curve: Curves.easeOutCubic,
-                ),
-            const SizedBox(height: AppSpacing.xl),
-            _NicknameInputCard(controller: _nicknameController, colors: colors),
-          ],
-        );
-      case _RegisterStep.category:
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Hey ${_draft.nickname.isNotEmpty ? _draft.nickname : 'there'},\ntell us about yourself.',
-              style: AppTypography.display.copyWith(color: colors.onBackground),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              'Pick the lane that fits.',
-              style: AppTypography.bodyLarge.copyWith(
-                color: colors.onSurfaceDim,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            for (final category in profileCategories) ...[
-              KeyedSubtree(
-                key: ValueKey('register-category-${category.value}'),
-                child: _FieldCard(
-                  icon: category.icon,
-                  title: category.label,
-                  autoSelectsLabel: category.description,
-                  isSelected: _draft.profileCategory == category.value,
-                  colors: colors,
-                  onTap: () {
-                    setState(() {
-                      _draft = _draft.copyWith(
-                        profileCategory: category.value,
-                        profileField: null,
-                        printingPreferences: const [],
-                      );
-                      _stepError = null;
-                    });
-                  },
-                ),
-              ),
-              if (category != profileCategories.last)
-                const SizedBox(height: AppSpacing.md),
-            ],
-          ],
-        );
-      case _RegisterStep.field:
-        final fields = profileFieldsForCategory(_draft.profileCategory);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            OnboardingHero(
-              icon: _draft.profileCategory == 'professional'
-                  ? Icons.work_rounded
-                  : Icons.school_rounded,
-              headline: profilingPrompt(_draft.profileCategory),
-              subtitle: 'We\'ll preselect your print style automatically.',
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            for (final field in fields) ...[
-              _FieldCard(
-                icon: _fieldIcon(field.value),
-                title: field.label,
-                autoSelectsLabel: field.description,
-                isSelected: _draft.profileField == field.value,
-                colors: colors,
-                onTap: () {
-                  setState(() {
-                    _draft = _draft.copyWith(
-                      profileField: field.value,
-                      printingPreferences: defaultPrintingPreferencesForField(
-                        field.value,
+                            const TextSpan(text: '.'),
+                          ],
+                        ),
                       ),
-                    );
-                    _stepError = null;
-                  });
-                },
-              ),
-              if (field != fields.last) const SizedBox(height: AppSpacing.md),
-            ],
-          ],
-        );
-      case _RegisterStep.gender:
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const OnboardingHero(
-              headline: 'How do you identify?',
-              subtitle: 'Choose what feels right for you.',
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            GenderIdentitySelector(
-              value: _draft.gender,
-              onChanged: (value) {
-                setState(() {
-                  _draft = _draft.copyWith(gender: value);
-                  _stepError = null;
-                });
-              },
-            ),
-          ],
-        );
-      case _RegisterStep.ageRange:
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Age is just a number —\nbut it shapes\nyour experience.',
-              style: AppTypography.display.copyWith(color: colors.onBackground),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              'Swipe to find your range.',
-              style: AppTypography.bodyLarge.copyWith(
-                color: colors.onSurfaceDim,
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: AppSpacing.xl),
-            AgeRangeSelector(
-              value: _draft.ageRange,
-              onChanged: (value) {
-                setState(() {
-                  _draft = _draft.copyWith(ageRange: value);
-                  _stepError = null;
-                });
-              },
-            ),
           ],
         );
+
       case _RegisterStep.account:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (_draft.printingPreferences.isNotEmpty)
-              Wrap(
-                spacing: AppSpacing.sm,
-                runSpacing: AppSpacing.sm,
-                children: _draft.printingPreferences
-                    .map(
-                      (p) => _SummaryChip(
-                        label: printingPreferenceLabel(p),
-                        colors: colors,
-                      ),
-                    )
-                    .toList(),
-              ),
-            const SizedBox(height: AppSpacing.lg),
-            Text(
-              'Hi, ${_draft.nickname} 👋',
-              style: AppTypography.display.copyWith(color: colors.onBackground),
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              'Let\'s create your account.',
-              style: AppTypography.bodyLarge.copyWith(
-                color: colors.onSurfaceDim,
-              ),
+            const RegistrationStepHeader(
+              index: 1,
+              total: total,
+              plateLabel: 'ACCOUNT',
+              title: 'Set up your\naccount.',
+              subtitle: 'Your login and where deliveries reach you.',
             ),
             const SizedBox(height: AppSpacing.xl),
             _AccountField(
               controller: _fullNameController,
-              label: 'Full Name',
+              label: 'Full name',
               hintText: 'Kai Reyes',
               prefixIcon: Icons.person_rounded,
               textInputAction: TextInputAction.next,
@@ -769,12 +567,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               textInputAction: TextInputAction.next,
               errorText: _emailError,
               validator: (v) =>
-                  v.trim().isEmpty || !v.contains('@') ? 'Invalid email' : null,
+                  _emailPattern.hasMatch(v.trim()) ? null : 'Invalid email',
             ),
             const SizedBox(height: AppSpacing.md),
             _AccountField(
               controller: _phoneController,
-              label: 'Phone Number',
+              label: 'Phone number',
               hintText: '+63 917 123 4567',
               prefixIcon: Icons.phone_rounded,
               keyboardType: TextInputType.phone,
@@ -791,11 +589,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               obscureText: true,
               textInputAction: TextInputAction.next,
               errorText: _passwordError,
+              onChanged: (v) => setState(
+                () => _passwordStrength = scorePassword(v),
+              ),
             ),
+            if (_passwordStrength != PasswordStrength.empty) ...[
+              const SizedBox(height: AppSpacing.sm),
+              PasswordStrengthMeter(strength: _passwordStrength),
+            ],
             const SizedBox(height: AppSpacing.md),
             _AccountField(
               controller: _confirmPasswordController,
-              label: 'Confirm Password',
+              label: 'Confirm password',
               hintText: 'Re-enter your password',
               prefixIcon: Icons.lock_rounded,
               obscureText: true,
@@ -804,78 +609,153 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             ),
           ],
         );
-    }
-  }
-}
 
-class _WizardHeader extends StatelessWidget {
-  const _WizardHeader({
-    required this.stepIndex,
-    required this.stepCount,
-    required this.onBack,
-    required this.canGoBack,
-    required this.colors,
-  });
-
-  final int stepIndex;
-  final int stepCount;
-  final VoidCallback onBack;
-  final bool canGoBack;
-  final AppColorSet colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
+      case _RegisterStep.nickname:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Semantics(
-              label: 'Back',
-              button: true,
-              enabled: canGoBack,
-              child: GestureDetector(
-                onTap: canGoBack ? onBack : null,
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: colors.surface,
-                    borderRadius: AppRadius.borderFull,
-                    border: Border.all(color: colors.outline),
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(
-                    Icons.arrow_back_rounded,
-                    color: colors.onBackground,
-                  ),
-                ),
-              ),
+            RegistrationStepHeader(
+              index: 2,
+              total: total,
+              plateLabel: 'NICKNAME',
+              title: 'What should\nwe call you?',
+              subtitle: 'Hi ${_draft.fullName.split(' ').first}! '
+                  'Pick the name you want to see around the app.',
             ),
-            const Spacer(),
-            Text(
-              '${stepIndex + 1}/$stepCount',
-              style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
+            const SizedBox(height: AppSpacing.xl),
+            _NicknameInputCard(
+              controller: _nicknameController,
+              colors: colors,
             ),
           ],
-        ),
-        const SizedBox(height: AppSpacing.lg),
-        ClipRRect(
-          borderRadius: AppRadius.borderFull,
-          child: LinearProgressIndicator(
-            value: (stepIndex + 1) / stepCount,
-            minHeight: 8,
-            backgroundColor: colors.surfaceVariant,
-            valueColor: AlwaysStoppedAnimation<Color>(colors.brand),
-          ),
-        ),
-      ],
-    );
+        );
+
+      case _RegisterStep.craft:
+        final fields = profileFieldsForCategory(_draft.profileCategory);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const RegistrationStepHeader(
+              index: 3,
+              total: total,
+              plateLabel: 'CRAFT',
+              title: 'What do you\nprint?',
+              subtitle: 'We preset your print style from your answer.',
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            Text(
+              'YOUR LANE',
+              style: AppTypography.overline.copyWith(
+                color: colors.onSurfaceDim,
+                fontSize: 11,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            for (final category in profileCategories) ...[
+              _FieldCard(
+                key: ValueKey('register-category-${category.value}'),
+                icon: category.icon,
+                title: category.label,
+                autoSelectsLabel: category.description,
+                isSelected: _draft.profileCategory == category.value,
+                colors: colors,
+                onTap: () => setState(() {
+                  _draft = _draft.copyWith(
+                    profileCategory: category.value,
+                    profileField: null,
+                    printingPreferences: const [],
+                  );
+                  _stepError = null;
+                }),
+              ),
+              if (category != profileCategories.last)
+                const SizedBox(height: AppSpacing.sm),
+            ],
+            if (_draft.hasCategory) ...[
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                'YOUR FIELD',
+                style: AppTypography.overline.copyWith(
+                  color: colors.onSurfaceDim,
+                  fontSize: 11,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              for (final field in fields) ...[
+                _FieldCard(
+                  icon: _fieldIcon(field.value),
+                  title: field.label,
+                  autoSelectsLabel: field.description,
+                  isSelected: _draft.profileField == field.value,
+                  colors: colors,
+                  onTap: () => setState(() {
+                    _draft = _draft.copyWith(
+                      profileField: field.value,
+                      printingPreferences:
+                          defaultPrintingPreferencesForField(field.value),
+                    );
+                    _stepError = null;
+                  }),
+                ),
+                if (field != fields.last)
+                  const SizedBox(height: AppSpacing.sm),
+              ],
+            ],
+          ],
+        );
+
+      case _RegisterStep.profile:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const RegistrationStepHeader(
+              index: 4,
+              total: total,
+              plateLabel: 'YOU',
+              title: 'A little\nabout you.',
+              subtitle: 'Optional — it tunes recommendations. Skip anytime.',
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            Text(
+              'IDENTITY',
+              style: AppTypography.overline.copyWith(
+                color: colors.onSurfaceDim,
+                fontSize: 11,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            GenderIdentitySelector(
+              value: _draft.gender,
+              onChanged: (value) => setState(() {
+                _draft = _draft.copyWith(gender: value);
+                _stepError = null;
+              }),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              'AGE RANGE',
+              style: AppTypography.overline.copyWith(
+                color: colors.onSurfaceDim,
+                fontSize: 11,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            AgeRangeSelector(
+              value: _draft.ageRange,
+              onChanged: (value) => setState(() {
+                _draft = _draft.copyWith(ageRange: value);
+                _stepError = null;
+              }),
+            ),
+          ],
+        );
+    }
   }
 }
 
 class _FieldCard extends StatelessWidget {
   const _FieldCard({
+    super.key,
     required this.icon,
     required this.title,
     required this.autoSelectsLabel,
@@ -974,32 +854,6 @@ class _FieldCard extends StatelessWidget {
   }
 }
 
-class _SummaryChip extends StatelessWidget {
-  const _SummaryChip({required this.label, required this.colors});
-
-  final String label;
-  final AppColorSet colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
-      decoration: BoxDecoration(
-        color: colors.brand.withValues(alpha: 0.15),
-        borderRadius: AppRadius.borderFull,
-        border: Border.all(color: colors.brand.withValues(alpha: 0.40)),
-      ),
-      child: Text(
-        label,
-        style: AppTypography.caption.copyWith(color: colors.brand),
-      ),
-    );
-  }
-}
-
 IconData _fieldIcon(String fieldValue) {
   switch (fieldValue) {
     case 'architecture':
@@ -1034,6 +888,7 @@ class _AccountField extends StatefulWidget {
     this.errorText,
     this.validator,
     this.textInputAction,
+    this.onChanged,
   });
 
   final TextEditingController controller;
@@ -1045,6 +900,7 @@ class _AccountField extends StatefulWidget {
   final String? errorText;
   final String? Function(String)? validator;
   final TextInputAction? textInputAction;
+  final ValueChanged<String>? onChanged;
 
   @override
   State<_AccountField> createState() => _AccountFieldState();
@@ -1070,6 +926,7 @@ class _AccountFieldState extends State<_AccountField> {
         ? widget.validator!(value) == null
         : value.trim().isNotEmpty;
     setState(() => _isValid = valid);
+    widget.onChanged?.call(value);
   }
 
   @override
