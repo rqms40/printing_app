@@ -808,10 +808,10 @@ class _QueuedDeliveryStatusTile extends StatelessWidget {
     final position = liveState.queuePosition;
     final size = liveState.queueSize;
     final queueLabel = position == null
-        ? 'Waiting in delivery queue'
+        ? 'Waiting in queue'
         : size != null && size > 1
-        ? 'You are ${_ordinal(position)} of $size in queue'
-        : 'You are ${_ordinal(position)} in queue';
+        ? '${_ordinal(position)} of $size in queue'
+        : '${_ordinal(position)} in queue';
     final assignedSlot = liveState.assignedSlot;
     final activeSlot = assignedSlot != null
         ? slots

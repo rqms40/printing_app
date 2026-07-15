@@ -365,7 +365,7 @@ void main() {
     await tester.pumpWidget(harness.widget);
     await tester.pumpAndSettle();
 
-    expect(find.text('You are 2nd of 2 in queue'), findsOneWidget);
+    expect(find.text('2nd of 2 in queue'), findsOneWidget);
     expect(find.text('Standby for your turn'), findsOneWidget);
     expect(find.text('Order Dispatched'), findsOneWidget);
     expect(find.text('Live map starts after Stop 1!'), findsOneWidget);
@@ -402,7 +402,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('You are 2nd of 2 in queue'), findsOneWidget);
+    expect(find.text('2nd of 2 in queue'), findsOneWidget);
     expect(find.text('Order Dispatched'), findsOneWidget);
   });
 
