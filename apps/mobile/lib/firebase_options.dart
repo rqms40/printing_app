@@ -23,10 +23,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.android:
         return android;
       case TargetPlatform.iOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for ios - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return ios;
       case TargetPlatform.macOS:
         return macos;
       case TargetPlatform.windows:
@@ -59,6 +56,15 @@ class DefaultFirebaseOptions {
     messagingSenderId: '3582834609',
     projectId: 'grid-print-85681',
     storageBucket: 'grid-print-85681.firebasestorage.app',
+  );
+
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyA3lpb2O4iU0_CxW3gt7tlsysMLFCp2sHE',
+    appId: '1:3582834609:ios:f331cd3dd3b20cfe862f90',
+    messagingSenderId: '3582834609',
+    projectId: 'grid-print-85681',
+    storageBucket: 'grid-print-85681.firebasestorage.app',
+    iosBundleId: 'com.example.printingApp',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(

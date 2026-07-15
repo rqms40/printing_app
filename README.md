@@ -291,6 +291,28 @@ For local-only browser testing, use `GRIDGO_PUBLIC_HOST=127.0.0.1`.
 If a default port is already taken, override only that port, for example
 `GRIDGO_ADMIN_PORT=8289`.
 
+### Native emulators
+
+The Docker mobile web service remains available at `http://localhost:8088`.
+Native Flutter apps talk directly to the Docker API on host port 3000; do not
+point an emulator at the web port.
+
+```bash
+# Start the stack first. It continues to expose mobile web on port 8088.
+GRIDGO_PUBLIC_HOST=127.0.0.1 docker compose --env-file server/.env -f docker-compose.dev.yml up --build
+
+# In another terminal, from the repository root:
+make mobile-android  # Android Emulator uses the host alias 10.0.2.2
+make mobile-ios      # iOS Simulator uses localhost
+```
+
+Both commands pass the API endpoint through the build-time `SERVER_URL` Dart
+define. This keeps emulator-only addresses out of release builds. Android
+permits local HTTP only in its Debug variant; iOS permits local networking for
+the Simulator. These development targets also enable the app's local dev-auth
+path. Provide an HTTPS `SERVER_URL` and omit `ENABLE_DEV_AUTH` when making a
+production build.
+
 The stack seeds demo data only when the database is empty. Seed output never
 prints passwords. To stop it:
 
@@ -309,7 +331,8 @@ GRIDGO_PUBLIC_HOST=192.168.40.201 docker compose --env-file server/.env -f docke
 
 ### Prerequisites
 
-- [FVM](https://fvm.app) with Flutter 3.41.6 installed: `fvm install 3.41.6`
+- [FVM](https://fvm.app), installed once per Mac: `dart pub global activate fvm`
+- Flutter 3.41.6 for this project: `cd apps/mobile && fvm install`
 - Node.js 22+ and npm
 - Docker (for PostgreSQL, MinIO)
 
@@ -340,6 +363,7 @@ npm run start:dev       # http://localhost:3000/docs  (Swagger)
 
 ```bash
 cd apps/mobile
+fvm install
 fvm flutter pub get
 fvm flutter run          # or: fvm flutter build web --release --no-tree-shake-icons
 ```
