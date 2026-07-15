@@ -365,11 +365,10 @@ void main() {
     await tester.pumpWidget(harness.widget);
     await tester.pumpAndSettle();
 
-    expect(find.text('2nd of 2 in queue'), findsOneWidget);
-    expect(
-      find.text('Live tracking unlocks when you are next'),
-      findsOneWidget,
-    );
+    expect(find.text('You are 2nd of 2 in queue'), findsOneWidget);
+    expect(find.text('Standby for your turn'), findsOneWidget);
+    expect(find.text('Order Dispatched'), findsOneWidget);
+    expect(find.text('Live map starts after Stop 1!'), findsOneWidget);
     expect(find.text('Open live tracking'), findsNothing);
     expect(find.byKey(const Key('pending-route-preview-map')), findsNothing);
     expect(_semanticsLabel('Live delivery map'), findsNothing);

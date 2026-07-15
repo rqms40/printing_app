@@ -279,7 +279,11 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
       (liveState?.orderStatus == OrderStatus.onTheWay ||
           liveState?.orderStatus == OrderStatus.arrivedAtDestination);
 
-  bool get _shouldShowMapPanel => !_hasActiveDelivery || liveRiderPoint != null;
+  bool get _isQueued =>
+      _hasActiveDelivery && liveState?.canTrackDelivery == false;
+
+  bool get _shouldShowMapPanel =>
+      !_hasActiveDelivery || liveRiderPoint != null || _isQueued;
 
   List<DeliverySlot> get _sortedSlots {
     final sorted = [...slots]
@@ -333,7 +337,12 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
     final visibleSlots = sortedSlots.take(_maxInlineSlots).toList();
     final hiddenSlotCount = sortedSlots.length - visibleSlots.length;
     final showMapPanel = _shouldShowMapPanel;
-    final idleMapMessage = _hasActiveDelivery
+    final queuePosition = liveState?.queuePosition;
+    final idleMapMessage = _isQueued
+        ? (queuePosition != null && queuePosition > 1
+              ? 'Live map starts after Stop ${queuePosition - 1}!'
+              : 'Live map starts when you are next!')
+        : _hasActiveDelivery
         ? 'Waiting for rider location...'
         : visibleSlots.isEmpty
         ? 'No batches scheduled today'
@@ -344,6 +353,7 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
             key: const Key('delivery-status-panel'),
             colors: colors,
             liveState: liveState!,
+            slots: sortedSlots,
           )
         : _hasActiveDelivery
         ? _LiveDeliveryStatusTile(
@@ -786,20 +796,32 @@ class _QueuedDeliveryStatusTile extends StatelessWidget {
     super.key,
     required this.colors,
     required this.liveState,
+    this.slots = const [],
   });
 
   final AppColorSet colors;
   final LiveDeliveryMapState liveState;
+  final List<DeliverySlot> slots;
 
   @override
   Widget build(BuildContext context) {
     final position = liveState.queuePosition;
     final size = liveState.queueSize;
-    final label = position == null
+    final queueLabel = position == null
         ? 'Waiting in delivery queue'
         : size != null && size > 1
-        ? '${_ordinal(position)} of $size in queue'
-        : '${_ordinal(position)} in queue';
+        ? 'You are ${_ordinal(position)} of $size in queue'
+        : 'You are ${_ordinal(position)} in queue';
+    final assignedSlot = liveState.assignedSlot;
+    final activeSlot = assignedSlot != null
+        ? slots
+              .where((s) => s.templateId == assignedSlot.slotTemplateId)
+              .firstOrNull
+        : null;
+    final slotRatio = activeSlot == null || activeSlot.capacity == 0
+        ? 0.0
+        : (activeSlot.bookedCount / activeSlot.capacity).clamp(0.0, 1.0);
+
     return ClipRRect(
       borderRadius: AppRadius.borderXl,
       child: Container(
@@ -818,13 +840,119 @@ class _QueuedDeliveryStatusTile extends StatelessWidget {
                 fontWeight: FontWeight.w800,
               ),
             ),
-            const SizedBox(height: AppSpacing.md),
+            const SizedBox(height: AppSpacing.sm),
+            if (activeSlot != null) ...[
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '${_formatSlotRange(activeSlot)}: '
+                  '${activeSlot.bookedCount}/${activeSlot.capacity}',
+                  maxLines: 1,
+                  style: AppTypography.caption.copyWith(
+                    color: colors.onSurface,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    height: 1.1,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: AppRadius.borderFull,
+                      child: LinearProgressIndicator(
+                        value: slotRatio,
+                        minHeight: 6,
+                        backgroundColor: colors.outline.withValues(alpha: 0.55),
+                        valueColor: AlwaysStoppedAnimation<Color>(colors.brand),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    '${(slotRatio * 100).round()}%',
+                    style: AppTypography.overline.copyWith(
+                      color: colors.onSurfaceDim,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+            ],
             _StatusLine(
               colors: colors,
-              icon: Icons.format_list_numbered_rounded,
-              title: label,
-              subtitle: 'Live tracking unlocks when you are next',
-              darkIcon: true,
+              icon: Icons.check_rounded,
+              title: 'Order Dispatched',
+              subtitle: 'Ongoing Rider Delivery',
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: colors.brand, width: 1.6),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'STOP',
+                        style: AppTypography.overline.copyWith(
+                          color: colors.onSurfaceDim,
+                          fontSize: 5.5,
+                          height: 1,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      Text(
+                        position == null ? '—' : '$position',
+                        style: AppTypography.bodyBold.copyWith(
+                          color: colors.onSurface,
+                          fontSize: 12,
+                          height: 1.05,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        queueLabel,
+                        maxLines: 2,
+                        style: AppTypography.caption.copyWith(
+                          color: colors.brand,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          height: 1.15,
+                        ),
+                      ),
+                      Text(
+                        'Standby for your turn',
+                        maxLines: 1,
+                        style: AppTypography.caption.copyWith(
+                          color: colors.onSurfaceDim,
+                          fontSize: 10,
+                          height: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
             const Spacer(),
             Text(

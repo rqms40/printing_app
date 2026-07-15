@@ -385,9 +385,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  // 1: Start Printing (flex 2)
+                                  // 1: Start Printing (flex 5)
                                   Expanded(
-                                    flex: 2,
+                                    flex: 5,
                                     child: _StartPrintingTile(
                                       colors: colors,
                                       tutorialKey: _startPrintingTutorialKey,
@@ -396,15 +396,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: AppSpacing.sm),
-                                  // 2: The Data Grid (flex 2)
+                                  // 2: The Data Grid (flex 5)
                                   Expanded(
-                                    flex: 2,
+                                    flex: 5,
                                     child: _DataGridTile(colors: colors),
                                   ),
                                   const SizedBox(height: AppSpacing.sm),
-                                  // 3: The Feed (flex 3)
+                                  // 3: The Feed (flex 9)
                                   Expanded(
-                                    flex: 3,
+                                    flex: 9,
                                     child: _FeedTile(colors: colors),
                                   ),
                                 ],
