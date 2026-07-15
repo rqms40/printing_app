@@ -123,6 +123,7 @@ describe("BetaModePage", () => {
     mockSearch.mockResolvedValue({
       rows: [
         {
+          rank: 1,
           id: 42,
           email: "mark@example.test",
           fullName: "Mark",
@@ -140,6 +141,7 @@ describe("BetaModePage", () => {
     render(<BetaModePage />);
 
     expect(await screen.findByText("Mark")).toHaveStyle({ color: "#A0A0A0" });
+    expect(screen.getByText("#001")).toBeInTheDocument();
     expect(screen.getByText(/Auto-enrolls new customers/)).toHaveStyle({
       color: "#A0A0A0",
     });
@@ -153,6 +155,7 @@ describe("BetaModePage", () => {
     mockSearch.mockResolvedValue({
       rows: [
         {
+          rank: 1,
           id: 42,
           email: "mark@example.test",
           fullName: "Mark",
