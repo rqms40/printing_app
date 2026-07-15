@@ -1356,6 +1356,16 @@ async function dismissTutorials(page: Page): Promise<void> {
 }
 
 async function completeCustomerOnboarding(page: Page): Promise<void> {
+  // The onboarding carousel can arrive mid-transition (e.g. right after the
+  // beta reveal navigates here), so wait for its first control to be present.
+  await expect
+    .poll(async () => {
+      const nexts = await visibleLocators(
+        page.getByLabel(accessibleNamePattern("Next")),
+      );
+      return nexts.length;
+    })
+    .toBeGreaterThan(0);
   for (let pageIndex = 0; pageIndex < 4; pageIndex += 1) {
     await clickNamed(page, "Next");
     await page.waitForTimeout(450);
