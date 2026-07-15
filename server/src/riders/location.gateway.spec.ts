@@ -210,13 +210,45 @@ describe('LocationGateway', () => {
     });
 
     await expect((gateway as any).handleSubscribe('1', client)).rejects.toThrow(
-      'Forbidden',
+      'Live tracking is not available for this stop',
     );
 
     expect(
       dispatchPlanService.getCurrentPendingStopForRider,
     ).not.toHaveBeenCalled();
     expect(client.join).not.toHaveBeenCalled();
+  });
+
+  it('gives a customer the same rejection for a missing and an unowned delivery', async () => {
+    const client = {
+      handshake: { auth: { token: 'customer-token' } },
+      data: { userId: 99, role: UserRole.CUSTOMER },
+      join: jest.fn(),
+      disconnect: jest.fn(),
+    };
+    jest.spyOn(gateway as any, 'authenticateSocket').mockResolvedValue({
+      id: 99,
+      role: UserRole.CUSTOMER,
+    });
+
+    assignmentRepo.findOne.mockResolvedValueOnce(null);
+    const missing = await (gateway as any)
+      .handleSubscribe('4242', client)
+      .catch((e: Error) => e.message);
+
+    assignmentRepo.findOne.mockResolvedValueOnce({
+      id: 4242,
+      riderId: 5,
+      status: DeliveryStatus.ON_THE_WAY,
+      order: { userId: 10 },
+      rider: { userId: 50 },
+    });
+    const unowned = await (gateway as any)
+      .handleSubscribe('4242', client)
+      .catch((e: Error) => e.message);
+
+    expect(missing).toBe('Live tracking is not available for this stop');
+    expect(unowned).toBe(missing);
   });
 
   it('delivers no locationUpdate to the customer at queue position 2', async () => {
