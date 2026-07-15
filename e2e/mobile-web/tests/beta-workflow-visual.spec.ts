@@ -1659,10 +1659,12 @@ async function registerCustomerThroughUi(options: {
   await fillNamed(actor.page, "Min. 8 characters", password);
   await fillNamed(actor.page, "Re-enter your password", password);
   await clickNamed(actor.page, "Continue");
-  // Step 3 — nickname.
-  await actor.page.locator("input").last().fill(name);
+  // Step 3 — nickname (uses the robust filler; a plain .fill() does not
+  // reliably update the Flutter text controller on web).
+  await fillNamed(actor.page, "e.g. Kai", name);
   await clickNamed(actor.page, "Continue");
   // Step 4 — craft (category + field on one plate).
+  await expect(actor.page.locator("body")).toContainText(/YOUR LANE/i);
   await clickNamed(actor.page, "Student");
   await clickNamed(actor.page, "Architecture");
   await clickNamed(actor.page, "Continue");
