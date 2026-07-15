@@ -1357,11 +1357,14 @@ async function dismissTutorials(page: Page): Promise<void> {
 
 async function completeCustomerOnboarding(page: Page): Promise<void> {
   // The onboarding carousel can arrive mid-transition (e.g. right after the
-  // beta reveal navigates here), so wait for its first page to render before
-  // driving the Next control.
+  // beta reveal navigates here), so wait for its first page to render, then
+  // re-assert Flutter's accessibility tree — the multi-navigation through the
+  // reveal can leave it un-enabled so the Next button never surfaces.
   await expect(page.locator("body")).toContainText(/PRINT WITH EASE/i, {
     timeout: 30_000,
   });
+  await enableFlutterSemantics(page);
+  await page.waitForTimeout(700);
   for (let pageIndex = 0; pageIndex < 4; pageIndex += 1) {
     await clickNamed(page, "Next");
     await page.waitForTimeout(450);
