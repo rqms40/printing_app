@@ -17,6 +17,7 @@ import 'package:printing_app/features/rider/home/widgets/rider_recent_deliveries
 import 'package:printing_app/features/rider/home/widgets/rider_today_route_section.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:printing_app/features/rider/shared/widgets/rider_stale_route_banner.dart';
 
 /// Rider home — mirrors the customer home layout with rider content.
 class RiderHomeScreen extends ConsumerWidget {
@@ -92,6 +93,8 @@ class RiderHomeScreen extends ConsumerWidget {
 
                     const HeroBanner(),
                     const SizedBox(height: AppSpacing.sm + 2),
+
+                    if (state.dataStale) const RiderStaleRouteBanner(),
 
                     SizedBox(
                       height: 380,

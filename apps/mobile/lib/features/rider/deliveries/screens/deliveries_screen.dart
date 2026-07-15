@@ -18,6 +18,7 @@ import 'package:printing_app/shared/widgets/empty_state.dart';
 import 'package:printing_app/shared/widgets/pill_tab_bar.dart';
 import 'package:printing_app/shared/widgets/skeleton_screens.dart';
 import 'package:printing_app/utils/formatters.dart';
+import 'package:printing_app/features/rider/shared/widgets/rider_stale_route_banner.dart';
 
 /// Rider delivery queue — new, in-progress, and completed assignments.
 class DeliveriesScreen extends ConsumerStatefulWidget {
@@ -91,6 +92,12 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
                 .animate()
                 .fadeIn(duration: 350.ms)
                 .slideY(begin: 0.02, duration: 350.ms),
+
+            if (state.dataStale)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                child: RiderStaleRouteBanner(),
+              ),
 
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
