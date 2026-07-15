@@ -2319,11 +2319,13 @@ async function drawAndSubmitSignature(
   const viewport = actor.page.viewportSize();
   expect(viewport, "rider proof viewport must be available").not.toBeNull();
   const proofButton = actor.page.getByRole("button", {
-    name: /^Open proof of delivery/i,
+    name: /open proof of delivery/i,
   });
   // Arrival must reveal a keyboard/screen-reader-operable proof action without
-  // requiring an undiscoverable drag. The physical swipe remains covered by
-  // the Flutter component regression test.
+  // requiring an undiscoverable drag. Since the rider map uplift the slider
+  // itself is that action ("Swipe to open proof of delivery" exposes a
+  // semantics button with onTap); the physical swipe remains covered by the
+  // Flutter component regression test.
   await expect(proofButton).toHaveCount(1);
   await expect(proofButton).toBeVisible();
   await proofButton.click();
@@ -2939,7 +2941,7 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
           await assertLiveTrackingUi(actors.ven);
         },
       });
-      await capture(run, actors.ven, 23, /1st in queue/i, {
+      await capture(run, actors.ven, 23, /1st (?:of \d+ )?in queue/i, {
         orderId: ven.orderId,
         assignmentId: ven.assignmentId,
         dispatchPlanVersion: planVersion,
@@ -2953,7 +2955,7 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         assignmentId: mark.assignmentId,
       });
       await assertPrivateQueueUi(actors.mark.page);
-      await capture(run, actors.mark, 24, /2nd in queue/i, {
+      await capture(run, actors.mark, 24, /2nd (?:of \d+ )?in queue/i, {
         orderId: mark.orderId,
         dispatchPlanVersion: planVersion,
       });
