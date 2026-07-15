@@ -684,9 +684,7 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     expect(registrationResponse).toBeGreaterThanOrEqual(0);
     expect(tokenRegistration).toBeGreaterThan(registrationResponse);
     expect(tokenRegistration).toBeLessThan(betaLookup);
-    expect(registrationFlow).toContain(
-      'actor.page.url().includes("/onboarding")',
-    );
+    expect(registrationFlow).toContain('postSignup === "onboarding"');
     expect(registrationFlow).toContain(
       "await completeCustomerOnboarding(actor.page)",
     );
@@ -1702,13 +1700,25 @@ async function registerCustomerThroughUi(options: {
   const betaRank = positiveId(beta.rank, `${name} beta rank`);
   // Beta-eligible signups land on the press-proof reveal, whose "Start
   // printing" is the tester's welcome and goes straight to the customer home
-  // (the onboarding carousel is skipped for beta testers).
-  await actor.page.waitForURL(/\/(?:auth\/beta-welcome|onboarding|customer\/)/);
-  if (actor.page.url().includes("/auth/beta-welcome")) {
-    await expect(actor.page.locator("body")).toContainText(/FOUNDING TESTER/i);
+  // (the onboarding carousel is skipped for beta testers). Detect by settled
+  // content, not the URL: the auth-change redirect can flash /onboarding
+  // before the reveal navigation settles.
+  let postSignup = "pending";
+  await expect
+    .poll(async () => {
+      const body = (await actor.page.locator("body").textContent()) ?? "";
+      if (/FOUNDING TESTER/i.test(body)) return (postSignup = "reveal");
+      if (/PRINT WITH EASE/i.test(body)) return (postSignup = "onboarding");
+      if (actor.page.url().includes("/customer/")) {
+        return (postSignup = "home");
+      }
+      return "pending";
+    })
+    .toMatch(/^(?:reveal|onboarding|home)$/);
+  if (postSignup === "reveal") {
     await clickNamed(actor.page, "Start printing");
     await actor.page.waitForURL(/\/customer\//);
-  } else if (actor.page.url().includes("/onboarding")) {
+  } else if (postSignup === "onboarding") {
     await completeCustomerOnboarding(actor.page);
   }
   await dismissTutorials(actor.page);
