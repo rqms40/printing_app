@@ -101,17 +101,22 @@ class _StopCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              // With no planned position the status pill leads the card;
+              // spaceBetween keeps it flush left instead of floating right.
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 if (view.routePosition != null)
-                  Text(
-                    'STOP ${view.routePosition}',
-                    style: AppTypography.overline.copyWith(
-                      color: colors.onSurfaceDim,
-                      fontSize: 10,
-                      letterSpacing: 1.5,
+                  Padding(
+                    padding: const EdgeInsets.only(right: AppSpacing.sm),
+                    child: Text(
+                      'STOP ${view.routePosition}',
+                      style: AppTypography.overline.copyWith(
+                        color: colors.onSurfaceDim,
+                        fontSize: 10,
+                        letterSpacing: 1.5,
+                      ),
                     ),
                   ),
-                const Spacer(),
                 Flexible(
                   child: Container(
                     padding: const EdgeInsets.symmetric(

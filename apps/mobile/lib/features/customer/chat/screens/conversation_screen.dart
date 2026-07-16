@@ -67,17 +67,22 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
               : 'Delivery Rider',
       };
 
+  bool get _isRiderUser => widget.currentUserRole == SenderRole.rider;
+
   String get _emptyTitle => switch (widget.conversationType) {
     ConversationType.ai => 'Ask GridBot anything',
     ConversationType.admin => 'Start with the GRIDGO team',
-    ConversationType.rider => 'Message your rider',
+    ConversationType.rider =>
+      _isRiderUser ? 'Message your customer' : 'Message your rider',
   };
 
   String get _emptyBody => switch (widget.conversationType) {
     ConversationType.ai =>
       'Try asking about pricing, materials, or order steps.',
     ConversationType.admin => 'Send your order question and we will help.',
-    ConversationType.rider => 'Ask about pickup, delivery, or handoff timing.',
+    ConversationType.rider => _isRiderUser
+        ? 'Share your ETA or confirm the drop-off details.'
+        : 'Ask about pickup, delivery, or handoff timing.',
   };
 
   bool get _hasPendingAttachment => _pendingImageBytes != null;
