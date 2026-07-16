@@ -92,6 +92,29 @@ describe("marketing notification frequency controls", () => {
     ).toBeInTheDocument();
   });
 
+  it("sends a notification immediately from the list", async () => {
+    render(<MarketingSettings />);
+
+    fireEvent.click(screen.getByRole("button", { name: /send now/i }));
+
+    await waitFor(() => expect(mockMutate).toHaveBeenCalled());
+    const [config, callbacks] = mockMutate.mock.calls[0];
+    expect(config).toMatchObject({
+      url: "/notifications/marketing/1/send",
+      method: "post",
+    });
+
+    callbacks.onSuccess({
+      data: { sentTo: 2, failed: 0, fcmAvailable: true, tokens: 2 },
+    });
+    expect(mockRefetch).toHaveBeenCalled();
+  });
+
+  it("shows never-sent state in the list", () => {
+    render(<MarketingSettings />);
+    expect(screen.getByText("Never sent")).toBeInTheDocument();
+  });
+
   it(
     "submits compact interval frequency without UI-only fields",
     async () => {

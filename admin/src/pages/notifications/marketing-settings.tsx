@@ -15,7 +15,12 @@ import {
   theme,
   message,
 } from "antd";
-import { PlusOutlined, DeleteOutlined, EditOutlined } from "@ant-design/icons";
+import {
+  PlusOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  SendOutlined,
+} from "@ant-design/icons";
 import { useCustom, useCustomMutation } from "@refinedev/core";
 import { GridLogo } from "@/components/grid-logo";
 
@@ -36,6 +41,14 @@ interface MarketingNotification {
   body: string;
   frequency: string;
   isActive: boolean;
+  lastSentAt?: string | null;
+}
+
+interface SendNowResult {
+  sentTo: number;
+  failed: number;
+  fcmAvailable: boolean;
+  tokens: number;
 }
 
 const unitSuffixByIntervalUnit: Record<IntervalUnit, string> = {
@@ -120,6 +133,7 @@ export function MarketingSettings() {
     "The plane you requested will be fueled and ready at 1pm",
   );
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [sendingId, setSendingId] = useState<number | null>(null);
 
   const { data, isLoading, refetch } = useCustom<MarketingNotification[]>({
     url: "/notifications/marketing",
@@ -192,6 +206,43 @@ export function MarketingSettings() {
     }
   };
 
+  const onSendNow = (item: MarketingNotification) => {
+    setSendingId(item.id);
+    mutate(
+      {
+        url: `/notifications/marketing/${item.id}/send`,
+        method: "post",
+        values: {},
+      },
+      {
+        onSuccess: (response) => {
+          setSendingId(null);
+          const result = response?.data as unknown as SendNowResult | undefined;
+          if (!result || result.fcmAvailable === false) {
+            message.warning(
+              "Push service isn't configured on the server — nothing was sent.",
+            );
+          } else if (result.tokens === 0) {
+            message.warning("No customer devices are registered yet.");
+          } else if (result.sentTo === 0) {
+            message.error(
+              `Delivery failed for all ${result.tokens} devices. Check the server logs.`,
+            );
+          } else {
+            message.success(
+              `"${item.header}" sent to ${result.sentTo} of ${result.tokens} devices`,
+            );
+          }
+          refetch();
+        },
+        onError: () => {
+          setSendingId(null);
+          message.error("Could not send the notification. Try again.");
+        },
+      },
+    );
+  };
+
   const onDelete = (id: number) => {
     mutate(
       {
@@ -228,6 +279,14 @@ export function MarketingSettings() {
                 actions={[
                   <Button
                     type="text"
+                    aria-label="Send now"
+                    title="Send now"
+                    icon={<SendOutlined />}
+                    loading={sendingId === item.id}
+                    onClick={() => onSendNow(item)}
+                  />,
+                  <Button
+                    type="text"
                     icon={<EditOutlined />}
                     onClick={() => onEdit(item)}
                   />,
@@ -241,9 +300,22 @@ export function MarketingSettings() {
               >
                 <List.Item.Meta
                   title={item.description || item.header}
-                  description={`Frequency: ${formatFrequencyLabel(
-                    item.frequency,
-                  )} | Active: ${item.isActive ? "Yes" : "No"}`}
+                  description={
+                    <>
+                      <div>
+                        {`Frequency: ${formatFrequencyLabel(
+                          item.frequency,
+                        )} | Active: ${item.isActive ? "Yes" : "No"}`}
+                      </div>
+                      <div>
+                        {item.lastSentAt
+                          ? `Last sent ${new Date(
+                              item.lastSentAt,
+                            ).toLocaleString()}`
+                          : "Never sent"}
+                      </div>
+                    </>
+                  }
                 />
               </List.Item>
             )}

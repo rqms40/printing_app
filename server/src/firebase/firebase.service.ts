@@ -78,17 +78,23 @@ export class FirebaseService implements OnModuleInit {
     title: string,
     body: string,
     data?: Record<string, string>,
-  ): Promise<void> {
-    if (!this.messaging || tokens.length === 0) return;
+  ): Promise<{ successCount: number; failureCount: number } | null> {
+    if (!this.messaging) return null;
+    if (tokens.length === 0) return { successCount: 0, failureCount: 0 };
 
     try {
-      await this.messaging.sendEachForMulticast({
+      const response = await this.messaging.sendEachForMulticast({
         tokens,
         notification: { title, body },
         data: data ?? {},
       });
+      return {
+        successCount: response.successCount,
+        failureCount: response.failureCount,
+      };
     } catch (error) {
       this.logger.error(`Multicast push failed: ${error}`);
+      throw error;
     }
   }
 }
