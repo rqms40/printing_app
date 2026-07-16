@@ -10,11 +10,13 @@ import 'package:mockito/mockito.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/features/customer/home/providers/live_delivery_map_provider.dart';
 import 'package:printing_app/features/customer/home/widgets/map_tracking_tile.dart';
+import 'package:printing_app/features/customer/home/widgets/next_batch_dialog.dart';
 import 'package:printing_app/features/customer/order/models/delivery_slot.dart';
 import 'package:printing_app/features/customer/order/providers/delivery_slot_provider.dart';
 import 'package:printing_app/features/customer/tracking/providers/live_rider_location_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/location_update.dart';
+import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/providers/dio_provider.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
 
@@ -51,6 +53,8 @@ _TileHarness _harness({
   List<DeliverySlot> slots = const [],
   LocationUpdate? location,
   LocationSocketHealth socketHealth = LocationSocketHealth.connected,
+  BookedSlotInfo? booked,
+  NextBatchInfo? nextBatch,
   Widget Function(Widget child)? childBuilder,
 }) {
   final mockWs = MockWebSocketService();
@@ -71,6 +75,8 @@ _TileHarness _harness({
       dioProvider.overrideWithValue(MockDio()),
       webSocketServiceProvider.overrideWithValue(mockWs),
       liveDeliveryMapProvider.overrideWith((_) async => state),
+      bookedDeliverySlotProvider.overrideWith((_) => booked),
+      nextBatchInfoProvider.overrideWith((_) => nextBatch),
     ],
   );
   final keepAlive = container.listen(deliverySlotProvider(_today()), (_, _) {});
@@ -829,5 +835,125 @@ void main() {
     expect(find.byKey(const Key('delivery-map-panel')), findsOneWidget);
     expect(find.text('Order Dispatched'), findsOneWidget);
     expect(find.text('Rider is on the way'), findsOneWidget);
+  });
+
+  testWidgets('idle tile pins the customer booked slot above the list', (
+    tester,
+  ) async {
+    final booked = BookedSlotInfo(
+      orderId: 'ORD-100',
+      slot: AssignedDeliverySlot(
+        slotTemplateId: 1,
+        date: _today(),
+        startTime: '09:30:00',
+        endTime: '11:30:00',
+      ),
+    );
+    await tester.pumpWidget(
+      _harness(
+        state: LiveDeliveryMapState.idle(),
+        slots: _dailySlots,
+        booked: booked,
+      ).widget,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('booked-slot-block')), findsOneWidget);
+    expect(find.text('YOUR BATCH · TODAY'), findsOneWidget);
+    // The pinned block owns the booked window; the availability list
+    // drops its duplicate row.
+    expect(find.text('9:30 - 11:30 AM: 2/10'), findsOneWidget);
+    expect(find.text('2:00 - 4:00 PM: 4/10'), findsOneWidget);
+  });
+
+  testWidgets('idle tile pinned slot shows its day when booked ahead', (
+    tester,
+  ) async {
+    final booked = BookedSlotInfo(
+      orderId: 'ORD-101',
+      slot: const AssignedDeliverySlot(
+        slotTemplateId: 9,
+        date: '2099-07-17',
+        startTime: '14:00:00',
+        endTime: '16:00:00',
+      ),
+    );
+    await tester.pumpWidget(
+      _harness(
+        state: LiveDeliveryMapState.idle(),
+        slots: _dailySlots,
+        booked: booked,
+      ).widget,
+    );
+    await tester.pumpAndSettle();
+
+    // Window still renders from the booking itself even though that day's
+    // fill counts are not loaded.
+    expect(find.text('YOUR BATCH · FRI, JUL 17'), findsOneWidget);
+    expect(find.text('2:00 - 4:00 PM'), findsOneWidget);
+  });
+
+  testWidgets('idle tile rolls over to the next batch when today is empty', (
+    tester,
+  ) async {
+    const nextBatch = NextBatchInfo(
+      reason: NextBatchReason.weekend,
+      todayDate: '2099-07-18',
+      relevantDate: '2099-07-20',
+      relevantIsToday: false,
+      upcoming: [
+        UpcomingSlot(
+          startTime: '09:30:00',
+          endTime: '11:30:00',
+          bookedCount: 2,
+          capacity: 10,
+        ),
+      ],
+      nextSlotStart: '09:30:00',
+      nextSlotEnd: '11:30:00',
+    );
+    await tester.pumpWidget(
+      _harness(
+        state: LiveDeliveryMapState.idle(),
+        nextBatch: nextBatch,
+      ).widget,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('next-batch-block')), findsOneWidget);
+    expect(find.text('NEXT BATCH · MON, JUL 20'), findsOneWidget);
+    expect(find.text('9:30 - 11:30 AM: 2/10'), findsOneWidget);
+    expect(find.text('No active delivery'), findsNothing);
+    expect(find.text('No batches scheduled today'), findsNothing);
+  });
+
+  testWidgets('queued tile shows the booked window with live slot fill', (
+    tester,
+  ) async {
+    final queued = LiveDeliveryMapState.active(
+      riderPoint: const LatLng(7.20, 125.46),
+      shopPoint: const LatLng(7.19, 125.45),
+      destPoint: const LatLng(7.21, 125.47),
+      routePoints: const [LatLng(7.19, 125.45), LatLng(7.21, 125.47)],
+      orderId: 'ORD-QUEUED',
+      deliveryAssignmentId: null,
+      orderStatus: OrderStatus.onTheWay,
+      assignedSlot: AssignedDeliverySlot(
+        slotTemplateId: 1,
+        date: _today(),
+        startTime: '09:30:00',
+        endTime: '11:30:00',
+      ),
+      queuePosition: 2,
+      queueSize: 4,
+      canTrackDelivery: false,
+    );
+    await tester.pumpWidget(_wrap(queued, slots: _dailySlots));
+    await tester.pumpAndSettle();
+
+    expect(find.text('YOUR BATCH · TODAY'), findsOneWidget);
+    expect(find.text('9:30 - 11:30 AM: 2/10'), findsOneWidget);
+    expect(find.text('Order Dispatched'), findsOneWidget);
+    expect(find.text('2nd of 4 in queue'), findsOneWidget);
   });
 }

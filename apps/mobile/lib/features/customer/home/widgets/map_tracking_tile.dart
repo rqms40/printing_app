@@ -10,13 +10,53 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/home/providers/live_delivery_map_provider.dart';
+import 'package:printing_app/features/customer/home/widgets/next_batch_dialog.dart';
 import 'package:printing_app/features/customer/order/models/delivery_slot.dart';
 import 'package:printing_app/features/customer/order/providers/delivery_slot_provider.dart';
+import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/features/customer/tracking/providers/live_rider_location_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
+import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/models/location_update.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
+
+/// The customer's own booked delivery slot, taken from the most recently
+/// updated active (non-terminal) order that carries one.
+class BookedSlotInfo {
+  const BookedSlotInfo({required this.slot, required this.orderId});
+
+  final AssignedDeliverySlot slot;
+  final String orderId;
+}
+
+final bookedDeliverySlotProvider = Provider.autoDispose<BookedSlotInfo?>((
+  ref,
+) {
+  final orders = ref.watch(activeOrdersProvider);
+  for (final order in orders) {
+    final slot = order.assignedSlot;
+    if (slot != null) {
+      return BookedSlotInfo(slot: slot, orderId: order.orderId);
+    }
+  }
+  return null;
+});
+
+/// A booked slot resolved for display: the window comes from the order's
+/// booking, the live fill numbers from that day's slot availability (when
+/// loaded).
+class _BookedSlotView {
+  const _BookedSlotView({
+    required this.slot,
+    required this.fill,
+    required this.isToday,
+  });
+
+  final AssignedDeliverySlot slot;
+  final DeliverySlot? fill;
+  final bool isToday;
+}
 
 int? _readStrictPlanVersion(dynamic value) {
   final parsed = value is int
@@ -141,11 +181,38 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
     // not the entire FutureProvider async cycle.
     final locationUpdate = ref.watch(liveRiderLocationProvider);
     final socketHealth = ref.watch(liveLocationSocketHealthProvider);
-    final slots = ref.watch(deliverySlotProvider(_today()));
+    final today = _today();
+    final slots = ref.watch(deliverySlotProvider(today));
     final brightness = Theme.of(context).brightness;
     final colors = brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
+
+    // Resolves an order's booked slot into a displayable view: window from
+    // the booking itself, live fill from that day's availability feed.
+    _BookedSlotView? slotViewFor(AssignedDeliverySlot? assigned) {
+      if (assigned == null) return null;
+      final dayState = assigned.date == today
+          ? slots
+          : ref.watch(deliverySlotProvider(assigned.date));
+      final fill = dayState.slots
+          .where((s) => s.templateId == assigned.slotTemplateId)
+          .firstOrNull;
+      return _BookedSlotView(
+        slot: assigned,
+        fill: fill,
+        isToday: assigned.date == today,
+      );
+    }
+
+    final booked = ref.watch(bookedDeliverySlotProvider);
+    final bookedView = slotViewFor(booked?.slot);
+    // The next-batch rollover only matters when nothing is booked and today
+    // offers no batches at all; watching it conditionally avoids fetching
+    // tomorrow's slots on every home visit.
+    final nextBatch = booked == null && !slots.isLoading && slots.slots.isEmpty
+        ? ref.watch(nextBatchInfoProvider)
+        : null;
 
     return mapAsync.when(
       skipLoadingOnRefresh: true,
@@ -154,12 +221,15 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
         brightness: brightness,
         slots: slots.slots,
         isLoading: true,
+        bookedSlot: bookedView,
       ),
       error: (e, st) => _DeliveryStatusAndMapLayout(
         colors: colors,
         brightness: brightness,
         slots: slots.slots,
         isLoading: slots.isLoading,
+        bookedSlot: bookedView,
+        nextBatch: nextBatch,
       ),
       data: (state) {
         if (state.status == LiveMapStatus.loading) {
@@ -168,8 +238,11 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
             brightness: brightness,
             slots: slots.slots,
             isLoading: true,
+            bookedSlot: bookedView,
           );
         }
+
+        final liveSlotView = slotViewFor(state.assignedSlot) ?? bookedView;
 
         final canShowLiveMap =
             state.status == LiveMapStatus.active &&
@@ -217,6 +290,7 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
             liveState: state,
             liveRiderPoint: liveRiderPoint,
             locationHealth: locationHealth,
+            bookedSlot: liveSlotView,
             onMapTap: () => context.push('/customer/tracking'),
           );
         }
@@ -228,6 +302,7 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
             slots: slots.slots,
             isLoading: slots.isLoading,
             liveState: state,
+            bookedSlot: liveSlotView,
           );
         }
 
@@ -236,6 +311,8 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
           brightness: brightness,
           slots: slots.slots,
           isLoading: slots.isLoading,
+          bookedSlot: bookedView,
+          nextBatch: nextBatch,
         );
       },
     );
@@ -258,6 +335,8 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
     this.liveState,
     this.liveRiderPoint,
     this.locationHealth = LocationHealth.offline,
+    this.bookedSlot,
+    this.nextBatch,
     this.onMapTap,
   });
 
@@ -268,6 +347,8 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
   final LiveDeliveryMapState? liveState;
   final LatLng? liveRiderPoint;
   final LocationHealth locationHealth;
+  final _BookedSlotView? bookedSlot;
+  final NextBatchInfo? nextBatch;
   final VoidCallback? onMapTap;
 
   static const _maxInlineSlots = 3;
@@ -282,33 +363,51 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
   bool get _isQueued =>
       _hasActiveDelivery && liveState?.canTrackDelivery == false;
 
-  bool get _queuedShowsSlotBar {
-    final assignedSlot = liveState?.assignedSlot;
-    return assignedSlot != null &&
-        slots.any((s) => s.templateId == assignedSlot.slotTemplateId);
-  }
+  bool get _queuedShowsSlotBar => bookedSlot != null;
 
   bool get _shouldShowMapPanel =>
       !_hasActiveDelivery || liveRiderPoint != null || _isQueued;
 
+  /// Today's availability, minus the row that duplicates the customer's own
+  /// booked slot (that one is pinned above the list instead).
   List<DeliverySlot> get _sortedSlots {
-    final sorted = [...slots]
-      ..sort((a, b) => a.startTime.compareTo(b.startTime));
+    final booked = bookedSlot;
+    final sorted = [
+      for (final s in slots)
+        if (booked == null ||
+            !booked.isToday ||
+            s.templateId != booked.slot.slotTemplateId)
+          s,
+    ]..sort((a, b) => a.startTime.compareTo(b.startTime));
     return sorted;
   }
+
+  bool get _showsNextBatch =>
+      bookedSlot == null &&
+      slots.isEmpty &&
+      nextBatch != null &&
+      nextBatch!.nextSlotStart != null &&
+      nextBatch!.nextSlotEnd != null;
+
+  // Eyebrow (12) + gap (4) + window row (27) + trailing gap (12).
+  static const _pinnedSlotBlockHeight = 55.0;
 
   static double _idleStatusHeight({
     required int visibleSlotCount,
     required bool hasHiddenSlots,
     required bool isLoading,
+    required bool hasPinnedSlot,
+    required bool showsNextBatch,
   }) {
-    if (isLoading && visibleSlotCount == 0) return 96;
-    if (visibleSlotCount == 0) return 94;
-
     const chromeHeight = (AppSpacing.md * 2) + 20 + _deliveryStatusTitleGap;
+    if (showsNextBatch) return chromeHeight + _pinnedSlotBlockHeight;
+    if (isLoading && visibleSlotCount == 0 && !hasPinnedSlot) return 96;
+    if (visibleSlotCount == 0 && !hasPinnedSlot) return 94;
+
     const slotRowHeight = 27.0;
     const viewMoreHeight = 20.0;
     return chromeHeight +
+        (hasPinnedSlot ? _pinnedSlotBlockHeight : 0) +
         (slotRowHeight * visibleSlotCount) +
         (hasHiddenSlots ? viewMoreHeight : 0);
   }
@@ -339,6 +438,8 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
             visibleSlotCount: visibleSlotCount,
             hasHiddenSlots: hiddenSlotCount > 0,
             isLoading: isLoading,
+            hasPinnedSlot: bookedSlot != null,
+            showsNextBatch: _showsNextBatch,
           );
 
     return desiredHeight.clamp(0.0, maxStatusHeight).toDouble();
@@ -357,7 +458,9 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
               : 'Live map starts when you are next!')
         : _hasActiveDelivery
         ? 'Waiting for rider location...'
-        : visibleSlots.isEmpty
+        : _showsNextBatch
+        ? 'Live map starts on your delivery day.'
+        : visibleSlots.isEmpty && bookedSlot == null
         ? 'No batches scheduled today'
         : 'Live map starts after rider dispatch.';
     final statusPanel =
@@ -366,7 +469,7 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
             key: const Key('delivery-status-panel'),
             colors: colors,
             liveState: liveState!,
-            slots: sortedSlots,
+            bookedSlot: bookedSlot,
           )
         : _hasActiveDelivery
         ? _LiveDeliveryStatusTile(
@@ -376,7 +479,7 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
             liveRiderPoint: liveRiderPoint,
             hasLiveRiderPoint: liveRiderPoint != null,
             locationHealth: locationHealth,
-            slots: sortedSlots,
+            bookedSlot: bookedSlot,
           )
         : _BatchStatusTile(
             key: const Key('delivery-status-panel'),
@@ -385,6 +488,8 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
             allSlots: sortedSlots,
             hiddenSlotCount: hiddenSlotCount,
             isLoading: isLoading,
+            bookedSlot: bookedSlot,
+            nextBatch: _showsNextBatch ? nextBatch : null,
           );
     final mapPanel = showMapPanel
         ? _DeliveryMapPanel(
@@ -439,6 +544,8 @@ class _BatchStatusTile extends StatelessWidget {
     required this.allSlots,
     required this.hiddenSlotCount,
     required this.isLoading,
+    this.bookedSlot,
+    this.nextBatch,
   });
 
   final AppColorSet colors;
@@ -446,6 +553,8 @@ class _BatchStatusTile extends StatelessWidget {
   final List<DeliverySlot> allSlots;
   final int hiddenSlotCount;
   final bool isLoading;
+  final _BookedSlotView? bookedSlot;
+  final NextBatchInfo? nextBatch;
 
   bool get _hasHiddenSlots => hiddenSlotCount > 0;
 
@@ -474,7 +583,21 @@ class _BatchStatusTile extends StatelessWidget {
               ),
             ),
             const SizedBox(height: _deliveryStatusTitleGap),
-            if (isLoading && slots.isEmpty)
+            if (bookedSlot != null) ...[
+              _PinnedSlotBlock(
+                key: const Key('booked-slot-block'),
+                colors: colors,
+                view: bookedSlot!,
+              ),
+              if (slots.isNotEmpty) const SizedBox(height: AppSpacing.sm),
+            ],
+            if (nextBatch != null && bookedSlot == null)
+              _NextBatchBlock(
+                key: const Key('next-batch-block'),
+                colors: colors,
+                info: nextBatch!,
+              )
+            else if (isLoading && slots.isEmpty && bookedSlot == null)
               Expanded(
                 child: Center(
                   child: SizedBox(
@@ -487,7 +610,7 @@ class _BatchStatusTile extends StatelessWidget {
                   ),
                 ),
               )
-            else if (slots.isEmpty)
+            else if (slots.isEmpty && bookedSlot == null)
               Padding(
                 padding: const EdgeInsets.only(top: AppSpacing.xs),
                 child: Text(
@@ -501,7 +624,7 @@ class _BatchStatusTile extends StatelessWidget {
                   ),
                 ),
               )
-            else ...[
+            else if (slots.isNotEmpty) ...[
               for (var i = 0; i < slots.length; i++) ...[
                 _BatchSlotRow(slot: slots[i], colors: colors),
                 if (i != slots.length - 1 || _hasHiddenSlots)
@@ -677,6 +800,142 @@ class _DeliveryMapPanel extends StatelessWidget {
   }
 }
 
+/// The customer's own booked window, pinned above the availability list:
+/// eyebrow, window + fill line, and fill bar when the day's counts are known.
+class _PinnedSlotBlock extends StatelessWidget {
+  const _PinnedSlotBlock({super.key, required this.colors, required this.view});
+
+  final AppColorSet colors;
+  final _BookedSlotView view;
+
+  @override
+  Widget build(BuildContext context) {
+    final fill = view.fill;
+    final dayLabel = view.isToday
+        ? 'TODAY'
+        : _shortDateLabel(view.slot.date).toUpperCase();
+    return _SlotWindowBar(
+      colors: colors,
+      eyebrow: 'YOUR BATCH · $dayLabel',
+      window: _formatRawRange(view.slot.startTime, view.slot.endTime),
+      bookedCount: fill?.bookedCount,
+      capacity: fill?.capacity,
+    );
+  }
+}
+
+/// Shown when nothing is booked and today has no batches: the closest
+/// upcoming window, so the tile always points somewhere actionable.
+class _NextBatchBlock extends StatelessWidget {
+  const _NextBatchBlock({super.key, required this.colors, required this.info});
+
+  final AppColorSet colors;
+  final NextBatchInfo info;
+
+  @override
+  Widget build(BuildContext context) {
+    final first = info.upcoming.isNotEmpty ? info.upcoming.first : null;
+    final dayLabel = info.relevantIsToday
+        ? 'TODAY'
+        : _shortDateLabel(info.relevantDate).toUpperCase();
+    return _SlotWindowBar(
+      colors: colors,
+      eyebrow: 'NEXT BATCH · $dayLabel',
+      window: _formatRawRange(info.nextSlotStart!, info.nextSlotEnd!),
+      bookedCount: first?.bookedCount,
+      capacity: first?.capacity,
+    );
+  }
+}
+
+/// One slot window line with an optional eyebrow and fill bar — the shape
+/// shared by the pinned booked slot and the next-batch fallback.
+class _SlotWindowBar extends StatelessWidget {
+  const _SlotWindowBar({
+    required this.colors,
+    required this.eyebrow,
+    required this.window,
+    this.bookedCount,
+    this.capacity,
+  });
+
+  final AppColorSet colors;
+  final String eyebrow;
+  final String window;
+  final int? bookedCount;
+  final int? capacity;
+
+  @override
+  Widget build(BuildContext context) {
+    final booked = bookedCount;
+    final cap = capacity;
+    final hasFill = booked != null && cap != null && cap > 0;
+    final ratio = hasFill ? (booked / cap).clamp(0.0, 1.0).toDouble() : 0.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          eyebrow,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTypography.overline.copyWith(
+            color: colors.brand,
+            fontSize: 8,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.1,
+            height: 1,
+          ),
+        ),
+        const SizedBox(height: 4),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            hasFill ? '$window: $booked/$cap' : window,
+            maxLines: 1,
+            style: AppTypography.caption.copyWith(
+              color: colors.onSurface,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              height: 1.1,
+            ),
+          ),
+        ),
+        if (hasFill) ...[
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: AppRadius.borderFull,
+                  child: LinearProgressIndicator(
+                    value: ratio,
+                    minHeight: 6,
+                    backgroundColor: colors.outline.withValues(alpha: 0.55),
+                    valueColor: AlwaysStoppedAnimation<Color>(colors.brand),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                '${(ratio * 100).round()}%',
+                style: AppTypography.overline.copyWith(
+                  color: colors.onSurfaceDim,
+                  fontSize: 8,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 class _BatchSlotRow extends StatelessWidget {
   const _BatchSlotRow({required this.slot, required this.colors});
 
@@ -809,12 +1068,12 @@ class _QueuedDeliveryStatusTile extends StatelessWidget {
     super.key,
     required this.colors,
     required this.liveState,
-    this.slots = const [],
+    this.bookedSlot,
   });
 
   final AppColorSet colors;
   final LiveDeliveryMapState liveState;
-  final List<DeliverySlot> slots;
+  final _BookedSlotView? bookedSlot;
 
   @override
   Widget build(BuildContext context) {
@@ -825,15 +1084,7 @@ class _QueuedDeliveryStatusTile extends StatelessWidget {
         : size != null && size > 1
         ? '${_ordinal(position)} of $size in queue'
         : '${_ordinal(position)} in queue';
-    final assignedSlot = liveState.assignedSlot;
-    final activeSlot = assignedSlot != null
-        ? slots
-              .where((s) => s.templateId == assignedSlot.slotTemplateId)
-              .firstOrNull
-        : null;
-    final slotRatio = activeSlot == null || activeSlot.capacity == 0
-        ? 0.0
-        : (activeSlot.bookedCount / activeSlot.capacity).clamp(0.0, 1.0);
+    final slotView = bookedSlot;
 
     final child = ClipRRect(
       borderRadius: AppRadius.borderXl,
@@ -854,47 +1105,19 @@ class _QueuedDeliveryStatusTile extends StatelessWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.sm),
-            if (activeSlot != null) ...[
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '${_formatSlotRange(activeSlot)}: '
-                  '${activeSlot.bookedCount}/${activeSlot.capacity}',
-                  maxLines: 1,
-                  style: AppTypography.caption.copyWith(
-                    color: colors.onSurface,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    height: 1.1,
-                  ),
+            if (slotView != null) ...[
+              _SlotWindowBar(
+                colors: colors,
+                eyebrow: slotView.isToday
+                    ? 'YOUR BATCH · TODAY'
+                    : 'YOUR BATCH · '
+                          '${_shortDateLabel(slotView.slot.date).toUpperCase()}',
+                window: _formatRawRange(
+                  slotView.slot.startTime,
+                  slotView.slot.endTime,
                 ),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: AppRadius.borderFull,
-                      child: LinearProgressIndicator(
-                        value: slotRatio,
-                        minHeight: 6,
-                        backgroundColor: colors.outline.withValues(alpha: 0.55),
-                        valueColor: AlwaysStoppedAnimation<Color>(colors.brand),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    '${(slotRatio * 100).round()}%',
-                    style: AppTypography.overline.copyWith(
-                      color: colors.onSurfaceDim,
-                      fontSize: 8,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ],
+                bookedCount: slotView.fill?.bookedCount,
+                capacity: slotView.fill?.capacity,
               ),
               const SizedBox(height: AppSpacing.md),
             ],
@@ -978,7 +1201,7 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
     required this.liveRiderPoint,
     required this.hasLiveRiderPoint,
     required this.locationHealth,
-    required this.slots,
+    this.bookedSlot,
   });
 
   final AppColorSet colors;
@@ -986,7 +1209,7 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
   final LatLng? liveRiderPoint;
   final bool hasLiveRiderPoint;
   final LocationHealth locationHealth;
-  final List<DeliverySlot> slots;
+  final _BookedSlotView? bookedSlot;
 
   @override
   Widget build(BuildContext context) {
@@ -1001,12 +1224,7 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
         ? '${_ordinal(liveState.queuePosition!)} of $queueSize in queue'
         : '${_ordinal(liveState.queuePosition!)} in queue';
 
-    final assignedSlot = liveState.assignedSlot;
-    final activeSlot = assignedSlot != null
-        ? slots
-              .where((s) => s.templateId == assignedSlot.slotTemplateId)
-              .firstOrNull
-        : null;
+    final slotView = bookedSlot;
 
     final child = ClipRRect(
       borderRadius: AppRadius.borderXl,
@@ -1027,12 +1245,18 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.sm),
-            if (activeSlot != null) ...[
+            if (slotView != null) ...[
               FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  '${_formatSlotRange(activeSlot)}: ${activeSlot.bookedCount}/${activeSlot.capacity}',
+                  slotView.fill != null
+                      ? '${_formatRawRange(slotView.slot.startTime, slotView.slot.endTime)}: '
+                            '${slotView.fill!.bookedCount}/${slotView.fill!.capacity}'
+                      : _formatRawRange(
+                          slotView.slot.startTime,
+                          slotView.slot.endTime,
+                        ),
                   maxLines: 1,
                   style: AppTypography.caption.copyWith(
                     color: colors.onSurface,
@@ -1404,11 +1628,14 @@ class _StatusLine extends StatelessWidget {
   }
 }
 
-String _formatSlotRange(DeliverySlot slot) {
-  final start = _parseTime(slot.startTime);
-  final end = _parseTime(slot.endTime);
+String _formatSlotRange(DeliverySlot slot) =>
+    _formatRawRange(slot.startTime, slot.endTime);
+
+String _formatRawRange(String startRaw, String endRaw) {
+  final start = _parseTime(startRaw);
+  final end = _parseTime(endRaw);
   if (start == null || end == null) {
-    return '${slot.startTime} - ${slot.endTime}';
+    return '$startRaw - $endRaw';
   }
 
   final startPeriod = start.hour >= 12 ? 'PM' : 'AM';
@@ -1419,6 +1646,18 @@ String _formatSlotRange(DeliverySlot slot) {
   );
   final endLabel = _formatTime(end, includePeriod: true);
   return '$startLabel - $endLabel';
+}
+
+/// Formats an ISO `YYYY-MM-DD` date as e.g. `Fri, Jul 17`.
+String _shortDateLabel(String isoDate) {
+  final date = DateTime.tryParse(isoDate);
+  if (date == null) return isoDate;
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  return '${days[date.weekday - 1]}, ${months[date.month - 1]} ${date.day}';
 }
 
 TimeOfDay? _parseTime(String raw) {
