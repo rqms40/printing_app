@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- GRIDGO dot grid scaled to the adaptive-icon safe zone (66dp circle in a
+     108dp canvas). White dots on the cockpit-black background layer, with the
+     brand-yellow top-right dot and the muted bottom-right dot from the mark. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M32,38a6,6 0 1,0 12,0a6,6 0 1,0 -12,0" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M48,38a6,6 0 1,0 12,0a6,6 0 1,0 -12,0" />
+    <path android:fillColor="#FFDE58"
+        android:pathData="M64,38a6,6 0 1,0 12,0a6,6 0 1,0 -12,0" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M32,54a6,6 0 1,0 12,0a6,6 0 1,0 -12,0" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M48,54a6,6 0 1,0 12,0a6,6 0 1,0 -12,0" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M64,54a6,6 0 1,0 12,0a6,6 0 1,0 -12,0" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M32,70a6,6 0 1,0 12,0a6,6 0 1,0 -12,0" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M48,70a6,6 0 1,0 12,0a6,6 0 1,0 -12,0" />
+    <path android:fillColor="#8A8A8A"
+        android:pathData="M64,70a6,6 0 1,0 12,0a6,6 0 1,0 -12,0" />
+</vector>
