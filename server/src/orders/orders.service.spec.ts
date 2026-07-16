@@ -30,6 +30,7 @@ import { DeliveryDestination } from './entities/delivery-destination.entity';
 import { DeliverySlotsService } from '../delivery-slots/delivery-slots.service';
 import { DeliverySettingsService } from '../delivery-slots/delivery-settings.service';
 import { DeliverySlotsGateway } from '../delivery-slots/delivery-slots.gateway';
+import { DeliverySlotBooking } from '../delivery-slots/entities/delivery-slot-booking.entity';
 import {
   CancellationClosedException,
   SlotFullException,
@@ -160,6 +161,7 @@ describe('OrdersService', () => {
   let paperSpecsRepo: jest.Mocked<Partial<Repository<PaperSpec>>>;
   let threeDSpecsRepo: jest.Mocked<Partial<Repository<ThreeDSpec>>>;
   let assignmentRepo: jest.Mocked<Partial<Repository<DeliveryAssignment>>>;
+  let slotBookingRepo: jest.Mocked<Partial<Repository<DeliverySlotBooking>>>;
   let dispatchPlanRepo: jest.Mocked<Partial<Repository<DispatchPlan>>>;
   let historyRepo: jest.Mocked<Partial<Repository<OrderStatusHistory>>>;
   let addressRepo: jest.Mocked<Partial<Repository<Address>>>;
@@ -270,6 +272,9 @@ describe('OrdersService', () => {
       find: jest.fn(),
       findOne: jest.fn(),
     };
+    slotBookingRepo = {
+      find: jest.fn().mockResolvedValue([]),
+    };
     dispatchPlanRepo = { find: jest.fn().mockResolvedValue([]) };
     historyRepo = {
       insert: jest.fn(),
@@ -377,6 +382,7 @@ describe('OrdersService', () => {
     };
     dataSource = {
       query: jest.fn().mockResolvedValue([{ is_enabled: true }]),
+      getRepository: jest.fn().mockReturnValue(slotBookingRepo),
       transaction: jest.fn(async (runInTransaction) =>
         runInTransaction({
           query: transactionQuery,
@@ -1119,6 +1125,72 @@ describe('OrdersService', () => {
       expect(result).toEqual(orders);
     });
 
+    it('batch-loads and maps assigned slots across multiple order batches', async () => {
+      const orders = [
+        { ...mockOrder, id: 11, batchOrderId: 101 },
+        { ...mockOrder, id: 12, batchOrderId: 202 },
+        { ...mockOrder, id: 13, batchOrderId: 101 },
+      ] as Order[];
+      repo.find.mockResolvedValue(orders);
+      assignmentRepo.find.mockResolvedValue([]);
+      slotBookingRepo.find!.mockResolvedValue([
+        {
+          batchOrderId: 101,
+          slotTemplateId: 1,
+          date: '2026-07-20',
+          slotTemplate: {
+            startTime: '09:30:00',
+            endTime: '11:00:00',
+          },
+        } as DeliverySlotBooking,
+        {
+          batchOrderId: 202,
+          slotTemplateId: 2,
+          date: '2026-07-21',
+          slotTemplate: {
+            startTime: '13:00:00',
+            endTime: '14:30:00',
+          },
+        } as DeliverySlotBooking,
+      ]);
+
+      const result = await service.findByUser(1);
+
+      expect(slotBookingRepo.find).toHaveBeenCalledTimes(1);
+      expect(slotBookingRepo.find).toHaveBeenCalledWith({
+        where: { batchOrderId: expect.any(Object) },
+        relations: ['slotTemplate'],
+      });
+      expect((result[0] as any).assignedSlot).toEqual({
+        slotTemplateId: 1,
+        date: '2026-07-20',
+        startTime: '09:30:00',
+        endTime: '11:00:00',
+      });
+      expect((result[1] as any).assignedSlot).toEqual({
+        slotTemplateId: 2,
+        date: '2026-07-21',
+        startTime: '13:00:00',
+        endTime: '14:30:00',
+      });
+      expect((result[2] as any).assignedSlot).toEqual(
+        (result[0] as any).assignedSlot,
+      );
+      expect((result[0] as any).assignedSlot).not.toHaveProperty('bookingId');
+    });
+
+    it('leaves assignedSlot undefined when the batch has no active booking', async () => {
+      const orders = [{ ...mockOrder, batchOrderId: 101 }] as Order[];
+      repo.find.mockResolvedValue(orders);
+      assignmentRepo.find.mockResolvedValue([]);
+      slotBookingRepo.find!.mockResolvedValue([]);
+
+      const result = await service.findByUser(1);
+
+      expect(slotBookingRepo.find).toHaveBeenCalledTimes(1);
+      expect((result[0] as any).assignedSlot).toBeUndefined();
+    });
+
     it('attaches active deliveryAssignmentId for live tracking subscription', async () => {
       const orders = [{ ...mockOrder, id: 12 }] as Order[];
       repo.find.mockResolvedValue(orders);
@@ -1331,6 +1403,32 @@ describe('OrdersService', () => {
         ],
       });
       expect(result).toEqual(mockOrder);
+    });
+
+    it('attaches the active batch slot to an individual order', async () => {
+      const order = { ...mockOrder, batchOrderId: 101 } as Order;
+      repo.findOne.mockResolvedValue(order);
+      assignmentRepo.find.mockResolvedValue([]);
+      slotBookingRepo.find!.mockResolvedValue([
+        {
+          batchOrderId: 101,
+          slotTemplateId: 1,
+          date: '2026-07-20',
+          slotTemplate: {
+            startTime: '09:30:00',
+            endTime: '11:00:00',
+          },
+        } as DeliverySlotBooking,
+      ]);
+
+      const result = await service.findById(1);
+
+      expect((result as any).assignedSlot).toEqual({
+        slotTemplateId: 1,
+        date: '2026-07-20',
+        startTime: '09:30:00',
+        endTime: '11:00:00',
+      });
     });
   });
 

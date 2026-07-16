@@ -140,7 +140,7 @@ type SlotCandidate = {
 };
 
 type AssignedSlot = SlotCandidate & {
-  bookingId: number;
+  bookingId?: number;
 };
 
 type AssignedRiderContact = {
@@ -285,6 +285,30 @@ export class OrdersService {
     const orderIds = orders.map((order) => order.id).filter(Boolean);
     if (orderIds.length === 0) return orders;
 
+    const batchOrderIds = [
+      ...new Set(
+        orders
+          .map((order) => order.batchOrderId)
+          .filter((id): id is number => id != null),
+      ),
+    ];
+    const slotBookings =
+      batchOrderIds.length === 0
+        ? []
+        : await this.dataSource.getRepository(DeliverySlotBooking).find({
+            where: { batchOrderId: In(batchOrderIds) },
+            relations: ['slotTemplate'],
+          });
+    const assignedSlotByBatchOrderId = new Map<number, AssignedSlot>();
+    for (const booking of slotBookings) {
+      assignedSlotByBatchOrderId.set(booking.batchOrderId, {
+        slotTemplateId: booking.slotTemplateId,
+        date: booking.date,
+        startTime: booking.slotTemplate.startTime,
+        endTime: booking.slotTemplate.endTime,
+      });
+    }
+
     const assignments = await this.deliveryAssignmentRepo.find({
       where: {
         orderId: In(orderIds),
@@ -378,6 +402,10 @@ export class OrdersService {
           assignment,
           canTrackDelivery,
         ),
+        assignedSlot:
+          order.batchOrderId == null
+            ? undefined
+            : assignedSlotByBatchOrderId.get(order.batchOrderId),
       });
     });
   }
