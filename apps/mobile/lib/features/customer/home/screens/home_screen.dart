@@ -446,7 +446,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
         Positioned(
           right: AppSpacing.xl,
-          bottom: 90,
+          // The shell reports the nav bar's true height (66 + device inset)
+          // via MediaQuery padding — anchor above it instead of hard-coding.
+          bottom: MediaQuery.of(context).padding.bottom + AppSpacing.md,
           child: Consumer(
             builder: (_, ref, _) {
               final unread =
