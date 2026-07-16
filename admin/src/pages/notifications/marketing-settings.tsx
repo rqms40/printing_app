@@ -42,6 +42,7 @@ interface MarketingNotification {
   frequency: string;
   isActive: boolean;
   lastSentAt?: string | null;
+  imageUrl?: string | null;
 }
 
 interface SendNowResult {
@@ -134,6 +135,7 @@ export function MarketingSettings() {
   );
   const [editingId, setEditingId] = useState<number | null>(null);
   const [sendingId, setSendingId] = useState<number | null>(null);
+  const [previewImage, setPreviewImage] = useState<string>("");
 
   const { data, isLoading, refetch } = useCustom<MarketingNotification[]>({
     url: "/notifications/marketing",
@@ -149,6 +151,7 @@ export function MarketingSettings() {
   const handleValuesChange = (_changedValues: any, allValues: any) => {
     if (allValues.header !== undefined) setPreviewHeader(allValues.header);
     if (allValues.body !== undefined) setPreviewBody(allValues.body);
+    setPreviewImage(allValues.imageUrl ?? "");
   };
 
   const onEdit = (record: MarketingNotification) => {
@@ -157,6 +160,7 @@ export function MarketingSettings() {
     form.setFieldsValue({ ...record, ...frequencyValues });
     setPreviewHeader(record.header);
     setPreviewBody(record.body);
+    setPreviewImage(record.imageUrl ?? "");
   };
 
   const resetForm = () => {
@@ -164,6 +168,7 @@ export function MarketingSettings() {
     form.resetFields();
     setPreviewHeader("Header Preview");
     setPreviewBody("Body Preview");
+    setPreviewImage("");
   };
 
   const onFinish = (values: any) => {
@@ -359,6 +364,15 @@ export function MarketingSettings() {
               <TextArea rows={3} placeholder="e.g., The plane you requested..." />
             </Form.Item>
 
+            <Form.Item
+              name="imageUrl"
+              label="Image URL (optional)"
+              extra="Shown as a large picture on the customer's phone. Emoji work directly in the header and body."
+              rules={[{ type: "url", warningOnly: true }]}
+            >
+              <Input placeholder="https://…/promo.png" />
+            </Form.Item>
+
             <Row gutter={12}>
               <Col xs={24} sm={10}>
                 <Form.Item
@@ -446,13 +460,31 @@ export function MarketingSettings() {
                   <Text type="secondary" style={{ fontSize: "12px", flex: 1 }}>GRIDGO</Text>
                   <Text type="secondary" style={{ fontSize: "12px" }}>now</Text>
                 </div>
-                <div>
-                  <Text strong style={{ display: "block", fontSize: "15px", marginBottom: "2px" }}>
-                    {previewHeader || "Header Preview"}
-                  </Text>
-                  <Text style={{ fontSize: "14px", color: token.colorTextSecondary, lineHeight: 1.3 }}>
-                    {previewBody || "Body Preview"}
-                  </Text>
+                <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+                  <div style={{ flex: 1 }}>
+                    <Text strong style={{ display: "block", fontSize: "15px", marginBottom: "2px" }}>
+                      {previewHeader || "Header Preview"}
+                    </Text>
+                    <Text style={{ fontSize: "14px", color: token.colorTextSecondary, lineHeight: 1.3 }}>
+                      {previewBody || "Body Preview"}
+                    </Text>
+                  </div>
+                  {previewImage && (
+                    <img
+                      src={previewImage}
+                      alt="Notification attachment preview"
+                      style={{
+                        width: "44px",
+                        height: "44px",
+                        objectFit: "cover",
+                        borderRadius: "8px",
+                        flexShrink: 0,
+                      }}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = "none";
+                      }}
+                    />
+                  )}
                 </div>
               </div>
             </div>
