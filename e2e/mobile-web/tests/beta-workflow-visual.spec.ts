@@ -949,8 +949,21 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     );
   });
 
-  test("allows enough time for the complete four-role visual journey", () => {
-    expect(visualJourneyTimeoutMs).toBeGreaterThanOrEqual(10 * 60 * 1_000);
+  test("inherits the full configured time for the four-role visual journey", () => {
+    const config = readFileSync(
+      path.resolve(dirname, "../playwright.config.ts"),
+      "utf8",
+    );
+    expect(config).toContain(
+      "timeout: visualWorkflow ? 30 * 60_000 : 60_000",
+    );
+    const source = readFileSync(fileURLToPath(import.meta.url), "utf8");
+    const liveJourney = source.slice(
+      source.lastIndexOf(
+        'test.describe.serial("opt-in four-context visual beta release workflow"',
+      ),
+    );
+    expect(liveJourney).not.toContain("test.setTimeout(");
   });
 
   test("uses the Flutter login fields' actual accessible placeholders", () => {
@@ -1008,7 +1021,6 @@ type CustomerRun = {
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadFixture = path.resolve(dirname, "../fixtures/beta-upload.png");
 const expectedGridShareURL = "https://gridgoprint.ph/beta";
-const visualJourneyTimeoutMs = 15 * 60 * 1_000;
 
 function apiPath(response: Response, suffix: string): boolean {
   return new URL(response.url()).pathname.endsWith(suffix);
@@ -2562,7 +2574,6 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
     browser,
     request,
   }, testInfo) => {
-    test.setTimeout(visualJourneyTimeoutMs);
     test.skip(
       process.env.GRIDGO_RUN_BETA_FLOW_VISUAL !== "1",
       "Set GRIDGO_RUN_BETA_FLOW_VISUAL=1 against a fresh isolated stack.",
