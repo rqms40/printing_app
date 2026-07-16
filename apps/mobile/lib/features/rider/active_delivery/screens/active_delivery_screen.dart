@@ -190,21 +190,31 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
     final order = view.order;
     final destination = order.destination;
     final trackGps = view.shouldTrackLocation;
+    final sheetHeight =
+        MediaQuery.sizeOf(context).height *
+        (view.status == DeliveryStatus.arrived
+            ? _proofSheetSize
+            : _defaultSheetSize);
 
     return Scaffold(
       backgroundColor: colors.background,
       body: Stack(
+        fit: StackFit.expand,
         children: [
           Positioned.fill(
             child: RiderMapView(
-                    planOrigin: ref.watch(
-                      deliveriesProvider.select((s) => s.planOrigin),
-                    ),
+              planOrigin: ref.watch(
+                deliveriesProvider.select((s) => s.planOrigin),
+              ),
               assignmentId: view.id,
               destination: destination?.latLng,
               planStop: view.planStop,
               trackLocation: trackGps,
               interactive: true,
+              // Keep floating map controls clear of the header row and the
+              // customer sheet.
+              overlayTopInset: 76,
+              overlayBottomInset: sheetHeight,
             ),
           ),
           // Top scrim so map place-name labels fade out cleanly behind the
@@ -229,57 +239,63 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
               ),
             ),
           ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Row(
-                children: [
-                  _CircleButton(
-                    icon: HugeIcons.strokeRoundedArrowLeft01,
-                    onTap: () => Navigator.of(context).pop(),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
-                        vertical: AppSpacing.sm,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colors.surface.withValues(alpha: 0.94),
-                        borderRadius: AppRadius.borderMd,
-                        border: Border.all(
-                          color: colors.outline.withValues(alpha: 0.5),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: Row(
+                  children: [
+                    _CircleButton(
+                      icon: HugeIcons.strokeRoundedArrowLeft01,
+                      onTap: () => Navigator.of(context).pop(),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md,
+                          vertical: AppSpacing.sm,
+                        ),
+                        decoration: BoxDecoration(
+                          color: colors.surface.withValues(alpha: 0.94),
+                          borderRadius: AppRadius.borderMd,
+                          border: Border.all(
+                            color: colors.outline.withValues(alpha: 0.5),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              order.orderRef,
+                              style: AppTypography.bodyBold.copyWith(
+                                color: colors.onBackground,
+                              ),
+                            ),
+                            Text(
+                              destination?.shortLabel ?? 'En route',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.caption.copyWith(
+                                color: colors.onSurfaceDim,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            order.orderRef,
-                            style: AppTypography.bodyBold.copyWith(
-                              color: colors.onBackground,
-                            ),
-                          ),
-                          Text(
-                            destination?.shortLabel ?? 'En route',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTypography.caption.copyWith(
-                              color: colors.onSurfaceDim,
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  StatusBadge(
-                    label: visual.label,
-                    variant: visual.badgeVariant,
-                  ),
-                ],
+                    const SizedBox(width: AppSpacing.sm),
+                    StatusBadge(
+                      label: visual.label,
+                      variant: visual.badgeVariant,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -288,11 +304,7 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
             right: 0,
             bottom: 0,
             child: Container(
-              height:
-                  MediaQuery.sizeOf(context).height *
-                  (view.status == DeliveryStatus.arrived
-                      ? _proofSheetSize
-                      : _defaultSheetSize),
+              height: sheetHeight,
               decoration: BoxDecoration(
                 color: colors.surface,
                 borderRadius: const BorderRadius.vertical(

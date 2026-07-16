@@ -66,7 +66,7 @@ void main() {
 
     expect(find.byKey(const Key('active-route-leg')), findsOneWidget);
     expect(find.byType(PolylineLayer), findsOneWidget);
-    expect(find.text('Persisted route · 2.5 km'), findsOneWidget);
+    expect(find.text('2.5 km to this stop'), findsOneWidget);
   });
 
   testWidgets('missing persisted geometry degrades without a fake line', (
@@ -76,7 +76,7 @@ void main() {
     await tester.pump();
 
     expect(find.byType(PolylineLayer), findsNothing);
-    expect(find.text('Route geometry unavailable'), findsOneWidget);
+    expect(find.text('Route line unavailable'), findsOneWidget);
   });
 
   testWidgets('live rider map exposes a manual GPS refresh control', (

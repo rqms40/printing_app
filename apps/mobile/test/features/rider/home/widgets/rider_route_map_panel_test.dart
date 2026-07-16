@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_route_map_panel.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_route_map_tile.dart';
 import 'package:printing_app/features/rider/shared/rider_assignment_parser.dart';
@@ -171,10 +170,13 @@ void main() {
 
     expect(find.byKey(const Key('route-leg-0')), findsOneWidget);
     expect(find.byKey(const Key('route-leg-1')), findsOneWidget);
-    expect(find.text('Persisted route · Plan v1'), findsOneWidget);
+    // A healthy persisted plan renders quietly — no dispatch-plan jargon.
+    expect(find.textContaining('Persisted route'), findsNothing);
     expect(find.textContaining('Optimizing'), findsNothing);
+    expect(find.text('No route planned yet'), findsNothing);
     expect(find.byIcon(Icons.local_taxi_rounded), findsNothing);
     expect(find.byKey(const Key('route-summary')), findsOneWidget);
+    expect(find.byKey(const Key('route-open-pill')), findsOneWidget);
     expect(find.text('2 stops left · ~4 min · 1.2 km'), findsOneWidget);
     _expectRequiredAttribution(tester);
   });
