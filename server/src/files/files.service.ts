@@ -331,6 +331,7 @@ export class FilesService {
     fileId: number,
     requestingUserId: number,
     isAdmin: boolean,
+    requestHostname?: string,
   ): Promise<string> {
     const file = await this.fileRepo.findOne({ where: { id: fileId } });
     if (!file) throw new NotFoundException('File not found');
@@ -342,7 +343,11 @@ export class FilesService {
     }
     if (!file.objectKey) throw new NotFoundException('File has no storage key');
     try {
-      return await this.storageService.getPresignedUrl(file.objectKey, 3600);
+      return await this.storageService.getPresignedUrl(
+        file.objectKey,
+        3600,
+        requestHostname,
+      );
     } catch (err) {
       this.logger.error('Failed to generate presigned URL', err);
       throw new InternalServerErrorException(
@@ -351,8 +356,12 @@ export class FilesService {
     }
   }
 
-  async getPresignedUrlForKey(objectKey: string, ttl: number): Promise<string> {
-    return this.storageService.getPresignedUrl(objectKey, ttl);
+  async getPresignedUrlForKey(
+    objectKey: string,
+    ttl: number,
+    requestHostname?: string,
+  ): Promise<string> {
+    return this.storageService.getPresignedUrl(objectKey, ttl, requestHostname);
   }
 
   /** Permanently deletes an unreferenced file owned by the caller. */

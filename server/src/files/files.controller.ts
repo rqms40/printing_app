@@ -97,6 +97,7 @@ export class FilesController {
       id,
       req.user.sub,
       isAdmin,
+      req.hostname,
     );
     return { url };
   }
@@ -177,6 +178,7 @@ export class FilesController {
         previewGlbUrl = await this.filesService.getPresignedUrlForKey(
           previewKey,
           3600,
+          req.hostname,
         );
       } catch {
         /* non-fatal */

@@ -705,11 +705,12 @@ describe('FilesService', () => {
         'http://minio/presigned?sig=abc',
       );
 
-      const result = await service.getPresignedUrl(1, 42, false);
+      const result = await service.getPresignedUrl(1, 42, false, '10.0.2.2');
 
       expect(mockStorageService.getPresignedUrl).toHaveBeenCalledWith(
         'uploads/general/2026/04/21/uuid.jpg',
         3600,
+        '10.0.2.2',
       );
       expect(result).toBe('http://minio/presigned?sig=abc');
     });

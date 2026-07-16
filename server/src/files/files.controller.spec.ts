@@ -32,25 +32,32 @@ const makeRequest = (
   sub: number,
   role = 'customer',
   betaTestimonialPending = false,
+  hostname = 'localhost',
 ) =>
   ({
     user: { sub, role, email: 'user@example.com', betaTestimonialPending },
+    hostname,
   }) as RequestWithUser;
 
 const mockFilesService = {
   findById: jest.fn(),
+  getPresignedUrl: jest.fn(),
   getPresignedUrlForKey: jest.fn(),
 };
 const mockPrinterProfileService = { getProfile: jest.fn() };
 
 describe('FilesController', () => {
   let controller: FilesController;
-  let filesService: Pick<FilesService, 'findById' | 'storeMetadata'>;
+  let filesService: Pick<
+    FilesService,
+    'findById' | 'storeMetadata' | 'getPresignedUrl'
+  >;
 
   beforeEach(() => {
     filesService = {
       findById: jest.fn(),
       storeMetadata: jest.fn(),
+      getPresignedUrl: jest.fn(),
     };
     controller = new FilesController(
       filesService as FilesService,
@@ -82,6 +89,24 @@ describe('FilesController', () => {
 
     await expect(controller.getFile(1, makeRequest(42))).rejects.toThrow(
       ForbiddenException,
+    );
+  });
+
+  it('passes the request hostname through when presigning a file', async () => {
+    jest
+      .mocked(filesService.getPresignedUrl)
+      .mockResolvedValue('http://10.0.2.2:9000/file.pdf?signature=test');
+
+    await controller.getPresignedUrl(
+      1,
+      makeRequest(42, 'customer', false, '10.0.2.2'),
+    );
+
+    expect(filesService.getPresignedUrl).toHaveBeenCalledWith(
+      1,
+      42,
+      false,
+      '10.0.2.2',
     );
   });
 
@@ -311,11 +336,13 @@ describe('FilesController inspect with 3D bounds', () => {
 
     const out = await controller.inspect(11, {
       user: { sub: 1, role: 'customer' },
+      hostname: '10.0.2.2',
     } as any);
 
     expect(mockFilesService.getPresignedUrlForKey).toHaveBeenCalledWith(
       'uploads/model.obj.preview.glb',
       3600,
+      '10.0.2.2',
     );
     expect(out.previewGlbUrl).toBe('https://files/model.obj.preview.glb');
   });
