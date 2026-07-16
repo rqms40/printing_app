@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' show Color;
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../firebase_options.dart';
@@ -13,6 +16,94 @@ import '../../../firebase_options.dart';
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   debugPrint('Background message: ${message.notification?.title}');
+  // Data-only messages (delivery journey updates) are invisible unless the
+  // app renders them; notification-payload messages are already shown by
+  // the system in the background, so rendering those again would duplicate.
+  if (message.notification == null) {
+    await NotificationService.displayRemoteMessage(message);
+  }
+}
+
+/// How an incoming push should be displayed: which channel it belongs to,
+/// whether it carries journey progress, and any attached picture.
+@immutable
+class NotificationRenderSpec {
+  const NotificationRenderSpec({
+    required this.id,
+    required this.title,
+    required this.body,
+    required this.channelId,
+    required this.channelName,
+    required this.channelDescription,
+    this.progressCurrent,
+    this.progressTotal,
+    this.imageUrl,
+  });
+
+  final int id;
+  final String title;
+  final String body;
+  final String channelId;
+  final String channelName;
+  final String channelDescription;
+  final int? progressCurrent;
+  final int? progressTotal;
+  final String? imageUrl;
+
+  bool get hasProgress =>
+      progressCurrent != null && progressTotal != null && progressTotal! > 0;
+}
+
+/// Maps a push payload to its render spec. Returns null when there is
+/// nothing displayable (no title and no body anywhere in the message).
+///
+/// Contract with the server:
+/// - delivery pushes are data-only: `type=delivery_status`, `title`, `body`,
+///   `orderId`, optional `progressCurrent`/`progressTotal` (journey stage);
+/// - marketing pushes carry `type=marketing` and an optional `imageUrl`.
+NotificationRenderSpec? renderSpecForMessage({
+  required Map<String, dynamic> data,
+  String? notificationTitle,
+  String? notificationBody,
+}) {
+  final title = notificationTitle ?? data['title'] as String?;
+  final body = notificationBody ?? data['body'] as String?;
+  if (title == null && body == null) return null;
+
+  final type = data['type'] as String?;
+  final orderId = data['orderId'] as String?;
+
+  final (channelId, channelName, channelDescription) = switch (type) {
+    'delivery_status' => (
+      'gridgo_delivery',
+      'Delivery updates',
+      'Live progress of your print deliveries',
+    ),
+    'marketing' => (
+      'gridgo_marketing',
+      'Offers & news',
+      'Promotions and announcements from GRIDGO',
+    ),
+    _ => ('gridgo_general', 'General', 'Everything else from GRIDGO'),
+  };
+
+  // One evolving notification per order (Grab-style journey card); anything
+  // else gets its own entry.
+  final id = type == 'delivery_status' && orderId != null
+      ? orderId.hashCode
+      : DateTime.now().millisecondsSinceEpoch.remainder(1 << 31);
+
+  return NotificationRenderSpec(
+    id: id,
+    title: title ?? '',
+    body: body ?? '',
+    channelId: channelId,
+    channelName: channelName,
+    channelDescription: channelDescription,
+    progressCurrent: int.tryParse(data['progressCurrent']?.toString() ?? ''),
+    progressTotal: int.tryParse(data['progressTotal']?.toString() ?? ''),
+    imageUrl: data['imageUrl'] as String?,
+  );
 }
 
 /// FCM notification service — handles push notification setup and permissions.
@@ -51,6 +142,95 @@ class NotificationService {
 
   /// Whether FCM was successfully initialized.
   static bool _initialized = false;
+
+  static final _localNotifications = FlutterLocalNotificationsPlugin();
+  static bool _localNotificationsReady = false;
+
+  /// GRIDGO brand yellow — accents the small icon and progress bar.
+  static const _brandColor = Color(0xFFFFDE58);
+
+  static Future<void> _ensureLocalNotifications() async {
+    if (_localNotificationsReady) return;
+    await _localNotifications.initialize(
+      const InitializationSettings(
+        // White dot-grid silhouette; Android tints it with the accent color.
+        android: AndroidInitializationSettings('ic_notification'),
+      ),
+    );
+    _localNotificationsReady = true;
+  }
+
+  /// Renders an FCM message as a system notification.
+  ///
+  /// Used for foreground messages (Android never shows those on its own) and
+  /// for background data-only delivery updates.
+  static Future<void> displayRemoteMessage(RemoteMessage message) async {
+    final spec = renderSpecForMessage(
+      data: message.data,
+      notificationTitle: message.notification?.title,
+      notificationBody: message.notification?.body,
+    );
+    if (spec == null) return;
+
+    try {
+      await _ensureLocalNotifications();
+
+      AndroidBitmap<Object>? picture;
+      final imageUrl = spec.imageUrl ?? message.notification?.android?.imageUrl;
+      if (imageUrl != null && imageUrl.isNotEmpty) {
+        picture = await _downloadBitmap(imageUrl);
+      }
+
+      final android = AndroidNotificationDetails(
+        spec.channelId,
+        spec.channelName,
+        channelDescription: spec.channelDescription,
+        importance: Importance.high,
+        priority: Priority.high,
+        color: _brandColor,
+        showProgress: spec.hasProgress,
+        maxProgress: spec.progressTotal ?? 0,
+        progress: spec.progressCurrent ?? 0,
+        onlyAlertOnce: spec.hasProgress,
+        styleInformation: picture != null
+            ? BigPictureStyleInformation(
+                picture,
+                contentTitle: spec.title,
+                summaryText: spec.body,
+              )
+            : BigTextStyleInformation(spec.body, contentTitle: spec.title),
+      );
+
+      await _localNotifications.show(
+        spec.id,
+        spec.title,
+        spec.body,
+        NotificationDetails(android: android),
+      );
+    } catch (e) {
+      debugPrint('Failed to display notification: $e');
+    }
+  }
+
+  static Future<AndroidBitmap<Object>?> _downloadBitmap(String url) async {
+    try {
+      final client = HttpClient();
+      try {
+        final request = await client.getUrl(Uri.parse(url));
+        final response = await request.close().timeout(
+          const Duration(seconds: 8),
+        );
+        if (response.statusCode != 200) return null;
+        final bytes = await consolidateHttpClientResponseBytes(response);
+        return ByteArrayAndroidBitmap(bytes);
+      } finally {
+        client.close(force: true);
+      }
+    } catch (e) {
+      debugPrint('Notification image download failed: $e');
+      return null;
+    }
+  }
 
   /// Initialize Firebase + request notification permissions.
   /// Call once at app startup.
@@ -142,7 +322,8 @@ class NotificationService {
       debugPrint(_tokenLifecycleLog('acquired', token));
 
       if (!_messageListenersInstalled) {
-        // Listen for foreground messages
+        // Listen for foreground messages. Android never surfaces these on
+        // its own, so render them as system notifications too.
         FirebaseMessaging.onMessage.listen((RemoteMessage message) {
           final payload = <String, dynamic>{
             ...message.data,
@@ -152,6 +333,7 @@ class NotificationService {
               'body': message.notification!.body,
           };
           _messageController.add(payload);
+          unawaited(displayRemoteMessage(message));
           debugPrint('Foreground FCM: ${message.notification?.title}');
         });
 

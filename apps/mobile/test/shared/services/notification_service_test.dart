@@ -194,4 +194,78 @@ void main() {
     expect(acquired, isNot(contains(secretToken)));
     expect(refreshed, isNot(contains(secretToken)));
   });
+
+  group('renderSpecForMessage', () {
+    test('maps a delivery journey push to the delivery channel', () {
+      final spec = renderSpecForMessage(
+        data: const {
+          'type': 'delivery_status',
+          'title': 'Rider on the way',
+          'body': 'Juan is heading to you',
+          'orderId': 'ORD-10004',
+          'progressCurrent': '4',
+          'progressTotal': '5',
+        },
+      );
+
+      expect(spec, isNotNull);
+      expect(spec!.channelId, 'gridgo_delivery');
+      expect(spec.hasProgress, isTrue);
+      expect(spec.progressCurrent, 4);
+      expect(spec.progressTotal, 5);
+      expect(spec.title, 'Rider on the way');
+    });
+
+    test('reuses one notification id per order so updates replace', () {
+      NotificationRenderSpec specFor(String body) => renderSpecForMessage(
+        data: {
+          'type': 'delivery_status',
+          'title': 'Update',
+          'body': body,
+          'orderId': 'ORD-77',
+        },
+      )!;
+
+      expect(specFor('first').id, specFor('second').id);
+    });
+
+    test('maps marketing pushes with an image to the marketing channel', () {
+      final spec = renderSpecForMessage(
+        data: const {'type': 'marketing', 'imageUrl': 'https://x/img.png'},
+        notificationTitle: 'Last chance 🔥',
+        notificationBody: 'Complete checkout and get 10% off 🛒',
+      );
+
+      expect(spec, isNotNull);
+      expect(spec!.channelId, 'gridgo_marketing');
+      expect(spec.imageUrl, 'https://x/img.png');
+      expect(spec.hasProgress, isFalse);
+      expect(spec.title, 'Last chance 🔥');
+    });
+
+    test('unknown types fall back to the general channel', () {
+      final spec = renderSpecForMessage(
+        data: const {},
+        notificationTitle: 'Hello',
+      );
+      expect(spec!.channelId, 'gridgo_general');
+    });
+
+    test('returns null when there is nothing to show', () {
+      expect(renderSpecForMessage(data: const {'type': 'marketing'}), isNull);
+    });
+
+    test('ignores malformed progress values', () {
+      final spec = renderSpecForMessage(
+        data: const {
+          'type': 'delivery_status',
+          'title': 'T',
+          'body': 'B',
+          'progressCurrent': 'nope',
+          'progressTotal': '5',
+        },
+      );
+      expect(spec!.hasProgress, isFalse);
+    });
+  });
 }
