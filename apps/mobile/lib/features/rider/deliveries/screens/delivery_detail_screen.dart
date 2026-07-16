@@ -187,6 +187,8 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
                     interactive: true,
                     showLiveBadge: false,
                     showRoute: view.isInProgress,
+                    // Keep the recenter control below the floating back row.
+                    overlayTopInset: 52,
                   ),
                 ),
                 SafeArea(

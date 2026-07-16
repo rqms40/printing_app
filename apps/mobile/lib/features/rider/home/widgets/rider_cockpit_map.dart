@@ -26,6 +26,9 @@ class RiderCockpitMap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final planned = mapStops.where((view) => view.planStop != null).toList()
+      ..sort((a, b) => a.planSequence!.compareTo(b.planSequence!));
+
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -35,16 +38,23 @@ class RiderCockpitMap extends StatelessWidget {
           activeStop: activeStop,
           onTap: onMapTap,
         ),
-        Positioned(
-          top: 12,
-          right: 8,
-          bottom: 36,
-          child: RiderStopRail(
-            totalStops: mapStops.length,
-            completedCount: completedCount,
-            currentStopIndex: currentStopIndex,
+        // The rail mirrors the persisted plan; without one there is nothing
+        // to sequence, so it stays hidden instead of showing phantom stops.
+        if (planned.isNotEmpty)
+          Positioned(
+            top: 12,
+            right: 8,
+            // Leave the lower-right corner to the map attribution control.
+            bottom: 64,
+            child: RiderStopRail(
+              totalStops: planned.length,
+              completedCount: completedCount,
+              currentStopIndex: currentStopIndex,
+              stopStatuses: [
+                for (final view in planned) view.planStop!.status,
+              ],
+            ),
           ),
-        ),
       ],
     );
   }

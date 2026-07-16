@@ -28,6 +28,8 @@ class RiderMapView extends ConsumerStatefulWidget {
     this.showRoute = true,
     this.borderRadius,
     this.planOrigin,
+    this.overlayTopInset = 0,
+    this.overlayBottomInset = 0,
   });
 
   final String assignmentId;
@@ -39,6 +41,11 @@ class RiderMapView extends ConsumerStatefulWidget {
   final bool showRoute;
   final LatLng? planOrigin;
   final BorderRadius? borderRadius;
+
+  /// Extra space reserved above/below the floating overlays so hosts can keep
+  /// them clear of their own chrome (header row, customer sheet).
+  final double overlayTopInset;
+  final double overlayBottomInset;
 
   @override
   ConsumerState<RiderMapView> createState() => _RiderMapViewState();
@@ -93,8 +100,21 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
     ]);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      // Keep the route inside the band not covered by host chrome (header,
+      // customer sheet); fall back to plain padding when the map is too small.
+      final size = _mapController.camera.nonRotatedSize;
+      var padding = EdgeInsets.fromLTRB(
+        48,
+        widget.overlayTopInset + 48,
+        48,
+        widget.overlayBottomInset + 48,
+      );
+      if (padding.vertical + 80 > size.height ||
+          padding.horizontal + 80 > size.width) {
+        padding = const EdgeInsets.all(48);
+      }
       _mapController.fitCamera(
-        CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(48)),
+        CameraFit.bounds(bounds: bounds, padding: padding),
       );
     });
   }
@@ -141,9 +161,6 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
       }
     });
     final brightness = Theme.of(context).brightness;
-    final colors = brightness == Brightness.dark
-        ? AppColors.dark
-        : AppColors.light;
     final radius = widget.borderRadius ?? BorderRadius.zero;
 
     final tracker = ref.watch(riderLocationTrackerProvider(_trackerArgs));
@@ -163,6 +180,9 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
             options: MapOptions(
               initialCenter: _destination,
               initialZoom: 13,
+              backgroundColor: brightness == Brightness.dark
+                  ? const Color(0xFF111111)
+                  : const Color(0xFFE8E8E8),
               interactionOptions: InteractionOptions(
                 flags: widget.interactive
                     ? InteractiveFlag.all
@@ -209,9 +229,9 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
               MapHelpers.attribution(includeRouting: _routePoints.isNotEmpty),
             ],
           ),
-          if (widget.showLiveBadge && widget.trackLocation)
+          if (widget.showLiveBadge && widget.trackLocation && !_offRouteVisible)
             Positioned(
-              top: AppSpacing.md,
+              top: _overlayTop(context),
               left: AppSpacing.md,
               child: _GpsBadge(
                 pulseController: _pulseController,
@@ -222,46 +242,85 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
             Positioned(
               left: AppSpacing.md,
               right: AppSpacing.md,
-              bottom: AppSpacing.sm,
+              bottom: widget.overlayBottomInset + AppSpacing.sm + AppSpacing.xs,
               child: IgnorePointer(
-                child: Text(
-                  _routeDegraded
-                      ? 'Route geometry unavailable'
-                      : 'Persisted route · '
-                            '${(widget.planStop!.legDistanceMeters / 1000).toStringAsFixed(1)} km',
-                  textAlign: TextAlign.center,
-                  style: AppTypography.caption.copyWith(
-                    color: _routeDegraded
-                        ? Colors.orangeAccent
-                        : colors.onSurface,
-                    fontWeight: FontWeight.w600,
-                    shadows: const [
-                      Shadow(color: Color(0xCC000000), blurRadius: 8),
-                    ],
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xE6111111),
+                      borderRadius: AppRadius.borderFull,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _routeDegraded
+                              ? Icons.info_outline_rounded
+                              : Icons.route_rounded,
+                          size: 13,
+                          color: _routeDegraded
+                              ? Colors.orangeAccent
+                              : kRouteColor,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          _routeDegraded
+                              ? 'Route line unavailable'
+                              : '${(widget.planStop!.legDistanceMeters / 1000).toStringAsFixed(1)} km to this stop',
+                          style: AppTypography.caption.copyWith(
+                            color: _routeDegraded
+                                ? Colors.orangeAccent
+                                : Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
           Positioned(
             key: const Key('rider-map-location-control'),
-            top: MediaQuery.paddingOf(context).top + AppSpacing.xxxl,
+            top: _overlayTop(context),
             right: AppSpacing.md,
-            child: _MapControlButton(
-              label: widget.trackLocation
-                  ? 'Refresh GPS location'
-                  : 'Recenter delivery map',
-              icon: Icons.my_location_rounded,
-              onTap: () => unawaited(_refreshGpsLocation()),
+            child: Column(
+              children: [
+                _MapControlButton(
+                  label: widget.trackLocation
+                      ? 'Refresh GPS location'
+                      : 'Recenter delivery map',
+                  icon: Icons.my_location_rounded,
+                  onTap: () => unawaited(_refreshGpsLocation()),
+                ),
+                if (widget.trackLocation) ...[
+                  const SizedBox(height: AppSpacing.sm + 4),
+                  _MapControlButton(
+                    key: const Key('camera-follow-toggle'),
+                    label: _followCamera
+                        ? 'Stop following my position'
+                        : 'Follow my position',
+                    icon: _followCamera
+                        ? Icons.navigation_rounded
+                        : Icons.navigation_outlined,
+                    onTap: () => setState(() => _followCamera = !_followCamera),
+                  ),
+                ],
+              ],
             ),
           ),
-          if (widget.trackLocation &&
-              _offRouteFixes >= 3 &&
-              !_offRouteDismissed)
+          if (_offRouteVisible)
             Positioned(
               key: const Key('off-route-banner'),
-              top: MediaQuery.paddingOf(context).top + AppSpacing.md,
+              top: _overlayTop(context),
               left: AppSpacing.md,
-              right: AppSpacing.md,
+              // Stay clear of the map control column on the right.
+              right: AppSpacing.md + 52,
               child: Material(
                 color: const Color(0xF23D2E00),
                 borderRadius: AppRadius.borderMd,
@@ -304,25 +363,18 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
                 ),
               ),
             ),
-          if (widget.trackLocation)
-            Positioned(
-              key: const Key('camera-follow-toggle'),
-              top: MediaQuery.paddingOf(context).top + AppSpacing.xxxl + 56,
-              right: AppSpacing.md,
-              child: _MapControlButton(
-                label: _followCamera
-                    ? 'Stop following my position'
-                    : 'Follow my position',
-                icon: _followCamera
-                    ? Icons.navigation_rounded
-                    : Icons.navigation_outlined,
-                onTap: () => setState(() => _followCamera = !_followCamera),
-              ),
-            ),
         ],
       ),
     );
   }
+
+  bool get _offRouteVisible =>
+      widget.trackLocation && _offRouteFixes >= 3 && !_offRouteDismissed;
+
+  double _overlayTop(BuildContext context) =>
+      MediaQuery.paddingOf(context).top +
+      widget.overlayTopInset +
+      AppSpacing.md;
 
   Future<void> _requestReplan() async {
     setState(() => _replanInFlight = true);
@@ -411,6 +463,7 @@ class _GpsBadge extends StatelessWidget {
 
 class _MapControlButton extends StatelessWidget {
   const _MapControlButton({
+    super.key,
     required this.label,
     required this.icon,
     required this.onTap,
