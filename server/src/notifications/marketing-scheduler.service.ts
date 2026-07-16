@@ -117,11 +117,16 @@ export class MarketingSchedulerService {
       };
     }
 
+    const imageUrl = notif.imageUrl ?? undefined;
     const result = await this.firebaseService.sendToMultiple(
       tokens,
       notif.header,
       notif.body,
-      { type: 'marketing' },
+      {
+        type: 'marketing',
+        ...(imageUrl === undefined ? {} : { imageUrl }),
+      },
+      imageUrl,
     );
 
     if (!result) {

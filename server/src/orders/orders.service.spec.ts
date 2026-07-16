@@ -547,6 +547,29 @@ describe('OrdersService', () => {
       );
     });
 
+    it('sends the order-placed push data-only with initial journey progress', async () => {
+      repo.count.mockResolvedValue(0);
+      repo.create.mockReturnValue(mockOrder);
+      repo.save.mockResolvedValue(mockOrder);
+      (usersService.getFcmToken as jest.Mock).mockResolvedValue('token-1');
+
+      await service.create({ userId: 1 } as Partial<Order>);
+
+      expect(firebaseService.sendToDevice).toHaveBeenCalledWith(
+        'token-1',
+        'Order Placed',
+        `Your order ${mockOrder.orderId} has been placed successfully.`,
+        {
+          orderId: mockOrder.orderId,
+          status: 'order_placed',
+          type: 'delivery_status',
+          progressCurrent: '1',
+          progressTotal: '5',
+        },
+        { dataOnly: true },
+      );
+    });
+
     it('deducts GRIDGO Credits using print subtotal plus delivery fee', async () => {
       repo.count.mockResolvedValue(0);
       repo.create.mockReturnValue(mockOrder);
@@ -1640,6 +1663,64 @@ describe('OrdersService', () => {
   });
 
   describe('updateStatus notifications', () => {
+    it('sends delivery progress as string data in a data-only status push', async () => {
+      const updated = {
+        ...mockOrder,
+        orderStatus: OrderStatus.PRINTING_IN_PROGRESS,
+      } as Order;
+      repo.findOneOrFail.mockResolvedValue(updated);
+      (usersService.getFcmToken as jest.Mock).mockResolvedValue('token-1');
+
+      await service.publishStatusUpdate(
+        { ...mockOrder, orderStatus: OrderStatus.FILE_VERIFIED } as Order,
+        updated.id,
+        OrderStatus.PRINTING_IN_PROGRESS,
+      );
+
+      expect(firebaseService.sendToDevice).toHaveBeenCalledWith(
+        'token-1',
+        'Printing Started',
+        `Your order ${mockOrder.orderId} is being printed.`,
+        {
+          orderId: String(mockOrder.id),
+          status: OrderStatus.PRINTING_IN_PROGRESS,
+          toStatus: OrderStatus.PRINTING_IN_PROGRESS,
+          type: 'delivery_status',
+          progressCurrent: '2',
+          progressTotal: '5',
+        },
+        { dataOnly: true },
+      );
+    });
+
+    it('omits journey progress for an unmapped status push', async () => {
+      const updated = {
+        ...mockOrder,
+        orderStatus: OrderStatus.FILE_VERIFIED,
+      } as Order;
+      repo.findOneOrFail.mockResolvedValue(updated);
+      (usersService.getFcmToken as jest.Mock).mockResolvedValue('token-1');
+
+      await service.publishStatusUpdate(
+        { ...mockOrder, orderStatus: OrderStatus.ORDER_PLACED } as Order,
+        updated.id,
+        OrderStatus.FILE_VERIFIED,
+      );
+
+      const data = (firebaseService.sendToDevice as jest.Mock).mock.calls[0][3];
+      expect(data).toEqual(
+        expect.objectContaining({
+          type: 'delivery_status',
+          status: OrderStatus.FILE_VERIFIED,
+        }),
+      );
+      expect(data).not.toHaveProperty('progressCurrent');
+      expect(data).not.toHaveProperty('progressTotal');
+      expect(
+        (firebaseService.sendToDevice as jest.Mock).mock.calls[0][4],
+      ).toEqual({ dataOnly: true });
+    });
+
     it('keeps publication best-effort when customer FCM delivery fails', async () => {
       const updated = {
         ...mockOrder,
@@ -2847,6 +2928,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       );
       expect(surveyCalls).toHaveLength(1);
       expect(surveyCalls[0][0]).toBe('fcm-xyz');
+      expect(surveyCalls[0][4]).toBeUndefined();
     });
 
     it('skips WS/notification when survey requirement returns null (non-beta user)', async () => {

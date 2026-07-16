@@ -18,6 +18,7 @@ describe('MarketingSchedulerService', () => {
       header: 'Promo',
       body: 'Print today',
       description: 'Promo',
+      imageUrl: null,
       frequency: '1d',
       isActive: true,
       lastSentAt: null,
@@ -86,6 +87,7 @@ describe('MarketingSchedulerService', () => {
       'Promo',
       'Print today',
       { type: 'marketing' },
+      undefined,
     );
     expect(row.lastSentAt).toEqual(now);
     expect(repo.save).toHaveBeenCalledWith(row);
@@ -113,6 +115,7 @@ describe('MarketingSchedulerService', () => {
       'Promo',
       'Print today',
       { type: 'marketing' },
+      undefined,
     );
     expect(result).toEqual({
       sentTo: 2,
@@ -122,6 +125,25 @@ describe('MarketingSchedulerService', () => {
     });
     expect(row.lastSentAt).toEqual(now);
     expect(repo.save).toHaveBeenCalledWith(row);
+  });
+
+  it('passes the marketing image URL in data and Firebase image config', async () => {
+    const { firebaseService, service } = setup({
+      imageUrl: 'https://cdn.example.com/promo.jpg',
+    });
+
+    await service.sendNotificationById(1);
+
+    expect(firebaseService.sendToMultiple).toHaveBeenCalledWith(
+      ['token-a'],
+      'Promo',
+      'Print today',
+      {
+        type: 'marketing',
+        imageUrl: 'https://cdn.example.com/promo.jpg',
+      },
+      'https://cdn.example.com/promo.jpg',
+    );
   });
 
   it('throws a 404 when the marketing notification does not exist', async () => {

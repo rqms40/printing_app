@@ -1,5 +1,43 @@
 import { FirebaseService } from './firebase.service';
 
+describe('FirebaseService.sendToDevice', () => {
+  let service: FirebaseService;
+
+  beforeEach(() => {
+    service = new FirebaseService();
+  });
+
+  it('sends data-only messages with title and body in the data map', async () => {
+    const send = jest.fn().mockResolvedValue('message-id');
+    (service as unknown as { messaging: unknown }).messaging = { send };
+
+    await expect(
+      service.sendToDevice(
+        'token-a',
+        'Printing Started',
+        'Your order is being printed.',
+        {
+          orderId: '42',
+          type: 'delivery_status',
+        },
+        { dataOnly: true },
+      ),
+    ).resolves.toBe('message-id');
+
+    expect(send).toHaveBeenCalledWith({
+      token: 'token-a',
+      data: {
+        orderId: '42',
+        type: 'delivery_status',
+        title: 'Printing Started',
+        body: 'Your order is being printed.',
+      },
+      android: { priority: 'high' },
+    });
+    expect(send.mock.calls[0][0]).not.toHaveProperty('notification');
+  });
+});
+
 describe('FirebaseService.sendToMultiple', () => {
   let service: FirebaseService;
 
@@ -43,6 +81,37 @@ describe('FirebaseService.sendToMultiple', () => {
       tokens: ['a', 'b', 'c'],
       notification: { title: 'Title', body: 'Body' },
       data: { type: 'marketing' },
+    });
+  });
+
+  it('places an image URL in Android notification config and string data', async () => {
+    const sendEachForMulticast = jest
+      .fn()
+      .mockResolvedValue({ successCount: 1, failureCount: 0 });
+    (service as unknown as { messaging: unknown }).messaging = {
+      sendEachForMulticast,
+    };
+
+    await service.sendToMultiple(
+      ['token-a'],
+      'Fresh offer',
+      'Print today',
+      { type: 'marketing' },
+      'https://cdn.example.com/promo.jpg',
+    );
+
+    expect(sendEachForMulticast).toHaveBeenCalledWith({
+      tokens: ['token-a'],
+      notification: { title: 'Fresh offer', body: 'Print today' },
+      data: {
+        type: 'marketing',
+        imageUrl: 'https://cdn.example.com/promo.jpg',
+      },
+      android: {
+        notification: {
+          imageUrl: 'https://cdn.example.com/promo.jpg',
+        },
+      },
     });
   });
 

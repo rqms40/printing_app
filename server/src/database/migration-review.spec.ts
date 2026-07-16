@@ -2,8 +2,27 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { QueryRunner } from 'typeorm';
 import { DynamicProductCatalog1777680000000 } from '../../migrations/1777680000000-dynamic-product-catalog';
+import { AddMarketingNotificationImageUrl1784160000000 } from '../../migrations/1784160000000-add-marketing-notification-image-url';
 
 describe('migration review contracts', () => {
+  it('adds the nullable marketing notification image URL column', async () => {
+    const queries: string[] = [];
+    const queryRunner = {
+      hasTable: jest.fn(async () => true),
+      hasColumn: jest.fn(async () => false),
+      query: jest.fn(async (sql: string) => {
+        queries.push(sql);
+        return [];
+      }),
+    } as unknown as QueryRunner;
+
+    await new AddMarketingNotificationImageUrl1784160000000().up(queryRunner);
+
+    expect(queries).toEqual([
+      'ALTER TABLE "marketing_notifications" ADD COLUMN "image_url" varchar(2048)',
+    ]);
+  });
+
   it('preserves legacy product and order specification tables', async () => {
     const queries: string[] = [];
     const queryRunner = {

@@ -1125,7 +1125,11 @@ export class OrdersService {
           {
             orderId: savedOrder.orderId,
             status: 'order_placed',
+            type: 'delivery_status',
+            progressCurrent: '1',
+            progressTotal: '5',
           },
+          { dataOnly: true },
         );
       }
     } catch (err) {
@@ -2115,15 +2119,36 @@ export class OrdersService {
     try {
       const fcmToken = await this.usersService.getFcmToken(existing.userId);
       if (fcmToken && statusMsg) {
+        const progressByStatus: Partial<Record<OrderStatus, string>> = {
+          [OrderStatus.ORDER_PLACED]: '1',
+          [OrderStatus.PRINTING_IN_PROGRESS]: '2',
+          [OrderStatus.QUALITY_CHECKED]: '3',
+          [OrderStatus.ON_THE_WAY]: '4',
+          [OrderStatus.ARRIVED_AT_DESTINATION]: '4',
+          [OrderStatus.DELIVERED]: '5',
+        };
+        const progressCurrent = progressByStatus[orderStatus];
+        const pushData = Object.fromEntries(
+          Object.entries({
+            orderId: order.orderId,
+            status,
+            ...dynamicMetadata,
+          })
+            .filter(([, value]) => value != null)
+            .map(([key, value]) => [key, String(value)]),
+        );
         await this.firebaseService.sendToDevice(
           fcmToken,
           statusMsg.title,
           statusMsg.body,
           {
-            orderId: order.orderId,
-            status: status,
-            ...dynamicMetadata,
+            ...pushData,
+            type: 'delivery_status',
+            ...(progressCurrent === undefined
+              ? {}
+              : { progressCurrent, progressTotal: '5' }),
           },
+          { dataOnly: true },
         );
       }
     } catch (err) {
