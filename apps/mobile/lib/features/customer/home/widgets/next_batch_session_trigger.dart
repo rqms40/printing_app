@@ -64,10 +64,13 @@ class _NextBatchSessionTriggerState
   Future<void> _maybeShow() async {
     if (!mounted) return;
     if (ref.read(nextBatchShownThisSessionProvider)) return;
-    // Hold off until the first orders fetch lands — whether the customer has
-    // a batch in flight is unknowable before that.
-    if (!ref.read(ordersInitialLoadCompleteProvider)) return;
-    if (_hasBatchInFlight()) return;
+    // Suppress only when we positively know a batch is in flight. The orders
+    // fetch must never DELAY the reminder (fail-open): its moment is right
+    // after slots resolve at session start, and deferring it until orders
+    // land makes it pop unpredictably mid-interaction.
+    if (ref.read(ordersInitialLoadCompleteProvider) && _hasBatchInFlight()) {
+      return;
+    }
     final info = ref.read(nextBatchInfoProvider);
     if (info == null) return;
     ref.read(nextBatchShownThisSessionProvider.notifier).state = true;
@@ -78,12 +81,6 @@ class _NextBatchSessionTriggerState
   Widget build(BuildContext context) {
     ref.listen<NextBatchInfo?>(nextBatchInfoProvider, (prev, next) {
       if (next == null) return;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShow());
-    });
-    // Re-evaluate once the first orders fetch completes — slots often resolve
-    // before orders, and the decision needs both.
-    ref.listen<bool>(ordersInitialLoadCompleteProvider, (prev, next) {
-      if (!next) return;
       WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShow());
     });
     // Cover the case where the provider already had a value at first build.

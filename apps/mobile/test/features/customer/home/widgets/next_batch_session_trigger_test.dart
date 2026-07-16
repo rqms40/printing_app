@@ -100,11 +100,36 @@ void main() {
     expect(find.text("Today's last batch has departed"), findsNothing);
   });
 
-  testWidgets('waits for the first orders fetch before deciding', (
+  testWidgets('shows without waiting when orders have not loaded yet', (
     tester,
   ) async {
+    // Fail-open: an unloaded orders list must never delay the reminder —
+    // deferring makes it pop mid-interaction once orders land.
     await tester.pumpWidget(_wrap(ordersLoaded: false));
     await tester.pumpAndSettle();
-    expect(find.text("Today's last batch has departed"), findsNothing);
+    expect(find.text("Today's last batch has departed"), findsOneWidget);
+  });
+
+  testWidgets('booked batch does not suppress before orders load', (
+    tester,
+  ) async {
+    // A booked slot can only be known once orders are loaded; with the flag
+    // false the reminder still shows (fail-open).
+    await tester.pumpWidget(
+      _wrap(
+        ordersLoaded: false,
+        booked: const BookedSlotInfo(
+          orderId: 'ORD-1',
+          slot: AssignedDeliverySlot(
+            slotTemplateId: 1,
+            date: '2099-07-16',
+            startTime: '09:30:00',
+            endTime: '11:30:00',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text("Today's last batch has departed"), findsOneWidget);
   });
 }
