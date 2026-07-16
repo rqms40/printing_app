@@ -370,6 +370,20 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     expect(markDelivered).toBeGreaterThan(venDelivered);
   });
 
+  test("selects the credits payment row without matching tutorial controls", () => {
+    const source = readFileSync(fileURLToPath(import.meta.url), "utf8");
+    const orderFlow = source.slice(
+      source.lastIndexOf("async function placeCustomerOrder"),
+      source.lastIndexOf("async function advanceProductionAndAssign"),
+    );
+    expect(orderFlow).toContain(
+      "await clickNamed(actor.page, /^GRIDGO Credits\\./i);",
+    );
+    expect(orderFlow).not.toContain(
+      "await clickNamed(actor.page, /GRIDGO Credits/i);",
+    );
+  });
+
   test("opens an assigned delivery detail before Juan accepts it", () => {
     const source = readFileSync(fileURLToPath(import.meta.url), "utf8");
     const helper = source.slice(
@@ -2067,7 +2081,7 @@ async function placeCustomerOrder(options: {
     await clickNamed(actor.page, /Got it/);
   }
   await assertBetaOnlyPaymentOptions(actor.page);
-  await clickNamed(actor.page, /GRIDGO Credits/i);
+  await clickNamed(actor.page, /^GRIDGO Credits\./i);
   if (name === "Mark")
     await capture(
       run,
