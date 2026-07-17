@@ -16,7 +16,6 @@ interface IdRow {
   id: number;
 }
 
-
 interface SpecSeed {
   categoryId: number;
   key: string;
@@ -44,19 +43,6 @@ interface OptionSeed {
   estimatedQuantity?: number | null;
   isDefault?: boolean;
   sortOrder: number;
-}
-
-interface SpecSnapshotLookupRow {
-  spec_definition_id: number;
-  spec_key: string;
-  spec_label: string;
-  input_type: string;
-  option_id: number | null;
-  option_label: string | null;
-  multiplier: string | null;
-  fixed_fee: string | null;
-  unit_cost: string | null;
-  estimated_quantity: string | null;
 }
 
 type SeedPasswordVariable =
@@ -338,16 +324,6 @@ async function seed() {
     );
   }
   console.log('✅ 2 addresses created for Maria');
-
-  const [homeAddress] = await typedQuery<IdRow>(
-    ds,
-    'SELECT id FROM addresses WHERE user_id = $1 AND label = $2',
-    [mariaId, 'Home'],
-  );
-  const homeAddressId = homeAddress.id;
-  const homeAddressSeed = addresses.find(
-    (address) => address.label === 'Home',
-  )!;
 
   // ─── Rider Profile ─────────────────────────────────────────────────
   await ds.query(
