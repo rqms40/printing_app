@@ -21,9 +21,11 @@ LocationHealth classifyLocationHealth({
   required DateTime now,
   required bool connected,
 }) {
-  if (!connected) return LocationHealth.offline;
   final age = now.difference(updatedAt);
+  // A fresh update is proof of life even while the socket handshake state
+  // lags behind (reconnect churn must not flash "GPS offline" mid-stream).
   if (age < const Duration(seconds: 15)) return LocationHealth.live;
+  if (!connected) return LocationHealth.offline;
   if (age <= const Duration(seconds: 60)) return LocationHealth.stale;
   return LocationHealth.offline;
 }

@@ -207,7 +207,21 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
                 now: ref.read(deliveryTrackingNowProvider)(),
                 connected: socketHealth == LocationSocketHealth.connected,
               );
-        return _mapView(state, riderPoint, health, brightness, colors);
+        // Before the first fix arrives, "GPS offline" would be a lie — the
+        // socket is still handshaking/subscribing. Say what's happening.
+        final pendingLabel = matchingLocation == null
+            ? (socketHealth == LocationSocketHealth.connected
+                  ? 'Waiting for rider GPS…'
+                  : 'Connecting…')
+            : null;
+        return _mapView(
+          state,
+          riderPoint,
+          health,
+          brightness,
+          colors,
+          pendingLabel: pendingLabel,
+        );
       },
     );
   }
@@ -229,8 +243,9 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
     LatLng? riderPoint,
     LocationHealth locationHealth,
     Brightness brightness,
-    AppColorSet colors,
-  ) {
+    AppColorSet colors, {
+    String? pendingLabel,
+  }) {
     final canShowRouteEta =
         state.routePoints.length >= 2 &&
         (state.routingHealth == RoutingHealth.current ||
@@ -337,11 +352,13 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
                       ),
                       const SizedBox(width: AppSpacing.xs),
                       Text(
-                        switch (locationHealth) {
-                          LocationHealth.live => 'Live Tracking',
-                          LocationHealth.stale => 'Location stale',
-                          LocationHealth.offline => 'GPS offline',
-                        },
+                        pendingLabel ??
+                            switch (locationHealth) {
+                              LocationHealth.live => 'Live Tracking',
+                              LocationHealth.stale => 'Location stale',
+                              LocationHealth.offline =>
+                                'GPS offline — last known shown',
+                            },
                         style: AppTypography.caption.copyWith(
                           color: colors.onSurface,
                           fontWeight: FontWeight.w600,

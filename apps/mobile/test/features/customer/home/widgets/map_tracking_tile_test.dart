@@ -507,7 +507,7 @@ void main() {
       expect(find.text('Rider is on the way'), findsOneWidget);
       expect(
         _semanticsLabel(
-          'Rider is on the way. Tracking real-time location',
+          'Rider is on the way. Live · location updating',
         ),
         findsOneWidget,
       );

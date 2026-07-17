@@ -13,7 +13,7 @@ import { authenticateRealtimeSocket } from '../common/realtime/realtime-socket-a
 export type DeliveryQueueUpdatedPayload = {
   orderId: number;
   orderRef: string;
-  queuePosition: 1;
+  queuePosition: number;
   queueSize: number;
   canTrackDelivery: boolean;
   assignmentId: number | null;

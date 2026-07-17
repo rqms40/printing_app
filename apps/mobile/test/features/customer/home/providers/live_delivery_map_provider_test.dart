@@ -124,9 +124,21 @@ void main() {
         ),
         LocationHealth.offline,
       );
+      // A fresh fix proves updates are flowing even while the socket health
+      // flag lags (reconnect/resubscribe churn) — never flash offline.
       expect(
         classifyLocationHealth(
           updatedAt: now.subtract(const Duration(seconds: 1)),
+          now: now,
+          connected: false,
+        ),
+        LocationHealth.live,
+      );
+      // Once the last fix ages past the live window, a disconnected socket
+      // downgrades straight to offline instead of lingering on stale.
+      expect(
+        classifyLocationHealth(
+          updatedAt: now.subtract(const Duration(seconds: 20)),
           now: now,
           connected: false,
         ),

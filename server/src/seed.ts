@@ -16,11 +16,6 @@ interface IdRow {
   id: number;
 }
 
-interface OrderRow {
-  id: number;
-  order_id: string;
-}
-
 interface SpecSeed {
   categoryId: number;
   key: string;
@@ -48,19 +43,6 @@ interface OptionSeed {
   estimatedQuantity?: number | null;
   isDefault?: boolean;
   sortOrder: number;
-}
-
-interface SpecSnapshotLookupRow {
-  spec_definition_id: number;
-  spec_key: string;
-  spec_label: string;
-  input_type: string;
-  option_id: number | null;
-  option_label: string | null;
-  multiplier: string | null;
-  fixed_fee: string | null;
-  unit_cost: string | null;
-  estimated_quantity: string | null;
 }
 
 type SeedPasswordVariable =
@@ -141,66 +123,6 @@ async function insertSpecOption(
   );
 }
 
-async function insertOrderItemSpecSnapshot(
-  ds: DataSource,
-  orderItemId: number,
-  specKey: string,
-  value: string,
-  displayValue?: string,
-): Promise<void> {
-  const [lookup] = await typedQuery<SpecSnapshotLookupRow>(
-    ds,
-    `SELECT
-       d.id AS spec_definition_id,
-       d.key AS spec_key,
-       d.label AS spec_label,
-       d.input_type,
-       o.id AS option_id,
-       o.label AS option_label,
-       o.multiplier,
-       o.fixed_fee,
-       o.unit_cost,
-       o.estimated_quantity
-     FROM product_spec_definitions d
-     LEFT JOIN product_spec_options o
-       ON o.spec_definition_id = d.id AND o.value = $2
-     WHERE d.key = $1
-     ORDER BY d.id
-     LIMIT 1`,
-    [specKey, value],
-  );
-  if (!lookup) return;
-  await ds.query(
-    `INSERT INTO order_item_spec_values (
-      order_item_id, spec_definition_id, spec_key, spec_label, input_type,
-      value, display_value, option_id, option_label, multiplier, fixed_fee,
-      unit_cost, estimated_quantity
-    )
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-    [
-      orderItemId,
-      lookup.spec_definition_id,
-      lookup.spec_key,
-      lookup.spec_label,
-      lookup.input_type,
-      value,
-      displayValue ?? lookup.option_label ?? value,
-      lookup.option_id,
-      lookup.option_label,
-      lookup.multiplier ?? 1,
-      lookup.fixed_fee ?? 0,
-      lookup.unit_cost ?? 0,
-      lookup.estimated_quantity,
-    ],
-  );
-}
-
-/**
- * Database seed script -- creates demo data for all 3 roles.
- *
- * Run: npx ts-node -r tsconfig-paths/register src/seed.ts
- * Or:  npm run seed
- */
 async function seed() {
   const customerPassword = requireSeedPassword('GRIDGO_SEED_CUSTOMER_PASSWORD');
   const riderPassword = requireSeedPassword('GRIDGO_SEED_RIDER_PASSWORD');
@@ -403,16 +325,6 @@ async function seed() {
   }
   console.log('✅ 2 addresses created for Maria');
 
-  const [homeAddress] = await typedQuery<IdRow>(
-    ds,
-    'SELECT id FROM addresses WHERE user_id = $1 AND label = $2',
-    [mariaId, 'Home'],
-  );
-  const homeAddressId = homeAddress.id;
-  const homeAddressSeed = addresses.find(
-    (address) => address.label === 'Home',
-  )!;
-
   // ─── Rider Profile ─────────────────────────────────────────────────
   await ds.query(
     `INSERT INTO rider_profiles (user_id, vehicle_type, plate_number, license_number, is_available)
@@ -421,300 +333,20 @@ async function seed() {
   );
   console.log('✅ Rider profile created for Juan');
 
-  // ─── Orders ─────────────────────────────────────────────────────────
-  const orders = [
-    {
-      order_id: 'ORD-10001',
-      category: 'paper',
-      quantity: 2,
-      total_price: 120,
-      delivery_fee: 50,
-      payment_method: 'gcash',
-      payment_status: 'paid',
-      order_status: 'order_placed',
-      delivery_option: 'delivery',
-      delivery_address_id: homeAddressId,
-    },
-    {
-      order_id: 'ORD-10002',
-      category: 'paper',
-      quantity: 1,
-      total_price: 80,
-      delivery_fee: 0,
-      payment_method: 'maya',
-      payment_status: 'paid',
-      order_status: 'printing_in_progress',
-      delivery_option: 'pickup',
-    },
-    {
-      order_id: 'ORD-10003',
-      category: '3d',
-      quantity: 1,
-      total_price: 350,
-      delivery_fee: 50,
-      payment_method: 'cod',
-      payment_status: 'pending',
-      order_status: 'quality_checked',
-      delivery_option: 'delivery',
-      delivery_address_id: homeAddressId,
-    },
-    {
-      order_id: 'ORD-10004',
-      category: 'paper',
-      quantity: 5,
-      total_price: 250,
-      delivery_fee: 50,
-      payment_method: 'gcash',
-      payment_status: 'paid',
-      order_status: 'on_the_way',
-      delivery_option: 'delivery',
-      delivery_address_id: homeAddressId,
-    },
-    {
-      order_id: 'ORD-10005',
-      category: 'paper',
-      quantity: 1,
-      total_price: 45,
-      delivery_fee: 0,
-      payment_method: 'maya',
-      payment_status: 'paid',
-      order_status: 'delivered',
-      delivery_option: 'pickup',
-    },
-    {
-      order_id: 'ORD-10006',
-      category: '3d',
-      quantity: 2,
-      total_price: 580,
-      delivery_fee: 50,
-      payment_method: 'gcash',
-      payment_status: 'refunded',
-      order_status: 'cancelled',
-      delivery_option: 'delivery',
-      delivery_address_id: homeAddressId,
-    },
-  ];
-
-  const destinationByOrderRef = new Map<string, number | null>();
-
-  for (const o of orders) {
-    let batchOrderId: number | null = null;
-    let destinationId: number | null = null;
-
-    if (o.delivery_option === 'delivery' && o.delivery_address_id != null) {
-      const [batchOrder] = await typedQuery<IdRow>(
-        ds,
-        `INSERT INTO batch_orders (
-          batch_ref, user_id, subtotal, delivery_fee, total_price,
-          payment_method, payment_status, delivery_option, delivery_address_id,
-          delivery_type, speed_tier, priority_fee, extra_destination_fee
-        )
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'local','standard',0,0)
-         RETURNING id`,
-        [
-          `BATCH-${o.order_id.slice(4)}`,
-          mariaId,
-          o.total_price,
-          o.delivery_fee,
-          o.total_price + o.delivery_fee,
-          o.payment_method,
-          o.payment_status,
-          o.delivery_option,
-          o.delivery_address_id,
-        ],
-      );
-      batchOrderId = batchOrder.id;
-
-      const [destination] = await typedQuery<IdRow>(
-        ds,
-        `INSERT INTO delivery_destinations (
-          batch_order_id, address_id, label, sort_order, full_address,
-          barangay, city, province, zip_code, landmark, latitude, longitude
-        )
-         VALUES ($1,$2,$3,0,$4,$5,$6,$7,$8,$9,$10,$11)
-         RETURNING id`,
-        [
-          batchOrderId,
-          o.delivery_address_id,
-          homeAddressSeed.label,
-          homeAddressSeed.full_address,
-          homeAddressSeed.barangay,
-          homeAddressSeed.city,
-          homeAddressSeed.province,
-          homeAddressSeed.zip_code,
-          homeAddressSeed.landmark,
-          homeAddressSeed.latitude,
-          homeAddressSeed.longitude,
-        ],
-      );
-      destinationId = destination.id;
-    }
-
-    destinationByOrderRef.set(o.order_id, destinationId);
-
-    await ds.query(
-      `INSERT INTO orders (
-        order_id, user_id, category, quantity, total_price, delivery_fee,
-        payment_method, payment_status, order_status, delivery_option,
-        delivery_address_id, batch_order_id, destination_id, file_name
-      )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-      [
-        o.order_id,
-        mariaId,
-        o.category,
-        o.quantity,
-        o.total_price,
-        o.delivery_fee,
-        o.payment_method,
-        o.payment_status,
-        o.order_status,
-        o.delivery_option,
-        o.delivery_address_id ?? null,
-        batchOrderId,
-        destinationId,
-        `${o.category === 'paper' ? 'document' : 'model'}_${o.order_id.slice(-3)}.${o.category === 'paper' ? 'pdf' : 'stl'}`,
-      ],
-    );
-  }
-  console.log('✅ 6 orders created for Maria (various statuses)');
-
-  // Get order IDs
-  const orderRows = await typedQuery<OrderRow>(
-    ds,
-    'SELECT id, order_id FROM orders ORDER BY id',
-  );
-
-  const orderItemByOrderId = new Map<string, number>();
-  for (const row of orderRows) {
-    const source = orders.find((order) => order.order_id === row.order_id)!;
-    const [item] = await typedQuery<IdRow>(
-      ds,
-      `INSERT INTO order_items (order_id, category, quantity, total_price, file_name, destination_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id`,
-      [
-        row.id,
-        source.category,
-        source.quantity,
-        source.total_price,
-        `${source.category === 'paper' ? 'document' : 'model'}_${source.order_id.slice(-3)}.${source.category === 'paper' ? 'pdf' : 'stl'}`,
-        destinationByOrderRef.get(row.order_id) ?? null,
-      ],
-    );
-    orderItemByOrderId.set(row.order_id, item.id);
-  }
-  console.log('✅ Order items added to 6 orders');
-
-  // ─── Delivery Assignment ────────────────────────────────────────────
-  // Get rider profile ID (FK references rider_profiles, not users)
-  const [riderProfile] = await typedQuery<IdRow>(
-    ds,
-    'SELECT id FROM rider_profiles WHERE user_id = $1',
-    [juanId],
-  );
-  const riderProfileId: number = riderProfile.id;
-
-  const onTheWayOrder: OrderRow | undefined = orderRows.find(
-    (r: OrderRow) => r.order_id === 'ORD-10004',
-  );
-  if (onTheWayOrder) {
-    await ds.query(
-      `INSERT INTO delivery_assignments (order_id, rider_id, status, accepted_at, picked_up_at, on_the_way_at)
-       VALUES ($1, $2, $3, NOW(), NOW(), NOW())`,
-      [onTheWayOrder.id, riderProfileId, 'on_the_way'],
-    );
-    // Update order with assigned rider
-    await ds.query('UPDATE orders SET assigned_rider_id = $1 WHERE id = $2', [
-      juanId,
-      onTheWayOrder.id,
-    ]);
-    console.log(
-      '✅ Delivery assignment created (ORD-10004 → Juan, on_the_way)',
-    );
-  }
-
   // ─── Notifications ──────────────────────────────────────────────────
-  const notifications = [
-    {
-      user_id: mariaId,
-      order_ref: 'ORD-10001' as string | null,
-      title: 'Order Placed',
-      message: 'Your order ORD-10001 has been placed successfully.',
-      type: 'order_update',
-      is_read: false,
-    },
-    {
-      user_id: mariaId,
-      order_ref: 'ORD-10002' as string | null,
-      title: 'Printing Started',
-      message: 'Your order ORD-10002 is now being printed.',
-      type: 'order_update',
-      is_read: false,
-    },
-    {
-      user_id: mariaId,
-      order_ref: 'ORD-10004' as string | null,
-      title: 'Rider On The Way',
-      message: 'Juan is delivering your order ORD-10004.',
-      type: 'delivery_update',
-      is_read: false,
-    },
-    {
-      user_id: mariaId,
-      order_ref: 'ORD-10005' as string | null,
-      title: 'Order Completed',
-      message: 'Your order ORD-10005 has been picked up. Thank you!',
-      type: 'order_update',
-      is_read: true,
-    },
-    {
-      user_id: mariaId,
-      order_ref: 'ORD-10006' as string | null,
-      title: 'Refund Processed',
-      message: 'Your refund for ORD-10006 has been processed.',
-      type: 'payment',
-      is_read: true,
-    },
-    {
-      user_id: mariaId,
-      order_ref: null as string | null,
-      title: 'Welcome to GRIDGO!',
-      message: 'Start your first order and enjoy premium printing.',
-      type: 'promo',
-      is_read: true,
-    },
-    {
-      user_id: juanId,
-      order_ref: 'ORD-10004' as string | null,
-      title: 'New Delivery',
-      message: 'You have been assigned to deliver ORD-10004.',
-      type: 'delivery_assignment',
-      is_read: true,
-    },
-  ];
-
-  for (const n of notifications) {
-    await ds.query(
-      `INSERT INTO notifications (user_id, order_ref, title, message, type, is_read)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [n.user_id, n.order_ref, n.title, n.message, n.type, n.is_read],
-    );
-  }
-  console.log('✅ 7 notifications created');
-
-  // ─── Payment Transactions ───────────────────────────────────────────
-  const paidOrders: OrderRow[] = orderRows.filter((r: OrderRow) =>
-    ['ORD-10001', 'ORD-10002', 'ORD-10004', 'ORD-10005'].includes(r.order_id),
+  // Seed accounts start with zero orders, so only order-agnostic content.
+  await ds.query(
+    `INSERT INTO notifications (user_id, order_ref, title, message, type, is_read)
+     VALUES ($1, NULL, $2, $3, $4, $5)`,
+    [
+      mariaId,
+      'Welcome to GRIDGO!',
+      'Start your first order and enjoy premium printing.',
+      'promo',
+      false,
+    ],
   );
-  for (const o of paidOrders) {
-    await ds.query(
-      `INSERT INTO payment_transactions (order_id, payment_method, amount, status)
-       VALUES ($1, $2, $3, $4)`,
-      [o.id, 'gcash', 150, 'success'],
-    );
-  }
-  console.log('✅ 4 payment transactions created');
+  console.log('✅ 1 welcome notification created');
 
   // ─── Product Catalog ────────────────────────────────────────────────
   const paperExtensions = '["pdf","png","jpg","jpeg","tif","tiff","docx"]';
@@ -1205,57 +837,6 @@ async function seed() {
   ];
   for (const option of tdOptions) await insertSpecOption(ds, option);
   console.log('✅ 3D catalog specs and options created');
-
-  const paperOrderIds: OrderRow[] = orderRows.filter((r: OrderRow) =>
-    ['ORD-10001', 'ORD-10002', 'ORD-10004', 'ORD-10005'].includes(r.order_id),
-  );
-  for (const order of paperOrderIds) {
-    const orderItemId = orderItemByOrderId.get(order.order_id);
-    if (!orderItemId) continue;
-    await insertOrderItemSpecSnapshot(ds, orderItemId, 'paper_size', 'a4');
-    await insertOrderItemSpecSnapshot(
-      ds,
-      orderItemId,
-      'color_mode',
-      'full_color',
-    );
-    await insertOrderItemSpecSnapshot(ds, orderItemId, 'media_type', 'glossy');
-    await insertOrderItemSpecSnapshot(
-      ds,
-      orderItemId,
-      'print_sides',
-      'front_only',
-    );
-    await insertOrderItemSpecSnapshot(ds, orderItemId, 'binding', 'none');
-    await insertOrderItemSpecSnapshot(
-      ds,
-      orderItemId,
-      'print_mode',
-      'fitToPage',
-    );
-    await insertOrderItemSpecSnapshot(ds, orderItemId, 'page_count', '1');
-  }
-
-  const threeDOrderIds: OrderRow[] = orderRows.filter((r: OrderRow) =>
-    ['ORD-10003', 'ORD-10006'].includes(r.order_id),
-  );
-  for (const order of threeDOrderIds) {
-    const orderItemId = orderItemByOrderId.get(order.order_id);
-    if (!orderItemId) continue;
-    await insertOrderItemSpecSnapshot(ds, orderItemId, 'file_format', 'stl');
-    await insertOrderItemSpecSnapshot(ds, orderItemId, 'material', 'pla');
-    await insertOrderItemSpecSnapshot(ds, orderItemId, 'color', 'white');
-    await insertOrderItemSpecSnapshot(
-      ds,
-      orderItemId,
-      'infill_percentage',
-      '20',
-    );
-    await insertOrderItemSpecSnapshot(ds, orderItemId, 'layer_height', '0.2');
-    await insertOrderItemSpecSnapshot(ds, orderItemId, 'supports', 'false');
-    await insertOrderItemSpecSnapshot(ds, orderItemId, 'notes', '');
-  }
-  console.log('✅ Dynamic order item spec snapshots added to seeded orders');
 
   // ─── Service Addons ─────────────────────────────────────────────────
   await ds.query(

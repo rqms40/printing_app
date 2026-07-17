@@ -19,6 +19,7 @@ import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/models/location_update.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
+import 'package:printing_app/shared/widgets/delivery_journey_bar.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
 /// The customer's own booked delivery slot, taken from the most recently
@@ -624,40 +625,55 @@ class _BatchStatusTile extends StatelessWidget {
                   ),
                 ),
               )
-            else if (slots.isNotEmpty) ...[
-              for (var i = 0; i < slots.length; i++) ...[
-                _BatchSlotRow(slot: slots[i], colors: colors),
-                if (i != slots.length - 1 || _hasHiddenSlots)
-                  const SizedBox(height: AppSpacing.xs),
-              ],
-              if (_hasHiddenSlots)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    key: const Key('delivery-slots-view-more'),
-                    onPressed: () =>
-                        _showDeliverySlotsSheet(context, colors, allSlots),
-                    style: TextButton.styleFrom(
-                      foregroundColor: colors.brand,
-                      minimumSize: Size.zero,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 2,
-                        vertical: 0,
-                      ),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: Text(
-                      'View more',
-                      style: AppTypography.caption.copyWith(
-                        color: colors.brand,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                        height: 1,
-                      ),
-                    ),
+            else if (slots.isNotEmpty)
+              // Flexible + scroll keeps the bento cell from hard-overflowing
+              // when three slot rows (or large text scales) exceed the tile.
+              Flexible(
+                child: SingleChildScrollView(
+                  physics: const ClampingScrollPhysics(),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var i = 0; i < slots.length; i++) ...[
+                        _BatchSlotRow(slot: slots[i], colors: colors),
+                        if (i != slots.length - 1 || _hasHiddenSlots)
+                          const SizedBox(height: AppSpacing.xs),
+                      ],
+                      if (_hasHiddenSlots)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            key: const Key('delivery-slots-view-more'),
+                            onPressed: () => _showDeliverySlotsSheet(
+                              context,
+                              colors,
+                              allSlots,
+                            ),
+                            style: TextButton.styleFrom(
+                              foregroundColor: colors.brand,
+                              minimumSize: Size.zero,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 2,
+                                vertical: 0,
+                              ),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: Text(
+                              'View more',
+                              style: AppTypography.caption.copyWith(
+                                color: colors.brand,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                                height: 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-            ],
+              ),
           ],
         ),
       ),
@@ -1209,6 +1225,18 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
   final LatLng? liveRiderPoint;
   final bool hasLiveRiderPoint;
   final LocationHealth locationHealth;
+
+  /// "1.2 km · ~4 min away" while a live fix exists; null hides the caption.
+  String? get _remainingLabel {
+    final point = liveRiderPoint;
+    if (point == null || liveState.routePoints.length < 2) return null;
+    final meters = remainingRouteDistanceMeters(point, liveState.routePoints);
+    final minutes = estimateRouteEtaMinutes(point, liveState.routePoints);
+    final distance = meters >= 950
+        ? '${(meters / 1000).toStringAsFixed(1)} km'
+        : '${meters.round()} m';
+    return '$distance · ~$minutes min away';
+  }
   final _BookedSlotView? bookedSlot;
 
   @override
@@ -1216,7 +1244,6 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
     final ratio = liveRiderPoint == null
         ? 0.0
         : routeProgressRatioForPoint(liveRiderPoint!, liveState.routePoints);
-    final percent = (ratio * 100).round();
     final queueSize = liveState.queueSize;
     final queueLabel = liveState.queuePosition == null
         ? null
@@ -1268,32 +1295,13 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
               ),
               const SizedBox(height: 4),
             ],
-            Row(
-              children: [
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: AppRadius.borderFull,
-                    child: LinearProgressIndicator(
-                      value: ratio,
-                      minHeight: 6,
-                      backgroundColor: colors.outline.withValues(alpha: 0.55),
-                      valueColor: AlwaysStoppedAnimation<Color>(colors.brand),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Text(
-                  '$percent%',
-                  style: AppTypography.overline.copyWith(
-                    color: colors.onSurfaceDim,
-                    fontSize: 8,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ],
+            DeliveryJourneyBar(
+              colors: colors,
+              progress: ratio,
+              compact: true,
+              remainingLabel: _remainingLabel,
             ),
-            const SizedBox(height: AppSpacing.md),
+            const SizedBox(height: AppSpacing.sm),
             _StatusLine(
               colors: colors,
               icon: Icons.check_rounded,
@@ -1308,11 +1316,11 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
               icon: Icons.electric_moped_rounded,
               title: 'Rider is on the way',
               subtitle: switch (locationHealth) {
-                LocationHealth.live => 'Tracking real-time location',
-                LocationHealth.stale => 'Location stale — showing last update',
+                LocationHealth.live => 'Live · location updating',
+                LocationHealth.stale => 'Paused · last known shown',
                 LocationHealth.offline when hasLiveRiderPoint =>
-                  'GPS offline — showing last location',
-                LocationHealth.offline => 'Awaiting an authenticated GPS ping',
+                  'Offline · last known shown',
+                LocationHealth.offline => 'Waiting for rider GPS',
               },
               outlined: true,
             ),

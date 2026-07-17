@@ -6,6 +6,8 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>GRIDGO uses your location while you deliver so customers can follow their order in real time.</string>
 	<key>CFBundleDisplayName</key>
 	<string>Printing App</string>
 	<key>CFBundleExecutable</key>

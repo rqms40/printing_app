@@ -182,21 +182,19 @@ describe('seed script', () => {
     expect(seedSource).toContain("label: 'Actual Size'");
   });
 
-  it('wires the active demo delivery to Maria home address coordinates', () => {
+  it('seeds accounts with zero orders and no delivery fixtures', () => {
     const seedSource = readFileSync(join(__dirname, 'seed.ts'), 'utf8');
 
-    expect(seedSource).toContain('homeAddressId');
-    expect(seedSource).toMatch(
-      /order_id: 'ORD-10004',[\s\S]*delivery_address_id: homeAddressId/,
-    );
-    expect(seedSource).toContain('INSERT INTO delivery_destinations');
-    expect(seedSource).toContain(
-      'destinationByOrderRef.set(o.order_id, destinationId)',
-    );
-    expect(seedSource).toContain(
-      'delivery_address_id, batch_order_id, destination_id, file_name',
-    );
-    expect(seedSource).toContain('file_name, destination_id');
+    // Seed users start from a clean slate — no demo orders, assignments,
+    // payments, or order-bound notifications; the fresh-order journey is
+    // exercised end-to-end by the app itself.
+    expect(seedSource).not.toContain("order_id: 'ORD-");
+    expect(seedSource).not.toContain('INSERT INTO orders');
+    expect(seedSource).not.toContain('INSERT INTO order_items');
+    expect(seedSource).not.toContain('INSERT INTO delivery_assignments');
+    expect(seedSource).not.toContain('INSERT INTO payment_transactions');
+    // Truncate list still resets order tables for repeatable fresh stacks.
+    expect(seedSource).toContain('order_items, orders, batch_orders');
   });
 
   it('migrates print scaling out of user profile defaults', () => {

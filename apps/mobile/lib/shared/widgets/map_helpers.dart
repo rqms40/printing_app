@@ -166,7 +166,8 @@ class MapHelpers {
     ),
   );
 
-  /// Rider marker — dark circle + navigation arrow.
+  /// Rider marker — the delivery vehicle, ride-hailing style: brand disc
+  /// with a motorcycle glyph so the courier is instantly recognizable.
   static Marker riderMarker(
     LatLng point, {
     Key? semanticKey,
@@ -174,9 +175,9 @@ class MapHelpers {
   }) {
     final marker = Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+        color: const Color(0xFFFFDE58),
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2.5),
+        border: Border.all(color: const Color(0xFF141414), width: 2.5),
         boxShadow: const [
           BoxShadow(
             color: Color(0x40000000),
@@ -186,9 +187,9 @@ class MapHelpers {
         ],
       ),
       child: const Icon(
-        Icons.navigation_rounded,
-        color: Colors.white,
-        size: 20,
+        Icons.two_wheeler_rounded,
+        color: Color(0xFF141414),
+        size: 22,
       ),
     );
     return Marker(

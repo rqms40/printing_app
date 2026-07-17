@@ -8,8 +8,12 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/chat/providers/chat_provider.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:printing_app/features/customer/home/providers/live_delivery_map_provider.dart';
+import 'package:printing_app/features/customer/tracking/providers/live_rider_location_provider.dart';
 import 'package:printing_app/features/customer/tracking/widgets/delivery_map.dart';
 import 'package:printing_app/features/customer/tracking/widgets/rider_info_card.dart';
+import 'package:printing_app/shared/widgets/delivery_journey_bar.dart';
 import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
 import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
 import 'package:printing_app/features/tutorial/widgets/coach_mark_sequence.dart';
@@ -172,6 +176,16 @@ class _DeliveryTrackingScreenState
               .animate()
               .fadeIn(duration: 400.ms, curve: Curves.easeOut)
               .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
+          // Journey progress: store → vehicle → home, Grab-style.
+          const Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              0,
+              AppSpacing.md,
+              AppSpacing.sm,
+            ),
+            child: _JourneyProgressSection(),
+          ),
           // Rider info card at bottom
           Padding(
                 padding: const EdgeInsets.fromLTRB(
@@ -197,6 +211,55 @@ class _DeliveryTrackingScreenState
               ),
         ],
       ),
+    );
+  }
+}
+
+/// Store → vehicle → home strip fed by the live WS rider fix; distance and
+/// ETA shrink Google-Maps-style as the rider closes in on the door.
+class _JourneyProgressSection extends ConsumerWidget {
+  const _JourneyProgressSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.dark
+        : AppColors.light;
+    final state = ref.watch(liveDeliveryMapProvider).asData?.value;
+    final locationUpdate = ref.watch(liveRiderLocationProvider);
+    if (state == null ||
+        !state.canTrackDelivery ||
+        state.routePoints.length < 2) {
+      return const SizedBox.shrink();
+    }
+    final matching =
+        locationUpdate != null &&
+            locationUpdate.deliveryAssignmentId == state.deliveryAssignmentId &&
+            locationUpdate.planVersion == state.planVersion
+        ? locationUpdate
+        : null;
+    final riderPoint = matching == null
+        ? null
+        : LatLng(matching.latitude, matching.longitude);
+    final progress = riderPoint == null
+        ? 0.0
+        : routeProgressRatioForPoint(riderPoint, state.routePoints);
+    String? remaining;
+    if (riderPoint != null) {
+      final meters = remainingRouteDistanceMeters(
+        riderPoint,
+        state.routePoints,
+      );
+      final minutes = estimateRouteEtaMinutes(riderPoint, state.routePoints);
+      final distance = meters >= 950
+          ? '${(meters / 1000).toStringAsFixed(1)} km'
+          : '${meters.round()} m';
+      remaining = '$distance · ~$minutes min away';
+    }
+    return DeliveryJourneyBar(
+      colors: colors,
+      progress: progress,
+      remainingLabel: remaining ?? 'Waiting for the rider to start moving',
     );
   }
 }
