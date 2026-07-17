@@ -92,12 +92,14 @@ Widget _wrapRouter(List<Override> overrides) {
 void main() {
   setUpAll(() async {
     WebSocketService.disableDailyGridSocketForTests = true;
+    WebSocketService.disableHomeFeedSocketForTests = true;
     Hive.init('/tmp/hive_test_home_screen');
     await Hive.openBox('draft_orders');
   });
 
   tearDownAll(() async {
     WebSocketService.disableDailyGridSocketForTests = false;
+    WebSocketService.disableHomeFeedSocketForTests = false;
     await Hive.close();
   });
 

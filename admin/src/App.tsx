@@ -51,6 +51,7 @@ import { NotificationsPage } from "@/pages/notifications";
 import { TamSurveyList } from "@/pages/tam-surveys/list";
 import { TamSurveyShow } from "@/pages/tam-surveys/show";
 import { DailyGridList } from "@/pages/daily-grid/list";
+import { HomeFeedPage } from "@/pages/home-feed";
 import { BetaModePage } from '@/pages/beta-mode';
 import { ChatInboxPage } from "@/pages/chat";
 import { DeliverySlotsTodayPage } from '@/pages/delivery-slots/today';
@@ -152,9 +153,18 @@ function App() {
                 meta: { label: "Surveys", icon: <FormOutlined /> },
               },
               {
+                name: "home-content",
+                meta: { label: "Home Screen", icon: <AppstoreOutlined /> },
+              },
+              {
                 name: "daily-grid",
                 list: "/daily-grid",
-                meta: { label: "Daily Grid", icon: <AppstoreOutlined /> },
+                meta: { label: "Daily Grid", parent: "home-content" },
+              },
+              {
+                name: "home-feed",
+                list: "/home-feed",
+                meta: { label: "Home Feed", parent: "home-content" },
               },
               {
                 name: 'beta-mode',
@@ -224,6 +234,7 @@ function App() {
                   <Route path="show/:id" element={<TamSurveyShow />} />
                 </Route>
                 <Route path="/daily-grid" element={<DailyGridList />} />
+                <Route path="/home-feed" element={<HomeFeedPage />} />
                 <Route path="/beta-mode" element={<BetaModePage />} />
                 <Route path="/chat" element={<ChatInboxPage />} />
                 <Route path="/delivery-slots/today" element={<DeliverySlotsTodayPage />} />
