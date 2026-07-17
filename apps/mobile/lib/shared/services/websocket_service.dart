@@ -65,6 +65,7 @@ class WebSocketService {
   /// MUST be reset to false in tearDownAll to avoid polluting other test files.
   @visibleForTesting
   static bool disableDailyGridSocketForTests = false;
+  static bool disableHomeFeedSocketForTests = false;
 
   /// When true, [connectOrders] is a no-op. Set in tests that exercise order
   /// listeners without opening a real socket.
@@ -92,6 +93,7 @@ class WebSocketService {
   int _notificationsConnectionGeneration = 0;
   int _notificationsSocketCreateCountForTests = 0;
   io.Socket? _dailyGridSocket;
+  io.Socket? _homeFeedSocket;
   io.Socket? _chatSocket;
   io.Socket? _slotsSocket;
   final Map<int, List<Function(ChatMessage)>> _chatMessageListeners = {};
@@ -888,6 +890,54 @@ class WebSocketService {
   void disconnectDailyGrid() {
     _dailyGridSocket?.disconnect();
     _dailyGridSocket = null;
+  }
+
+  /// Connects to the /ws/home-feed namespace and listens for [homeFeedUpdated]
+  /// events (admin changed the home feed tile settings).
+  ///
+  /// Mirrors [connectDailyGrid]: [onUpdated] is registered only on the first
+  /// connection; call [disconnectHomeFeed] first to swap the callback.
+  Future<void> connectHomeFeed({required VoidCallback onUpdated}) async {
+    if (disableHomeFeedSocketForTests) return;
+    if (_homeFeedSocket?.connected == true) return;
+    if (_homeFeedSocket != null) {
+      _homeFeedSocket!.connect();
+      return;
+    }
+    try {
+      // No auth required — the event carries no data, it only signals refetch.
+      _homeFeedSocket = io.io(
+        '$_baseUrl/ws/home-feed',
+        io.OptionBuilder()
+            .setTransports(['websocket'])
+            .disableAutoConnect()
+            .build(),
+      );
+      _homeFeedSocket!.on('homeFeedUpdated', (_) {
+        try {
+          onUpdated();
+        } catch (e) {
+          debugPrint('WS homeFeedUpdated handler error: $e');
+        }
+      });
+      _homeFeedSocket!.on(
+        'connect',
+        (_) => debugPrint('WS HomeFeed connected'),
+      );
+      _homeFeedSocket!.on(
+        'connect_error',
+        (e) => debugPrint('WS HomeFeed error: $e'),
+      );
+      _homeFeedSocket!.connect();
+    } catch (e) {
+      debugPrint('WS HomeFeed connection error: $e');
+      // Connection failure should not crash the app
+    }
+  }
+
+  void disconnectHomeFeed() {
+    _homeFeedSocket?.disconnect();
+    _homeFeedSocket = null;
   }
 
   Future<bool> connectChat() async {
