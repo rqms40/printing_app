@@ -8,6 +8,7 @@ import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Order } from '../orders/entities/order.entity';
 import { BatchOrder } from '../orders/entities/batch-order.entity';
 import { DeliveryDestination } from '../orders/entities/delivery-destination.entity';
+import { OrdersGateway } from '../orders/orders.gateway';
 import { DispatchPlanService } from './dispatch-plan.service';
 import {
   DispatchPlan,
@@ -34,6 +35,8 @@ describe('DispatchPlanService', () => {
     status: DeliveryStatus.ASSIGNED,
     order: {
       id: 101,
+      orderId: 'ORD-101',
+      userId: 1001,
       batchOrderId: null,
       destinationId: 201,
       destination: { id: 201, latitude: 7.074, longitude: 125.6079 },
@@ -47,6 +50,8 @@ describe('DispatchPlanService', () => {
     status: DeliveryStatus.ASSIGNED,
     order: {
       id: 102,
+      orderId: 'ORD-102',
+      userId: 1002,
       batchOrderId: null,
       destinationId: 202,
       destination: { id: 202, latitude: 7.0645, longitude: 125.6079 },
@@ -63,6 +68,7 @@ describe('DispatchPlanService', () => {
   let provider: jest.Mocked<RoutingProvider>;
   let manager: jest.Mocked<Partial<EntityManager>>;
   let dataSource: jest.Mocked<Partial<DataSource>>;
+  let ordersGateway: { notifyDeliveryQueueUpdated: jest.Mock };
   let service: DispatchPlanService;
 
   beforeEach(() => {
@@ -180,12 +186,14 @@ describe('DispatchPlanService', () => {
         ) => await callback(manager as EntityManager),
       ),
     };
+    ordersGateway = { notifyDeliveryQueueUpdated: jest.fn() };
     service = new DispatchPlanService(
       planRepo as Repository<DispatchPlan>,
       stopRepo as Repository<DispatchPlanStop>,
       assignmentRepo as Repository<DeliveryAssignment>,
       profileRepo as Repository<RiderProfile>,
       provider,
+      ordersGateway as unknown as OrdersGateway,
       dataSource as DataSource,
       new ConfigService({
         ROUTING_PROFILE: 'driving',
@@ -212,6 +220,36 @@ describe('DispatchPlanService', () => {
       mark.id,
     ]);
     expect(plan.stops.map((stop) => stop.sequence)).toEqual([1, 2]);
+  });
+
+  it('pushes queue positions to every stop customer after persisting', async () => {
+    await service.createPlan(rider.id, [mark.id, ven.id]);
+
+    const calls = ordersGateway.notifyDeliveryQueueUpdated.mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls).toContainEqual([
+      1002,
+      expect.objectContaining({
+        orderId: 102,
+        orderRef: 'ORD-102',
+        queuePosition: 1,
+        queueSize: 2,
+        canTrackDelivery: false,
+        assignmentId: null,
+        planVersion: 1,
+      }),
+    ]);
+    expect(calls).toContainEqual([
+      1001,
+      expect.objectContaining({
+        orderId: 101,
+        orderRef: 'ORD-101',
+        queuePosition: 2,
+        queueSize: 2,
+        canTrackDelivery: false,
+        planVersion: 1,
+      }),
+    ]);
   });
 
   it('does not reorder the persisted plan after rider movement', async () => {

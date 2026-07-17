@@ -165,6 +165,21 @@ export function RiderList() {
       });
   }, [reloadKey]);
 
+  // Live Tracking accuracy: rider GPS lands in /admin/riders as
+  // last_latitude/longitude, so poll quietly while the page is open — the
+  // map marker and "Last Seen" follow the rider instead of a stale snapshot.
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      void apiClient
+        .get("/admin/riders")
+        .then((r) => setRiders(normalizeAdminRiders(r.data) as ApiRider[]))
+        .catch(() => {
+          // Keep the last successful snapshot on transient poll failures.
+        });
+    }, 10_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
   const handleAssignRider = async (
     orderId: number | string,
     riderId: number,
@@ -230,7 +245,25 @@ export function RiderList() {
     return matchesSearch && matchesStatus;
   });
 
-  const mapCenter: [number, number] = [7.132836, 125.610605];
+  // Center on the riders we can actually see; fall back to the city default.
+  // Rounded so the remount key only changes when riders move meaningfully.
+  const located = riders.filter((d) => d.last_latitude && d.last_longitude);
+  const mapCenter: [number, number] = located.length
+    ? [
+        Number(
+          (
+            located.reduce((sum, d) => sum + Number(d.last_latitude), 0) /
+            located.length
+          ).toFixed(3),
+        ),
+        Number(
+          (
+            located.reduce((sum, d) => sum + Number(d.last_longitude), 0) /
+            located.length
+          ).toFixed(3),
+        ),
+      ]
+    : [7.132836, 125.610605];
 
   return (
     <div
@@ -407,6 +440,7 @@ export function RiderList() {
               }}
             >
               <MapContainer
+                key={mapCenter.join(',')}
                 center={mapCenter}
                 zoom={13}
                 style={{ height: "100%", width: "100%" }}

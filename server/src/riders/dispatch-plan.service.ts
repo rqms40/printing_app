@@ -12,6 +12,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { Order } from '../orders/entities/order.entity';
 import { BatchOrder } from '../orders/entities/batch-order.entity';
+import {
+  OrdersGateway,
+  type DeliveryQueueUpdatedPayload,
+} from '../orders/orders.gateway';
 import { DeliveryDestination } from '../orders/entities/delivery-destination.entity';
 import {
   DeliveryAssignment,
@@ -110,6 +114,7 @@ export class DispatchPlanService {
     private readonly profileRepo: Repository<RiderProfile>,
     @Inject(ROUTING_PROVIDER)
     private readonly routingProvider: RoutingProvider,
+    private readonly ordersGateway: OrdersGateway,
     private readonly dataSource: DataSource,
     config: ConfigService,
   ) {
@@ -503,6 +508,61 @@ export class DispatchPlanService {
   }
 
   private async persistPreparedPlan(
+    riderId: number,
+    prepared: PreparedPlan,
+    expectedActivePlanId: number | null,
+  ): Promise<DispatchPlan> {
+    const plan = await this.persistPreparedPlanTransaction(
+      riderId,
+      prepared,
+      expectedActivePlanId,
+    );
+    this.publishQueuePositions(plan, prepared);
+    return plan;
+  }
+
+  /**
+   * Every persisted plan version changes queue positions for every stop's
+   * customer, so each of them gets a deliveryQueueUpdated push — clients
+   * refetch the affected order instead of waiting for a manual refresh.
+   */
+  private publishQueuePositions(
+    plan: DispatchPlan,
+    prepared: PreparedPlan,
+  ): void {
+    try {
+      const assignmentById = new Map(
+        prepared.assignments.map((item) => [item.assignment.id, item]),
+      );
+      const stops = [...(plan.stops ?? [])].sort(
+        (left, right) => left.sequence - right.sequence,
+      );
+      stops.forEach((stop, index) => {
+        const item = assignmentById.get(stop.assignmentId);
+        const order = item?.assignment.order;
+        if (!item || !order || order.userId == null) return;
+        const canTrackDelivery =
+          index === 0 &&
+          [DeliveryStatus.ON_THE_WAY, DeliveryStatus.ARRIVED].includes(
+            item.assignment.status,
+          );
+        const payload: DeliveryQueueUpdatedPayload = {
+          orderId: order.id,
+          orderRef: order.orderId,
+          queuePosition: index + 1,
+          queueSize: stops.length,
+          canTrackDelivery,
+          assignmentId: canTrackDelivery ? item.assignment.id : null,
+          planVersion: plan.version,
+        };
+        this.ordersGateway.notifyDeliveryQueueUpdated(order.userId, payload);
+      });
+    } catch {
+      // Realtime nudges must never fail plan persistence.
+    }
+  }
+
+  private async persistPreparedPlanTransaction(
     riderId: number,
     prepared: PreparedPlan,
     expectedActivePlanId: number | null,

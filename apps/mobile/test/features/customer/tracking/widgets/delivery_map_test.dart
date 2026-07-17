@@ -274,11 +274,11 @@ void main() {
       harness.clock.advance(const Duration(seconds: 2));
       await tester.pump(const Duration(seconds: 1));
 
-      expect(find.text('GPS offline'), findsOneWidget);
+      expect(find.text('GPS offline — last known shown'), findsOneWidget);
       expect(find.byType(FlutterMap), findsOneWidget);
     });
 
-    testWidgets('explicit disconnect is offline even for a fresh marker', (
+    testWidgets('fresh marker stays live through socket handshake churn', (
       tester,
     ) async {
       final harness = _harness(
@@ -289,7 +289,22 @@ void main() {
       await tester.pumpWidget(harness.widget);
       await _settle(tester);
 
-      expect(find.text('GPS offline'), findsOneWidget);
+      expect(find.text('Live Tracking'), findsOneWidget);
+      expect(find.byType(FlutterMap), findsOneWidget);
+    });
+
+    testWidgets('disconnect goes offline once the fix ages out', (
+      tester,
+    ) async {
+      final harness = _harness(
+        _active(),
+        locationAge: const Duration(seconds: 20),
+        health: LocationSocketHealth.disconnected,
+      );
+      await tester.pumpWidget(harness.widget);
+      await _settle(tester);
+
+      expect(find.text('GPS offline — last known shown'), findsOneWidget);
       expect(find.byType(FlutterMap), findsOneWidget);
     });
 
