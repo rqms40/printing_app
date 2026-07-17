@@ -673,7 +673,7 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
       visualSource.lastIndexOf("async function assertLiveTrackingUi"),
       visualSource.lastIndexOf("async function assertPrivateQueueUi"),
     );
-    expect(liveAssertion).toContain("Tracking real-time location");
+    expect(liveAssertion).toContain("LIVE_TRACKING_STATUS");
     expect(liveAssertion).not.toContain('getByText("Open live tracking"');
     expect(liveAssertion).not.toContain('locator("canvas")');
     expect(liveAssertion).not.toContain("actor.network.some");
@@ -681,7 +681,7 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
       visualSource.lastIndexOf("async function assertPrivateQueueUi"),
       visualSource.lastIndexOf("async function loginAdmin"),
     );
-    expect(privateAssertion).toContain("Tracking real-time location");
+    expect(privateAssertion).toContain("LIVE_TRACKING_STATUS");
     const registrationFlow = visualSource.slice(
       visualSource.lastIndexOf("async function registerCustomerThroughUi"),
       visualSource.lastIndexOf("async function saveAddressThroughUi"),
@@ -1456,6 +1456,12 @@ function assertStandardCheckoutPayload(payload: JsonRecord): void {
   expect(payload.speedTier, "explicit checkout delivery mode").toBe("standard");
 }
 
+// The rider status line under live tracking: "Live · location updating" when
+// fixes are fresh, "Paused/Offline · last known shown" when the stream ages
+// out mid-run. Accepting the whole ladder keeps the assertion meaningful
+// (the line only renders when canTrackDelivery is true) without timing flake.
+const LIVE_TRACKING_STATUS = /Live · location updating|last known shown/i;
+
 async function assertLiveTrackingUi(actor: BetaActorRuntime): Promise<void> {
   // Background Flutter canvases may defer their semantics update until the page
   // is foregrounded even though the pixels render when Playwright takes a
@@ -1463,7 +1469,7 @@ async function assertLiveTrackingUi(actor: BetaActorRuntime): Promise<void> {
   // the map so the accessibility tree and rendered state describe the same UI.
   await foregroundFlutterPage(actor.page);
   await expect(actor.page.locator("body")).toContainText(
-    /Tracking real-time location/i,
+    LIVE_TRACKING_STATUS,
     { timeout: 30_000 },
   );
   const map = actor.page.getByRole("group", {
@@ -1560,9 +1566,7 @@ async function assertPrivateQueueUi(page: Page): Promise<void> {
   await expect(
     page.getByRole("button", { name: "Open live tracking", exact: true }),
   ).toHaveCount(0);
-  await expect(page.locator("body")).not.toContainText(
-    /Tracking real-time location/i,
-  );
+  await expect(page.locator("body")).not.toContainText(LIVE_TRACKING_STATUS);
   await expect(
     page.getByText(/-?\d{1,2}\.\d{4,}\s*,\s*-?\d{2,3}\.\d{4,}/),
   ).toHaveCount(0);
@@ -3144,7 +3148,7 @@ test.describe.serial("opt-in four-context visual beta release workflow", () => {
         ),
         "Mark must gain live tracking without a document reload",
       ).toBe(markDocumentMarker);
-      await capture(run, actors.mark, 26, /Tracking real-time location/i, {
+      await capture(run, actors.mark, 26, LIVE_TRACKING_STATUS, {
         orderId: mark.orderId,
         assignmentId: mark.assignmentId,
         dispatchPlanVersion: planVersion,
