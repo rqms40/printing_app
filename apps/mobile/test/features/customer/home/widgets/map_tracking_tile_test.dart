@@ -486,7 +486,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Waiting for rider location...'), findsNothing);
-      expect(find.text('Rider GPS reconnecting'), findsOneWidget);
+      expect(find.text('GPS reconnecting'), findsOneWidget);
       expect(find.text('Open live tracking'), findsOneWidget);
       expect(_semanticsLabel('Open live tracking'), findsOneWidget);
       expect(

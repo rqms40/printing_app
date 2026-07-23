@@ -23,7 +23,6 @@ import 'package:printing_app/features/customer/order/providers/delivery_slot_pro
 import 'package:printing_app/features/customer/home/widgets/hero_banner.dart';
 import 'package:printing_app/features/customer/home/widgets/map_tracking_tile.dart';
 import 'package:printing_app/features/customer/home/widgets/recent_orders_section.dart';
-import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
 import 'package:printing_app/utils/formatters.dart';
 import 'package:printing_app/features/customer/chat/providers/chat_provider.dart';
 import 'package:printing_app/features/customer/chat/widgets/floating_chat_button.dart';
@@ -257,8 +256,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final firstName = (authState.user?.fullName ?? 'there').split(' ').first;
     final cart = ref.watch(checkoutProvider);
 
-    final unreadCount = ref.watch(unreadNotificationsCountProvider);
-
     final credits = (double.tryParse(authState.user?.credits ?? '0') ?? 0.0)
         .toInt();
 
@@ -326,10 +323,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 ),
                               ),
 
-                              // Notification bell
-                              _NotificationWidget(
+                              // Cart
+                              _CartWidget(
                                 colors: colors,
-                                unreadCount: unreadCount,
+                                itemCount: cart.items.length,
                               ),
 
                               const SizedBox(width: AppSpacing.xs),
@@ -908,38 +905,24 @@ class _CreditsDropdown extends StatelessWidget {
 
 // ── Notification bell + dropdown ────────────────────────────────────────────
 
-String _relativeTime(DateTime dt) {
-  final diff = DateTime.now().difference(dt);
-  if (diff.inSeconds < 60) return 'just now';
-  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-  if (diff.inHours < 24) return '${diff.inHours}h ago';
-  if (diff.inDays < 7) return '${diff.inDays}d ago';
-  return '${dt.day}/${dt.month}';
-}
-
-class _NotificationWidget extends ConsumerStatefulWidget {
-  const _NotificationWidget({required this.colors, required this.unreadCount});
+class _CartWidget extends ConsumerStatefulWidget {
+  const _CartWidget({required this.colors, required this.itemCount});
 
   final AppColorSet colors;
-  final int unreadCount;
+  final int itemCount;
 
   @override
-  ConsumerState<_NotificationWidget> createState() =>
-      _NotificationWidgetState();
+  ConsumerState<_CartWidget> createState() => _CartWidgetState();
 }
 
-class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
+class _CartWidgetState extends ConsumerState<_CartWidget>
     with SingleTickerProviderStateMixin {
-  final GlobalKey _bellKey = GlobalKey();
+  final GlobalKey _anchorKey = GlobalKey();
   OverlayEntry? _overlay;
   late final AnimationController _animCtrl;
   late final Animation<double> _scaleAnim;
   late final Animation<double> _fadeAnim;
   bool _isOpen = false;
-
-  /// IDs hidden from the home dropdown without touching the global state.
-  /// The notifications screen always shows the full list from the provider.
-  final Set<String> _locallyDismissed = {};
 
   @override
   void initState() {
@@ -979,14 +962,20 @@ class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
     });
   }
 
+  /// Close the dropdown, then push [route] once the collapse animation ends.
+  void _closeThen(BuildContext stateCtx, String route) {
+    _close();
+    Future.delayed(const Duration(milliseconds: 180), () {
+      if (stateCtx.mounted) stateCtx.push(route);
+    });
+  }
+
   OverlayEntry _buildOverlay(BuildContext stateCtx) {
     return OverlayEntry(
       builder: (overlayCtx) {
-        // Position the dropdown using the bell's *actual* screen coordinates,
-        // so it stays inside the viewport regardless of device width or where
-        // the bell sits in the layout. CompositedTransformFollower doesn't
-        // clamp to screen edges, which caused the dropdown to overflow off
-        // the left side on narrow screens.
+        // Position the dropdown using the button's *actual* screen
+        // coordinates, so it stays inside the viewport regardless of device
+        // width or where the button sits in the layout.
         final media = MediaQuery.of(overlayCtx);
         final screenWidth = media.size.width;
         final viewPadding = media.viewPadding;
@@ -994,18 +983,16 @@ class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
         const sideMargin = 12.0;
         final maxWidth = math.min(360.0, screenWidth - sideMargin * 2);
 
-        // Look up the bell's actual screen rect via its GlobalKey. Falls back
-        // to a sensible top-right anchor (under the system status bar) so the
-        // overlay still renders inside the viewport if the lookup fails.
-        final bellCtx = _bellKey.currentContext;
-        final bellBox = bellCtx?.findRenderObject() as RenderBox?;
+        final anchorCtx = _anchorKey.currentContext;
+        final anchorBox = anchorCtx?.findRenderObject() as RenderBox?;
         double topPos;
         double rightInset;
-        if (bellBox != null && bellBox.hasSize && bellBox.attached) {
-          final bellPos = bellBox.localToGlobal(Offset.zero);
-          final bellSize = bellBox.size;
-          topPos = bellPos.dy + bellSize.height + 8;
-          final desiredRight = screenWidth - (bellPos.dx + bellSize.width);
+        if (anchorBox != null && anchorBox.hasSize && anchorBox.attached) {
+          final anchorPos = anchorBox.localToGlobal(Offset.zero);
+          final anchorSize = anchorBox.size;
+          topPos = anchorPos.dy + anchorSize.height + 8;
+          final desiredRight =
+              screenWidth - (anchorPos.dx + anchorSize.width);
           rightInset = desiredRight.clamp(
             sideMargin,
             screenWidth - maxWidth - sideMargin,
@@ -1028,8 +1015,6 @@ class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
                 right: rightInset,
                 width: maxWidth,
                 child: Padding(
-                  // Honour the bottom safe area so the card never sits under
-                  // a system gesture bar on tall layouts.
                   padding: EdgeInsets.only(bottom: viewPadding.bottom),
                   child: Material(
                     color: Colors.transparent,
@@ -1040,54 +1025,14 @@ class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
                         child: ScaleTransition(
                           scale: _scaleAnim,
                           alignment: Alignment.topRight,
-                          child: _NotificationDropdown(
+                          child: _CartDropdown(
                             colors: widget.colors,
-                            dismissedIds: _locallyDismissed,
-                            onClose: _close,
-                            onViewAll: () {
-                              _close();
-                              Future.delayed(
-                                const Duration(milliseconds: 180),
-                                () {
-                                  if (stateCtx.mounted) {
-                                    // go() switches the StatefulShellRoute
-                                    // branch so the bottom-nav "Notifications"
-                                    // tab activates. push() would have
-                                    // stacked over the current tab and left
-                                    // the wrong nav item highlighted.
-                                    stateCtx.go('/customer/notifications');
-                                  }
-                                },
-                              );
-                            },
-                            onTapNotification: (id) {
-                              ref
-                                  .read(notificationsProvider.notifier)
-                                  .markAsRead(id);
-                              _close();
-                              Future.delayed(
-                                const Duration(milliseconds: 180),
-                                () {
-                                  if (stateCtx.mounted) {
-                                    stateCtx.go('/customer/notifications');
-                                  }
-                                },
-                              );
-                            },
-                            onMarkAllRead: () {
-                              ref
-                                  .read(notificationsProvider.notifier)
-                                  .markAllAsRead();
-                              _overlay?.markNeedsBuild();
-                            },
-                            onClear: () {
-                              final ids = ref
-                                  .read(notificationsProvider)
-                                  .map((n) => n.id)
-                                  .toSet();
-                              setState(() => _locallyDismissed.addAll(ids));
-                              _close();
-                            },
+                            onCheckout: () => _closeThen(
+                              stateCtx,
+                              '/customer/order/checkout',
+                            ),
+                            onStartPrinting: () =>
+                                _closeThen(stateCtx, '/customer/order/new'),
                           ),
                         ),
                       ),
@@ -1105,21 +1050,21 @@ class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
   @override
   Widget build(BuildContext context) {
     final colors = widget.colors;
-    final unreadCount = widget.unreadCount;
+    final itemCount = widget.itemCount;
 
     return _HeaderIconButton(
-      key: _bellKey,
+      key: _anchorKey,
       onTap: _toggle,
       colors: colors,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
           HugeIcon(
-            icon: HugeIcons.strokeRoundedNotification02,
+            icon: HugeIcons.strokeRoundedShoppingBasket01,
             size: 22,
             color: colors.onBackground,
           ),
-          if (unreadCount > 0)
+          if (itemCount > 0)
             Positioned(
               top: -3,
               right: -3,
@@ -1132,7 +1077,7 @@ class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
                 ),
                 child: Center(
                   child: Text(
-                    unreadCount > 9 ? '9+' : '$unreadCount',
+                    itemCount > 9 ? '9+' : '$itemCount',
                     style: AppTypography.overline.copyWith(
                       color: colors.background,
                       fontSize: 8,
@@ -1148,43 +1093,25 @@ class _NotificationWidgetState extends ConsumerState<_NotificationWidget>
   }
 }
 
-class _NotificationDropdown extends ConsumerWidget {
-  const _NotificationDropdown({
+class _CartDropdown extends ConsumerWidget {
+  const _CartDropdown({
     required this.colors,
-    required this.onClose,
-    required this.onViewAll,
-    required this.onTapNotification,
-    required this.onMarkAllRead,
-    required this.onClear,
-    required this.dismissedIds,
+    required this.onCheckout,
+    required this.onStartPrinting,
   });
 
   final AppColorSet colors;
-  final VoidCallback onClose;
-  final VoidCallback onViewAll;
-  final void Function(String id) onTapNotification;
-  final VoidCallback onMarkAllRead;
-  final VoidCallback onClear;
+  final VoidCallback onCheckout;
+  final VoidCallback onStartPrinting;
 
-  /// IDs locally dismissed from the home dropdown — not cleared from DB.
-  final Set<String> dismissedIds;
-
-  Color _dotColor(String type, AppColorSet colors) {
-    final t = type.toLowerCase();
-    if (t.contains('order')) return colors.brand;
-    if (t.contains('credit') || t.contains('top')) return Colors.green;
-    return colors.onSurfaceDim;
-  }
+  static const _maxInlineItems = 4;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final notifications = ref.watch(notificationsProvider);
-    // Filter out locally-dismissed items (home-only, not deleted from DB)
-    final visible = notifications
-        .where((n) => !dismissedIds.contains(n.id))
-        .toList();
-    final recent = visible.take(5).toList();
-    final unreadCount = visible.where((n) => !n.isRead).length;
+    final cart = ref.watch(checkoutProvider);
+    final items = cart.items;
+    final visible = items.take(_maxInlineItems).toList();
+    final overflowCount = items.length - visible.length;
 
     return Container(
       width: double.infinity,
@@ -1213,44 +1140,29 @@ class _NotificationDropdown extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.md,
               AppSpacing.md,
-              AppSpacing.sm,
+              AppSpacing.md,
               AppSpacing.xs,
             ),
             child: Row(
               children: [
                 Text(
-                  'Notifications',
+                  'Cart',
                   style: AppTypography.bodyBold.copyWith(
                     color: colors.onBackground,
                     fontSize: 13,
                   ),
                 ),
                 const Spacer(),
-                if (visible.isNotEmpty)
-                  GestureDetector(
-                    onTap: onClear,
-                    child: Text(
-                      'Clear',
-                      style: AppTypography.caption.copyWith(
-                        color: Colors.redAccent,
-                        fontSize: 11,
-                      ),
+                if (items.isNotEmpty)
+                  Text(
+                    items.length == 1
+                        ? '1 print job'
+                        : '${items.length} print jobs',
+                    style: AppTypography.caption.copyWith(
+                      color: colors.onSurfaceDim,
+                      fontSize: 11,
                     ),
                   ),
-                if (unreadCount > 0) ...[
-                  const SizedBox(width: AppSpacing.sm),
-                  GestureDetector(
-                    onTap: onMarkAllRead,
-                    child: Text(
-                      'Mark all read',
-                      style: AppTypography.caption.copyWith(
-                        color: colors.onSurfaceDim,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(width: AppSpacing.xs),
               ],
             ),
           ),
@@ -1261,127 +1173,209 @@ class _NotificationDropdown extends ConsumerWidget {
             color: colors.outline.withValues(alpha: 0.25),
           ),
 
-          // ── Notification rows ────────────────────────────────────────
-          if (recent.isEmpty)
+          // ── Empty state ──────────────────────────────────────────────
+          if (items.isEmpty)
             Padding(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              child: Center(
-                child: Text(
-                  'No notifications',
-                  style: AppTypography.caption.copyWith(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.lg,
+                vertical: AppSpacing.lg,
+              ),
+              child: Column(
+                children: [
+                  HugeIcon(
+                    icon: HugeIcons.strokeRoundedShoppingBasket01,
+                    size: 26,
                     color: colors.onSurfaceDim,
                   ),
-                ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Your cart is empty',
+                    style: AppTypography.bodyBold.copyWith(
+                      color: colors.onBackground,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'Files you add to an order wait here.',
+                    textAlign: TextAlign.center,
+                    style: AppTypography.caption.copyWith(
+                      color: colors.onSurfaceDim,
+                      fontSize: 11,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  GestureDetector(
+                    onTap: onStartPrinting,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Start printing',
+                          style: AppTypography.bodyBold.copyWith(
+                            color: colors.brand,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.arrow_forward_rounded,
+                          size: 13,
+                          color: colors.brand,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             )
-          else
+          else ...[
+            // ── Cart rows ──────────────────────────────────────────────
             Flexible(
               child: ListView.builder(
-                padding: EdgeInsets.zero,
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
                 shrinkWrap: true,
-                itemCount: recent.length,
+                itemCount: visible.length,
                 itemBuilder: (context, index) {
-                  final n = recent[index];
-                  return GestureDetector(
-                    onTap: () => onTapNotification(n.id),
-                    child: Container(
-                      color: n.isRead
-                          ? Colors.transparent
-                          : colors.brand.withValues(alpha: 0.06),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
-                        vertical: AppSpacing.sm,
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(top: 5),
-                            child: Container(
-                              width: 7,
-                              height: 7,
-                              decoration: BoxDecoration(
-                                color: _dotColor(n.type, colors),
-                                shape: BoxShape.circle,
+                  final item = visible[index];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                      vertical: 6,
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: colors.surfaceVariant,
+                            borderRadius: AppRadius.borderSm,
+                          ),
+                          child: Center(
+                            child: HugeIcon(
+                              icon: item.category == '3d'
+                                  ? HugeIcons.strokeRoundedCube
+                                  : HugeIcons.strokeRoundedFile02,
+                              size: 16,
+                              color: colors.brand,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item.fileName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTypography.bodyBold.copyWith(
+                                  color: colors.onBackground,
+                                  fontSize: 12,
+                                  height: 1.2,
+                                ),
                               ),
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  n.title,
-                                  style: AppTypography.bodyBold.copyWith(
-                                    color: colors.onBackground,
-                                    fontSize: 12,
-                                    height: 1.2,
-                                  ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${item.categoryName ?? item.category}'
+                                ' · ×${item.quantity}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTypography.caption.copyWith(
+                                  color: colors.onSurfaceDim,
+                                  fontSize: 10.5,
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  n.message,
-                                  style: AppTypography.caption.copyWith(
-                                    color: colors.onSurfaceDim,
-                                    fontSize: 11,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: AppSpacing.xs),
-                          Text(
-                            _relativeTime(n.createdAt),
-                            style: AppTypography.caption.copyWith(
-                              color: colors.onSurfaceDim,
-                              fontSize: 10,
-                            ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Text(
+                          formatCurrency(item.printSubtotal),
+                          style: AppTypography.caption.copyWith(
+                            color: colors.onSurface,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   );
                 },
               ),
             ),
-
-          Divider(
-            height: 1,
-            thickness: 0.5,
-            color: colors.outline.withValues(alpha: 0.25),
-          ),
-
-          // ── Footer ───────────────────────────────────────────────────
-          GestureDetector(
-            onTap: onViewAll,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md,
-                vertical: AppSpacing.sm,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'View all',
-                    style: AppTypography.bodyBold.copyWith(
-                      color: colors.brand,
-                      fontSize: 12,
-                    ),
+            if (overflowCount > 0)
+              Padding(
+                padding: const EdgeInsets.only(
+                  left: AppSpacing.md,
+                  right: AppSpacing.md,
+                  bottom: AppSpacing.xs,
+                ),
+                child: Text(
+                  '+$overflowCount more in checkout',
+                  style: AppTypography.caption.copyWith(
+                    color: colors.onSurfaceDim,
+                    fontSize: 10.5,
                   ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.arrow_forward_rounded,
-                    size: 13,
-                    color: colors.brand,
+                ),
+              ),
+
+            Divider(
+              height: 1,
+              thickness: 0.5,
+              color: colors.outline.withValues(alpha: 0.25),
+            ),
+
+            // ── Footer ─────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Subtotal',
+                        style: AppTypography.caption.copyWith(
+                          color: colors.onSurfaceDim,
+                          fontSize: 11,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        formatCurrency(cart.subtotal),
+                        style: AppTypography.bodyBold.copyWith(
+                          color: colors.onBackground,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  GestureDetector(
+                    onTap: onCheckout,
+                    child: Container(
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: colors.brand,
+                        borderRadius: AppRadius.borderMd,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        'Review & check out',
+                        style: AppTypography.bodyBold.copyWith(
+                          color: Colors.black,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-          ),
+          ],
         ],
       ),
     );

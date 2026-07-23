@@ -1319,9 +1319,9 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
               colors: colors,
               icon: Icons.check_rounded,
               title: 'Order Dispatched',
-              subtitle: queueLabel == null
-                  ? 'Ongoing Rider Delivery'
-                  : '$queueLabel · Ongoing Rider Delivery',
+              // The line below already says the rider is on the way, so the
+              // subtitle only carries the queue position (narrow card).
+              subtitle: queueLabel ?? 'Ongoing rider delivery',
             ),
             const SizedBox(height: AppSpacing.xs),
             _StatusLine(
@@ -1354,8 +1354,8 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
               _StatusLine(
                 colors: colors,
                 icon: Icons.gps_fixed_rounded,
-                title: 'Rider GPS reconnecting',
-                subtitle: 'Live map resumes automatically',
+                title: 'GPS reconnecting',
+                subtitle: 'Live map resumes soon',
                 outlined: true,
               ),
               const SizedBox(height: AppSpacing.sm),
