@@ -137,6 +137,7 @@ describe('DispatchPlanService', () => {
             type: 'LineString',
             coordinates: [
               [125.6079, 7.064],
+              [125.60791, 7.06425],
               [125.6079, 7.0645],
             ],
           },
@@ -150,6 +151,8 @@ describe('DispatchPlanService', () => {
             type: 'LineString',
             coordinates: [
               [125.6079, 7.0645],
+              [125.60795, 7.067],
+              [125.60797, 7.071],
               [125.6079, 7.074],
             ],
           },
@@ -220,6 +223,25 @@ describe('DispatchPlanService', () => {
       mark.id,
     ]);
     expect(plan.stops.map((stop) => stop.sequence)).toEqual([1, 2]);
+    expect(plan.stops.map((stop) => stop.legGeometry)).toEqual([
+      {
+        type: 'LineString',
+        coordinates: [
+          [125.6079, 7.064],
+          [125.60791, 7.06425],
+          [125.6079, 7.0645],
+        ],
+      },
+      {
+        type: 'LineString',
+        coordinates: [
+          [125.6079, 7.0645],
+          [125.60795, 7.067],
+          [125.60797, 7.071],
+          [125.6079, 7.074],
+        ],
+      },
+    ]);
   });
 
   it('pushes queue positions to every stop customer after persisting', async () => {
@@ -626,6 +648,50 @@ describe('DispatchPlanService', () => {
     expect(stopRepo.save!.mock.calls).toHaveLength(0);
   });
 
+  it('completes the plan atomically when the final delivery stop advances', async () => {
+    const active = {
+      id: 501,
+      riderId: rider.id,
+      version: 3,
+      status: DispatchPlanStatus.ACTIVE,
+      completedAt: null,
+    } as DispatchPlan;
+    const finalStop = {
+      id: 901,
+      planId: active.id,
+      assignmentId: ven.id,
+      sequence: 1,
+      status: DispatchStopStatus.PENDING,
+      completedAt: null,
+    } as DispatchPlanStop;
+    planRepo.findOne!.mockResolvedValueOnce(active);
+    stopRepo
+      .findOne!.mockResolvedValueOnce(finalStop)
+      .mockResolvedValueOnce(finalStop)
+      .mockResolvedValueOnce(null);
+
+    const progress = await service.advanceStop(
+      manager as EntityManager,
+      rider.id,
+      ven.id,
+      DispatchStopStatus.COMPLETED,
+    );
+
+    expect(finalStop.status).toBe(DispatchStopStatus.COMPLETED);
+    expect(finalStop.completedAt).toBeInstanceOf(Date);
+    expect(active.status).toBe(DispatchPlanStatus.COMPLETED);
+    expect(active.completedAt).toBeInstanceOf(Date);
+    expect(planRepo.save!.mock.calls).toContainEqual([active]);
+    expect(progress).toEqual({
+      planId: active.id,
+      riderId: rider.id,
+      planVersion: 3,
+      planStatus: DispatchPlanStatus.COMPLETED,
+      assignmentId: ven.id,
+      stopStatus: DispatchStopStatus.COMPLETED,
+    });
+  });
+
   it('allows a pre-plan decline but rejects skipping a planned later stop', async () => {
     planRepo.findOne!.mockResolvedValueOnce(null);
     await expect(
@@ -701,5 +767,63 @@ describe('DispatchPlanService', () => {
     expect(current.skippedAt).toBeInstanceOf(Date);
     expect(active.routingDataStale).toBe(true);
     expect(planRepo.save!.mock.calls).toContainEqual([active]);
+  });
+
+  it('completes the plan atomically when its final stop is skipped', async () => {
+    const active = {
+      id: 501,
+      riderId: rider.id,
+      version: 4,
+      status: DispatchPlanStatus.ACTIVE,
+      completedAt: null,
+      routingDataStale: false,
+    } as DispatchPlan;
+    const finalStop = {
+      id: 901,
+      planId: active.id,
+      assignmentId: ven.id,
+      sequence: 1,
+      status: DispatchStopStatus.PENDING,
+      skippedAt: null,
+    } as DispatchPlanStop;
+    planRepo.findOne!.mockResolvedValueOnce(active);
+    stopRepo
+      .findOne!.mockResolvedValueOnce(finalStop)
+      .mockResolvedValueOnce(finalStop)
+      .mockResolvedValueOnce(null);
+
+    const progress = await service.skipStopIfPlanned(
+      manager as EntityManager,
+      rider.id,
+      ven.id,
+    );
+
+    expect(finalStop.status).toBe(DispatchStopStatus.SKIPPED);
+    expect(finalStop.skippedAt).toBeInstanceOf(Date);
+    expect(active.status).toBe(DispatchPlanStatus.COMPLETED);
+    expect(active.completedAt).toBeInstanceOf(Date);
+    expect(progress).toEqual({
+      planId: active.id,
+      riderId: rider.id,
+      planVersion: 4,
+      planStatus: DispatchPlanStatus.COMPLETED,
+      assignmentId: ven.id,
+      stopStatus: DispatchStopStatus.SKIPPED,
+    });
+  });
+
+  it('queries only active plans and returns null after completion', async () => {
+    planRepo.findOne!.mockResolvedValueOnce(null);
+
+    await expect(service.getActivePlanForRider(rider.id)).resolves.toBeNull();
+    expect(planRepo.findOne).toHaveBeenLastCalledWith({
+      where: { riderId: rider.id, status: DispatchPlanStatus.ACTIVE },
+      relations: [
+        'stops',
+        'stops.assignment',
+        'stops.assignment.order',
+        'stops.assignment.order.destination',
+      ],
+    });
   });
 });

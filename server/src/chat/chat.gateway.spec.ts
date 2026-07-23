@@ -281,6 +281,52 @@ describe('ChatGateway', () => {
       expect(server.emit).toHaveBeenCalledWith('bot-response', botMsg);
     });
 
+    it('emits a fallback bot-response when the bot pipeline fails', async () => {
+      const socket = makeSocket({ data: { userId: 1, role: 'customer' } });
+      chatService.saveMessageForActor.mockResolvedValueOnce({
+        id: 10,
+        content: 'Hello',
+      });
+      chatService.saveMessage.mockImplementation(
+        (_convId, _senderId, senderRole, content) =>
+          Promise.resolve({ id: 11, senderRole, content }),
+      );
+      chatService.findConversation.mockResolvedValue({
+        customerId: 1,
+        type: ConversationType.AI,
+      });
+      chatService.getBotResponse.mockRejectedValue(
+        new Error('OPENROUTER_API_KEY is not configured'),
+      );
+      const consoleError = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
+      await gateway.handleSendMessage(
+        { conversationId: 3, content: 'Hello' },
+        socket as any,
+      );
+      await new Promise((r) => setImmediate(r));
+
+      // The customer must never be left on a dangling bot-typing indicator:
+      // a fallback bot message is persisted and broadcast instead.
+      expect(chatService.saveMessage).toHaveBeenCalledWith(
+        3,
+        null,
+        SenderRole.BOT,
+        expect.stringContaining('GridBot is temporarily unavailable'),
+      );
+      expect(server.emit).toHaveBeenCalledWith(
+        'bot-response',
+        expect.objectContaining({
+          content: expect.stringContaining(
+            'GridBot is temporarily unavailable',
+          ),
+        }),
+      );
+      consoleError.mockRestore();
+    });
+
     it('does not trigger GridBot for admin messages in AI conversations', async () => {
       usersService.findSocketIdentity.mockResolvedValue({
         id: 7,

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 
+import 'package:flutter/widgets.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -131,6 +132,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
 
   void Function()? _removeRiderAssignmentListener;
   void Function()? _removeRiderDispatchPlanListener;
+  _ResumeRefreshObserver? _resumeObserver;
 
   void _startRealtime() {
     unawaited(WebSocketService.instance.connectOrders());
@@ -142,6 +144,12 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         .listenForRiderDispatchPlanUpdates((_) {
           unawaited(refreshAssignments());
         });
+    // Sockets can miss events while the OS suspends the app; a foreground
+    // re-fetch keeps the rider's assignments matching the database.
+    _resumeObserver = _ResumeRefreshObserver(() {
+      unawaited(refreshAssignments());
+    });
+    WidgetsBinding.instance.addObserver(_resumeObserver!);
   }
 
   @override
@@ -149,6 +157,9 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
     _fetchGeneration += 1;
     _removeRiderAssignmentListener?.call();
     _removeRiderDispatchPlanListener?.call();
+    if (_resumeObserver != null) {
+      WidgetsBinding.instance.removeObserver(_resumeObserver!);
+    }
     super.dispose();
   }
 
@@ -513,4 +524,16 @@ List<RiderAssignmentView> mergeRiderAssignmentViews(
       );
 
   return [...orderedActive, ...sortedHistory];
+}
+
+/// Calls [onResume] whenever the app returns to the foreground.
+class _ResumeRefreshObserver extends WidgetsBindingObserver {
+  _ResumeRefreshObserver(this.onResume);
+
+  final void Function() onResume;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) onResume();
+  }
 }

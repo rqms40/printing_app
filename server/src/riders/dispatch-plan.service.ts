@@ -65,6 +65,15 @@ type PreparedPlan = {
   totalDistanceMeters: number;
 };
 
+export type DispatchPlanProgress = {
+  planId: number;
+  riderId: number;
+  planVersion: number;
+  planStatus: DispatchPlanStatus.ACTIVE | DispatchPlanStatus.COMPLETED;
+  assignmentId: number;
+  stopStatus: DispatchStopStatus.COMPLETED | DispatchStopStatus.SKIPPED;
+};
+
 function routingUnavailable(): ServiceUnavailableException {
   return new ServiceUnavailableException({
     code: 'routing_unavailable',
@@ -287,7 +296,7 @@ export class DispatchPlanService {
     riderId: number,
     assignmentId: number,
     outcome: DispatchStopStatus.COMPLETED | DispatchStopStatus.SKIPPED,
-  ): Promise<void> {
+  ): Promise<DispatchPlanProgress | undefined> {
     const planRepo = manager.getRepository(DispatchPlan);
     const stopRepo = manager.getRepository(DispatchPlanStop);
     const plan = await planRepo.findOne({
@@ -347,13 +356,24 @@ export class DispatchPlanService {
       plan.completedAt = now;
       await planRepo.save(plan);
     }
+    return {
+      planId: plan.id,
+      riderId: plan.riderId,
+      planVersion: plan.version,
+      planStatus:
+        plan.status === DispatchPlanStatus.COMPLETED
+          ? DispatchPlanStatus.COMPLETED
+          : DispatchPlanStatus.ACTIVE,
+      assignmentId,
+      stopStatus: outcome,
+    };
   }
 
   async skipStopIfPlanned(
     manager: EntityManager,
     riderId: number,
     assignmentId: number,
-  ): Promise<void> {
+  ): Promise<DispatchPlanProgress | undefined> {
     const planRepo = manager.getRepository(DispatchPlan);
     const stopRepo = manager.getRepository(DispatchPlanStop);
     const plan = await planRepo.findOne({
@@ -394,6 +414,17 @@ export class DispatchPlanService {
       plan.completedAt = now;
     }
     await planRepo.save(plan);
+    return {
+      planId: plan.id,
+      riderId: plan.riderId,
+      planVersion: plan.version,
+      planStatus:
+        plan.status === DispatchPlanStatus.COMPLETED
+          ? DispatchPlanStatus.COMPLETED
+          : DispatchPlanStatus.ACTIVE,
+      assignmentId,
+      stopStatus: DispatchStopStatus.SKIPPED,
+    };
   }
 
   private async loadPlanningAssignments(

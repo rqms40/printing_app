@@ -95,10 +95,12 @@ class WebSocketService {
   io.Socket? _dailyGridSocket;
   io.Socket? _homeFeedSocket;
   io.Socket? _chatSocket;
+  Future<bool>? _chatConnectFuture;
   io.Socket? _slotsSocket;
   final Map<int, List<Function(ChatMessage)>> _chatMessageListeners = {};
   final List<Function(int)> _botTypingListeners = [];
   final List<Function(int)> _messagesReadListeners = [];
+  final List<Function(bool)> _chatConnectionListeners = [];
   final List<Function(Map<String, dynamic>)> _slotUpdatedListeners = [];
   String? _pendingLocationDeliveryId;
   int? _pendingLocationPlanVersion;
@@ -942,13 +944,33 @@ class WebSocketService {
 
   Future<bool> connectChat() async {
     if (_chatSocket?.connected == true) return true;
-    if (_chatSocket != null) {
-      final connected = _waitForChatConnection(_chatSocket!);
-      _chatSocket!.connect();
-      return connected;
+    final inFlight = _chatConnectFuture;
+    if (inFlight != null) return inFlight;
+    final connection = _connectChatSocket();
+    _chatConnectFuture = connection;
+    try {
+      return await connection;
+    } finally {
+      if (identical(_chatConnectFuture, connection)) {
+        _chatConnectFuture = null;
+      }
+    }
+  }
+
+  Future<bool> _connectChatSocket() async {
+    // A disconnected socket keeps the auth token captured when it was first
+    // created. If the server rejected that token, its `client.disconnect()`
+    // arrives as a silent `io server disconnect` that socket.io never
+    // auto-reconnects from — so dispose and recreate the socket to send a
+    // fresh JWT on the handshake (same pattern as connectNotifications).
+    final staleSocket = _chatSocket;
+    if (staleSocket != null) {
+      _chatSocket = null;
+      staleSocket.dispose();
     }
     final token = await TokenStorage.getToken();
-    _chatSocket = io.io(
+    late final io.Socket socket;
+    socket = io.io(
       '$_baseUrl/ws/chat',
       io.OptionBuilder()
           .setTransports(['websocket'])
@@ -956,13 +978,17 @@ class WebSocketService {
           .disableAutoConnect()
           .build(),
     );
-    _chatSocket!.on('message-received', (data) {
+    _chatSocket = socket;
+    socket.on('message-received', (data) {
+      if (!identical(_chatSocket, socket)) return;
       _dispatchChatMessage(_normalize(data));
     });
-    _chatSocket!.on('bot-response', (data) {
+    socket.on('bot-response', (data) {
+      if (!identical(_chatSocket, socket)) return;
       _dispatchChatMessage(_normalize(data));
     });
-    _chatSocket!.on('bot-typing', (data) {
+    socket.on('bot-typing', (data) {
+      if (!identical(_chatSocket, socket)) return;
       try {
         final d = _normalize(data) as Map<String, dynamic>;
         final convId = d['conversationId'] as int;
@@ -977,7 +1003,8 @@ class WebSocketService {
         debugPrint('WS bot-typing parse error: $e');
       }
     });
-    _chatSocket!.on('messages-read', (data) {
+    socket.on('messages-read', (data) {
+      if (!identical(_chatSocket, socket)) return;
       try {
         final d = _normalize(data) as Map<String, dynamic>;
         final convId = d['conversationId'] as int;
@@ -992,23 +1019,70 @@ class WebSocketService {
         debugPrint('WS messages-read parse error: $e');
       }
     });
-    _chatSocket!.on('connect', (_) => debugPrint('WS Chat connected'));
-    _chatSocket!.on('connect_error', (e) => debugPrint('WS Chat error: $e'));
-    final connected = _waitForChatConnection(_chatSocket!);
-    _chatSocket!.connect();
+    socket.on('connect', (_) {
+      if (!identical(_chatSocket, socket)) return;
+      debugPrint('WS Chat connected');
+    });
+    // 'session-ready' is emitted by the gateway only after handleConnection
+    // has authenticated the JWT and stamped socket.data. Emitting
+    // 'join-conversation' on the raw 'connect' event races that async auth —
+    // the server's getActor() sees no identity and force-disconnects the
+    // socket. So the "connected" health signal (which triggers room joins)
+    // must wait for session-ready.
+    socket.on('session-ready', (_) {
+      if (!identical(_chatSocket, socket)) return;
+      debugPrint('WS Chat session ready');
+      _dispatchChatConnection(true);
+    });
+    socket.on('disconnect', (_) {
+      if (!identical(_chatSocket, socket)) return;
+      debugPrint('WS Chat disconnected');
+      _dispatchChatConnection(false);
+    });
+    socket.on('connect_error', (e) {
+      if (!identical(_chatSocket, socket)) return;
+      debugPrint('WS Chat error: $e');
+    });
+    final connected = _waitForChatConnection(socket);
+    socket.connect();
     return connected;
   }
 
-  Future<bool> _waitForChatConnection(io.Socket socket) {
-    if (socket.connected) return Future.value(true);
+  /// Register a callback for chat socket connectivity changes
+  /// (true = connected, false = disconnected). Fires on every reconnect so
+  /// owners can re-join their conversation rooms — server room membership is
+  /// per-socket and does not survive a reconnect.
+  /// Returns a removal handle — call it in dispose().
+  VoidCallback listenForChatConnection(Function(bool connected) callback) {
+    if (!_chatConnectionListeners.contains(callback)) {
+      _chatConnectionListeners.add(callback);
+    }
+    return () => _chatConnectionListeners.remove(callback);
+  }
 
+  void _dispatchChatConnection(bool connected) {
+    for (final cb in List.of(_chatConnectionListeners)) {
+      try {
+        cb(connected);
+      } catch (e) {
+        debugPrint('WS chat connection handler error: $e');
+      }
+    }
+  }
+
+  Future<bool> _waitForChatConnection(io.Socket socket) {
     final completer = Completer<bool>();
 
     void complete(bool value) {
       if (!completer.isCompleted) completer.complete(value);
     }
 
-    socket.once('connect', (_) => complete(true));
+    // Wait for the server's post-auth acknowledgement, not the transport
+    // 'connect': an auth-rejected socket still fires 'connect' before the
+    // server silently force-disconnects it, and callers emit
+    // 'join-conversation' as soon as this future resolves.
+    socket.once('session-ready', (_) => complete(true));
+    socket.once('disconnect', (_) => complete(false));
     socket.once('connect_error', (_) => complete(false));
 
     return completer.future.timeout(
@@ -1141,11 +1215,13 @@ class WebSocketService {
   }
 
   void disconnectChat() {
+    _chatConnectFuture = null;
     _chatSocket?.disconnect();
     _chatSocket = null;
     _chatMessageListeners.clear();
     _botTypingListeners.clear();
     _messagesReadListeners.clear();
+    _chatConnectionListeners.clear();
   }
 
   void disconnect() {
@@ -1161,6 +1237,7 @@ class WebSocketService {
     _notificationsSocket = null;
     notificationsSocket?.dispose();
     _dailyGridSocket?.disconnect();
+    _chatConnectFuture = null;
     _chatSocket?.disconnect();
     _chatSocket = null;
     _slotsSocket?.disconnect();
@@ -1171,6 +1248,7 @@ class WebSocketService {
     _chatMessageListeners.clear();
     _botTypingListeners.clear();
     _messagesReadListeners.clear();
+    _chatConnectionListeners.clear();
     _slotUpdatedListeners.clear();
     _orderListeners.clear();
     _riderAssignmentListeners.clear();

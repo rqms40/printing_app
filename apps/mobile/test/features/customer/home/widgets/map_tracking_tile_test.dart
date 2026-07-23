@@ -13,6 +13,7 @@ import 'package:printing_app/features/customer/home/widgets/map_tracking_tile.da
 import 'package:printing_app/features/customer/home/widgets/next_batch_dialog.dart';
 import 'package:printing_app/features/customer/order/models/delivery_slot.dart';
 import 'package:printing_app/features/customer/order/providers/delivery_slot_provider.dart';
+import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/features/customer/tracking/providers/live_rider_location_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/location_update.dart';
@@ -48,6 +49,24 @@ class _TileHarness {
   final Function(dynamic)? Function() locationHandler;
 }
 
+/// A minimal in-flight order: enough for the tile to treat the customer as
+/// having a delivery on the way (pre-dispatch).
+Order _activeOrder() => Order(
+  id: '1',
+  orderId: 'ORD-TEST-1',
+  userId: 'u1',
+  category: 'paper',
+  quantity: 1,
+  totalPrice: 100,
+  deliveryFee: 0,
+  paymentMethod: PaymentMethod.gridCredits,
+  paymentStatus: PaymentStatus.paid,
+  orderStatus: OrderStatus.orderPlaced,
+  deliveryOption: 'delivery',
+  createdAt: DateTime(2026, 1, 1),
+  updatedAt: DateTime(2026, 1, 1),
+);
+
 _TileHarness _harness({
   required LiveDeliveryMapState state,
   List<DeliverySlot> slots = const [],
@@ -55,6 +74,7 @@ _TileHarness _harness({
   LocationSocketHealth socketHealth = LocationSocketHealth.connected,
   BookedSlotInfo? booked,
   NextBatchInfo? nextBatch,
+  List<Order> activeOrders = const [],
   Widget Function(Widget child)? childBuilder,
 }) {
   final mockWs = MockWebSocketService();
@@ -77,6 +97,7 @@ _TileHarness _harness({
       liveDeliveryMapProvider.overrideWith((_) async => state),
       bookedDeliverySlotProvider.overrideWith((_) => booked),
       nextBatchInfoProvider.overrideWith((_) => nextBatch),
+      activeOrdersProvider.overrideWith((_) => activeOrders),
     ],
   );
   final keepAlive = container.listen(deliverySlotProvider(_today()), (_, _) {});
@@ -103,8 +124,14 @@ Widget _wrap(
   LiveDeliveryMapState state, {
   List<DeliverySlot> slots = const [],
   LocationUpdate? location,
+  List<Order> activeOrders = const [],
 }) {
-  return _harness(state: state, slots: slots, location: location).widget;
+  return _harness(
+    state: state,
+    slots: slots,
+    location: location,
+    activeOrders: activeOrders,
+  ).widget;
 }
 
 Widget _wrapConstrained(
@@ -181,15 +208,36 @@ void main() {
 
   testWidgets('shows daily batch progress rows in idle state', (tester) async {
     await tester.pumpWidget(
-      _wrap(LiveDeliveryMapState.idle(), slots: _dailySlots),
+      _wrap(
+        LiveDeliveryMapState.idle(),
+        slots: _dailySlots,
+        activeOrders: [_activeOrder()],
+      ),
     );
     await tester.pumpAndSettle();
     expect(find.text('Delivery Status'), findsOneWidget);
-    expect(find.text('9:30 - 11:30 AM: 2/10'), findsOneWidget);
-    expect(find.text('2:00 - 4:00 PM: 4/10'), findsOneWidget);
-    expect(find.text('6:00 - 8:00 PM: 10/10'), findsOneWidget);
+    expect(find.text('9:30 - 11:30 AM'), findsOneWidget);
+    expect(find.text('2/10'), findsOneWidget);
+    expect(find.text('2:00 - 4:00 PM'), findsOneWidget);
+    expect(find.text('4/10'), findsOneWidget);
+    expect(find.text('6:00 - 8:00 PM'), findsOneWidget);
+    expect(find.text('10/10'), findsOneWidget);
     expect(find.text('Live map starts after rider dispatch.'), findsOneWidget);
     expect(find.byType(FlutterMap), findsOneWidget);
+  });
+
+  testWidgets('invites ordering when idle with no order in flight', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrap(LiveDeliveryMapState.idle(), slots: _dailySlots),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('No delivery in progress — track your rider here once you order.'),
+      findsOneWidget,
+    );
+    expect(find.text('Live map starts after rider dispatch.'), findsNothing);
   });
 
   testWidgets('stacks delivery status and map preview as separate panels', (
@@ -276,9 +324,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final titleBottom = tester.getBottomLeft(find.text('Delivery Status')).dy;
-    final firstSlotTop = tester
-        .getTopLeft(find.text('9:30 - 11:30 AM: 2/10'))
-        .dy;
+    final firstSlotTop = tester.getTopLeft(find.text('9:30 - 11:30 AM')).dy;
 
     expect(firstSlotTop - titleBottom, greaterThanOrEqualTo(AppSpacing.md));
   });
@@ -296,15 +342,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('View more'), findsOneWidget);
-    expect(find.text('8:00 - 9:00 PM: 1/10'), findsNothing);
-    expect(find.text('9:00 - 10:00 PM: 0/10'), findsNothing);
+    expect(find.text('8:00 - 9:00 PM'), findsNothing);
+    expect(find.text('9:00 - 10:00 PM'), findsNothing);
 
     await tester.tap(find.text('View more'));
     await tester.pumpAndSettle();
 
     expect(find.text("Today's delivery slots"), findsOneWidget);
-    expect(find.text('8:00 - 9:00 PM: 1/10'), findsOneWidget);
-    expect(find.text('9:00 - 10:00 PM: 0/10'), findsOneWidget);
+    expect(find.text('8:00 - 9:00 PM'), findsOneWidget);
+    expect(find.text('9:00 - 10:00 PM'), findsOneWidget);
   });
 
   testWidgets('shows map preview when no batches are scheduled', (
@@ -347,7 +393,7 @@ void main() {
       expect(find.text('LIVE MAP'), findsNothing);
       expect(find.text('Order Dispatched'), findsOneWidget);
       expect(find.text('Rider is on the way'), findsOneWidget);
-      expect(find.text('9:30 - 11:30 AM: 2/10'), findsNothing);
+      expect(find.text('9:30 - 11:30 AM'), findsNothing);
     },
   );
 
@@ -862,8 +908,10 @@ void main() {
     expect(find.text('YOUR BATCH · TODAY'), findsOneWidget);
     // The pinned block owns the booked window; the availability list
     // drops its duplicate row.
-    expect(find.text('9:30 - 11:30 AM: 2/10'), findsOneWidget);
-    expect(find.text('2:00 - 4:00 PM: 4/10'), findsOneWidget);
+    expect(find.text('9:30 - 11:30 AM'), findsOneWidget);
+    expect(find.text('2/10'), findsOneWidget);
+    expect(find.text('2:00 - 4:00 PM'), findsOneWidget);
+    expect(find.text('4/10'), findsOneWidget);
   });
 
   testWidgets('idle tile pinned slot shows its day when booked ahead', (
@@ -888,9 +936,10 @@ void main() {
     await tester.pumpAndSettle();
 
     // Window still renders from the booking itself even though that day's
-    // fill counts are not loaded.
+    // fill counts are not loaded. Today's 2-4 PM availability row also shows
+    // the same window text, so it appears twice.
     expect(find.text('YOUR BATCH · FRI, JUL 17'), findsOneWidget);
-    expect(find.text('2:00 - 4:00 PM'), findsOneWidget);
+    expect(find.text('2:00 - 4:00 PM'), findsNWidgets(2));
   });
 
   testWidgets('idle tile rolls over to the next batch when today is empty', (
@@ -922,7 +971,8 @@ void main() {
 
     expect(find.byKey(const Key('next-batch-block')), findsOneWidget);
     expect(find.text('NEXT BATCH · MON, JUL 20'), findsOneWidget);
-    expect(find.text('9:30 - 11:30 AM: 2/10'), findsOneWidget);
+    expect(find.text('9:30 - 11:30 AM'), findsOneWidget);
+    expect(find.text('2/10'), findsOneWidget);
     expect(find.text('No active delivery'), findsNothing);
     expect(find.text('No batches scheduled today'), findsNothing);
   });
@@ -952,7 +1002,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('YOUR BATCH · TODAY'), findsOneWidget);
-    expect(find.text('9:30 - 11:30 AM: 2/10'), findsOneWidget);
+    expect(find.text('9:30 - 11:30 AM'), findsOneWidget);
+    expect(find.text('2/10'), findsOneWidget);
     expect(find.text('Order Dispatched'), findsOneWidget);
     expect(find.text('2nd of 4 in queue'), findsOneWidget);
   });

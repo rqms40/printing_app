@@ -659,6 +659,8 @@ describe('AdminController analytics', () => {
         assignmentId: 99,
         orderId: 42,
         orderRef: 'ORD-10042',
+        status: DeliveryStatus.ASSIGNED,
+        change: 'assigned',
       });
       expect(notificationsService.create).toHaveBeenCalledWith({
         userId: 70,

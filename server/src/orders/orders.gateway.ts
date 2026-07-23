@@ -24,7 +24,31 @@ export type RiderDispatchPlanUpdatedPayload = {
   riderProfileId: number;
   planId: number;
   planVersion: number;
-  change: 'created' | 'reoptimized';
+} & (
+  | {
+      change: 'created' | 'reoptimized';
+    }
+  | {
+      change: 'stopCompleted' | 'stopSkipped' | 'completed';
+      assignmentId: number;
+      stopStatus: 'completed' | 'skipped';
+      planStatus: 'active' | 'completed';
+    }
+);
+
+export type RiderAssignmentUpdatedPayload = {
+  assignmentId: number;
+  orderId: number;
+  orderRef: string;
+  status?:
+    | 'assigned'
+    | 'accepted'
+    | 'declined'
+    | 'picked_up'
+    | 'on_the_way'
+    | 'arrived'
+    | 'delivered';
+  change?: 'assigned' | 'statusUpdated' | 'unassigned';
 };
 
 @WebSocketGateway({ namespace: '/ws/orders', cors: { origin: '*' } })
@@ -73,7 +97,7 @@ export class OrdersGateway implements OnGatewayConnection {
 
   notifyRiderAssignment(
     riderUserId: number,
-    payload: { assignmentId: number; orderId: number; orderRef: string },
+    payload: RiderAssignmentUpdatedPayload,
   ) {
     this.server.to(`user_${riderUserId}`).emit('riderAssignment', payload);
   }

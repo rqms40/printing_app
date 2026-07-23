@@ -162,10 +162,20 @@ export class ChatGateway implements OnGatewayConnection {
         conversationId,
       });
 
-      const botText = await this.chatService.getBotResponse(
-        conversationId,
-        userMessage,
-      );
+      let botText: string;
+      try {
+        botText = await this.chatService.getBotResponse(
+          conversationId,
+          userMessage,
+        );
+      } catch (err) {
+        // Never leave the customer with a dangling bot-typing indicator —
+        // e.g. OPENROUTER_API_KEY missing or the upstream model erroring.
+        console.error('[ChatGateway] bot response failed', err);
+        botText =
+          'Sorry — GridBot is temporarily unavailable. Please try again ' +
+          'in a moment, or reach Human Support from the chat menu.';
+      }
       const botMsg = await this.chatService.saveMessage(
         conversationId,
         null,

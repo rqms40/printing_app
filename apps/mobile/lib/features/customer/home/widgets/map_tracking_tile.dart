@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show FontFeature;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -178,6 +179,11 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
   @override
   Widget build(BuildContext context) {
     final mapAsync = ref.watch(liveDeliveryMapProvider);
+    // Only the empty/idle copy depends on whether any order is in flight, so
+    // select the boolean to avoid rebuilding the tile on every order mutation.
+    final hasActiveOrder = ref.watch(
+      activeOrdersProvider.select((orders) => orders.isNotEmpty),
+    );
     // Watched directly here so location updates only rebuild markers,
     // not the entire FutureProvider async cycle.
     final locationUpdate = ref.watch(liveRiderLocationProvider);
@@ -223,6 +229,7 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
         slots: slots.slots,
         isLoading: true,
         bookedSlot: bookedView,
+        hasActiveOrder: hasActiveOrder,
       ),
       error: (e, st) => _DeliveryStatusAndMapLayout(
         colors: colors,
@@ -231,6 +238,7 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
         isLoading: slots.isLoading,
         bookedSlot: bookedView,
         nextBatch: nextBatch,
+        hasActiveOrder: hasActiveOrder,
       ),
       data: (state) {
         if (state.status == LiveMapStatus.loading) {
@@ -240,6 +248,7 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
             slots: slots.slots,
             isLoading: true,
             bookedSlot: bookedView,
+            hasActiveOrder: hasActiveOrder,
           );
         }
 
@@ -292,6 +301,7 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
             liveRiderPoint: liveRiderPoint,
             locationHealth: locationHealth,
             bookedSlot: liveSlotView,
+            hasActiveOrder: true,
             onMapTap: () => context.push('/customer/tracking'),
           );
         }
@@ -304,6 +314,7 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
             isLoading: slots.isLoading,
             liveState: state,
             bookedSlot: liveSlotView,
+            hasActiveOrder: true,
           );
         }
 
@@ -314,6 +325,7 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
           isLoading: slots.isLoading,
           bookedSlot: bookedView,
           nextBatch: nextBatch,
+          hasActiveOrder: hasActiveOrder,
         );
       },
     );
@@ -338,6 +350,7 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
     this.locationHealth = LocationHealth.offline,
     this.bookedSlot,
     this.nextBatch,
+    this.hasActiveOrder = false,
     this.onMapTap,
   });
 
@@ -345,6 +358,7 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
   final Brightness brightness;
   final List<DeliverySlot> slots;
   final bool isLoading;
+  final bool hasActiveOrder;
   final LiveDeliveryMapState? liveState;
   final LatLng? liveRiderPoint;
   final LocationHealth locationHealth;
@@ -390,8 +404,9 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
       nextBatch!.nextSlotStart != null &&
       nextBatch!.nextSlotEnd != null;
 
-  // Eyebrow (12) + gap (4) + window row (27) + trailing gap (12).
-  static const _pinnedSlotBlockHeight = 55.0;
+  // Eyebrow (8) + gap (4) + window row (14) + gap (5) + bar (5) +
+  // trailing gap (12), with a couple px of slack for text metrics.
+  static const _pinnedSlotBlockHeight = 50.0;
 
   static double _idleStatusHeight({
     required int visibleSlotCount,
@@ -405,7 +420,8 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
     if (isLoading && visibleSlotCount == 0 && !hasPinnedSlot) return 96;
     if (visibleSlotCount == 0 && !hasPinnedSlot) return 94;
 
-    const slotRowHeight = 27.0;
+    // Window row (14) + gap (5) + bar (5) + inter-row gap (8).
+    const slotRowHeight = 32.0;
     const viewMoreHeight = 20.0;
     return chromeHeight +
         (hasPinnedSlot ? _pinnedSlotBlockHeight : 0) +
@@ -463,7 +479,9 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
         ? 'Live map starts on your delivery day.'
         : visibleSlots.isEmpty && bookedSlot == null
         ? 'No batches scheduled today'
-        : 'Live map starts after rider dispatch.';
+        : hasActiveOrder
+        ? 'Live map starts after rider dispatch.'
+        : 'No delivery in progress — track your rider here once you order.';
     final statusPanel =
         _hasActiveDelivery && liveState?.canTrackDelivery == false
         ? _QueuedDeliveryStatusTile(
@@ -638,7 +656,7 @@ class _BatchStatusTile extends StatelessWidget {
                       for (var i = 0; i < slots.length; i++) ...[
                         _BatchSlotRow(slot: slots[i], colors: colors),
                         if (i != slots.length - 1 || _hasHiddenSlots)
-                          const SizedBox(height: AppSpacing.xs),
+                          const SizedBox(height: AppSpacing.sm),
                       ],
                       if (_hasHiddenSlots)
                         Align(
@@ -886,7 +904,6 @@ class _SlotWindowBar extends StatelessWidget {
     final booked = bookedCount;
     final cap = capacity;
     final hasFill = booked != null && cap != null && cap > 0;
-    final ratio = hasFill ? (booked / cap).clamp(0.0, 1.0).toDouble() : 0.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -905,46 +922,87 @@ class _SlotWindowBar extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Text(
-            hasFill ? '$window: $booked/$cap' : window,
-            maxLines: 1,
-            style: AppTypography.caption.copyWith(
-              color: colors.onSurface,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              height: 1.1,
-            ),
-          ),
+        _SlotFillLine(
+          colors: colors,
+          window: window,
+          bookedCount: hasFill ? booked : null,
+          capacity: hasFill ? cap : null,
         ),
-        if (hasFill) ...[
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: AppRadius.borderFull,
-                  child: LinearProgressIndicator(
-                    value: ratio,
-                    minHeight: 6,
-                    backgroundColor: colors.outline.withValues(alpha: 0.55),
-                    valueColor: AlwaysStoppedAnimation<Color>(colors.brand),
-                  ),
+      ],
+    );
+  }
+}
+
+/// One aligned "window ... booked/capacity" line with a full-width fill bar
+/// underneath — the shared shape for every slot row in the tile.
+class _SlotFillLine extends StatelessWidget {
+  const _SlotFillLine({
+    required this.colors,
+    required this.window,
+    this.bookedCount,
+    this.capacity,
+  });
+
+  final AppColorSet colors;
+  final String window;
+  final int? bookedCount;
+  final int? capacity;
+
+  @override
+  Widget build(BuildContext context) {
+    final booked = bookedCount;
+    final cap = capacity;
+    final hasFill = booked != null && cap != null && cap > 0;
+    final ratio = hasFill ? (booked / cap).clamp(0.0, 1.0).toDouble() : 0.0;
+    final isFull = hasFill && booked >= cap;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Expanded(
+              child: Text(
+                window,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.caption.copyWith(
+                  color: colors.onSurface,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  height: 1.2,
                 ),
               ),
-              const SizedBox(width: 5),
+            ),
+            if (hasFill) ...[
+              const SizedBox(width: AppSpacing.sm),
               Text(
-                '${(ratio * 100).round()}%',
-                style: AppTypography.overline.copyWith(
-                  color: colors.onSurfaceDim,
-                  fontSize: 8,
+                '$booked/$cap',
+                maxLines: 1,
+                style: AppTypography.caption.copyWith(
+                  color: isFull ? colors.onSurface : colors.onSurfaceDim,
+                  fontSize: 11,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: 0.3,
+                  height: 1.2,
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
             ],
+          ],
+        ),
+        if (hasFill) ...[
+          const SizedBox(height: 5),
+          ClipRRect(
+            borderRadius: AppRadius.borderFull,
+            child: LinearProgressIndicator(
+              value: ratio,
+              minHeight: 5,
+              backgroundColor: colors.outline.withValues(alpha: 0.45),
+              valueColor: AlwaysStoppedAnimation<Color>(colors.brand),
+            ),
           ),
         ],
       ],
@@ -960,56 +1018,11 @@ class _BatchSlotRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ratio = slot.capacity <= 0
-        ? 0.0
-        : (slot.bookedCount / slot.capacity).clamp(0.0, 1.0);
-    final percent = (ratio * 100).round();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Text(
-            '${_formatSlotRange(slot)}: ${slot.bookedCount}/${slot.capacity}',
-            maxLines: 1,
-            style: AppTypography.caption.copyWith(
-              color: colors.onSurface,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              height: 1.1,
-            ),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Row(
-          children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: AppRadius.borderFull,
-                child: LinearProgressIndicator(
-                  value: ratio,
-                  minHeight: 6,
-                  backgroundColor: colors.outline.withValues(alpha: 0.55),
-                  valueColor: AlwaysStoppedAnimation<Color>(colors.brand),
-                ),
-              ),
-            ),
-            const SizedBox(width: 5),
-            Text(
-              '$percent%',
-              style: AppTypography.overline.copyWith(
-                color: colors.onSurfaceDim,
-                fontSize: 8,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ],
-        ),
-      ],
+    return _SlotFillLine(
+      colors: colors,
+      window: _formatSlotRange(slot),
+      bookedCount: slot.bookedCount,
+      capacity: slot.capacity,
     );
   }
 }

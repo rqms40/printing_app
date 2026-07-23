@@ -267,6 +267,94 @@ void main() {
       },
     );
 
+    test(
+      'retry reconnects after the socket drops post-initialization',
+      () async {
+        // Regression: sendMessage flipping isConnected=false used to leave
+        // _initialized=true, making the Retry button (initialize()) a
+        // permanent no-op — the screen stayed on "Reconnecting…" forever.
+        when(mockWs.connectChat()).thenAnswer((_) async => true);
+        when(mockWs.joinConversation(1)).thenReturn(null);
+        when(mockWs.listenForChatMessages(1, any)).thenReturn(() {});
+        when(mockWs.listenForBotTyping(any)).thenReturn(() {});
+        when(mockWs.listenForMessagesRead(any)).thenReturn(() {});
+        when(mockWs.listenForChatConnection(any)).thenReturn(() {});
+        when(mockWs.emitReadMessages(1)).thenReturn(null);
+        when(
+          mockDio.get<List<dynamic>>('/chat/conversations/1/messages'),
+        ).thenAnswer(
+          (_) async => Response(
+            data: [],
+            statusCode: 200,
+            requestOptions: RequestOptions(
+              path: '/chat/conversations/1/messages',
+            ),
+          ),
+        );
+
+        final notifier = ConversationNotifier(1, mockWs, mockDio);
+        await notifier.initialize();
+        expect(notifier.state.isConnected, true);
+
+        // The socket drops; a send fails and flags the UI as disconnected.
+        when(mockWs.isChatConnected).thenReturn(false);
+        expect(notifier.sendMessage('hello'), isFalse);
+        expect(notifier.state.isConnected, false);
+
+        // Retry (initialize() again) must reconnect and re-join the room.
+        await notifier.initialize();
+
+        verify(mockWs.connectChat()).called(2);
+        verify(mockWs.joinConversation(1)).called(2);
+        expect(notifier.state.isConnected, true);
+      },
+    );
+
+    test(
+      'chat connection events update state and re-join the room',
+      () async {
+        Function(bool)? connectionCallback;
+        when(mockWs.connectChat()).thenAnswer((_) async => true);
+        when(mockWs.joinConversation(1)).thenReturn(null);
+        when(mockWs.listenForChatMessages(1, any)).thenReturn(() {});
+        when(mockWs.listenForBotTyping(any)).thenReturn(() {});
+        when(mockWs.listenForMessagesRead(any)).thenReturn(() {});
+        when(mockWs.listenForChatConnection(any)).thenAnswer((invocation) {
+          connectionCallback =
+              invocation.positionalArguments.first as Function(bool);
+          return () {};
+        });
+        when(mockWs.emitReadMessages(1)).thenReturn(null);
+        when(
+          mockDio.get<List<dynamic>>('/chat/conversations/1/messages'),
+        ).thenAnswer(
+          (_) async => Response(
+            data: [],
+            statusCode: 200,
+            requestOptions: RequestOptions(
+              path: '/chat/conversations/1/messages',
+            ),
+          ),
+        );
+
+        final notifier = ConversationNotifier(1, mockWs, mockDio);
+        await notifier.initialize();
+        expect(connectionCallback, isNotNull);
+        expect(notifier.state.isConnected, true);
+
+        // Socket disconnect must be reflected in the UI health state.
+        connectionCallback!(false);
+        expect(notifier.state.isConnected, false);
+
+        // Reconnect must flip the state back AND re-join the conversation
+        // room — server room membership is per-socket and lost on reconnect,
+        // otherwise bot responses never reach the client again.
+        connectionCallback!(true);
+        expect(notifier.state.isConnected, true);
+        verify(mockWs.joinConversation(1)).called(2);
+      },
+    );
+
     test('sendMessage calls sendChatMessage on WS with trimmed content', () {
       when(mockWs.isChatConnected).thenReturn(true);
       when(mockWs.sendChatMessage(1, 'hello')).thenReturn(null);
