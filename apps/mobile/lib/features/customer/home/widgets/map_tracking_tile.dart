@@ -402,44 +402,7 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
       nextBatch!.nextSlotStart != null &&
       nextBatch!.nextSlotEnd != null;
 
-  // Eyebrow (8) + gap (4) + window row (13) + gap (5) + bar (5) +
-  // gap to the availability list (8), with slack for text metrics.
-  static const _pinnedSlotBlockHeight = 45.0;
-
-  static double _idleStatusHeight({
-    required int visibleSlotCount,
-    required bool hasHiddenSlots,
-    required bool isLoading,
-    required bool hasPinnedSlot,
-    required bool showsNextBatch,
-  }) {
-    // Padding (16×2) + title (20) + subtitle (4 + 10) + gap to rows (12).
-    const chromeHeight = (AppSpacing.md * 2) + 20 + 4 + 10 + 12;
-    if (showsNextBatch) return chromeHeight + _pinnedSlotBlockHeight;
-    if (isLoading && visibleSlotCount == 0 && !hasPinnedSlot) return 96;
-    if (visibleSlotCount == 0 && !hasPinnedSlot) return 94;
-
-    // Window row (13) + gap (5) + bar (5); rows separated by sm gaps. Exact
-    // accounting here — any slack becomes dead space at the card's bottom,
-    // and any freed height goes to the map panel below instead.
-    const slotRowHeight = 23.0;
-    const viewMoreHeight = 20.0;
-    final gapCount = visibleSlotCount > 0 ? visibleSlotCount - 1 : 0;
-    return chromeHeight +
-        (hasPinnedSlot ? _pinnedSlotBlockHeight : 0) +
-        (slotRowHeight * visibleSlotCount) +
-        (AppSpacing.sm * gapCount) +
-        (hasHiddenSlots ? AppSpacing.sm + viewMoreHeight : 0);
-  }
-
-  double _statusHeight({
-    required double maxHeight,
-    required int visibleSlotCount,
-    required int hiddenSlotCount,
-    required bool showMapPanel,
-  }) {
-    if (!showMapPanel) return maxHeight;
-
+  double _statusHeight({required double maxHeight}) {
     final maxStatusHeight = (maxHeight - _panelGap - _minMapHeight)
         .clamp(0.0, maxHeight)
         .toDouble();
@@ -452,15 +415,7 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
         // Without a matching slot bar the card shrinks so the freed space
         // goes to the map panel instead of trailing as an empty gap.
         ? (_queuedShowsSlotBar ? 196.0 : 152.0)
-        : _hasActiveDelivery
-        ? ((((maxHeight - (_panelGap * 2)) / 7) * 4) + _panelGap)
-        : _idleStatusHeight(
-            visibleSlotCount: visibleSlotCount,
-            hasHiddenSlots: hiddenSlotCount > 0,
-            isLoading: isLoading,
-            hasPinnedSlot: bookedSlot != null,
-            showsNextBatch: _showsNextBatch,
-          );
+        : ((((maxHeight - (_panelGap * 2)) / 7) * 4) + _panelGap);
 
     return desiredHeight.clamp(0.0, maxStatusHeight).toDouble();
   }
@@ -531,12 +486,31 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
         final maxHeight = constraints.hasBoundedHeight
             ? constraints.maxHeight
             : 290.0;
-        final statusHeight = _statusHeight(
-          maxHeight: maxHeight,
-          visibleSlotCount: visibleSlots.length,
-          hiddenSlotCount: hiddenSlotCount,
-          showMapPanel: showMapPanel,
-        );
+        if (mapPanel == null) {
+          return SizedBox(height: maxHeight, child: statusPanel);
+        }
+
+        if (!_hasActiveDelivery) {
+          // Idle: the status card takes exactly its content height and every
+          // remaining pixel belongs to the map preview — no reserved height,
+          // so no dead space inside the card at any text scale.
+          final maxStatusHeight = (maxHeight - _panelGap - _minMapHeight)
+              .clamp(0.0, maxHeight)
+              .toDouble();
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxStatusHeight),
+                child: statusPanel,
+              ),
+              const SizedBox(height: _panelGap),
+              Expanded(child: mapPanel),
+            ],
+          );
+        }
+
+        final statusHeight = _statusHeight(maxHeight: maxHeight);
         final mapHeight = (maxHeight - statusHeight - _panelGap)
             .clamp(0.0, double.infinity)
             .toDouble();
@@ -545,10 +519,8 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(height: statusHeight, child: statusPanel),
-            if (mapPanel != null) ...[
-              const SizedBox(height: _panelGap),
-              SizedBox(height: mapHeight, child: mapPanel),
-            ],
+            const SizedBox(height: _panelGap),
+            SizedBox(height: mapHeight, child: mapPanel),
           ],
         );
       },
@@ -589,6 +561,7 @@ class _BatchStatusTile extends StatelessWidget {
         decoration: BoxDecoration(color: colors.surface),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             FittedBox(
               fit: BoxFit.scaleDown,
@@ -617,7 +590,7 @@ class _BatchStatusTile extends StatelessWidget {
                 height: 1.25,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             if (bookedSlot != null) ...[
               _PinnedSlotBlock(
                 key: const Key('booked-slot-block'),
@@ -633,7 +606,8 @@ class _BatchStatusTile extends StatelessWidget {
                 info: nextBatch!,
               )
             else if (isLoading && slots.isEmpty && bookedSlot == null)
-              Expanded(
+              SizedBox(
+                height: 44,
                 child: Center(
                   child: SizedBox(
                     width: 18,
