@@ -336,7 +336,6 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
   }
 }
 
-const _deliveryStatusTitleGap = AppSpacing.md;
 
 class _DeliveryStatusAndMapLayout extends StatelessWidget {
   const _DeliveryStatusAndMapLayout({
@@ -403,9 +402,9 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
       nextBatch!.nextSlotStart != null &&
       nextBatch!.nextSlotEnd != null;
 
-  // Eyebrow (8) + gap (4) + window row (14) + gap (5) + bar (5) +
-  // trailing gap (12), with a couple px of slack for text metrics.
-  static const _pinnedSlotBlockHeight = 50.0;
+  // Eyebrow (8) + gap (4) + window row (13) + gap (5) + bar (5) +
+  // gap to the availability list (8), with slack for text metrics.
+  static const _pinnedSlotBlockHeight = 45.0;
 
   static double _idleStatusHeight({
     required int visibleSlotCount,
@@ -414,18 +413,23 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
     required bool hasPinnedSlot,
     required bool showsNextBatch,
   }) {
-    const chromeHeight = (AppSpacing.md * 2) + 20 + _deliveryStatusTitleGap;
+    // Padding (16×2) + title (20) + subtitle (4 + 10) + gap to rows (12).
+    const chromeHeight = (AppSpacing.md * 2) + 20 + 4 + 10 + 12;
     if (showsNextBatch) return chromeHeight + _pinnedSlotBlockHeight;
     if (isLoading && visibleSlotCount == 0 && !hasPinnedSlot) return 96;
     if (visibleSlotCount == 0 && !hasPinnedSlot) return 94;
 
-    // Window row (14) + gap (5) + bar (5) + inter-row gap (8).
-    const slotRowHeight = 32.0;
+    // Window row (13) + gap (5) + bar (5); rows separated by sm gaps. Exact
+    // accounting here — any slack becomes dead space at the card's bottom,
+    // and any freed height goes to the map panel below instead.
+    const slotRowHeight = 23.0;
     const viewMoreHeight = 20.0;
+    final gapCount = visibleSlotCount > 0 ? visibleSlotCount - 1 : 0;
     return chromeHeight +
         (hasPinnedSlot ? _pinnedSlotBlockHeight : 0) +
         (slotRowHeight * visibleSlotCount) +
-        (hasHiddenSlots ? viewMoreHeight : 0);
+        (AppSpacing.sm * gapCount) +
+        (hasHiddenSlots ? AppSpacing.sm + viewMoreHeight : 0);
   }
 
   double _statusHeight({
@@ -600,7 +604,20 @@ class _BatchStatusTile extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: _deliveryStatusTitleGap),
+            const SizedBox(height: 4),
+            Text(
+              nextBatch != null ? 'NEXT DELIVERY BATCH' : "TODAY'S BATCHES",
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.overline.copyWith(
+                color: colors.onSurfaceDim,
+                fontSize: 8,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.1,
+                height: 1.25,
+              ),
+            ),
+            const SizedBox(height: 12),
             if (bookedSlot != null) ...[
               _PinnedSlotBlock(
                 key: const Key('booked-slot-block'),
