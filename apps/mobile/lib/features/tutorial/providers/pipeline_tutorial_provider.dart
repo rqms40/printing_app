@@ -64,6 +64,9 @@ class PipelineTutorialNotifier extends StateNotifier<PipelineState> {
   }
 
   void abandon() {
+    // May be invoked from a deferred callback after teardown (e.g. a screen
+    // disposed while the app is shutting down).
+    if (!mounted) return;
     _ref.read(tutorialProvider.notifier).markSeen(TutorialKey.pipeline);
     state = const PipelineState();
   }

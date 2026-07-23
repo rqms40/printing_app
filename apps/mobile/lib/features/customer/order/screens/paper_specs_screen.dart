@@ -72,7 +72,10 @@ class _PaperSpecsScreenState extends ConsumerState<PaperSpecsScreen> {
         (_pipelineState.step == PipelineStep.paperSpecsForm ||
             _pipelineState.step == PipelineStep.paperSpecsContinue) &&
         !_advancedThisFrame) {
-      _pipelineNotifier?.abandon();
+      // Providers must not be mutated while the tree is locked for
+      // unmounting; defer past the current frame.
+      final pipelineNotifier = _pipelineNotifier;
+      Future.microtask(() => pipelineNotifier?.abandon());
     }
     _quantityController.dispose();
     _specialInstructionsController.dispose();
