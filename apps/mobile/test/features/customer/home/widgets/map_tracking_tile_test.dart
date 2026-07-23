@@ -342,6 +342,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('View more'), findsOneWidget);
+    // With extras, only two rows stay inline — View more takes the third slot.
+    expect(find.text('6:00 - 8:00 PM'), findsNothing);
     expect(find.text('8:00 - 9:00 PM'), findsNothing);
     expect(find.text('9:00 - 10:00 PM'), findsNothing);
 
@@ -349,6 +351,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text("Today's delivery slots"), findsOneWidget);
+    expect(find.text('6:00 - 8:00 PM'), findsOneWidget);
     expect(find.text('8:00 - 9:00 PM'), findsOneWidget);
     expect(find.text('9:00 - 10:00 PM'), findsOneWidget);
   });
