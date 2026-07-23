@@ -423,7 +423,11 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sortedSlots = _sortedSlots;
-    final visibleSlots = sortedSlots.take(_maxInlineSlots).toList();
+    // Three rows fill the aligned card exactly; when more exist, the
+    // "View more" line takes the third row's slot so nothing scrolls.
+    final visibleSlots = sortedSlots.length <= _maxInlineSlots
+        ? sortedSlots
+        : sortedSlots.take(_maxInlineSlots - 1).toList();
     final hiddenSlotCount = sortedSlots.length - visibleSlots.length;
     final showMapPanel = _shouldShowMapPanel;
     final queuePosition = liveState?.queuePosition;
@@ -491,19 +495,22 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
         }
 
         if (!_hasActiveDelivery) {
-          // Idle: the status card takes exactly its content height and every
-          // remaining pixel belongs to the map preview — no reserved height,
-          // so no dead space inside the card at any text scale.
           final maxStatusHeight = (maxHeight - _panelGap - _minMapHeight)
               .clamp(0.0, maxHeight)
               .toDouble();
+          // The right bento column stacks Start Printing (5) + Data Grid (5)
+          // + Feed (9) with sm gaps. Spanning 10/19 of the flex space plus
+          // the inner gap puts this card's bottom edge exactly on The Data
+          // Grid's bottom edge; the rows distribute inside (spaceBetween in
+          // the card) so none of that height pools as a blank strip.
+          final alignedHeight =
+              (((maxHeight - (_panelGap * 2)) / 19) * 10 + _panelGap)
+                  .clamp(0.0, maxStatusHeight)
+                  .toDouble();
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: maxStatusHeight),
-                child: statusPanel,
-              ),
+              SizedBox(height: alignedHeight, child: statusPanel),
               const SizedBox(height: _panelGap),
               Expanded(child: mapPanel),
             ],
@@ -554,6 +561,79 @@ class _BatchStatusTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final rowsChildren = <Widget>[
+      if (bookedSlot != null)
+        _PinnedSlotBlock(
+          key: const Key('booked-slot-block'),
+          colors: colors,
+          view: bookedSlot!,
+        ),
+      if (nextBatch != null && bookedSlot == null)
+        _NextBatchBlock(
+          key: const Key('next-batch-block'),
+          colors: colors,
+          info: nextBatch!,
+        )
+      else if (isLoading && slots.isEmpty && bookedSlot == null)
+        SizedBox(
+          height: 44,
+          child: Center(
+            child: SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: colors.accent,
+              ),
+            ),
+          ),
+        )
+      else if (slots.isEmpty && bookedSlot == null)
+        Padding(
+          padding: const EdgeInsets.only(top: AppSpacing.xs),
+          child: Text(
+            'No active delivery',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: AppTypography.caption.copyWith(
+              color: colors.onSurfaceDim,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        )
+      else if (slots.isNotEmpty) ...[
+        for (final slot in slots) _BatchSlotRow(slot: slot, colors: colors),
+        if (_hasHiddenSlots)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              key: const Key('delivery-slots-view-more'),
+              onPressed: () =>
+                  _showDeliverySlotsSheet(context, colors, allSlots),
+              style: TextButton.styleFrom(
+                foregroundColor: colors.brand,
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 2,
+                  vertical: 0,
+                ),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                'View more',
+                style: AppTypography.caption.copyWith(
+                  color: colors.brand,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  height: 1,
+                ),
+              ),
+            ),
+          ),
+      ],
+    ];
+
     return ClipRRect(
       borderRadius: AppRadius.borderXl,
       child: Container(
@@ -561,7 +641,6 @@ class _BatchStatusTile extends StatelessWidget {
         decoration: BoxDecoration(color: colors.surface),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
           children: [
             FittedBox(
               fit: BoxFit.scaleDown,
@@ -591,97 +670,28 @@ class _BatchStatusTile extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            if (bookedSlot != null) ...[
-              _PinnedSlotBlock(
-                key: const Key('booked-slot-block'),
-                colors: colors,
-                view: bookedSlot!,
-              ),
-              if (slots.isNotEmpty) const SizedBox(height: AppSpacing.sm),
-            ],
-            if (nextBatch != null && bookedSlot == null)
-              _NextBatchBlock(
-                key: const Key('next-batch-block'),
-                colors: colors,
-                info: nextBatch!,
-              )
-            else if (isLoading && slots.isEmpty && bookedSlot == null)
-              SizedBox(
-                height: 44,
-                child: Center(
-                  child: SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: colors.accent,
+            // The rows own the rest of the card: spare height distributes
+            // between them (no blank strip at the bottom), and oversized
+            // content — pinned block + rows, or large text scales — scrolls
+            // instead of hard-overflowing the bento cell.
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, rowConstraints) => SingleChildScrollView(
+                  physics: const ClampingScrollPhysics(),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: rowConstraints.maxHeight,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      spacing: AppSpacing.sm,
+                      children: rowsChildren,
                     ),
                   ),
                 ),
-              )
-            else if (slots.isEmpty && bookedSlot == null)
-              Padding(
-                padding: const EdgeInsets.only(top: AppSpacing.xs),
-                child: Text(
-                  'No active delivery',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.caption.copyWith(
-                    color: colors.onSurfaceDim,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              )
-            else if (slots.isNotEmpty)
-              // Flexible + scroll keeps the bento cell from hard-overflowing
-              // when three slot rows (or large text scales) exceed the tile.
-              Flexible(
-                child: SingleChildScrollView(
-                  physics: const ClampingScrollPhysics(),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (var i = 0; i < slots.length; i++) ...[
-                        _BatchSlotRow(slot: slots[i], colors: colors),
-                        if (i != slots.length - 1 || _hasHiddenSlots)
-                          const SizedBox(height: AppSpacing.sm),
-                      ],
-                      if (_hasHiddenSlots)
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            key: const Key('delivery-slots-view-more'),
-                            onPressed: () => _showDeliverySlotsSheet(
-                              context,
-                              colors,
-                              allSlots,
-                            ),
-                            style: TextButton.styleFrom(
-                              foregroundColor: colors.brand,
-                              minimumSize: Size.zero,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 2,
-                                vertical: 0,
-                              ),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            child: Text(
-                              'View more',
-                              style: AppTypography.caption.copyWith(
-                                color: colors.brand,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w900,
-                                height: 1,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
               ),
+            ),
           ],
         ),
       ),
