@@ -234,6 +234,8 @@ describe('OrdersGateway', () => {
         assignmentId: 99,
         orderId: 42,
         orderRef: 'ORD-10042',
+        status: 'assigned' as const,
+        change: 'assigned' as const,
       };
       gateway.notifyRiderAssignment(70, payload);
 
@@ -257,6 +259,29 @@ describe('OrdersGateway', () => {
       gateway.notifyRiderDispatchPlanUpdated(70, payload);
 
       expect(toMock).toHaveBeenCalledTimes(1);
+      expect(toMock).toHaveBeenCalledWith('user_70');
+      expect(emitMock).toHaveBeenCalledWith(
+        'riderDispatchPlanUpdated',
+        payload,
+      );
+    });
+
+    it('emits terminal plan progress to the same rider room', () => {
+      const emitMock = jest.fn();
+      const toMock = jest.fn().mockReturnValue({ emit: emitMock });
+      gateway.server = { to: toMock } as unknown as Server;
+      const payload = {
+        riderProfileId: 10,
+        planId: 501,
+        planVersion: 4,
+        change: 'completed' as const,
+        assignmentId: 99,
+        stopStatus: 'completed' as const,
+        planStatus: 'completed' as const,
+      };
+
+      gateway.notifyRiderDispatchPlanUpdated(70, payload);
+
       expect(toMock).toHaveBeenCalledWith('user_70');
       expect(emitMock).toHaveBeenCalledWith(
         'riderDispatchPlanUpdated',

@@ -63,7 +63,6 @@ import 'package:printing_app/features/customer/chat/screens/conversation_screen.
 // ---------------------------------------------------------------------------
 // Rider screens
 // ---------------------------------------------------------------------------
-import 'package:printing_app/features/rider/alerts/screens/rider_alerts_screen.dart';
 import 'package:printing_app/features/rider/deliveries/screens/deliveries_screen.dart';
 import 'package:printing_app/features/rider/deliveries/screens/delivery_detail_screen.dart';
 import 'package:printing_app/features/rider/active_delivery/screens/active_delivery_screen.dart';
@@ -648,7 +647,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       // -----------------------------------------------------------------------
-      // Rider shell (Home, Orders, + FAB, Alerts, Profile) — rider-UI.png
+      // Rider shell (Home, Deliveries, + FAB, Notifications, Profile)
       // -----------------------------------------------------------------------
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => ScaffoldWithNav(
@@ -674,7 +673,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             NavItem(
               icon: HugeIcons.strokeRoundedNotification02,
               activeIcon: HugeIcons.strokeRoundedNotification02,
-              label: 'Alerts',
+              label: 'Notifications',
             ),
             NavItem(
               icon: HugeIcons.strokeRoundedUser,
@@ -704,8 +703,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/rider/alerts',
-                builder: (_, _) => const RiderAlertsScreen(),
+                path: '/rider/notifications',
+                builder: (_, _) => const NotificationsScreen(),
               ),
             ],
           ),

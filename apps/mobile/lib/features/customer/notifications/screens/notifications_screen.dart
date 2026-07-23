@@ -293,6 +293,7 @@ class _NotificationItem extends ConsumerWidget {
           colors.success,
         );
       case 'delivery_assignment':
+      case 'rider_assigned':
         return _NotificationVisual(
           HugeIcons.strokeRoundedTruck,
           colors.info.withValues(alpha: 0.12),

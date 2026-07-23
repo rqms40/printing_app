@@ -41,7 +41,11 @@ describe('RidersService', () => {
   let conversationRepo: jest.Mocked<Partial<Repository<Conversation>>>;
   let dataSource: Partial<DataSource>;
   let locationGateway: Partial<LocationGateway>;
-  let ordersGateway: { notifyDeliveryQueueUpdated: jest.Mock };
+  let ordersGateway: {
+    notifyDeliveryQueueUpdated: jest.Mock;
+    notifyRiderAssignment: jest.Mock;
+    notifyRiderDispatchPlanUpdated: jest.Mock;
+  };
   let chatGateway: { notifyConversationClosed: jest.Mock };
   let ordersService: {
     updateStatus: jest.Mock;
@@ -137,6 +141,7 @@ describe('RidersService', () => {
       findOne: jest.fn(),
       findOneOrFail: jest.fn().mockResolvedValue({
         id: 1,
+        orderId: 'ORD-1',
         batchOrderId: null,
         orderStatus: OrderStatus.RIDER_ASSIGNED,
       } as Order),
@@ -188,6 +193,7 @@ describe('RidersService', () => {
     };
     ordersGateway = {
       notifyDeliveryQueueUpdated: jest.fn(),
+      notifyRiderAssignment: jest.fn(),
       notifyRiderDispatchPlanUpdated: jest.fn(),
     };
     chatGateway = {
@@ -391,6 +397,52 @@ describe('RidersService', () => {
         }),
       );
       expect(historyRepo.insert).toHaveBeenCalledTimes(1);
+    });
+
+    it('still returns committed assignment data when publication and reload both fail', async () => {
+      const readyOrder = {
+        id: 1,
+        orderId: 'ORD-1',
+        batchOrderId: null,
+        deliveryOption: 'delivery',
+        assignedRiderId: null,
+        orderStatus: OrderStatus.READY_FOR_DISPATCH,
+      } as Order;
+      const rider = {
+        ...mockProfile,
+        user: {
+          id: mockProfile.userId,
+          role: UserRole.RIDER,
+          isActive: true,
+        } as User,
+      } as RiderProfile;
+      const savedAssignment = {
+        ...mockAssignment,
+        isCurrent: true,
+      } as DeliveryAssignment;
+      orderRepo.findOneOrFail
+        .mockResolvedValueOnce(readyOrder)
+        .mockResolvedValueOnce(readyOrder)
+        .mockRejectedValueOnce(new Error('Reload unavailable'));
+      orderRepo.update.mockResolvedValue({ affected: 1 } as never);
+      assignmentRepo.findOne.mockResolvedValue(null);
+      assignmentRepo.save.mockResolvedValue(savedAssignment);
+      profileRepo.findOne.mockResolvedValue(rider);
+      ordersService.publishStatusUpdate.mockRejectedValue(
+        new Error('Customer publication failed'),
+      );
+
+      await expect(
+        service.assignOrderToRider(readyOrder.id, rider.id, 7),
+      ).resolves.toEqual({
+        assignment: savedAssignment,
+        riderProfile: rider,
+        order: {
+          ...readyOrder,
+          assignedRiderId: rider.userId,
+          orderStatus: OrderStatus.RIDER_ASSIGNED,
+        },
+      });
     });
 
     it('returns a deterministic conflict for a repeated assignment', async () => {
@@ -665,6 +717,9 @@ describe('RidersService', () => {
       ordersService.publishStatusUpdate.mockRejectedValue(
         new Error('Publication unavailable'),
       );
+      ordersGateway.notifyRiderAssignment.mockImplementation(() => {
+        throw new Error('Rider socket unavailable');
+      });
 
       await expect(
         service.updateDeliveryStatus(
@@ -675,6 +730,7 @@ describe('RidersService', () => {
       ).resolves.toMatchObject({ status: DeliveryStatus.PICKED_UP });
 
       expect(historyRepo.insert).toHaveBeenCalledTimes(1);
+      expect(ordersGateway.notifyRiderAssignment).toHaveBeenCalledTimes(1);
     });
 
     it('rolls back delivery and emits nothing when survey creation fails', async () => {
@@ -712,6 +768,10 @@ describe('RidersService', () => {
       expect(ordersService.publishStatusUpdate).not.toHaveBeenCalled();
       expect(locationGateway.broadcastLocation).not.toHaveBeenCalled();
       expect(ordersGateway.notifyDeliveryQueueUpdated).not.toHaveBeenCalled();
+      expect(ordersGateway.notifyRiderAssignment).not.toHaveBeenCalled();
+      expect(
+        ordersGateway.notifyRiderDispatchPlanUpdated,
+      ).not.toHaveBeenCalled();
       expect(chatGateway.notifyConversationClosed).not.toHaveBeenCalled();
     });
 
@@ -740,6 +800,14 @@ describe('RidersService', () => {
         assignedRiderId: null,
         orderStatus: OrderStatus.READY_FOR_DISPATCH,
       } as Order);
+      dispatchPlanService.skipStopIfPlanned.mockResolvedValueOnce({
+        planId: 500,
+        riderId: mockProfile.id,
+        planVersion: 4,
+        planStatus: DispatchPlanStatus.COMPLETED,
+        assignmentId: assignedAssignment.id,
+        stopStatus: DispatchStopStatus.SKIPPED,
+      });
 
       const result = await service.updateDeliveryStatus(
         mockProfile.userId,
@@ -771,6 +839,28 @@ describe('RidersService', () => {
           toStatus: OrderStatus.READY_FOR_DISPATCH,
           notes: 'Rider declined assignment: Too far',
         }),
+      );
+      expect(ordersGateway.notifyRiderAssignment).toHaveBeenCalledWith(
+        mockProfile.userId,
+        {
+          assignmentId: assignedAssignment.id,
+          orderId: assignedAssignment.orderId,
+          orderRef: assignedOrder.orderId,
+          status: DeliveryStatus.DECLINED,
+          change: 'unassigned',
+        },
+      );
+      expect(ordersGateway.notifyRiderDispatchPlanUpdated).toHaveBeenCalledWith(
+        mockProfile.userId,
+        {
+          riderProfileId: mockProfile.id,
+          planId: 500,
+          planVersion: 4,
+          change: 'completed',
+          assignmentId: assignedAssignment.id,
+          stopStatus: DispatchStopStatus.SKIPPED,
+          planStatus: DispatchPlanStatus.COMPLETED,
+        },
       );
     });
 
@@ -877,6 +967,7 @@ describe('RidersService', () => {
       );
       orderRepo.findOneOrFail.mockResolvedValue({
         id: 1,
+        orderId: 'ORD-1',
         batchOrderId: null,
         orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
       } as Order);
@@ -893,6 +984,19 @@ describe('RidersService', () => {
         id: 55,
         objectKey: 'uploads/proof_of_delivery/server-55.jpg',
       });
+      dispatchPlanService.advanceStop.mockResolvedValueOnce({
+        planId: 500,
+        riderId: mockProfile.id,
+        planVersion: 4,
+        planStatus: DispatchPlanStatus.COMPLETED,
+        assignmentId: mockAssignment.id,
+        stopStatus: DispatchStopStatus.COMPLETED,
+      });
+      ordersGateway.notifyRiderDispatchPlanUpdated.mockImplementationOnce(
+        () => {
+          throw new Error('Rider plan socket unavailable');
+        },
+      );
 
       const result = await (service.updateDeliveryStatus as any)(
         1,
@@ -925,6 +1029,18 @@ describe('RidersService', () => {
         1,
         OrderStatus.DELIVERED,
         surveyRequirement,
+      );
+      expect(ordersGateway.notifyRiderDispatchPlanUpdated).toHaveBeenCalledWith(
+        mockProfile.userId,
+        {
+          riderProfileId: mockProfile.id,
+          planId: 500,
+          planVersion: 4,
+          change: 'completed',
+          assignmentId: mockAssignment.id,
+          stopStatus: DispatchStopStatus.COMPLETED,
+          planStatus: DispatchPlanStatus.COMPLETED,
+        },
       );
     });
 
@@ -986,6 +1102,14 @@ describe('RidersService', () => {
           },
         ],
       });
+      dispatchPlanService.advanceStop.mockResolvedValueOnce({
+        planId: 500,
+        riderId: mockProfile.id,
+        planVersion: 4,
+        planStatus: DispatchPlanStatus.ACTIVE,
+        assignmentId: venAssignment.id,
+        stopStatus: DispatchStopStatus.COMPLETED,
+      });
 
       await service.updateDeliveryStatus(
         mockProfile.userId,
@@ -1015,6 +1139,18 @@ describe('RidersService', () => {
         ordersGateway.notifyDeliveryQueueUpdated.mock.invocationCallOrder[0],
       ).toBeLessThan(
         ordersService.publishStatusUpdate.mock.invocationCallOrder[0],
+      );
+      expect(ordersGateway.notifyRiderDispatchPlanUpdated).toHaveBeenCalledWith(
+        mockProfile.userId,
+        {
+          riderProfileId: mockProfile.id,
+          planId: 500,
+          planVersion: 4,
+          change: 'stopCompleted',
+          assignmentId: venAssignment.id,
+          stopStatus: DispatchStopStatus.COMPLETED,
+          planStatus: DispatchPlanStatus.ACTIVE,
+        },
       );
     });
 
@@ -1505,6 +1641,18 @@ describe('RidersService', () => {
       );
       expect(delivered.status).toBe(DeliveryStatus.DELIVERED);
       expect(delivered.deliveredAt).toBeDefined();
+      expect(ordersGateway.notifyRiderAssignment).toHaveBeenCalledTimes(5);
+      expect(
+        ordersGateway.notifyRiderAssignment.mock.calls.map(
+          ([, payload]) => (payload as { status: DeliveryStatus }).status,
+        ),
+      ).toEqual([
+        DeliveryStatus.ACCEPTED,
+        DeliveryStatus.PICKED_UP,
+        DeliveryStatus.ON_THE_WAY,
+        DeliveryStatus.ARRIVED,
+        DeliveryStatus.DELIVERED,
+      ]);
     });
 
     it('rejects arriving at a later route stop before the current stop', async () => {

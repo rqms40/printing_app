@@ -32,8 +32,12 @@ import { ChatGateway } from '../chat/chat.gateway';
 import { FilesService } from '../files/files.service';
 import { MAX_SIGNATURE_PROOF_BYTES } from './dto/update-delivery-status.dto';
 import { TamSurveyRequirement } from '../tam-surveys/entities/tam-survey-requirement.entity';
-import { DispatchPlanService } from './dispatch-plan.service';
+import {
+  DispatchPlanService,
+  type DispatchPlanProgress,
+} from './dispatch-plan.service';
 import { DispatchStopStatus } from './entities/dispatch-plan-stop.entity';
+import { DispatchPlanStatus } from './entities/dispatch-plan.entity';
 import {
   DeliveryQueueUpdatedPayload,
   OrdersGateway,
@@ -267,9 +271,20 @@ export class RidersService {
       this.logger.warn(
         `Post-commit assignment publication failed for order ${orderId}: ${error}`,
       );
-      order = await this.dataSource
-        .getRepository(Order)
-        .findOneOrFail({ where: { id: orderId } });
+      try {
+        order = await this.dataSource
+          .getRepository(Order)
+          .findOneOrFail({ where: { id: orderId } });
+      } catch (reloadError) {
+        this.logger.warn(
+          `Post-commit assignment reload failed for order ${orderId}: ${reloadError}`,
+        );
+        order = {
+          ...assignmentResult.previous,
+          assignedRiderId: assignmentResult.riderProfile.userId,
+          orderStatus: OrderStatus.RIDER_ASSIGNED,
+        };
+      }
     }
     return {
       order,
@@ -710,18 +725,37 @@ export class RidersService {
       }
 
       if (newStatus === DeliveryStatus.DELIVERED) {
-        await this.dispatchPlanService.advanceStop(
+        const dispatchPlanProgress = await this.dispatchPlanService.advanceStop(
           manager,
           profile.id,
           assignment.id,
           DispatchStopStatus.COMPLETED,
         );
+        return {
+          savedAssignment,
+          orderStatus,
+          previous,
+          surveyRequirement,
+          closedConversationIds,
+          dispatchPlanProgress,
+          orderRef: order.orderId,
+        };
       } else if (newStatus === DeliveryStatus.DECLINED) {
-        await this.dispatchPlanService.skipStopIfPlanned(
-          manager,
-          profile.id,
-          assignment.id,
-        );
+        const dispatchPlanProgress =
+          await this.dispatchPlanService.skipStopIfPlanned(
+            manager,
+            profile.id,
+            assignment.id,
+          );
+        return {
+          savedAssignment,
+          orderStatus,
+          previous,
+          surveyRequirement,
+          closedConversationIds,
+          dispatchPlanProgress,
+          orderRef: order.orderId,
+        };
       }
 
       return {
@@ -730,8 +764,23 @@ export class RidersService {
         previous,
         surveyRequirement,
         closedConversationIds,
+        dispatchPlanProgress: null,
+        orderRef: order.orderId,
       };
     });
+
+    await this.publishRiderAssignmentUpdated(
+      userId,
+      result.savedAssignment,
+      result.orderRef,
+    );
+    if (result.dispatchPlanProgress) {
+      await this.publishDispatchPlanProgress(
+        userId,
+        profile.id,
+        result.dispatchPlanProgress,
+      );
+    }
 
     if (result.savedAssignment.status === DeliveryStatus.DELIVERED) {
       try {
@@ -777,6 +826,60 @@ export class RidersService {
     }
 
     return result.savedAssignment;
+  }
+
+  private async publishRiderAssignmentUpdated(
+    riderUserId: number,
+    assignment: DeliveryAssignment,
+    orderRef: string,
+  ): Promise<void> {
+    try {
+      await Promise.resolve(
+        this.ordersGateway.notifyRiderAssignment(riderUserId, {
+          assignmentId: assignment.id,
+          orderId: assignment.orderId,
+          orderRef,
+          status: assignment.status,
+          change:
+            assignment.status === DeliveryStatus.DECLINED
+              ? 'unassigned'
+              : 'statusUpdated',
+        }),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Rider assignment WS notification failed for assignment ${assignment.id}: ${error}`,
+      );
+    }
+  }
+
+  private async publishDispatchPlanProgress(
+    riderUserId: number,
+    riderProfileId: number,
+    progress: DispatchPlanProgress,
+  ): Promise<void> {
+    try {
+      await Promise.resolve(
+        this.ordersGateway.notifyRiderDispatchPlanUpdated(riderUserId, {
+          riderProfileId,
+          planId: progress.planId,
+          planVersion: progress.planVersion,
+          change:
+            progress.planStatus === DispatchPlanStatus.COMPLETED
+              ? 'completed'
+              : progress.stopStatus === DispatchStopStatus.SKIPPED
+                ? 'stopSkipped'
+                : 'stopCompleted',
+          assignmentId: progress.assignmentId,
+          stopStatus: progress.stopStatus,
+          planStatus: progress.planStatus,
+        }),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Dispatch plan ${progress.planId} progress WS notification failed for rider ${riderProfileId}: ${error}`,
+      );
+    }
   }
 
   private async publishCurrentDeliveryQueue(riderId: number): Promise<void> {

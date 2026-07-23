@@ -783,6 +783,8 @@ export class AdminController {
           assignmentId: savedAssignment.id,
           orderId: order.id,
           orderRef: order.orderId,
+          status: savedAssignment.status,
+          change: 'assigned',
         }),
       );
     } catch (error) {

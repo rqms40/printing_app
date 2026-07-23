@@ -59,22 +59,26 @@ class ConversationNotifier extends StateNotifier<ConversationState> {
   VoidCallback? _removeBotTypingListener;
   VoidCallback? _removeChatMessageListener;
   VoidCallback? _removeMessagesReadListener;
+  VoidCallback? _removeChatConnectionListener;
   bool _initialized = false;
 
   Future<void> initialize() async {
-    if (_initialized) return;
+    if (_initialized) {
+      // Retry path: a session that lost its socket after a successful first
+      // initialize (e.g. server restart, expired token, network blip) must be
+      // able to reconnect — an early return here would make the Retry button
+      // a permanent no-op.
+      if (!_ws.isChatConnected) {
+        await _reconnect();
+      }
+      return;
+    }
     _initialized = true;
     state = state.copyWith(isLoading: true);
     final socketConnected = await _ws.connectChat();
     if (socketConnected) {
       _ws.joinConversation(_conversationId);
-      _removeChatMessageListener = _ws.listenForChatMessages(
-        _conversationId,
-        _onMessage,
-      );
-      _removeBotTypingListener = _ws.listenForBotTyping(_onBotTyping);
-      _removeMessagesReadListener =
-          _ws.listenForMessagesRead(_onMessagesRead);
+      _registerSocketListeners();
     }
     final historyLoaded = await _loadHistory();
     state = state.copyWith(isLoading: false, isConnected: socketConnected);
@@ -84,6 +88,42 @@ class ConversationNotifier extends StateNotifier<ConversationState> {
     }
     if (!socketConnected) {
       _initialized = false;
+    }
+  }
+
+  void _registerSocketListeners() {
+    _removeChatMessageListener ??= _ws.listenForChatMessages(
+      _conversationId,
+      _onMessage,
+    );
+    _removeBotTypingListener ??= _ws.listenForBotTyping(_onBotTyping);
+    _removeMessagesReadListener ??= _ws.listenForMessagesRead(_onMessagesRead);
+    _removeChatConnectionListener ??= _ws.listenForChatConnection(
+      _onChatConnection,
+    );
+  }
+
+  Future<void> _reconnect() async {
+    final connected = await _ws.connectChat();
+    if (!mounted) return;
+    if (connected) {
+      // The socket may be brand new (fresh token) — re-join the room and
+      // re-register listeners in case the service cleared them.
+      _ws.joinConversation(_conversationId);
+      _registerSocketListeners();
+    }
+    state = state.copyWith(isConnected: connected);
+  }
+
+  /// Keeps the UI health state in sync with the socket and restores server
+  /// room membership, which is per-socket and lost on every reconnect.
+  void _onChatConnection(bool connected) {
+    if (!mounted) return;
+    if (connected) {
+      _ws.joinConversation(_conversationId);
+      state = state.copyWith(isConnected: true);
+    } else {
+      state = state.copyWith(isConnected: false);
     }
   }
 
@@ -182,6 +222,7 @@ class ConversationNotifier extends StateNotifier<ConversationState> {
     _removeBotTypingListener?.call();
     _removeChatMessageListener?.call();
     _removeMessagesReadListener?.call();
+    _removeChatConnectionListener?.call();
     _ws.leaveConversation(_conversationId);
     _refreshGlobalUnreadCount();
     super.dispose();

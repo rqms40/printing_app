@@ -1489,6 +1489,21 @@ class MockWebSocketService extends _i1.Mock implements _i10.WebSocketService {
   );
 
   @override
+  _i8.Future<void> connectHomeFeed({required _i12.VoidCallback? onUpdated}) =>
+      (super.noSuchMethod(
+            Invocation.method(#connectHomeFeed, [], {#onUpdated: onUpdated}),
+            returnValue: _i8.Future<void>.value(),
+            returnValueForMissingStub: _i8.Future<void>.value(),
+          )
+          as _i8.Future<void>);
+
+  @override
+  void disconnectHomeFeed() => super.noSuchMethod(
+    Invocation.method(#disconnectHomeFeed, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
   _i8.Future<bool> connectChat() =>
       (super.noSuchMethod(
             Invocation.method(#connectChat, []),
@@ -1496,6 +1511,15 @@ class MockWebSocketService extends _i1.Mock implements _i10.WebSocketService {
             returnValueForMissingStub: _i8.Future<bool>.value(false),
           )
           as _i8.Future<bool>);
+
+  @override
+  _i12.VoidCallback listenForChatConnection(dynamic Function(bool)? callback) =>
+      (super.noSuchMethod(
+            Invocation.method(#listenForChatConnection, [callback]),
+            returnValue: () {},
+            returnValueForMissingStub: () {},
+          )
+          as _i12.VoidCallback);
 
   @override
   void joinConversation(int? conversationId) => super.noSuchMethod(
