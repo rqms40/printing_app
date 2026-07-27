@@ -1,7 +1,8 @@
 String? riderMessageRouteForPayload(Map<String, dynamic> payload) {
   final nested = payload['metadata'];
+  if (nested is Map && nested.keys.any((key) => key is! String)) return null;
   final metadata = nested is Map
-      ? <String, dynamic>{...payload, ...Map<String, dynamic>.from(nested)}
+      ? <String, dynamic>{...payload, ...nested.cast<String, dynamic>()}
       : payload;
   if (metadata['type'] != 'rider_message' ||
       metadata['conversationType'] != 'rider') {

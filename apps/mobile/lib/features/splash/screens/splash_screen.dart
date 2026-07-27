@@ -87,6 +87,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   Future<void> _startAnimation() async {
+    // Start stored-session restoration immediately. A terminated-app
+    // notification route waits for this authentication transition instead of
+    // navigating away from splash and cancelling auto-login.
+    final autoLogin = ref.read(authProvider.notifier).tryAutoLogin();
+
     // Preload the audio to completely eliminate startup playback delay
     await _introPlayer.setSource(AssetSource('audio/Intro_SF.m4a'));
     _outroPlayer.setSource(AssetSource('audio/Outro_SF.m4a'));
@@ -112,11 +117,15 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     if (!mounted) return;
 
     // Get yellow dot position and expand it relative to Stack
-    final RenderBox? dotBox = _yellowDotKey.currentContext?.findRenderObject() as RenderBox?;
-    final RenderBox? stackBox = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    final RenderBox? dotBox =
+        _yellowDotKey.currentContext?.findRenderObject() as RenderBox?;
+    final RenderBox? stackBox =
+        _stackKey.currentContext?.findRenderObject() as RenderBox?;
     if (dotBox != null && stackBox != null) {
       setState(() {
-        final globalDotCenter = dotBox.localToGlobal(dotBox.size.center(Offset.zero));
+        final globalDotCenter = dotBox.localToGlobal(
+          dotBox.size.center(Offset.zero),
+        );
         _yellowDotPosition = stackBox.globalToLocal(globalDotCenter);
       });
     }
@@ -139,8 +148,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
 
-    // Try auto-login before navigating
-    await ref.read(authProvider.notifier).tryAutoLogin();
+    // Ensure the startup authentication attempt is settled before choosing
+    // the ordinary post-splash destination.
+    await autoLogin;
     if (!mounted) return;
 
     final authState = ref.read(authProvider);
@@ -180,8 +190,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     // Final colors for each dot position (row, col)
     final dotColors = [
       [fg, fg, yellow], // row 0
-      [fg, fg, fg],     // row 1
-      [fg, fg, grey],   // row 2
+      [fg, fg, fg], // row 1
+      [fg, fg, grey], // row 2
     ];
 
     // Build a map from (row,col) → controller index
@@ -217,7 +227,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: List.generate(3, (row) {
                         return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: spacing / 2),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: spacing / 2,
+                          ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: List.generate(3, (col) {
@@ -225,8 +237,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                               final finalColor = dotColors[row][col];
 
                               return Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: spacing / 2),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: spacing / 2,
+                                ),
                                 child: _DotAnimator(
                                   animation: CurvedAnimation(
                                     parent: _dotControllers[ctrlIndex],
@@ -236,11 +249,17 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                                     return Transform.scale(
                                       scale: 0.4 + (0.6 * t),
                                       child: Container(
-                                        key: (row == 0 && col == 2) ? _yellowDotKey : null,
+                                        key: (row == 0 && col == 2)
+                                            ? _yellowDotKey
+                                            : null,
                                         width: dotSize,
                                         height: dotSize,
                                         decoration: BoxDecoration(
-                                          color: Color.lerp(ghost, finalColor, t),
+                                          color: Color.lerp(
+                                            ghost,
+                                            finalColor,
+                                            t,
+                                          ),
                                           shape: BoxShape.circle,
                                         ),
                                       ),
@@ -264,7 +283,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                 animation: _expandController,
                 builder: (context, child) {
                   // easeIn overlaps nicely with the end of the previous bounce
-                  final curvedValue = Curves.easeIn.transform(_expandController.value);
+                  final curvedValue = Curves.easeIn.transform(
+                    _expandController.value,
+                  );
                   final scale = 1.0 + (curvedValue * 150);
 
                   return Positioned(
@@ -320,7 +341,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                         ),
                       ),
                     ),
-                    
+
                     // Bottom "Powered by GRIDGO" text and tagline
                     Align(
                       alignment: Alignment.bottomCenter,
@@ -333,14 +354,18 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                               Text(
                                 'Powered by GRIDGO',
                                 style: AppTypography.overline.copyWith(
-                                  color: const Color(0xFF1E1E1E).withValues(alpha: 0.6),
+                                  color: const Color(
+                                    0xFF1E1E1E,
+                                  ).withValues(alpha: 0.6),
                                 ),
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 'MAPPING THE FUTURE OF PRINTING',
                                 style: AppTypography.overline.copyWith(
-                                  color: const Color(0xFF1E1E1E).withValues(alpha: 0.6),
+                                  color: const Color(
+                                    0xFF1E1E1E,
+                                  ).withValues(alpha: 0.6),
                                   letterSpacing: 1.2,
                                 ),
                               ),

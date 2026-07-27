@@ -41,6 +41,17 @@ void main() {
         }),
         isNull,
       );
+      expect(
+        riderMessageRouteForPayload({
+          'type': 'rider_message',
+          'metadata': {
+            7: 'non-string-key',
+            'conversationType': 'rider',
+            'conversationId': 5,
+          },
+        }),
+        isNull,
+      );
     });
   });
 

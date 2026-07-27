@@ -325,7 +325,7 @@ describe('ChatGateway', () => {
       expect(firebaseService.sendToDevice).not.toHaveBeenCalled();
     });
 
-    it('keeps a saved rider message successful when notification delivery fails', async () => {
+    it('still attempts push when persistent notification delivery fails', async () => {
       usersService.findSocketIdentity.mockResolvedValue({
         id: 12,
         role: UserRole.RIDER,
@@ -358,7 +358,15 @@ describe('ChatGateway', () => {
         'message-received',
         expect.objectContaining({ id: 83 }),
       );
-      expect(firebaseService.sendToDevice).not.toHaveBeenCalled();
+      expect(firebaseService.sendToDevice).toHaveBeenCalledWith(
+        'customer-device-token',
+        'New message from your rider',
+        'On my way',
+        expect.objectContaining({
+          type: 'rider_message',
+          conversationId: '5',
+        }),
+      );
       consoleWarn.mockRestore();
     });
 

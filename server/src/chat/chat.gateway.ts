@@ -163,20 +163,22 @@ export class ChatGateway implements OnGatewayConnection {
     conversationId: number,
     message: string,
   ): Promise<void> {
-    try {
-      const context =
-        await this.chatService.getRiderMessageNotificationContext(
-          conversationId,
-        );
-      if (!context) return;
+    const context = await this.chatService
+      .getRiderMessageNotificationContext(conversationId)
+      .catch((error) => {
+        console.warn('Rider message notification context failed:', error);
+        return null;
+      });
+    if (!context) return;
 
-      const title = 'New message from your rider';
-      const metadata = {
-        conversationId,
-        conversationType: 'rider',
-        orderId: context.orderId,
-        orderRef: context.orderRef,
-      };
+    const title = 'New message from your rider';
+    const metadata = {
+      conversationId,
+      conversationType: 'rider',
+      orderId: context.orderId,
+      orderRef: context.orderRef,
+    };
+    try {
       await this.notificationsService.create({
         userId: context.customerId,
         title,
@@ -185,8 +187,12 @@ export class ChatGateway implements OnGatewayConnection {
         orderRef: context.orderRef,
         metadata,
       });
+    } catch (error) {
+      console.warn('Rider message persistent notification failed:', error);
+    }
 
-      if (context.customerFcmToken) {
+    if (context.customerFcmToken) {
+      try {
         await this.firebaseService.sendToDevice(
           context.customerFcmToken,
           title,
@@ -199,9 +205,9 @@ export class ChatGateway implements OnGatewayConnection {
             orderRef: context.orderRef,
           },
         );
+      } catch (error) {
+        console.warn('Rider message push notification failed:', error);
       }
-    } catch (error) {
-      console.warn('Rider message notification delivery failed:', error);
     }
   }
 

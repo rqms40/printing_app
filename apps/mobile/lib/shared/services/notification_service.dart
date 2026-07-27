@@ -141,6 +141,10 @@ class NotificationService {
     return route;
   }
 
+  static void retainPendingRoute(String route) {
+    _pendingRoute = route;
+  }
+
   static const _pendingTokenDeletionKey = 'fcm_token_deletion_pending';
   static StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   static Future<void> _tokenDeletionTail = Future<void>.value();

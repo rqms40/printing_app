@@ -859,11 +859,22 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ],
   );
-  final routeSubscription = NotificationService.routeStream.listen(router.go);
-  ref.onDispose(routeSubscription.cancel);
-  final pendingRoute = NotificationService.takePendingRoute();
-  if (pendingRoute != null) {
-    Future<void>.microtask(() => router.go(pendingRoute));
+  void openNotificationRoute(String route) {
+    if (ref.read(authProvider).status == AuthStatus.authenticated) {
+      router.go(route);
+    } else {
+      NotificationService.retainPendingRoute(route);
+    }
   }
+
+  final routeSubscription = NotificationService.routeStream.listen(
+    openNotificationRoute,
+  );
+  ref.onDispose(routeSubscription.cancel);
+  ref.listen(authProvider, (_, next) {
+    if (next.status != AuthStatus.authenticated) return;
+    final pendingRoute = NotificationService.takePendingRoute();
+    if (pendingRoute != null) router.go(pendingRoute);
+  });
   return router;
 });
