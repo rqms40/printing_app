@@ -5,61 +5,34 @@ import 'package:flutter/services.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 
-const double _mmPerInch = 25.4;
 const double _bandHeight = 76;
 const double _dialRadius = 30;
 const double _controlsGap = 10;
 const double _controlsHeight = 42;
 
 @immutable
-class ArchitectScale {
-  const ArchitectScale({
-    required this.label,
-    required this.inchesPerFoot,
-    this.isFullSize = false,
-  });
+class MetricScale {
+  const MetricScale({required this.denominator})
+    : assert(denominator > 0, 'Scale denominator must be positive');
 
-  /// Visible triangular architect scale label.
-  final String label;
+  final int denominator;
 
-  /// Drawing inches that represent one real-world foot.
-  ///
-  /// Example: 1/4" = 1'-0" has 0.25 drawing inches per real foot.
-  final double inchesPerFoot;
+  String get label => '1:$denominator';
 
-  /// True for the triangular ruler's standard full-size inch face.
-  final bool isFullSize;
-
-  double drawingInchesForRealFeet(double realFeet) => realFeet * inchesPerFoot;
-
-  double realFeetForDrawingInches(double drawingInches) =>
-      drawingInches / inchesPerFoot;
+  double drawingMillimetresForRealMetres(double realMetres) =>
+      realMetres * 1000 / denominator;
 }
 
-const ArchitectScale kDefaultArchitectScale = ArchitectScale(
-  label: '1/4" = 1\'-0"',
-  inchesPerFoot: 1 / 4,
-);
+const MetricScale kDefaultMetricScale = MetricScale(denominator: 100);
 
-/// Standard imperial triangular architect scale faces.
-///
-/// These intentionally exclude metric and engineer decimal scales.
-const List<ArchitectScale> kArchitectScales = <ArchitectScale>[
-  kDefaultArchitectScale,
-  ArchitectScale(label: '1/8" = 1\'-0"', inchesPerFoot: 1 / 8),
-  ArchitectScale(label: '1/2" = 1\'-0"', inchesPerFoot: 1 / 2),
-  ArchitectScale(label: '3/32" = 1\'-0"', inchesPerFoot: 3 / 32),
-  ArchitectScale(label: '3/16" = 1\'-0"', inchesPerFoot: 3 / 16),
-  ArchitectScale(label: '3/8" = 1\'-0"', inchesPerFoot: 3 / 8),
-  ArchitectScale(label: '3/4" = 1\'-0"', inchesPerFoot: 3 / 4),
-  ArchitectScale(label: '1" = 1\'-0"', inchesPerFoot: 1),
-  ArchitectScale(label: '1 1/2" = 1\'-0"', inchesPerFoot: 1.5),
-  ArchitectScale(label: '3" = 1\'-0"', inchesPerFoot: 3),
-  ArchitectScale(
-    label: 'Full size (1/16")',
-    inchesPerFoot: 12,
-    isFullSize: true,
-  ),
+const List<MetricScale> kMetricScales = <MetricScale>[
+  MetricScale(denominator: 20),
+  MetricScale(denominator: 25),
+  MetricScale(denominator: 50),
+  MetricScale(denominator: 75),
+  kDefaultMetricScale,
+  MetricScale(denominator: 125),
+  MetricScale(denominator: 200),
 ];
 
 Rect rulerFittedDrawingRect({
@@ -84,7 +57,7 @@ Rect rulerFittedDrawingRect({
   );
 }
 
-double drawingPixelsPerInchForViewport({
+double drawingPixelsPerMillimetreForViewport({
   required Size viewportSize,
   required double drawingWidthMm,
   required double drawingHeightMm,
@@ -94,24 +67,17 @@ double drawingPixelsPerInchForViewport({
     drawingWidthMm: drawingWidthMm,
     drawingHeightMm: drawingHeightMm,
   );
-  final drawingWidthIn = drawingWidthMm / _mmPerInch;
-  if (drawingWidthIn <= 0) return 0;
-  return rect.width / drawingWidthIn;
+  if (drawingWidthMm <= 0) return 0;
+  return rect.width / drawingWidthMm;
 }
 
-double pixelsForRealFeet({
-  required ArchitectScale scale,
-  required double realFeet,
-  required double pxPerDrawingInch,
+double pixelsForRealMetres({
+  required MetricScale scale,
+  required double realMetres,
+  required double pxPerDrawingMillimetre,
 }) {
-  return scale.drawingInchesForRealFeet(realFeet) * pxPerDrawingInch;
-}
-
-double pixelsForDrawingInches({
-  required double drawingInches,
-  required double pxPerDrawingInch,
-}) {
-  return drawingInches * pxPerDrawingInch;
+  return scale.drawingMillimetresForRealMetres(realMetres) *
+      pxPerDrawingMillimetre;
 }
 
 Offset rulerCenterForGesture({
@@ -173,13 +139,13 @@ class RulerOverlay extends StatefulWidget {
     super.key,
     required this.widthMm,
     required this.heightMm,
-    this.scale = kDefaultArchitectScale,
+    this.scale = kDefaultMetricScale,
     this.onCycleScale,
   });
 
   final double widthMm;
   final double heightMm;
-  final ArchitectScale scale;
+  final MetricScale scale;
   final VoidCallback? onCycleScale;
 
   @override
@@ -228,7 +194,7 @@ class _RulerOverlayState extends State<RulerOverlay> {
           drawingWidthMm: widget.widthMm,
           drawingHeightMm: widget.heightMm,
         );
-        final pxPerDrawingInch = drawingPixelsPerInchForViewport(
+        final pxPerDrawingMillimetre = drawingPixelsPerMillimetreForViewport(
           viewportSize: size,
           drawingWidthMm: widget.widthMm,
           drawingHeightMm: widget.heightMm,
@@ -303,7 +269,7 @@ class _RulerOverlayState extends State<RulerOverlay> {
                         child: CustomPaint(
                           painter: _RulerTicksPainter(
                             scale: widget.scale,
-                            pxPerDrawingInch: pxPerDrawingInch,
+                            pxPerDrawingMillimetre: pxPerDrawingMillimetre,
                             brand: brand,
                             dialClearance: _dialRadius + 14,
                           ),
@@ -391,7 +357,8 @@ class _RotationDial extends StatelessWidget {
           final r = local - const Offset(_dialRadius, _dialRadius);
           final r2 = r.distanceSquared;
           if (r2 < 16) return;
-          final delta = (r.dx * details.delta.dy - r.dy * details.delta.dx) / r2;
+          final delta =
+              (r.dx * details.delta.dy - r.dy * details.delta.dx) / r2;
           onRotateBy(delta);
         },
         child: CustomPaint(
@@ -455,9 +422,11 @@ class _DialPainter extends CustomPainter {
       canvas.drawLine(
         c + Offset(math.cos(a), math.sin(a)) * inner,
         c + Offset(math.cos(a), math.sin(a)) * outer,
-        isCardinal ? tickPaint : (Paint()
-          ..color = brand.withValues(alpha: 0.4)
-          ..strokeWidth = 1),
+        isCardinal
+            ? tickPaint
+            : (Paint()
+                ..color = brand.withValues(alpha: 0.4)
+                ..strokeWidth = 1),
       );
     }
   }
@@ -502,7 +471,7 @@ class _ScaleChip extends StatelessWidget {
   });
 
   final Color brand;
-  final ArchitectScale scale;
+  final MetricScale scale;
   final VoidCallback? onCycleScale;
 
   @override
@@ -533,15 +502,9 @@ class _ScaleChip extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    'Document-calibrated',
-                    style: _chipCaptionStyle,
-                  ),
+                  Text('Document-calibrated', style: _chipCaptionStyle),
                   Text(' · ', style: _chipCaptionStyle),
-                  Text(
-                    'Tap to change',
-                    style: _chipCaptionStyle,
-                  ),
+                  Text('Tap to change', style: _chipCaptionStyle),
                 ],
               ),
             ],
@@ -562,13 +525,13 @@ class _ScaleChip extends StatelessWidget {
 class _RulerTicksPainter extends CustomPainter {
   _RulerTicksPainter({
     required this.scale,
-    required this.pxPerDrawingInch,
+    required this.pxPerDrawingMillimetre,
     required this.brand,
     required this.dialClearance,
   });
 
-  final ArchitectScale scale;
-  final double pxPerDrawingInch;
+  final MetricScale scale;
+  final double pxPerDrawingMillimetre;
   final Color brand;
 
   /// Half-width of the centre zone kept free of labels (dial sits there).
@@ -591,13 +554,8 @@ class _RulerTicksPainter extends CustomPainter {
       edgePaint,
     );
 
-    if (pxPerDrawingInch <= 0 || scale.inchesPerFoot <= 0) return;
-
-    if (scale.isFullSize) {
-      _paintFullSizeTicks(canvas, size);
-    } else {
-      _paintFootTicks(canvas, size);
-    }
+    if (pxPerDrawingMillimetre <= 0 || scale.denominator <= 0) return;
+    _paintMetreTicks(canvas, size);
   }
 
   static const double _majorTickLen = 17;
@@ -624,27 +582,27 @@ class _RulerTicksPainter extends CustomPainter {
     );
   }
 
-  void _paintFootTicks(Canvas canvas, Size size) {
+  void _paintMetreTicks(Canvas canvas, Size size) {
     final cx = size.width / 2;
-    final footPx = pixelsForRealFeet(
+    final metrePx = pixelsForRealMetres(
       scale: scale,
-      realFeet: 1,
-      pxPerDrawingInch: pxPerDrawingInch,
+      realMetres: 1,
+      pxPerDrawingMillimetre: pxPerDrawingMillimetre,
     );
-    if (footPx <= 0) return;
+    if (metrePx <= 0) return;
 
-    final tickEveryFeet = _niceFootInterval(footPx, minSpacingPx: 8);
-    final labelEveryFeet = _niceFootInterval(footPx, minSpacingPx: 46);
-    final inchPx = footPx / 12;
-    final drawInchMinors = inchPx >= 4 && footPx >= 28;
+    final tickEveryMetres = _niceMetreInterval(metrePx, minSpacingPx: 8);
+    final labelEveryMetres = _niceMetreInterval(metrePx, minSpacingPx: 46);
+    final tenthMetrePx = metrePx / 10;
+    final drawMinorTicks = tenthMetrePx >= 4 && metrePx >= 28;
 
     for (final direction in const [1, -1]) {
-      for (var feet = 0; ; feet += tickEveryFeet) {
-        final x = cx + direction * feet * footPx;
+      for (var metres = 0; ; metres += tickEveryMetres) {
+        final x = cx + direction * metres * metrePx;
         if (x < 0 || x > size.width) break;
-        if (direction == -1 && feet == 0) continue;
+        if (direction == -1 && metres == 0) continue;
 
-        final isLabelTick = feet % labelEveryFeet == 0;
+        final isLabelTick = metres % labelEveryMetres == 0;
         _tick(
           canvas,
           size,
@@ -653,20 +611,20 @@ class _RulerTicksPainter extends CustomPainter {
           isLabelTick ? _majorPaint : _mediumPaint,
         );
         if (isLabelTick && (x - cx).abs() > dialClearance) {
-          _paintLabel(canvas, size, '$feet\'', x);
+          _paintLabel(canvas, size, '${metres}m', x);
         }
 
-        if (drawInchMinors) {
-          for (var inch = 1; inch < 12 * tickEveryFeet; inch++) {
-            final ix = x + direction * inch * inchPx;
-            if (ix < 0 || ix > size.width) break;
-            final isHalfFoot = inch % 6 == 0;
+        if (drawMinorTicks) {
+          for (var tenth = 1; tenth < 10 * tickEveryMetres; tenth++) {
+            final minorX = x + direction * tenth * tenthMetrePx;
+            if (minorX < 0 || minorX > size.width) break;
+            final isHalfMetre = tenth % 5 == 0;
             _tick(
               canvas,
               size,
-              ix,
-              isHalfFoot ? _mediumTickLen : _minorTickLen,
-              isHalfFoot ? _mediumPaint : _minorPaint,
+              minorX,
+              isHalfMetre ? _mediumTickLen : _minorTickLen,
+              isHalfMetre ? _mediumPaint : _minorPaint,
             );
           }
         }
@@ -674,81 +632,10 @@ class _RulerTicksPainter extends CustomPainter {
     }
   }
 
-  void _paintFullSizeTicks(Canvas canvas, Size size) {
-    final cx = size.width / 2;
-    final sixteenthPx = pixelsForDrawingInches(
-      drawingInches: 1 / 16,
-      pxPerDrawingInch: pxPerDrawingInch,
-    );
-    if (sixteenthPx <= 0) return;
-
-    final tickEverySixteenths = _niceSixteenthInterval(
-      sixteenthPx,
-      minSpacingPx: 3,
-    );
-    final labelEveryInches = _niceInchInterval(
-      pxPerDrawingInch,
-      minSpacingPx: 46,
-    );
-
-    for (final direction in const [1, -1]) {
-      for (var sixteenths = 0; ; sixteenths += tickEverySixteenths) {
-        final x = cx + direction * sixteenths * sixteenthPx;
-        if (x < 0 || x > size.width) break;
-        if (direction == -1 && sixteenths == 0) continue;
-
-        final isInch = sixteenths % 16 == 0;
-        final isHalfInch = sixteenths % 8 == 0;
-        final isQuarterInch = sixteenths % 4 == 0;
-        _tick(
-          canvas,
-          size,
-          x,
-          isInch
-              ? _majorTickLen
-              : isHalfInch
-              ? _mediumTickLen
-              : _minorTickLen,
-          isInch
-              ? _majorPaint
-              : isQuarterInch
-              ? _mediumPaint
-              : _minorPaint,
-        );
-
-        final inches = sixteenths ~/ 16;
-        if (isInch &&
-            inches % labelEveryInches == 0 &&
-            (x - cx).abs() > dialClearance) {
-          _paintLabel(canvas, size, '$inches"', x);
-        }
-      }
-    }
-  }
-
-  int _niceFootInterval(double footPx, {required double minSpacingPx}) {
+  int _niceMetreInterval(double metrePx, {required double minSpacingPx}) {
     const candidates = <int>[1, 2, 4, 5, 8, 10, 16, 20, 25, 50, 100];
     for (final candidate in candidates) {
-      if (candidate * footPx >= minSpacingPx) return candidate;
-    }
-    return candidates.last;
-  }
-
-  int _niceSixteenthInterval(
-    double sixteenthPx, {
-    required double minSpacingPx,
-  }) {
-    const candidates = <int>[1, 2, 4, 8, 16, 32, 64];
-    for (final candidate in candidates) {
-      if (candidate * sixteenthPx >= minSpacingPx) return candidate;
-    }
-    return candidates.last;
-  }
-
-  int _niceInchInterval(double inchPx, {required double minSpacingPx}) {
-    const candidates = <int>[1, 2, 4, 6, 12, 24, 48];
-    for (final candidate in candidates) {
-      if (candidate * inchPx >= minSpacingPx) return candidate;
+      if (candidate * metrePx >= minSpacingPx) return candidate;
     }
     return candidates.last;
   }
@@ -772,7 +659,7 @@ class _RulerTicksPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _RulerTicksPainter old) =>
       old.scale != scale ||
-      old.pxPerDrawingInch != pxPerDrawingInch ||
+      old.pxPerDrawingMillimetre != pxPerDrawingMillimetre ||
       old.brand != brand ||
       old.dialClearance != dialClearance;
 }
