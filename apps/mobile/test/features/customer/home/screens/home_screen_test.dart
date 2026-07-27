@@ -126,6 +126,31 @@ void main() {
       );
     });
 
+    testWidgets('names the icon-only cart button for screen readers', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1080, 3200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(_wrap(const HomeScreen()));
+      await tester.pump(const Duration(seconds: 1));
+
+      // An unnamed icon button renders on Flutter web as a role="button"
+      // element with no accessible name, which axe reports as a serious
+      // aria-command-name violation and fails the release evidence gate.
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Semantics &&
+              widget.properties.button == true &&
+              (widget.properties.label?.startsWith('Cart') ?? false),
+        ),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('renders bento grid hero text', (tester) async {
       tester.view.physicalSize = const Size(1080, 3200);
       tester.view.devicePixelRatio = 1.0;

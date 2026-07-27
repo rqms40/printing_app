@@ -608,24 +608,34 @@ class _HeaderIconButton extends StatelessWidget {
     required this.onTap,
     required this.colors,
     required this.child,
+    required this.semanticLabel,
   });
 
   final VoidCallback onTap;
   final AppColorSet colors;
   final Widget child;
 
+  /// Required: the child is icon-only, so without this the button reaches
+  /// screen readers (and axe) as a control with no accessible name.
+  final String semanticLabel;
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 38,
-        height: 38,
-        decoration: BoxDecoration(
-          color: colors.surfaceVariant,
-          borderRadius: AppRadius.borderMd,
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      container: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: colors.surfaceVariant,
+            borderRadius: AppRadius.borderMd,
+          ),
+          child: Center(child: ExcludeSemantics(child: child)),
         ),
-        child: Center(child: child),
       ),
     );
   }
@@ -1089,6 +1099,9 @@ class _CartWidgetState extends ConsumerState<_CartWidget>
       key: _anchorKey,
       onTap: _toggle,
       colors: colors,
+      semanticLabel: itemCount > 0
+          ? 'Cart, $itemCount ${itemCount == 1 ? 'item' : 'items'}'
+          : 'Cart, empty',
       child: Stack(
         clipBehavior: Clip.none,
         children: [
