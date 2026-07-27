@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
 import 'package:printing_app/features/tutorial/repository/tutorial_repository.dart';
@@ -31,10 +32,20 @@ class TutorialNotifier extends StateNotifier<Set<TutorialKey>> {
     state = {...state, key};
     final accountId = _accountId;
     final currentKeys = state;
-    _pendingWrite = _pendingWrite.then(
-      (_) =>
-          _repo.markSeen(key, currentKeys: currentKeys, accountId: accountId),
-    );
+    // The chain is shared by every later write and by flushPendingWrites(), so
+    // a single failure must not leave it permanently rejected. The repository
+    // already queues a dirty key for retry, so swallowing here loses nothing.
+    _pendingWrite = _pendingWrite
+        .then(
+          (_) => _repo.markSeen(
+            key,
+            currentKeys: currentKeys,
+            accountId: accountId,
+          ),
+        )
+        .catchError((Object error) {
+          debugPrint('Tutorial write failed for ${key.name}: $error');
+        });
     await _pendingWrite;
   }
 

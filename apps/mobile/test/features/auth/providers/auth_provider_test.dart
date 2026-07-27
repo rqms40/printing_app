@@ -7,6 +7,8 @@ import 'package:printing_app/features/auth/providers/auth_provider.dart';
 import 'package:printing_app/features/customer/address/providers/address_provider.dart';
 import 'package:printing_app/features/customer/profile/models/account_state.dart';
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
+import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
+import 'package:printing_app/features/tutorial/repository/tutorial_repository.dart';
 import 'package:printing_app/shared/models/address.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
 import 'package:printing_app/shared/services/notification_service.dart';
@@ -781,4 +783,89 @@ void main() {
       expect(updated.id, '1'); // preserved
     });
   });
+
+  group('logout is never blocked by queued tutorial writes', () {
+    tearDown(() {
+      AuthNotifier.tutorialFlushTimeout = const Duration(seconds: 2);
+      NotificationService.takePendingRoute();
+    });
+
+    test('completes and clears auth when the tutorial flush fails', () async {
+      final container = ProviderContainer(
+        overrides: [
+          authProvider.overrideWith((ref) => AuthNotifier(ref, true)),
+          tutorialProvider.overrideWith(
+            (ref) => _StubTutorialNotifier(
+              flush: () => Future<void>.error(StateError('prefs unavailable')),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(authProvider.notifier).devBypass('customer');
+
+      await container.read(authProvider.notifier).logout();
+
+      expect(
+        container.read(authProvider).status,
+        AuthStatus.unauthenticated,
+      );
+    });
+
+    test('completes when the tutorial flush never settles', () async {
+      AuthNotifier.tutorialFlushTimeout = const Duration(milliseconds: 20);
+      final never = Completer<void>();
+      addTearDown(() {
+        if (!never.isCompleted) never.complete();
+      });
+      final container = ProviderContainer(
+        overrides: [
+          authProvider.overrideWith((ref) => AuthNotifier(ref, true)),
+          tutorialProvider.overrideWith(
+            (ref) => _StubTutorialNotifier(flush: () => never.future),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(authProvider.notifier).devBypass('customer');
+
+      await container
+          .read(authProvider.notifier)
+          .logout()
+          .timeout(const Duration(seconds: 5));
+
+      expect(
+        container.read(authProvider).status,
+        AuthStatus.unauthenticated,
+      );
+    });
+
+    test('drops a push route captured before the next sign-in', () async {
+      final container = ProviderContainer(
+        overrides: [
+          authProvider.overrideWith((ref) => AuthNotifier(ref, true)),
+          tutorialProvider.overrideWith((ref) => _StubTutorialNotifier()),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(authProvider.notifier).devBypass('customer');
+      NotificationService.retainPendingRoute('/customer/chat/512?type=rider');
+
+      await container.read(authProvider.notifier).logout();
+
+      expect(NotificationService.takePendingRoute(), isNull);
+    });
+  });
+}
+
+class _StubTutorialNotifier extends TutorialNotifier {
+  _StubTutorialNotifier({Future<void> Function()? flush})
+    : _flush = flush,
+      super(TutorialRepository());
+
+  final Future<void> Function()? _flush;
+
+  @override
+  Future<void> flushPendingWrites() =>
+      _flush?.call() ?? Future<void>.value();
 }

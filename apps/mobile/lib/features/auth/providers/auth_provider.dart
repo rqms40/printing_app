@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/features/customer/address/providers/address_provider.dart';
@@ -291,6 +292,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
   void Function()? _removeSurveyRequiredListener;
   int _authGeneration = 0;
   Future<void> _tokenMutationTail = Future<void>.value();
+
+  /// How long logout waits for queued tutorial writes before giving up.
+  @visibleForTesting
+  static Duration tutorialFlushTimeout = const Duration(seconds: 2);
 
   int _beginAuthOperation() => ++_authGeneration;
 
@@ -648,8 +653,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final shouldRevokeFcmToken = _manageFcmSession && !_isDevBypassSession;
     _disconnectRealtimeSession();
     _prepareSessionScopedData();
-    await _ref?.read(tutorialProvider.notifier).flushPendingWrites();
+    // Best-effort: give in-flight tutorial writes a bounded window to land
+    // while the token is still valid, but never let a slow or failing write
+    // hold the session open or strand the bearer token.
+    final flush = _ref?.read(tutorialProvider.notifier).flushPendingWrites();
+    if (flush != null) {
+      try {
+        await flush.timeout(tutorialFlushTimeout);
+      } catch (e) {
+        debugPrint('Tutorial flush skipped during logout: $e');
+      }
+    }
     _ref?.read(tutorialProvider.notifier).resetStateOnly();
+    // A push tap captured while signed out must not replay into the next
+    // account's session.
+    NotificationService.takePendingRoute();
     // Reset session-scoped UI flags so they fire again on next login.
     _ref?.read(nextBatchShownThisSessionProvider.notifier).state = false;
     // AuthState() clears everything including betaLocked.

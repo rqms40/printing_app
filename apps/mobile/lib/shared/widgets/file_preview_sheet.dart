@@ -95,6 +95,13 @@ class _MetricScalePickerState extends State<MetricScalePicker> {
       setState(() => _customError = 'Enter a positive whole number');
       return;
     }
+    if (!isSupportedMetricScaleDenominator(value)) {
+      setState(
+        () => _customError =
+            'Enter a scale between 1:1 and 1:$kMaxMetricScaleDenominator',
+      );
+      return;
+    }
     setState(() => _customError = null);
     widget.onSelected(value);
   }

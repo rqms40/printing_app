@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' show Color;
 
@@ -174,6 +175,23 @@ class NotificationService {
   /// GRIDGO brand yellow — accents the small icon and progress bar.
   static const _brandColor = Color(0xFFFFDE58);
 
+  /// Routes a tap on a locally-rendered notification.
+  ///
+  /// Foreground messages are drawn by the local plugin rather than by FCM, so
+  /// their taps never reach [FirebaseMessaging.onMessageOpenedApp].
+  @visibleForTesting
+  static void handleLocalNotificationResponse(String? payload) {
+    if (payload == null || payload.isEmpty) return;
+    try {
+      final decoded = jsonDecode(payload);
+      if (decoded is! Map) return;
+      if (decoded.keys.any((key) => key is! String)) return;
+      handleNotificationTap(decoded.cast<String, dynamic>());
+    } catch (e) {
+      debugPrint('Ignored malformed notification payload: $e');
+    }
+  }
+
   static Future<void> _ensureLocalNotifications() async {
     if (_localNotificationsReady) return;
     await _localNotifications.initialize(
@@ -181,6 +199,8 @@ class NotificationService {
         // White dot-grid silhouette; Android tints it with the accent color.
         android: AndroidInitializationSettings('ic_notification'),
       ),
+      onDidReceiveNotificationResponse: (response) =>
+          handleLocalNotificationResponse(response.payload),
     );
     _localNotificationsReady = true;
   }
@@ -231,6 +251,9 @@ class NotificationService {
         spec.title,
         spec.body,
         NotificationDetails(android: android),
+        // Carries the routing metadata so a tap on a foreground notification
+        // deep-links the same way a background one does.
+        payload: jsonEncode(message.data),
       );
     } catch (e) {
       debugPrint('Failed to display notification: $e');

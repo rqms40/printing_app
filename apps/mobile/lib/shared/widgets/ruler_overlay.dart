@@ -10,6 +10,17 @@ const double _dialRadius = 30;
 const double _controlsGap = 10;
 const double _controlsHeight = 42;
 
+/// Largest supported `1:N` denominator.
+///
+/// Beyond this the metre ticks fall below a pixel apart, so the tick loop in
+/// [_RulerTicksPainter] would iterate for millions of steps and freeze the UI
+/// thread. Well above the largest preset (1:200) and any realistic site plan.
+const int kMaxMetricScaleDenominator = 5000;
+
+/// Whether [denominator] is a usable `1:N` metric scale.
+bool isSupportedMetricScaleDenominator(int denominator) =>
+    denominator > 0 && denominator <= kMaxMetricScaleDenominator;
+
 @immutable
 class MetricScale {
   const MetricScale({required this.denominator})
@@ -21,6 +32,14 @@ class MetricScale {
 
   double drawingMillimetresForRealMetres(double realMetres) =>
       realMetres * 1000 / denominator;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MetricScale && other.denominator == denominator;
+
+  @override
+  int get hashCode => denominator.hashCode;
 }
 
 const MetricScale kDefaultMetricScale = MetricScale(denominator: 100);
@@ -592,6 +611,9 @@ class _RulerTicksPainter extends CustomPainter {
     if (metrePx <= 0) return;
 
     final tickEveryMetres = _niceMetreInterval(metrePx, minSpacingPx: 8);
+    // The coarsest interval still lands sub-pixel: there is nothing legible to
+    // draw, and iterating would cost one step per fraction of a pixel.
+    if (tickEveryMetres * metrePx < 1) return;
     final labelEveryMetres = _niceMetreInterval(metrePx, minSpacingPx: 46);
     final tenthMetrePx = metrePx / 10;
     final drawMinorTicks = tenthMetrePx >= 4 && metrePx >= 28;
