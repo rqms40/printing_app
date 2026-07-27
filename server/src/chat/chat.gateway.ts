@@ -55,6 +55,12 @@ export class ChatGateway implements OnGatewayConnection {
 
   private readonly botInFlight = new Set<number>();
 
+  /**
+   * Most recent best-effort rider-message fan-out. Exposed so tests can await
+   * the notification work that deliberately does not block the message ack.
+   */
+  riderNotificationTask: Promise<void> = Promise.resolve();
+
   constructor(
     private readonly jwtService: JwtService,
     private readonly chatService: ChatService,
@@ -142,10 +148,14 @@ export class ChatGateway implements OnGatewayConnection {
       .emit('message-received', msg);
 
     if (senderRole === SenderRole.RIDER) {
-      await this.notifyCustomerOfRiderMessage(
+      // Best-effort fan-out: the message is already persisted and broadcast, so
+      // a slow or unreachable FCM must never delay the sender's ack.
+      this.riderNotificationTask = this.notifyCustomerOfRiderMessage(
         data.conversationId,
         trimmedContent || 'Sent an attachment',
-      );
+      ).catch((err) => {
+        console.error('[ChatGateway] rider notification error', err);
+      });
     }
 
     if (senderRole === SenderRole.CUSTOMER && trimmedContent) {

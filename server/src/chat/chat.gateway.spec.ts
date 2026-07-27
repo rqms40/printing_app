@@ -222,6 +222,7 @@ describe('ChatGateway', () => {
         { conversationId: 5, content: ' I am arriving now ' },
         socket as any,
       );
+      await gateway.riderNotificationTask;
 
       expect(notificationsService.create).toHaveBeenCalledWith({
         userId: 7,
@@ -248,6 +249,42 @@ describe('ChatGateway', () => {
           orderRef: 'ORD-10042',
         },
       );
+    });
+
+    it('acknowledges a rider message without waiting on push delivery', async () => {
+      usersService.findSocketIdentity.mockResolvedValue({
+        id: 12,
+        role: UserRole.RIDER,
+        isActive: true,
+      });
+      const socket = makeSocket({ data: { userId: 12, role: 'rider' } });
+      chatService.saveMessageForActor.mockResolvedValue({
+        id: 83,
+        conversationId: 5,
+        content: 'On my way',
+      });
+      chatService.getRiderMessageNotificationContext.mockResolvedValue({
+        customerId: 7,
+        orderId: 42,
+        orderRef: 'ORD-10042',
+        customerFcmToken: 'customer-device-token',
+      });
+      // A push provider that never settles must not hold the sender's ack.
+      let releasePush: () => void = () => {};
+      notificationsService.create.mockReturnValue(
+        new Promise((resolve) => {
+          releasePush = () => resolve({ id: 92 });
+        }),
+      );
+
+      const ack = await gateway.handleSendMessage(
+        { conversationId: 5, content: 'On my way' },
+        socket as any,
+      );
+
+      expect(ack).toEqual({ status: 'ok', messageId: 83 });
+      releasePush();
+      await gateway.riderNotificationTask;
     });
 
     it('uses an attachment description for an attachment-only rider message', async () => {
@@ -277,6 +314,7 @@ describe('ChatGateway', () => {
         },
         socket as any,
       );
+      await gateway.riderNotificationTask;
 
       expect(notificationsService.create).toHaveBeenCalledWith(
         expect.objectContaining({ message: 'Sent an attachment' }),
@@ -300,6 +338,7 @@ describe('ChatGateway', () => {
         { conversationId: 5, content: 'Hello' },
         socket as any,
       );
+      await gateway.riderNotificationTask;
 
       expect(notificationsService.create).not.toHaveBeenCalled();
       expect(firebaseService.sendToDevice).not.toHaveBeenCalled();
@@ -354,6 +393,7 @@ describe('ChatGateway', () => {
           socket as any,
         ),
       ).resolves.toEqual({ status: 'ok', messageId: 83 });
+      await gateway.riderNotificationTask;
       expect(server.emit).toHaveBeenCalledWith(
         'message-received',
         expect.objectContaining({ id: 83 }),
@@ -454,6 +494,7 @@ describe('ChatGateway', () => {
         { conversationId: 5, content: 'Hi' },
         socket as any,
       );
+      await gateway.riderNotificationTask;
 
       expect(chatService.saveMessageForActor).toHaveBeenCalledWith(
         5,
@@ -485,6 +526,7 @@ describe('ChatGateway', () => {
         { conversationId: 3, content: 'Hello' },
         socket as any,
       );
+      await gateway.riderNotificationTask;
       // Flush microtask queue so fire-and-forget triggerBotIfNeeded completes
       await new Promise((r) => setImmediate(r));
 
@@ -522,6 +564,7 @@ describe('ChatGateway', () => {
         { conversationId: 3, content: 'Hello' },
         socket as any,
       );
+      await gateway.riderNotificationTask;
       await new Promise((r) => setImmediate(r));
 
       // The customer must never be left on a dangling bot-typing indicator:
@@ -561,6 +604,7 @@ describe('ChatGateway', () => {
         { conversationId: 3, content: 'I can help' },
         socket as any,
       );
+      await gateway.riderNotificationTask;
       await new Promise((r) => setImmediate(r));
 
       expect(chatService.getBotResponse).not.toHaveBeenCalled();
