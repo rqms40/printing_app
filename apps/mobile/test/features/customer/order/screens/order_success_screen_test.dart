@@ -85,6 +85,30 @@ void main() {
     expect(find.text('View orders'), findsOneWidget);
   });
 
+  testWidgets('matches exact orders before shared-batch fallback', (
+    tester,
+  ) async {
+    final snapshots = [
+      _order(id: 'line-one', orderRef: 'SNAP-1', batchId: 'batch-shared'),
+      _order(id: 'line-two', orderRef: 'SNAP-2', batchId: 'batch-shared'),
+    ];
+    final notifier = _TestOrdersNotifier([
+      _order(id: 'line-one', orderRef: 'LIVE-1', batchId: 'batch-shared'),
+      _order(id: 'line-two', orderRef: 'LIVE-2', batchId: 'batch-shared'),
+    ]);
+
+    await _pumpSuccess(
+      tester,
+      payload: OrderSuccessPayload(createdOrders: snapshots),
+      ordersNotifier: notifier,
+    );
+
+    expect(find.text('LIVE-1'), findsOneWidget);
+    expect(find.text('LIVE-2'), findsOneWidget);
+    expect(find.text('SNAP-1'), findsNothing);
+    expect(find.text('SNAP-2'), findsNothing);
+  });
+
   testWidgets('reflects a newer provider status without refetching', (
     tester,
   ) async {
@@ -116,6 +140,43 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Back to home'), findsOneWidget);
+  });
+
+  testWidgets('renders malformed short slot times without throwing', (
+    tester,
+  ) async {
+    await _pumpSuccess(
+      tester,
+      payload: OrderSuccessPayload(
+        createdOrders: [
+          _order(
+            id: 'short-slot',
+            orderRef: 'ORD-SHORT',
+            assignedSlot: const AssignedDeliverySlot(
+              slotTemplateId: 4,
+              date: '2026-07-29',
+              startTime: '9',
+              endTime: '',
+            ),
+          ),
+        ],
+      ),
+    );
+
+    expect(find.text('2026-07-29 · 9–'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  test('payload snapshots do not retain mutable Order objects', () {
+    final sourceOrder = _order(id: 'immutable', orderRef: 'ORD-IMMUTABLE');
+    final source = <Order>[sourceOrder];
+
+    final payload = OrderSuccessPayload(createdOrders: source);
+    source.clear();
+
+    expect(payload.createdOrders, hasLength(1));
+    expect(payload.createdOrders.single, isNot(same(sourceOrder)));
+    expect(payload.createdOrders.single.id, 'immutable');
   });
 }
 
@@ -181,11 +242,13 @@ Order _order({
   String deliveryOption = 'delivery',
   AssignedDeliverySlot? assignedSlot,
   bool canTrackDelivery = false,
+  String? batchId,
 }) {
   final now = DateTime(2026, 7, 27);
   return Order(
     id: id,
     orderId: orderRef,
+    batchId: batchId,
     userId: '7',
     category: 'paper',
     fileName: 'print.pdf',

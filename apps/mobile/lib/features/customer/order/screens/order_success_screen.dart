@@ -14,9 +14,62 @@ import 'package:printing_app/shared/models/order.dart';
 
 class OrderSuccessPayload {
   OrderSuccessPayload({required List<Order> createdOrders})
-    : createdOrders = List<Order>.unmodifiable(createdOrders);
+    : createdOrders = List<OrderSuccessSnapshot>.unmodifiable(
+        createdOrders.map(OrderSuccessSnapshot.fromOrder),
+      );
 
-  final List<Order> createdOrders;
+  final List<OrderSuccessSnapshot> createdOrders;
+}
+
+class OrderSuccessSnapshot {
+  const OrderSuccessSnapshot({
+    required this.id,
+    required this.orderRef,
+    required this.orderStatus,
+    required this.deliveryOption,
+    required this.canTrackDelivery,
+    this.batchId,
+    this.assignedSlot,
+  });
+
+  factory OrderSuccessSnapshot.fromOrder(Order order) => OrderSuccessSnapshot(
+    id: order.id,
+    orderRef: order.orderId,
+    batchId: order.batchId,
+    orderStatus: order.orderStatus,
+    deliveryOption: order.deliveryOption,
+    assignedSlot: order.assignedSlot == null
+        ? null
+        : OrderSuccessSlotSnapshot.fromSlot(order.assignedSlot!),
+    canTrackDelivery: order.canTrackDelivery,
+  );
+
+  final String id;
+  final String orderRef;
+  final String? batchId;
+  final OrderStatus orderStatus;
+  final String deliveryOption;
+  final OrderSuccessSlotSnapshot? assignedSlot;
+  final bool canTrackDelivery;
+}
+
+class OrderSuccessSlotSnapshot {
+  const OrderSuccessSlotSnapshot({
+    required this.date,
+    required this.startTime,
+    required this.endTime,
+  });
+
+  factory OrderSuccessSlotSnapshot.fromSlot(AssignedDeliverySlot slot) =>
+      OrderSuccessSlotSnapshot(
+        date: slot.date,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+      );
+
+  final String date;
+  final String startTime;
+  final String endTime;
 }
 
 class OrderSuccessScreen extends ConsumerStatefulWidget {
@@ -46,13 +99,11 @@ class _OrderSuccessScreenState extends ConsumerState<OrderSuccessScreen> {
     final colors = Theme.of(context).brightness == Brightness.dark
         ? AppColors.dark
         : AppColors.light;
-    final snapshotOrders = widget.payload?.createdOrders ?? const <Order>[];
+    final snapshotOrders =
+        widget.payload?.createdOrders ?? const <OrderSuccessSnapshot>[];
     final liveOrders = ref.watch(ordersProvider);
-    final orders = [
-      for (final snapshot in snapshotOrders)
-        _findLiveOrder(liveOrders, snapshot) ?? snapshot,
-    ];
-    final orderRefs = orders.map((order) => order.orderId).toList();
+    final orders = _resolveSuccessOrders(snapshotOrders, liveOrders);
+    final orderRefs = orders.map((order) => order.orderRef).toList();
     final isMulti = orders.length > 1;
     final firstOrder = orders.firstOrNull;
 
@@ -142,15 +193,44 @@ class _OrderSuccessScreenState extends ConsumerState<OrderSuccessScreen> {
   }
 }
 
-Order? _findLiveOrder(List<Order> liveOrders, Order snapshot) {
-  for (final order in liveOrders) {
-    if (order.id == snapshot.id ||
-        order.orderId == snapshot.orderId ||
-        (snapshot.batchId != null && order.batchId == snapshot.batchId)) {
-      return order;
-    }
+List<OrderSuccessSnapshot> _resolveSuccessOrders(
+  List<OrderSuccessSnapshot> snapshots,
+  List<Order> liveOrders,
+) {
+  final consumedLiveIndexes = <int>{};
+  return [
+    for (final snapshot in snapshots)
+      (() {
+        for (var index = 0; index < liveOrders.length; index++) {
+          if (consumedLiveIndexes.contains(index)) continue;
+          final live = liveOrders[index];
+          if (live.id == snapshot.id || live.orderId == snapshot.orderRef) {
+            consumedLiveIndexes.add(index);
+            return OrderSuccessSnapshot.fromOrder(live);
+          }
+        }
+
+        if (snapshots.length == 1 && snapshot.batchId != null) {
+          for (var index = 0; index < liveOrders.length; index++) {
+            if (consumedLiveIndexes.contains(index)) continue;
+            final live = liveOrders[index];
+            if (live.batchId == snapshot.batchId) {
+              consumedLiveIndexes.add(index);
+              return OrderSuccessSnapshot.fromOrder(live);
+            }
+          }
+        }
+        return snapshot;
+      })(),
+  ];
+}
+
+String _formatSlotTime(String value) {
+  final trimmed = value.trim();
+  if (trimmed.length <= 5) {
+    return trimmed;
   }
-  return null;
+  return trimmed.substring(0, 5);
 }
 
 class _DeliveryStateCard extends StatelessWidget {
@@ -160,7 +240,7 @@ class _DeliveryStateCard extends StatelessWidget {
     required this.colors,
   });
 
-  final Order order;
+  final OrderSuccessSnapshot order;
   final int orderCount;
   final AppColorSet colors;
 
@@ -199,7 +279,7 @@ class _DeliveryStateCard extends StatelessWidget {
           if (slot != null) ...[
             const SizedBox(height: 4),
             Text(
-              '${slot.date} · ${slot.startTime.substring(0, 5)}–${slot.endTime.substring(0, 5)}',
+              '${slot.date} · ${_formatSlotTime(slot.startTime)}–${_formatSlotTime(slot.endTime)}',
               style: AppTypography.caption.copyWith(color: colors.onSurfaceDim),
             ),
           ],
