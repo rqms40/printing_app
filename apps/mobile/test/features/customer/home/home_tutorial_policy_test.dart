@@ -7,6 +7,7 @@ void main() {
     expect(
       shouldShowFirstOrderTutorial(
         ordersLoaded: true,
+        orderHistoryAuthoritative: true,
         hasOrderHistory: true,
         pipelineSeen: false,
         activeOrderStatuses: const [],
@@ -19,11 +20,25 @@ void main() {
     expect(
       shouldShowFirstOrderTutorial(
         ordersLoaded: true,
+        orderHistoryAuthoritative: true,
         hasOrderHistory: false,
         pipelineSeen: false,
         activeOrderStatuses: const [],
       ),
       isTrue,
+    );
+  });
+
+  test('failed empty history load is not authoritative', () {
+    expect(
+      shouldShowFirstOrderTutorial(
+        ordersLoaded: true,
+        orderHistoryAuthoritative: false,
+        hasOrderHistory: false,
+        pipelineSeen: false,
+        activeOrderStatuses: const [],
+      ),
+      isFalse,
     );
   });
 
@@ -33,6 +48,7 @@ void main() {
       expect(
         shouldShowFirstOrderTutorial(
           ordersLoaded: false,
+          orderHistoryAuthoritative: false,
           hasOrderHistory: false,
           pipelineSeen: false,
           activeOrderStatuses: const [],
@@ -42,6 +58,7 @@ void main() {
       expect(
         shouldShowFirstOrderTutorial(
           ordersLoaded: true,
+          orderHistoryAuthoritative: true,
           hasOrderHistory: false,
           pipelineSeen: true,
           activeOrderStatuses: const [],
@@ -51,6 +68,7 @@ void main() {
       expect(
         shouldShowFirstOrderTutorial(
           ordersLoaded: true,
+          orderHistoryAuthoritative: true,
           hasOrderHistory: false,
           pipelineSeen: false,
           activeOrderStatuses: const [OrderStatus.onTheWay],
@@ -64,6 +82,7 @@ void main() {
     expect(
       shouldShowFirstOrderTutorial(
         ordersLoaded: true,
+        orderHistoryAuthoritative: true,
         hasOrderHistory: true,
         pipelineSeen: false,
         activeOrderStatuses: const [OrderStatus.completedPickup],

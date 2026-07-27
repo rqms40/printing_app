@@ -502,6 +502,29 @@ void main() {
       expect(loadReports, 2);
     });
 
+    test('reports failed initial history load as non-authoritative', () async {
+      WebSocketService.disableOrdersSocketForTests = true;
+      failOrdersGet = true;
+      addTearDown(() {
+        failOrdersGet = false;
+        WebSocketService.disableOrdersSocketForTests = false;
+        WebSocketService.instance.disconnect();
+      });
+      final results = <bool>[];
+      final notifier = OrdersNotifier(
+        skipBootstrap: true,
+        realFlow: true,
+        onInitialLoadResult: results.add,
+      );
+      addTearDown(notifier.dispose);
+
+      await notifier.refreshOrders();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifier.state, isEmpty);
+      expect(results, [false]);
+    });
+
     test('session restart re-registers the delivery queue listener', () async {
       WebSocketService.disableOrdersSocketForTests = true;
       WebSocketService.instance.disconnect();

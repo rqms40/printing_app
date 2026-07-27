@@ -632,6 +632,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       _ref?.read(ordersProvider.notifier).clear();
     } catch (_) {}
     _ref?.read(ordersInitialLoadCompleteProvider.notifier).state = false;
+    _ref?.read(ordersInitialLoadAuthoritativeProvider.notifier).state = false;
     _ref?.read(liveRiderLocationProvider.notifier).state = null;
     _ref?.read(liveLocationSocketHealthProvider.notifier).state =
         LocationSocketHealth.disconnected;

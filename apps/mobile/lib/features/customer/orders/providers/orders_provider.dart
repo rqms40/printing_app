@@ -721,6 +721,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     bool skipBootstrap = false,
     this.onCompletionUpdate,
     this.onInitialLoadComplete,
+    this.onInitialLoadResult,
     bool? realFlow,
   }) : realFlow = realFlow ?? AppConstants.realFlow,
        super(initialState) {
@@ -732,6 +733,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
 
   final Future<void> Function()? onCompletionUpdate;
   final VoidCallback? onInitialLoadComplete;
+  final ValueChanged<bool>? onInitialLoadResult;
   final bool realFlow;
   String? errorMessage;
   VoidCallback? _removeOrderUpdateListener;
@@ -862,6 +864,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   Future<void> _fetchOrders() async {
     final sessionGeneration = _sessionGeneration;
     final fetchGeneration = ++_fetchGeneration;
+    var authoritative = false;
     try {
       final response = await ApiClient.instance.get('/orders');
       final data = response.data as List<dynamic>;
@@ -873,6 +876,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
         data.map((json) => _parseOrder(json as Map<String, dynamic>)).toList(),
       );
       errorMessage = null;
+      authoritative = true;
       debugPrint('OrdersProvider: Loaded ${state.length} orders from API');
     } catch (e) {
       if (!_isCurrentSession(sessionGeneration) ||
@@ -895,6 +899,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     }
     // Subscribe to all loaded orders in case socket connected before fetch completed.
     _subscribeToAllOrders();
+    scheduleMicrotask(() => onInitialLoadResult?.call(authoritative));
     if (!_initialLoadReported) {
       _initialLoadReported = true;
       scheduleMicrotask(() => onInitialLoadComplete?.call());
@@ -1233,10 +1238,17 @@ final ordersProvider = StateNotifierProvider<OrdersNotifier, List<Order>>((
     onInitialLoadComplete: () {
       ref.read(ordersInitialLoadCompleteProvider.notifier).state = true;
     },
+    onInitialLoadResult: (authoritative) {
+      ref.read(ordersInitialLoadAuthoritativeProvider.notifier).state =
+          authoritative;
+    },
   );
 });
 
 final ordersInitialLoadCompleteProvider = StateProvider<bool>((ref) => false);
+final ordersInitialLoadAuthoritativeProvider = StateProvider<bool>(
+  (ref) => false,
+);
 
 /// Reactive list of active (non-terminal) orders, sorted newest-updated first.
 /// Widgets that watch this will rebuild automatically on any WS or API update.

@@ -133,5 +133,29 @@ void main() {
       await nextSession.loadForAccount(accountId: 'customer-one');
       expect(nextSession.state, contains(TutorialKey.pipeline));
     });
+
+    test('stale server keys cannot erase a locally dirty completion', () async {
+      final repository = TutorialRepository(
+        patchServer: (_) async => throw StateError('offline'),
+      );
+      final notifier = TutorialNotifier(repository);
+      addTearDown(notifier.dispose);
+      await notifier.loadForAccount(
+        accountId: 'customer-one',
+        serverKeys: const [],
+      );
+
+      unawaited(notifier.markSeen(TutorialKey.pipeline));
+      await notifier.flushPendingWrites();
+      notifier.resetStateOnly();
+
+      final nextSession = TutorialNotifier(repository);
+      addTearDown(nextSession.dispose);
+      await nextSession.loadForAccount(
+        accountId: 'customer-one',
+        serverKeys: const [],
+      );
+      expect(nextSession.state, contains(TutorialKey.pipeline));
+    });
   });
 }

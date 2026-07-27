@@ -15,6 +15,7 @@ import 'package:printing_app/features/customer/order/providers/checkout_provider
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart'
     show
         activeOrdersProvider,
+        ordersInitialLoadAuthoritativeProvider,
         ordersInitialLoadCompleteProvider,
         ordersProvider;
 import 'package:printing_app/features/customer/home/widgets/home_feed_tile.dart';
@@ -51,11 +52,13 @@ bool shouldDeferHomeTutorial({
 
 bool shouldShowFirstOrderTutorial({
   required bool ordersLoaded,
+  required bool orderHistoryAuthoritative,
   required bool hasOrderHistory,
   required bool pipelineSeen,
   required Iterable<OrderStatus> activeOrderStatuses,
 }) {
   return !pipelineSeen &&
+      orderHistoryAuthoritative &&
       !hasOrderHistory &&
       !shouldDeferHomeTutorial(
         ordersLoaded: ordersLoaded,
@@ -65,13 +68,17 @@ bool shouldShowFirstOrderTutorial({
 
 final homeTutorialReadyProvider = Provider<bool>((ref) {
   final ordersLoaded = ref.watch(ordersInitialLoadCompleteProvider);
+  final orderHistoryAuthoritative = ref.watch(
+    ordersInitialLoadAuthoritativeProvider,
+  );
   final activeStatuses = ref
       .watch(activeOrdersProvider)
       .map((order) => order.orderStatus);
-  return !shouldDeferHomeTutorial(
-    ordersLoaded: ordersLoaded,
-    activeOrderStatuses: activeStatuses,
-  );
+  return orderHistoryAuthoritative &&
+      !shouldDeferHomeTutorial(
+        ordersLoaded: ordersLoaded,
+        activeOrderStatuses: activeStatuses,
+      );
 });
 
 /// Customer home screen — editorial redesign.
@@ -169,6 +176,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         .map((order) => order.orderStatus);
     final showFirstOrderTutorial = shouldShowFirstOrderTutorial(
       ordersLoaded: ref.read(ordersInitialLoadCompleteProvider),
+      orderHistoryAuthoritative: ref.read(
+        ordersInitialLoadAuthoritativeProvider,
+      ),
       hasOrderHistory: ref.read(ordersProvider).isNotEmpty,
       pipelineSeen: ref.read(tutorialSeenProvider(TutorialKey.pipeline)),
       activeOrderStatuses: activeOrderStatuses,
