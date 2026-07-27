@@ -139,6 +139,7 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
                 ),
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(),
+                  tooltip: 'Close',
                   icon: HugeIcon(
                     icon: HugeIcons.strokeRoundedCancel01,
                     color: colors.onSurfaceDim,

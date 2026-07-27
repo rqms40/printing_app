@@ -91,10 +91,14 @@ class _RiderStopRailState extends State<RiderStopRail> {
   }
 
   Widget _handle(AppColorSet colors, {required bool expand}) {
-    return GestureDetector(
-      key: const ValueKey('rider-rail-toggle'),
-      onTap: _toggle,
-      child: Container(
+    return Semantics(
+      button: true,
+      label: expand ? 'Expand stop list' : 'Collapse stop list',
+      container: true,
+      child: GestureDetector(
+        key: const ValueKey('rider-rail-toggle'),
+        onTap: _toggle,
+        child: Container(
         width: 30,
         height: 30,
         decoration: BoxDecoration(
@@ -104,13 +108,16 @@ class _RiderStopRailState extends State<RiderStopRail> {
             BoxShadow(color: Color(0x66000000), blurRadius: 6, offset: Offset(0, 2)),
           ],
         ),
-        child: Center(
-          child: Icon(
-            expand
-                ? Icons.keyboard_double_arrow_right_rounded
-                : Icons.keyboard_double_arrow_left_rounded,
-            color: Colors.black,
-            size: 20,
+          child: Center(
+            child: ExcludeSemantics(
+              child: Icon(
+                expand
+                    ? Icons.keyboard_double_arrow_right_rounded
+                    : Icons.keyboard_double_arrow_left_rounded,
+                color: Colors.black,
+                size: 20,
+              ),
+            ),
           ),
         ),
       ),

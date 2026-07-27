@@ -64,20 +64,27 @@ class RiderHomeHeader extends StatelessWidget {
             ],
           ),
         ),
-        GestureDetector(
-          onTap: () => context.go('/rider/notifications'),
-          child: Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: colors.surfaceVariant,
-              borderRadius: AppRadius.borderMd,
-            ),
-            child: Center(
-              child: HugeIcon(
-                icon: HugeIcons.strokeRoundedNotification02,
-                size: 22,
-                color: colors.onBackground,
+        Semantics(
+          button: true,
+          label: 'Notifications',
+          container: true,
+          child: GestureDetector(
+            onTap: () => context.go('/rider/notifications'),
+            child: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: colors.surfaceVariant,
+                borderRadius: AppRadius.borderMd,
+              ),
+              child: Center(
+                child: ExcludeSemantics(
+                  child: HugeIcon(
+                    icon: HugeIcons.strokeRoundedNotification02,
+                    size: 22,
+                    color: colors.onBackground,
+                  ),
+                ),
               ),
             ),
           ),
