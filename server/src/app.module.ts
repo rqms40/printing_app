@@ -30,6 +30,7 @@ import {
   createTypeOrmOptions,
   initializeDataSourceWithPreSyncNormalization,
 } from './database/typeorm.config';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -82,6 +83,7 @@ import {
     SupportTicketsModule,
     HomeFeedModule,
   ],
+  controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}
