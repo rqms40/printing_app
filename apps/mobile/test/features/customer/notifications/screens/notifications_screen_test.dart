@@ -93,8 +93,6 @@ void main() {
     ) async {
       final api = _ScreenNotificationsApi();
       final notifier = NotificationsNotifier(api: api);
-      addTearDown(notifier.dispose);
-      await Future<void>.delayed(Duration.zero);
       final router = GoRouter(
         initialLocation: '/notifications',
         routes: [
@@ -132,8 +130,6 @@ void main() {
       (tester) async {
         final api = _ScreenNotificationsApi(malformed: true);
         final notifier = NotificationsNotifier(api: api);
-        addTearDown(notifier.dispose);
-        await Future<void>.delayed(Duration.zero);
 
         await tester.pumpWidget(
           ProviderScope(
@@ -144,7 +140,7 @@ void main() {
         await tester.pump(const Duration(seconds: 1));
 
         await tester.tap(find.text('New message from your rider'));
-        await tester.pump();
+        await tester.pumpAndSettle();
 
         expect(find.text('New message from your rider'), findsOneWidget);
         expect(api.markedReadIds, ['301']);
