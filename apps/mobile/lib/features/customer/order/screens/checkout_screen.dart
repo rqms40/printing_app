@@ -9,6 +9,7 @@ import 'package:printing_app/features/customer/address/providers/address_provide
 import 'package:printing_app/features/customer/beta/exceptions/beta_order_limit_exception.dart';
 import 'package:printing_app/features/customer/beta/widgets/beta_order_limit_sheet.dart';
 import 'package:printing_app/features/customer/order/providers/checkout_provider.dart';
+import 'package:printing_app/features/customer/order/screens/order_success_screen.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_delivery_card.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_footer.dart';
 import 'package:printing_app/features/customer/order/widgets/checkout_items_card.dart';
@@ -389,13 +390,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       final placed = await notifier.placeCheckout(ref.read(checkoutProvider));
       ref.read(checkoutProvider.notifier).reset();
       if (!context.mounted) return;
-      final refs = placed.map((o) => o.orderId).toList();
-      final firstNumericId = placed.isEmpty
-          ? null
-          : int.tryParse(placed.first.id);
       context.go(
         '/customer/order/success',
-        extra: {'orderRefs': refs, 'firstOrderId': firstNumericId},
+        extra: OrderSuccessPayload(createdOrders: placed),
       );
     } on BetaOrderLimitException {
       if (!context.mounted) return;

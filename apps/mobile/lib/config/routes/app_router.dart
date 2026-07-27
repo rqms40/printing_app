@@ -523,12 +523,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/customer/order/success',
         pageBuilder: (_, state) {
-          final extra = (state.extra as Map?) ?? const {};
-          final refs =
-              (extra['orderRefs'] as List?)?.cast<String>() ?? const <String>[];
-          final firstId = extra['firstOrderId'] as int?;
           return slideUpTransition(
-            OrderSuccessScreen(orderRefs: refs, firstOrderId: firstId),
+            OrderSuccessScreen(
+              payload: state.extra is OrderSuccessPayload
+                  ? state.extra as OrderSuccessPayload
+                  : null,
+            ),
             state,
           );
         },
