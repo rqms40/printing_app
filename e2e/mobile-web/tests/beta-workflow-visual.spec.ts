@@ -1753,7 +1753,21 @@ async function registerCustomerThroughUi(options: {
   }
   await dismissTutorials(actor.page);
   if (registrationStep === 3) {
-    await capture(run, actor, 3, /TODAY|NEXT BATCH/i, { userId });
+    // A brand-new customer's home only decides whether to show the first-order
+    // invitation once /orders resolves and confirms an empty history, so that
+    // sheet can mount after dismissTutorials has already given up. It replaces
+    // home in the semantics tree, so racing it makes this step flaky. Wait for
+    // the home to settle into one of its three real first-run states — the
+    // batch tile, the next-batch dialog, or the first-order invitation — and
+    // accept whichever one the customer would actually be looking at.
+    await expect
+      .poll(async () => (await actor.page.locator("body").textContent()) ?? "", {
+        message: "customer home settled after registration",
+      })
+      .toMatch(/TODAY|NEXT BATCH|Let's print something/i);
+    await capture(run, actor, 3, /TODAY|NEXT BATCH|Let's print something/i, {
+      userId,
+    });
   }
   return {
     actor,
