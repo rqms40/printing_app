@@ -205,6 +205,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
+      // The scrim is tappable, so it needs a name — otherwise it reaches the
+      // web semantics tree as a full-viewport button with nothing to announce.
+      barrierLabel: 'Dismiss first order guide',
       builder: (sheetCtx) {
         final media = MediaQuery.of(sheetCtx);
         // viewInsets covers keyboard; viewPadding covers system gestures/nav bar.

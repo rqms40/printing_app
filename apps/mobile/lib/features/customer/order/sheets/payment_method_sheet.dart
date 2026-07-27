@@ -24,6 +24,7 @@ class PaymentMethodSheet {
     PaymentMethod? current,
   }) {
     return showModalBottomSheet<PaymentMethod>(
+      barrierLabel: 'Dismiss payment method picker',
       context: context,
       isScrollControlled: true,
       builder: (_) => _PaymentSheetBody(initial: current),

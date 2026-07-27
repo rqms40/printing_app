@@ -57,7 +57,10 @@ class TutorialBubble extends StatelessWidget {
           children: [
             Row(
               children: [
-                HugeIcon(icon: icon, color: colors.brand, size: 20),
+                // Decorative: the title beside it names the step.
+                ExcludeSemantics(
+                  child: HugeIcon(icon: icon, color: colors.brand, size: 20),
+                ),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(

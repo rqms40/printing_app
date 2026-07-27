@@ -111,6 +111,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   void _showAddAddressPrompt() {
     showModalBottomSheet(
+      barrierLabel: 'Dismiss checkout sheet',
       context: context,
       isScrollControlled: true,
       useSafeArea: true,

@@ -80,9 +80,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     ConversationType.ai =>
       'Try asking about pricing, materials, or order steps.',
     ConversationType.admin => 'Send your order question and we will help.',
-    ConversationType.rider => _isRiderUser
-        ? 'Share your ETA or confirm the drop-off details.'
-        : 'Ask about pickup, delivery, or handoff timing.',
+    ConversationType.rider =>
+      _isRiderUser
+          ? 'Share your ETA or confirm the drop-off details.'
+          : 'Ask about pickup, delivery, or handoff timing.',
   };
 
   bool get _hasPendingAttachment => _pendingImageBytes != null;
@@ -189,6 +190,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     if (!mounted) return;
     final colors = _colors(context);
     showModalBottomSheet<void>(
+      barrierLabel: 'Dismiss chat options',
       context: context,
       backgroundColor: colors.surface,
       shape: const RoundedRectangleBorder(

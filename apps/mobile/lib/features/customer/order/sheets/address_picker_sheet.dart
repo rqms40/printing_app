@@ -40,6 +40,7 @@ class AddressPickerSheet {
     TemporaryCheckoutAddress? initialTemporaryAddress,
   }) {
     return showModalBottomSheet<CheckoutAddressSelection>(
+      barrierLabel: 'Dismiss address picker',
       context: context,
       isScrollControlled: true,
       useSafeArea: true,

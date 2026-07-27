@@ -852,6 +852,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
     }
 
     showModalBottomSheet<void>(
+      barrierLabel: 'Dismiss upload options',
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,

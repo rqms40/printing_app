@@ -23,6 +23,7 @@ class AssignDropSheet {
     required String? currentDropId,
   }) {
     return showModalBottomSheet<String>(
+      barrierLabel: 'Dismiss drop assignment',
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,

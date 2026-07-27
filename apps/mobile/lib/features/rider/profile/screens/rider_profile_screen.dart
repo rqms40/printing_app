@@ -36,6 +36,7 @@ class _RiderProfileScreenState extends ConsumerState<RiderProfileScreen> {
     var isSaving = false;
 
     showModalBottomSheet<void>(
+      barrierLabel: 'Dismiss rider profile options',
       context: context,
       isScrollControlled: true,
       useSafeArea: true,

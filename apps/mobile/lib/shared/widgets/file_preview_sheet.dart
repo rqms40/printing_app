@@ -44,6 +44,7 @@ class FilePreviewSheet extends ConsumerStatefulWidget {
     double? heightMm,
   }) {
     return showModalBottomSheet<void>(
+      barrierLabel: 'Dismiss file preview',
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -217,6 +218,7 @@ class _FilePreviewSheetState extends ConsumerState<FilePreviewSheet>
 
   Future<void> _openRulerScalePicker() async {
     final selectedDenominator = await showModalBottomSheet<int>(
+      barrierLabel: 'Dismiss metric scale picker',
       context: context,
       backgroundColor: Colors.transparent,
       useSafeArea: true,
