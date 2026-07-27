@@ -6,40 +6,53 @@ import 'package:printing_app/shared/services/api_client.dart';
 class TutorialRepository {
   static const _prefsKey = 'tutorial_seen_keys';
 
-  Future<Set<TutorialKey>> loadLocal() async {
+  String _storageKey(String? accountId) {
+    if (accountId == null || accountId.isEmpty) return _prefsKey;
+    return '${_prefsKey}_${Uri.encodeComponent(accountId)}';
+  }
+
+  Future<Set<TutorialKey>> loadLocal({String? accountId}) async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_prefsKey);
+    final raw = prefs.getString(_storageKey(accountId));
     if (raw == null) return {};
     final list = (jsonDecode(raw) as List).cast<String>();
-    return list
-        .map(TutorialKey.fromString)
-        .whereType<TutorialKey>()
-        .toSet();
+    return list.map(TutorialKey.fromString).whereType<TutorialKey>().toSet();
   }
 
-  Future<void> syncFromServer(List<String> serverKeys) async {
+  Future<void> syncFromServer(
+    List<String> serverKeys, {
+    String? accountId,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefsKey, jsonEncode(serverKeys));
+    await prefs.setString(_storageKey(accountId), jsonEncode(serverKeys));
   }
 
-  Future<void> markSeen(TutorialKey key, {required Set<TutorialKey> currentKeys}) async {
+  Future<void> markSeen(
+    TutorialKey key, {
+    required Set<TutorialKey> currentKeys,
+    String? accountId,
+  }) async {
     final updated = {...currentKeys, key};
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefsKey, jsonEncode(updated.map((k) => k.name).toList()));
-    _patchServer(updated.map((k) => k.name).toList());
+    await prefs.setString(
+      _storageKey(accountId),
+      jsonEncode(updated.map((k) => k.name).toList()),
+    );
+    await _patchServer(updated.map((k) => k.name).toList());
   }
 
-  Future<void> resetAll() async {
+  Future<void> resetAll({String? accountId}) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_prefsKey);
-    _patchServer([]);
+    await prefs.remove(_storageKey(accountId));
+    await _patchServer([]);
   }
 
-  void _patchServer(List<String> keys) {
+  Future<void> _patchServer(List<String> keys) async {
     try {
-      ApiClient.instance
-          .patch('/users/me/tutorials', data: {'keys': keys})
-          .then((_) {}, onError: (_) {});
+      await ApiClient.instance.patch(
+        '/users/me/tutorials',
+        data: {'keys': keys},
+      );
     } catch (_) {
       // Swallow sync errors (e.g. ApiClient not initialized in tests).
     }

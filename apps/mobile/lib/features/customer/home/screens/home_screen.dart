@@ -49,6 +49,20 @@ bool shouldDeferHomeTutorial({
       activeOrderStatuses.any(_activeDeliveryTutorialBlockingStatuses.contains);
 }
 
+bool shouldShowFirstOrderTutorial({
+  required bool ordersLoaded,
+  required bool hasOrderHistory,
+  required bool pipelineSeen,
+  required Iterable<OrderStatus> activeOrderStatuses,
+}) {
+  return !pipelineSeen &&
+      !hasOrderHistory &&
+      !shouldDeferHomeTutorial(
+        ordersLoaded: ordersLoaded,
+        activeOrderStatuses: activeOrderStatuses,
+      );
+}
+
 final homeTutorialReadyProvider = Provider<bool>((ref) {
   final ordersLoaded = ref.watch(ordersInitialLoadCompleteProvider);
   final activeStatuses = ref
@@ -150,8 +164,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return;
     }
 
+    final activeOrderStatuses = ref
+        .read(activeOrdersProvider)
+        .map((order) => order.orderStatus);
+    final showFirstOrderTutorial = shouldShowFirstOrderTutorial(
+      ordersLoaded: ref.read(ordersInitialLoadCompleteProvider),
+      hasOrderHistory: ref.read(ordersProvider).isNotEmpty,
+      pipelineSeen: ref.read(tutorialSeenProvider(TutorialKey.pipeline)),
+      activeOrderStatuses: activeOrderStatuses,
+    );
+
     // First-time pipeline: show welcome card → user taps "Show me how →" to start
-    if (!ref.read(tutorialSeenProvider(TutorialKey.pipeline))) {
+    if (showFirstOrderTutorial) {
       _homeTutorialAttempted = true;
       _showPipelineWelcomeCard();
       return;
@@ -991,8 +1015,7 @@ class _CartWidgetState extends ConsumerState<_CartWidget>
           final anchorPos = anchorBox.localToGlobal(Offset.zero);
           final anchorSize = anchorBox.size;
           topPos = anchorPos.dy + anchorSize.height + 8;
-          final desiredRight =
-              screenWidth - (anchorPos.dx + anchorSize.width);
+          final desiredRight = screenWidth - (anchorPos.dx + anchorSize.width);
           rightInset = desiredRight.clamp(
             sideMargin,
             screenWidth - maxWidth - sideMargin,
@@ -1551,4 +1574,3 @@ class _DataGridTile extends StatelessWidget {
     onTap: () => context.push('/customer/uploads'),
   );
 }
-

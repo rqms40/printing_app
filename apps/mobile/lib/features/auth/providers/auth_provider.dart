@@ -13,7 +13,6 @@ import 'package:printing_app/shared/services/token_storage.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
 import 'package:printing_app/features/customer/home/widgets/next_batch_session_trigger.dart';
 import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
-import 'package:printing_app/features/tutorial/repository/tutorial_repository.dart';
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/features/customer/tracking/providers/live_rider_location_provider.dart';
@@ -368,9 +367,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
             : AuthStatus.profileIncomplete,
         user: user,
       );
-      await TutorialRepository().syncFromServer(user.tutorialSeenKeys);
-      if (!_isAuthOperationCurrent(authGeneration)) return;
-      await _ref?.read(tutorialProvider.notifier).loadFromPrefs();
+      await _ref
+          ?.read(tutorialProvider.notifier)
+          .loadForAccount(
+            accountId: user.id,
+            serverKeys: user.tutorialSeenKeys,
+          );
       if (!_isAuthOperationCurrent(authGeneration)) return;
       await _ref?.read(accountStateProvider.notifier).refresh();
       if (!_isAuthOperationCurrent(authGeneration)) return;
@@ -465,9 +467,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
             : AuthStatus.profileIncomplete,
         user: user,
       );
-      await TutorialRepository().syncFromServer(user.tutorialSeenKeys);
-      if (!_isAuthOperationCurrent(authGeneration)) return;
-      await _ref?.read(tutorialProvider.notifier).loadFromPrefs();
+      await _ref
+          ?.read(tutorialProvider.notifier)
+          .loadForAccount(
+            accountId: user.id,
+            serverKeys: user.tutorialSeenKeys,
+          );
       if (!_isAuthOperationCurrent(authGeneration)) return;
       await _ref?.read(accountStateProvider.notifier).refresh();
       if (!_isAuthOperationCurrent(authGeneration)) return;
@@ -642,6 +647,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final shouldRevokeFcmToken = _manageFcmSession && !_isDevBypassSession;
     _disconnectRealtimeSession();
     _prepareSessionScopedData();
+    await _ref?.read(tutorialProvider.notifier).flushPendingWrites();
     _ref?.read(tutorialProvider.notifier).resetStateOnly();
     // Reset session-scoped UI flags so they fire again on next login.
     _ref?.read(nextBatchShownThisSessionProvider.notifier).state = false;
@@ -729,9 +735,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       user: user,
     );
     try {
-      await TutorialRepository().syncFromServer(user.tutorialSeenKeys);
-      if (!_isAuthOperationCurrent(authGeneration)) return;
-      await _ref?.read(tutorialProvider.notifier).loadFromPrefs();
+      await _ref
+          ?.read(tutorialProvider.notifier)
+          .loadForAccount(
+            accountId: user.id,
+            serverKeys: user.tutorialSeenKeys,
+          );
       if (!_isAuthOperationCurrent(authGeneration)) return;
       await _ref?.read(accountStateProvider.notifier).refresh();
       if (!_isAuthOperationCurrent(authGeneration)) return;

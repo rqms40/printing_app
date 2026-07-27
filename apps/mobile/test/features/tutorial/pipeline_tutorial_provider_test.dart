@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
 import 'package:printing_app/features/tutorial/providers/pipeline_tutorial_provider.dart';
 import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
+import 'package:printing_app/features/tutorial/repository/tutorial_repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -44,32 +47,35 @@ void main() {
       );
     });
 
-    test('advance from placeOrderButton triggers finish (marks pipeline seen, clears state)', () async {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
+    test(
+      'advance from placeOrderButton triggers finish (marks pipeline seen, clears state)',
+      () async {
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
 
-      final notifier = container.read(pipelineTutorialProvider.notifier);
-      notifier.start();
-      for (var i = 0; i < PipelineStep.placeOrderButton.index; i++) {
-        notifier.advance();
-      }
-      expect(
-        container.read(pipelineTutorialProvider).step,
-        PipelineStep.placeOrderButton,
-      );
+        final notifier = container.read(pipelineTutorialProvider.notifier);
+        notifier.start();
+        for (var i = 0; i < PipelineStep.placeOrderButton.index; i++) {
+          notifier.advance();
+        }
+        expect(
+          container.read(pipelineTutorialProvider).step,
+          PipelineStep.placeOrderButton,
+        );
 
-      notifier.advance(); // → finish()
+        notifier.advance(); // → finish()
 
-      final state = container.read(pipelineTutorialProvider);
-      expect(state.active, isFalse);
-      expect(state.step, PipelineStep.startPrintingTile);
+        final state = container.read(pipelineTutorialProvider);
+        expect(state.active, isFalse);
+        expect(state.step, PipelineStep.startPrintingTile);
 
-      await Future<void>.delayed(Duration.zero);
-      expect(
-        container.read(tutorialProvider).contains(TutorialKey.pipeline),
-        isTrue,
-      );
-    });
+        await Future<void>.delayed(Duration.zero);
+        expect(
+          container.read(tutorialProvider).contains(TutorialKey.pipeline),
+          isTrue,
+        );
+      },
+    );
 
     test('abandon marks pipeline seen and clears state', () async {
       final container = ProviderContainer();
@@ -107,6 +113,25 @@ void main() {
         container.read(tutorialProvider).contains(TutorialKey.pipeline),
         isFalse,
       );
+    });
+
+    test('pipeline completion survives immediate session reset', () async {
+      final repository = TutorialRepository();
+      final notifier = TutorialNotifier(repository);
+      addTearDown(notifier.dispose);
+      await notifier.loadForAccount(
+        accountId: 'customer-one',
+        serverKeys: const [],
+      );
+
+      unawaited(notifier.markSeen(TutorialKey.pipeline));
+      notifier.resetStateOnly();
+      await notifier.flushPendingWrites();
+
+      final nextSession = TutorialNotifier(repository);
+      addTearDown(nextSession.dispose);
+      await nextSession.loadForAccount(accountId: 'customer-one');
+      expect(nextSession.state, contains(TutorialKey.pipeline));
     });
   });
 }
