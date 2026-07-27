@@ -7,6 +7,8 @@ import { ConversationType } from './entities/conversation.entity';
 import { UsersService } from '../users/users.service';
 import { UserRole } from '../users/entities/user.entity';
 import { RealtimeSessionRegistry } from '../common/realtime/realtime-session-registry';
+import { NotificationsService } from '../notifications/notifications.service';
+import { FirebaseService } from '../firebase/firebase.service';
 
 const makeSocket = (overrides: Partial<{ auth: any; data: any }> = {}) => ({
   id: 'socket-1',
@@ -29,10 +31,13 @@ describe('ChatGateway', () => {
     markMessagesRead: jest.Mock;
     markMessagesReadForActor: jest.Mock;
     assertCanAccessConversationForActor: jest.Mock;
+    getRiderMessageNotificationContext: jest.Mock;
   };
   let jwtService: { verifyAsync: jest.Mock };
   let usersService: { findSocketIdentity: jest.Mock };
   let realtimeSessions: { register: jest.Mock };
+  let notificationsService: { create: jest.Mock };
+  let firebaseService: { sendToDevice: jest.Mock };
   let server: {
     to: jest.Mock;
     in: jest.Mock;
@@ -49,6 +54,7 @@ describe('ChatGateway', () => {
       markMessagesRead: jest.fn(),
       markMessagesReadForActor: jest.fn(),
       assertCanAccessConversationForActor: jest.fn().mockResolvedValue({}),
+      getRiderMessageNotificationContext: jest.fn(),
     };
     jwtService = {
       verifyAsync: jest.fn().mockResolvedValue({ sub: 42, role: 'customer' }),
@@ -61,6 +67,8 @@ describe('ChatGateway', () => {
       })),
     };
     realtimeSessions = { register: jest.fn() };
+    notificationsService = { create: jest.fn() };
+    firebaseService = { sendToDevice: jest.fn() };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -69,6 +77,8 @@ describe('ChatGateway', () => {
         { provide: JwtService, useValue: jwtService },
         { provide: UsersService, useValue: usersService },
         { provide: RealtimeSessionRegistry, useValue: realtimeSessions },
+        { provide: NotificationsService, useValue: notificationsService },
+        { provide: FirebaseService, useValue: firebaseService },
       ],
     }).compile();
 
@@ -188,6 +198,204 @@ describe('ChatGateway', () => {
   });
 
   describe('handleSendMessage', () => {
+    it('notifies the customer in-app and by push after a rider message', async () => {
+      usersService.findSocketIdentity.mockResolvedValue({
+        id: 12,
+        role: UserRole.RIDER,
+        isActive: true,
+      });
+      const socket = makeSocket({ data: { userId: 12, role: 'rider' } });
+      chatService.saveMessageForActor.mockResolvedValue({
+        id: 81,
+        conversationId: 5,
+        content: 'I am arriving now',
+      });
+      chatService.getRiderMessageNotificationContext.mockResolvedValue({
+        customerId: 7,
+        orderId: 42,
+        orderRef: 'ORD-10042',
+        customerFcmToken: 'customer-device-token',
+      });
+      notificationsService.create.mockResolvedValue({ id: 91 });
+
+      await gateway.handleSendMessage(
+        { conversationId: 5, content: ' I am arriving now ' },
+        socket as any,
+      );
+
+      expect(notificationsService.create).toHaveBeenCalledWith({
+        userId: 7,
+        title: 'New message from your rider',
+        message: 'I am arriving now',
+        type: 'rider_message',
+        orderRef: 'ORD-10042',
+        metadata: {
+          conversationId: 5,
+          conversationType: 'rider',
+          orderId: 42,
+          orderRef: 'ORD-10042',
+        },
+      });
+      expect(firebaseService.sendToDevice).toHaveBeenCalledWith(
+        'customer-device-token',
+        'New message from your rider',
+        'I am arriving now',
+        {
+          type: 'rider_message',
+          conversationId: '5',
+          conversationType: 'rider',
+          orderId: '42',
+          orderRef: 'ORD-10042',
+        },
+      );
+    });
+
+    it('uses an attachment description for an attachment-only rider message', async () => {
+      usersService.findSocketIdentity.mockResolvedValue({
+        id: 12,
+        role: UserRole.RIDER,
+        isActive: true,
+      });
+      const socket = makeSocket({ data: { userId: 12, role: 'rider' } });
+      chatService.saveMessageForActor.mockResolvedValue({
+        id: 82,
+        conversationId: 5,
+        content: null,
+      });
+      chatService.getRiderMessageNotificationContext.mockResolvedValue({
+        customerId: 7,
+        orderId: 42,
+        orderRef: 'ORD-10042',
+        customerFcmToken: null,
+      });
+
+      await gateway.handleSendMessage(
+        {
+          conversationId: 5,
+          attachmentFileId: 31,
+          attachmentMimeType: 'image/jpeg',
+        },
+        socket as any,
+      );
+
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'Sent an attachment' }),
+      );
+      expect(firebaseService.sendToDevice).not.toHaveBeenCalled();
+    });
+
+    it('does not notify anyone after a customer message', async () => {
+      const socket = makeSocket({ data: { userId: 1, role: 'customer' } });
+      chatService.saveMessageForActor.mockResolvedValue({
+        id: 10,
+        conversationId: 5,
+        content: 'Hello',
+      });
+      chatService.findConversation.mockResolvedValue({
+        customerId: 1,
+        type: ConversationType.ADMIN,
+      });
+
+      await gateway.handleSendMessage(
+        { conversationId: 5, content: 'Hello' },
+        socket as any,
+      );
+
+      expect(notificationsService.create).not.toHaveBeenCalled();
+      expect(firebaseService.sendToDevice).not.toHaveBeenCalled();
+    });
+
+    it('does not notify when authorization or message persistence fails', async () => {
+      usersService.findSocketIdentity.mockResolvedValue({
+        id: 12,
+        role: UserRole.RIDER,
+        isActive: true,
+      });
+      const socket = makeSocket({ data: { userId: 12, role: 'rider' } });
+      chatService.saveMessageForActor.mockRejectedValue(new Error('Forbidden'));
+
+      await expect(
+        gateway.handleSendMessage(
+          { conversationId: 5, content: 'Not allowed' },
+          socket as any,
+        ),
+      ).rejects.toThrow('Forbidden');
+
+      expect(notificationsService.create).not.toHaveBeenCalled();
+      expect(firebaseService.sendToDevice).not.toHaveBeenCalled();
+    });
+
+    it('keeps a saved rider message successful when notification delivery fails', async () => {
+      usersService.findSocketIdentity.mockResolvedValue({
+        id: 12,
+        role: UserRole.RIDER,
+        isActive: true,
+      });
+      const socket = makeSocket({ data: { userId: 12, role: 'rider' } });
+      chatService.saveMessageForActor.mockResolvedValue({
+        id: 83,
+        conversationId: 5,
+        content: 'On my way',
+      });
+      chatService.getRiderMessageNotificationContext.mockResolvedValue({
+        customerId: 7,
+        orderId: 42,
+        orderRef: 'ORD-10042',
+        customerFcmToken: 'customer-device-token',
+      });
+      notificationsService.create.mockRejectedValue(new Error('database down'));
+      const consoleWarn = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => {});
+
+      await expect(
+        gateway.handleSendMessage(
+          { conversationId: 5, content: 'On my way' },
+          socket as any,
+        ),
+      ).resolves.toEqual({ status: 'ok', messageId: 83 });
+      expect(server.emit).toHaveBeenCalledWith(
+        'message-received',
+        expect.objectContaining({ id: 83 }),
+      );
+      expect(firebaseService.sendToDevice).not.toHaveBeenCalled();
+      consoleWarn.mockRestore();
+    });
+
+    it('keeps a saved rider message successful when push delivery fails', async () => {
+      usersService.findSocketIdentity.mockResolvedValue({
+        id: 12,
+        role: UserRole.RIDER,
+        isActive: true,
+      });
+      const socket = makeSocket({ data: { userId: 12, role: 'rider' } });
+      chatService.saveMessageForActor.mockResolvedValue({
+        id: 84,
+        conversationId: 5,
+        content: 'At the gate',
+      });
+      chatService.getRiderMessageNotificationContext.mockResolvedValue({
+        customerId: 7,
+        orderId: 42,
+        orderRef: 'ORD-10042',
+        customerFcmToken: 'customer-device-token',
+      });
+      notificationsService.create.mockResolvedValue({ id: 94 });
+      firebaseService.sendToDevice.mockRejectedValue(new Error('FCM down'));
+      const consoleWarn = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => {});
+
+      await expect(
+        gateway.handleSendMessage(
+          { conversationId: 5, content: 'At the gate' },
+          socket as any,
+        ),
+      ).resolves.toEqual({ status: 'ok', messageId: 84 });
+      expect(notificationsService.create).toHaveBeenCalledTimes(1);
+      consoleWarn.mockRestore();
+    });
+
     it('disconnects a newly held customer before accepting a message', async () => {
       usersService.findSocketIdentity.mockResolvedValue({
         id: 1,

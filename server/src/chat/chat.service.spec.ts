@@ -116,6 +116,50 @@ describe('ChatService', () => {
     });
   });
 
+  describe('getRiderMessageNotificationContext', () => {
+    it('returns the customer, internal order id, public order reference, and token', async () => {
+      convRepo.findOne.mockResolvedValue({
+        id: 5,
+        customerId: 7,
+        type: ConversationType.RIDER,
+        orderId: 42,
+      });
+      orderRepo.findOne.mockResolvedValue({
+        id: 42,
+        orderId: 'ORD-10042',
+        userId: 7,
+        user: { fcmToken: 'customer-device-token' },
+      });
+
+      await expect(
+        service.getRiderMessageNotificationContext(5),
+      ).resolves.toEqual({
+        customerId: 7,
+        orderId: 42,
+        orderRef: 'ORD-10042',
+        customerFcmToken: 'customer-device-token',
+      });
+      expect(orderRepo.findOne).toHaveBeenCalledWith({
+        where: { id: 42, userId: 7 },
+        relations: ['user'],
+      });
+    });
+
+    it('returns null when the conversation is not an order rider conversation', async () => {
+      convRepo.findOne.mockResolvedValue({
+        id: 5,
+        customerId: 7,
+        type: ConversationType.ADMIN,
+        orderId: 42,
+      });
+
+      await expect(
+        service.getRiderMessageNotificationContext(5),
+      ).resolves.toBeNull();
+      expect(orderRepo.findOne).not.toHaveBeenCalled();
+    });
+  });
+
   describe('getOrCreateCustomerOrderConversation', () => {
     it('creates a rider conversation by deriving the assigned rider from the order', async () => {
       orderRepo.findOne.mockResolvedValue({

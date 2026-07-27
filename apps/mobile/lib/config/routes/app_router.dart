@@ -91,6 +91,7 @@ import 'package:printing_app/features/customer/beta/screens/beta_locked_screen.d
 import 'package:printing_app/features/onboarding/screens/onboarding_screen.dart';
 import 'package:printing_app/features/tutorial/models/tutorial_key.dart';
 import 'package:printing_app/features/tutorial/providers/tutorial_provider.dart';
+import 'package:printing_app/shared/services/notification_service.dart';
 
 // ---------------------------------------------------------------------------
 // Navigation keys (keep shell state across navigations)
@@ -262,7 +263,8 @@ String? resolveAppRedirect({
 final routerProvider = Provider<GoRouter>((ref) {
   final authNotifier = _AuthChangeNotifier(ref);
 
-  return GoRouter(
+  late final GoRouter router;
+  router = GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/splash',
     debugLogDiagnostics: true,
@@ -857,4 +859,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ],
   );
+  final routeSubscription = NotificationService.routeStream.listen(router.go);
+  ref.onDispose(routeSubscription.cancel);
+  final pendingRoute = NotificationService.takePendingRoute();
+  if (pendingRoute != null) {
+    Future<void>.microtask(() => router.go(pendingRoute));
+  }
+  return router;
 });

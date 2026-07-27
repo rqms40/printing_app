@@ -93,14 +93,16 @@ class NotificationsNotifier extends StateNotifier<List<AppNotification>> {
   void _listenToWsNotifications() {
     _removeWsNotificationListener ??= WebSocketService.instance
         .listenForNewNotifications((data) {
-          final notif = _parseNotification(data);
-          // Deduplicate: don't add if already present
-          if (!state.any((n) => n.id == notif.id)) {
-            state = [notif, ...state];
-            _playNotificationSound();
-          }
+          handleRealtimeNotification(data);
         });
     unawaited(WebSocketService.instance.connectNotifications());
+  }
+
+  void handleRealtimeNotification(Map<String, dynamic> data) {
+    final notif = _parseNotification(data);
+    if (state.any((n) => n.id == notif.id)) return;
+    state = [notif, ...state];
+    _playNotificationSound();
   }
 
   @override

@@ -10,6 +10,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../firebase_options.dart';
+import 'package:printing_app/features/customer/notifications/notification_route.dart';
 
 /// Top-level background message handler (must be top-level function).
 @pragma('vm:entry-point')
@@ -120,6 +121,26 @@ class NotificationService {
   static final _tokenRefreshController = StreamController<String>.broadcast();
   static Stream<String> get tokenRefreshStream =>
       _tokenRefreshController.stream;
+  static final _routeController = StreamController<String>.broadcast();
+  static Stream<String> get routeStream => _routeController.stream;
+  static String? _pendingRoute;
+
+  static void handleNotificationTap(Map<String, dynamic> data) {
+    final route = riderMessageRouteForPayload(data);
+    if (route == null) return;
+    if (_routeController.hasListener) {
+      _routeController.add(route);
+    } else {
+      _pendingRoute = route;
+    }
+  }
+
+  static String? takePendingRoute() {
+    final route = _pendingRoute;
+    _pendingRoute = null;
+    return route;
+  }
+
   static const _pendingTokenDeletionKey = 'fcm_token_deletion_pending';
   static StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   static Future<void> _tokenDeletionTail = Future<void>.value();
@@ -340,7 +361,7 @@ class NotificationService {
         // Listen for notification taps (app was in background)
         FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
           debugPrint('Notification tapped: ${message.notification?.title}');
-          // Could navigate to relevant screen based on message data
+          handleNotificationTap(message.data);
         });
 
         // Listen for token refresh
@@ -352,6 +373,10 @@ class NotificationService {
       }
 
       _initialized = true;
+      final initialMessage = await _messaging.getInitialMessage();
+      if (initialMessage != null) {
+        handleNotificationTap(initialMessage.data);
+      }
       return true;
     } catch (e) {
       debugPrint('FCM setup failed (platform may not support FCM): $e');

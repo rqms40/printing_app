@@ -19,6 +19,8 @@ import {
   reauthorizeRealtimeSocket,
 } from '../common/realtime/realtime-socket-auth';
 import { UserRole } from '../users/entities/user.entity';
+import { NotificationsService } from '../notifications/notifications.service';
+import { FirebaseService } from '../firebase/firebase.service';
 
 const CHAT_ACTOR_ROLE_BY_USER_ROLE: Record<UserRole, ChatActorRole> = {
   [UserRole.ADMIN]: 'admin',
@@ -58,6 +60,8 @@ export class ChatGateway implements OnGatewayConnection {
     private readonly chatService: ChatService,
     private readonly usersService: UsersService,
     private readonly realtimeSessions: RealtimeSessionRegistry,
+    private readonly notificationsService: NotificationsService,
+    private readonly firebaseService: FirebaseService,
   ) {}
 
   async handleConnection(client: ChatSocket) {
@@ -137,6 +141,13 @@ export class ChatGateway implements OnGatewayConnection {
       .to(`conversation:${data.conversationId}`)
       .emit('message-received', msg);
 
+    if (senderRole === SenderRole.RIDER) {
+      await this.notifyCustomerOfRiderMessage(
+        data.conversationId,
+        trimmedContent || 'Sent an attachment',
+      );
+    }
+
     if (senderRole === SenderRole.CUSTOMER && trimmedContent) {
       this.triggerBotIfNeeded(data.conversationId, trimmedContent).catch(
         (err) => {
@@ -146,6 +157,52 @@ export class ChatGateway implements OnGatewayConnection {
     }
 
     return { status: 'ok', messageId: msg.id };
+  }
+
+  private async notifyCustomerOfRiderMessage(
+    conversationId: number,
+    message: string,
+  ): Promise<void> {
+    try {
+      const context =
+        await this.chatService.getRiderMessageNotificationContext(
+          conversationId,
+        );
+      if (!context) return;
+
+      const title = 'New message from your rider';
+      const metadata = {
+        conversationId,
+        conversationType: 'rider',
+        orderId: context.orderId,
+        orderRef: context.orderRef,
+      };
+      await this.notificationsService.create({
+        userId: context.customerId,
+        title,
+        message,
+        type: 'rider_message',
+        orderRef: context.orderRef,
+        metadata,
+      });
+
+      if (context.customerFcmToken) {
+        await this.firebaseService.sendToDevice(
+          context.customerFcmToken,
+          title,
+          message,
+          {
+            type: 'rider_message',
+            conversationId: String(conversationId),
+            conversationType: 'rider',
+            orderId: String(context.orderId),
+            orderRef: context.orderRef,
+          },
+        );
+      }
+    } catch (error) {
+      console.warn('Rider message notification delivery failed:', error);
+    }
   }
 
   private async triggerBotIfNeeded(
