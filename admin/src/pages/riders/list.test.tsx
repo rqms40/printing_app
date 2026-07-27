@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
+import { App, ConfigProvider } from "antd";
+import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RiderList } from "./list";
@@ -11,24 +13,21 @@ vi.mock("@/providers/api-client", () => ({
   apiClient: { get: mockGet, post: vi.fn() },
 }));
 
-vi.mock("react-leaflet", () => ({
-  MapContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  TileLayer: () => null,
-  Marker: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Popup: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+vi.mock("@/components/google-map/grid-google-map", () => ({
+  GridGoogleMap: () => <div data-testid="grid-google-map" />,
 }));
 
-vi.mock("leaflet", () => {
-  class DivIcon {}
-  return {
-    default: {
-      Icon: {
-        Default: { prototype: {}, mergeOptions: vi.fn() },
-      },
-    },
-    DivIcon,
-  };
-});
+vi.mock("./dispatch-plan-panel", () => ({
+  DispatchPlanPanel: () => <div data-testid="dispatch-plan-panel" />,
+}));
+
+function renderPage(ui: ReactElement) {
+  return render(
+    <ConfigProvider>
+      <App>{ui}</App>
+    </ConfigProvider>,
+  );
+}
 
 const riders = [
   {
@@ -72,6 +71,8 @@ const readyOrder = {
 };
 
 describe("RiderList", () => {
+  // Ant Design table + map chrome is slow under happy-dom on this page.
+  vi.setConfig({ testTimeout: 15000 });
   beforeEach(() => vi.clearAllMocks());
   afterEach(cleanup);
 
@@ -82,36 +83,52 @@ describe("RiderList", () => {
         : Promise.resolve({ data: [] }),
     );
 
-    render(<RiderList />);
+    renderPage(<RiderList />);
 
     expect(await screen.findByText("Rider request failed")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry riders" })).toBeInTheDocument();
     expect(screen.queryByText("Total Deliveries")).not.toBeInTheDocument();
   });
 
-  it("offers assignment only to server-eligible riders", async () => {
-    mockGet.mockImplementation((url: string) =>
-      Promise.resolve({ data: url === "/admin/riders" ? riders : [readyOrder] }),
-    );
+  it(
+    "offers assignment only to server-eligible riders",
+    async () => {
+      mockGet.mockImplementation((url: string) =>
+        Promise.resolve({
+          data: url === "/admin/riders" ? riders : [readyOrder],
+        }),
+      );
 
-    render(<RiderList />);
+      renderPage(<RiderList />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Assign rider for ORD-MARK" }));
+      // Page chrome is heavy under happy-dom; wait for ORD-MARK row actions.
+      const assignBtn = await screen.findByRole(
+        "button",
+        { name: "Assign rider for ORD-MARK" },
+        { timeout: 12000 },
+      );
+      fireEvent.click(assignBtn);
 
-    expect(screen.getByLabelText("Assign ORD-MARK to Maria")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Assign ORD-MARK to Juan")).not.toBeInTheDocument();
-    expect(screen.getAllByText(/Available/).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/Online/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Offline/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/On delivery/)).not.toBeInTheDocument();
-  });
+      expect(
+        screen.getByLabelText("Assign ORD-MARK to Maria"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByLabelText("Assign ORD-MARK to Juan"),
+      ).not.toBeInTheDocument();
+      expect(screen.getAllByText(/Available/).length).toBeGreaterThan(0);
+      expect(screen.queryByText(/Online/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Offline/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/On delivery/)).not.toBeInTheDocument();
+    },
+    20000,
+  );
 
   it("names the live-map toggle and uses readable muted rider text", async () => {
     mockGet.mockImplementation((url: string) =>
       Promise.resolve({ data: url === "/admin/riders" ? riders : [] }),
     );
 
-    render(<RiderList />);
+    renderPage(<RiderList />);
 
     const expand = await screen.findByRole("button", {
       name: "Expand live tracking map",

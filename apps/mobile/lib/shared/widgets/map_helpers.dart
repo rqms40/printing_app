@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:printing_app/config/theme/app_radius.dart';
+import 'package:printing_app/shared/maps/grid_map_models.dart';
 
-/// Route colors tuned to match the desktop riders map treatment.
+/// Route colors tuned for dark Google basemap + GRIDGO brand yellow.
 const Color kRouteColor = Color(0xFFFFDE58);
 const Color kRouteBorderColor = Color(0xFF0A0A0A);
 
-/// Shared map builders for all map screens.
+/// Shared map constants and overlay builders for all map screens.
+///
+/// Geometry uses [latlong2.LatLng] (server GeoJSON). Rendering goes through
+/// [GridMapView] (Google Maps on Android/iOS/Web).
 class MapHelpers {
   MapHelpers._();
 
-  /// GRIDGO shop pickup — Davao (matches server SHOP_LOCATION).
+  /// GRIDGO shop pickup — Davao (matches server GRIDGO_STORE_*).
   static const shopPoint = LatLng(7.064, 125.6079);
 
   /// Legacy demo destination (Manila) — fallback only.
@@ -23,187 +25,144 @@ class MapHelpers {
   /// Davao City center — used for idle state on home map tile.
   static const davaoCenter = LatLng(7.1907, 125.4553);
 
-  static const cartoDarkTileUrl =
-      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+  static GridMapCamera camera(
+    LatLng target, {
+    double zoom = 14,
+  }) =>
+      GridMapCamera(target: target, zoom: zoom);
 
-  /// Returns the shared CARTO dark tile layer used across GRIDGO maps.
-  /// This mirrors the Leaflet/CARTO treatment used by the desktop riders map
-  /// and keeps labels, roads, and water detail visible without an extra filter.
-  ///
-  /// Pass [cachingProvider] (e.g. `const DisabledMapCachingProvider()`) to opt
-  /// out of flutter_map's built-in disk cache, which depends on `path_provider`
-  /// and is unavailable in widget tests. When null, the default built-in cache
-  /// is used.
-  static TileLayer tileLayer(
-    Brightness brightness, {
-    MapCachingProvider? cachingProvider,
+  static GridMapMarker shopMarker({LatLng? point}) => GridMapMarker(
+        id: 'shop',
+        point: point ?? shopPoint,
+        kind: GridMarkerKind.shop,
+        semanticLabel: 'Shop',
+        zIndex: 1,
+      );
+
+  static GridMapMarker destinationMarker({
+    LatLng? point,
+    String id = 'destination',
+  }) =>
+      GridMapMarker(
+        id: id,
+        point: point ?? destinationPoint,
+        kind: GridMarkerKind.destination,
+        semanticLabel: 'Destination',
+        zIndex: 2,
+      );
+
+  static GridMapMarker riderMarker(
+    LatLng point, {
+    String id = 'rider',
+    String? semanticLabel,
+    double rotation = 0,
+  }) =>
+      GridMapMarker(
+        id: id,
+        point: point,
+        kind: GridMarkerKind.rider,
+        semanticLabel: semanticLabel ?? 'Rider',
+        rotation: rotation,
+        zIndex: 10,
+      );
+
+  static GridMapMarker stopMarker({
+    required int sequence,
+    required LatLng point,
+    bool isCurrent = false,
+  }) =>
+      GridMapMarker(
+        id: 'stop-$sequence',
+        point: point,
+        kind: GridMarkerKind.stop,
+        label: '$sequence',
+        semanticLabel: 'Stop $sequence',
+        zIndex: isCurrent ? 5 : 3,
+      );
+
+  /// Bold route polylines (border + yellow fill) for a customer-safe leg.
+  static List<GridMapPolyline> routePolylines(
+    List<LatLng> points, {
+    String idPrefix = 'route',
   }) {
-    return TileLayer(
-      urlTemplate: cartoDarkTileUrl,
-      userAgentPackageName: 'com.gridgoprint.app',
-      tileProvider: cachingProvider == null
-          ? null
-          : NetworkTileProvider(cachingProvider: cachingProvider),
-    );
+    if (points.length < 2) return const [];
+    return [
+      GridMapPolyline(
+        id: '$idPrefix-border',
+        points: points,
+        color: kRouteBorderColor,
+        width: 7,
+        zIndex: 1,
+      ),
+      GridMapPolyline(
+        id: '$idPrefix-fill',
+        points: points,
+        color: kRouteColor,
+        width: 4.5,
+        zIndex: 2,
+      ),
+    ];
   }
 
-  /// Bold route polyline (double-layered: dark border + GRIDGO yellow fill).
-  static PolylineLayer routePolyline(List<LatLng> points) {
-    return PolylineLayer(
-      polylines: [
-        Polyline(points: points, color: kRouteBorderColor, strokeWidth: 7.0),
-        Polyline(points: points, color: kRouteColor, strokeWidth: 4.5),
-      ],
-    );
-  }
-
-  /// One persisted server-owned dispatch leg. Completed legs are subdued,
-  /// while the current leg keeps the high-contrast GRIDGO treatment.
-  static PolylineLayer persistedRouteLeg({
-    Key? key,
+  /// One persisted server-owned dispatch leg.
+  static List<GridMapPolyline> persistedRouteLeg({
+    required String id,
     required List<LatLng> points,
     required bool isCompleted,
     required bool isCurrent,
   }) {
+    if (points.length < 2) return const [];
     final fill = isCompleted
         ? const Color(0xFF8B8B8B).withValues(alpha: 0.62)
         : isCurrent
-        ? kRouteColor
-        : kRouteColor.withValues(alpha: 0.58);
+            ? kRouteColor
+            : kRouteColor.withValues(alpha: 0.58);
     final border = kRouteBorderColor.withValues(
       alpha: isCompleted ? 0.45 : 0.9,
     );
-    return PolylineLayer(
-      key: key,
-      polylines: [
-        Polyline(points: points, color: border, strokeWidth: isCurrent ? 7 : 6),
-        Polyline(
-          points: points,
-          color: fill,
-          strokeWidth: isCurrent ? 4.5 : 3.5,
-        ),
-      ],
-    );
+    return [
+      GridMapPolyline(
+        id: '$id-border',
+        points: points,
+        color: border,
+        width: isCurrent ? 7 : 6,
+        zIndex: 1,
+      ),
+      GridMapPolyline(
+        id: '$id-fill',
+        points: points,
+        color: fill,
+        width: isCurrent ? 4.5 : 3.5,
+        zIndex: 2,
+      ),
+    ];
   }
 
-  /// Required tile and routing attribution for every GRIDGO map.
-  static RichAttributionWidget attribution({bool includeRouting = false}) {
-    return RichAttributionWidget(
-      showFlutterMapAttribution: false,
-      attributions: [
-        const TextSourceAttribution('OpenStreetMap contributors'),
-        const TextSourceAttribution('CARTO'),
-        if (includeRouting)
-          const TextSourceAttribution(
-            'Route data: OSRM',
-            prependCopyright: false,
-          ),
-      ],
-    );
-  }
-
-  /// Shop marker — white circle + store icon + shadow.
-  static Marker shopMarker({LatLng? point}) => Marker(
-    point: point ?? shopPoint,
-    width: 44,
-    height: 44,
-    child: Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-        border: Border.all(color: kRouteColor, width: 2.5),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x40000000),
-            blurRadius: 6,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: const Icon(
-        Icons.store_rounded,
-        color: kRouteBorderColor,
-        size: 22,
-      ),
-    ),
-  );
-
-  /// Destination marker — neutral circle + flag + pin tail.
-  static Marker destinationMarker({LatLng? point}) => Marker(
-    point: point ?? destinationPoint,
-    width: 44,
-    height: 54,
-    alignment: Alignment.topCenter,
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 40,
-          height: 40,
+  /// Attribution chip for Google Maps basemap (replaces OSM/CARTO/OSRM).
+  static Widget attribution({bool includeRouting = false}) {
+    return Align(
+      alignment: Alignment.bottomLeft,
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: DecoratedBox(
           decoration: BoxDecoration(
-            color: kRouteColor,
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 2.5),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x40000000),
-                blurRadius: 6,
-                offset: Offset(0, 2),
+            color: const Color(0xCC0A0A0A),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            child: Text(
+              includeRouting
+                  ? '© Google · Routes'
+                  : '© Google',
+              style: const TextStyle(
+                color: Color(0xFFB0B0B0),
+                fontSize: 10,
               ),
-            ],
-          ),
-          child: const Icon(Icons.flag_rounded, color: Colors.white, size: 20),
-        ),
-        Container(
-          width: 3,
-          height: 8,
-          decoration: BoxDecoration(
-            color: kRouteColor,
-            borderRadius: AppRadius.borderFull,
-          ),
-        ),
-      ],
-    ),
-  );
-
-  /// Rider marker — the delivery vehicle, ride-hailing style: brand disc
-  /// with a motorcycle glyph so the courier is instantly recognizable.
-  static Marker riderMarker(
-    LatLng point, {
-    Key? semanticKey,
-    String? semanticLabel,
-  }) {
-    final marker = Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFDE58),
-        shape: BoxShape.circle,
-        border: Border.all(color: const Color(0xFF141414), width: 2.5),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x40000000),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: const Icon(
-        Icons.two_wheeler_rounded,
-        color: Color(0xFF141414),
-        size: 22,
-      ),
-    );
-    return Marker(
-      point: point,
-      width: 44,
-      height: 44,
-      child: semanticLabel == null
-          ? marker
-          : Semantics(
-              key: semanticKey,
-              container: true,
-              label: semanticLabel,
-              child: marker,
             ),
+          ),
+        ),
+      ),
     );
   }
 }

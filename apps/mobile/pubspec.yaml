@@ -78,6 +78,7 @@ dependencies:
 
   # Tutorial system
   tutorial_coach_mark: ^1.2.11
+  google_maps_flutter: ^2.18.0
 
 dev_dependencies:
   flutter_test:

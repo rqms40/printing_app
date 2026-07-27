@@ -10,6 +10,11 @@
         android:label="GRIDGO"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Google Maps SDK — inject via local.properties MAPS_API_KEY or
+             manifestPlaceholders; never commit a real key. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${MAPS_API_KEY}" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

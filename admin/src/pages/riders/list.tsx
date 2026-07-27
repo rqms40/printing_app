@@ -28,14 +28,12 @@ import {
   ExpandOutlined,
   CompressOutlined,
 } from "@ant-design/icons";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import L, { DivIcon } from "leaflet";
-import "leaflet/dist/leaflet.css";
 import { formatDateTime, formatRelativeTime } from "@/utils/format";
 import { apiClient } from "@/providers/api-client";
 import { normalizeAdminRiders, normalizeOrders } from "@/utils/api-normalizers";
 import type { Order } from "@/types/order";
 import { DispatchPlanPanel } from "./dispatch-plan-panel";
+import { GridGoogleMap } from "@/components/google-map/grid-google-map";
 
 const { Text, Title } = Typography;
 const MUTED_TEXT = "#A0A0A0";
@@ -56,33 +54,6 @@ interface ApiRider {
   created_at: string;
   updated_at: string;
 }
-
-// Fix leaflet default icon issue in React
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
-
-/* ─── Map Icon helpers ───────────────────────────────────────────── */
-const createIcon = (color: string, size = 14) =>
-  new DivIcon({
-    className: "",
-    html: `<div style="
-      background:${color};
-      width:${size}px;height:${size}px;
-      border-radius:50%;
-      border:2.5px solid rgba(255,255,255,0.9);
-      box-shadow:0 0 0 3px ${color}33, 0 2px 8px rgba(0,0,0,0.4);
-    "></div>`,
-    iconSize: [size + 6, size + 6],
-    iconAnchor: [(size + 6) / 2, (size + 6) / 2],
-  });
-
-const availableIcon = createIcon("#34d399");
-const unavailableIcon = createIcon("#808080");
 
 const VEHICLE_COLORS: Record<string, string> = {
   motorcycle: "#FFCA28",
@@ -439,56 +410,27 @@ export function RiderList() {
                 isolation: "isolate",
               }}
             >
-              <MapContainer
-                key={mapCenter.join(',')}
-                center={mapCenter}
+              <GridGoogleMap
+                key={mapCenter.join(",")}
+                center={{ lat: mapCenter[0], lng: mapCenter[1] }}
                 zoom={13}
-                style={{ height: "100%", width: "100%" }}
-                zoomControl={false}
-              >
-                <TileLayer
-                  url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                  attribution="&copy; OSM &copy; CARTO"
-                />
-                {riders
+                height="100%"
+                markers={riders
                   .filter((d) => d.last_latitude && d.last_longitude)
-                  .map((d) => (
-                    <Marker
-                      key={d.id}
-                      position={[d.last_latitude!, d.last_longitude!]}
-                      icon={d.is_available ? availableIcon : unavailableIcon}
-                    >
-                      <Popup>
-                        <div
-                          style={{
-                            fontFamily: "'DM Sans', sans-serif",
-                            fontSize: 13,
-                            lineHeight: 1.6,
-                          }}
-                        >
-                          <div
-                            style={{
-                              fontWeight: 700,
-                              fontSize: 14,
-                              marginBottom: 2,
-                            }}
-                          >
-                            {d.full_name ?? d.email}
-                          </div>
-                          <div style={{ color: "#666" }}>
-                            {d.vehicle_type} &middot; {d.plate_number}
-                          </div>
-                          <Tag
-                            color={d.is_available ? "green" : "default"}
-                            style={{ marginTop: 4 }}
-                          >
-                            {d.is_available ? "Available" : "Unavailable"}
-                          </Tag>
-                        </div>
-                      </Popup>
-                    </Marker>
-                  ))}
-              </MapContainer>
+                  .map((d) => ({
+                    id: `rider-${d.id}`,
+                    position: {
+                      lat: Number(d.last_latitude),
+                      lng: Number(d.last_longitude),
+                    },
+                    title: `${d.full_name ?? d.email ?? "Rider"} · ${
+                      d.is_available ? "Available" : "Unavailable"
+                    } · ${d.vehicle_type}${
+                      d.plate_number ? ` · ${d.plate_number}` : ""
+                    }`,
+                    color: d.is_available ? "#34d399" : "#808080",
+                  }))}
+              />
 
               {/* Map legend overlay */}
               <div

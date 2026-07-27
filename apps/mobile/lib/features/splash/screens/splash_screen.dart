@@ -296,55 +296,55 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
               child: SizedBox.expand(
                 child: Stack(
                   children: [
-                    // Center "GRIDGO" text
-                    const Align(
+                    // Center "GRIDGO" text and tagline
+                    Align(
                       alignment: Alignment.center,
-                      child: Text.rich(
-                        TextSpan(
-                          children: [
-                            TextSpan(
-                              text: 'GRID',
-                              style: TextStyle(color: Color(0xFF1E1E1E)),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text.rich(
+                            const TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: 'GRID',
+                                  style: TextStyle(color: Color(0xFF1E1E1E)),
+                                ),
+                                TextSpan(
+                                  text: 'GO',
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                              ],
                             ),
-                            TextSpan(
-                              text: 'GO',
-                              style: TextStyle(color: Colors.grey),
+                            style: AppTypography.display.copyWith(
+                              color: const Color(0xFF1E1E1E),
+                              fontSize: 48,
+                              height: 1.0,
+                              letterSpacing: 6,
                             ),
-                          ],
-                        ),
-                        style: TextStyle(
-                          fontFamily: 'Satoshi',
-                          fontSize: 48,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 6,
-                        ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'MAPPING THE FUTURE OF PRINTING',
+                            style: AppTypography.overline.copyWith(
+                              color: const Color(0xFF1E1E1E).withValues(alpha: 0.6),
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     
-                    // Bottom "Powered by GRIDGO" text and tagline
+                    // Bottom "Powered by GRIDGO" text
                     Align(
                       alignment: Alignment.bottomCenter,
                       child: SafeArea(
                         child: Padding(
                           padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Powered by GRIDGO',
-                                style: AppTypography.overline.copyWith(
-                                  color: const Color(0xFF1E1E1E).withValues(alpha: 0.6),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'MAPPING THE FUTURE OF PRINTING',
-                                style: AppTypography.overline.copyWith(
-                                  color: const Color(0xFF1E1E1E).withValues(alpha: 0.6),
-                                  letterSpacing: 1.2,
-                                ),
-                              ),
-                            ],
+                          child: Text(
+                            'Powered by GRIDGO',
+                            style: AppTypography.overline.copyWith(
+                              color: const Color(0xFF1E1E1E).withValues(alpha: 0.6),
+                            ),
                           ),
                         ),
                       ),

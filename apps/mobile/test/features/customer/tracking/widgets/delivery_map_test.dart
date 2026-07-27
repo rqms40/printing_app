@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
@@ -8,6 +7,7 @@ import 'package:printing_app/features/customer/home/providers/live_delivery_map_
 import 'package:printing_app/features/customer/order/providers/delivery_slot_provider.dart';
 import 'package:printing_app/features/customer/tracking/providers/live_rider_location_provider.dart';
 import 'package:printing_app/features/customer/tracking/widgets/delivery_map.dart';
+import 'package:printing_app/shared/maps/grid_map_view.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/location_update.dart';
 import 'package:printing_app/shared/providers/dio_provider.dart';
@@ -132,11 +132,11 @@ void main() {
       verify(harness.socket.subscribeToDeliveryPlan('101', 4)).called(1);
       expect(find.text('Live Tracking'), findsOneWidget);
       expect(_semanticsLabel('Live delivery map'), findsOneWidget);
-      expect(_semanticsLabel('Rider current location marker'), findsOneWidget);
       expect(find.byKey(const Key('live-delivery-map')), findsOneWidget);
+      final map = tester.widget<GridMapView>(find.byType(GridMapView));
       expect(
-        find.byKey(const Key('rider-current-location-marker')),
-        findsOneWidget,
+        map.markers.any((m) => m.kind == GridMarkerKind.rider),
+        isTrue,
       );
     });
 
@@ -151,10 +151,11 @@ void main() {
         await tester.pumpWidget(harness.widget);
         await _settle(tester);
 
-        final map = tester.widget<FlutterMap>(find.byType(FlutterMap));
-        final center = map.mapController!.camera.center;
-        expect(center.latitude, closeTo(7.073, 0.000001));
-        expect(center.longitude, closeTo(125.613, 0.000001));
+        final map = tester.widget<GridMapView>(find.byType(GridMapView));
+        // Camera targets destination until a live rider fix arrives.
+        expect(map.initialCamera.target.latitude, closeTo(7.073, 0.000001));
+        expect(map.initialCamera.target.longitude, closeTo(125.613, 0.000001));
+        expect(map.markers, isNotEmpty);
         expect(_semanticsLabel('Rider current location marker'), findsNothing);
       },
     );
@@ -257,7 +258,7 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
 
       expect(find.text('Location stale'), findsOneWidget);
-      expect(find.byType(FlutterMap), findsOneWidget);
+      expect(find.byType(GridMapView), findsOneWidget);
     });
 
     testWidgets('reevaluates stale location into offline and retains marker', (
@@ -275,7 +276,7 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
 
       expect(find.text('GPS offline — last known shown'), findsOneWidget);
-      expect(find.byType(FlutterMap), findsOneWidget);
+      expect(find.byType(GridMapView), findsOneWidget);
     });
 
     testWidgets('fresh marker stays live through socket handshake churn', (
@@ -290,7 +291,7 @@ void main() {
       await _settle(tester);
 
       expect(find.text('Live Tracking'), findsOneWidget);
-      expect(find.byType(FlutterMap), findsOneWidget);
+      expect(find.byType(GridMapView), findsOneWidget);
     });
 
     testWidgets('disconnect goes offline once the fix ages out', (
@@ -305,7 +306,7 @@ void main() {
       await _settle(tester);
 
       expect(find.text('GPS offline — last known shown'), findsOneWidget);
-      expect(find.byType(FlutterMap), findsOneWidget);
+      expect(find.byType(GridMapView), findsOneWidget);
     });
 
     testWidgets('independently surfaces stale routing data', (tester) async {
@@ -317,7 +318,7 @@ void main() {
       await _settle(tester);
 
       expect(find.text('Route data stale'), findsOneWidget);
-      expect(find.byType(FlutterMap), findsOneWidget);
+      expect(find.byType(GridMapView), findsOneWidget);
     });
 
     testWidgets('malformed geometry never displays a route ETA', (
@@ -333,7 +334,8 @@ void main() {
       expect(find.text('Route geometry degraded'), findsOneWidget);
       expect(find.text('~2 min'), findsNothing);
       expect(find.textContaining(' min'), findsNothing);
-      expect(find.byType(PolylineLayer), findsNothing);
+      final map = tester.widget<GridMapView>(find.byType(GridMapView));
+      expect(map.polylines, isEmpty);
     });
   });
 }

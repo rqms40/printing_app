@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
@@ -8,7 +7,7 @@ import 'package:printing_app/features/rider/home/widgets/rider_route_summary_chi
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/features/rider/shared/providers/rider_location_tracker_provider.dart';
 import 'package:printing_app/features/rider/shared/rider_theme.dart';
-import 'package:printing_app/features/rider/shared/widgets/rider_vehicle_marker.dart';
+import 'package:printing_app/shared/maps/grid_map_view.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
 /// Expanded rider route cockpit backed only by the persisted server plan.
@@ -29,7 +28,7 @@ class RiderRouteMapPanel extends ConsumerStatefulWidget {
 }
 
 class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
-  final _mapController = MapController();
+  final _mapController = GridMapController();
 
   List<RiderAssignmentView> get _planned =>
       widget.stops.where((stop) => stop.planStop != null).toList()..sort(
@@ -55,13 +54,14 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
   void _fitCamera() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _mapController.fitCamera(
-        CameraFit.bounds(
-          bounds: LatLngBounds.fromPoints(_framePoints),
-          padding: const EdgeInsets.all(40),
-        ),
-      );
+      _mapController.fitBounds(_framePoints, padding: 40);
     });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _fitCamera();
   }
 
   @override
@@ -72,7 +72,7 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
 
   @override
   void dispose() {
-    _mapController.dispose();
+    _mapController.unbind();
     super.dispose();
   }
 
@@ -114,39 +114,42 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
               borderRadius: BorderRadius.circular(12),
               child: ColoredBox(
                 color: RiderTheme.surface,
-                child: FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(
-                    initialCenter: _framePoints.last,
-                    initialZoom: 13,
-                    backgroundColor: RiderTheme.background,
-                    onMapReady: _fitCamera,
-                  ),
+                child: Stack(
+                  fit: StackFit.expand,
                   children: [
-                    MapHelpers.tileLayer(Brightness.dark),
-                    for (var i = 0; i < _planned.length; i++)
-                      if (_planned[i].planStop?.geometry case final geometry?)
-                        MapHelpers.persistedRouteLeg(
-                          key: Key('route-leg-$i'),
-                          points: geometry.points,
-                          isCompleted:
-                              _planned[i].planStop!.status ==
-                              RiderDispatchStopStatus.completed,
-                          isCurrent: _planned[i].isCurrentPlanStop,
-                        ),
-                    MarkerLayer(
+                    GridMapView(
+                      controller: _mapController,
+                      initialCamera: MapHelpers.camera(
+                        _framePoints.last,
+                        zoom: 13,
+                      ),
+                      interactive: true,
                       markers: [
-                        MapHelpers.shopMarker(point: widget.planOrigin ?? MapHelpers.shopPoint),
+                        MapHelpers.shopMarker(
+                          point: widget.planOrigin ?? MapHelpers.shopPoint,
+                        ),
                         for (final stop in _planned)
-                          _numberedStopMarker(
-                            stop.planStop!.destination,
-                            stop.planSequence!,
+                          MapHelpers.stopMarker(
+                            sequence: stop.planSequence!,
+                            point: stop.planStop!.destination,
+                            isCurrent: stop.isCurrentPlanStop,
                           ),
                         if (livePoint != null)
-                          riderVehicleMarker(
-                            point: livePoint,
-                            headingDegrees: gps?.headingDegrees,
+                          MapHelpers.riderMarker(
+                            livePoint,
+                            rotation: gps?.headingDegrees ?? 0,
                           ),
+                      ],
+                      polylines: [
+                        for (var i = 0; i < _planned.length; i++)
+                          if (_planned[i].planStop?.geometry case final geometry?)
+                            ...MapHelpers.persistedRouteLeg(
+                              id: 'route-leg-$i',
+                              points: geometry.points,
+                              isCompleted: _planned[i].planStop!.status ==
+                                  RiderDispatchStopStatus.completed,
+                              isCurrent: _planned[i].isCurrentPlanStop,
+                            ),
                       ],
                     ),
                     MapHelpers.attribution(includeRouting: true),
@@ -195,44 +198,5 @@ class _RiderRouteMapPanelState extends ConsumerState<RiderRouteMapPanel> {
       ),
     );
   }
-
-  Marker _numberedStopMarker(LatLng point, int number) => Marker(
-    point: point,
-    width: 38,
-    height: 58,
-    alignment: Alignment.topCenter,
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 30,
-          height: 30,
-          decoration: BoxDecoration(
-            color: RiderTheme.surface,
-            shape: BoxShape.circle,
-            border: Border.all(color: kRouteColor, width: 1.4),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x99000000),
-                blurRadius: 8,
-                offset: Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Center(
-            child: Text(
-              '$number',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 10,
-              ),
-            ),
-          ),
-        ),
-        Container(width: 2.4, height: 14, color: kRouteColor),
-      ],
-    ),
-  );
 
 }

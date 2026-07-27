@@ -20,12 +20,10 @@ import {
   EnvironmentOutlined,
   UserSwitchOutlined,
 } from "@ant-design/icons";
-import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
-import { DivIcon, LatLngBounds, type LatLngExpression } from "leaflet";
-import "leaflet/dist/leaflet.css";
 import { useParams } from "react-router";
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
+import { GridGoogleMap } from "@/components/google-map/grid-google-map";
 import type { OrderStatus } from "@/types/enums";
 import { ORDER_STATUS_LABELS } from "@/types/enums";
 import { StatusBadge } from "@/components/status-badge";
@@ -50,13 +48,6 @@ import { ManualStatusCard } from "./components/manual-status-card";
 
 const { Text } = Typography;
 const { TextArea } = Input;
-
-const DESTINATION_PIN_ICON = new DivIcon({
-  className: "order-destination-pin",
-  html: `<div style="width:18px;height:18px;border-radius:50%;background:#1677ff;border:3px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,.35);"></div>`,
-  iconSize: [24, 24],
-  iconAnchor: [12, 12],
-});
 
 function hasCoordinates(destination?: OrderDestination | null) {
   return (
@@ -99,76 +90,34 @@ function getMappableDestinations(order: Order): OrderDestination[] {
   return result.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
 }
 
-function DestinationMapViewport({
-  positions,
-}: {
-  positions: LatLngExpression[];
-}) {
-  const map = useMap();
-
-  useEffect(() => {
-    if (positions.length === 0) return;
-    if (positions.length === 1) {
-      map.setView(positions[0], 15);
-      return;
-    }
-    map.fitBounds(new LatLngBounds(positions), { padding: [32, 32] });
-  }, [map, positions]);
-
-  return null;
-}
-
 function OrderDestinationMap({
   destinations,
 }: {
   destinations: OrderDestination[];
 }) {
-  const positions = destinations.map(
-    (destination) =>
-      [destination.latitude as number, destination.longitude as number] as [
-        number,
-        number,
-      ],
-  );
-  const center = positions[0] ?? ([7.0713113, 125.6123279] as [number, number]);
+  const positions = destinations.map((destination) => ({
+    lat: destination.latitude as number,
+    lng: destination.longitude as number,
+  }));
+  const center = positions[0] ?? { lat: 7.0713113, lng: 125.6123279 };
 
   return (
-    <div style={{ height: 320, borderRadius: 8, overflow: "hidden" }}>
-      <MapContainer
-        center={center}
-        zoom={15}
-        style={{ height: "100%", width: "100%", zIndex: 1 }}
-      >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-        />
-        <DestinationMapViewport positions={positions} />
-        {destinations.map((destination, index) => (
-          <Marker
-            key={
-              destination.id ??
-              `${destination.latitude}:${destination.longitude}:${index}`
-            }
-            position={positions[index]}
-            icon={DESTINATION_PIN_ICON}
-          >
-            <Popup>
-              <div style={{ minWidth: 180 }}>
-                <strong>{destinationTitle(destination, index)}</strong>
-                <div>{destinationAddress(destination)}</div>
-                {destination.landmark && (
-                  <div>Landmark: {destination.landmark}</div>
-                )}
-                <div style={{ color: "#666", fontSize: 12 }}>
-                  {destination.latitude}, {destination.longitude}
-                </div>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-      </MapContainer>
-    </div>
+    <GridGoogleMap
+      center={center}
+      zoom={15}
+      height={320}
+      markers={destinations.map((destination, index) => ({
+        id: String(
+          destination.id ??
+            `${destination.latitude}:${destination.longitude}:${index}`,
+        ),
+        position: positions[index],
+        title: `${destinationTitle(destination, index)} · ${destinationAddress(
+          destination,
+        )}${destination.landmark ? ` · ${destination.landmark}` : ""}`,
+      }))}
+      fitPositions={positions}
+    />
   );
 }
 

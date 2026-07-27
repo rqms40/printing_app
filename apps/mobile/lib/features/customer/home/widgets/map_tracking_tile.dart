@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
+import 'package:printing_app/shared/maps/grid_map_view.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
@@ -1047,19 +1047,14 @@ class _MapPlaceholder extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          FlutterMap(
-            options: const MapOptions(
-              initialCenter: MapHelpers.davaoCenter,
-              initialZoom: _davaoZoom,
-              interactionOptions: InteractionOptions(
-                flags: InteractiveFlag.none,
-              ),
+          GridMapView(
+            initialCamera: MapHelpers.camera(
+              MapHelpers.davaoCenter,
+              zoom: _davaoZoom,
             ),
-            children: [
-              MapHelpers.tileLayer(brightness),
-              MapHelpers.attribution(),
-            ],
+            interactive: false,
           ),
+          MapHelpers.attribution(),
           Container(color: Colors.black.withValues(alpha: 0.52)),
           DecoratedBox(
             decoration: BoxDecoration(
@@ -1404,35 +1399,24 @@ class _PendingRoutePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-
     return ClipRRect(
       key: const Key('pending-route-preview-map'),
       borderRadius: AppRadius.borderMd,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          FlutterMap(
-            options: MapOptions(
-              initialCenter: _center,
-              initialZoom: 13.2,
-              interactionOptions: const InteractionOptions(
-                flags: InteractiveFlag.none,
-              ),
-            ),
-            children: [
-              MapHelpers.tileLayer(brightness),
-              if (_routePoints.isNotEmpty)
-                MapHelpers.routePolyline(_routePoints),
-              MarkerLayer(
-                markers: [
-                  MapHelpers.shopMarker(point: state.shopPoint),
-                  MapHelpers.destinationMarker(point: state.destPoint),
-                ],
-              ),
-              MapHelpers.attribution(includeRouting: _routePoints.isNotEmpty),
+          GridMapView(
+            initialCamera: MapHelpers.camera(_center, zoom: 13.2),
+            interactive: false,
+            markers: [
+              MapHelpers.shopMarker(point: state.shopPoint),
+              MapHelpers.destinationMarker(point: state.destPoint),
             ],
+            polylines: _routePoints.isNotEmpty
+                ? MapHelpers.routePolylines(_routePoints)
+                : const [],
           ),
+          MapHelpers.attribution(includeRouting: _routePoints.isNotEmpty),
           Container(color: Colors.black.withValues(alpha: 0.22)),
           Positioned(
             top: AppSpacing.xs,
@@ -1740,24 +1724,20 @@ class _ActiveTile extends StatelessWidget {
           excludeSemantics: true,
           label: 'Live delivery map',
           hint: 'Shows the rider current location and delivery route',
-          child: FlutterMap(
-            options: MapOptions(
-              initialCenter: riderPoint,
-              initialZoom: 13.8,
-              interactionOptions: const InteractionOptions(
-                flags: InteractiveFlag.none,
-              ),
-            ),
+          child: Stack(
+            fit: StackFit.expand,
             children: [
-              MapHelpers.tileLayer(brightness),
-              if (state.routePoints.isNotEmpty)
-                MapHelpers.routePolyline(state.routePoints),
-              MarkerLayer(
+              GridMapView(
+                initialCamera: MapHelpers.camera(riderPoint, zoom: 13.8),
+                interactive: false,
                 markers: [
                   MapHelpers.shopMarker(point: state.shopPoint),
                   MapHelpers.destinationMarker(point: state.destPoint),
                   MapHelpers.riderMarker(riderPoint),
                 ],
+                polylines: state.routePoints.isNotEmpty
+                    ? MapHelpers.routePolylines(state.routePoints)
+                    : const [],
               ),
               MapHelpers.attribution(
                 includeRouting: state.routePoints.isNotEmpty,

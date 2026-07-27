@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
@@ -11,6 +10,7 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/customer/home/providers/live_delivery_map_provider.dart';
 import 'package:printing_app/features/customer/order/providers/delivery_slot_provider.dart';
 import 'package:printing_app/features/customer/tracking/providers/live_rider_location_provider.dart';
+import 'package:printing_app/shared/maps/grid_map_view.dart';
 import 'package:printing_app/shared/models/location_update.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
@@ -38,8 +38,7 @@ class DeliveryMap extends ConsumerStatefulWidget {
 class _DeliveryMapState extends ConsumerState<DeliveryMap>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulseController;
-  final _mapController = MapController();
-  bool _isMapReady = false;
+  final _mapController = GridMapController();
   String? _desiredAssignmentId;
   int? _desiredPlanVersion;
   String? _subscribedAssignmentId;
@@ -103,7 +102,7 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
   @override
   void dispose() {
     _pulseController.dispose();
-    _mapController.dispose();
+    _mapController.unbind();
     _ws.removeLocationUpdateListener(_handleLocationUpdate);
     _ws.removeLocationHealthListener(_handleLocationHealth);
     _healthRefreshTimer?.cancel();
@@ -149,11 +148,11 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
   }
 
   void _moveCameraTo(LatLng point) {
-    if (!_isMapReady || !mounted) return;
+    if (!mounted) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_isMapReady || !mounted) return;
+      if (!mounted) return;
       try {
-        _mapController.move(point, 13.5);
+        _mapController.moveTo(GridMapCamera(target: point, zoom: 13.5));
       } catch (e) {
         debugPrint('DeliveryMap: map camera move skipped: $e');
       }
@@ -276,35 +275,29 @@ class _DeliveryMapState extends ConsumerState<DeliveryMap>
                 container: true,
                 explicitChildNodes: true,
                 label: 'Live delivery map',
-                child: FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(
-                    initialCenter: riderPoint ?? state.destPoint,
-                    initialZoom: 13.5,
-                    onMapReady: () {
-                      _isMapReady = true;
-                      if (riderPoint != null) {
-                        _moveCameraTo(riderPoint);
-                      }
-                    },
-                  ),
+                child: Stack(
+                  fit: StackFit.expand,
                   children: [
-                    MapHelpers.tileLayer(brightness),
-                    if (state.routePoints.isNotEmpty)
-                      MapHelpers.routePolyline(state.routePoints),
-                    MarkerLayer(
+                    GridMapView(
+                      controller: _mapController,
+                      initialCamera: MapHelpers.camera(
+                        riderPoint ?? state.destPoint,
+                        zoom: 13.5,
+                      ),
+                      interactive: true,
                       markers: [
                         MapHelpers.shopMarker(point: state.shopPoint),
                         MapHelpers.destinationMarker(point: state.destPoint),
                         if (riderPoint != null)
                           MapHelpers.riderMarker(
                             riderPoint,
-                            semanticKey: const Key(
-                              'rider-current-location-marker',
-                            ),
+                            id: 'rider-current-location-marker',
                             semanticLabel: 'Rider current location marker',
                           ),
                       ],
+                      polylines: state.routePoints.isNotEmpty
+                          ? MapHelpers.routePolylines(state.routePoints)
+                          : const [],
                     ),
                     MapHelpers.attribution(
                       includeRouting: state.routePoints.isNotEmpty,

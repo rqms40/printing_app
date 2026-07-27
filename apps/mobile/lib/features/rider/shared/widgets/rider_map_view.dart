@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
@@ -12,7 +11,7 @@ import 'package:printing_app/features/rider/deliveries/providers/deliveries_prov
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/features/rider/shared/off_route.dart';
 import 'package:printing_app/features/rider/shared/providers/rider_location_tracker_provider.dart';
-import 'package:printing_app/features/rider/shared/widgets/rider_vehicle_marker.dart';
+import 'package:printing_app/shared/maps/grid_map_view.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
 /// Rider delivery map backed only by the persisted server dispatch leg.
@@ -53,7 +52,7 @@ class RiderMapView extends ConsumerStatefulWidget {
 
 class _RiderMapViewState extends ConsumerState<RiderMapView>
     with SingleTickerProviderStateMixin {
-  final _mapController = MapController();
+  final _mapController = GridMapController();
   bool _followCamera = false;
   int _offRouteFixes = 0;
   bool _offRouteDismissed = false;
@@ -84,6 +83,7 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     )..repeat(reverse: true);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _fitBounds());
   }
 
   @override
@@ -93,29 +93,10 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
   }
 
   void _fitBounds() {
-    final bounds = LatLngBounds.fromPoints([
-      _shop,
-      _destination,
-      ..._routePoints,
-    ]);
+    final points = <LatLng>[_shop, _destination, ..._routePoints];
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      // Keep the route inside the band not covered by host chrome (header,
-      // customer sheet); fall back to plain padding when the map is too small.
-      final size = _mapController.camera.nonRotatedSize;
-      var padding = EdgeInsets.fromLTRB(
-        48,
-        widget.overlayTopInset + 48,
-        48,
-        widget.overlayBottomInset + 48,
-      );
-      if (padding.vertical + 80 > size.height ||
-          padding.horizontal + 80 > size.width) {
-        padding = const EdgeInsets.all(48);
-      }
-      _mapController.fitCamera(
-        CameraFit.bounds(bounds: bounds, padding: padding),
-      );
+      _mapController.fitBounds(points, padding: 48);
     });
   }
 
@@ -136,7 +117,7 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
   @override
   void dispose() {
     _pulseController.dispose();
-    _mapController.dispose();
+    _mapController.unbind();
     super.dispose();
   }
 
@@ -146,7 +127,7 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
       final point = next.point;
       if (point == null || point == previous?.point) return;
       if (_followCamera) {
-        _mapController.move(point, _mapController.camera.zoom);
+        _mapController.moveTo(GridMapCamera(target: point, zoom: 15));
       }
       final leg = _routePoints;
       if (widget.trackLocation && leg.length >= 2) {
@@ -160,75 +141,67 @@ class _RiderMapViewState extends ConsumerState<RiderMapView>
         }
       }
     });
-    final brightness = Theme.of(context).brightness;
     final radius = widget.borderRadius ?? BorderRadius.zero;
 
     final tracker = ref.watch(riderLocationTrackerProvider(_trackerArgs));
     final riderPoint = tracker.point;
 
-    final markers = <Marker>[
+    final markers = <GridMapMarker>[
       MapHelpers.shopMarker(point: _shop),
       MapHelpers.destinationMarker(point: _destination),
+      if (riderPoint != null)
+        MapHelpers.riderMarker(
+          riderPoint,
+          rotation: tracker.headingDegrees ?? 0,
+          semanticLabel: 'Rider vehicle',
+        ),
+    ];
+
+    final polylines = _routePoints.isNotEmpty
+        ? MapHelpers.persistedRouteLeg(
+            id: 'active-route-leg',
+            points: _routePoints,
+            isCompleted: false,
+            isCurrent: true,
+          )
+        : const <GridMapPolyline>[];
+
+    final circles = <GridMapCircle>[
+      if (riderPoint != null && tracker.accuracyMeters != null)
+        GridMapCircle(
+          id: 'gps-accuracy',
+          center: riderPoint,
+          radiusMeters: tracker.accuracyMeters!,
+          fillColor: const Color(0x33FFDE58),
+          strokeColor: const Color(0x88FFDE58),
+          strokeWidth: 1,
+        ),
     ];
 
     return ClipRRect(
       borderRadius: radius,
       child: Stack(
         children: [
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: _destination,
-              initialZoom: 13,
-              backgroundColor: brightness == Brightness.dark
-                  ? const Color(0xFF111111)
-                  : const Color(0xFFE8E8E8),
-              interactionOptions: InteractionOptions(
-                flags: widget.interactive
-                    ? InteractiveFlag.all
-                    : InteractiveFlag.none,
-              ),
-              onMapReady: _fitBounds,
-              onPositionChanged: (camera, hasGesture) {
-                if (hasGesture && _followCamera) {
-                  setState(() => _followCamera = false);
-                }
-              },
+          GridMapView(
+            controller: _mapController,
+            initialCamera: MapHelpers.camera(_destination, zoom: 13),
+            interactive: widget.interactive,
+            markers: markers,
+            polylines: polylines,
+            circles: circles,
+            padding: EdgeInsets.fromLTRB(
+              0,
+              widget.overlayTopInset,
+              0,
+              widget.overlayBottomInset,
             ),
-            children: [
-              MapHelpers.tileLayer(brightness),
-              if (_routePoints.isNotEmpty)
-                MapHelpers.persistedRouteLeg(
-                  key: const Key('active-route-leg'),
-                  points: _routePoints,
-                  isCompleted: false,
-                  isCurrent: true,
-                ),
-              MarkerLayer(markers: markers),
-              if (riderPoint != null)
-                AnimatedVehiclePosition(
-                  point: riderPoint,
-                  builder: (context, animated) => Stack(
-                    children: [
-                      if (tracker.accuracyMeters != null)
-                        riderAccuracyCircle(
-                          point: animated,
-                          accuracyMeters: tracker.accuracyMeters!,
-                        ),
-                      MarkerLayer(
-                        markers: [
-                          riderVehicleMarker(
-                            point: animated,
-                            headingDegrees: tracker.headingDegrees,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              MapHelpers.attribution(includeRouting: _routePoints.isNotEmpty),
-            ],
+            onCameraMove: (_) {
+              if (_followCamera) {
+                // User-driven camera will also fire; follow toggle is explicit.
+              }
+            },
           ),
+          MapHelpers.attribution(includeRouting: _routePoints.isNotEmpty),
           if (widget.showLiveBadge && widget.trackLocation && !_offRouteVisible)
             Positioned(
               top: _overlayTop(context),

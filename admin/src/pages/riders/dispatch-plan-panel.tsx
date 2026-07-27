@@ -7,6 +7,7 @@ import {
   reoptimizeDispatchPlan,
 } from "@/services/dispatchPlansApi";
 import type { DispatchPlan } from "@/types/dispatch-plan";
+import { GridGoogleMap } from "@/components/google-map/grid-google-map";
 
 const { Text } = Typography;
 const lockedDeliveryStatuses = new Set(["picked_up", "on_the_way", "arrived"]);
@@ -273,6 +274,67 @@ export function DispatchPlanPanel({
                   {formatDistance(plan.total_distance_meters)}
                 </Text>
               </Space>
+              <GridGoogleMap
+                center={{
+                  lat: plan.origin_latitude,
+                  lng: plan.origin_longitude,
+                }}
+                zoom={13}
+                height={280}
+                markers={[
+                  {
+                    id: "origin",
+                    position: {
+                      lat: plan.origin_latitude,
+                      lng: plan.origin_longitude,
+                    },
+                    title: "Store origin",
+                  },
+                  ...plan.stops.map((stop) => ({
+                    id: `stop-${stop.id}`,
+                    position: {
+                      lat: stop.destination_latitude,
+                      lng: stop.destination_longitude,
+                    },
+                    title: `#${stop.sequence} ${
+                      assignmentById.get(stop.assignment_id)?.customerName ??
+                      stop.order_ref ??
+                      "Stop"
+                    }`,
+                  })),
+                ]}
+                polylines={plan.stops
+                  .filter(
+                    (stop) =>
+                      stop.leg_geometry?.type === "LineString" &&
+                      Array.isArray(stop.leg_geometry.coordinates) &&
+                      stop.leg_geometry.coordinates.length >= 2,
+                  )
+                  .map((stop) => ({
+                    id: `leg-${stop.id}`,
+                    path: stop.leg_geometry.coordinates.map(([lng, lat]) => ({
+                      lat,
+                      lng,
+                    })),
+                    color:
+                      stop.status === "completed"
+                        ? "#8B8B8B"
+                        : stop.status === "pending"
+                          ? "#FFDE58"
+                          : "#666666",
+                    weight: 4,
+                  }))}
+                fitPositions={[
+                  {
+                    lat: plan.origin_latitude,
+                    lng: plan.origin_longitude,
+                  },
+                  ...plan.stops.map((stop) => ({
+                    lat: stop.destination_latitude,
+                    lng: stop.destination_longitude,
+                  })),
+                ]}
+              />
               <Space direction="vertical" style={{ width: "100%" }}>
                 {plan.stops.map((stop) => {
                   const assignment = assignmentById.get(stop.assignment_id);

@@ -15,16 +15,8 @@ vi.mock("react-router", () => ({ useParams: () => ({ id: "42" }) }));
 vi.mock("react-router-dom", () => ({
   Link: ({ children }: { children: ReactNode }) => <span>{children}</span>,
 }));
-vi.mock("react-leaflet", () => ({
-  MapContainer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  TileLayer: () => null,
-  Marker: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  Popup: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  useMap: () => ({ setView: vi.fn(), fitBounds: vi.fn() }),
-}));
-vi.mock("leaflet", () => ({
-  DivIcon: class {},
-  LatLngBounds: class {},
+vi.mock("@/components/google-map/grid-google-map", () => ({
+  GridGoogleMap: () => <div data-testid="grid-google-map" />,
 }));
 vi.mock("@/components/show-page", () => ({
   ShowPage: ({ title, children }: { title: string; children: ReactNode }) => (

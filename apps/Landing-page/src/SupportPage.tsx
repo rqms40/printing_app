@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { ShieldCheck, ArrowLeft, Send, CheckCircle2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://192.168.40.201:3000/api';
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:3000/api';
 const randomCaptchaNumber = () => Math.floor(Math.random() * 10) + 1;
 
 export function SupportPage() {

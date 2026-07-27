@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
@@ -8,7 +7,7 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_route_summary_chip.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
 import 'package:printing_app/features/rider/shared/providers/rider_location_tracker_provider.dart';
-import 'package:printing_app/features/rider/shared/widgets/rider_vehicle_marker.dart';
+import 'package:printing_app/shared/maps/grid_map_view.dart';
 import 'package:printing_app/shared/widgets/map_helpers.dart';
 
 /// Rider home cockpit map. The server's persisted plan is the only source of
@@ -32,7 +31,7 @@ class RiderRouteMapTile extends ConsumerStatefulWidget {
 }
 
 class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
-  final _mapController = MapController();
+  final _mapController = GridMapController();
 
   List<RiderAssignmentView> get _planned =>
       widget.stops.where((stop) => stop.planStop != null).toList()..sort(
@@ -56,15 +55,14 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
   void _fitCamera() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _mapController.fitCamera(
-        CameraFit.bounds(
-          bounds: LatLngBounds.fromPoints(_framePoints),
-          // Extra top/right/bottom room keeps markers clear of the summary
-          // chip, the stop rail, and the bottom status chips.
-          padding: const EdgeInsets.fromLTRB(52, 60, 60, 64),
-        ),
-      );
+      _mapController.fitBounds(_framePoints, padding: 56);
     });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _fitCamera();
   }
 
   @override
@@ -75,7 +73,7 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
 
   @override
   void dispose() {
-    _mapController.dispose();
+    _mapController.unbind();
     super.dispose();
   }
 
@@ -100,6 +98,38 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
     final hasPlan = _planned.isNotEmpty;
     final gpsChip = _gpsChip(gps, active);
 
+    final polylines = <GridMapPolyline>[];
+    for (var i = 0; i < _planned.length; i++) {
+      final geometry = _planned[i].planStop?.geometry;
+      if (geometry == null) continue;
+      polylines.addAll(
+        MapHelpers.persistedRouteLeg(
+          id: 'route-leg-$i',
+          points: geometry.points,
+          isCompleted: _planned[i].planStop!.status ==
+              RiderDispatchStopStatus.completed,
+          isCurrent: _planned[i].isCurrentPlanStop,
+        ),
+      );
+    }
+
+    final markers = <GridMapMarker>[
+      MapHelpers.shopMarker(
+        point: widget.planOrigin ?? MapHelpers.shopPoint,
+      ),
+      for (final stop in _planned)
+        MapHelpers.stopMarker(
+          sequence: stop.planSequence!,
+          point: stop.planStop!.destination,
+          isCurrent: stop.isCurrentPlanStop,
+        ),
+      if (livePoint != null)
+        MapHelpers.riderMarker(
+          livePoint,
+          rotation: gps?.headingDegrees ?? 0,
+        ),
+    ];
+
     return GestureDetector(
       onTap: widget.onTap,
       child: ClipRRect(
@@ -109,54 +139,17 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              FlutterMap(
-                mapController: _mapController,
-                options: MapOptions(
-                  initialCenter: _framePoints.last,
-                  initialZoom: 12.5,
-                  backgroundColor: colors.surfaceDim,
-                  onMapReady: _fitCamera,
-                  onTap: (_, _) => widget.onTap(),
-                  interactionOptions: const InteractionOptions(
-                    flags: InteractiveFlag.none,
-                  ),
+              GridMapView(
+                controller: _mapController,
+                initialCamera: MapHelpers.camera(
+                  _framePoints.last,
+                  zoom: 12.5,
                 ),
-                children: [
-                  MapHelpers.tileLayer(
-                    brightness,
-                    cachingProvider: const DisabledMapCachingProvider(),
-                  ),
-                  for (var i = 0; i < _planned.length; i++)
-                    if (_planned[i].planStop?.geometry case final geometry?)
-                      MapHelpers.persistedRouteLeg(
-                        key: Key('route-leg-$i'),
-                        points: geometry.points,
-                        isCompleted:
-                            _planned[i].planStop!.status ==
-                            RiderDispatchStopStatus.completed,
-                        isCurrent: _planned[i].isCurrentPlanStop,
-                      ),
-                  MarkerLayer(
-                    markers: [
-                      MapHelpers.shopMarker(point: widget.planOrigin ?? MapHelpers.shopPoint),
-                      for (final stop in _planned)
-                        Marker(
-                          point: stop.planStop!.destination,
-                          width: 34,
-                          height: 46,
-                          alignment: Alignment.topCenter,
-                          child: _numberBadge(stop.planSequence!, colors),
-                        ),
-                      if (livePoint != null)
-                        riderVehicleMarker(
-                          point: livePoint,
-                          headingDegrees: gps?.headingDegrees,
-                        ),
-                    ],
-                  ),
-                  MapHelpers.attribution(includeRouting: true),
-                ],
+                interactive: false,
+                markers: markers,
+                polylines: polylines,
               ),
+              MapHelpers.attribution(includeRouting: true),
               if (!hasPlan)
                 Positioned.fill(
                   child: IgnorePointer(
@@ -198,7 +191,6 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
                               textAlign: TextAlign.center,
                               style: AppTypography.caption.copyWith(
                                 color: Colors.white.withValues(alpha: 0.65),
-                                fontSize: 11,
                               ),
                             ),
                           ],
@@ -208,79 +200,28 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
                   ),
                 ),
               Positioned(
-                top: 14,
-                left: 14,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    RiderRouteSummaryChip(
-                      key: const Key('route-summary'),
-                      stops: _planned,
-                    ),
-                    if (_hasPendingStops) const SizedBox(height: 8),
-                    Container(
-                      key: const Key('route-open-pill'),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: kRouteColor,
-                        borderRadius: BorderRadius.circular(999),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x66000000),
-                            blurRadius: 8,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            widget.activeStop != null
-                                ? 'Open delivery'
-                                : 'View deliveries',
-                            style: AppTypography.caption.copyWith(
-                              color: Colors.black,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const Icon(
-                            Icons.chevron_right_rounded,
-                            color: Colors.black,
-                            size: 15,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                top: 10,
+                left: 10,
+                child: RiderRouteSummaryChip(stops: widget.stops),
               ),
-              Positioned(
-                left: 14,
-                right: 60,
-                bottom: 12,
-                child: IgnorePointer(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (_hasMalformedGeometry)
-                        const _MapStatusChip(
-                          icon: Icons.info_outline_rounded,
-                          text: 'Route detail degraded',
-                          tone: _ChipTone.warning,
-                        ),
-                      if (gpsChip != null) ...[
-                        if (_hasMalformedGeometry) const SizedBox(height: 6),
-                        gpsChip,
-                      ],
-                    ],
+              if (_hasMalformedGeometry)
+                Positioned(
+                  left: 10,
+                  right: 10,
+                  bottom: 10,
+                  child: _statusChip(
+                    icon: Icons.info_outline_rounded,
+                    label: 'Route detail degraded',
+                    color: Colors.orangeAccent,
                   ),
+                )
+              else if (gpsChip != null)
+                Positioned(
+                  left: 10,
+                  right: 10,
+                  bottom: 10,
+                  child: gpsChip,
                 ),
-              ),
             ],
           ),
         ),
@@ -288,86 +229,31 @@ class _RiderRouteMapTileState extends ConsumerState<RiderRouteMapTile> {
     );
   }
 
-  bool get _hasPendingStops => _planned.any(
-    (stop) => stop.planStop!.status == RiderDispatchStopStatus.pending,
-  );
-
-  /// GPS status chip — only surfaces states the rider can act on or should
-  /// know about; healthy tracking stays silent.
-  _MapStatusChip? _gpsChip(
+  Widget? _gpsChip(
     RiderLocationTrackerState? gps,
     RiderAssignmentView? active,
   ) {
-    if (gps == null || active?.shouldTrackLocation != true) return null;
-    return switch (gps.status) {
-      RiderGpsStatus.serviceDisabled ||
-      RiderGpsStatus.permissionDenied ||
-      RiderGpsStatus.permissionDeniedForever ||
-      RiderGpsStatus.uploadFailed ||
-      RiderGpsStatus.streamError => _MapStatusChip(
-        icon: Icons.gps_off_rounded,
-        text: gps.message,
-        tone: _ChipTone.warning,
-      ),
-      RiderGpsStatus.locating ||
-      RiderGpsStatus.requestingPermission => _MapStatusChip(
-        icon: Icons.gps_not_fixed_rounded,
-        text: gps.message,
-        tone: _ChipTone.neutral,
-      ),
-      _ => null,
-    };
+    if (gps == null || active == null || !active.shouldTrackLocation) {
+      return null;
+    }
+    if (gps.status == RiderGpsStatus.live ||
+        gps.status == RiderGpsStatus.uploading) {
+      return null;
+    }
+    return _statusChip(
+      icon: Icons.gps_off_rounded,
+      label: gps.message,
+      color: Colors.orangeAccent,
+    );
   }
 
-  Widget _numberBadge(int number, AppColorSet colors) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        width: 28,
-        height: 28,
-        decoration: BoxDecoration(
-          color: const Color(0xFF141414),
-          shape: BoxShape.circle,
-          border: Border.all(color: kRouteColor, width: 1.8),
-        ),
-        child: Center(
-          child: Text(
-            '$number',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: 12,
-            ),
-          ),
-        ),
-      ),
-      Container(width: 2.6, height: 14, color: kRouteColor),
-    ],
-  );
-}
-
-enum _ChipTone { neutral, warning }
-
-/// Compact status chip pinned to the map's lower-left corner.
-class _MapStatusChip extends StatelessWidget {
-  const _MapStatusChip({
-    required this.icon,
-    required this.text,
-    required this.tone,
-  });
-
-  final IconData icon;
-  final String text;
-  final _ChipTone tone;
-
-  @override
-  Widget build(BuildContext context) {
-    final fg = tone == _ChipTone.warning
-        ? Colors.orangeAccent
-        : Colors.white.withValues(alpha: 0.85);
-
+  Widget _statusChip({
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: const Color(0xE6111111),
         borderRadius: BorderRadius.circular(999),
@@ -375,16 +261,15 @@ class _MapStatusChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: fg),
-          const SizedBox(width: 5),
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
           Flexible(
             child: Text(
-              text,
+              label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppTypography.caption.copyWith(
-                color: fg,
-                fontSize: 11,
+                color: color,
                 fontWeight: FontWeight.w600,
               ),
             ),

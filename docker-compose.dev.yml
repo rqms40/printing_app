@@ -19,15 +19,21 @@ x-api-env: &api-env
   GRIDGO_TRUST_PROXY_HOPS: ${GRIDGO_TRUST_PROXY_HOPS:-0}
   NODE_ENV: development
   DATABASE_SYNCHRONIZE: "false"
+  # Auto: Google Routes when GOOGLE_MAPS_API is set, else OSRM. Override with ROUTING_PROVIDER=google|osrm.
+  GOOGLE_MAPS_API: ${GOOGLE_MAPS_API:-}
+  ROUTING_PROVIDER: ${ROUTING_PROVIDER:-}
   ROUTING_BASE_URL: ${ROUTING_BASE_URL:-http://osrm:5000}
   ROUTING_PROFILE: ${ROUTING_PROFILE:-driving}
-  ROUTING_TIMEOUT_MS: ${ROUTING_TIMEOUT_MS:-5000}
+  ROUTING_TIMEOUT_MS: ${ROUTING_TIMEOUT_MS:-8000}
   GRIDGO_STORE_LATITUDE: ${GRIDGO_STORE_LATITUDE:-7.064}
   GRIDGO_STORE_LONGITUDE: ${GRIDGO_STORE_LONGITUDE:-125.6079}
   PORT: 3000
 
 services:
+  # Optional legacy routing. Start with: docker compose --profile osrm -f docker-compose.dev.yml up
+  # When GOOGLE_MAPS_API is set, the API uses Google Routes and does not need this service.
   osrm:
+    profiles: ["osrm"]
     image: ghcr.io/project-osrm/osrm-backend:v5.27.1@sha256:855614a38f464b0558a2ad6eaa7cb8c139f39887da9b38b485ce453c6e6e6124
     command:
       - bash
@@ -146,8 +152,6 @@ services:
     depends_on:
       seed:
         condition: service_completed_successfully
-      osrm:
-        condition: service_healthy
     healthcheck:
       test:
         [
@@ -167,6 +171,7 @@ services:
         SERVER_URL: http://${GRIDGO_PUBLIC_HOST:?GRIDGO_PUBLIC_HOST must be the browser-reachable host}:${GRIDGO_API_PORT:-3000}
         ENABLE_DEV_AUTH: ${GRIDGO_ENABLE_DEV_AUTH:-false}
         GRIDGO_REAL_FLOW: ${GRIDGO_REAL_FLOW:-true}
+        GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API:-}
     ports:
       - "${GRIDGO_BIND_ADDR:-0.0.0.0}:${GRIDGO_MOBILE_PORT:-8088}:80"
     depends_on:
@@ -180,6 +185,7 @@ services:
       args:
         VITE_API_URL: http://${GRIDGO_PUBLIC_HOST:?GRIDGO_PUBLIC_HOST must be the browser-reachable host}:${GRIDGO_API_PORT:-3000}/api
         VITE_WS_URL: http://${GRIDGO_PUBLIC_HOST:?GRIDGO_PUBLIC_HOST must be the browser-reachable host}:${GRIDGO_API_PORT:-3000}
+        VITE_GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API:-}
     ports:
       - "${GRIDGO_BIND_ADDR:-0.0.0.0}:${GRIDGO_ADMIN_PORT:-8189}:80"
     depends_on:

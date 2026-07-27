@@ -16,8 +16,38 @@ import { DispatchPlanStop } from './entities/dispatch-plan-stop.entity';
 import { DispatchPlanService } from './dispatch-plan.service';
 import { ROUTING_PROVIDER } from './routing/routing-provider';
 import { OsrmRoutingProvider } from './routing/osrm-routing.provider';
+import { GoogleRoutesRoutingProvider } from './routing/google-routes.provider';
 import { UsersModule } from '../users/users.module';
 import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.module';
+
+function createRoutingProvider(config: ConfigService) {
+  const preferred = (config.get<string>('ROUTING_PROVIDER') ?? '')
+    .trim()
+    .toLowerCase();
+  const hasGoogleKey = Boolean(
+    config.get<string>('GOOGLE_MAPS_API')?.trim() ||
+      config.get<string>('GOOGLE_MAPS_API_KEY')?.trim(),
+  );
+
+  // Prefer Google when explicitly requested, or when a Maps key is present
+  // and the operator did not force OSRM.
+  // Note: Google Routes API requires billing enabled on the GCP project.
+  // If dispatch fails with routing_unavailable / 403, either enable billing
+  // or set ROUTING_PROVIDER=osrm (and run compose --profile osrm).
+  const useGoogle =
+    preferred === 'google' ||
+    preferred === 'google_routes' ||
+    (preferred !== 'osrm' && hasGoogleKey);
+
+  if (useGoogle) {
+    // eslint-disable-next-line no-console
+    console.log('[routing] provider=google_routes (GOOGLE_MAPS_API present)');
+    return new GoogleRoutesRoutingProvider(config);
+  }
+  // eslint-disable-next-line no-console
+  console.log('[routing] provider=osrm');
+  return new OsrmRoutingProvider(config);
+}
 
 @Module({
   imports: [
@@ -49,7 +79,7 @@ import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.mod
     {
       provide: ROUTING_PROVIDER,
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => new OsrmRoutingProvider(config),
+      useFactory: createRoutingProvider,
     },
   ],
   exports: [RidersService, DispatchPlanService, LocationGateway],

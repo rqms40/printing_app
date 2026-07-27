@@ -34,6 +34,77 @@
   <title>GRIDGO</title>
   <link rel="manifest" href="manifest.json">
 
+  <!-- Google Maps JavaScript API for Flutter web.
+       Key injected for local/dev; do not commit real keys.
+       Sets window.__gridgoMapsReady / window.__gridgoMapsError for Dart. -->
+  <script>
+    window.__gridgoMapsReady = false;
+    window.__gridgoMapsError = null;
+    window.gm_authFailure = function () {
+      window.__gridgoMapsReady = false;
+      window.__gridgoMapsError =
+        'Maps JavaScript API blocked for this key (gm_authFailure / ApiTargetBlockedMapError). ' +
+        'In Google Cloud: enable Maps JavaScript API + billing; key API restrictions must include Maps JavaScript API; ' +
+        'for local dev set Application restrictions to None OR HTTP referrers http://127.0.0.1:8080/* and http://127.0.0.1:5173/*';
+      console.error('[GRIDGO]', window.__gridgoMapsError);
+    };
+    window.__gridgoMapsInit = function () {
+      try {
+        if (!window.google || !google.maps || !google.maps.Map) {
+          window.__gridgoMapsError = 'google.maps.Map missing after script load.';
+          return;
+        }
+        var el = document.createElement('div');
+        el.setAttribute('aria-hidden', 'true');
+        el.style.cssText = 'width:2px;height:2px;position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none;';
+        document.body.appendChild(el);
+        new google.maps.Map(el, {
+          center: { lat: 7.064, lng: 125.6079 },
+          zoom: 12,
+          disableDefaultUI: true,
+          keyboardShortcuts: false
+        });
+        var checks = 0;
+        var timer = setInterval(function () {
+          checks += 1;
+          var text = (el.innerText || el.textContent || '');
+          if (window.__gridgoMapsError) {
+            clearInterval(timer);
+            try { el.remove(); } catch (e) {}
+            window.__gridgoMapsReady = false;
+            return;
+          }
+          if (text.indexOf('Oops') !== -1 || text.indexOf("didn't load Google Maps") !== -1) {
+            clearInterval(timer);
+            window.__gridgoMapsReady = false;
+            window.__gridgoMapsError =
+              'Google Maps auth failed (Oops tile). Check Maps JavaScript API enablement + key restrictions.';
+            console.error('[GRIDGO]', window.__gridgoMapsError);
+            try { el.remove(); } catch (e) {}
+            return;
+          }
+          if (el.querySelector('canvas') || el.querySelector('img') || checks >= 12) {
+            clearInterval(timer);
+            if (!window.__gridgoMapsError) {
+              window.__gridgoMapsReady = true;
+              console.info('[GRIDGO] Google Maps JS ready');
+            }
+            try { el.remove(); } catch (e) {}
+          }
+        }, 250);
+      } catch (e) {
+        window.__gridgoMapsReady = false;
+        window.__gridgoMapsError = 'Maps init failed: ' + (e && e.message ? e.message : e);
+        console.error('[GRIDGO]', window.__gridgoMapsError);
+      }
+    };
+  </script>
+  <script
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCzkhDlCNjANPju7veY1fLFuG4eHPqu_KQ&libraries=geometry&callback=__gridgoMapsInit"
+    async
+    defer
+    onerror="window.__gridgoMapsReady=false;window.__gridgoMapsError='Failed to load Maps JavaScript API script.';console.error(window.__gridgoMapsError);"
+  ></script>
   <!-- Firebase JS SDK for web push notifications -->
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js"></script>

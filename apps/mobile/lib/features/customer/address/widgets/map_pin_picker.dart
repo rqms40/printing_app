@@ -1,25 +1,27 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
+import 'package:printing_app/shared/maps/grid_map_view.dart';
 
 /// Interactive map for picking a delivery address by dragging the map
-/// under a fixed center pin.
+/// under a fixed center pin (Google Maps on Android/iOS/Web).
 class MapPinPicker extends StatefulWidget {
   const MapPinPicker({
     super.key,
     this.initialCenter = const LatLng(7.0731, 125.6128),
     this.height = 200,
     this.mapTilesEnabled = true,
+    this.forcePlaceholder = false,
     this.onChanged,
   });
 
   final LatLng initialCenter;
   final double height;
   final bool mapTilesEnabled;
+  final bool forcePlaceholder;
   final ValueChanged<LatLng>? onChanged;
 
   @override
@@ -27,7 +29,7 @@ class MapPinPicker extends StatefulWidget {
 }
 
 class _MapPinPickerState extends State<MapPinPicker> {
-  final MapController _mapController = MapController();
+  final GridMapController _mapController = GridMapController();
   late LatLng _center;
 
   @override
@@ -37,6 +39,12 @@ class _MapPinPickerState extends State<MapPinPicker> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) widget.onChanged?.call(_center);
     });
+  }
+
+  @override
+  void dispose() {
+    _mapController.unbind();
+    super.dispose();
   }
 
   void _updateCenter(LatLng center) {
@@ -63,31 +71,25 @@ class _MapPinPickerState extends State<MapPinPicker> {
           borderRadius: AppRadius.borderLg,
           child: Stack(
             children: [
-              // Interactive OpenStreetMap
-              FlutterMap(
-                mapController: _mapController,
-                options: MapOptions(
-                  initialCenter: widget.initialCenter,
-                  initialZoom: 15.0,
-                  onPositionChanged: (camera, hasGesture) {
-                    _updateCenter(camera.center);
-                  },
-                  onTap: (_, point) {
-                    _mapController.move(point, 15.0);
+              if (!widget.mapTilesEnabled)
+                ColoredBox(color: colors.surfaceVariant)
+              else
+                GridMapView(
+                  controller: _mapController,
+                  forcePlaceholder: widget.forcePlaceholder,
+                  initialCamera: GridMapCamera(
+                    target: widget.initialCenter,
+                    zoom: 15,
+                  ),
+                  interactive: true,
+                  onCameraMove: (camera) => _updateCenter(camera.target),
+                  onTap: (point) {
+                    _mapController.moveTo(
+                      GridMapCamera(target: point, zoom: 15),
+                    );
                     _updateCenter(point);
                   },
                 ),
-                children: [
-                  if (widget.mapTilesEnabled)
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.gridgoprint.app',
-                    )
-                  else
-                    ColoredBox(color: colors.surfaceVariant),
-                ],
-              ),
 
               // Center pin overlay — fixed position, map moves under it
               Center(
@@ -116,11 +118,10 @@ class _MapPinPickerState extends State<MapPinPicker> {
                 ),
               ),
 
-              // "Drag map to set location" label at bottom
               Positioned(
-                bottom: AppSpacing.sm,
                 left: 0,
                 right: 0,
+                bottom: AppSpacing.sm,
                 child: Center(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -128,36 +129,15 @@ class _MapPinPickerState extends State<MapPinPicker> {
                       vertical: AppSpacing.xs,
                     ),
                     decoration: BoxDecoration(
-                      color: colors.surface.withValues(alpha: 0.9),
+                      color: colors.surface.withValues(alpha: 0.92),
                       borderRadius: AppRadius.borderFull,
                     ),
                     child: Text(
                       'Drag map to set location',
                       style: AppTypography.caption.copyWith(
-                        color: colors.onSurfaceDim,
+                        color: colors.onSurface,
+                        fontWeight: FontWeight.w600,
                       ),
-                    ),
-                  ),
-                ),
-              ),
-
-              Positioned(
-                top: AppSpacing.sm,
-                left: AppSpacing.sm,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.sm,
-                    vertical: AppSpacing.xs,
-                  ),
-                  decoration: BoxDecoration(
-                    color: colors.surface.withValues(alpha: 0.9),
-                    borderRadius: AppRadius.borderFull,
-                  ),
-                  child: Text(
-                    '${_center.latitude.toStringAsFixed(5)}, '
-                    '${_center.longitude.toStringAsFixed(5)}',
-                    style: AppTypography.caption.copyWith(
-                      color: colors.onSurfaceDim,
                     ),
                   ),
                 ),

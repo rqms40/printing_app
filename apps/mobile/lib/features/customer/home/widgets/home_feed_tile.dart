@@ -774,7 +774,7 @@ class _InviteState extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            'Reviews appear here after deliveries.',
+            'Reviews appear here.',
             style: AppTypography.caption.copyWith(
               color: colors.onSurfaceDim,
               fontSize: 9.5,

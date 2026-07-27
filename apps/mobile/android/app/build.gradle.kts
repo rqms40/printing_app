@@ -28,10 +28,17 @@ android {
         applicationId = "com.example.printing_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = maxOf(flutter.minSdkVersion, 21)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Google Maps: MAPS_API_KEY from local.properties, env, or empty (map tiles fail until set).
+        val mapsKey =
+            (project.findProperty("MAPS_API_KEY") as String?)
+                ?: System.getenv("GOOGLE_MAPS_API")
+                ?: System.getenv("GOOGLE_MAPS_API_KEY")
+                ?: ""
+        manifestPlaceholders["MAPS_API_KEY"] = mapsKey
     }
 
     signingConfigs {

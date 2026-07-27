@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Form,
   InputNumber,
@@ -13,75 +13,20 @@ import {
   Divider,
 } from "antd";
 import { EnvironmentOutlined, AimOutlined } from "@ant-design/icons";
-import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  Circle,
-  useMapEvents,
-  useMap,
-} from "react-leaflet";
-import { DivIcon, type LatLngExpression } from "leaflet";
-import "leaflet/dist/leaflet.css";
 import { apiClient } from "@/providers/api-client";
 import type { DeliverySettings } from "@/types/delivery-slot";
+import { GridGoogleMap } from "@/components/google-map/grid-google-map";
 
 const { Text, Title } = Typography;
-
-const PIN_ICON = new DivIcon({
-  className: "delivery-pin-icon",
-  html: `
-    <div style="position: relative; width: 36px; height: 44px;">
-      <div style="
-        position: absolute;
-        top: 0; left: 0;
-        width: 36px; height: 36px;
-        background: #FFDE58;
-        border-radius: 50% 50% 50% 0;
-        transform: rotate(-45deg);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-        border: 3px solid #141414;
-      "></div>
-      <div style="
-        position: absolute;
-        top: 9px; left: 9px;
-        width: 18px; height: 18px;
-        background: #141414;
-        border-radius: 50%;
-      "></div>
-    </div>
-  `,
-  iconSize: [36, 44],
-  iconAnchor: [18, 40],
-});
-
-function MapClickHandler({
-  onPick,
-}: {
-  onPick: (lat: number, lng: number) => void;
-}) {
-  useMapEvents({
-    click(e) {
-      onPick(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return null;
-}
-
-function MapRecenter({ center }: { center: LatLngExpression }) {
-  const map = useMap();
-  useEffect(() => {
-    map.flyTo(center, map.getZoom(), { duration: 0.6 });
-  }, [center, map]);
-  return null;
-}
 
 export function DeliverySettingsPage() {
   const { message } = App.useApp();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [center, setCenter] = useState<[number, number] | null>(null);
+  const [center, setCenter] = useState<{ lat: number; lng: number } | null>(
+    null,
+  );
   const [radiusKm, setRadiusKm] = useState<number>(25);
 
   useEffect(() => {
@@ -98,37 +43,44 @@ export function DeliverySettingsPage() {
           priorityFeeAmount: Number(res.data.priorityFeeAmount),
           extraDestinationSurcharge: Number(res.data.extraDestinationSurcharge),
         });
-        setCenter([lat, lng]);
+        setCenter({ lat, lng });
         setRadiusKm(radius);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [form]);
 
   const handleMapPick = (lat: number, lng: number) => {
-    const rounded: [number, number] = [
-      Number(lat.toFixed(7)),
-      Number(lng.toFixed(7)),
-    ];
-    setCenter(rounded);
+    const next = {
+      lat: Number(lat.toFixed(7)),
+      lng: Number(lng.toFixed(7)),
+    };
+    setCenter(next);
     form.setFieldsValue({
-      serviceCenterLat: rounded[0],
-      serviceCenterLng: rounded[1],
+      serviceCenterLat: next.lat,
+      serviceCenterLng: next.lng,
     });
   };
 
   const handleFieldChange = (
-    _changed: any,
-    all: { serviceCenterLat?: number; serviceCenterLng?: number; serviceRadiusKm?: number },
+    _changed: unknown,
+    all: {
+      serviceCenterLat?: number;
+      serviceCenterLng?: number;
+      serviceRadiusKm?: number;
+    },
   ) => {
-    if (typeof all.serviceCenterLat === "number" && typeof all.serviceCenterLng === "number") {
-      setCenter([all.serviceCenterLat, all.serviceCenterLng]);
+    if (
+      typeof all.serviceCenterLat === "number" &&
+      typeof all.serviceCenterLng === "number"
+    ) {
+      setCenter({ lat: all.serviceCenterLat, lng: all.serviceCenterLng });
     }
     if (typeof all.serviceRadiusKm === "number" && all.serviceRadiusKm > 0) {
       setRadiusKm(all.serviceRadiusKm);
     }
   };
 
-  const onSave = async (values: any) => {
+  const onSave = async (values: unknown) => {
     setSaving(true);
     try {
       await apiClient.patch("/admin/settings/delivery", values);
@@ -139,11 +91,6 @@ export function DeliverySettingsPage() {
       setSaving(false);
     }
   };
-
-  const tileUrl = useMemo(
-    () => "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-    [],
-  );
 
   if (loading || !center) {
     return (
@@ -180,30 +127,30 @@ export function DeliverySettingsPage() {
               style={{ borderRadius: 12, overflow: "hidden" }}
             >
               <div style={{ height: 480, position: "relative" }}>
-                <MapContainer
+                <GridGoogleMap
                   center={center}
                   zoom={12}
-                  style={{ height: "100%", width: "100%", zIndex: 1 }}
-                >
-                  <TileLayer
-                    url={tileUrl}
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-                  />
-                  <MapRecenter center={center} />
-                  <MapClickHandler onPick={handleMapPick} />
-                  <Marker position={center} icon={PIN_ICON} />
-                  <Circle
-                    center={center}
-                    radius={radiusKm * 1000}
-                    pathOptions={{
-                      color: "#FFDE58",
+                  height={480}
+                  interactive
+                  onClick={(pos) => handleMapPick(pos.lat, pos.lng)}
+                  markers={[
+                    {
+                      id: "service-center",
+                      position: center,
+                      title: "Service center",
+                    },
+                  ]}
+                  circles={[
+                    {
+                      id: "service-radius",
+                      center,
+                      radiusMeters: radiusKm * 1000,
+                      strokeColor: "#FFDE58",
                       fillColor: "#FFDE58",
-                      fillOpacity: 0.12,
-                      weight: 2,
-                      dashArray: "6 6",
-                    }}
-                  />
-                </MapContainer>
+                    },
+                  ]}
+                  fitPositions={[center]}
+                />
 
                 <div
                   style={{
@@ -227,121 +174,52 @@ export function DeliverySettingsPage() {
                   <AimOutlined style={{ color: "#FFDE58" }} />
                   Click anywhere on the map to move the service center
                 </div>
-
-                <div
-                  style={{
-                    position: "absolute",
-                    bottom: 12,
-                    left: 12,
-                    background: "rgba(20, 20, 20, 0.85)",
-                    color: "#FFFFFF",
-                    padding: "8px 12px",
-                    borderRadius: 8,
-                    fontSize: 11,
-                    fontFamily:
-                      "'SFMono-Regular', Consolas, 'Liberation Mono', monospace",
-                    letterSpacing: "0.04em",
-                    zIndex: 2,
-                    backdropFilter: "blur(6px)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  <EnvironmentOutlined style={{ color: "#FFDE58" }} />
-                  {center[0].toFixed(5)}, {center[1].toFixed(5)} · {radiusKm} km
-                </div>
               </div>
             </Card>
           </Col>
 
           <Col xs={24} lg={10}>
-            <Card
-              title="Service Area"
-              style={{ marginBottom: 16, borderRadius: 12 }}
-            >
-              <Space.Compact style={{ width: "100%" }}>
-                <Form.Item
-                  name="serviceCenterLat"
-                  label="Latitude"
-                  rules={[{ required: true }]}
-                  style={{ width: "50%", marginBottom: 12 }}
-                >
-                  <InputNumber
-                    style={{ width: "100%" }}
-                    step={0.0001}
-                    precision={7}
-                  />
-                </Form.Item>
-                <Form.Item
-                  name="serviceCenterLng"
-                  label="Longitude"
-                  rules={[{ required: true }]}
-                  style={{ width: "50%", marginBottom: 12 }}
-                >
-                  <InputNumber
-                    style={{ width: "100%" }}
-                    step={0.0001}
-                    precision={7}
-                  />
-                </Form.Item>
-              </Space.Compact>
+            <Card title={<Space><EnvironmentOutlined /> Service area</Space>}>
               <Form.Item
+                label="Center latitude"
+                name="serviceCenterLat"
+                rules={[{ required: true }]}
+              >
+                <InputNumber style={{ width: "100%" }} step={0.0000001} />
+              </Form.Item>
+              <Form.Item
+                label="Center longitude"
+                name="serviceCenterLng"
+                rules={[{ required: true }]}
+              >
+                <InputNumber style={{ width: "100%" }} step={0.0000001} />
+              </Form.Item>
+              <Form.Item
+                label="Radius (km)"
                 name="serviceRadiusKm"
-                label="Service radius (km)"
-                rules={[{ required: true, type: "number", min: 0.1 }]}
-                style={{ marginBottom: 0 }}
+                rules={[{ required: true }]}
               >
-                <InputNumber
-                  style={{ width: "100%" }}
-                  min={0.1}
-                  max={500}
-                  step={1}
-                />
+                <InputNumber style={{ width: "100%" }} min={1} max={200} />
               </Form.Item>
-            </Card>
-
-            <Card title="Fee Settings" style={{ borderRadius: 12 }}>
-              <Form.Item
-                name="priorityFeeAmount"
-                label="Priority fee (₱)"
-                rules={[{ required: true, type: "number", min: 0 }]}
-              >
-                <InputNumber
-                  style={{ width: "100%" }}
-                  min={0}
-                  step={5}
-                  prefix="₱"
-                />
+              <Divider />
+              <Form.Item label="Priority fee (PHP)" name="priorityFeeAmount">
+                <InputNumber style={{ width: "100%" }} min={0} />
               </Form.Item>
               <Form.Item
+                label="Extra destination surcharge (PHP)"
                 name="extraDestinationSurcharge"
-                label="Extra destination surcharge (₱)"
-                rules={[{ required: true, type: "number", min: 0 }]}
-                style={{ marginBottom: 0 }}
               >
-                <InputNumber
-                  style={{ width: "100%" }}
-                  min={0}
-                  step={5}
-                  prefix="₱"
-                />
+                <InputNumber style={{ width: "100%" }} min={0} />
               </Form.Item>
+              <Button type="primary" htmlType="submit" loading={saving} block>
+                Save delivery settings
+              </Button>
             </Card>
-
-            <Divider style={{ margin: "20px 0 16px" }} />
-            <Button
-              type="primary"
-              htmlType="submit"
-              loading={saving}
-              block
-              size="large"
-            >
-              Save settings
-            </Button>
           </Col>
         </Row>
       </Form>
     </div>
   );
 }
+
+export default DeliverySettingsPage;
