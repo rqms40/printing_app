@@ -74,18 +74,23 @@ class FeatureOverlayCard extends StatelessWidget {
 
           if (heroIcon != null) ...[
             Center(
-              child: Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  color: colors.brand.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Center(
-                  child: HugeIcon(
-                    icon: heroIcon,
-                    color: colors.brand,
-                    size: 36,
+              // Decorative: the card's title and body carry the meaning, so
+              // keep the glyph out of the semantics tree rather than leaving
+              // an unnamed role="img" for screen readers and axe.
+              child: ExcludeSemantics(
+                child: Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: colors.brand.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Center(
+                    child: HugeIcon(
+                      icon: heroIcon,
+                      color: colors.brand,
+                      size: 36,
+                    ),
                   ),
                 ),
               ),
@@ -126,17 +131,20 @@ class FeatureOverlayCard extends StatelessWidget {
               children: iconTiles.map((tile) => Expanded(
                 child: Column(
                   children: [
-                    Container(
-                      width: 48, height: 48,
-                      decoration: BoxDecoration(
-                        color: colors.brand.withValues(alpha: 0.10),
-                        borderRadius: AppRadius.borderMd,
-                      ),
-                      child: Center(
-                        child: HugeIcon(
-                          icon: tile.icon,
-                          color: colors.brand,
-                          size: 22,
+                    // Decorative: the label underneath names the tile.
+                    ExcludeSemantics(
+                      child: Container(
+                        width: 48, height: 48,
+                        decoration: BoxDecoration(
+                          color: colors.brand.withValues(alpha: 0.10),
+                          borderRadius: AppRadius.borderMd,
+                        ),
+                        child: Center(
+                          child: HugeIcon(
+                            icon: tile.icon,
+                            color: colors.brand,
+                            size: 22,
+                          ),
                         ),
                       ),
                     ),
