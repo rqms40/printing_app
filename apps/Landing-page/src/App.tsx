@@ -65,7 +65,7 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
           <button className="px-6 py-2 bg-white text-black rounded-full hover:bg-gray-200 transition-colors">Sign Up</button>
         </div> */}
 
-        
+
         {/* Dark Mode Toggle */}
         <button
           onClick={toggleDarkMode}
@@ -551,7 +551,7 @@ function BetaSection() {
                     <path d="M16.365 14.363c-.015-3.08 2.502-4.545 2.617-4.618-1.428-2.091-3.64-2.378-4.423-2.42-1.894-.19-3.693 1.115-4.654 1.115-.963 0-2.434-1.09-4.01-1.059-2.063.03-3.965 1.196-5.029 3.037-2.146 3.712-.55 9.206 1.543 12.235 1.025 1.48 2.235 3.134 3.84 3.076 1.531-.061 2.112-.99 3.94-.99 1.828 0 2.35.99 3.94 1.02 1.636.03 2.686-1.449 3.706-2.94 1.176-1.716 1.66-3.376 1.682-3.46-.035-.015-3.146-1.206-3.152-4.996zM14.935 5.568c.843-1.02 1.411-2.436 1.256-3.848-1.218.049-2.695.811-3.565 1.826-.701.815-1.383 2.264-1.198 3.645 1.364.105 2.663-.603 3.507-1.623z" />
                   </svg>
                   <div className="flex flex-col items-start justify-center">
-                    <span className="text-[9px] leading-[1] text-gray-700 dark:text-gray-300 mb-[2px]">Download on the</span>
+                    {/* <span className="text-[9px] leading-[1] text-gray-700 dark:text-gray-300 mb-[2px]">Download on the</span> */}
                     <span className="text-[14px] font-semibold leading-[1]">App Store</span>
                   </div>
                 </div>
@@ -562,7 +562,7 @@ function BetaSection() {
                     <path d="M3.609 1.814L13.792 12 3.61 22.186c-.165-.133-.298-.3-.389-.49A1.737 1.737 0 013 20.854V3.146c0-.306.075-.596.221-.842.146-.246.353-.448.6-.58.058-.031.121-.059.188-.083v.173zm1.116-.503l9.96 5.75L15.3 7.644 4.725 1.311zm11.393 6.643L20.655 10.6a1.738 1.738 0 010 2.802l-4.537 2.645-1.572-1.571 1.572-1.572zM4.725 22.689l10.575-6.333-1.403-1.403-9.172 7.736z" />
                   </svg>
                   <div className="flex flex-col items-start justify-center">
-                    <span className="text-[9px] leading-[1] text-gray-700 dark:text-gray-300 mb-[2px]">GET IT ON</span>
+                    {/* <span className="text-[9px] leading-[1] text-gray-700 dark:text-gray-300 mb-[2px]">GET IT ON</span> */}
                     <span className="text-[14px] font-semibold leading-[1]">Google Play</span>
                   </div>
                 </div>
@@ -573,6 +573,85 @@ function BetaSection() {
 
       </div>
     </section>
+  );
+}
+
+function FooterSection() {
+  return (
+    <footer className="bg-[#050505] text-white pt-24 pb-12 px-8 relative z-20 border-t border-white/5 font-sans">
+      <div className="max-w-[1100px] mx-auto flex flex-col md:flex-row justify-between gap-16 mb-24">
+
+        {/* Left Logo & Info */}
+        <div className="flex-[1.5] max-w-sm">
+          <a href="#hero" className="flex items-center gap-4 cursor-pointer mb-10">
+            <div className="grid grid-cols-3 gap-1">
+              <div className="w-2 h-2 bg-white rounded-full"></div>
+              <div className="w-2 h-2 bg-white rounded-full"></div>
+              <div className="w-2 h-2 bg-[var(--color-primary)] rounded-full"></div>
+              <div className="w-2 h-2 bg-white rounded-full"></div>
+              <div className="w-2 h-2 bg-white rounded-full"></div>
+              <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
+              <div className="w-2 h-2 bg-white rounded-full"></div>
+              <div className="w-2 h-2 bg-white rounded-full"></div>
+              <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
+            </div>
+            <span className="text-3xl font-black tracking-widest uppercase text-white">
+              GRID<span className="text-[var(--color-primary)]">GO</span>
+            </span>
+          </a>
+
+          <div className="text-gray-400 text-[13px] font-mono space-y-3 mb-12">
+            <p>GRIDGO Team</p>
+            <p className="leading-relaxed">The essential digital printing partner in the global market, making the transition from digital design to physical reality effortless.</p>
+          </div>
+
+          <p className="text-[#666] text-[11px] tracking-widest font-mono uppercase">SUPPORT@GRIDGO.APP</p>
+        </div>
+
+        {/* Links Columns */}
+        <div className="flex-[2] flex flex-wrap md:flex-nowrap justify-between gap-12 border-l border-white/5 pl-0 md:pl-12">
+          <div className="flex flex-col gap-6">
+            <h4 className="text-[#666] text-[13px] lowercase font-mono">services</h4>
+            <div className="flex flex-col gap-5">
+              <a href="#" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">DOCUMENT PRINTING</a>
+              <a href="#" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">3D PRINTING</a>
+              <a href="#" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">DELIVERY</a>
+              <a href="#" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">THE QUEUE</a>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-6">
+            <h4 className="text-[#666] text-[13px] lowercase font-mono">resources</h4>
+            <div className="flex flex-col gap-5">
+              <a href="#support" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">SUPPORT</a>
+              <a href="#process" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">HOW IT WORKS</a>
+              <a href="#features" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">FEATURES</a>
+              <a href="#download" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">DOWNLOAD APP</a>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-6">
+            <h4 className="text-[#666] text-[13px] lowercase font-mono">more</h4>
+            <div className="flex flex-col gap-5">
+              <a href="#about" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">ABOUT US</a>
+              <a href="#" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">PRIVACY POLICY</a>
+              <a href="#" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">TERMS OF SERVICE</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom bar */}
+      <div className="max-w-[1100px] mx-auto flex flex-col md:flex-row justify-between items-end gap-6 pt-10 text-[#666] text-[11px] font-mono tracking-wide">
+        <p className="max-w-[400px] leading-relaxed">
+          A modern platform for digital printing combining precision technology, high-quality output, and seamless logistics.
+        </p>
+        <div className="flex gap-8 uppercase tracking-widest">
+          <span>&copy; 2026 GRIDGO</span>
+          <span>ALL RIGHTS RESERVED</span>
+        </div>
+      </div>
+    </footer>
   );
 }
 
@@ -616,7 +695,7 @@ function App() {
       return;
     }
 
-    
+
 
     const handleScroll = () => {
       setShowScrollTop(window.scrollY > 500);
@@ -642,6 +721,7 @@ function App() {
         <AboutSection isDarkMode={isDarkMode} />
         <TeamSection isDarkMode={isDarkMode} />
         <BetaSection />
+        <FooterSection />
       </div>
 
       {/* Scroll to Top Button */}

@@ -169,9 +169,28 @@ function PhoneRig() {
     const innerHeight = window.innerHeight
     const vh = scrollY / innerHeight
     const maxScroll = document.documentElement.scrollHeight - innerHeight
-    const fromBottomVh = Math.max(0, (maxScroll - scrollY) / innerHeight)
+    
+    const footer = document.querySelector('footer')
+    const footerHeight = footer ? footer.offsetHeight : 0
+    
+    const maxScrollBeta = Math.max(0, maxScroll - footerHeight)
+    
+    let fromBottomVh = (maxScrollBeta - scrollY) / innerHeight
+    let footerScrollVh = 0
+    
+    if (fromBottomVh < 0) {
+      footerScrollVh = -fromBottomVh
+      fromBottomVh = 0
+    }
 
     const target = getPhoneState(vh, fromBottomVh)
+    
+    // Apply scroll offset if scrolling into footer
+    // In 3D space, moving up is positive Y.
+    // 6.627 is roughly the visible height in 3D units for fov 45, z=8
+    const visibleHeightUnits = 2 * Math.tan((45 / 2) * (Math.PI / 180)) * 8
+    target.pos[1] += footerScrollVh * visibleHeightUnits
+
     const lf = 0.08 // lerp factor
 
     group.current.position.x = THREE.MathUtils.lerp(group.current.position.x, target.pos[0], lf)
