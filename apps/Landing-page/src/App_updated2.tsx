@@ -10,6 +10,7 @@ import { landingLinks, shouldRedirectToMobileWeb } from './utils/landingLinks';
 function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDarkMode: () => void }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [isLogoGlassy, setIsLogoGlassy] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -17,6 +18,8 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
 
       const featuresEl = document.getElementById('features');
       if (featuresEl) {
+        const rect = featuresEl.getBoundingClientRect();
+        setIsLogoGlassy(rect.top <= 80 && rect.bottom >= 20);
       }
     };
     window.addEventListener('scroll', handleScroll);
@@ -33,7 +36,7 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
         className="fixed top-0 left-0 right-0 z-[60] px-8 py-4 flex items-center justify-between"
       >
         {/* Logo */}
-        <a href="#hero" className="flex items-center gap-3 cursor-pointer px-5 py-2.5 rounded-full border border-white/10 bg-black text-white shadow-[0_0_15px_rgba(0,0,0,0.5)] hover:bg-black/80 transition-all duration-500">
+        <a href="#hero" className={`flex items-center gap-3 cursor-pointer px-5 py-2.5 rounded-full border transition-all duration-500 ${isLogoGlassy ? 'bg-white dark:bg-white/80 dark:bg-black/60 backdrop-blur-md border-black/10 dark:border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}>
           <div className="grid grid-cols-3 gap-1">
             <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
             <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
@@ -51,7 +54,7 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
         </a>
 
         {/* Center Nav */}
-        <div className={`hidden md:flex rounded-full px-6 py-2.5 items-center gap-8 text-sm font-medium absolute left-1/2 -translate-x-1/2 border transition-all duration-500 ${isScrolled ? 'bg-white dark:bg-black/60 backdrop-blur-md border-black/10 dark:border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}>
+        <div className={`hidden md:flex rounded-full px-6 py-2.5 items-center gap-8 text-sm font-medium absolute left-1/2 -translate-x-1/2 border transition-all duration-500 ${isScrolled ? 'bg-white dark:bg-white/80 dark:bg-black/60 backdrop-blur-md border-black/10 dark:border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}>
           <a href="#features" className="hover:text-[var(--color-primary)] transition-colors">Features</a>
           <a href="#process" className="hover:text-[var(--color-primary)] transition-colors">How it Works</a>
           <a href="#support" className="hover:text-[var(--color-primary)] transition-colors">Support</a>
@@ -60,7 +63,7 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
         </div>
 
         {/* Right Nav */}
-        {/* <div className={`hidden md:flex rounded-full items-center text-sm font-medium overflow-hidden p-1 border transition-all duration-500 ${isScrolled ? 'bg-white dark:bg-black/60 backdrop-blur-md border-black/10 dark:border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}>
+        {/* <div className={`hidden md:flex rounded-full items-center text-sm font-medium overflow-hidden p-1 border transition-all duration-500 ${isScrolled ? 'bg-white dark:bg-white/80 dark:bg-black/60 backdrop-blur-md border-black/10 dark:border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}>
           <button className="px-6 py-2 hover:bg-white/10 rounded-full transition-colors">Log In</button>
           <button className="px-6 py-2 bg-white text-black rounded-full hover:bg-gray-200 transition-colors">Sign Up</button>
         </div> */}
@@ -75,7 +78,7 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
         </button>
         {/* Mobile Hamburger Button */}
         <button
-          className={`md:hidden p-2 rounded-full z-50 relative border transition-all duration-500 ${isScrolled ? 'bg-white dark:bg-black/60 backdrop-blur-md border-black/10 dark:border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}
+          className={`md:hidden p-2 rounded-full z-50 relative border transition-all duration-500 ${isScrolled ? 'bg-white dark:bg-white/80 dark:bg-black/60 backdrop-blur-md border-black/10 dark:border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}
           onClick={() => setIsOpen(!isOpen)}
         >
           {isOpen ? <X size={24} /> : <Menu size={24} />}
@@ -89,7 +92,7 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
             initial={{ opacity: 0, y: -20, filter: 'blur(10px)' }}
             animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
             exit={{ opacity: 0, y: -20, filter: 'blur(10px)' }}
-            className="fixed inset-0 z-50 bg-white dark:bg-black/90 backdrop-blur-lg flex flex-col items-center justify-center gap-8 md:hidden"
+            className="fixed inset-0 z-50 bg-white dark:bg-white/95 dark:bg-black/90 backdrop-blur-lg flex flex-col items-center justify-center gap-8 md:hidden"
           >
             <a href="#features" onClick={() => setIsOpen(false)} className="text-2xl font-bold hover:text-[var(--color-primary)] transition-colors">Features</a>
             <a href="#process" onClick={() => setIsOpen(false)} className="text-2xl font-bold hover:text-[var(--color-primary)] transition-colors">How it Works</a>
@@ -97,7 +100,7 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
             <a href="#about" onClick={() => setIsOpen(false)} className="text-2xl font-bold hover:text-[var(--color-primary)] transition-colors">About Us</a>
             <a href="#download" onClick={() => setIsOpen(false)} className="text-2xl font-bold hover:text-[var(--color-primary)] transition-colors">Download</a>
             {/* <div className="flex gap-4 mt-8">
-              <button className="px-8 py-3 bg-white dark:bg-black/60 backdrop-blur-md border border-black/10 dark:border-white/10 rounded-full transition-colors font-bold" onClick={() => setIsOpen(false)}>Log In</button>
+              <button className="px-8 py-3 bg-white dark:bg-white/80 dark:bg-black/60 backdrop-blur-md border border-black/10 dark:border-white/10 rounded-full transition-colors font-bold" onClick={() => setIsOpen(false)}>Log In</button>
               <button className="px-8 py-3 bg-[var(--color-primary)] text-black rounded-full hover:bg-yellow-400 transition-colors font-bold" onClick={() => setIsOpen(false)}>Sign Up</button>
             </div> */}
           </motion.div>
@@ -115,16 +118,15 @@ function HeroSection() {
   );
 }
 
-function ProcessSection({ isDarkMode }: { isDarkMode?: boolean }) {
+function ProcessSection() {
   return (
-    <section className="h-[100vh] flex flex-col items-center justify-end pb-32 relative z-10 bg-map" style={{ backgroundImage: `url(${isDarkMode ? "/GRIDGO_BG.png" : "/GRIDGO_BG_WHITE.png"})` }}>
-      <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-0 pointer-events-none dark:hidden" />
+    <section className="h-[100vh] flex flex-col items-center justify-end pb-32 relative z-10 bg-map">
       <motion.div
         initial={{ opacity: 0, y: 50, filter: 'blur(20px)' }}
         whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
         transition={{ duration: 1, ease: 'easeOut' }}
         viewport={{ once: true, margin: "-100px" }}
-        className="text-center max-w-2xl px-4 relative z-10"
+        className="text-center max-w-2xl px-4"
       >
         <p className="text-xs md:text-sm tracking-[0.3em] uppercase text-gray-600 dark:text-gray-400 mb-2">
           MAPPING THE FUTURE OF PRINTING
@@ -294,11 +296,10 @@ function HowItWorksSection() {
   );
 }
 
-function SupportSection({ isDarkMode }: { isDarkMode?: boolean }) {
+function SupportSection() {
   return (
-    <section id="support" className="min-h-screen bg-map py-24 relative z-10" style={{ backgroundImage: `url(${isDarkMode ? "/GRIDGO_BG.png" : "/GRIDGO_BG_WHITE.png"})` }}>
-      <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-0 pointer-events-none dark:hidden" />
-      <div className="max-w-6xl mx-auto px-6 relative z-10">
+    <section id="support" className="min-h-screen bg-map py-24 relative z-10">
+      <div className="max-w-6xl mx-auto px-6">
 
         {/* Header */}
         <motion.div
@@ -378,11 +379,10 @@ function SupportSection({ isDarkMode }: { isDarkMode?: boolean }) {
   );
 }
 
-function AboutSection({ isDarkMode }: { isDarkMode?: boolean }) {
+function AboutSection() {
   return (
-    <section id="about" className="min-h-screen bg-map py-32 relative z-10 flex flex-col justify-center" style={{ backgroundImage: `url(${isDarkMode ? "/GRIDGO_BG.png" : "/GRIDGO_BG_WHITE.png"})` }}>
-      <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-0 pointer-events-none dark:hidden" />
-      <div className="max-w-[1100px] mx-auto px-8 w-full relative z-10">
+    <section id="about" className="min-h-screen bg-map py-32 relative z-10 flex flex-col justify-center">
+      <div className="max-w-[1100px] mx-auto px-8 w-full">
         <h2 className="font-heading text-4xl md:text-[42px] font-bold text-center mb-24 tracking-tight">About Us</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-[4.5fr_7.5fr] gap-10 md:gap-16 items-stretch">
@@ -460,11 +460,10 @@ function TeamMember({ image, role, name, quote, delay = 0, reverse = false }: Te
   );
 }
 
-function TeamSection({ isDarkMode }: { isDarkMode?: boolean }) {
+function TeamSection() {
   return (
-    <section className="min-h-screen bg-map py-20 relative z-10 overflow-hidden" style={{ backgroundImage: `url(${isDarkMode ? "/GRIDGO_BG.png" : "/GRIDGO_BG_WHITE.png"})` }}>
-      <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-0 pointer-events-none dark:hidden" />
-      <div className="px-8 relative z-10">
+    <section className="min-h-screen bg-map py-20 relative z-10 overflow-hidden">
+      <div className="px-8">
         <TeamMember
           image="/JR.png"
           role="founder"
@@ -578,16 +577,11 @@ function BetaSection() {
 
 function App() {
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    const saved = localStorage.getItem('theme');
-    return saved ? saved === 'dark' : true;
-  });
+  const [isDarkMode, setIsDarkMode] = useState(true);
 
   const toggleDarkMode = () => {
-    const newMode = !isDarkMode;
-    setIsDarkMode(newMode);
-    localStorage.setItem('theme', newMode ? 'dark' : 'light');
-    if (newMode) {
+    setIsDarkMode(!isDarkMode);
+    if (!isDarkMode) {
       document.documentElement.classList.add('dark');
       document.body.style.backgroundColor = '#000';
     } else {
@@ -597,13 +591,8 @@ function App() {
   };
 
   useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-      document.body.style.backgroundColor = '#000';
-    } else {
-      document.documentElement.classList.remove('dark');
-      document.body.style.backgroundColor = '#fff';
-    }
+    document.documentElement.classList.add('dark');
+    document.body.style.backgroundColor = '#000';
     const { mobileWebPort } = landingLinks(window.location);
     if (
       shouldRedirectToMobileWeb(
@@ -630,17 +619,17 @@ function App() {
       <Navbar isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
 
       {/* The 3D Parallax Canvas stays fixed in the background */}
-      <PhoneScene isDarkMode={isDarkMode} />
+      <PhoneScene />
 
       {/* Scrollable Content */}
       <div className="relative w-full">
         <HeroSection />
-        <ProcessSection isDarkMode={isDarkMode} />
+        <ProcessSection />
         <FeaturesSection />
         <HowItWorksSection />
-        <SupportSection isDarkMode={isDarkMode} />
-        <AboutSection isDarkMode={isDarkMode} />
-        <TeamSection isDarkMode={isDarkMode} />
+        <SupportSection />
+        <AboutSection />
+        <TeamSection />
         <BetaSection />
       </div>
 
@@ -652,7 +641,7 @@ function App() {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.8, y: 20 }}
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            className="fixed bottom-8 right-8 z-50 p-3 rounded-full bg-white dark:bg-black/60 backdrop-blur-md border border-black/10 dark:border-white/10 text-black dark:text-white hover:text-[var(--color-primary)] hover:border-[var(--color-primary)] shadow-lg transition-all duration-300"
+            className="fixed bottom-8 right-8 z-50 p-3 rounded-full bg-white dark:bg-white/80 dark:bg-black/60 backdrop-blur-md border border-black/10 dark:border-white/10 text-black dark:text-white hover:text-[var(--color-primary)] hover:border-[var(--color-primary)] shadow-lg transition-all duration-300"
           >
             <ChevronUp size={24} strokeWidth={2.5} />
           </motion.button>

@@ -8,7 +8,7 @@ import { Model as Phone } from './PhoneModel' // Make sure you have this file in
 const isMobile = () => window.innerWidth < 768
 
 // ─── GRIDGO text layers (zero-gravity scatter) ───────────────────────────────
-function GridTextLayer({ index }: { index: number }) {
+function GridTextLayer({ index, isDarkMode }: { index: number, isDarkMode?: boolean }) {
   const mesh = useRef<(THREE.Mesh & { fillOpacity: number; outlineOpacity: number })>(null)
 
   // Each layer has a fixed offset so the stack looks tight at rest
@@ -61,9 +61,9 @@ function GridTextLayer({ index }: { index: number }) {
       fontSize={4.15}
       fontWeight={900}
       letterSpacing={0.28}
-      color="white"
+      color={isDarkMode ? "white" : "#111111"}
       outlineWidth={index === 0 ? 0 : 0.025}
-      outlineColor="#ffffff"
+      outlineColor={isDarkMode ? "#ffffff" : "#111111"}
       fillOpacity={baseAlpha}
       position={[0, 0, baseZ]}
     >
@@ -72,11 +72,11 @@ function GridTextLayer({ index }: { index: number }) {
   )
 }
 
-function GridTextLayers() {
+function GridTextLayers({ isDarkMode }: { isDarkMode?: boolean }) {
   return (
     <group>
       {[0, 1, 2, 3, 4].map(i => (
-        <GridTextLayer key={i} index={i} />
+        <GridTextLayer key={i} index={i} isDarkMode={isDarkMode} />
       ))}
     </group>
   )
@@ -223,7 +223,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 }
 
 // ─── Scene export ────────────────────────────────────────────────────────────
-export function PhoneScene() {
+export function PhoneScene({ isDarkMode }: { isDarkMode?: boolean }) {
   return (
     <div className="fixed inset-0 pointer-events-none z-30">
       <ErrorBoundary>
@@ -242,7 +242,7 @@ export function PhoneScene() {
           <Environment preset="city" />
 
           <CameraRig />
-          <GridTextLayers />
+          <GridTextLayers isDarkMode={isDarkMode} />
           <PhoneRig />
 
           <ContactShadows

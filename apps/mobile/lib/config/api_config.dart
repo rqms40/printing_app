@@ -14,7 +14,7 @@ import 'package:flutter/foundation.dart';
 //   flutter build web --release --no-tree-shake-icons --dart-define-from-file=dart_defines.json
 //   flutter run -d chrome --dart-define-from-file=dart_defines.json
 
-const String kDefaultServerUrl = 'http://192.168.40.201:3000';
+const String kDefaultServerUrl = 'http://127.0.0.1:3000';
 const int kDefaultApiPort = 3000;
 
 const String _compileTimeServerUrl = String.fromEnvironment(
