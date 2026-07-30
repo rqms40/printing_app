@@ -109,38 +109,54 @@ class _AddressPickerBodyState extends ConsumerState<_AddressPickerBody> {
       longitude: _selectedPoint.longitude,
     );
     final now = DateTime.now();
-    final savedAddress = await ref.read(addressProvider.notifier).addAddress(
-      Address(
-        id: 'pending_${now.microsecondsSinceEpoch}',
-        userId: '',
-        label: temporaryAddress.displayLabel,
-        fullAddress: temporaryAddress.fullAddress.trim(),
-        barangay: temporaryAddress.barangay,
-        city: temporaryAddress.city.trim(),
-        province: temporaryAddress.province,
-        zipCode: temporaryAddress.zipCode,
-        landmark: temporaryAddress.landmark,
-        latitude: temporaryAddress.latitude,
-        longitude: temporaryAddress.longitude,
-        isDefault: false,
-        createdAt: now,
-        updatedAt: now,
-      ),
-      addLocallyOnFailure: false,
-    );
+    final savedAddress = await ref
+        .read(addressProvider.notifier)
+        .addAddress(
+          Address(
+            id: 'pending_${now.microsecondsSinceEpoch}',
+            userId: '',
+            label: temporaryAddress.displayLabel,
+            fullAddress: temporaryAddress.fullAddress.trim(),
+            barangay: temporaryAddress.barangay,
+            city: temporaryAddress.city.trim(),
+            province: temporaryAddress.province,
+            zipCode: temporaryAddress.zipCode,
+            landmark: temporaryAddress.landmark,
+            latitude: temporaryAddress.latitude,
+            longitude: temporaryAddress.longitude,
+            isDefault: false,
+            createdAt: now,
+            updatedAt: now,
+          ),
+          addLocallyOnFailure: false,
+        );
     if (!mounted) return;
     if (savedAddress != null) {
       Navigator.of(context).pop(CheckoutAddressSelection.saved(savedAddress));
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'This location will be used for this order but was not saved.',
+    final useOnce = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Address was not saved'),
+        content: const Text(
+          'GRID could not save this address. It will not appear in saved or '
+          'recent addresses. Use it for this order only?',
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Use once'),
+          ),
+        ],
       ),
     );
+    if (!mounted || useOnce != true) return;
     Navigator.of(
       context,
     ).pop(CheckoutAddressSelection.temporary(temporaryAddress));
@@ -362,42 +378,53 @@ class _SheetActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: colors.background,
-      borderRadius: AppRadius.borderLg,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Row(
-            children: [
-              Icon(icon, color: colors.brand, size: 22),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: AppTypography.bodyBold.copyWith(
-                        color: colors.onBackground,
-                      ),
+    return Semantics(
+      button: true,
+      label: '$title. $subtitle',
+      onTap: onTap,
+      child: ExcludeSemantics(
+        child: Material(
+          color: colors.background,
+          borderRadius: AppRadius.borderLg,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Row(
+                children: [
+                  Icon(icon, color: colors.brand, size: 22),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: AppTypography.bodyBold.copyWith(
+                            color: colors.onBackground,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.caption.copyWith(
+                            color: colors.onSurfaceDim,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.caption.copyWith(
-                        color: colors.onSurfaceDim,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                  Icon(
+                    Icons.chevron_right,
+                    color: colors.onSurfaceDim,
+                    size: 20,
+                  ),
+                ],
               ),
-              Icon(Icons.chevron_right, color: colors.onSurfaceDim, size: 20),
-            ],
+            ),
           ),
         ),
       ),

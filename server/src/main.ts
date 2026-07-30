@@ -4,9 +4,11 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import helmet from 'helmet';
+import { configureTrustedProxy } from './config/trusted-proxy';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  configureTrustedProxy(app);
 
   // Security headers — skip entirely in dev; plain HTTP on a remote IP is incompatible
   // with HSTS, COOP, and CSP upgrade-insecure-requests that helmet enables by default.

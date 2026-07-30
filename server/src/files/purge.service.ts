@@ -13,7 +13,7 @@ export class PurgeService {
     this.logger.log('Starting nightly file purge sweep');
     const result = await this.filesService.deleteExpired();
     this.logger.log(
-      `Purge sweep complete: ${result.deleted} deleted, ${result.skipped} skipped of ${result.found} found`,
+      `Purge sweep complete: ${result.deleted} deleted, ${result.failed} failed, ${result.skipped} skipped of ${result.found} found`,
     );
   }
 }

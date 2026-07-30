@@ -10,6 +10,13 @@ class AppConstants {
     defaultValue: false,
   );
 
+  /// Production/live E2E mode. When enabled, API failures must stay visible
+  /// and may never be replaced by demo orders, addresses, assignments, or GPS.
+  static const bool realFlow = bool.fromEnvironment(
+    'GRIDGO_REAL_FLOW',
+    defaultValue: false,
+  );
+
   // ---------------------------------------------------------------------------
   // File size limits (in MB)
   // ---------------------------------------------------------------------------

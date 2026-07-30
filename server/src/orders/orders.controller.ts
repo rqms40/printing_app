@@ -20,6 +20,7 @@ import { CreateBatchOrderDto, CreateOrderDto } from './dto/create-order.dto';
 import { QuoteOrderDto } from './dto/quote-order.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { UpdateManualStatusDto } from './dto/update-manual-status.dto';
+import { OrderStatus } from './entities/order.entity';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
 
 @ApiTags('orders')
@@ -113,8 +114,23 @@ export class OrdersController {
   @Patch(':id/status')
   @Roles('admin')
   @UseGuards(RolesGuard)
-  updateStatus(@Param('id') id: number, @Body() dto: UpdateStatusDto) {
-    return this.ordersService.updateStatus(id, dto.status);
+  updateStatus(
+    @Request() req: RequestWithUser,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateStatusDto,
+  ) {
+    if (dto.status === OrderStatus.CANCELLED) {
+      throw new BadRequestException('Use the cancellation workflow');
+    }
+    return this.ordersService.updateStatus(
+      id,
+      dto.status,
+      {},
+      {
+        actorUserId: req.user.sub,
+        reason: dto.notes?.trim() || 'Admin status update',
+      },
+    );
   }
 
   @Patch('admin/orders/:id/manual-status')

@@ -11,6 +11,9 @@ class BetaTestimonialState {
     this.uploadProgress,
     this.error,
     this.submitted = false,
+    this.sharedOnSocial = false,
+    this.shareRecorded = false,
+    this.uploadedFileId,
   });
 
   /// 0.0–1.0 while uploading; null when idle or done.
@@ -21,6 +24,9 @@ class BetaTestimonialState {
 
   /// True once the full submit (upload + POST testimonial) succeeded.
   final bool submitted;
+  final bool sharedOnSocial;
+  final bool shareRecorded;
+  final int? uploadedFileId;
 
   bool get isUploading => uploadProgress != null;
   bool get hasError => error != null;
@@ -31,16 +37,68 @@ class BetaTestimonialState {
     bool clearProgress = false,
     bool clearError = false,
     bool? submitted,
-  }) =>
-      BetaTestimonialState(
-        uploadProgress: clearProgress ? null : (uploadProgress ?? this.uploadProgress),
-        error: clearError ? null : (error ?? this.error),
-        submitted: submitted ?? this.submitted,
-      );
+    bool? sharedOnSocial,
+    bool? shareRecorded,
+    int? uploadedFileId,
+    bool clearUploadedFileId = false,
+  }) => BetaTestimonialState(
+    uploadProgress: clearProgress
+        ? null
+        : (uploadProgress ?? this.uploadProgress),
+    error: clearError ? null : (error ?? this.error),
+    submitted: submitted ?? this.submitted,
+    sharedOnSocial: sharedOnSocial ?? this.sharedOnSocial,
+    shareRecorded: shareRecorded ?? this.shareRecorded,
+    uploadedFileId: clearUploadedFileId
+        ? null
+        : (uploadedFileId ?? this.uploadedFileId),
+  );
 }
 
+typedef MarkBetaShared = Future<void> Function();
+typedef UploadBetaTestimonialPhoto =
+    Future<int> Function({
+      File? photo,
+      Uint8List? photoBytes,
+      String? photoFileName,
+      void Function(int sent, int total)? onSendProgress,
+    });
+typedef SubmitBetaTestimonialRecord =
+    Future<void> Function({required int fileId, required bool sharedOnSocial});
+
 class BetaTestimonialNotifier extends StateNotifier<BetaTestimonialState> {
-  BetaTestimonialNotifier() : super(const BetaTestimonialState());
+  BetaTestimonialNotifier({
+    MarkBetaShared? markShared,
+    UploadBetaTestimonialPhoto? uploadPhoto,
+    SubmitBetaTestimonialRecord? submitTestimonial,
+  }) : _markShared = markShared ?? _markSharedWithApi,
+       _uploadPhoto = uploadPhoto ?? _uploadPhotoWithApi,
+       _submitTestimonial = submitTestimonial ?? _submitTestimonialWithApi,
+       super(const BetaTestimonialState());
+
+  final MarkBetaShared _markShared;
+  final UploadBetaTestimonialPhoto _uploadPhoto;
+  final SubmitBetaTestimonialRecord _submitTestimonial;
+
+  Future<void> recordConfirmedShare({
+    required bool photoAlreadyUploaded,
+  }) async {
+    if (!state.sharedOnSocial) {
+      state = state.copyWith(sharedOnSocial: true);
+    }
+    if (!photoAlreadyUploaded || state.shareRecorded) return;
+
+    try {
+      await _markShared();
+      state = state.copyWith(sharedOnSocial: true, shareRecorded: true);
+    } on DioException catch (error) {
+      state = state.copyWith(error: _friendlyDioError(error));
+      rethrow;
+    } catch (error) {
+      state = state.copyWith(error: error.toString());
+      rethrow;
+    }
+  }
 
   /// Submit a testimonial. On web [photoBytes] is used instead of [photo].
   Future<void> submit({
@@ -49,78 +107,122 @@ class BetaTestimonialNotifier extends StateNotifier<BetaTestimonialState> {
     String? photoFileName,
     required bool sharedOnSocial,
   }) async {
-    assert(
-      photo != null || (photoBytes != null && photoFileName != null),
-      'Either photo (native) or photoBytes+photoFileName (web) must be provided',
+    if (state.uploadedFileId == null) {
+      assert(
+        photo != null || (photoBytes != null && photoFileName != null),
+        'Either photo (native) or photoBytes+photoFileName (web) must be provided',
+      );
+    }
+
+    state = state.copyWith(
+      uploadProgress: 0.0,
+      clearError: true,
+      submitted: false,
     );
 
-    state = const BetaTestimonialState(uploadProgress: 0.0);
-
     try {
-      // ── 1. Build form data ────────────────────────────────────────────────
-      final MultipartFile multipart;
-      if (photo != null) {
-        final fileName = photo.path.split('/').last;
-        multipart = await MultipartFile.fromFile(photo.path, filename: fileName);
-      } else {
-        multipart = MultipartFile.fromBytes(
-          photoBytes!,
-          filename: photoFileName!,
+      var fileId = state.uploadedFileId;
+      if (fileId == null) {
+        fileId = await _uploadPhoto(
+          photo: photo,
+          photoBytes: photoBytes,
+          photoFileName: photoFileName,
+          onSendProgress: (sent, total) {
+            if (total > 0 && mounted) {
+              state = state.copyWith(uploadProgress: sent / total);
+            }
+          },
         );
+        state = state.copyWith(uploadedFileId: fileId);
       }
 
-      final formData = FormData.fromMap({
-        'file': multipart,
-        'purpose': 'beta_testimonial',
-      });
+      final effectiveShared = state.sharedOnSocial || sharedOnSocial;
+      await _submitTestimonial(fileId: fileId, sharedOnSocial: effectiveShared);
 
-      // ── 2. Upload with progress ───────────────────────────────────────────
-      final uploadResp = await ApiClient.instance.post(
-        '/files/upload',
-        data: formData,
-        options: Options(contentType: 'multipart/form-data'),
-        onSendProgress: (sent, total) {
-          if (total > 0 && mounted) {
-            state = BetaTestimonialState(uploadProgress: sent / total);
-          }
-        },
+      state = state.copyWith(
+        clearProgress: true,
+        clearError: true,
+        submitted: true,
+        sharedOnSocial: effectiveShared,
+        shareRecorded: effectiveShared,
       );
-
-      final uploadData = uploadResp.data as Map<String, dynamic>;
-      // Server returns the full FileMetadata entity; the PK field is 'id'.
-      final fileId = uploadData['id'] as int;
-
-      // ── 3. Record testimonial ─────────────────────────────────────────────
-      await ApiClient.instance.post(
-        '/beta-mode/testimonial',
-        data: {
-          'fileId': fileId,
-          'sharedOnSocial': sharedOnSocial,
-        },
-      );
-
-      state = const BetaTestimonialState(submitted: true);
     } on DioException catch (e) {
       final msg = _friendlyDioError(e);
-      state = BetaTestimonialState(error: msg);
+      state = state.copyWith(clearProgress: true, error: msg);
       rethrow;
     } catch (e) {
-      state = BetaTestimonialState(error: e.toString());
+      state = state.copyWith(clearProgress: true, error: e.toString());
       rethrow;
     }
   }
 
   void clearError() {
-    state = const BetaTestimonialState();
+    state = state.copyWith(clearError: true, clearProgress: true);
+  }
+
+  void resetForNewPhoto() {
+    state = state.copyWith(
+      clearError: true,
+      clearProgress: true,
+      clearUploadedFileId: true,
+      submitted: false,
+    );
+  }
+
+  static Future<void> _markSharedWithApi() async {
+    await ApiClient.instance.patch('/beta-mode/me/share');
+  }
+
+  static Future<int> _uploadPhotoWithApi({
+    File? photo,
+    Uint8List? photoBytes,
+    String? photoFileName,
+    void Function(int sent, int total)? onSendProgress,
+  }) async {
+    final MultipartFile multipart;
+    if (photo != null) {
+      final fileName = photo.path.split('/').last;
+      multipart = await MultipartFile.fromFile(photo.path, filename: fileName);
+    } else {
+      multipart = MultipartFile.fromBytes(
+        photoBytes!,
+        filename: photoFileName!,
+      );
+    }
+    final uploadResp = await ApiClient.instance.post(
+      '/files/upload',
+      data: FormData.fromMap({
+        'file': multipart,
+        'purpose': 'beta_testimonial',
+      }),
+      options: Options(contentType: 'multipart/form-data'),
+      onSendProgress: onSendProgress,
+    );
+    final uploadData = uploadResp.data as Map<String, dynamic>;
+    return uploadData['id'] as int;
+  }
+
+  static Future<void> _submitTestimonialWithApi({
+    required int fileId,
+    required bool sharedOnSocial,
+  }) async {
+    await ApiClient.instance.post(
+      '/beta-mode/testimonial',
+      data: {'fileId': fileId, 'sharedOnSocial': sharedOnSocial},
+    );
   }
 
   static String _friendlyDioError(DioException e) {
     final status = e.response?.statusCode;
     if (status == 401) return 'Session expired — please sign in again.';
-    if (status == 413) return 'Photo is too large. Please choose a smaller image.';
+    if (status == 413) {
+      return 'Photo is too large. Please choose a smaller image.';
+    }
     if (status == 400) {
       final msg = e.response?.data?['message'];
-      return (msg is String) ? msg : 'Invalid file. Please choose a JPEG, PNG, or WebP image.';
+      return (msg is String)
+          ? msg
+          : 'Invalid file. Please choose a JPEG, PNG, or WebP image.';
     }
     if (e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.sendTimeout ||
@@ -132,7 +234,8 @@ class BetaTestimonialNotifier extends StateNotifier<BetaTestimonialState> {
   }
 }
 
-final betaTestimonialProvider = StateNotifierProvider.autoDispose<
-    BetaTestimonialNotifier, BetaTestimonialState>(
-  (_) => BetaTestimonialNotifier(),
-);
+final betaTestimonialProvider =
+    StateNotifierProvider.autoDispose<
+      BetaTestimonialNotifier,
+      BetaTestimonialState
+    >((_) => BetaTestimonialNotifier());

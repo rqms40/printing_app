@@ -7,6 +7,7 @@ import 'package:printing_app/features/customer/orders/providers/orders_provider.
 import 'package:printing_app/shared/models/address.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
+import 'package:printing_app/shared/models/route_geometry.dart';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -20,6 +21,10 @@ Order _makeOrder({
   int? queuePosition = 1,
   int? queueSize = 1,
   bool canTrackDelivery = true,
+  int? planVersion = 1,
+  GeoJsonLineString? routeGeometry,
+  bool routeGeometryMalformed = false,
+  bool routingDataStale = false,
 }) => Order(
   id: id,
   orderId: orderId,
@@ -38,6 +43,10 @@ Order _makeOrder({
   deliveryQueuePosition: queuePosition,
   deliveryQueueSize: queueSize,
   canTrackDelivery: canTrackDelivery,
+  deliveryPlanVersion: planVersion,
+  deliveryRouteGeometry: routeGeometry,
+  deliveryRouteGeometryMalformed: routeGeometryMalformed,
+  deliveryRoutingDataStale: routingDataStale,
   createdAt: DateTime(2026, 4, 21),
   updatedAt: DateTime(2026, 4, 21),
 );
@@ -76,6 +85,68 @@ ProviderContainer _container({
 // ── State factory unit tests ──────────────────────────────────────────────────
 
 void main() {
+  group('location health boundaries', () {
+    final now = DateTime.utc(2026, 7, 10, 12);
+
+    test('14 seconds is live and 15 seconds is stale', () {
+      expect(
+        classifyLocationHealth(
+          updatedAt: now.subtract(const Duration(seconds: 14)),
+          now: now,
+          connected: true,
+        ),
+        LocationHealth.live,
+      );
+      expect(
+        classifyLocationHealth(
+          updatedAt: now.subtract(const Duration(seconds: 15)),
+          now: now,
+          connected: true,
+        ),
+        LocationHealth.stale,
+      );
+    });
+
+    test('60 seconds is stale and 61 seconds is offline', () {
+      expect(
+        classifyLocationHealth(
+          updatedAt: now.subtract(const Duration(seconds: 60)),
+          now: now,
+          connected: true,
+        ),
+        LocationHealth.stale,
+      );
+      expect(
+        classifyLocationHealth(
+          updatedAt: now.subtract(const Duration(seconds: 61)),
+          now: now,
+          connected: true,
+        ),
+        LocationHealth.offline,
+      );
+      // A fresh fix proves updates are flowing even while the socket health
+      // flag lags (reconnect/resubscribe churn) — never flash offline.
+      expect(
+        classifyLocationHealth(
+          updatedAt: now.subtract(const Duration(seconds: 1)),
+          now: now,
+          connected: false,
+        ),
+        LocationHealth.live,
+      );
+      // Once the last fix ages past the live window, a disconnected socket
+      // downgrades straight to offline instead of lingering on stale.
+      expect(
+        classifyLocationHealth(
+          updatedAt: now.subtract(const Duration(seconds: 20)),
+          now: now,
+          connected: false,
+        ),
+        LocationHealth.offline,
+      );
+    });
+  });
+
   group('LiveDeliveryMapState factories', () {
     test('idle() uses Davao center and empty route', () {
       final state = LiveDeliveryMapState.idle();
@@ -199,6 +270,30 @@ void main() {
       expect(state.status, LiveMapStatus.idle);
     });
 
+    test('keeps tracking available after rider arrives', () async {
+      final geometry = GeoJsonLineString.tryParse({
+        'type': 'LineString',
+        'coordinates': [
+          [125.6079, 7.064],
+          [125.6128, 7.0731],
+        ],
+      });
+      container = _container(
+        orders: [
+          _makeOrder(
+            status: OrderStatus.arrivedAtDestination,
+            routeGeometry: geometry,
+          ),
+        ],
+        addresses: [_makeDavaoAddress()],
+      );
+
+      final state = await container.read(liveDeliveryMapProvider.future);
+      expect(state.status, LiveMapStatus.active);
+      expect(state.orderStatus, OrderStatus.arrivedAtDestination);
+      expect(state.routePoints, isNotEmpty);
+    });
+
     test('returns idle when onTheWay order has no deliveryAddressId', () async {
       container = _container(
         orders: [_makeOrder(deliveryAddressId: null)],
@@ -220,8 +315,15 @@ void main() {
     test(
       'returns active when onTheWay order + matching address exist',
       () async {
+        final geometry = GeoJsonLineString.tryParse({
+          'type': 'LineString',
+          'coordinates': [
+            [125.6079, 7.064],
+            [125.6128, 7.0731],
+          ],
+        });
         container = _container(
-          orders: [_makeOrder()],
+          orders: [_makeOrder(routeGeometry: geometry)],
           addresses: [_makeDavaoAddress()],
         );
         final state = await container.read(liveDeliveryMapProvider.future);
@@ -235,18 +337,18 @@ void main() {
         expect(state.orderStatus, OrderStatus.onTheWay);
         expect(state.destPoint.latitude, closeTo(7.0731, 0.001));
         expect(state.destPoint.longitude, closeTo(125.6128, 0.001));
-        // Route fallback always returns non-empty list
-        expect(state.routePoints, isNotEmpty);
+        expect(state.routePoints, geometry!.points);
+        expect(state.routingHealth, RoutingHealth.current);
       },
     );
 
-    test('preserves queued state when assignment tracking id is withheld', () async {
+    test('never creates a client route for a private later stop', () async {
       container = _container(
         orders: [
           _makeOrder(
             deliveryAssignmentId: null,
             queuePosition: 2,
-            queueSize: 3,
+            queueSize: 2,
             canTrackDelivery: false,
           ),
         ],
@@ -255,12 +357,63 @@ void main() {
 
       final state = await container.read(liveDeliveryMapProvider.future);
 
-      expect(state.status, LiveMapStatus.active);
-      expect(state.deliveryAssignmentId, isNull);
-      expect(state.queuePosition, 2);
-      expect(state.queueSize, 3);
-      expect(state.canTrackDelivery, isFalse);
+      expect(state.routePoints, isEmpty);
+      expect(state.routingHealth, RoutingHealth.unavailable);
     });
+
+    test(
+      'malformed persisted geometry is degraded without a fake line',
+      () async {
+        container = _container(
+          orders: [
+            _makeOrder(routeGeometryMalformed: true, routingDataStale: false),
+          ],
+          addresses: [_makeDavaoAddress()],
+        );
+
+        final state = await container.read(liveDeliveryMapProvider.future);
+
+        expect(state.routePoints, isEmpty);
+        expect(state.routingHealth, RoutingHealth.malformed);
+      },
+    );
+
+    test('missing current geometry is degraded without a fake line', () async {
+      container = _container(
+        orders: [_makeOrder(routeGeometry: null)],
+        addresses: [_makeDavaoAddress()],
+      );
+
+      final state = await container.read(liveDeliveryMapProvider.future);
+
+      expect(state.routePoints, isEmpty);
+      expect(state.routingHealth, RoutingHealth.malformed);
+    });
+
+    test(
+      'preserves queued state when assignment tracking id is withheld',
+      () async {
+        container = _container(
+          orders: [
+            _makeOrder(
+              deliveryAssignmentId: null,
+              queuePosition: 2,
+              queueSize: 3,
+              canTrackDelivery: false,
+            ),
+          ],
+          addresses: [_makeDavaoAddress()],
+        );
+
+        final state = await container.read(liveDeliveryMapProvider.future);
+
+        expect(state.status, LiveMapStatus.active);
+        expect(state.deliveryAssignmentId, isNull);
+        expect(state.queuePosition, 2);
+        expect(state.queueSize, 3);
+        expect(state.canTrackDelivery, isFalse);
+      },
+    );
 
     test(
       'returns active from temporary delivery address snapshot without saved id',

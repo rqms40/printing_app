@@ -106,6 +106,20 @@ export class BetaModeController {
     return this.service.getBetaStatus(req.user.sub);
   }
 
+  @Get('me/completion')
+  @UseGuards(JwtAuthGuard)
+  @AllowBetaHeld()
+  getCompletionState(@Req() req: RequestWithUser) {
+    return this.service.getCompletionState(req.user.sub);
+  }
+
+  @Patch('me/share')
+  @UseGuards(JwtAuthGuard)
+  @AllowBetaHeld()
+  markShared(@Req() req: RequestWithUser) {
+    return this.service.markShared(req.user.sub);
+  }
+
   @Post('testimonial')
   @UseGuards(JwtAuthGuard)
   @AllowBetaHeld()

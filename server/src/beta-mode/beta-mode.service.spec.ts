@@ -1,10 +1,16 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { BetaModeService } from './beta-mode.service';
 import { BetaModeSettings } from './entities/beta-mode-settings.entity';
 import { User } from '../users/entities/user.entity';
-import { FileMetadata } from '../files/entities/file-metadata.entity';
+import { CreditsService } from '../credits/credits.service';
+import { DataSource, EntityManager } from 'typeorm';
+import { FilesService } from '../files/files.service';
 
 const makeUser = (overrides: Partial<User> = {}): User =>
   ({
@@ -15,6 +21,7 @@ const makeUser = (overrides: Partial<User> = {}): User =>
     betaEnrolledAt: null,
     betaCreditsGranted: false,
     credits: 50,
+    role: 'customer',
     ...overrides,
   }) as User;
 
@@ -24,16 +31,28 @@ describe('BetaModeService', () => {
   let userRepo: {
     findOne: jest.Mock;
     find: jest.Mock;
-    count: jest.Mock;
     update: jest.Mock;
     createQueryBuilder: jest.Mock;
+    manager: { query: jest.Mock };
   };
-  let fileMetadataRepo: { findOne: jest.Mock };
-  let mockQB: {
+  let creditsService: { grantBetaEnrollmentCredits: jest.Mock };
+  let dataSource: { transaction: jest.Mock };
+  let transactionUserRepo: {
+    findOne: jest.Mock;
+    save: jest.Mock;
     update: jest.Mock;
-    set: jest.Mock;
+  };
+  let transactionSettingsRepo: {
+    findOne: jest.Mock;
+    create: jest.Mock;
+    save: jest.Mock;
+  };
+  let filesService: { resolveBetaTestimonialFile: jest.Mock };
+  let transactionManager: EntityManager;
+  let mockQB: {
     where: jest.Mock;
-    execute: jest.Mock;
+    andWhere: jest.Mock;
+    getCount: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -44,21 +63,62 @@ describe('BetaModeService', () => {
       save: jest.fn().mockImplementation(async (v) => v),
     };
     mockQB = {
-      update: jest.fn().mockReturnThis(),
-      set: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
-      execute: jest.fn().mockResolvedValue({ affected: 1 }),
+      andWhere: jest.fn().mockReturnThis(),
+      getCount: jest.fn().mockResolvedValue(0),
     };
     userRepo = {
-      findOne: jest.fn(),
+      findOne: jest.fn().mockResolvedValue(
+        makeUser({
+          isBetaUser: true,
+          betaCompletedAt: new Date('2026-07-10T00:00:00Z'),
+        }),
+      ),
       find: jest.fn(),
-      count: jest.fn(),
       update: jest.fn().mockResolvedValue(undefined),
       createQueryBuilder: jest.fn().mockReturnValue(mockQB),
+      manager: { query: jest.fn().mockResolvedValue([]) },
     };
-    fileMetadataRepo = {
-      findOne: jest.fn(),
+    creditsService = {
+      grantBetaEnrollmentCredits: jest.fn().mockResolvedValue(undefined),
     };
+    dataSource = {
+      transaction: jest.fn(),
+    };
+    transactionUserRepo = {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+      findOne: jest.fn((options) => userRepo.findOne(options)),
+      save: jest.fn().mockImplementation(async (user: User) => user),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    transactionSettingsRepo = {
+      findOne: jest.fn().mockResolvedValue({ id: 1, isEnabled: false }),
+      create: jest.fn().mockReturnValue({ id: 1, isEnabled: false }),
+      save: jest
+        .fn()
+        .mockImplementation(async (settings: BetaModeSettings) => settings),
+    };
+    filesService = {
+      resolveBetaTestimonialFile: jest.fn().mockResolvedValue({
+        id: 42,
+        uploadedBy: 1,
+        objectKey: 'uploads/beta_testimonial/2026/07/photo.png',
+        purpose: 'beta_testimonial',
+        mimeType: 'image/png',
+      }),
+    };
+    transactionManager = {
+      getRepository: jest.fn((entity) =>
+        entity === BetaModeSettings
+          ? transactionSettingsRepo
+          : transactionUserRepo,
+      ),
+    } as unknown as EntityManager;
+    dataSource.transaction.mockImplementation(
+      async (work: (manager: EntityManager) => Promise<unknown>) => {
+        return work(transactionManager);
+      },
+    );
 
     const module = await Test.createTestingModule({
       providers: [
@@ -68,10 +128,9 @@ describe('BetaModeService', () => {
           useValue: settingsRepo,
         },
         { provide: getRepositoryToken(User), useValue: userRepo },
-        {
-          provide: getRepositoryToken(FileMetadata),
-          useValue: fileMetadataRepo,
-        },
+        { provide: CreditsService, useValue: creditsService },
+        { provide: DataSource, useValue: dataSource },
+        { provide: FilesService, useValue: filesService },
       ],
     }).compile();
 
@@ -94,23 +153,45 @@ describe('BetaModeService', () => {
   });
 
   it('updateSettings disables beta mode and reopens beta survey held accounts', async () => {
-    settingsRepo.find.mockResolvedValue([{ id: 1, isEnabled: true }]);
+    transactionSettingsRepo.findOne.mockResolvedValue({
+      id: 1,
+      isEnabled: true,
+    });
 
     const result = await service.updateSettings(false);
 
     expect(result.isEnabled).toBe(false);
-    expect(userRepo.update).toHaveBeenCalledWith(
+    expect(transactionUserRepo.update).toHaveBeenCalledWith(
+      { isActive: false, accountHoldReason: 'beta_survey_complete' },
+      { isActive: true, accountHoldReason: null, accountHeldAt: null },
+    );
+  });
+
+  it('updates the beta switch and reopens survey holds in one transaction', async () => {
+    transactionSettingsRepo.findOne.mockResolvedValue({
+      id: 1,
+      isEnabled: true,
+    });
+
+    await service.updateSettings(false);
+
+    expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+    expect(settingsRepo.save).not.toHaveBeenCalled();
+    expect(transactionUserRepo.update).toHaveBeenCalledWith(
       { isActive: false, accountHoldReason: 'beta_survey_complete' },
       { isActive: true, accountHoldReason: null, accountHeldAt: null },
     );
   });
 
   it('updateSettings does not reopen held accounts when enabling beta mode', async () => {
-    settingsRepo.find.mockResolvedValue([{ id: 1, isEnabled: false }]);
+    transactionSettingsRepo.findOne.mockResolvedValue({
+      id: 1,
+      isEnabled: false,
+    });
 
     await service.updateSettings(true);
 
-    expect(userRepo.update).not.toHaveBeenCalledWith(
+    expect(transactionUserRepo.update).not.toHaveBeenCalledWith(
       { isActive: false, accountHoldReason: 'beta_survey_complete' },
       expect.anything(),
     );
@@ -121,18 +202,75 @@ describe('BetaModeService', () => {
   it('enrollUser sets isBetaUser=true and grants 100 credits atomically on first enroll', async () => {
     userRepo.findOne.mockResolvedValue(makeUser({ credits: 50 }));
     await service.enrollUser(1);
-    expect(userRepo.update).toHaveBeenCalledWith(
-      1,
+    expect(transactionUserRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({ isBetaUser: true }),
     );
-    expect(mockQB.set).toHaveBeenCalledWith(
-      expect.objectContaining({ betaCreditsGranted: true }),
+    expect(creditsService.grantBetaEnrollmentCredits).toHaveBeenCalledWith(
+      1,
+      100,
+      transactionManager,
     );
-    expect(mockQB.where).toHaveBeenCalledWith(
-      expect.stringContaining('beta_credits_granted = false'),
-      expect.objectContaining({ id: 1 }),
+  });
+
+  it('rejects manual beta enrollment for a rider', async () => {
+    userRepo.findOne.mockResolvedValue(
+      makeUser({ id: 9, role: 'rider' as User['role'] }),
     );
-    expect(mockQB.execute).toHaveBeenCalled();
+
+    await expect(service.enrollUser(9)).rejects.toThrow(ForbiddenException);
+
+    expect(transactionUserRepo.save).not.toHaveBeenCalled();
+    expect(creditsService.grantBetaEnrollmentCredits).not.toHaveBeenCalled();
+  });
+
+  it('delegates multi-instance correctness to locked database transactions', async () => {
+    userRepo.findOne.mockResolvedValue(makeUser({ id: 9, credits: 0 }));
+
+    await Promise.all([service.enrollUser(9), service.enrollUser(9)]);
+
+    expect(dataSource.transaction).toHaveBeenCalledTimes(2);
+    expect(creditsService.grantBetaEnrollmentCredits).toHaveBeenCalledTimes(2);
+    expect(creditsService.grantBetaEnrollmentCredits).toHaveBeenCalledWith(
+      9,
+      100,
+      transactionManager,
+    );
+  });
+
+  it('locks enrollment state and shares one transaction with the credit grant', async () => {
+    const lockedUser = makeUser({ id: 9, credits: 0 });
+    const transactionUserRepo = {
+      findOne: jest.fn().mockResolvedValue(lockedUser),
+      save: jest.fn().mockImplementation(async (user: User) => user),
+    };
+    const manager = {
+      getRepository: jest.fn().mockReturnValue(transactionUserRepo),
+    } as unknown as EntityManager;
+    dataSource.transaction.mockImplementation(
+      async (work: (manager: EntityManager) => Promise<unknown>) => {
+        await work(manager);
+      },
+    );
+
+    await service.enrollUser(9);
+
+    expect(transactionUserRepo.findOne).toHaveBeenCalledWith({
+      where: { id: 9 },
+      lock: { mode: 'pessimistic_write' },
+    });
+    expect(transactionUserRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 9,
+        isBetaUser: true,
+        betaEnrolledAt: expect.any(Date),
+      }),
+    );
+    expect(creditsService.grantBetaEnrollmentCredits).toHaveBeenCalledWith(
+      9,
+      100,
+      manager,
+    );
+    expect(userRepo.update).not.toHaveBeenCalled();
   });
 
   it('enrollUser is idempotent — does nothing if already enrolled', async () => {
@@ -145,8 +283,12 @@ describe('BetaModeService', () => {
       }),
     );
     await service.enrollUser(1);
-    expect(userRepo.update).not.toHaveBeenCalled();
-    expect(mockQB.execute).not.toHaveBeenCalled();
+    expect(transactionUserRepo.save).not.toHaveBeenCalled();
+    expect(creditsService.grantBetaEnrollmentCredits).toHaveBeenCalledWith(
+      1,
+      100,
+      transactionManager,
+    );
   });
 
   it('enrollUser recovers an enrolled user whose credit grant was interrupted', async () => {
@@ -161,8 +303,12 @@ describe('BetaModeService', () => {
 
     await service.enrollUser(1);
 
-    expect(userRepo.update).not.toHaveBeenCalled();
-    expect(mockQB.execute).toHaveBeenCalled();
+    expect(transactionUserRepo.save).not.toHaveBeenCalled();
+    expect(creditsService.grantBetaEnrollmentCredits).toHaveBeenCalledWith(
+      1,
+      100,
+      transactionManager,
+    );
   });
 
   it('enrollUser does not grant credits again if betaCreditsGranted is already true', async () => {
@@ -170,7 +316,14 @@ describe('BetaModeService', () => {
       makeUser({ isBetaUser: false, betaCreditsGranted: true, credits: 150 }),
     );
     await service.enrollUser(1);
-    expect(mockQB.execute).not.toHaveBeenCalled();
+    expect(transactionUserRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ isBetaUser: true }),
+    );
+    expect(creditsService.grantBetaEnrollmentCredits).toHaveBeenCalledWith(
+      1,
+      100,
+      transactionManager,
+    );
   });
 
   it('enrollUser preserves original betaEnrolledAt on re-enroll', async () => {
@@ -183,8 +336,9 @@ describe('BetaModeService', () => {
       }),
     );
     await service.enrollUser(1);
-    const [, updateArg] = userRepo.update.mock.calls[0];
-    expect(updateArg).not.toHaveProperty('betaEnrolledAt');
+    expect(transactionUserRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ betaEnrolledAt: original }),
+    );
   });
 
   it('enrollUser throws NotFoundException for unknown userId', async () => {
@@ -220,7 +374,7 @@ describe('BetaModeService', () => {
       isBetaUser: false,
       rank: null,
     });
-    expect(userRepo.count).not.toHaveBeenCalled();
+    expect(userRepo.createQueryBuilder).not.toHaveBeenCalled();
   });
 
   it('getBetaStatus returns correct rank for enrolled user', async () => {
@@ -229,7 +383,7 @@ describe('BetaModeService', () => {
     userRepo.findOne.mockResolvedValue(
       makeUser({ isBetaUser: true, betaEnrolledAt: enrolledAt }),
     );
-    userRepo.count.mockResolvedValue(3);
+    mockQB.getCount.mockResolvedValue(3);
 
     const result = await service.getBetaStatus(1);
 
@@ -238,6 +392,26 @@ describe('BetaModeService', () => {
       isBetaUser: true,
       rank: 3,
     });
+  });
+
+  it('breaks equal enrollment timestamps by user id', async () => {
+    const sharedTimestamp = new Date('2026-01-15T00:00:00Z');
+    const rankQuery = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getCount: jest.fn().mockResolvedValue(3),
+    };
+    userRepo.createQueryBuilder.mockReturnValueOnce(rankQuery);
+    userRepo.findOne.mockResolvedValue(
+      makeUser({ id: 9, isBetaUser: true, betaEnrolledAt: sharedTimestamp }),
+    );
+
+    await service.getBetaStatus(9);
+
+    expect(rankQuery.andWhere).toHaveBeenCalledWith(
+      '(u.beta_enrolled_at < :at OR (u.beta_enrolled_at = :at AND u.id <= :id))',
+      { at: sharedTimestamp, id: 9 },
+    );
   });
 
   // ── getBetaUsers ───────────────────────────────────────────────────────────
@@ -255,25 +429,161 @@ describe('BetaModeService', () => {
     expect(result[0].rank).toBe(1);
     expect(result[1].rank).toBe(2);
     expect(result[0].betaEnrolledAt).toBe(t1);
+    expect(userRepo.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        order: { betaEnrolledAt: 'ASC', id: 'ASC' },
+      }),
+    );
+  });
+
+  it('uses user id as the secondary order for paginated beta members', async () => {
+    const rankedQuery = {
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      getQuery: jest.fn().mockReturnValue('SELECT ranked beta users'),
+      getParameters: jest.fn().mockReturnValue({}),
+    };
+    const countQuery = { getCount: jest.fn().mockResolvedValue(0) };
+    const memberQuery = {
+      innerJoin: jest.fn().mockReturnThis(),
+      setParameters: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      clone: jest.fn().mockReturnValue(countQuery),
+      addSelect: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      offset: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      getRawAndEntities: jest.fn().mockResolvedValue({ entities: [], raw: [] }),
+    };
+    userRepo.createQueryBuilder
+      .mockReturnValueOnce(rankedQuery)
+      .mockReturnValueOnce(memberQuery);
+
+    await service.searchBetaMembers({ page: 1, limit: 10 });
+
+    expect(memberQuery.orderBy).toHaveBeenCalledWith(
+      'u.beta_enrolled_at',
+      'ASC',
+    );
+    expect(memberQuery.addOrderBy).toHaveBeenCalledWith('u.id', 'ASC');
+  });
+
+  it('keeps the global enrollment rank when search matches only the third member', async () => {
+    const enrolledUsers = [
+      makeUser({
+        id: 1,
+        email: 'first@test.com',
+        betaEnrolledAt: new Date('2026-01-01'),
+      }),
+      makeUser({
+        id: 2,
+        email: 'second@test.com',
+        betaEnrolledAt: new Date('2026-01-02'),
+      }),
+      makeUser({
+        id: 3,
+        email: 'match@test.com',
+        betaEnrolledAt: new Date('2026-01-03'),
+      }),
+    ];
+    const rankedQuery = {
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      getQuery: jest.fn().mockReturnValue('SELECT ranked beta users'),
+      getParameters: jest.fn().mockReturnValue({}),
+    };
+    const countQuery = { getCount: jest.fn().mockResolvedValue(1) };
+    const memberQuery = {
+      innerJoin: jest.fn().mockReturnThis(),
+      setParameters: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      clone: jest.fn().mockReturnValue(countQuery),
+      addSelect: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      offset: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      getRawAndEntities: jest.fn().mockResolvedValue({
+        entities: [enrolledUsers[2]],
+        raw: [{ rank: '3' }],
+      }),
+    };
+    userRepo.createQueryBuilder
+      .mockReturnValueOnce(rankedQuery)
+      .mockReturnValueOnce(memberQuery);
+
+    const result = await service.searchBetaMembers({
+      search: 'match',
+      page: 1,
+      limit: 10,
+    });
+
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toEqual(
+      expect.objectContaining({ id: 3, email: 'match@test.com', rank: 3 }),
+    );
   });
 
   // ── submitTestimonial ──────────────────────────────────────────────────────
 
   describe('submitTestimonial', () => {
-    it('happy path: updates user row and returns { ok: true }', async () => {
-      fileMetadataRepo.findOne.mockResolvedValue({
+    it('locks evidence and updates the user in the same transaction', async () => {
+      const file = {
         id: 42,
         uploadedBy: 1,
         objectKey: 'uploads/beta_testimonial/2026/07/photo.png',
+        purpose: 'beta_testimonial',
+        mimeType: 'image/png',
+      };
+      filesService.resolveBetaTestimonialFile.mockResolvedValue(file);
+
+      await service.submitTestimonial(1, {
+        fileId: 42,
+        sharedOnSocial: true,
       });
 
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(filesService.resolveBetaTestimonialFile).toHaveBeenCalledWith(
+        42,
+        1,
+        transactionManager,
+      );
+      expect(
+        transactionUserRepo.findOne.mock.invocationCallOrder[0],
+      ).toBeLessThan(
+        filesService.resolveBetaTestimonialFile.mock.invocationCallOrder[0],
+      );
+      expect(transactionUserRepo.update).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ betaPhotoFileId: 42 }),
+      );
+      expect(userRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects testimonial metadata whose storage object is missing', async () => {
+      filesService.resolveBetaTestimonialFile.mockRejectedValue(
+        new ForbiddenException('A beta testimonial photo is required'),
+      );
+
+      await expect(
+        service.submitTestimonial(1, { fileId: 42 }),
+      ).rejects.toThrow('A beta testimonial photo is required');
+
+      expect(transactionUserRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('happy path: updates user row and returns { ok: true }', async () => {
       const result = await service.submitTestimonial(1, {
         fileId: 42,
         sharedOnSocial: true,
       });
 
       expect(result).toEqual({ ok: true });
-      expect(userRepo.update).toHaveBeenCalledWith(
+      expect(transactionUserRepo.update).toHaveBeenCalledWith(
         1,
         expect.objectContaining({
           betaPhotoFileId: 42,
@@ -284,22 +594,18 @@ describe('BetaModeService', () => {
     });
 
     it('defaults sharedOnSocial to false when omitted', async () => {
-      fileMetadataRepo.findOne.mockResolvedValue({
-        id: 42,
-        uploadedBy: 1,
-        objectKey: 'uploads/beta_testimonial/2026/07/photo.png',
-      });
-
       await service.submitTestimonial(1, { fileId: 42 });
 
-      expect(userRepo.update).toHaveBeenCalledWith(
+      expect(transactionUserRepo.update).toHaveBeenCalledWith(
         1,
         expect.objectContaining({ betaSharedOnSocial: false }),
       );
     });
 
     it('throws NotFoundException when file does not exist', async () => {
-      fileMetadataRepo.findOne.mockResolvedValue(null);
+      filesService.resolveBetaTestimonialFile.mockRejectedValue(
+        new NotFoundException('File 999 not found'),
+      );
 
       await expect(
         service.submitTestimonial(1, { fileId: 999 }),
@@ -307,7 +613,9 @@ describe('BetaModeService', () => {
     });
 
     it('throws ForbiddenException when file belongs to a different user', async () => {
-      fileMetadataRepo.findOne.mockResolvedValue({ id: 42, uploadedBy: 99 });
+      filesService.resolveBetaTestimonialFile.mockRejectedValue(
+        new ForbiddenException('File does not belong to this user'),
+      );
 
       await expect(
         service.submitTestimonial(1, { fileId: 42 }),
@@ -315,15 +623,185 @@ describe('BetaModeService', () => {
     });
 
     it('rejects an ordinary order upload as a beta testimonial', async () => {
-      fileMetadataRepo.findOne.mockResolvedValue({
-        id: 42,
-        uploadedBy: 1,
-        objectKey: 'uploads/general/2026/07/document.pdf',
-      });
+      filesService.resolveBetaTestimonialFile.mockRejectedValue(
+        new ForbiddenException('A beta testimonial photo is required'),
+      );
 
       await expect(
         service.submitTestimonial(1, { fileId: 42 }),
       ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('rejects a testimonial file with a non-image MIME type', async () => {
+      filesService.resolveBetaTestimonialFile.mockRejectedValue(
+        new ForbiddenException('A beta testimonial photo is required'),
+      );
+
+      await expect(
+        service.submitTestimonial(1, { fileId: 42 }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('rejects a testimonial record without a storage object key', async () => {
+      filesService.resolveBetaTestimonialFile.mockRejectedValue(
+        new ForbiddenException('A beta testimonial photo is required'),
+      );
+
+      await expect(
+        service.submitTestimonial(1, { fileId: 42 }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('requires a beta customer with a completed survey', async () => {
+      transactionUserRepo.findOne.mockResolvedValueOnce(
+        makeUser({ isBetaUser: true, betaCompletedAt: null }),
+      );
+
+      await expect(
+        service.submitTestimonial(1, { fileId: 42 }),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(filesService.resolveBetaTestimonialFile).not.toHaveBeenCalled();
+      expect(transactionUserRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('accepts an identical testimonial retry without resolving evidence again', async () => {
+      transactionUserRepo.findOne.mockResolvedValueOnce(
+        makeUser({
+          isBetaUser: true,
+          betaCompletedAt: new Date('2026-07-10T00:00:00Z'),
+          betaPhotoFileId: 42,
+          betaSharedOnSocial: false,
+        }),
+      );
+
+      await expect(
+        service.submitTestimonial(1, { fileId: 42 }),
+      ).resolves.toEqual({ ok: true });
+
+      expect(filesService.resolveBetaTestimonialFile).not.toHaveBeenCalled();
+    });
+
+    it('rejects a competing testimonial replacement', async () => {
+      transactionUserRepo.findOne.mockResolvedValueOnce(
+        makeUser({
+          isBetaUser: true,
+          betaCompletedAt: new Date('2026-07-10T00:00:00Z'),
+          betaPhotoFileId: 41,
+        }),
+      );
+
+      await expect(
+        service.submitTestimonial(1, { fileId: 42 }),
+      ).rejects.toThrow(ConflictException);
+
+      expect(filesService.resolveBetaTestimonialFile).not.toHaveBeenCalled();
+      expect(transactionUserRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('never changes an existing shared state from true to false', async () => {
+      transactionUserRepo.findOne.mockResolvedValueOnce(
+        makeUser({
+          isBetaUser: true,
+          betaCompletedAt: new Date('2026-07-10T00:00:00Z'),
+          betaPhotoFileId: 42,
+          betaSharedOnSocial: true,
+        }),
+      );
+
+      await service.submitTestimonial(1, {
+        fileId: 42,
+        sharedOnSocial: false,
+      });
+
+      expect(transactionUserRepo.update).not.toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ betaSharedOnSocial: false }),
+      );
+    });
+  });
+
+  describe('held completion and share state', () => {
+    const completedUser = makeUser({
+      isActive: false,
+      isBetaUser: true,
+      accountHoldReason: 'beta_survey_complete',
+      betaCompletedAt: new Date('2026-07-10T00:00:00Z'),
+      betaPhotoFileId: 42,
+      betaPhotoUploadedAt: new Date('2026-07-10T00:01:00Z'),
+      betaSharedOnSocial: false,
+    });
+
+    it('returns only the authenticated held customer completion state', async () => {
+      settingsRepo.find.mockResolvedValue([{ id: 1, isEnabled: true }]);
+      userRepo.findOne.mockResolvedValue(completedUser);
+
+      await expect((service as any).getCompletionState(1)).resolves.toEqual({
+        accountStatus: 'beta_held',
+        user: { fullName: 'Test User', email: 'user@test.com' },
+        betaPhotoUploaded: true,
+        betaSharedOnSocial: false,
+        betaCompletedAt: new Date('2026-07-10T00:00:00Z').toISOString(),
+      });
+    });
+
+    it('fails closed for an authenticated customer without beta completion', async () => {
+      userRepo.findOne.mockResolvedValue(
+        makeUser({ isBetaUser: true, betaCompletedAt: null }),
+      );
+
+      await expect((service as any).getCompletionState(1)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('self-heals a held customer when beta mode is already disabled', async () => {
+      settingsRepo.find.mockResolvedValue([{ id: 1, isEnabled: false }]);
+      userRepo.findOne.mockResolvedValue(completedUser);
+
+      await expect((service as any).getCompletionState(1)).resolves.toEqual({
+        accountStatus: 'active',
+      });
+
+      expect(userRepo.update).toHaveBeenCalledWith(
+        {
+          id: 1,
+          isActive: false,
+          accountHoldReason: 'beta_survey_complete',
+        },
+        { isActive: true, accountHoldReason: null, accountHeldAt: null },
+      );
+    });
+
+    it('marks sharing true under the user lock and is idempotent', async () => {
+      transactionUserRepo.findOne.mockResolvedValueOnce(completedUser);
+
+      await expect((service as any).markShared(1)).resolves.toEqual({
+        ok: true,
+        betaSharedOnSocial: true,
+      });
+
+      expect(transactionUserRepo.findOne).toHaveBeenCalledWith({
+        where: { id: 1 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      expect(transactionUserRepo.update).toHaveBeenCalledWith(1, {
+        betaSharedOnSocial: true,
+      });
+    });
+
+    it('never writes false when sharing was already confirmed', async () => {
+      transactionUserRepo.findOne.mockResolvedValueOnce({
+        ...completedUser,
+        betaSharedOnSocial: true,
+      });
+
+      await expect((service as any).markShared(1)).resolves.toEqual({
+        ok: true,
+        betaSharedOnSocial: true,
+      });
+
+      expect(transactionUserRepo.update).not.toHaveBeenCalled();
     });
   });
 
@@ -331,6 +809,7 @@ describe('BetaModeService', () => {
     it('updates betaEnrolledAt to a recent timestamp for a beta user', async () => {
       userRepo.findOne.mockResolvedValue({
         id: 7,
+        role: 'customer',
         isBetaUser: true,
         betaEnrolledAt: new Date('2026-04-01T00:00:00Z'),
       } as any);
@@ -361,6 +840,7 @@ describe('BetaModeService', () => {
     it('throws NotFoundException when user is not a beta member', async () => {
       userRepo.findOne.mockResolvedValue({
         id: 7,
+        role: 'customer',
         isBetaUser: false,
       } as any);
       await expect(service.resetOrderLimit(7)).rejects.toThrow(/not a beta/i);

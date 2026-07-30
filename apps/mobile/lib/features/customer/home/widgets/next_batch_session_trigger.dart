@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing_app/features/customer/home/widgets/map_tracking_tile.dart';
 import 'package:printing_app/features/customer/home/widgets/next_batch_dialog.dart';
 import 'package:printing_app/features/customer/order/providers/delivery_slot_provider.dart';
+import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
+import 'package:printing_app/shared/models/enums.dart';
 
 /// Session-level flag — true once the NextBatchDialog has been shown for the
 /// current logged-in session. Reset on logout (handled by auth provider).
@@ -43,9 +46,31 @@ class _NextBatchSessionTriggerState
   String _iso(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
+  /// True when the customer already has a batch to watch — a booked slot on
+  /// an active order, or a delivery currently on the road. The reminder is
+  /// about placing an order; interrupting someone who already placed one is
+  /// noise.
+  bool _hasBatchInFlight() {
+    if (ref.read(bookedDeliverySlotProvider) != null) return true;
+    return ref
+        .read(activeOrdersProvider)
+        .any(
+          (o) =>
+              o.orderStatus == OrderStatus.onTheWay ||
+              o.orderStatus == OrderStatus.arrivedAtDestination,
+        );
+  }
+
   Future<void> _maybeShow() async {
     if (!mounted) return;
     if (ref.read(nextBatchShownThisSessionProvider)) return;
+    // Suppress only when we positively know a batch is in flight. The orders
+    // fetch must never DELAY the reminder (fail-open): its moment is right
+    // after slots resolve at session start, and deferring it until orders
+    // land makes it pop unpredictably mid-interaction.
+    if (ref.read(ordersInitialLoadCompleteProvider) && _hasBatchInFlight()) {
+      return;
+    }
     final info = ref.read(nextBatchInfoProvider);
     if (info == null) return;
     ref.read(nextBatchShownThisSessionProvider.notifier).state = true;

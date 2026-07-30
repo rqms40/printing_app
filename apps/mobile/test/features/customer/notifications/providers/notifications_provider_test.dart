@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
@@ -8,11 +10,28 @@ class _FakeNotificationsApi implements NotificationsApi {
   _FakeNotificationsApi(this.notifications);
 
   final List<Map<String, dynamic>> notifications;
+  var markAllAsReadCalls = 0;
 
   @override
   Future<List<Map<String, dynamic>>> fetchNotifications() async {
     return notifications;
   }
+
+  @override
+  Future<void> markAllAsRead() async {
+    markAllAsReadCalls += 1;
+  }
+
+  @override
+  Future<void> markAsRead(String id) async {}
+}
+
+class _DeferredNotificationsApi implements NotificationsApi {
+  final responses = <Completer<List<Map<String, dynamic>>>>[];
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchNotifications() =>
+      responses.removeAt(0).future;
 
   @override
   Future<void> markAllAsRead() async {}
@@ -154,5 +173,69 @@ void main() {
         expect(serverNotifier.state.single.isRead, isFalse);
       },
     );
+
+    test(
+      'clears session notifications locally without an API request',
+      () async {
+        final api = _FakeNotificationsApi([
+          {
+            'id': 100,
+            'user_id': 1,
+            'title': 'Delivery update',
+            'message': 'Your order was delivered.',
+            'type': 'order_delivered',
+            'is_read': false,
+            'created_at': '2026-07-13T04:00:00.000Z',
+          },
+        ]);
+        final serverNotifier = NotificationsNotifier(api: api);
+        addTearDown(serverNotifier.dispose);
+        await Future.delayed(Duration.zero);
+
+        await serverNotifier.clearNotifications();
+
+        expect(serverNotifier.state, isEmpty);
+        expect(api.markAllAsReadCalls, 0);
+      },
+    );
+
+    test('an old notification response cannot replace a new session', () async {
+      final api = _DeferredNotificationsApi();
+      final oldResponse = Completer<List<Map<String, dynamic>>>();
+      final newResponse = Completer<List<Map<String, dynamic>>>();
+      api.responses.addAll([oldResponse, newResponse]);
+      final sessionNotifier = NotificationsNotifier(api: api);
+      addTearDown(sessionNotifier.dispose);
+
+      await sessionNotifier.clearNotifications();
+      final newRefresh = sessionNotifier.refreshNotifications();
+      newResponse.complete([
+        {
+          'id': 200,
+          'user_id': 2,
+          'title': 'Ven update',
+          'message': 'New account notification',
+          'type': 'info',
+          'is_read': false,
+          'created_at': '2026-07-13T05:00:00.000Z',
+        },
+      ]);
+      await newRefresh;
+      oldResponse.complete([
+        {
+          'id': 100,
+          'user_id': 1,
+          'title': 'Mark update',
+          'message': 'Previous account notification',
+          'type': 'info',
+          'is_read': false,
+          'created_at': '2026-07-13T04:00:00.000Z',
+        },
+      ]);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(sessionNotifier.state.single.userId, '2');
+      expect(sessionNotifier.state.single.title, 'Ven update');
+    });
   });
 }

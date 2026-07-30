@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,14 @@ import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/shared/services/api_client.dart';
 import 'package:printing_app/shared/widgets/app_button.dart';
+
+Future<MultipartFile> buildProofPhotoMultipart(XFile picked) async {
+  final bytes = await picked.readAsBytes();
+  final filename = picked.name.trim().isEmpty
+      ? 'delivery-proof.jpg'
+      : picked.name;
+  return MultipartFile.fromBytes(bytes, filename: filename);
+}
 
 class ProofOfDeliverySheet extends StatefulWidget {
   const ProofOfDeliverySheet({super.key, required this.orderRef});
@@ -25,6 +34,8 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
   var _mode = 'signature';
   var _isUploading = false;
   String? _error;
+  XFile? _pendingPhoto;
+  Uint8List? _pendingPhotoBytes;
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -47,27 +58,32 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
     ).pop({'type': 'signature', 'signatureData': jsonEncode(payload)});
   }
 
-  Future<void> _capturePhoto() async {
+  Future<void> _pickPhoto() async {
+    setState(() => _error = null);
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.camera,
+      imageQuality: 82,
+    );
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    if (!mounted) return;
+    setState(() {
+      _pendingPhoto = picked;
+      _pendingPhotoBytes = bytes;
+    });
+  }
+
+  Future<void> _uploadPendingPhoto() async {
+    final picked = _pendingPhoto;
+    if (picked == null) return;
     setState(() {
       _error = null;
       _isUploading = true;
     });
     try {
-      final picked = await ImagePicker().pickImage(
-        source: ImageSource.camera,
-        imageQuality: 82,
-      );
-      if (picked == null) {
-        if (mounted) setState(() => _isUploading = false);
-        return;
-      }
-
       final form = FormData.fromMap({
-        'purpose': 'proof-of-delivery',
-        'file': await MultipartFile.fromFile(
-          picked.path,
-          filename: picked.name,
-        ),
+        'purpose': 'proof_of_delivery',
+        'file': await buildProofPhotoMultipart(picked),
       });
       final response = await ApiClient.instance.post<Map<String, dynamic>>(
         '/files/upload',
@@ -83,12 +99,13 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
       Navigator.of(context).pop({
         'type': 'photo',
         'fileId': fileId is int ? fileId : int.tryParse(fileId.toString()),
-        'objectKey': data['objectKey'] ?? data['object_key'],
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = 'Could not upload proof photo. Try a signature or retake it.';
+        _error =
+            'Could not upload proof photo. Retry the upload, retake it, '
+            'or use a signature.';
         _isUploading = false;
       });
     }
@@ -154,39 +171,46 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
             ),
             const SizedBox(height: AppSpacing.md),
             if (_mode == 'signature') ...[
-              Container(
-                height: 190,
-                decoration: BoxDecoration(
-                  color: colors.surfaceVariant,
-                  borderRadius: AppRadius.borderMd,
-                  border: Border.all(color: colors.outline),
-                ),
-                child: GestureDetector(
-                  onPanStart: (details) {
-                    setState(() {
-                      _points.add(details.localPosition);
-                    });
-                  },
-                  onPanUpdate: (details) {
-                    setState(() {
-                      _points.add(details.localPosition);
-                    });
-                  },
-                  onPanEnd: (_) => setState(() => _points.add(null)),
-                  child: CustomPaint(
-                    painter: _SignaturePainter(
-                      points: _points,
-                      color: colors.onBackground,
-                    ),
-                    child: Center(
-                      child: _hasSignature
-                          ? null
-                          : Text(
-                              'Sign here',
-                              style: AppTypography.body.copyWith(
-                                color: colors.onSurfaceDim,
+              Semantics(
+                container: true,
+                explicitChildNodes: true,
+                focusable: true,
+                label: 'Signature pad',
+                hint: 'Draw the recipient signature here',
+                child: Container(
+                  height: 190,
+                  decoration: BoxDecoration(
+                    color: colors.surfaceVariant,
+                    borderRadius: AppRadius.borderMd,
+                    border: Border.all(color: colors.outline),
+                  ),
+                  child: GestureDetector(
+                    onPanStart: (details) {
+                      setState(() {
+                        _points.add(details.localPosition);
+                      });
+                    },
+                    onPanUpdate: (details) {
+                      setState(() {
+                        _points.add(details.localPosition);
+                      });
+                    },
+                    onPanEnd: (_) => setState(() => _points.add(null)),
+                    child: CustomPaint(
+                      painter: _SignaturePainter(
+                        points: List<Offset?>.of(_points),
+                        color: colors.onBackground,
+                      ),
+                      child: Center(
+                        child: _hasSignature
+                            ? null
+                            : Text(
+                                'Sign here',
+                                style: AppTypography.body.copyWith(
+                                  color: colors.onSurfaceDim,
+                                ),
                               ),
-                            ),
+                      ),
                     ),
                   ),
                 ),
@@ -211,13 +235,43 @@ class _ProofOfDeliverySheetState extends State<ProofOfDeliverySheet> {
                   ),
                 ],
               ),
-            ] else ...[
+            ] else if (_pendingPhotoBytes == null) ...[
               AppButton(
                 label: 'Take photo proof',
                 icon: HugeIcons.strokeRoundedCamera01,
-                isLoading: _isUploading,
                 isFullWidth: true,
-                onTap: _isUploading ? null : _capturePhoto,
+                onTap: _pickPhoto,
+              ),
+            ] else ...[
+              ClipRRect(
+                borderRadius: AppRadius.borderMd,
+                child: Image.memory(
+                  _pendingPhotoBytes!,
+                  key: const Key('proof-photo-preview'),
+                  height: 190,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Row(
+                children: [
+                  Expanded(
+                    child: AppButton(
+                      label: 'Retake',
+                      variant: AppButtonVariant.secondary,
+                      onTap: _isUploading ? null : _pickPhoto,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: AppButton(
+                      label: _error == null ? 'Use photo' : 'Retry upload',
+                      isLoading: _isUploading,
+                      onTap: _isUploading ? null : _uploadPendingPhoto,
+                    ),
+                  ),
+                ],
               ),
             ],
             if (_error != null) ...[

@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { DataSource, DataSourceOptions, QueryRunner } from 'typeorm';
+import { databaseOptionsFromEnv } from './data-source';
 
 const previousRole = ['dri', 'ver'].join('');
 const currentRole = 'rider';
@@ -254,15 +255,19 @@ export async function normalizeLegacyRiderTerminology(
 export function createTypeOrmOptions(
   config: ConfigService,
 ): TypeOrmModuleOptions {
+  const databaseOptions = databaseOptionsFromEnv({
+    ...process.env,
+    DATABASE_HOST: config.get<string>('DATABASE_HOST', 'localhost'),
+    DATABASE_PORT: String(config.get<number>('DATABASE_PORT', 5432)),
+    DATABASE_USER: config.get<string>('DATABASE_USER', 'postgres'),
+    DATABASE_PASSWORD: config.get<string>('DATABASE_PASSWORD', 'postgres'),
+    DATABASE_NAME: config.get<string>('DATABASE_NAME', 'grid_print'),
+  });
+
   return {
-    type: 'postgres' as const,
-    host: config.get<string>('DATABASE_HOST', 'localhost'),
-    port: config.get<number>('DATABASE_PORT', 5432),
-    username: config.get<string>('DATABASE_USER', 'postgres'),
-    password: config.get<string>('DATABASE_PASSWORD', 'postgres'),
-    database: config.get<string>('DATABASE_NAME', 'grid_print'),
+    ...databaseOptions,
     autoLoadEntities: true,
-    synchronize: config.get<string>('NODE_ENV') !== 'production',
+    synchronize: config.get<string>('DATABASE_SYNCHRONIZE') === 'true',
   };
 }
 

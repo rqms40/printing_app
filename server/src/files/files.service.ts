@@ -5,15 +5,23 @@ import {
   BadRequestException,
   InternalServerErrorException,
   ForbiddenException,
+  ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, MoreThan, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  IsNull,
+  MoreThan,
+  Repository,
+} from 'typeorm';
 import { extname } from 'path';
 import { createReadStream } from 'fs';
-import { readFile, unlink } from 'fs/promises';
+import { readFile } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import type { Readable } from 'stream';
-import { FileMetadata } from './entities/file-metadata.entity';
+import { FileMetadata, FilePurpose } from './entities/file-metadata.entity';
+import { DELIVERY_PROOF_IMAGE_MIME_TYPES } from './files.constants';
 import { StorageService } from '../storage/storage.service';
 import { FileAnalysisService } from './file-analysis.service';
 import {
@@ -25,6 +33,7 @@ import {
   THREE_D_MAX_FILE_SIZE_BYTES,
   THREE_D_MAX_FILE_SIZE_MB,
 } from '../storage/storage.config';
+import { removeUploadedTempFile } from './upload-temp-file';
 
 @Injectable()
 export class FilesService {
@@ -35,6 +44,7 @@ export class FilesService {
     private readonly fileRepo: Repository<FileMetadata>,
     private readonly storageService: StorageService,
     private readonly analysisService: FileAnalysisService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async storeMetadata(
@@ -43,6 +53,7 @@ export class FilesService {
     purpose = 'general',
   ): Promise<FileMetadata> {
     try {
+      const normalizedPurpose = this.normalizeUploadPurpose(purpose);
       const fileExt = extname(file.originalname).toLowerCase();
       const mimeOk = ALLOWED_MIME_TYPES.includes(file.mimetype);
       const extOk =
@@ -64,9 +75,39 @@ export class FilesService {
         throw new BadRequestException(`File exceeds ${maxSizeMb} MB limit`);
       }
 
+      let evidenceAnalysis:
+        | Awaited<ReturnType<FileAnalysisService['analyze']>>
+        | undefined;
+      if (
+        normalizedPurpose === FilePurpose.PROOF_OF_DELIVERY ||
+        normalizedPurpose === FilePurpose.BETA_TESTIMONIAL
+      ) {
+        try {
+          const buffer = await this.readUploadBuffer(file);
+          evidenceAnalysis = await this.analysisService.analyze(
+            buffer,
+            file.mimetype,
+            file.originalname,
+          );
+        } catch {
+          evidenceAnalysis = null;
+        }
+        if (
+          !evidenceAnalysis ||
+          !Number.isInteger(evidenceAnalysis.widthPx) ||
+          !Number.isInteger(evidenceAnalysis.heightPx) ||
+          evidenceAnalysis.widthPx! <= 0 ||
+          evidenceAnalysis.heightPx! <= 0
+        ) {
+          throw new BadRequestException(
+            'Evidence upload must contain a valid image',
+          );
+        }
+      }
+
       const now = new Date();
       const datePath = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
-      const objectKey = `uploads/${purpose}/${datePath}/${randomUUID()}${fileExt}`;
+      const objectKey = `uploads/${normalizedPurpose}/${datePath}/${randomUUID()}${fileExt}`;
 
       // Run the original-file upload concurrently with content analysis.
       // Disk-backed uploads stream to object storage so large files do not sit
@@ -89,18 +130,23 @@ export class FilesService {
         throw new InternalServerErrorException('File upload failed');
       });
 
-      const analysisPromise = this.readUploadBuffer(file)
-        .then((buffer) =>
-          this.analysisService.analyze(
-            buffer,
-            file.mimetype,
-            file.originalname,
-          ),
-        )
-        .catch((err: unknown) => {
-          this.logger.warn(`File analysis failed (non-fatal): ${String(err)}`);
-          return null;
-        });
+      const analysisPromise =
+        evidenceAnalysis !== undefined
+          ? Promise.resolve(evidenceAnalysis)
+          : this.readUploadBuffer(file)
+              .then((buffer) =>
+                this.analysisService.analyze(
+                  buffer,
+                  file.mimetype,
+                  file.originalname,
+                ),
+              )
+              .catch((err: unknown) => {
+                this.logger.warn(
+                  `File analysis failed (non-fatal): ${String(err)}`,
+                );
+                return null;
+              });
 
       const [url, analysis] = await Promise.all([
         uploadPromise,
@@ -133,6 +179,7 @@ export class FilesService {
         url,
         objectKey,
         uploadedBy,
+        purpose: normalizedPurpose,
         widthPt: analysis?.widthPt ?? null,
         heightPt: analysis?.heightPt ?? null,
         widthPx: analysis?.widthPx ?? null,
@@ -148,7 +195,103 @@ export class FilesService {
       });
       return this.fileRepo.save(meta);
     } finally {
-      await this.removeDiskUpload(file);
+      await removeUploadedTempFile(file);
+    }
+  }
+
+  private normalizeUploadPurpose(purpose: string): FilePurpose {
+    const normalized = purpose.trim().toLowerCase().replace(/-/g, '_');
+    const allowed = new Set<FilePurpose>([
+      FilePurpose.GENERAL,
+      FilePurpose.PAPER,
+      FilePurpose.PROOF_OF_DELIVERY,
+      FilePurpose.BETA_TESTIMONIAL,
+    ]);
+    if (!allowed.has(normalized as FilePurpose)) {
+      throw new BadRequestException('File purpose not allowed');
+    }
+    return normalized as FilePurpose;
+  }
+
+  async resolveDeliveryProofFile(
+    fileId: number,
+    riderUserId: number,
+    manager: EntityManager,
+  ): Promise<FileMetadata> {
+    const file = await manager.getRepository(FileMetadata).findOne({
+      where: { id: fileId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!file) {
+      throw new BadRequestException('Proof file not found');
+    }
+    if (file.uploadedBy !== riderUserId) {
+      throw new BadRequestException('Proof file does not belong to this rider');
+    }
+    if (file.purpose !== FilePurpose.PROOF_OF_DELIVERY) {
+      throw new BadRequestException('File is not a proof of delivery');
+    }
+    if (
+      !DELIVERY_PROOF_IMAGE_MIME_TYPES.includes(
+        file.mimeType as (typeof DELIVERY_PROOF_IMAGE_MIME_TYPES)[number],
+      )
+    ) {
+      throw new BadRequestException('Proof file must be PNG, JPEG, or WebP');
+    }
+    if (!file.objectKey?.trim()) {
+      throw new BadRequestException('Proof file has no storage object');
+    }
+    await this.requireStoredObject(
+      file,
+      new BadRequestException('Proof file storage object not found'),
+    );
+    return file;
+  }
+
+  async resolveBetaTestimonialFile(
+    fileId: number,
+    userId: number,
+    manager: EntityManager,
+  ): Promise<FileMetadata> {
+    const file = await manager.getRepository(FileMetadata).findOne({
+      where: { id: fileId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!file) {
+      throw new NotFoundException(`File ${fileId} not found`);
+    }
+    if (file.uploadedBy !== userId) {
+      throw new ForbiddenException('File does not belong to this user');
+    }
+    if (
+      file.purpose !== FilePurpose.BETA_TESTIMONIAL ||
+      !DELIVERY_PROOF_IMAGE_MIME_TYPES.includes(
+        file.mimeType as (typeof DELIVERY_PROOF_IMAGE_MIME_TYPES)[number],
+      ) ||
+      !file.objectKey?.trim()
+    ) {
+      throw new ForbiddenException('A beta testimonial photo is required');
+    }
+    await this.requireStoredObject(
+      file,
+      new ForbiddenException('A beta testimonial photo is required'),
+    );
+    return file;
+  }
+
+  private async requireStoredObject(
+    file: FileMetadata,
+    missingError: Error,
+  ): Promise<void> {
+    try {
+      if (!(await this.storageService.objectExists(file.objectKey!))) {
+        throw missingError;
+      }
+    } catch (error) {
+      if (error === missingError) throw error;
+      throw new InternalServerErrorException(
+        'Could not verify evidence storage',
+      );
     }
   }
 
@@ -178,17 +321,6 @@ export class FilesService {
     );
   }
 
-  private async removeDiskUpload(file: Express.Multer.File): Promise<void> {
-    if (this.hasMemoryBuffer(file) || !file.path) return;
-    try {
-      await unlink(file.path);
-    } catch (err) {
-      this.logger.warn(
-        `Failed to remove temporary upload ${file.path}: ${err}`,
-      );
-    }
-  }
-
   async findById(id: number): Promise<FileMetadata> {
     const file = await this.fileRepo.findOne({ where: { id } });
     if (!file) throw new NotFoundException('File not found');
@@ -199,6 +331,7 @@ export class FilesService {
     fileId: number,
     requestingUserId: number,
     isAdmin: boolean,
+    requestHostname?: string,
   ): Promise<string> {
     const file = await this.fileRepo.findOne({ where: { id: fileId } });
     if (!file) throw new NotFoundException('File not found');
@@ -210,7 +343,11 @@ export class FilesService {
     }
     if (!file.objectKey) throw new NotFoundException('File has no storage key');
     try {
-      return await this.storageService.getPresignedUrl(file.objectKey, 3600);
+      return await this.storageService.getPresignedUrl(
+        file.objectKey,
+        3600,
+        requestHostname,
+      );
     } catch (err) {
       this.logger.error('Failed to generate presigned URL', err);
       throw new InternalServerErrorException(
@@ -219,51 +356,33 @@ export class FilesService {
     }
   }
 
-  async getPresignedUrlForKey(objectKey: string, ttl: number): Promise<string> {
-    return this.storageService.getPresignedUrl(objectKey, ttl);
+  async getPresignedUrlForKey(
+    objectKey: string,
+    ttl: number,
+    requestHostname?: string,
+  ): Promise<string> {
+    return this.storageService.getPresignedUrl(objectKey, ttl, requestHostname);
   }
 
-  /**
-   * Permanently deletes a file the user owns: removes the original from
-   * MinIO, the preview-GLB sibling (if any), and the DB row. Throws if the
-   * caller doesn't own the file (admins bypass via `isAdmin`).
-   */
+  /** Permanently deletes an unreferenced file owned by the caller. */
   async deleteOwnedFile(
     fileId: number,
     requestingUserId: number,
     isAdmin: boolean,
   ): Promise<void> {
-    const file = await this.fileRepo.findOne({ where: { id: fileId } });
-    if (!file) throw new NotFoundException('File not found');
-    if (
-      !isAdmin &&
-      (file.uploadedBy == null || file.uploadedBy !== requestingUserId)
-    ) {
-      throw new ForbiddenException();
-    }
-
-    // Delete MinIO objects first; tolerate "not found" so a partial state
-    // (object already gone) still cleans up the DB row. Hard errors on the
-    // primary object propagate so the caller knows storage is broken.
-    if (file.objectKey) {
-      try {
-        await this.storageService.delete(file.objectKey);
-      } catch (err) {
-        this.logger.warn(
-          `Primary object delete failed for ${file.objectKey}: ${err}`,
-        );
+    try {
+      await this.dataSource.transaction((manager) =>
+        this.lockAndDeleteMetadata(manager, fileId, {
+          requestingUserId,
+          isAdmin,
+        }),
+      );
+    } catch (error) {
+      if (this.isForeignKeyViolation(error)) {
+        throw new ConflictException('Referenced files cannot be deleted');
       }
+      throw error;
     }
-    if (file.previewGlbObjectKey) {
-      try {
-        await this.storageService.delete(file.previewGlbObjectKey);
-      } catch (err) {
-        this.logger.warn(
-          `Preview GLB delete failed for ${file.previewGlbObjectKey}: ${err}`,
-        );
-      }
-    }
-    await this.fileRepo.delete(fileId);
   }
 
   async getMyUploads(userId: number): Promise<FileMetadata[]> {
@@ -280,15 +399,18 @@ export class FilesService {
   async stampExpiry(
     fileMetadataId: number,
     retentionDays: number,
+    manager?: EntityManager,
   ): Promise<void> {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + retentionDays);
-    await this.fileRepo.update(fileMetadataId, { expiresAt });
+    const repo = manager?.getRepository(FileMetadata) ?? this.fileRepo;
+    await repo.update(fileMetadataId, { expiresAt });
   }
 
   async deleteExpired(): Promise<{
     found: number;
     deleted: number;
+    failed: number;
     skipped: number;
   }> {
     const now = new Date();
@@ -299,25 +421,179 @@ export class FilesService {
       .getMany();
 
     let deleted = 0;
+    let failed = 0;
     let skipped = 0;
 
     for (const file of expired) {
-      if (file.objectKey) {
-        try {
-          await this.storageService.delete(file.objectKey);
-        } catch (err) {
-          this.logger.error(
-            `Failed to delete MinIO object ${file.objectKey}`,
-            err,
-          );
+      try {
+        await this.dataSource.transaction((manager) =>
+          this.lockAndDeleteMetadata(manager, file.id, { expiredAt: now }),
+        );
+        deleted++;
+      } catch (error) {
+        if (
+          error instanceof ConflictException ||
+          error instanceof NotFoundException ||
+          this.isForeignKeyViolation(error)
+        ) {
           skipped++;
           continue;
         }
+        failed++;
+        this.logger.error(
+          `Expired file deletion failed; retained for retry (${this.errorLabel(error)})`,
+        );
       }
-      await this.fileRepo.delete(file.id);
-      deleted++;
     }
 
-    return { found: expired.length, deleted, skipped };
+    return { found: expired.length, deleted, failed, skipped };
+  }
+
+  private async lockAndDeleteMetadata(
+    manager: EntityManager,
+    fileId: number,
+    options:
+      | { requestingUserId: number; isAdmin: boolean }
+      | { expiredAt: Date },
+  ): Promise<void> {
+    const repo = manager.getRepository(FileMetadata);
+    const file = await repo.findOne({
+      where: { id: fileId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!file) throw new NotFoundException('File not found');
+
+    if ('requestingUserId' in options) {
+      if (
+        !options.isAdmin &&
+        (file.uploadedBy == null ||
+          file.uploadedBy !== options.requestingUserId)
+      ) {
+        throw new ForbiddenException();
+      }
+    } else {
+      if (!file.expiresAt || file.expiresAt > options.expiredAt) {
+        throw new ConflictException('File is no longer expired');
+      }
+      if (
+        file.purpose !== FilePurpose.GENERAL &&
+        file.purpose !== FilePurpose.PAPER
+      ) {
+        throw new ConflictException('Evidence files are retained');
+      }
+    }
+
+    const [references = {}] = await manager.query<Array<FileReferenceState>>(
+      `SELECT
+         EXISTS (
+           SELECT 1 FROM delivery_assignments WHERE proof_file_id = $1
+         ) AS "deliveryProofReferenced",
+         EXISTS (
+           SELECT 1 FROM users WHERE beta_photo_file_id = $1
+         ) AS "testimonialReferenced",
+         EXISTS (
+           SELECT 1 FROM orders WHERE file_metadata_id = $1
+         ) AS "orderReferenced",
+         EXISTS (
+           SELECT 1 FROM order_items WHERE file_metadata_id = $1
+         ) AS "orderItemReferenced"`,
+      [fileId],
+    );
+    const hasSpecificReference =
+      !!references.deliveryProofReferenced ||
+      !!references.testimonialReferenced ||
+      !!references.orderReferenced ||
+      !!references.orderItemReferenced;
+    const referenced = references.referenced ?? hasSpecificReference;
+    const hasUnknownReference = referenced && !hasSpecificReference;
+    const hasProtectedEvidenceReference =
+      !!references.deliveryProofReferenced ||
+      !!references.testimonialReferenced ||
+      hasUnknownReference;
+    const isExpirySweep = 'expiredAt' in options;
+    if (hasProtectedEvidenceReference || (!isExpirySweep && referenced)) {
+      throw new ConflictException('Referenced files cannot be deleted');
+    }
+
+    if (isExpirySweep && references.orderReferenced) {
+      await manager.query(
+        `UPDATE "orders"
+         SET "file_metadata_id" = NULL
+         WHERE "file_metadata_id" = $1`,
+        [fileId],
+      );
+    }
+    if (isExpirySweep && references.orderItemReferenced) {
+      await manager.query(
+        `UPDATE "order_items"
+         SET "file_metadata_id" = NULL
+         WHERE "file_metadata_id" = $1`,
+        [fileId],
+      );
+    }
+
+    await this.deleteStoredObjects(file);
+    try {
+      await repo.delete(fileId);
+    } catch (error) {
+      if (this.isForeignKeyViolation(error)) throw error;
+      this.logger.error(
+        `File metadata finalization failed after object cleanup; retry required (${this.errorLabel(error)})`,
+      );
+      throw new MetadataDeletionRetryException();
+    }
+  }
+
+  private async deleteStoredObjects(file: FileMetadata): Promise<void> {
+    for (const key of [file.objectKey, file.previewGlbObjectKey]) {
+      if (!key) continue;
+      try {
+        await this.storageService.delete(key);
+      } catch (error) {
+        this.logger.error(
+          `Stored file cleanup failed; metadata retained for retry (${this.errorLabel(error)})`,
+        );
+        throw new StorageDeletionRetryException();
+      }
+    }
+  }
+
+  private errorLabel(error: unknown): string {
+    const details =
+      typeof error === 'object' && error !== null
+        ? (error as Record<string, unknown>)
+        : {};
+    if (typeof details.code === 'string') return details.code;
+    if (typeof details.name === 'string') return details.name;
+    return 'unknown';
+  }
+
+  private isForeignKeyViolation(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      String(error.code) === '23503'
+    );
+  }
+}
+
+interface FileReferenceState {
+  referenced?: boolean;
+  deliveryProofReferenced?: boolean;
+  testimonialReferenced?: boolean;
+  orderReferenced?: boolean;
+  orderItemReferenced?: boolean;
+}
+
+class StorageDeletionRetryException extends InternalServerErrorException {
+  constructor() {
+    super('Could not delete stored file; retry later');
+  }
+}
+
+class MetadataDeletionRetryException extends InternalServerErrorException {
+  constructor() {
+    super('Could not finalize file deletion; retry later');
   }
 }

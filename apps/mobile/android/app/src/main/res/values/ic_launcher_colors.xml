@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- GRIDGO cockpit black — lets the dot grid and yellow accent own the icon. -->
+    <color name="ic_launcher_background">#111111</color>
+    <!-- Brand yellow used to tint system-rendered notification icons. -->
+    <color name="notification_accent">#FFDE58</color>
+</resources>

@@ -1,0 +1,304 @@
+name: Beta Visual Evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Exact 40-character main commit SHA to verify
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  visual-evidence:
+    name: Visual Evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      COMPOSE_PROJECT_NAME: gridgo-visual-${{ github.run_id }}-${{ github.run_attempt }}
+      GRIDGO_PUBLIC_HOST: 127.0.0.1
+      GRIDGO_BIND_ADDR: 127.0.0.1
+      GRIDGO_TRUST_PROXY_HOPS: "1"
+      GRIDGO_REAL_FLOW: "true"
+      MINIO_PUBLIC_URL: http://127.0.0.1:9000
+      GRIDGO_ADMIN_EMAIL: admin@gridgo.ph
+      GRIDGO_RIDER_EMAIL: juan@gridgo.ph
+      GRIDGO_BETA_EVIDENCE_DIR: ${{ github.workspace }}/beta-evidence
+      GRIDGO_BETA_PLAYWRIGHT_OUTPUT: ${{ github.workspace }}/e2e/mobile-web/test-results
+
+    steps:
+      - name: Check out requested evidence commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Require dispatch and checkout SHAs to match
+        env:
+          REQUESTED_SHA: ${{ inputs.commit_sha }}
+        run: |
+          [[ "$REQUESTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$REQUESTED_SHA"
+          test "$GITHUB_SHA" = "$REQUESTED_SHA"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: e2e/mobile-web/package-lock.json
+
+      - name: Generate and mask ephemeral stack credentials
+        shell: bash
+        run: |
+          umask 077
+          : > server/.env
+          for variable in JWT_SECRET GRIDGO_SEED_CUSTOMER_PASSWORD GRIDGO_SEED_RIDER_PASSWORD GRIDGO_SEED_ADMIN_PASSWORD MINIO_ACCESS_KEY MINIO_SECRET_KEY; do
+            value="$(openssl rand -hex 32)"
+            echo "::add-mask::$value"
+            echo "$variable=$value" >> "$GITHUB_ENV"
+            echo "$variable=$value" >> server/.env
+          done
+          set -a
+          source server/.env
+          set +a
+          echo "GRIDGO_ADMIN_PASSWORD=$GRIDGO_SEED_ADMIN_PASSWORD" >> "$GITHUB_ENV"
+          echo "GRIDGO_RIDER_PASSWORD=$GRIDGO_SEED_RIDER_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Install locked Playwright Chromium
+        working-directory: e2e/mobile-web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Build stack images once
+        run: docker compose -f docker-compose.dev.yml build
+
+      - name: Start disposable infrastructure
+        run: docker compose -f docker-compose.dev.yml up -d --no-build --wait postgres minio osrm
+
+      - name: Migrate and seed the empty database
+        run: |
+          docker compose -f docker-compose.dev.yml run --rm --no-deps migrate
+          docker compose -f docker-compose.dev.yml run --rm --no-deps seed
+
+      - name: Start and verify application surfaces
+        run: |
+          docker compose -f docker-compose.dev.yml up -d --no-build --no-deps api
+          docker compose -f docker-compose.dev.yml up -d --no-build --no-deps mobile admin landing
+          for url in http://127.0.0.1:3000/api/health http://127.0.0.1:8088 http://127.0.0.1:8189 http://127.0.0.1:8090; do
+            ready=0
+            for _ in {1..60}; do
+              if curl -fsS "$url" > /dev/null; then
+                ready=1
+                break
+              fi
+              sleep 2
+            done
+            if [[ "$ready" != 1 ]]; then
+              echo "Surface did not become ready: $url" >&2
+              exit 1
+            fi
+          done
+
+      - name: Run screenshot-backed four-actor workflow
+        working-directory: e2e/mobile-web
+        env:
+          GRIDGO_RUN_BETA_FLOW_VISUAL: "1"
+          MOBILE_WEB_E2E_NO_SERVER: "1"
+          MOBILE_WEB_E2E_URL: http://127.0.0.1:8088
+          GRIDGO_ADMIN_URL: http://127.0.0.1:8189
+          GRIDGO_API_URL: http://127.0.0.1:3000/api
+        run: npm run test:beta:visual
+
+      - name: Build sanitized accepted evidence
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import datetime
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import shutil
+          import struct
+
+          source = pathlib.Path("beta-evidence").resolve()
+          destination = pathlib.Path("sanitized-evidence").resolve()
+          if destination.exists():
+              shutil.rmtree(destination)
+          screenshots = destination / "screenshots"
+          screenshots.mkdir(parents=True, mode=0o700)
+
+          raw_manifest = json.loads((source / "manifest.json").read_text())
+          entries = raw_manifest.get("entries")
+          if not isinstance(entries, list) or {entry.get("stepId") for entry in entries} != set(range(1, 30)):
+              raise SystemExit("visual manifest must contain accepted evidence for every step 1..29")
+
+          for entry in entries:
+              required = ("actor", "url", "sha256", "png", "durableIds", "assertionSummary")
+              if any(key not in entry for key in required):
+                  raise SystemExit(f"step {entry.get('stepId')} is missing required evidence metadata")
+              if pathlib.Path(entry["file"]).name != entry["file"]:
+                  raise SystemExit(f"unsafe screenshot filename: {entry['file']}")
+              source_image = (source / "screenshots" / entry["file"]).resolve()
+              if source not in source_image.parents or not source_image.is_file() or source_image.is_symlink():
+                  raise SystemExit(f"missing or unsafe screenshot path: {entry.get('file')}")
+              data = source_image.read_bytes()
+              if hashlib.sha256(data).hexdigest() != entry["sha256"]:
+                  raise SystemExit(f"screenshot hash mismatch: {entry['file']}")
+              if data[:8] != b"\x89PNG\r\n\x1a\n":
+                  raise SystemExit(f"not a PNG: {entry['file']}")
+              width, height = struct.unpack(">II", data[16:24])
+              png = entry["png"]
+              if (png.get("width"), png.get("height"), png.get("bytes")) != (width, height, len(data)):
+                  raise SystemExit(f"PNG metadata mismatch: {entry['file']}")
+              if width <= 300 or height <= 600 or not entry["assertionSummary"]:
+                  raise SystemExit(f"incomplete screenshot evidence: {entry['file']}")
+              shutil.copyfile(source_image, screenshots / entry["file"])
+
+          manifest = {
+              "runLabel": raw_manifest.get("runLabel"),
+              "generatedAt": raw_manifest.get("generatedAt"),
+              "commitSha": os.environ["EXPECTED_SHA"],
+              "entries": entries,
+          }
+          manifest_path = destination / "manifest.json"
+          manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+
+          files = []
+          for path in sorted(destination.rglob("*")):
+              if path.is_file():
+                  files.append({
+                      "path": path.relative_to(destination).as_posix(),
+                      "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                      "bytes": path.stat().st_size,
+                  })
+          accepted = {
+              "accepted": True,
+              "commitSha": os.environ["EXPECTED_SHA"],
+              "sourceRunId": os.environ["GITHUB_RUN_ID"],
+              "sourceRunAttempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "acceptedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "manifestSha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+              "files": files,
+          }
+          (destination / "accepted-manifest.json").write_text(json.dumps(accepted, indent=2) + "\n")
+          PY
+
+      - name: Scan sanitized evidence for secrets
+        run: |
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import re
+
+          root = pathlib.Path("sanitized-evidence").resolve()
+          secret_names = (
+              "GRIDGO_SEED_CUSTOMER_PASSWORD",
+              "GRIDGO_SEED_RIDER_PASSWORD",
+              "GRIDGO_SEED_ADMIN_PASSWORD",
+              "GRIDGO_RIDER_PASSWORD",
+              "GRIDGO_ADMIN_PASSWORD",
+              "JWT_SECRET",
+              "MINIO_ACCESS_KEY",
+              "MINIO_SECRET_KEY",
+          )
+          secrets = []
+          for name in secret_names:
+              value = os.environ.get(name)
+              if not value:
+                  raise SystemExit(f"required ephemeral secret is missing: {name}")
+              secrets.append((name, value.encode()))
+
+          forbidden_fields = re.compile(
+              rb"(?i)(?:access_?token|token|jwt|authorization|password|secret)\s*[\"']?\s*[:=]\s*[\"']?[^\"'\s,}]+"
+          )
+          bearer = re.compile(rb"(?i)Bearer\s+[A-Za-z0-9._~+/=-]+")
+          for path in sorted(root.rglob("*")):
+              if path.is_symlink():
+                  raise SystemExit(f"symlink is not allowed in accepted evidence: {path}")
+              if not path.is_file():
+                  continue
+              data = path.read_bytes()
+              for name, secret in secrets:
+                  if secret in data:
+                      raise SystemExit(f"accepted evidence contains ephemeral secret {name}: {path}")
+              if path.suffix == ".json" and (bearer.search(data) or forbidden_fields.search(data)):
+                  raise SystemExit(f"accepted evidence contains an authentication field: {path}")
+          PY
+
+      - name: Upload accepted sanitized visual evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: beta-visual-evidence-accepted-${{ github.sha }}
+          path: sanitized-evidence
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove disposable stack and credentials
+        if: always()
+        run: |
+          docker compose -f docker-compose.dev.yml down -v --remove-orphans || true
+          rm -f server/.env
+          rm -rf beta-evidence sanitized-evidence e2e/mobile-web/test-results
+
+  evidence-accepted:
+    name: Evidence Accepted
+    needs: visual-evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: beta-release-evidence
+
+    steps:
+      - name: Download exact-run visual evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: beta-visual-evidence-accepted-${{ github.sha }}
+          path: accepted-evidence
+
+      - name: Revalidate accepted evidence
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+
+          root = pathlib.Path("accepted-evidence").resolve()
+          acceptance = json.loads((root / "accepted-manifest.json").read_text())
+          if acceptance.get("accepted") is not True:
+              raise SystemExit("evidence is not accepted")
+          if acceptance.get("commitSha") != os.environ["EXPECTED_SHA"]:
+              raise SystemExit("accepted evidence commit does not match workflow SHA")
+          if str(acceptance.get("sourceRunId")) != os.environ["GITHUB_RUN_ID"]:
+              raise SystemExit("accepted evidence source run does not match workflow")
+
+          manifest_path = root / "manifest.json"
+          if hashlib.sha256(manifest_path.read_bytes()).hexdigest() != acceptance.get("manifestSha256"):
+              raise SystemExit("visual manifest hash mismatch")
+          manifest = json.loads(manifest_path.read_text())
+          if manifest.get("commitSha") != os.environ["EXPECTED_SHA"]:
+              raise SystemExit("visual manifest commit does not match workflow SHA")
+          entries = manifest.get("entries")
+          if not isinstance(entries, list) or {entry.get("stepId") for entry in entries} != set(range(1, 30)):
+              raise SystemExit("visual manifest must contain accepted evidence for every step 1..29")
+
+          files = acceptance.get("files")
+          if not isinstance(files, list) or not files:
+              raise SystemExit("accepted evidence has no file hash inventory")
+          for item in files:
+              path = (root / item["path"]).resolve()
+              if root not in path.parents or not path.is_file() or path.is_symlink():
+                  raise SystemExit(f"missing or unsafe accepted evidence file: {item['path']}")
+              data = path.read_bytes()
+              if len(data) != item.get("bytes"):
+                  raise SystemExit(f"accepted evidence size mismatch: {item['path']}")
+              if hashlib.sha256(data).hexdigest() != item.get("sha256"):
+                  raise SystemExit(f"accepted evidence hash mismatch: {item['path']}")
+          PY

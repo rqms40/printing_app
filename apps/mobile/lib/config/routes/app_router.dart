@@ -5,9 +5,11 @@ import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/routes/page_transitions.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
+import 'package:printing_app/features/customer/beta/providers/beta_status_provider.dart';
 import 'package:printing_app/features/auth/models/registration_draft.dart';
 import 'package:printing_app/features/customer/profile/models/account_state.dart';
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
+import 'package:printing_app/shared/models/address.dart';
 import 'package:printing_app/shared/widgets/app_bottom_nav.dart';
 import 'package:printing_app/shared/widgets/scaffold_with_nav.dart';
 
@@ -20,6 +22,7 @@ import 'package:printing_app/features/splash/screens/splash_screen.dart';
 // Auth screens
 // ---------------------------------------------------------------------------
 import 'package:printing_app/features/auth/screens/login_screen.dart';
+import 'package:printing_app/features/auth/screens/beta_welcome_screen.dart';
 import 'package:printing_app/features/auth/screens/register_screen.dart';
 import 'package:printing_app/features/auth/screens/profile_setup_screen.dart';
 
@@ -60,7 +63,6 @@ import 'package:printing_app/features/customer/chat/screens/conversation_screen.
 // ---------------------------------------------------------------------------
 // Rider screens
 // ---------------------------------------------------------------------------
-import 'package:printing_app/features/rider/alerts/screens/rider_alerts_screen.dart';
 import 'package:printing_app/features/rider/deliveries/screens/deliveries_screen.dart';
 import 'package:printing_app/features/rider/deliveries/screens/delivery_detail_screen.dart';
 import 'package:printing_app/features/rider/active_delivery/screens/active_delivery_screen.dart';
@@ -102,8 +104,156 @@ class _AuthChangeNotifier extends ChangeNotifier {
   _AuthChangeNotifier(this._ref) {
     _ref.listen(authProvider, (_, _) => notifyListeners());
     _ref.listen(accountStateProvider, (_, _) => notifyListeners());
+    _ref.listen(betaStatusProvider, (_, _) => notifyListeners());
   }
   final Ref _ref;
+}
+
+String _roleHome(String? role) => switch (role) {
+  'rider' => '/rider/home',
+  'admin' => '/admin/dashboard',
+  _ => '/customer/home',
+};
+
+String _effectiveRole(String? role) => switch (role) {
+  'rider' => 'rider',
+  'admin' => 'admin',
+  _ => 'customer',
+};
+
+bool _isProtectedPathOwnedByRole(String path, String? role) {
+  final owner = switch (path) {
+    final value when value.startsWith('/customer/') => 'customer',
+    final value when value.startsWith('/rider/') => 'rider',
+    final value when value.startsWith('/admin/') => 'admin',
+    _ => null,
+  };
+  return owner == null || owner == _effectiveRole(role);
+}
+
+bool _isSafeRoleDeepLink(String? rawLocation, String? role) {
+  if (rawLocation == null || rawLocation.isEmpty) return false;
+  final target = Uri.tryParse(rawLocation);
+  if (target == null || target.hasScheme || target.hasAuthority) return false;
+  final path = target.path;
+  if (path == '/customer/beta/success-wall' ||
+      path == '/customer/beta/locked' ||
+      path == '/customer/survey/required') {
+    return false;
+  }
+  return switch (role) {
+    'customer' => path.startsWith('/customer/'),
+    'rider' => path.startsWith('/rider/'),
+    'admin' => path.startsWith('/admin/'),
+    _ => false,
+  };
+}
+
+bool _isPotentialProtectedDeepLink(Uri uri) {
+  final path = uri.path;
+  if (path == '/customer/beta/success-wall' ||
+      path == '/customer/beta/locked' ||
+      path == '/customer/survey/required') {
+    return false;
+  }
+  return path.startsWith('/customer/') ||
+      path.startsWith('/rider/') ||
+      path.startsWith('/admin/');
+}
+
+/// Pure redirect policy shared by GoRouter and route-guard regression tests.
+String? resolveAppRedirect({
+  required Uri uri,
+  required AuthState authState,
+  required AccountState accountState,
+  required bool seenOnboarding,
+  bool betaGloballyEnabled = false,
+}) {
+  final path = uri.path;
+  final isAuth = authState.status == AuthStatus.authenticated;
+  final isProfileIncomplete = authState.status == AuthStatus.profileIncomplete;
+  final isOnAuth = path.startsWith('/auth');
+  final isOnSplash = path == '/splash';
+  final isOnOnboarding = path == '/onboarding';
+  final isOnBetaLocked = path == '/customer/beta/locked';
+  final isOnBetaSuccess = path == '/customer/beta/success-wall';
+
+  if (authState.betaLocked != null) {
+    return isOnBetaLocked ? null : '/customer/beta/locked';
+  }
+
+  if (isOnSplash) {
+    final requested = uri.queryParameters['redirect'];
+    if (isAuth && _isSafeRoleDeepLink(requested, authState.user?.role)) {
+      return requested;
+    }
+    return null;
+  }
+
+  if (isOnBetaSuccess) {
+    if (isAuth && authState.betaCompletionJustSubmitted) return null;
+    return isAuth ? _roleHome(authState.user?.role) : '/auth/login';
+  }
+  if (isOnBetaLocked) {
+    return isAuth ? _roleHome(authState.user?.role) : '/auth/login';
+  }
+
+  // The post-signup beta reveal is shown to freshly-authenticated testers
+  // before onboarding; allow it through like /onboarding.
+  if (path == '/auth/beta-welcome') {
+    return isAuth ? null : '/auth/login';
+  }
+
+  final isForcedSurvey = path == '/customer/survey/required';
+  if (isForcedSurvey && !isAuth) return '/auth/login';
+  if (isAuth &&
+      _effectiveRole(authState.user?.role) == 'customer' &&
+      accountState.status == AccountGateStatus.surveyRequired) {
+    return isForcedSurvey ? null : '/customer/survey/required';
+  }
+  if (isAuth && !_isProtectedPathOwnedByRole(path, authState.user?.role)) {
+    return _roleHome(authState.user?.role);
+  }
+  if (isForcedSurvey &&
+      isAuth &&
+      accountState.status != AccountGateStatus.surveyRequired) {
+    return '/customer/home';
+  }
+
+  if (isOnOnboarding && isAuth) return null;
+
+  if (!isAuth && !isProfileIncomplete && !isOnAuth) {
+    if (_isPotentialProtectedDeepLink(uri)) {
+      return Uri(
+        path: '/auth/login',
+        queryParameters: {'redirect': uri.toString()},
+      ).toString();
+    }
+    return '/auth/login';
+  }
+
+  if (isProfileIncomplete && !path.contains('profile-setup')) {
+    return '/auth/profile-setup';
+  }
+
+  if (isAuth && isOnAuth) {
+    final requested = uri.queryParameters['redirect'];
+    if (_isSafeRoleDeepLink(requested, authState.user?.role)) {
+      return requested;
+    }
+    if (seenOnboarding) return _roleHome(authState.user?.role);
+    // A freshly-registered customer in an active beta gets the press-proof
+    // reveal instead of the generic onboarding carousel. Routing this here
+    // (not via a post-register context.go) makes it deterministic rather than
+    // racing the auth-change redirect.
+    if (betaGloballyEnabled &&
+        _effectiveRole(authState.user?.role) == 'customer') {
+      return '/auth/beta-welcome';
+    }
+    return '/onboarding';
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -118,74 +268,20 @@ final routerProvider = Provider<GoRouter>((ref) {
     debugLogDiagnostics: true,
     refreshListenable: authNotifier,
     redirect: (context, state) {
-      // Read (not watch!) current auth state at redirect time
       final authState = ref.read(authProvider);
-      final isAuth = authState.status == AuthStatus.authenticated;
-      final isProfileIncomplete =
-          authState.status == AuthStatus.profileIncomplete;
-      final isOnAuth = state.matchedLocation.startsWith('/auth');
-      final isOnSplash = state.matchedLocation == '/splash';
-      final isOnOnboarding = state.matchedLocation == '/onboarding';
-
-      // Let the splash screen and onboarding through without redirect
-      if (isOnSplash) return null;
-
-      // Beta-locked: redirect to locked screen when on any auth route
-      final isBetaLocked = authState.betaLocked != null;
-      final isOnBetaLocked = state.matchedLocation == '/customer/beta/locked';
-      final isOnBetaSuccess =
-          state.matchedLocation == '/customer/beta/success-wall';
-      if (isBetaLocked && isOnAuth && !isOnBetaLocked) {
-        return '/customer/beta/locked';
-      }
-      // Allow beta screens to pass through
-      if (isOnBetaLocked || isOnBetaSuccess) return null;
-
       final accountState = ref.read(accountStateProvider);
-      final isForcedSurvey =
-          state.matchedLocation == '/customer/survey/required';
-      if (isForcedSurvey && !isAuth) {
-        return '/auth/login';
-      }
-      if (isAuth && accountState.status == AccountGateStatus.surveyRequired) {
-        return isForcedSurvey ? null : '/customer/survey/required';
-      }
-      if (isForcedSurvey &&
-          isAuth &&
-          accountState.status != AccountGateStatus.surveyRequired) {
-        return '/customer/home';
-      }
-
-      if (isOnOnboarding && isAuth) return null;
-
-      // Unauthenticated users must go to login
-      if (!isAuth && !isProfileIncomplete && !isOnAuth) {
-        return '/auth/login';
-      }
-
-      // Incomplete profile users must complete profile
-      if (isProfileIncomplete &&
-          !state.matchedLocation.contains('profile-setup')) {
-        return '/auth/profile-setup';
-      }
-
-      // Authenticated users on auth pages go through onboarding first (first login only)
-      if (isAuth && isOnAuth) {
-        final seenOnboarding = ref.read(
-          tutorialSeenProvider(TutorialKey.onboarding),
-        );
-        if (seenOnboarding) {
-          final role = ref.read(authProvider).user?.role ?? 'customer';
-          return switch (role) {
-            'rider' => '/rider/home',
-            'admin' => '/admin/dashboard',
-            _ => '/customer/home',
-          };
-        }
-        return '/onboarding';
-      }
-
-      return null; // no redirect
+      final seenOnboarding = ref.read(
+        tutorialSeenProvider(TutorialKey.onboarding),
+      );
+      final betaGloballyEnabled =
+          ref.read(betaStatusProvider).valueOrNull?.globallyEnabled ?? false;
+      return resolveAppRedirect(
+        uri: state.uri,
+        authState: authState,
+        accountState: accountState,
+        seenOnboarding: seenOnboarding,
+        betaGloballyEnabled: betaGloballyEnabled,
+      );
     },
     routes: [
       // -----------------------------------------------------------------------
@@ -207,6 +303,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/auth/register',
         pageBuilder: (_, state) =>
             fadeTransition(const RegisterScreen(), state),
+      ),
+      GoRoute(
+        path: '/auth/beta-welcome',
+        pageBuilder: (_, state) =>
+            fadeTransition(const BetaWelcomeScreen(), state),
       ),
       GoRoute(
         path: '/auth/profile-setup',
@@ -305,7 +406,9 @@ final routerProvider = Provider<GoRouter>((ref) {
                 showFab: true,
                 onTap: (i) {
                   if (i == 2) {
-                    ref.read(notificationsProvider.notifier).refreshNotifications();
+                    ref
+                        .read(notificationsProvider.notifier)
+                        .refreshNotifications();
                   }
                   navigationShell.goBranch(
                     i,
@@ -447,8 +550,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/customer/addresses/new',
-        pageBuilder: (_, state) =>
-            slideTransition(const AddressPickerScreen(), state),
+        pageBuilder: (_, state) {
+          final existingAddress = state.extra is Address
+              ? state.extra as Address
+              : null;
+          return slideTransition(
+            AddressPickerScreen(existingAddress: existingAddress),
+            state,
+          );
+        },
       ),
       GoRoute(
         path: '/customer/profile/account',
@@ -537,42 +647,42 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       // -----------------------------------------------------------------------
-      // Rider shell (Home, Orders, + FAB, Alerts, Profile) — rider-UI.png
+      // Rider shell (Home, Deliveries, + FAB, Notifications, Profile)
       // -----------------------------------------------------------------------
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => ScaffoldWithNav(
-            currentIndex: navigationShell.currentIndex,
-            showFab: true,
-            navStyle: AppBottomNavStyle.standard,
-            quickActions: kRiderQuickActions,
-            onTap: (i) => navigationShell.goBranch(
-              i,
-              initialLocation: i == navigationShell.currentIndex,
-            ),
-            items: const [
-              NavItem(
-                icon: HugeIcons.strokeRoundedHome01,
-                activeIcon: HugeIcons.strokeRoundedHome01,
-                label: 'Home',
-              ),
-              NavItem(
-                icon: HugeIcons.strokeRoundedLeftToRightListDash,
-                activeIcon: HugeIcons.strokeRoundedLeftToRightListDash,
-                label: 'Orders',
-              ),
-              NavItem(
-                icon: HugeIcons.strokeRoundedNotification02,
-                activeIcon: HugeIcons.strokeRoundedNotification02,
-                label: 'Alerts',
-              ),
-              NavItem(
-                icon: HugeIcons.strokeRoundedUser,
-                activeIcon: HugeIcons.strokeRoundedUser,
-                label: 'Profile',
-              ),
-            ],
-            child: navigationShell,
+          currentIndex: navigationShell.currentIndex,
+          showFab: true,
+          navStyle: AppBottomNavStyle.standard,
+          quickActions: kRiderQuickActions,
+          onTap: (i) => navigationShell.goBranch(
+            i,
+            initialLocation: i == navigationShell.currentIndex,
           ),
+          items: const [
+            NavItem(
+              icon: HugeIcons.strokeRoundedHome01,
+              activeIcon: HugeIcons.strokeRoundedHome01,
+              label: 'Home',
+            ),
+            NavItem(
+              icon: HugeIcons.strokeRoundedLeftToRightListDash,
+              activeIcon: HugeIcons.strokeRoundedLeftToRightListDash,
+              label: 'Deliveries',
+            ),
+            NavItem(
+              icon: HugeIcons.strokeRoundedNotification02,
+              activeIcon: HugeIcons.strokeRoundedNotification02,
+              label: 'Notifications',
+            ),
+            NavItem(
+              icon: HugeIcons.strokeRoundedUser,
+              activeIcon: HugeIcons.strokeRoundedUser,
+              label: 'Profile',
+            ),
+          ],
+          child: navigationShell,
+        ),
         branches: [
           StatefulShellBranch(
             routes: [
@@ -593,8 +703,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/rider/alerts',
-                builder: (_, _) => const RiderAlertsScreen(),
+                path: '/rider/notifications',
+                builder: (_, _) => const NotificationsScreen(),
               ),
             ],
           ),

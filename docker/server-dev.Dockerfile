@@ -1,6 +1,7 @@
 FROM node:24-bookworm-slim
 
 WORKDIR /app/server
+ENV DATABASE_SYNCHRONIZE=false
 
 COPY server/package*.json ./
 RUN npm ci

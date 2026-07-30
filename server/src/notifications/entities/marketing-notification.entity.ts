@@ -20,6 +20,14 @@ export class MarketingNotification {
   @Column()
   body: string;
 
+  @Column({
+    name: 'image_url',
+    type: 'varchar',
+    length: 2048,
+    nullable: true,
+  })
+  imageUrl: string | null;
+
   @Column()
   frequency: string; // e.g., '6h', 'daily', 'monthly'
 

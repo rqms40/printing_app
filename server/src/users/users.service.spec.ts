@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { ConflictException, BadRequestException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './entities/user.entity';
@@ -9,6 +9,8 @@ import * as bcrypt from 'bcrypt';
 describe('UsersService', () => {
   let service: UsersService;
   let repo: jest.Mocked<Partial<Repository<User>>>;
+  let dataSource: { transaction: jest.Mock };
+  let transactionQuery: jest.Mock;
 
   const mockUser = {
     id: 1,
@@ -31,11 +33,23 @@ describe('UsersService', () => {
       findOneOrFail: jest.fn(),
       find: jest.fn(),
     };
+    transactionQuery = jest.fn();
+    dataSource = {
+      transaction: jest.fn(
+        async (
+          work: (manager: {
+            getRepository: () => typeof repo;
+            query: jest.Mock;
+          }) => Promise<unknown>,
+        ) => await work({ getRepository: () => repo, query: transactionQuery }),
+      ),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
         UsersService,
         { provide: getRepositoryToken(User), useValue: repo },
+        { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
 
@@ -72,6 +86,74 @@ describe('UsersService', () => {
       expect(result).toEqual(mockUser);
       expect(repo.findOne).toHaveBeenCalledWith({ where: { id: 1 } });
     });
+  });
+
+  describe('FCM token ownership', () => {
+    it('atomically transfers a device token away from every previous owner', async () => {
+      repo.update.mockResolvedValue(undefined as any);
+
+      await service.updateFcmToken(2, 'device-token');
+
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(transactionQuery).toHaveBeenCalledWith(
+        'SELECT pg_advisory_xact_lock($1::bigint)',
+        [1777854200000],
+      );
+      expect(repo.update).toHaveBeenNthCalledWith(
+        1,
+        { fcmToken: 'device-token' },
+        { fcmToken: null },
+      );
+      expect(repo.update).toHaveBeenNthCalledWith(2, 2, {
+        fcmToken: 'device-token',
+      });
+    });
+
+    it('revokes only the matching token owned by the authenticated user', async () => {
+      repo.update.mockResolvedValue(undefined as any);
+
+      await service.clearFcmToken(2, 'device-token');
+
+      expect(repo.update).toHaveBeenCalledWith(
+        { id: 2, fcmToken: 'device-token' },
+        { fcmToken: null },
+      );
+    });
+
+    it('rejects tokens whose UTF-8 representation exceeds the index limit', async () => {
+      await expect(service.updateFcmToken(2, '🚀'.repeat(513))).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findSocketIdentity', () => {
+    it('loads only the authoritative socket identity fields', async () => {
+      repo.findOne.mockResolvedValue({
+        id: 1,
+        role: 'customer',
+        isActive: true,
+      } as User);
+
+      await expect(service.findSocketIdentity(1)).resolves.toEqual({
+        id: 1,
+        role: 'customer',
+        isActive: true,
+      });
+      expect(repo.findOne).toHaveBeenCalledWith({
+        where: { id: 1 },
+        select: { id: true, role: true, isActive: true },
+      });
+    });
+
+    it.each([undefined, null, 0, -1, 1.2, '1', Number.NaN])(
+      'fails closed for invalid user id %p',
+      async (id) => {
+        await expect(service.findSocketIdentity(id)).resolves.toBeNull();
+        expect(repo.findOne).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('create', () => {
@@ -253,6 +335,9 @@ describe('UsersService', () => {
 
 describe('UsersService — storage settings', () => {
   let service: UsersService;
+  const dataSource = {
+    transaction: jest.fn(),
+  };
   const repo = {
     findOne: jest.fn(),
     findOneOrFail: jest.fn(),
@@ -268,6 +353,7 @@ describe('UsersService — storage settings', () => {
       providers: [
         UsersService,
         { provide: getRepositoryToken(User), useValue: repo },
+        { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
     service = module.get<UsersService>(UsersService);

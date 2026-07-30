@@ -29,6 +29,7 @@ import { PaperSizeValidatorService } from './paper-size-validator.service';
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
 import { PT_TO_MM } from './files.constants';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
+import { removeUploadedTempFile } from './upload-temp-file';
 
 const UPLOAD_TMP_DIR = join(tmpdir(), 'gridgo-uploads');
 
@@ -65,12 +66,13 @@ export class FilesController {
       limits: { fileSize: 200 * 1024 * 1024 },
     }),
   )
-  uploadFile(
+  async uploadFile(
     @UploadedFile() file: Express.Multer.File,
     @Request() req: RequestWithUser,
     @Body('purpose') purpose?: string,
   ) {
     if (req.user.betaTestimonialPending && purpose !== 'beta_testimonial') {
+      await removeUploadedTempFile(file);
       throw new ForbiddenException(
         'Only a beta testimonial photo may be uploaded',
       );
@@ -95,6 +97,7 @@ export class FilesController {
       id,
       req.user.sub,
       isAdmin,
+      req.hostname,
     );
     return { url };
   }
@@ -175,6 +178,7 @@ export class FilesController {
         previewGlbUrl = await this.filesService.getPresignedUrlForKey(
           previewKey,
           3600,
+          req.hostname,
         );
       } catch {
         /* non-fatal */

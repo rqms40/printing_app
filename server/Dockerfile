@@ -11,5 +11,6 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 ENV NODE_ENV=production
+ENV DATABASE_SYNCHRONIZE=false
 EXPOSE 3000
 CMD ["node", "dist/src/main.js"]

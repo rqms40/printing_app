@@ -8,6 +8,10 @@ import { DeliverySlotsGateway } from './delivery-slots.gateway';
 
 describe('DeliverySlotsService', () => {
   let svc: DeliverySlotsService;
+  let gateway: {
+    notifySlotUpdated: jest.Mock;
+    notifyDateChanged: jest.Mock;
+  };
   const templateRepo = { find: jest.fn() };
   const bookingRepo = {
     createQueryBuilder: jest.fn(),
@@ -38,6 +42,7 @@ describe('DeliverySlotsService', () => {
       ],
     }).compile();
     svc = mod.get(DeliverySlotsService);
+    gateway = mod.get(DeliverySlotsGateway);
   });
 
   describe('getAvailability', () => {
@@ -232,12 +237,14 @@ describe('DeliverySlotsService', () => {
     it('throws CancellationClosedException past cutoff', async () => {
       const past = '2020-01-01';
       const tx = {
-        findOne: jest.fn().mockResolvedValue({
-          id: 7,
-          slotTemplateId: 1,
-          date: past,
-          slotTemplate: { startTime: '09:30:00' },
-        }),
+        findOne: jest
+          .fn()
+          .mockResolvedValueOnce({
+            id: 7,
+            slotTemplateId: 1,
+            date: past,
+          })
+          .mockResolvedValueOnce({ id: 1, startTime: '09:30:00' }),
       };
       await expect(svc.releaseSlot(tx as any, 7)).rejects.toThrow(
         'Slot is in progress, cancellation closed',
@@ -249,16 +256,26 @@ describe('DeliverySlotsService', () => {
         .toISOString()
         .slice(0, 10);
       const tx = {
-        findOne: jest.fn().mockResolvedValue({
-          id: 7,
-          slotTemplateId: 1,
-          date: future,
-          slotTemplate: { startTime: '09:30:00' },
-        }),
+        findOne: jest
+          .fn()
+          .mockResolvedValueOnce({
+            id: 7,
+            slotTemplateId: 1,
+            date: future,
+          })
+          .mockResolvedValueOnce({ id: 1, startTime: '09:30:00' }),
         remove: jest.fn().mockResolvedValue(undefined),
       };
-      await svc.releaseSlot(tx as any, 7);
+      const releasedDate = await svc.releaseSlot(tx as any, 7);
       expect(tx.remove).toHaveBeenCalled();
+      expect(gateway.notifyDateChanged).not.toHaveBeenCalled();
+      (
+        svc as DeliverySlotsService & {
+          publishReleasedSlot(date: string | null): void;
+        }
+      ).publishReleasedSlot(releasedDate as unknown as string | null);
+      expect(gateway.notifyDateChanged).toHaveBeenCalledTimes(1);
+      expect(gateway.notifyDateChanged).toHaveBeenCalledWith(future);
     });
   });
 

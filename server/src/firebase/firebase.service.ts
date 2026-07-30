@@ -46,6 +46,7 @@ export class FirebaseService implements OnModuleInit {
     title: string,
     body: string,
     data?: Record<string, string>,
+    opts?: { dataOnly?: boolean },
   ): Promise<string | null> {
     if (!this.messaging) {
       this.logger.warn('FCM not available — skipping notification');
@@ -55,12 +56,14 @@ export class FirebaseService implements OnModuleInit {
     try {
       const response = await this.messaging.send({
         token,
-        notification: { title, body },
-        data: data ?? {},
-        android: {
-          priority: 'high',
-          notification: { sound: 'default' },
-        },
+        ...(opts?.dataOnly ? {} : { notification: { title, body } }),
+        data: opts?.dataOnly ? { ...(data ?? {}), title, body } : (data ?? {}),
+        android: opts?.dataOnly
+          ? { priority: 'high' }
+          : {
+              priority: 'high',
+              notification: { sound: 'default' },
+            },
       });
       this.logger.log(`Push sent: ${title} → ${token.slice(0, 20)}...`);
       return response;
@@ -78,17 +81,30 @@ export class FirebaseService implements OnModuleInit {
     title: string,
     body: string,
     data?: Record<string, string>,
-  ): Promise<void> {
-    if (!this.messaging || tokens.length === 0) return;
+    imageUrl?: string,
+  ): Promise<{ successCount: number; failureCount: number } | null> {
+    if (!this.messaging) return null;
+    if (tokens.length === 0) return { successCount: 0, failureCount: 0 };
 
     try {
-      await this.messaging.sendEachForMulticast({
+      const response = await this.messaging.sendEachForMulticast({
         tokens,
         notification: { title, body },
-        data: data ?? {},
+        data: {
+          ...(data ?? {}),
+          ...(imageUrl === undefined ? {} : { imageUrl }),
+        },
+        ...(imageUrl === undefined
+          ? {}
+          : { android: { notification: { imageUrl } } }),
       });
+      return {
+        successCount: response.successCount,
+        failureCount: response.failureCount,
+      };
     } catch (error) {
       this.logger.error(`Multicast push failed: ${error}`);
+      throw error;
     }
   }
 }

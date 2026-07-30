@@ -15,6 +15,13 @@ import type {
   ThreeDSpecs,
 } from "@/types/order";
 import type {
+  DispatchPlan,
+  DispatchPlanStatus,
+  DispatchPlanStop,
+  DispatchStopStatus,
+  LineStringGeometry,
+} from "@/types/dispatch-plan";
+import type {
   ProductFileProcessingType,
   ProductInputType,
   ProductPricingModel,
@@ -83,6 +90,7 @@ export interface AdminRiderRecord {
   vehicle_type: VehicleType | string;
   plate_number: string | null;
   is_available: boolean;
+  assignment_eligible: boolean;
   last_latitude: number | null;
   last_longitude: number | null;
   last_location_update: string | null;
@@ -120,6 +128,17 @@ const ADMIN_USER_DETAIL_PAYMENT_STATUSES = new Set<PaymentStatus>([
   "paid",
   "failed",
   "refunded",
+]);
+const ORDER_STATUSES = new Set<OrderStatus>(ADMIN_USER_DETAIL_ORDER_STATUSES);
+const DISPATCH_PLAN_STATUSES = new Set<DispatchPlanStatus>([
+  "active",
+  "superseded",
+  "completed",
+]);
+const DISPATCH_STOP_STATUSES = new Set<DispatchStopStatus>([
+  "pending",
+  "completed",
+  "skipped",
 ]);
 
 function asRecord(value: unknown): ApiRecord {
@@ -214,6 +233,257 @@ function toStringArray(value: unknown): string[] {
   }
 
   return [];
+}
+
+function toOrderStatusArray(value: unknown): OrderStatus[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is OrderStatus =>
+      typeof item === "string" && ORDER_STATUSES.has(item as OrderStatus),
+  );
+}
+
+function requiredNumber(
+  record: ApiRecord,
+  label: string,
+  ...keys: string[]
+): number {
+  const value = read(record, ...keys);
+  const number = typeof value === "number" ? value : Number(value);
+  if (value === null || value === "" || !Number.isFinite(number)) {
+    throw new Error(`Invalid dispatch ${label}`);
+  }
+  return number;
+}
+
+function requiredInteger(
+  record: ApiRecord,
+  label: string,
+  ...keys: string[]
+): number {
+  const number = requiredNumber(record, label, ...keys);
+  if (!Number.isInteger(number) || number <= 0) {
+    throw new Error(`Invalid dispatch ${label}`);
+  }
+  return number;
+}
+
+function requiredDispatchString(
+  record: ApiRecord,
+  label: string,
+  ...keys: string[]
+): string {
+  const value = toOptionalString(record, ...keys);
+  if (!value) throw new Error(`Invalid dispatch ${label}`);
+  return value;
+}
+
+function requiredBoolean(
+  record: ApiRecord,
+  label: string,
+  ...keys: string[]
+): boolean {
+  const value = read(record, ...keys);
+  if (typeof value !== "boolean") {
+    throw new Error(`Invalid dispatch ${label}`);
+  }
+  return value;
+}
+
+function normalizeLineString(value: unknown): LineStringGeometry {
+  const record = asRecord(value);
+  if (record.type !== "LineString") {
+    throw new Error("Dispatch route geometry must be a LineString");
+  }
+  if (!Array.isArray(record.coordinates) || record.coordinates.length < 2) {
+    throw new Error("Dispatch route geometry requires two coordinates");
+  }
+
+  const coordinates = record.coordinates.map((position) => {
+    if (
+      !Array.isArray(position) ||
+      position.length !== 2 ||
+      typeof position[0] !== "number" ||
+      typeof position[1] !== "number" ||
+      !Number.isFinite(position[0]) ||
+      !Number.isFinite(position[1]) ||
+      position[0] < -180 ||
+      position[0] > 180 ||
+      position[1] < -90 ||
+      position[1] > 90
+    ) {
+      throw new Error("Invalid dispatch route coordinate");
+    }
+    return [position[0], position[1]] as [number, number];
+  });
+
+  return { type: "LineString", coordinates };
+}
+
+function normalizeDispatchPlanStop(value: unknown): DispatchPlanStop {
+  const record = asRecord(value);
+  const status = requiredDispatchString(record, "stop status", "status");
+  if (!DISPATCH_STOP_STATUSES.has(status as DispatchStopStatus)) {
+    throw new Error("Invalid dispatch stop status");
+  }
+  const assignment = asRecord(read(record, "assignment"));
+  const order = asRecord(read(assignment, "order"));
+  const destinationLatitude = requiredNumber(
+    record,
+    "destination latitude",
+    "destination_latitude",
+    "destinationLatitude",
+  );
+  const destinationLongitude = requiredNumber(
+    record,
+    "destination longitude",
+    "destinationLongitude",
+  );
+  if (
+    destinationLatitude < -90 ||
+    destinationLatitude > 90 ||
+    destinationLongitude < -180 ||
+    destinationLongitude > 180
+  ) {
+    throw new Error("Invalid dispatch destination coordinate");
+  }
+
+  const duration = requiredNumber(
+    record,
+    "leg duration",
+    "leg_duration_seconds",
+    "legDurationSeconds",
+  );
+  const distance = requiredNumber(
+    record,
+    "leg distance",
+    "leg_distance_meters",
+    "legDistanceMeters",
+  );
+  if (duration < 0 || distance < 0) {
+    throw new Error("Invalid dispatch leg metrics");
+  }
+
+  return {
+    id: requiredInteger(record, "stop id", "id"),
+    plan_id: requiredInteger(record, "plan id", "plan_id", "planId"),
+    assignment_id: requiredInteger(
+      record,
+      "assignment id",
+      "assignment_id",
+      "assignmentId",
+    ),
+    sequence: requiredInteger(record, "stop sequence", "sequence"),
+    status: status as DispatchStopStatus,
+    destination_latitude: destinationLatitude,
+    destination_longitude: destinationLongitude,
+    leg_duration_seconds: duration,
+    leg_distance_meters: distance,
+    leg_geometry: normalizeLineString(
+      read(record, "leg_geometry", "legGeometry"),
+    ),
+    order_ref:
+      toOptionalString(order, "order_id", "orderId") ??
+      toOptionalString(assignment, "order_ref", "orderRef") ??
+      null,
+    completed_at:
+      toOptionalString(record, "completed_at", "completedAt") ?? null,
+    skipped_at: toOptionalString(record, "skipped_at", "skippedAt") ?? null,
+  };
+}
+
+export function normalizeDispatchPlan(input: unknown): DispatchPlan | null {
+  if (input == null) return null;
+  const record = asRecord(input);
+  const status = requiredDispatchString(record, "plan status", "status");
+  if (!DISPATCH_PLAN_STATUSES.has(status as DispatchPlanStatus)) {
+    throw new Error("Invalid dispatch plan status");
+  }
+  const originLatitude = requiredNumber(
+    record,
+    "origin latitude",
+    "origin_latitude",
+    "originLatitude",
+  );
+  const originLongitude = requiredNumber(
+    record,
+    "origin longitude",
+    "originLongitude",
+  );
+  const duration = requiredNumber(
+    record,
+    "total duration",
+    "total_duration_seconds",
+    "totalDurationSeconds",
+  );
+  const distance = requiredNumber(
+    record,
+    "total distance",
+    "total_distance_meters",
+    "totalDistanceMeters",
+  );
+  if (
+    originLatitude < -90 ||
+    originLatitude > 90 ||
+    originLongitude < -180 ||
+    originLongitude > 180 ||
+    duration < 0 ||
+    distance < 0
+  ) {
+    throw new Error("Invalid dispatch plan metrics");
+  }
+  const stopsValue = read(record, "stops");
+  if (!Array.isArray(stopsValue) || stopsValue.length === 0) {
+    throw new Error("Invalid dispatch plan stops");
+  }
+  const stops = stopsValue.map(normalizeDispatchPlanStop).sort(
+    (left, right) => left.sequence - right.sequence,
+  );
+  if (new Set(stops.map((stop) => stop.sequence)).size !== stops.length) {
+    throw new Error("Duplicate dispatch stop sequence");
+  }
+  if (new Set(stops.map((stop) => stop.assignment_id)).size !== stops.length) {
+    throw new Error("Duplicate dispatch assignment id");
+  }
+  const planId = requiredInteger(record, "plan id", "id");
+  if (stops.some((stop) => stop.plan_id !== planId)) {
+    throw new Error("Dispatch stop plan id does not match plan");
+  }
+  const plannedAt = requiredDispatchString(
+    record,
+    "planned at",
+    "planned_at",
+    "plannedAt",
+  );
+  if (Number.isNaN(Date.parse(plannedAt))) {
+    throw new Error("Invalid dispatch planned timestamp");
+  }
+
+  return {
+    id: planId,
+    rider_profile_id: requiredInteger(
+      record,
+      "rider profile id",
+      "rider_profile_id",
+      "riderId",
+    ),
+    version: requiredInteger(record, "plan version", "version"),
+    status: status as DispatchPlanStatus,
+    origin_latitude: originLatitude,
+    origin_longitude: originLongitude,
+    provider: requiredDispatchString(record, "provider", "provider"),
+    profile: requiredDispatchString(record, "profile", "profile"),
+    total_duration_seconds: duration,
+    total_distance_meters: distance,
+    routing_data_stale: requiredBoolean(
+      record,
+      "routing stale flag",
+      "routing_data_stale",
+      "routingDataStale",
+    ),
+    planned_at: plannedAt,
+    stops,
+  };
 }
 
 function hasFiniteNumberField(record: ApiRecord, ...keys: string[]) {
@@ -588,6 +858,9 @@ export function normalizeOrder(input: unknown): Order & {
       "order_status",
       "orderStatus",
     ) as OrderStatus,
+    allowed_next_statuses: toOrderStatusArray(
+      read(record, "allowed_next_statuses", "allowedNextStatuses"),
+    ),
     decline_reason: toOptionalString(record, "decline_reason", "declineReason"),
     cancellation_reason: toOptionalString(
       record,
@@ -843,6 +1116,12 @@ export function normalizeAdminRider(input: unknown): AdminRiderRecord {
     plate_number:
       toOptionalString(record, "plate_number", "plateNumber") ?? null,
     is_available: toBooleanValue(record, false, "is_available", "isAvailable"),
+    assignment_eligible: toBooleanValue(
+      record,
+      false,
+      "assignment_eligible",
+      "assignmentEligible",
+    ),
     last_latitude:
       read(record, "last_latitude", "lastLatitude") === undefined
         ? null

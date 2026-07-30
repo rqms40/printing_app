@@ -260,48 +260,60 @@ class _ScaffoldWithNavState extends ConsumerState<ScaffoldWithNav>
                   duration: const Duration(milliseconds: 200),
                   child: IgnorePointer(
                     ignoring: _isOpen,
-                    child: GestureDetector(
+                    child: Semantics(
+                      button: true,
+                      label: isRiderNav
+                          ? 'Open rider quick actions'
+                          : 'Open quick actions',
                       onTap: () {
                         HapticFeedback.lightImpact();
                         _onToggle(true);
                       },
-                      child: Container(
-                        width: openFabSize,
-                        height: openFabSize,
-                        decoration: BoxDecoration(
-                          color: isRiderNav
-                              ? const Color(0xFFFFDE58)
-                              : colors.brand,
-                          shape: isRiderNav
-                              ? BoxShape.rectangle
-                              : BoxShape.circle,
-                          borderRadius: isRiderNav
-                              ? BorderRadius.circular(9)
-                              : null,
-                          boxShadow: [
-                            BoxShadow(
-                              color:
-                                  (isRiderNav
-                                          ? const Color(0xFFFFDE58)
-                                          : colors.brand)
-                                      .withValues(
-                                        alpha: isRiderNav ? 0.22 : 0.55,
-                                      ),
-                              blurRadius: isRiderNav ? 10 : 18,
-                              spreadRadius: 0,
-                              offset: const Offset(0, 3),
+                      child: ExcludeSemantics(
+                        child: GestureDetector(
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            _onToggle(true);
+                          },
+                          child: Container(
+                            width: openFabSize,
+                            height: openFabSize,
+                            decoration: BoxDecoration(
+                              color: isRiderNav
+                                  ? const Color(0xFFFFDE58)
+                                  : colors.brand,
+                              shape: isRiderNav
+                                  ? BoxShape.rectangle
+                                  : BoxShape.circle,
+                              borderRadius: isRiderNav
+                                  ? BorderRadius.circular(9)
+                                  : null,
+                              boxShadow: [
+                                BoxShadow(
+                                  color:
+                                      (isRiderNav
+                                              ? const Color(0xFFFFDE58)
+                                              : colors.brand)
+                                          .withValues(
+                                            alpha: isRiderNav ? 0.22 : 0.55,
+                                          ),
+                                  blurRadius: isRiderNav ? 10 : 18,
+                                  spreadRadius: 0,
+                                  offset: const Offset(0, 3),
+                                ),
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.14),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.14),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
+                            child: Icon(
+                              Icons.add_rounded,
+                              size: isRiderNav ? 30 : 30,
+                              color: Colors.black,
                             ),
-                          ],
-                        ),
-                        child: Icon(
-                          Icons.add_rounded,
-                          size: isRiderNav ? 30 : 30,
-                          color: Colors.black,
+                          ),
                         ),
                       ),
                     ),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -6,7 +7,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 import 'package:printing_app/features/customer/beta/exceptions/beta_order_limit_exception.dart';
+import 'package:printing_app/features/customer/address/providers/address_provider.dart';
 import 'package:printing_app/features/customer/cart/models/cart_item.dart';
+import 'package:printing_app/features/customer/home/providers/live_delivery_map_provider.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
@@ -23,6 +26,10 @@ void main() {
   var batchResponseOrders = <Map<String, dynamic>>[];
   Map<String, dynamic>? batchAssignedSlot;
   var failOrdersGet = false;
+  var ordersGetResponse = <Map<String, dynamic>>[];
+  final deferredOrdersGets = <Completer<List<Map<String, dynamic>>>>[];
+  Map<String, dynamic>? orderByIdResponse;
+  var orderByIdFetches = 0;
   final forceBetaLimitPaths = <String>{};
   final force500Paths = <String>{};
 
@@ -49,6 +56,21 @@ void main() {
           }
 
           if (options.path == '/orders' && options.method == 'GET') {
+            if (deferredOrdersGets.isNotEmpty) {
+              final response = deferredOrdersGets.removeAt(0);
+              unawaited(
+                response.future.then(
+                  (data) => handler.resolve(
+                    Response(
+                      requestOptions: options,
+                      statusCode: 200,
+                      data: data,
+                    ),
+                  ),
+                ),
+              );
+              return;
+            }
             if (failOrdersGet) {
               handler.reject(
                 DioException(
@@ -65,7 +87,23 @@ void main() {
             }
 
             handler.resolve(
-              Response(requestOptions: options, statusCode: 200, data: []),
+              Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: ordersGetResponse,
+              ),
+            );
+            return;
+          }
+
+          if (options.path == '/orders/7' && options.method == 'GET') {
+            orderByIdFetches++;
+            handler.resolve(
+              Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: orderByIdResponse,
+              ),
             );
             return;
           }
@@ -136,6 +174,10 @@ void main() {
     lastBatchPayload = null;
     batchAssignedSlot = null;
     failOrdersGet = false;
+    ordersGetResponse = [];
+    deferredOrdersGets.clear();
+    orderByIdResponse = null;
+    orderByIdFetches = 0;
     batchResponseOrders = [
       _orderJson(id: '101', orderId: 'ORD-BATCH-1', fileName: 'proposal.pdf'),
       _orderJson(id: '102', orderId: 'ORD-BATCH-2', fileName: 'gear.stl'),
@@ -312,6 +354,130 @@ void main() {
   });
 
   group('OrdersNotifier lifecycle', () {
+    test(
+      'promotion with null assignment refetches order before enabling map',
+      () async {
+        WebSocketService.disableOrdersSocketForTests = true;
+        WebSocketService.instance.disconnect();
+        addTearDown(() {
+          WebSocketService.disableOrdersSocketForTests = false;
+          WebSocketService.instance.disconnect();
+        });
+        ordersGetResponse = [
+          {
+            ..._orderJson(
+              id: '7',
+              orderId: 'ORD-10007',
+              fileName: 'proposal.pdf',
+              orderStatus: 'on_the_way',
+            ),
+            'deliveryQueuePosition': 2,
+            'deliveryQueueSize': 2,
+            'canTrackDelivery': false,
+            'deliveryAssignmentId': null,
+            'deliveryPlanVersion': 4,
+            'destination': {
+              'fullAddress': 'Ven home',
+              'city': 'Davao City',
+              'latitude': 7.0731,
+              'longitude': 125.6128,
+            },
+          },
+        ];
+        orderByIdResponse = {
+          ...ordersGetResponse.single,
+          'deliveryQueuePosition': 1,
+          'deliveryQueueSize': 1,
+          'canTrackDelivery': true,
+          'deliveryAssignmentId': 101,
+          'deliveryRouteGeometry': {
+            'type': 'LineString',
+            'coordinates': [
+              [125.6079, 7.064],
+              [125.6128, 7.0731],
+            ],
+          },
+          'deliveryLegDurationSeconds': 170,
+          'deliveryLegDistanceMeters': 1134,
+          'deliveryRoutingDataStale': false,
+        };
+
+        final notifier = OrdersNotifier();
+        final container = ProviderContainer(
+          overrides: [
+            ordersProvider.overrideWith((ref) => notifier),
+            addressProvider.overrideWith(
+              (ref) =>
+                  AddressNotifier(initialState: const [], skipBootstrap: true),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(notifier.state.single.deliveryQueuePosition, 2);
+        final privateMap = await container.read(liveDeliveryMapProvider.future);
+        expect(privateMap.queuePosition, 2);
+        expect(privateMap.routePoints, isEmpty);
+
+        WebSocketService.instance.dispatchDeliveryQueueUpdatedForTests({
+          'orderId': 7,
+          'orderRef': 'ORD-10007',
+          'queuePosition': 1,
+          'queueSize': 1,
+          'canTrackDelivery': false,
+          'assignmentId': null,
+          'planVersion': 4,
+        });
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        expect(orderByIdFetches, 1);
+        expect(notifier.state.single.deliveryQueuePosition, 1);
+        expect(notifier.state.single.deliveryAssignmentId, '101');
+        expect(notifier.state.single.canTrackDelivery, isTrue);
+        expect(notifier.state.single.deliveryRouteGeometry, isNotNull);
+        final promotedMap = await container.read(
+          liveDeliveryMapProvider.future,
+        );
+        expect(promotedMap.queuePosition, 1);
+        expect(promotedMap.deliveryAssignmentId, '101');
+        expect(promotedMap.routePoints, isNotEmpty);
+        expect(promotedMap.routingHealth, RoutingHealth.current);
+      },
+    );
+
+    test('malformed plan metrics parse as null and degraded', () async {
+      WebSocketService.disableOrdersSocketForTests = true;
+      WebSocketService.instance.disconnect();
+      addTearDown(() {
+        WebSocketService.disableOrdersSocketForTests = false;
+        WebSocketService.instance.disconnect();
+      });
+      ordersGetResponse = [
+        {
+          ..._orderJson(
+            id: '7',
+            orderId: 'ORD-10007',
+            fileName: 'proposal.pdf',
+            orderStatus: 'arrived_at_destination',
+          ),
+          'canTrackDelivery': true,
+          'deliveryPlanVersion': 0,
+          'deliveryLegDurationSeconds': -1,
+          'deliveryLegDistanceMeters': 'not-a-number',
+        },
+      ];
+      final notifier = OrdersNotifier();
+      addTearDown(notifier.dispose);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      final order = notifier.state.single;
+      expect(order.orderStatus, OrderStatus.arrivedAtDestination);
+      expect(order.deliveryPlanVersion, isNull);
+      expect(order.deliveryLegDurationSeconds, isNull);
+      expect(order.deliveryLegDistanceMeters, isNull);
+      expect(order.deliveryRouteGeometryMalformed, isTrue);
+    });
+
     test('reports initial order loading again after a session reset', () async {
       WebSocketService.disableOrdersSocketForTests = true;
       addTearDown(() {
@@ -334,6 +500,55 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(loadReports, 2);
+    });
+
+    test('session restart re-registers the delivery queue listener', () async {
+      WebSocketService.disableOrdersSocketForTests = true;
+      WebSocketService.instance.disconnect();
+      addTearDown(() {
+        WebSocketService.disableOrdersSocketForTests = false;
+        WebSocketService.instance.disconnect();
+      });
+      ordersGetResponse = [];
+      final notifier = OrdersNotifier(skipBootstrap: true);
+      addTearDown(notifier.dispose);
+
+      notifier.clear();
+      await notifier.startSession();
+      expect(WebSocketService.instance.deliveryQueueListenerCountForTests, 1);
+
+      WebSocketService.instance.disconnect();
+      notifier.clear();
+      await notifier.startSession();
+
+      expect(WebSocketService.instance.deliveryQueueListenerCountForTests, 1);
+    });
+
+    test('an old orders response cannot replace a new session', () async {
+      WebSocketService.disableOrdersSocketForTests = true;
+      addTearDown(() {
+        WebSocketService.disableOrdersSocketForTests = false;
+        WebSocketService.instance.disconnect();
+      });
+      final oldResponse = Completer<List<Map<String, dynamic>>>();
+      final newResponse = Completer<List<Map<String, dynamic>>>();
+      deferredOrdersGets.addAll([oldResponse, newResponse]);
+      final notifier = OrdersNotifier(skipBootstrap: true);
+      addTearDown(notifier.dispose);
+
+      final oldRefresh = notifier.refreshOrders();
+      notifier.clear();
+      final newRefresh = notifier.startSession();
+      newResponse.complete([
+        _orderJson(id: '8', orderId: 'ORD-VEN', fileName: 'ven.pdf'),
+      ]);
+      await newRefresh;
+      oldResponse.complete([
+        _orderJson(id: '7', orderId: 'ORD-MARK', fileName: 'mark.pdf'),
+      ]);
+      await oldRefresh;
+
+      expect(notifier.state.single.orderId, 'ORD-VEN');
     });
 
     test('failed refresh preserves existing real orders', () async {
@@ -359,6 +574,10 @@ void main() {
       expect(orders, hasLength(1));
       expect(orders.single.id, '7');
       expect(orders.single.orderId, 'ORD-10007');
+      expect(
+        container.read(ordersProvider.notifier).errorMessage,
+        'Unable to refresh live orders',
+      );
     });
 
     test('dispose unregisters websocket completion listener', () async {
@@ -891,6 +1110,33 @@ void main() {
       expect(container.read(ordersProvider).map((o) => o.id), [
         'test_new_fallback',
       ]);
+    });
+
+    test('real-flow addOrder fails closed on generic 500', () async {
+      force500Paths.add('/orders');
+      final notifier = OrdersNotifier(skipBootstrap: true, realFlow: true);
+      addTearDown(notifier.dispose);
+      final newOrder = Order(
+        id: 'must-not-be-local',
+        orderId: 'ORD-99997',
+        userId: 'usr_001',
+        category: 'paper',
+        quantity: 1,
+        totalPrice: 100,
+        deliveryFee: 0,
+        paymentMethod: PaymentMethod.gridCredits,
+        paymentStatus: PaymentStatus.pending,
+        orderStatus: OrderStatus.orderPlaced,
+        deliveryOption: 'delivery',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      await expectLater(
+        notifier.addOrder(newOrder),
+        throwsA(isA<DioException>()),
+      );
+      expect(notifier.state, isEmpty);
     });
   });
 

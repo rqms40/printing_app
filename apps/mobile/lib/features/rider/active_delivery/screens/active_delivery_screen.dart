@@ -31,8 +31,11 @@ class ActiveDeliveryScreen extends ConsumerStatefulWidget {
 }
 
 class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
+  static const _defaultSheetSize = 0.40;
+  static const _proofSheetSize = 0.58;
+
   bool _isAdvancing = false;
-  final _sheetController = DraggableScrollableController();
+  final _checkpointKey = GlobalKey();
 
   AppColorSet _colors(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
@@ -82,10 +85,24 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
     context.push(uri.toString());
   }
 
+  void _showLaunchFailure(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _callCustomer(String? phone) async {
-    if (phone == null || phone.isEmpty) return;
+    if (phone == null || phone.isEmpty) {
+      _showLaunchFailure('No phone number on file');
+      return;
+    }
     final uri = Uri.parse('tel:$phone');
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      _showLaunchFailure('Could not open — no app available');
+    }
   }
 
   Future<void> _navigateTo(RiderAssignmentView view) async {
@@ -97,6 +114,8 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
     );
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      _showLaunchFailure('Could not open — no app available');
     }
   }
 
@@ -142,12 +161,6 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
   }
 
   @override
-  void dispose() {
-    _sheetController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
     final state = ref.watch(deliveriesProvider);
@@ -167,8 +180,8 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
           heading: 'No active delivery',
           body: 'Accept an assignment to start live navigation.',
           icon: HugeIcons.strokeRoundedDeliveryTruck02,
-          ctaLabel: 'Back to deliveries',
-          onCtaTap: () => context.go('/rider/home'),
+          ctaLabel: 'Back to Deliveries',
+          onCtaTap: () => context.go('/rider/deliveries'),
         ),
       );
     }
@@ -177,17 +190,31 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
     final order = view.order;
     final destination = order.destination;
     final trackGps = view.shouldTrackLocation;
+    final sheetHeight =
+        MediaQuery.sizeOf(context).height *
+        (view.status == DeliveryStatus.arrived
+            ? _proofSheetSize
+            : _defaultSheetSize);
 
     return Scaffold(
       backgroundColor: colors.background,
       body: Stack(
+        fit: StackFit.expand,
         children: [
           Positioned.fill(
             child: RiderMapView(
+              planOrigin: ref.watch(
+                deliveriesProvider.select((s) => s.planOrigin),
+              ),
               assignmentId: view.id,
               destination: destination?.latLng,
+              planStop: view.planStop,
               trackLocation: trackGps,
               interactive: true,
+              // Keep floating map controls clear of the header row and the
+              // customer sheet.
+              overlayTopInset: 76,
+              overlayBottomInset: sheetHeight,
             ),
           ),
           // Top scrim so map place-name labels fade out cleanly behind the
@@ -212,162 +239,180 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
               ),
             ),
           ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Row(
-                children: [
-                  _CircleButton(
-                    icon: HugeIcons.strokeRoundedArrowLeft01,
-                    onTap: () => Navigator.of(context).pop(),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
-                        vertical: AppSpacing.sm,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colors.surface.withValues(alpha: 0.94),
-                        borderRadius: AppRadius.borderMd,
-                        border: Border.all(
-                          color: colors.outline.withValues(alpha: 0.5),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: Row(
+                  children: [
+                    _CircleButton(
+                      icon: HugeIcons.strokeRoundedArrowLeft01,
+                      onTap: () => Navigator.of(context).pop(),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md,
+                          vertical: AppSpacing.sm,
                         ),
+                        decoration: BoxDecoration(
+                          color: colors.surface.withValues(alpha: 0.94),
+                          borderRadius: AppRadius.borderMd,
+                          border: Border.all(
+                            color: colors.outline.withValues(alpha: 0.5),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              order.orderRef,
+                              style: AppTypography.bodyBold.copyWith(
+                                color: colors.onBackground,
+                              ),
+                            ),
+                            Text(
+                              destination?.shortLabel ?? 'En route',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.caption.copyWith(
+                                color: colors.onSurfaceDim,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    StatusBadge(
+                      label: visual.label,
+                      variant: visual.badgeVariant,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              height: sheetHeight,
+              decoration: BoxDecoration(
+                color: colors.surface,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(AppRadius.lg),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: colors.onBackground.withValues(alpha: 0.12),
+                    blurRadius: 20,
+                    offset: const Offset(0, -6),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.md,
+                        AppSpacing.sm,
+                        AppSpacing.md,
+                        0,
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
                         children: [
+                          Center(
+                            child: Container(
+                              width: 40,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: colors.disabled,
+                                borderRadius: AppRadius.borderFull,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.md),
                           Text(
-                            order.orderRef,
-                            style: AppTypography.bodyBold.copyWith(
+                            order.customerName ?? 'Customer',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.h3.copyWith(
                               color: colors.onBackground,
                             ),
                           ),
+                          const SizedBox(height: AppSpacing.xs),
                           Text(
-                            destination?.shortLabel ?? 'En route',
+                            destination?.fullAddress ?? 'Delivery address',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: AppTypography.caption.copyWith(
+                            style: AppTypography.body.copyWith(
                               color: colors.onSurfaceDim,
                             ),
                           ),
+                          if (destination?.landmark != null) ...[
+                            const SizedBox(height: AppSpacing.xs),
+                            Text(
+                              destination!.landmark!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.bodyBold.copyWith(
+                                color: colors.onBackground,
+                              ),
+                            ),
+                          ],
+                          const Spacer(),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _QuickAction(
+                                  label: 'Navigate',
+                                  icon: HugeIcons.strokeRoundedRoute01,
+                                  onTap: () => _navigateTo(view),
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: _QuickAction(
+                                  label: 'Call',
+                                  icon: HugeIcons.strokeRoundedCall,
+                                  onTap: () =>
+                                      _callCustomer(order.customerPhone),
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: _QuickAction(
+                                  label: 'Chat',
+                                  icon: HugeIcons.strokeRoundedMessage01,
+                                  onTap: () => _openCustomerChat(context, view),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: AppSpacing.md),
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.sm),
-                  StatusBadge(
-                    label: visual.label,
-                    variant: visual.badgeVariant,
+                  RiderCheckpointPanel(
+                    key: _checkpointKey,
+                    status: view.status,
+                    isLoading: _isAdvancing,
+                    onAdvance: () => _handleAdvance(view.id),
                   ),
                 ],
               ),
             ),
-          ),
-          DraggableScrollableSheet(
-            controller: _sheetController,
-            initialChildSize: 0.28,
-            minChildSize: 0.22,
-            maxChildSize: 0.55,
-            snap: true,
-            snapSizes: const [0.22, 0.28, 0.55],
-            builder: (context, scrollController) {
-              return Container(
-                decoration: BoxDecoration(
-                  color: colors.surface,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(AppRadius.lg),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: colors.onBackground.withValues(alpha: 0.12),
-                      blurRadius: 20,
-                      offset: const Offset(0, -6),
-                    ),
-                  ],
-                ),
-                child: ListView(
-                  controller: scrollController,
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.md,
-                    AppSpacing.sm,
-                    AppSpacing.md,
-                    AppSpacing.md,
-                  ),
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: colors.disabled,
-                          borderRadius: AppRadius.borderFull,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    Text(
-                      order.customerName ?? 'Customer',
-                      style: AppTypography.h3.copyWith(
-                        color: colors.onBackground,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      destination?.fullAddress ?? 'Delivery address',
-                      style: AppTypography.body.copyWith(
-                        color: colors.onSurfaceDim,
-                      ),
-                    ),
-                    if (destination?.landmark != null) ...[
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        destination!.landmark!,
-                        style: AppTypography.bodyBold.copyWith(
-                          color: colors.onBackground,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: AppSpacing.md),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _QuickAction(
-                            label: 'Navigate',
-                            icon: HugeIcons.strokeRoundedRoute01,
-                            onTap: () => _navigateTo(view),
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: _QuickAction(
-                            label: 'Call',
-                            icon: HugeIcons.strokeRoundedCall,
-                            onTap: () => _callCustomer(order.customerPhone),
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: _QuickAction(
-                            label: 'Chat',
-                            icon: HugeIcons.strokeRoundedMessage01,
-                            onTap: () => _openCustomerChat(context, view),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    RiderCheckpointPanel(
-                      status: view.status,
-                      isLoading: _isAdvancing,
-                      onAdvance: () => _handleAdvance(view.id),
-                    ),
-                  ],
-                ),
-              );
-            },
           ),
         ],
       ),

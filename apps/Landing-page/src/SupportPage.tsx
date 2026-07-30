@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { ShieldCheck, ArrowLeft, Send, CheckCircle2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:3000/api';
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
 const randomCaptchaNumber = () => Math.floor(Math.random() * 10) + 1;
 
 export function SupportPage() {
@@ -81,13 +81,13 @@ export function SupportPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white relative flex flex-col items-center py-20 px-6">
+    <div className="min-h-screen bg-white dark:bg-black text-black dark:text-white relative flex flex-col items-center py-20 px-6">
       {/* Background elements */}
       <div className="absolute top-0 left-0 w-full h-[50vh] bg-gradient-to-b from-[#FFDE58]/5 to-transparent pointer-events-none" />
       <div className="absolute top-[20%] left-[50%] -translate-x-1/2 w-[800px] h-[800px] bg-[#FFDE58]/5 rounded-full blur-[120px] pointer-events-none" />
 
       <div className="w-full max-w-3xl relative z-10 flex flex-col items-center">
-        <Link to="/" className="self-start flex items-center gap-2 text-gray-400 hover:text-[var(--color-primary)] transition-colors mb-12">
+        <Link to="/" className="self-start flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-[var(--color-primary)] transition-colors mb-12">
           <ArrowLeft size={20} />
           <span>Back to Home</span>
         </Link>
@@ -102,7 +102,7 @@ export function SupportPage() {
             Secure Support Portal
           </div>
           <h1 className="text-4xl md:text-5xl font-bold mb-4">How can we help?</h1>
-          <p className="text-gray-400 max-w-lg mx-auto">
+          <p className="text-gray-600 dark:text-gray-400 max-w-lg mx-auto">
             Submit a ticket below and our support team will get back to you via email shortly.
           </p>
         </motion.div>
@@ -111,13 +111,13 @@ export function SupportPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="w-full bg-white/5 border border-white/10 rounded-3xl p-8 md:p-10 backdrop-blur-xl shadow-2xl relative overflow-hidden"
+          className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-3xl p-8 md:p-10 backdrop-blur-xl shadow-2xl relative overflow-hidden"
         >
           {status === 'success' ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <CheckCircle2 size={64} className="text-[var(--color-primary)] mb-6" />
               <h2 className="text-2xl font-bold mb-3">Ticket Submitted Successfully!</h2>
-              <p className="text-gray-400 mb-8 max-w-md">
+              <p className="text-gray-600 dark:text-gray-400 mb-8 max-w-md">
                 We've received your concern. Our team will review it and reply to the email address you provided.
               </p>
               <button
@@ -131,7 +131,7 @@ export function SupportPage() {
             <form onSubmit={handleSubmit} className="flex flex-col gap-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="flex flex-col gap-2">
-                  <label htmlFor="name" className="text-sm font-medium text-gray-300">Full Name</label>
+                  <label htmlFor="name" className="text-sm font-medium text-gray-700 dark:text-gray-300">Full Name</label>
                   <input
                     type="text"
                     id="name"
@@ -139,12 +139,12 @@ export function SupportPage() {
                     required
                     value={formData.name}
                     onChange={handleChange}
-                    className="bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-all"
+                    className="bg-white dark:bg-white/50 dark:bg-black/50 border border-black/10 dark:border-white/10 rounded-xl px-4 py-3 text-black dark:text-white placeholder-gray-500 focus:outline-none focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-all"
                     placeholder="John Doe"
                   />
                 </div>
                 <div className="flex flex-col gap-2">
-                  <label htmlFor="email" className="text-sm font-medium text-gray-300">Email Address</label>
+                  <label htmlFor="email" className="text-sm font-medium text-gray-700 dark:text-gray-300">Email Address</label>
                   <input
                     type="email"
                     id="email"
@@ -152,14 +152,14 @@ export function SupportPage() {
                     required
                     value={formData.email}
                     onChange={handleChange}
-                    className="bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-all"
+                    className="bg-white dark:bg-white/50 dark:bg-black/50 border border-black/10 dark:border-white/10 rounded-xl px-4 py-3 text-black dark:text-white placeholder-gray-500 focus:outline-none focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-all"
                     placeholder="john@example.com"
                   />
                 </div>
               </div>
 
               <div className="flex flex-col gap-2">
-                <label htmlFor="subject" className="text-sm font-medium text-gray-300">Subject</label>
+                <label htmlFor="subject" className="text-sm font-medium text-gray-700 dark:text-gray-300">Subject</label>
                 <input
                   type="text"
                   id="subject"
@@ -167,13 +167,13 @@ export function SupportPage() {
                   required
                   value={formData.subject}
                   onChange={handleChange}
-                  className="bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-all"
+                  className="bg-white dark:bg-white/50 dark:bg-black/50 border border-black/10 dark:border-white/10 rounded-xl px-4 py-3 text-black dark:text-white placeholder-gray-500 focus:outline-none focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-all"
                   placeholder="E.g. Issue with order #1234"
                 />
               </div>
 
               <div className="flex flex-col gap-2">
-                <label htmlFor="message" className="text-sm font-medium text-gray-300">How can we help?</label>
+                <label htmlFor="message" className="text-sm font-medium text-gray-700 dark:text-gray-300">How can we help?</label>
                 <textarea
                   id="message"
                   name="message"
@@ -181,14 +181,14 @@ export function SupportPage() {
                   rows={5}
                   value={formData.message}
                   onChange={handleChange}
-                  className="bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-all resize-none"
+                  className="bg-white dark:bg-white/50 dark:bg-black/50 border border-black/10 dark:border-white/10 rounded-xl px-4 py-3 text-black dark:text-white placeholder-gray-500 focus:outline-none focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-all resize-none"
                   placeholder="Please describe your issue or concern in detail..."
                 />
               </div>
 
               {/* CAPTCHA Field */}
               <div className="flex flex-col gap-2">
-                <label htmlFor="captcha" className="text-sm font-medium text-gray-300">
+                <label htmlFor="captcha" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   Security Check: What is {captchaNum1} + {captchaNum2}?
                 </label>
                 <input
@@ -198,7 +198,7 @@ export function SupportPage() {
                   required
                   value={userCaptchaInput}
                   onChange={(e) => setUserCaptchaInput(e.target.value)}
-                  className="bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-all"
+                  className="bg-white dark:bg-white/50 dark:bg-black/50 border border-black/10 dark:border-white/10 rounded-xl px-4 py-3 text-black dark:text-white placeholder-gray-500 focus:outline-none focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-all"
                   placeholder="Enter the answer..."
                 />
               </div>

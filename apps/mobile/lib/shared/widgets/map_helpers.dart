@@ -57,6 +57,51 @@ class MapHelpers {
     );
   }
 
+  /// One persisted server-owned dispatch leg. Completed legs are subdued,
+  /// while the current leg keeps the high-contrast GRIDGO treatment.
+  static PolylineLayer persistedRouteLeg({
+    Key? key,
+    required List<LatLng> points,
+    required bool isCompleted,
+    required bool isCurrent,
+  }) {
+    final fill = isCompleted
+        ? const Color(0xFF8B8B8B).withValues(alpha: 0.62)
+        : isCurrent
+        ? kRouteColor
+        : kRouteColor.withValues(alpha: 0.58);
+    final border = kRouteBorderColor.withValues(
+      alpha: isCompleted ? 0.45 : 0.9,
+    );
+    return PolylineLayer(
+      key: key,
+      polylines: [
+        Polyline(points: points, color: border, strokeWidth: isCurrent ? 7 : 6),
+        Polyline(
+          points: points,
+          color: fill,
+          strokeWidth: isCurrent ? 4.5 : 3.5,
+        ),
+      ],
+    );
+  }
+
+  /// Required tile and routing attribution for every GRIDGO map.
+  static RichAttributionWidget attribution({bool includeRouting = false}) {
+    return RichAttributionWidget(
+      showFlutterMapAttribution: false,
+      attributions: [
+        const TextSourceAttribution('OpenStreetMap contributors'),
+        const TextSourceAttribution('CARTO'),
+        if (includeRouting)
+          const TextSourceAttribution(
+            'Route data: OSRM',
+            prependCopyright: false,
+          ),
+      ],
+    );
+  }
+
   /// Shop marker — white circle + store icon + shadow.
   static Marker shopMarker({LatLng? point}) => Marker(
     point: point ?? shopPoint,
@@ -121,16 +166,18 @@ class MapHelpers {
     ),
   );
 
-  /// Rider marker — dark circle + navigation arrow.
-  static Marker riderMarker(LatLng point) => Marker(
-    point: point,
-    width: 44,
-    height: 44,
-    child: Container(
+  /// Rider marker — the delivery vehicle, ride-hailing style: brand disc
+  /// with a motorcycle glyph so the courier is instantly recognizable.
+  static Marker riderMarker(
+    LatLng point, {
+    Key? semanticKey,
+    String? semanticLabel,
+  }) {
+    final marker = Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+        color: const Color(0xFFFFDE58),
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2.5),
+        border: Border.all(color: const Color(0xFF141414), width: 2.5),
         boxShadow: const [
           BoxShadow(
             color: Color(0x40000000),
@@ -140,10 +187,23 @@ class MapHelpers {
         ],
       ),
       child: const Icon(
-        Icons.navigation_rounded,
-        color: Colors.white,
-        size: 20,
+        Icons.two_wheeler_rounded,
+        color: Color(0xFF141414),
+        size: 22,
       ),
-    ),
-  );
+    );
+    return Marker(
+      point: point,
+      width: 44,
+      height: 44,
+      child: semanticLabel == null
+          ? marker
+          : Semantics(
+              key: semanticKey,
+              container: true,
+              label: semanticLabel,
+              child: marker,
+            ),
+    );
+  }
 }

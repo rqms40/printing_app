@@ -4,6 +4,7 @@ import 'package:printing_app/config/theme/app_radius.dart';
 import 'package:printing_app/config/theme/app_spacing.dart';
 import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
+import 'package:printing_app/features/rider/shared/rider_eta.dart';
 import 'package:printing_app/features/rider/shared/rider_delivery_status.dart';
 
 /// Horizontal carousel of today's stops. Mirrors the customer Daily Grid.
@@ -100,16 +101,22 @@ class _StopCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              // With no planned position the status pill leads the card;
+              // spaceBetween keeps it flush left instead of floating right.
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'STOP ${view.routePosition ?? '-'}',
-                  style: AppTypography.overline.copyWith(
-                    color: colors.onSurfaceDim,
-                    fontSize: 9,
-                    letterSpacing: 1.5,
+                if (view.routePosition != null)
+                  Padding(
+                    padding: const EdgeInsets.only(right: AppSpacing.sm),
+                    child: Text(
+                      'STOP ${view.routePosition}',
+                      style: AppTypography.overline.copyWith(
+                        color: colors.onSurfaceDim,
+                        fontSize: 10,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
                   ),
-                ),
-                const Spacer(),
                 Flexible(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -155,13 +162,26 @@ class _StopCard extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            Text(
-              order.orderRef,
-              style: AppTypography.caption.copyWith(
-                color: colors.brand,
-                fontWeight: FontWeight.w700,
-                fontSize: 11,
-              ),
+            Row(
+              children: [
+                Text(
+                  order.orderRef,
+                  style: AppTypography.caption.copyWith(
+                    color: colors.brand,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                  ),
+                ),
+                const Spacer(),
+                if (view.planStop != null)
+                  Text(
+                    formatEtaMinutes(view.planStop!.legDurationSeconds),
+                    style: AppTypography.caption.copyWith(
+                      color: colors.onSurfaceDim,
+                      fontSize: 11,
+                    ),
+                  ),
+              ],
             ),
           ],
         ),

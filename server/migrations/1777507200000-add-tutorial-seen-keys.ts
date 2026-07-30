@@ -1,16 +1,26 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { isBaselineOwned } from '../src/database/migration-ownership';
 
 export class AddTutorialSeenKeys1777507200000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`
-      ALTER TABLE users
-      ADD COLUMN IF NOT EXISTS tutorial_seen_keys text[] NOT NULL DEFAULT '{}'
-    `);
+    if (
+      (await queryRunner.hasTable('users')) &&
+      !(await queryRunner.hasColumn('users', 'tutorial_seen_keys'))
+    ) {
+      await queryRunner.query(`
+        ALTER TABLE users
+        ADD COLUMN tutorial_seen_keys text[] NOT NULL DEFAULT '{}'
+      `);
+    }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`
-      ALTER TABLE users DROP COLUMN IF EXISTS tutorial_seen_keys
-    `);
+    if (!(await isBaselineOwned(queryRunner))) return;
+
+    if (await queryRunner.hasTable('users')) {
+      await queryRunner.query(`
+        ALTER TABLE users DROP COLUMN IF EXISTS tutorial_seen_keys
+      `);
+    }
   }
 }

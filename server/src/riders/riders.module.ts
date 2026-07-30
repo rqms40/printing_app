@@ -9,10 +9,25 @@ import { RidersController } from './riders.controller';
 import { LocationGateway } from './location.gateway';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { ChatModule } from '../chat/chat.module';
+import { FilesModule } from '../files/files.module';
+import { DispatchPlan } from './entities/dispatch-plan.entity';
+import { DispatchPlanStop } from './entities/dispatch-plan-stop.entity';
+import { DispatchPlanService } from './dispatch-plan.service';
+import { ROUTING_PROVIDER } from './routing/routing-provider';
+import { OsrmRoutingProvider } from './routing/osrm-routing.provider';
+import { UsersModule } from '../users/users.module';
+import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([RiderProfile, DeliveryAssignment, Order]),
+    TypeOrmModule.forFeature([
+      RiderProfile,
+      DeliveryAssignment,
+      DispatchPlan,
+      DispatchPlanStop,
+      Order,
+    ]),
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -21,9 +36,22 @@ import { ConfigService } from '@nestjs/config';
       }),
     }),
     OrdersModule,
+    ChatModule,
+    FilesModule,
+    UsersModule,
+    RealtimeSessionsModule,
   ],
   controllers: [RidersController],
-  providers: [RidersService, LocationGateway],
-  exports: [RidersService, LocationGateway],
+  providers: [
+    RidersService,
+    DispatchPlanService,
+    LocationGateway,
+    {
+      provide: ROUTING_PROVIDER,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => new OsrmRoutingProvider(config),
+    },
+  ],
+  exports: [RidersService, DispatchPlanService, LocationGateway],
 })
 export class RidersModule {}

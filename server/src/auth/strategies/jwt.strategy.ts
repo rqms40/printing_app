@@ -4,6 +4,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { JwtPayload } from '../../common/interfaces/request-with-user';
 import { UsersService } from '../../users/users.service';
+import { UserRole } from '../../users/entities/user.entity';
 
 /**
  * Users whose survey is complete are marked isActive=false with this hold
@@ -36,6 +37,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // testimonial photo on BetaSuccessWallScreen before logging out.
     const isBetaTestimonialPending =
       user.isActive === false &&
+      user.role === UserRole.CUSTOMER &&
+      user.isBetaUser &&
+      !user.isBetaSurveyExempt &&
       user.accountHoldReason === BETA_TESTIMONIAL_HOLD_REASON;
     if (user.isActive === false && !isBetaTestimonialPending) {
       throw new UnauthorizedException('Account is inactive');

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing_app/config/constants/app_constants.dart';
 import 'package:printing_app/shared/models/address.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
 import 'package:printing_app/shared/services/api_client.dart';
@@ -37,34 +38,76 @@ class AddressNotifier extends StateNotifier<List<Address>> {
   AddressNotifier({
     List<Address> initialState = const [],
     bool skipBootstrap = false,
-  }) : super(initialState) {
+    bool? realFlow,
+  }) : realFlow = realFlow ?? AppConstants.realFlow,
+       super(initialState) {
     if (!skipBootstrap) _fetchAddresses();
   }
 
   static const int maxAddresses = 5;
+  final bool realFlow;
+  String? errorMessage;
+  int _sessionGeneration = 0;
+  int _fetchGeneration = 0;
 
   bool get canAddMore => state.length < maxAddresses;
 
   Future<void> _fetchAddresses() async {
+    final sessionGeneration = _sessionGeneration;
+    final fetchGeneration = ++_fetchGeneration;
     try {
       final response = await ApiClient.instance.get('/addresses');
+      if (!_isCurrent(sessionGeneration) ||
+          fetchGeneration != _fetchGeneration) {
+        return;
+      }
       final data = response.data as List<dynamic>;
       state = data
           .map((json) => _parseAddress(json as Map<String, dynamic>))
           .toList();
+      errorMessage = null;
     } catch (_) {
-      // Offline fallback
-      state = List.from(MockData.addresses);
+      if (!_isCurrent(sessionGeneration) ||
+          fetchGeneration != _fetchGeneration) {
+        return;
+      }
+      if (!realFlow) {
+        state = List.from(MockData.addresses);
+        errorMessage = 'Showing offline demo addresses';
+      } else {
+        _setError('Unable to load saved addresses');
+      }
     }
   }
 
-  Future<void> refreshAddresses() async => _fetchAddresses();
+  Future<bool> refreshAddresses() async {
+    await _fetchAddresses();
+    return errorMessage == null;
+  }
+
+  void clear() {
+    _sessionGeneration += 1;
+    _fetchGeneration += 1;
+    errorMessage = null;
+    state = const [];
+  }
+
+  bool _isCurrent(int generation) =>
+      mounted && generation == _sessionGeneration;
+
+  @override
+  void dispose() {
+    _sessionGeneration += 1;
+    _fetchGeneration += 1;
+    super.dispose();
+  }
 
   Future<Address?> addAddress(
     Address address, {
     bool addLocallyOnFailure = true,
   }) async {
     if (!canAddMore) return null;
+    final sessionGeneration = _sessionGeneration;
 
     try {
       final response = await ApiClient.instance.post(
@@ -82,6 +125,7 @@ class AddressNotifier extends StateNotifier<List<Address>> {
           'isDefault': address.isDefault,
         },
       );
+      if (!_isCurrent(sessionGeneration)) return null;
       final newAddr = _parseAddress(response.data as Map<String, dynamic>);
 
       // If new address is default, unset others
@@ -90,20 +134,27 @@ class AddressNotifier extends StateNotifier<List<Address>> {
       } else {
         state = [...state, newAddr];
       }
+      errorMessage = null;
       return newAddr;
     } catch (_) {
-      if (!addLocallyOnFailure) return null;
+      if (!_isCurrent(sessionGeneration)) return null;
+      if (!addLocallyOnFailure || realFlow) {
+        _setError('Address was not saved');
+        return null;
+      }
       // Offline: add locally
       if (address.isDefault) {
         state = [for (final a in state) a.copyWith(isDefault: false), address];
       } else {
         state = [...state, address];
       }
+      errorMessage = 'Address is available only on this device';
       return null;
     }
   }
 
-  Future<void> updateAddress(Address address) async {
+  Future<bool> updateAddress(Address address) async {
+    final sessionGeneration = _sessionGeneration;
     try {
       await ApiClient.instance.put(
         '/addresses/${address.id}',
@@ -120,28 +171,62 @@ class AddressNotifier extends StateNotifier<List<Address>> {
           'isDefault': address.isDefault,
         },
       );
-    } catch (_) {}
+    } catch (_) {
+      if (!_isCurrent(sessionGeneration)) return false;
+      if (realFlow) {
+        _setError('Unable to update this address');
+        return false;
+      }
+    }
+    if (!_isCurrent(sessionGeneration)) return false;
     // Update local state regardless
     state = [
       for (final a in state)
         if (a.id == address.id) address else a,
     ];
+    errorMessage = null;
+    return true;
   }
 
-  Future<void> deleteAddress(String id) async {
+  Future<bool> deleteAddress(String id) async {
+    final sessionGeneration = _sessionGeneration;
     try {
       await ApiClient.instance.delete('/addresses/$id');
-    } catch (_) {}
+    } catch (_) {
+      if (!_isCurrent(sessionGeneration)) return false;
+      if (realFlow) {
+        _setError('Unable to delete this address');
+        return false;
+      }
+    }
+    if (!_isCurrent(sessionGeneration)) return false;
     // Update local state regardless
     state = state.where((a) => a.id != id).toList();
+    errorMessage = null;
+    return true;
   }
 
-  Future<void> setDefault(String id) async {
+  Future<bool> setDefault(String id) async {
+    final sessionGeneration = _sessionGeneration;
     try {
       await ApiClient.instance.patch('/addresses/$id/default');
-    } catch (_) {}
+    } catch (_) {
+      if (!_isCurrent(sessionGeneration)) return false;
+      if (realFlow) {
+        _setError('Unable to set the default address');
+        return false;
+      }
+    }
+    if (!_isCurrent(sessionGeneration)) return false;
     // Update local state regardless
     state = [for (final a in state) a.copyWith(isDefault: a.id == id)];
+    errorMessage = null;
+    return true;
+  }
+
+  void _setError(String message) {
+    errorMessage = message;
+    state = [...state];
   }
 }
 

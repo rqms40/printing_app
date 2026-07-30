@@ -10,13 +10,25 @@ class AccountStateNotifier extends StateNotifier<AccountState> {
       super(const AccountState.unknown());
 
   final FetchAccountState _fetchAccountState;
+  int _sessionGeneration = 0;
+  int _fetchGeneration = 0;
+
+  bool _isCurrent(int sessionGeneration, int fetchGeneration) =>
+      mounted &&
+      sessionGeneration == _sessionGeneration &&
+      fetchGeneration == _fetchGeneration;
 
   Future<void> refresh() async {
+    final sessionGeneration = _sessionGeneration;
+    final fetchGeneration = ++_fetchGeneration;
     final previousState = state;
     state = state.copyWith(isLoading: true);
     try {
-      state = AccountState.fromJson(await _fetchAccountState());
+      final response = await _fetchAccountState();
+      if (!_isCurrent(sessionGeneration, fetchGeneration)) return;
+      state = AccountState.fromJson(response);
     } catch (_) {
+      if (!_isCurrent(sessionGeneration, fetchGeneration)) return;
       state = previousState.status == AccountGateStatus.surveyRequired
           ? previousState.copyWith(isLoading: false)
           : const AccountState.unknown();
@@ -24,7 +36,16 @@ class AccountStateNotifier extends StateNotifier<AccountState> {
   }
 
   void clear() {
+    _sessionGeneration += 1;
+    _fetchGeneration += 1;
     state = const AccountState.unknown();
+  }
+
+  @override
+  void dispose() {
+    _sessionGeneration += 1;
+    _fetchGeneration += 1;
+    super.dispose();
   }
 }
 

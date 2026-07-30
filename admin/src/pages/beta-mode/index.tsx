@@ -41,11 +41,46 @@ import { formatDate } from '@/utils/format';
 const { Text, Title } = Typography;
 
 const BRAND = '#FFD700';
+const MUTED_TEXT = '#A0A0A0';
+
+export function betaModeConfirmation(checked: boolean) {
+  return checked
+    ? {
+        title: 'Enable Beta Mode?',
+        content:
+          'New customer accounts are auto-enrolled in order and receive a one-time 100 GRIDGO Credits grant. Beta checkout accepts GRIDGO Credits only. After delivery, the mandatory 14-question feedback survey is shown; completed beta accounts are held from login until beta mode is disabled. Enrollment and credit history is retained.',
+        okText: 'Enable',
+        okButtonProps: { danger: false },
+      }
+    : {
+        title: 'Disable Beta Mode?',
+        content:
+          'Disabling beta mode immediately restores held beta accounts. Existing enrollment, rank, credit-grant, order, and feedback history is retained; beta auto-enrollment and credits-only checkout stop while beta mode is disabled.',
+        okText: 'Disable',
+        okButtonProps: { danger: true },
+      };
+}
 
 interface AdminUser {
   id: number;
   email: string;
   full_name: string | null;
+  role: string;
+}
+
+export function eligibleBetaEnrollUsers<T extends { role?: string }>(users: T[]): T[] {
+  return users.filter((user) => user.role === 'customer');
+}
+
+export function betaSurveyExemptionConfirmation(member: {
+  email: string;
+  fullName?: string | null;
+}) {
+  return {
+    title: 'Exempt future beta delivery surveys?',
+    content: `${member.fullName ?? member.email} will skip the mandatory post-delivery survey requirement for future beta deliveries. This does not reopen an account already held after beta completion. Disable beta mode to restore an existing held account.`,
+    okText: 'Enable survey exemption',
+  };
 }
 
 const S = {
@@ -155,12 +190,7 @@ export function BetaModePage() {
 
   const handleSettingsToggle = (checked: boolean) => {
     modal.confirm({
-      title: checked ? 'Enable Beta Mode?' : 'Disable Beta Mode?',
-      content: checked
-        ? 'Beta indicators become visible to all enrolled users.'
-        : 'Beta indicators are hidden from all users.',
-      okText: checked ? 'Enable' : 'Disable',
-      okButtonProps: { danger: !checked },
+      ...betaModeConfirmation(checked),
       onOk: () => doToggleSettings(checked),
     });
   };
@@ -171,22 +201,7 @@ export function BetaModePage() {
     if (next) {
       const ok = await new Promise<boolean>((resolve) => {
         modal.confirm({
-          title: 'Allow re-login after TAM survey?',
-          content: (
-            <div>
-              <p style={{ margin: 0 }}>
-                <strong>{row.fullName ?? row.email}</strong> will be allowed to
-                log back in even when beta mode is on and they have pending
-                survey holds.
-              </p>
-              <p style={{ marginTop: 12, color: '#999' }}>
-                Default: beta members are signed out after submitting the
-                post-delivery TAM survey and can't sign back in until the next
-                requirement clears. This override lifts that lock.
-              </p>
-            </div>
-          ),
-          okText: 'Allow re-login',
+          ...betaSurveyExemptionConfirmation(row),
           cancelText: 'Cancel',
           okButtonProps: {
             style: { background: BRAND, color: '#111', borderColor: BRAND },
@@ -208,8 +223,8 @@ export function BetaModePage() {
       await setBetaSurveyExempt(row.id, next);
       void message.success(
         next
-          ? `${row.fullName ?? row.email} can now re-login`
-          : `Default lock restored for ${row.fullName ?? row.email}`,
+          ? `Survey exemption enabled for ${row.fullName ?? row.email}`
+          : `Mandatory future surveys restored for ${row.fullName ?? row.email}`,
       );
     } catch {
       setRows((rs) =>
@@ -270,7 +285,7 @@ export function BetaModePage() {
         apiClient.get<AdminUser[]>('/admin/users'),
         getBetaUsers(),
       ]);
-      setAllUsers(users.data);
+      setAllUsers(eligibleBetaEnrollUsers(users.data));
       setEnrolledIds(new Set(enrolled.map((u) => u.id)));
     } catch {
       void message.error('Failed to load users.');
@@ -310,6 +325,13 @@ export function BetaModePage() {
   const columns = useMemo(
     () => [
       {
+        title: 'Rank',
+        dataIndex: 'rank',
+        key: 'rank',
+        width: 80,
+        render: (rank: number) => `#${String(rank).padStart(3, '0')}`,
+      },
+      {
         title: 'Member',
         key: 'member',
         render: (_: unknown, row: BetaMemberRow) => (
@@ -317,7 +339,7 @@ export function BetaModePage() {
             <Text style={{ color: '#E0E0E0', fontSize: 13 }}>{row.email}</Text>
             {row.fullName ? (
               <div>
-                <Text style={{ color: '#777', fontSize: 12 }}>
+                <Text style={{ color: MUTED_TEXT, fontSize: 12 }}>
                   {row.fullName}
                 </Text>
               </div>
@@ -331,7 +353,7 @@ export function BetaModePage() {
         key: 'betaEnrolledAt',
         width: 130,
         render: (date: string | null) => (
-          <Text style={{ color: '#777', fontSize: 12 }}>
+          <Text style={{ color: MUTED_TEXT, fontSize: 12 }}>
             {date ? formatDate(date) : '—'}
           </Text>
         ),
@@ -359,7 +381,7 @@ export function BetaModePage() {
               style={{
                 background: '#1A1A1A',
                 border: '1px solid #2E2E2E',
-                color: '#555',
+                color: MUTED_TEXT,
                 margin: 0,
                 fontSize: 11,
               }}
@@ -403,10 +425,10 @@ export function BetaModePage() {
       {
         title: (
           <span>
-            Re-login allowed{' '}
-            <Tooltip title="When ON, this member skips the post-survey lockout and can sign in repeatedly even with pending TAM holds.">
+            Survey exempt{' '}
+            <Tooltip title="When ON, future beta deliveries skip the mandatory feedback requirement. Existing completed-account holds remain until beta mode is disabled.">
               <span
-                style={{ color: '#666', cursor: 'help', fontSize: 11 }}
+                style={{ color: MUTED_TEXT, cursor: 'help', fontSize: 11 }}
               >
                 (?)
               </span>
@@ -417,6 +439,7 @@ export function BetaModePage() {
         width: 150,
         render: (_: unknown, row: BetaMemberRow) => (
           <Switch
+            aria-label={`Survey exemption for ${row.fullName ? `${row.fullName} (${row.email})` : row.email}`}
             size="small"
             checked={row.isBetaSurveyExempt}
             loading={busyId === row.id}
@@ -514,11 +537,17 @@ export function BetaModePage() {
             >
               Beta Mode
             </Title>
-            <Text style={{ color: '#666', fontSize: 13 }}>
-              Controls visibility of beta indicators on customer devices.
+            <Text style={{ color: MUTED_TEXT, fontSize: 13 }}>
+              Auto-enrolls new customers in rank order, grants one-time 100
+              GRIDGO Credits, and limits beta checkout to GRIDGO Credits. Delivery
+              completion requires the 14-question feedback survey and then
+              holds completed accounts until beta mode is disabled. Disabling
+              restores access immediately while retaining enrollment, credit,
+              order, and feedback history.
             </Text>
           </div>
           <Switch
+            aria-label="Beta mode"
             checked={settings?.isEnabled ?? false}
             onChange={(checked) => handleSettingsToggle(checked)}
             loading={toggleLoading}
@@ -548,9 +577,9 @@ export function BetaModePage() {
             >
               Beta Members
             </Title>
-            <Text style={{ color: '#666', fontSize: 12 }}>
-              {total} total · toggle <strong>Re-login allowed</strong> to lift
-              the post-survey lockout for a member.
+            <Text style={{ color: MUTED_TEXT, fontSize: 12 }}>
+              {total} total · toggle <strong>Survey exempt</strong> only when a
+              member should skip mandatory feedback on future beta deliveries.
             </Text>
           </div>
           <Space>
@@ -578,7 +607,7 @@ export function BetaModePage() {
         <div style={{ padding: '16px 24px 0' }}>
           <Input
             allowClear
-            prefix={<SearchOutlined style={{ color: '#666' }} />}
+            prefix={<SearchOutlined style={{ color: MUTED_TEXT }} />}
             placeholder="Search by email or name…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -601,7 +630,7 @@ export function BetaModePage() {
           style={{ background: '#141414' }}
           locale={{
             emptyText: (
-              <Text style={{ color: '#444' }}>
+              <Text style={{ color: MUTED_TEXT }}>
                 {debouncedSearch
                   ? 'No beta members match that search.'
                   : 'No beta members enrolled yet.'}
@@ -626,7 +655,7 @@ export function BetaModePage() {
             onChange={(p) => setPage(p)}
             showTotal={(t, range) => (
               <Text
-                style={{ color: '#666', fontSize: 12, marginRight: 12 }}
+                style={{ color: MUTED_TEXT, fontSize: 12, marginRight: 12 }}
               >
                 {range[0]}–{range[1]} of {t}
               </Text>
@@ -691,7 +720,11 @@ export function BetaModePage() {
             <Spin />
           </div>
         ) : (
-          <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+          <div
+            role="listbox"
+            aria-label="Eligible customers for beta enrollment"
+            style={{ maxHeight: 300, overflowY: 'auto' }}
+          >
             <List<AdminUser>
               dataSource={filteredModalUsers}
               renderItem={(user) => {
@@ -699,8 +732,22 @@ export function BetaModePage() {
                 const alreadyEnrolled = enrolledIds.has(user.id);
                 return (
                   <List.Item
+                    role="option"
+                    aria-label={`Select ${user.full_name ? `${user.full_name} (${user.email})` : user.email} for beta enrollment`}
+                    aria-disabled={alreadyEnrolled}
+                    aria-selected={isSelected}
+                    tabIndex={alreadyEnrolled ? -1 : 0}
                     onClick={() => {
                       if (!alreadyEnrolled) setSelectedUser(user);
+                    }}
+                    onKeyDown={(event) => {
+                      if (
+                        !alreadyEnrolled &&
+                        (event.key === 'Enter' || event.key === ' ')
+                      ) {
+                        event.preventDefault();
+                        setSelectedUser(user);
+                      }
                     }}
                     style={{
                       cursor: alreadyEnrolled ? 'not-allowed' : 'pointer',
@@ -739,7 +786,7 @@ export function BetaModePage() {
                         )}
                       </Text>
                       {user.full_name && (
-                        <Text style={{ color: '#666', fontSize: 12 }}>
+                        <Text style={{ color: MUTED_TEXT, fontSize: 12 }}>
                           {user.full_name}
                         </Text>
                       )}
@@ -749,7 +796,7 @@ export function BetaModePage() {
               }}
               locale={{
                 emptyText: (
-                  <Text style={{ color: '#444' }}>No users found</Text>
+                  <Text style={{ color: MUTED_TEXT }}>No users found</Text>
                 ),
               }}
             />

@@ -19,16 +19,53 @@ dynamic _normalize(dynamic data) {
   return data;
 }
 
+int? _readStrictPositiveInt(dynamic value) {
+  final parsed = value is int
+      ? value
+      : value is num && value.isFinite && value == value.roundToDouble()
+      ? value.toInt()
+      : value is String
+      ? int.tryParse(value)
+      : null;
+  return parsed != null && parsed > 0 ? parsed : null;
+}
+
+String? _readLocationAssignmentId(dynamic value) {
+  if (value is int) return value > 0 ? value.toString() : null;
+  if (value is num) {
+    if (!value.isFinite || value <= 0 || value != value.roundToDouble()) {
+      return null;
+    }
+    return value.toInt().toString();
+  }
+  if (value is! String) return null;
+  final text = value.trim();
+  if (text.isEmpty) return null;
+  final numeric = num.tryParse(text);
+  if (numeric != null &&
+      (!numeric.isFinite ||
+          numeric <= 0 ||
+          numeric != numeric.roundToDouble())) {
+    return null;
+  }
+  return text;
+}
+
+enum LocationSocketHealth { disconnected, connecting, subscribing, connected }
+
 /// Centralized WebSocket service for real-time order and location updates.
 class WebSocketService {
   static final instance = WebSocketService._();
   WebSocketService._();
+
+  static const _ordersNamespace = '/ws/orders';
 
   /// When true, [connectDailyGrid] is a no-op. Set in widget tests that pump
   /// [DailyGridSection] to prevent real socket connection attempts.
   /// MUST be reset to false in tearDownAll to avoid polluting other test files.
   @visibleForTesting
   static bool disableDailyGridSocketForTests = false;
+  static bool disableHomeFeedSocketForTests = false;
 
   /// When true, [connectOrders] is a no-op. Set in tests that exercise order
   /// listeners without opening a real socket.
@@ -40,17 +77,41 @@ class WebSocketService {
   @visibleForTesting
   static bool disableNotificationsSocketForTests = false;
 
+  /// Prevents real network I/O while retaining token/connect lifecycle logic.
+  @visibleForTesting
+  static bool disableLocationSocketForTests = false;
+
   io.Socket? _ordersSocket;
+  Future<void>? _ordersConnectFuture;
+  int _ordersConnectionGeneration = 0;
+  int _ordersSocketCreateCountForTests = 0;
   io.Socket? _locationSocket;
+  Future<void>? _locationConnectFuture;
+  int _locationConnectionGeneration = 0;
   io.Socket? _notificationsSocket;
+  Future<void>? _notificationsConnectFuture;
+  int _notificationsConnectionGeneration = 0;
+  int _notificationsSocketCreateCountForTests = 0;
   io.Socket? _dailyGridSocket;
+  io.Socket? _homeFeedSocket;
   io.Socket? _chatSocket;
+  Future<bool>? _chatConnectFuture;
   io.Socket? _slotsSocket;
   final Map<int, List<Function(ChatMessage)>> _chatMessageListeners = {};
   final List<Function(int)> _botTypingListeners = [];
   final List<Function(int)> _messagesReadListeners = [];
+  final List<Function(bool)> _chatConnectionListeners = [];
   final List<Function(Map<String, dynamic>)> _slotUpdatedListeners = [];
   String? _pendingLocationDeliveryId;
+  int? _pendingLocationPlanVersion;
+  String? _subscribedLocationAssignmentId;
+  int? _subscribedLocationPlanVersion;
+  static const int _locationReconnectAttempts = 5;
+  LocationSocketHealth _locationHealth = LocationSocketHealth.disconnected;
+  final List<Function(Map<String, dynamic>)> _locationListeners = [];
+  final List<Function(LocationSocketHealth)> _locationHealthListeners = [];
+  int _locationSubscribeEmitCountForTests = 0;
+  int _locationSocketRecreateRequestsForTests = 0;
 
   bool get isNotificationsConnected => _notificationsSocket?.connected == true;
   bool get isChatConnected => _chatSocket?.connected == true;
@@ -70,44 +131,106 @@ class WebSocketService {
 
   // Callbacks registered for rider assignment updates
   final List<Function(Map<String, dynamic>)> _riderAssignmentListeners = [];
+  final List<Function(Map<String, dynamic>)> _riderDispatchPlanListeners = [];
+  final List<Function(Map<String, dynamic>)> _deliveryQueueListeners = [];
+  final List<VoidCallback> _ordersConnectListeners = [];
 
   String get _baseUrl => kServerUrl;
+
+  @visibleForTesting
+  String get surveyRequiredNamespaceForTests => _ordersNamespace;
 
   Future<void> connectOrders({VoidCallback? onConnect}) async {
     if (disableOrdersSocketForTests) {
       onConnect?.call();
       return;
     }
-    if (_ordersSocket?.connected == true) return;
+    if (onConnect != null && !_ordersConnectListeners.contains(onConnect)) {
+      _ordersConnectListeners.add(onConnect);
+    }
+    if (_ordersSocket?.connected == true) {
+      onConnect?.call();
+      return;
+    }
+    final inFlight = _ordersConnectFuture;
+    if (inFlight != null) {
+      await inFlight;
+      return;
+    }
     if (_ordersSocket != null) {
       _ordersSocket!.connect();
       return;
     }
 
+    final generation = _ordersConnectionGeneration;
+    final connection = _connectOrdersSocket(generation);
+    _ordersConnectFuture = connection;
+    try {
+      await connection;
+    } finally {
+      if (identical(_ordersConnectFuture, connection)) {
+        _ordersConnectFuture = null;
+      }
+    }
+  }
+
+  Future<void> _connectOrdersSocket(int generation) async {
     final token = await TokenStorage.getToken();
-    _ordersSocket = io.io(
-      '$_baseUrl/ws/orders',
+    if (generation != _ordersConnectionGeneration ||
+        disableOrdersSocketForTests) {
+      return;
+    }
+    late final io.Socket socket;
+    socket = io.io(
+      '$_baseUrl$_ordersNamespace',
       io.OptionBuilder()
           .setTransports(['websocket'])
           .setAuth({'token': token ?? ''})
           .disableAutoConnect()
           .build(),
     );
-    _ordersSocket!.on('orderUpdate', (data) {
+    _ordersSocketCreateCountForTests++;
+    if (generation != _ordersConnectionGeneration) {
+      socket.dispose();
+      return;
+    }
+    _ordersSocket = socket;
+    socket.on('orderUpdate', (data) {
+      if (!identical(_ordersSocket, socket)) return;
       _dispatchOrderUpdate(data);
     });
-    _ordersSocket!.on('riderAssignment', (data) {
+    socket.on('riderAssignment', (data) {
+      if (!identical(_ordersSocket, socket)) return;
       _dispatchRiderAssignment(data);
     });
-    _ordersSocket!.on('connect', (_) {
-      debugPrint('WS Orders connected');
-      onConnect?.call();
+    socket.on('riderDispatchPlanUpdated', (data) {
+      if (!identical(_ordersSocket, socket)) return;
+      _dispatchRiderDispatchPlanUpdated(data);
     });
-    _ordersSocket!.on(
-      'connect_error',
-      (e) => debugPrint('WS Orders error: $e'),
-    );
-    _ordersSocket!.connect();
+    socket.on('deliveryQueueUpdated', (data) {
+      if (!identical(_ordersSocket, socket)) return;
+      _dispatchDeliveryQueueUpdated(data);
+    });
+    socket.on('survey-required', (data) {
+      if (!identical(_ordersSocket, socket)) return;
+      _dispatchSurveyRequired(data);
+    });
+    socket.on('connect', (_) {
+      if (!identical(_ordersSocket, socket)) return;
+      debugPrint('WS Orders connected');
+      for (final callback in List.of(_ordersConnectListeners)) {
+        try {
+          callback();
+        } catch (error) {
+          debugPrint('WS Orders connect handler error: $error');
+        }
+      }
+    });
+    socket.on('connect_error', (e) {
+      if (!identical(_ordersSocket, socket)) return;
+      debugPrint('WS Orders error: $e');
+    });
+    socket.connect();
   }
 
   void _dispatchOrderUpdate(dynamic data) {
@@ -147,8 +270,67 @@ class WebSocketService {
   }
 
   @visibleForTesting
+  void dispatchRiderDispatchPlanUpdatedForTests(dynamic data) {
+    _dispatchRiderDispatchPlanUpdated(data);
+  }
+
+  void _dispatchRiderDispatchPlanUpdated(dynamic data) {
+    final normalized = _normalize(data);
+    if (normalized is! Map<String, dynamic>) return;
+    final riderProfileId = _readStrictPositiveInt(normalized['riderProfileId']);
+    final planId = _readStrictPositiveInt(normalized['planId']);
+    final planVersion = _readStrictPositiveInt(normalized['planVersion']);
+    final change = normalized['change'];
+    if (riderProfileId == null ||
+        planId == null ||
+        planVersion == null ||
+        (change != 'created' && change != 'reoptimized')) {
+      return;
+    }
+    final payload = <String, dynamic>{
+      'riderProfileId': riderProfileId,
+      'planId': planId,
+      'planVersion': planVersion,
+      'change': change,
+    };
+    for (final callback in List.of(_riderDispatchPlanListeners)) {
+      try {
+        callback(payload);
+      } catch (error) {
+        debugPrint('WS riderDispatchPlanUpdated handler error: $error');
+      }
+    }
+  }
+
+  @visibleForTesting
   int get riderAssignmentListenerCountForTests =>
       _riderAssignmentListeners.length;
+
+  @visibleForTesting
+  int get riderDispatchPlanListenerCountForTests =>
+      _riderDispatchPlanListeners.length;
+
+  @visibleForTesting
+  int get deliveryQueueListenerCountForTests => _deliveryQueueListeners.length;
+
+  @visibleForTesting
+  int get ordersSocketCreateCountForTests => _ordersSocketCreateCountForTests;
+
+  @visibleForTesting
+  int get notificationsSocketCreateCountForTests =>
+      _notificationsSocketCreateCountForTests;
+
+  @visibleForTesting
+  int get notificationListenerCountForTests => _notificationListeners.length;
+
+  @visibleForTesting
+  int get creditsUpdateListenerCountForTests => _creditsUpdateListeners.length;
+
+  @visibleForTesting
+  void resetConnectionTestCountersForTests() {
+    _ordersSocketCreateCountForTests = 0;
+    _notificationsSocketCreateCountForTests = 0;
+  }
 
   /// Returns a removal handle — call it in dispose() to unregister the callback.
   VoidCallback listenForOrderUpdates(Function(dynamic) callback) {
@@ -168,65 +350,362 @@ class WebSocketService {
     return () => _riderAssignmentListeners.remove(callback);
   }
 
+  VoidCallback listenForRiderDispatchPlanUpdates(
+    Function(Map<String, dynamic>) callback,
+  ) {
+    if (!_riderDispatchPlanListeners.contains(callback)) {
+      _riderDispatchPlanListeners.add(callback);
+    }
+    return () => _riderDispatchPlanListeners.remove(callback);
+  }
+
+  VoidCallback listenForDeliveryQueueUpdates(
+    Function(Map<String, dynamic>) callback,
+  ) {
+    if (!_deliveryQueueListeners.contains(callback)) {
+      _deliveryQueueListeners.add(callback);
+    }
+    return () => _deliveryQueueListeners.remove(callback);
+  }
+
+  void _dispatchDeliveryQueueUpdated(dynamic data) {
+    final normalized = _normalize(data);
+    if (normalized is! Map<String, dynamic>) return;
+    for (final callback in List.of(_deliveryQueueListeners)) {
+      try {
+        callback(normalized);
+      } catch (error) {
+        debugPrint('WS deliveryQueueUpdated handler error: $error');
+      }
+    }
+  }
+
   void subscribeToOrder(String orderId) {
     _ordersSocket?.emit('subscribe', orderId);
   }
 
   Future<void> connectLocation({Function(dynamic)? onLocationUpdate}) async {
-    _locationSocket?.disconnect();
-    _locationSocket = null;
+    if (onLocationUpdate != null &&
+        !_locationListeners.contains(onLocationUpdate)) {
+      _locationListeners.add(onLocationUpdate);
+    }
+    if (_locationSocket?.connected == true) return;
+    if (_locationSocket != null) {
+      _setLocationHealth(LocationSocketHealth.connecting);
+      _locationSocket!.connect();
+      return;
+    }
 
+    final inFlight = _locationConnectFuture;
+    if (inFlight != null) {
+      await inFlight;
+      return;
+    }
+
+    _setLocationHealth(LocationSocketHealth.connecting);
+    final generation = _locationConnectionGeneration;
+    final connection = _connectLocationSocket(generation);
+    _locationConnectFuture = connection;
+    try {
+      await connection;
+    } finally {
+      if (identical(_locationConnectFuture, connection)) {
+        _locationConnectFuture = null;
+      }
+    }
+  }
+
+  Future<void> _connectLocationSocket(int generation) async {
     final token = await TokenStorage.getToken();
-    _locationSocket = io.io(
+    if (generation != _locationConnectionGeneration) return;
+    if (disableLocationSocketForTests) return;
+
+    late final io.Socket socket;
+    socket = io.io(
       '$_baseUrl/ws/location',
       io.OptionBuilder()
           .setTransports(['websocket'])
           .setAuth({'token': token ?? ''})
+          .enableReconnection()
+          .setReconnectionAttempts(_locationReconnectAttempts)
+          .setReconnectionDelay(500)
+          .setReconnectionDelayMax(4000)
           .disableAutoConnect()
           .build(),
     );
-    if (onLocationUpdate != null) {
-      _locationSocket!.on('locationUpdate', (data) {
-        try {
-          onLocationUpdate(_normalize(data));
-        } catch (e) {
-          debugPrint('WS locationUpdate handler error: $e');
-        }
-      });
+    if (generation != _locationConnectionGeneration) {
+      socket.dispose();
+      return;
     }
-    _locationSocket!.on('connect', (_) {
+    _locationSocket = socket;
+    socket.on('locationUpdate', _dispatchLocationUpdate);
+    socket.on('subscribed', _dispatchLocationSubscribed);
+    socket.on('connect', (_) {
+      if (!identical(_locationSocket, socket)) return;
       debugPrint('WS Location connected');
-      final deliveryId = _pendingLocationDeliveryId;
-      if (deliveryId != null && deliveryId.isNotEmpty) {
-        _locationSocket?.emit('subscribe', deliveryId);
-      }
+      _emitPendingLocationSubscription();
     });
-    _locationSocket!.on(
-      'connect_error',
-      (e) => debugPrint('WS Location error: $e'),
-    );
-    _locationSocket!.connect();
+    socket.on('disconnect', (_) {
+      if (!identical(_locationSocket, socket)) return;
+      _clearAcknowledgedLocationIdentity();
+      _setLocationHealth(LocationSocketHealth.disconnected);
+    });
+    socket.on('connect_error', (e) {
+      if (!identical(_locationSocket, socket)) return;
+      debugPrint('WS Location error: $e');
+      _clearAcknowledgedLocationIdentity();
+      _setLocationHealth(LocationSocketHealth.disconnected);
+    });
+    socket.on('reconnect_attempt', (_) {
+      if (!identical(_locationSocket, socket)) return;
+      _setLocationHealth(LocationSocketHealth.connecting);
+    });
+    socket.on('reconnect_failed', (_) {
+      if (!identical(_locationSocket, socket)) return;
+      _pendingLocationDeliveryId = null;
+      _pendingLocationPlanVersion = null;
+      _clearAcknowledgedLocationIdentity();
+      _setLocationHealth(LocationSocketHealth.disconnected);
+    });
+    socket.connect();
   }
 
   void subscribeToDelivery(String assignmentId) {
+    _subscribeToDelivery(assignmentId, planVersion: null);
+  }
+
+  void subscribeToDeliveryPlan(String assignmentId, int planVersion) {
+    _subscribeToDelivery(assignmentId, planVersion: planVersion);
+  }
+
+  void _subscribeToDelivery(String assignmentId, {required int? planVersion}) {
+    final normalizedAssignmentId = _readLocationAssignmentId(assignmentId);
+    if (normalizedAssignmentId == null ||
+        (planVersion != null && planVersion <= 0)) {
+      return;
+    }
+    assignmentId = normalizedAssignmentId;
+    final previousAssignment = _pendingLocationDeliveryId;
+    final previousPlanVersion = _pendingLocationPlanVersion;
     _pendingLocationDeliveryId = assignmentId;
+    _pendingLocationPlanVersion = planVersion;
+    _clearAcknowledgedLocationIdentity();
+    if (previousAssignment != null && previousAssignment != assignmentId) {
+      _locationSocketRecreateRequestsForTests++;
+      final previousSocket = _locationSocket;
+      if (previousSocket != null) {
+        _locationConnectionGeneration++;
+        _locationConnectFuture = null;
+        _locationSocket = null;
+        previousSocket.disconnect();
+        unawaited(connectLocation());
+        return;
+      }
+    }
     if (_locationSocket?.connected == true) {
+      _setLocationHealth(LocationSocketHealth.subscribing);
       _locationSocket?.emit('subscribe', assignmentId);
+    } else if (previousAssignment == assignmentId &&
+        previousPlanVersion != planVersion) {
+      _setLocationHealth(LocationSocketHealth.connecting);
     }
   }
 
-  void sendRiderLocation(Map<String, dynamic> location) {
-    _locationSocket?.emit('updateLocation', location);
+  void _emitPendingLocationSubscription() {
+    final deliveryId = _pendingLocationDeliveryId;
+    if (deliveryId != null && deliveryId.isNotEmpty) {
+      _setLocationHealth(LocationSocketHealth.subscribing);
+      _locationSubscribeEmitCountForTests++;
+      _locationSocket?.emit('subscribe', deliveryId);
+    } else {
+      _setLocationHealth(LocationSocketHealth.connecting);
+    }
+  }
+
+  VoidCallback listenForLocationUpdates(
+    Function(Map<String, dynamic>) callback,
+  ) {
+    if (!_locationListeners.contains(callback)) {
+      _locationListeners.add(callback);
+    }
+    return () => _locationListeners.remove(callback);
+  }
+
+  void listenForLocationHealth(Function(LocationSocketHealth)? callback) {
+    if (callback == null) return;
+    if (!_locationHealthListeners.contains(callback)) {
+      _locationHealthListeners.add(callback);
+    }
+    callback(_locationHealth);
+  }
+
+  void removeLocationHealthListener(Function(LocationSocketHealth)? callback) {
+    if (callback == null) return;
+    _locationHealthListeners.remove(callback);
+  }
+
+  void removeLocationUpdateListener(Function(dynamic) callback) {
+    _locationListeners.remove(callback);
+  }
+
+  void _dispatchLocationSubscribed(dynamic data) {
+    final normalized = _normalize(data);
+    if (normalized is! Map<String, dynamic>) return;
+    final assignmentId = _readLocationAssignmentId(normalized['assignmentId']);
+    final planVersion = _readStrictPositiveInt(normalized['planVersion']);
+    if (assignmentId == null ||
+        assignmentId != _pendingLocationDeliveryId ||
+        planVersion == null ||
+        (_pendingLocationPlanVersion != null &&
+            planVersion != _pendingLocationPlanVersion)) {
+      return;
+    }
+    _subscribedLocationAssignmentId = assignmentId;
+    _subscribedLocationPlanVersion = planVersion;
+    _setLocationHealth(LocationSocketHealth.connected);
+  }
+
+  void _dispatchLocationUpdate(dynamic data) {
+    final normalized = _normalize(data);
+    if (normalized is! Map<String, dynamic>) return;
+    final assignmentId = _readLocationAssignmentId(normalized['assignmentId']);
+    final planVersion = _readStrictPositiveInt(normalized['planVersion']);
+    if (assignmentId != _subscribedLocationAssignmentId ||
+        planVersion != _subscribedLocationPlanVersion) {
+      return;
+    }
+    final latitude = normalized['latitude'];
+    final longitude = normalized['longitude'];
+    final timestamp = normalized['timestamp'];
+    if (latitude is! num ||
+        longitude is! num ||
+        !latitude.toDouble().isFinite ||
+        !longitude.toDouble().isFinite ||
+        latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180 ||
+        timestamp is! String ||
+        DateTime.tryParse(timestamp) == null) {
+      return;
+    }
+    for (final callback in List.of(_locationListeners)) {
+      try {
+        callback(normalized);
+      } catch (error) {
+        debugPrint('WS locationUpdate handler error: $error');
+      }
+    }
+  }
+
+  void _clearAcknowledgedLocationIdentity() {
+    _subscribedLocationAssignmentId = null;
+    _subscribedLocationPlanVersion = null;
+  }
+
+  void _setLocationHealth(LocationSocketHealth health) {
+    if (_locationHealth == health) return;
+    _locationHealth = health;
+    for (final callback in List.of(_locationHealthListeners)) {
+      try {
+        callback(health);
+      } catch (error) {
+        debugPrint('WS location health handler error: $error');
+      }
+    }
   }
 
   void disconnectLocation() {
-    _locationSocket?.disconnect();
+    _resetLocationSocket(clearListeners: true, resetTestCounters: true);
+  }
+
+  void _resetLocationSocket({
+    required bool clearListeners,
+    required bool resetTestCounters,
+  }) {
+    _locationConnectionGeneration++;
+    _locationConnectFuture = null;
+    final socket = _locationSocket;
     _locationSocket = null;
+    socket?.disconnect();
     _pendingLocationDeliveryId = null;
+    _pendingLocationPlanVersion = null;
+    _clearAcknowledgedLocationIdentity();
+    if (clearListeners) {
+      _locationListeners.clear();
+      _locationHealthListeners.clear();
+    }
+    _locationHealth = LocationSocketHealth.disconnected;
+    if (resetTestCounters) {
+      _locationSubscribeEmitCountForTests = 0;
+      _locationSocketRecreateRequestsForTests = 0;
+    }
   }
 
   @visibleForTesting
   String? get pendingLocationDeliveryIdForTests => _pendingLocationDeliveryId;
+
+  @visibleForTesting
+  int? get pendingLocationPlanVersionForTests => _pendingLocationPlanVersion;
+
+  @visibleForTesting
+  String? get subscribedLocationAssignmentIdForTests =>
+      _subscribedLocationAssignmentId;
+
+  @visibleForTesting
+  int? get subscribedLocationPlanVersionForTests =>
+      _subscribedLocationPlanVersion;
+
+  int get locationReconnectAttempts => _locationReconnectAttempts;
+
+  @visibleForTesting
+  LocationSocketHealth get locationHealthForTests => _locationHealth;
+
+  @visibleForTesting
+  int get locationSubscribeEmitCountForTests =>
+      _locationSubscribeEmitCountForTests;
+
+  @visibleForTesting
+  int get locationSocketRecreateRequestsForTests =>
+      _locationSocketRecreateRequestsForTests;
+
+  @visibleForTesting
+  void dispatchLocationSocketConnectedForTests() {
+    _emitPendingLocationSubscription();
+  }
+
+  @visibleForTesting
+  void dispatchLocationReconnectFailedForTests() {
+    _pendingLocationDeliveryId = null;
+    _pendingLocationPlanVersion = null;
+    _clearAcknowledgedLocationIdentity();
+    _setLocationHealth(LocationSocketHealth.disconnected);
+  }
+
+  @visibleForTesting
+  void dispatchLocationSubscribedForTests(dynamic data) {
+    _dispatchLocationSubscribed(data);
+  }
+
+  @visibleForTesting
+  void dispatchLocationUpdateForTests(dynamic data) {
+    _dispatchLocationUpdate(data);
+  }
+
+  @visibleForTesting
+  void dispatchDeliveryQueueUpdatedForTests(dynamic data) {
+    _dispatchDeliveryQueueUpdated(data);
+  }
+
+  @visibleForTesting
+  void dispatchSurveyRequiredForTests(dynamic data) {
+    _dispatchSurveyRequired(data);
+  }
+
+  @visibleForTesting
+  void clearDeliveryQueueListenersForTests() {
+    _deliveryQueueListeners.clear();
+  }
 
   Future<void> connectNotifications({
     Function(Map<String, dynamic>)? onCreditsUpdate,
@@ -237,13 +716,37 @@ class WebSocketService {
     }
     // Already connected — nothing to do
     if (_notificationsSocket?.connected == true) return;
+    final inFlight = _notificationsConnectFuture;
+    if (inFlight != null) {
+      await inFlight;
+      return;
+    }
     // Socket exists but disconnected — disconnect and recreate to ensure fresh token
     if (_notificationsSocket != null) {
-      _notificationsSocket!.disconnect();
+      _notificationsSocket!.dispose();
       _notificationsSocket = null;
     }
+
+    final generation = _notificationsConnectionGeneration;
+    final connection = _connectNotificationsSocket(generation);
+    _notificationsConnectFuture = connection;
+    try {
+      await connection;
+    } finally {
+      if (identical(_notificationsConnectFuture, connection)) {
+        _notificationsConnectFuture = null;
+      }
+    }
+  }
+
+  Future<void> _connectNotificationsSocket(int generation) async {
     final token = await TokenStorage.getToken();
-    _notificationsSocket = io.io(
+    if (generation != _notificationsConnectionGeneration ||
+        disableNotificationsSocketForTests) {
+      return;
+    }
+    late final io.Socket socket;
+    socket = io.io(
       '$_baseUrl/ws/notifications',
       io.OptionBuilder()
           .setTransports(['websocket'])
@@ -251,34 +754,49 @@ class WebSocketService {
           .disableAutoConnect()
           .build(),
     );
-    _notificationsSocket!.on('creditsUpdate', _dispatchCreditsUpdate);
-    _notificationsSocket!.on('newNotification', _dispatchNotification);
-    _notificationsSocket!.on('survey-required', _dispatchSurveyRequired);
-    _notificationsSocket!.on(
-      'connect',
-      (_) => debugPrint('WS Notifications connected'),
-    );
-    _notificationsSocket!.on(
-      'connect_error',
-      (e) => debugPrint('WS Notifications error: $e'),
-    );
-    _notificationsSocket!.connect();
+    _notificationsSocketCreateCountForTests++;
+    if (generation != _notificationsConnectionGeneration) {
+      socket.dispose();
+      return;
+    }
+    _notificationsSocket = socket;
+    socket.on('creditsUpdate', (data) {
+      if (!identical(_notificationsSocket, socket)) return;
+      _dispatchCreditsUpdate(data);
+    });
+    socket.on('newNotification', (data) {
+      if (!identical(_notificationsSocket, socket)) return;
+      _dispatchNotification(data);
+    });
+    socket.on('connect', (_) {
+      if (!identical(_notificationsSocket, socket)) return;
+      debugPrint('WS Notifications connected');
+    });
+    socket.on('connect_error', (e) {
+      if (!identical(_notificationsSocket, socket)) return;
+      debugPrint('WS Notifications error: $e');
+    });
+    socket.connect();
   }
 
   /// Register a callback for incoming `creditsUpdate` events.
-  void listenForCreditsUpdate(Function(Map<String, dynamic>) callback) {
+  VoidCallback listenForCreditsUpdate(Function(Map<String, dynamic>) callback) {
     if (!_creditsUpdateListeners.contains(callback)) {
       _creditsUpdateListeners.add(callback);
     }
+    return () => _creditsUpdateListeners.remove(callback);
   }
 
   /// Register a callback for incoming `newNotification` events.
-  /// Safe to call before [connectNotifications] and across reconnects.
-  void listenForNewNotifications(Function(Map<String, dynamic>) callback) {
+  /// Safe to call before [connectNotifications] and across reconnects. The
+  /// returned handle must be called when the listener owner is disposed.
+  VoidCallback listenForNewNotifications(
+    Function(Map<String, dynamic>) callback,
+  ) {
     if (!_notificationListeners.contains(callback)) {
       _notificationListeners.add(callback);
     }
-    connectNotifications();
+    return () => _notificationListeners.remove(callback);
   }
 
   void _dispatchCreditsUpdate(dynamic data) {
@@ -376,15 +894,83 @@ class WebSocketService {
     _dailyGridSocket = null;
   }
 
+  /// Connects to the /ws/home-feed namespace and listens for [homeFeedUpdated]
+  /// events (admin changed the home feed tile settings).
+  ///
+  /// Mirrors [connectDailyGrid]: [onUpdated] is registered only on the first
+  /// connection; call [disconnectHomeFeed] first to swap the callback.
+  Future<void> connectHomeFeed({required VoidCallback onUpdated}) async {
+    if (disableHomeFeedSocketForTests) return;
+    if (_homeFeedSocket?.connected == true) return;
+    if (_homeFeedSocket != null) {
+      _homeFeedSocket!.connect();
+      return;
+    }
+    try {
+      // No auth required — the event carries no data, it only signals refetch.
+      _homeFeedSocket = io.io(
+        '$_baseUrl/ws/home-feed',
+        io.OptionBuilder()
+            .setTransports(['websocket'])
+            .disableAutoConnect()
+            .build(),
+      );
+      _homeFeedSocket!.on('homeFeedUpdated', (_) {
+        try {
+          onUpdated();
+        } catch (e) {
+          debugPrint('WS homeFeedUpdated handler error: $e');
+        }
+      });
+      _homeFeedSocket!.on(
+        'connect',
+        (_) => debugPrint('WS HomeFeed connected'),
+      );
+      _homeFeedSocket!.on(
+        'connect_error',
+        (e) => debugPrint('WS HomeFeed error: $e'),
+      );
+      _homeFeedSocket!.connect();
+    } catch (e) {
+      debugPrint('WS HomeFeed connection error: $e');
+      // Connection failure should not crash the app
+    }
+  }
+
+  void disconnectHomeFeed() {
+    _homeFeedSocket?.disconnect();
+    _homeFeedSocket = null;
+  }
+
   Future<bool> connectChat() async {
     if (_chatSocket?.connected == true) return true;
-    if (_chatSocket != null) {
-      final connected = _waitForChatConnection(_chatSocket!);
-      _chatSocket!.connect();
-      return connected;
+    final inFlight = _chatConnectFuture;
+    if (inFlight != null) return inFlight;
+    final connection = _connectChatSocket();
+    _chatConnectFuture = connection;
+    try {
+      return await connection;
+    } finally {
+      if (identical(_chatConnectFuture, connection)) {
+        _chatConnectFuture = null;
+      }
+    }
+  }
+
+  Future<bool> _connectChatSocket() async {
+    // A disconnected socket keeps the auth token captured when it was first
+    // created. If the server rejected that token, its `client.disconnect()`
+    // arrives as a silent `io server disconnect` that socket.io never
+    // auto-reconnects from — so dispose and recreate the socket to send a
+    // fresh JWT on the handshake (same pattern as connectNotifications).
+    final staleSocket = _chatSocket;
+    if (staleSocket != null) {
+      _chatSocket = null;
+      staleSocket.dispose();
     }
     final token = await TokenStorage.getToken();
-    _chatSocket = io.io(
+    late final io.Socket socket;
+    socket = io.io(
       '$_baseUrl/ws/chat',
       io.OptionBuilder()
           .setTransports(['websocket'])
@@ -392,13 +978,17 @@ class WebSocketService {
           .disableAutoConnect()
           .build(),
     );
-    _chatSocket!.on('message-received', (data) {
+    _chatSocket = socket;
+    socket.on('message-received', (data) {
+      if (!identical(_chatSocket, socket)) return;
       _dispatchChatMessage(_normalize(data));
     });
-    _chatSocket!.on('bot-response', (data) {
+    socket.on('bot-response', (data) {
+      if (!identical(_chatSocket, socket)) return;
       _dispatchChatMessage(_normalize(data));
     });
-    _chatSocket!.on('bot-typing', (data) {
+    socket.on('bot-typing', (data) {
+      if (!identical(_chatSocket, socket)) return;
       try {
         final d = _normalize(data) as Map<String, dynamic>;
         final convId = d['conversationId'] as int;
@@ -413,7 +1003,8 @@ class WebSocketService {
         debugPrint('WS bot-typing parse error: $e');
       }
     });
-    _chatSocket!.on('messages-read', (data) {
+    socket.on('messages-read', (data) {
+      if (!identical(_chatSocket, socket)) return;
       try {
         final d = _normalize(data) as Map<String, dynamic>;
         final convId = d['conversationId'] as int;
@@ -428,23 +1019,70 @@ class WebSocketService {
         debugPrint('WS messages-read parse error: $e');
       }
     });
-    _chatSocket!.on('connect', (_) => debugPrint('WS Chat connected'));
-    _chatSocket!.on('connect_error', (e) => debugPrint('WS Chat error: $e'));
-    final connected = _waitForChatConnection(_chatSocket!);
-    _chatSocket!.connect();
+    socket.on('connect', (_) {
+      if (!identical(_chatSocket, socket)) return;
+      debugPrint('WS Chat connected');
+    });
+    // 'session-ready' is emitted by the gateway only after handleConnection
+    // has authenticated the JWT and stamped socket.data. Emitting
+    // 'join-conversation' on the raw 'connect' event races that async auth —
+    // the server's getActor() sees no identity and force-disconnects the
+    // socket. So the "connected" health signal (which triggers room joins)
+    // must wait for session-ready.
+    socket.on('session-ready', (_) {
+      if (!identical(_chatSocket, socket)) return;
+      debugPrint('WS Chat session ready');
+      _dispatchChatConnection(true);
+    });
+    socket.on('disconnect', (_) {
+      if (!identical(_chatSocket, socket)) return;
+      debugPrint('WS Chat disconnected');
+      _dispatchChatConnection(false);
+    });
+    socket.on('connect_error', (e) {
+      if (!identical(_chatSocket, socket)) return;
+      debugPrint('WS Chat error: $e');
+    });
+    final connected = _waitForChatConnection(socket);
+    socket.connect();
     return connected;
   }
 
-  Future<bool> _waitForChatConnection(io.Socket socket) {
-    if (socket.connected) return Future.value(true);
+  /// Register a callback for chat socket connectivity changes
+  /// (true = connected, false = disconnected). Fires on every reconnect so
+  /// owners can re-join their conversation rooms — server room membership is
+  /// per-socket and does not survive a reconnect.
+  /// Returns a removal handle — call it in dispose().
+  VoidCallback listenForChatConnection(Function(bool connected) callback) {
+    if (!_chatConnectionListeners.contains(callback)) {
+      _chatConnectionListeners.add(callback);
+    }
+    return () => _chatConnectionListeners.remove(callback);
+  }
 
+  void _dispatchChatConnection(bool connected) {
+    for (final cb in List.of(_chatConnectionListeners)) {
+      try {
+        cb(connected);
+      } catch (e) {
+        debugPrint('WS chat connection handler error: $e');
+      }
+    }
+  }
+
+  Future<bool> _waitForChatConnection(io.Socket socket) {
     final completer = Completer<bool>();
 
     void complete(bool value) {
       if (!completer.isCompleted) completer.complete(value);
     }
 
-    socket.once('connect', (_) => complete(true));
+    // Wait for the server's post-auth acknowledgement, not the transport
+    // 'connect': an auth-rejected socket still fires 'connect' before the
+    // server silently force-disconnects it, and callers emit
+    // 'join-conversation' as soon as this future resolves.
+    socket.once('session-ready', (_) => complete(true));
+    socket.once('disconnect', (_) => complete(false));
     socket.once('connect_error', (_) => complete(false));
 
     return completer.future.timeout(
@@ -577,34 +1215,46 @@ class WebSocketService {
   }
 
   void disconnectChat() {
+    _chatConnectFuture = null;
     _chatSocket?.disconnect();
     _chatSocket = null;
     _chatMessageListeners.clear();
     _botTypingListeners.clear();
     _messagesReadListeners.clear();
+    _chatConnectionListeners.clear();
   }
 
   void disconnect() {
-    _ordersSocket?.disconnect();
-    _locationSocket?.disconnect();
-    _notificationsSocket?.disconnect();
+    _ordersConnectionGeneration++;
+    _ordersConnectFuture = null;
+    final ordersSocket = _ordersSocket;
+    _ordersSocket = null;
+    ordersSocket?.dispose();
+    _resetLocationSocket(clearListeners: true, resetTestCounters: true);
+    _notificationsConnectionGeneration++;
+    _notificationsConnectFuture = null;
+    final notificationsSocket = _notificationsSocket;
+    _notificationsSocket = null;
+    notificationsSocket?.dispose();
     _dailyGridSocket?.disconnect();
+    _chatConnectFuture = null;
     _chatSocket?.disconnect();
     _chatSocket = null;
     _slotsSocket?.disconnect();
     _slotsSocket = null;
     // Null out so the next connection creates a fresh socket
     // with a new JWT — prevents stale-token room membership after logout.
-    _notificationsSocket = null;
-    _ordersSocket = null;
     _dailyGridSocket = null;
-    _locationSocket = null;
     _chatMessageListeners.clear();
     _botTypingListeners.clear();
     _messagesReadListeners.clear();
+    _chatConnectionListeners.clear();
     _slotUpdatedListeners.clear();
     _orderListeners.clear();
     _riderAssignmentListeners.clear();
+    _riderDispatchPlanListeners.clear();
+    _deliveryQueueListeners.clear();
+    _ordersConnectListeners.clear();
     _surveyRequiredListeners.clear();
   }
 }

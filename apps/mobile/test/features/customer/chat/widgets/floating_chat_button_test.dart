@@ -30,6 +30,15 @@ void main() {
     );
 
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics &&
+            widget.properties.button == true &&
+            widget.properties.label == 'Open customer chat',
+      ),
+      findsOneWidget,
+    );
     // Floating button is icon-only — tap the FloatingChatButton itself.
     await tester.tap(find.byType(FloatingChatButton));
     await tester.pumpAndSettle();

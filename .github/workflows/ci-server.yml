@@ -2,58 +2,32 @@ name: Server CI
 
 on:
   push:
-    paths:
-      - "server/**"
-      - ".github/workflows/ci-server.yml"
+    branches: [main]
   pull_request:
     paths:
       - "server/**"
+      - ".github/workflows/ci-server.yml"
+
+permissions:
+  contents: read
 
 jobs:
-  test:
+  server:
+    name: Server
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: server
 
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_DB: grid_print_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      DATABASE_HOST: localhost
-      DATABASE_PORT: 5432
-      DATABASE_NAME: grid_print_test
-      DATABASE_USER: postgres
-      DATABASE_PASSWORD: postgres
-      JWT_SECRET: ci-test-secret
-      MINIO_ENDPOINT: localhost
-      MINIO_PORT: 9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: grid-print
-      MINIO_USE_SSL: false
-      NODE_ENV: test
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "24"
-          cache: "npm"
+          cache: npm
           cache-dependency-path: server/package-lock.json
 
       - name: Install dependencies
@@ -66,23 +40,125 @@ jobs:
         run: npm run build
 
       - name: Unit tests
-        run: npm test
+        run: npm test -- --runInBand
 
-      - name: Start MinIO for e2e tests
+  migration:
+    name: Migration
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: server
+    services:
+      postgres:
+        image: postgres:15-alpine@sha256:57e5b9f69e672385cdf630f42b1306b5ca934c9bf8278b5f8b1948533d75a20b
+        env:
+          POSTGRES_DB: grid_print_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d grid_print_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_HOST: 127.0.0.1
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: grid_print_test
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_SYNCHRONIZE: "false"
+      JWT_SECRET: migration-ci-jwt-only
+      MINIO_ENDPOINT: 127.0.0.1
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: grid-print
+      MINIO_USE_SSL: "false"
+      NODE_ENV: test
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate ephemeral seed passwords
+        shell: bash
         run: |
-          docker run -d --name gridgo-minio \
+          for variable in GRIDGO_SEED_CUSTOMER_PASSWORD GRIDGO_SEED_RIDER_PASSWORD GRIDGO_SEED_ADMIN_PASSWORD; do
+            value="$(openssl rand -hex 32)"
+            echo "::add-mask::$value"
+            echo "$variable=$value" >> "$GITHUB_ENV"
+          done
+
+      - name: Start pinned MinIO
+        run: |
+          docker run -d --name gridgo-migration-minio \
             -p 9000:9000 \
             -e MINIO_ROOT_USER=minioadmin \
             -e MINIO_ROOT_PASSWORD=minioadmin \
-            minio/minio:latest server /data
-          for attempt in {1..30}; do
-            if curl -fsS http://localhost:9000/minio/health/live; then
+            minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e server /data
+          for _ in {1..30}; do
+            if curl -fsS http://127.0.0.1:9000/minio/health/live; then
               exit 0
             fi
             sleep 2
           done
-          docker logs gridgo-minio
+          docker logs gridgo-migration-minio
           exit 1
 
-      - name: E2E tests
+      - name: Build server
+        run: npm run build
+
+      - name: Migrate empty database
+        run: npm run migration:run
+
+      - name: Seed migrated database
+        run: npm run seed:if-empty
+
+      - name: Prove there are no pending migrations
+        run: npm run migration:run
+
+      - name: Start API with synchronization disabled
+        run: |
+          npm run start > /tmp/gridgo-migration-api.log 2>&1 &
+          echo "$!" > /tmp/gridgo-migration-api.pid
+          for _ in {1..60}; do
+            if curl -fsS http://127.0.0.1:3000/api/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/gridgo-migration-api.log
+          exit 1
+
+      - name: End-to-end tests
         run: npm run test:e2e -- --runInBand
+
+      - name: Upload migration failure logs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: migration-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: /tmp/gridgo-migration-api.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Stop migration services
+        if: always()
+        run: |
+          if [[ -f /tmp/gridgo-migration-api.pid ]]; then
+            kill "$(cat /tmp/gridgo-migration-api.pid)" 2>/dev/null || true
+          fi
+          docker rm -f gridgo-migration-minio 2>/dev/null || true

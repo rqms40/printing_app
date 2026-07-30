@@ -11,6 +11,12 @@ help: ## Show this help
 mobile-dev: ## Run Flutter app in debug mode
 	cd apps/mobile && fvm flutter run
 
+mobile-android: ## Run Android Emulator against the local Docker API
+	cd apps/mobile && fvm flutter run -d emulator-5554 --dart-define=SERVER_URL=http://10.0.2.2:3000 --dart-define=ENABLE_DEV_AUTH=true
+
+mobile-ios: ## Run iOS Simulator against the local Docker API
+	cd apps/mobile && fvm flutter run -d ios --dart-define=SERVER_URL=http://localhost:3000 --dart-define=ENABLE_DEV_AUTH=true
+
 mobile-test: ## Run Flutter tests
 	cd apps/mobile && fvm flutter test
 

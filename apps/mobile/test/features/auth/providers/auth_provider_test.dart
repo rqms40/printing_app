@@ -1,11 +1,134 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/features/auth/providers/auth_provider.dart';
+import 'package:printing_app/features/customer/address/providers/address_provider.dart';
 import 'package:printing_app/features/customer/profile/models/account_state.dart';
 import 'package:printing_app/features/customer/profile/providers/account_state_provider.dart';
+import 'package:printing_app/shared/models/address.dart';
 import 'package:printing_app/shared/services/websocket_service.dart';
+import 'package:printing_app/shared/services/notification_service.dart';
 
 import '../../../helpers/test_setup.dart';
+
+class _FakeAuthSessionClient implements AuthSessionClient {
+  bool hasToken = true;
+  var clearTokenCalls = 0;
+  final savedTokens = <String>[];
+  final loginResults = <Future<Map<String, dynamic>> Function()>[];
+  Future<Map<String, dynamic>> Function()? completionResult;
+  Future<Map<String, dynamic>> Function()? profileResult;
+  var completionCalls = 0;
+  var profileCalls = 0;
+
+  @override
+  Future<void> clearToken() async {
+    clearTokenCalls += 1;
+  }
+
+  @override
+  Future<Map<String, dynamic>> getCompletionState() async {
+    completionCalls += 1;
+    return completionResult!.call();
+  }
+
+  @override
+  Future<Map<String, dynamic>> getProfile() async {
+    profileCalls += 1;
+    return profileResult!.call();
+  }
+
+  @override
+  Future<bool> hasStoredToken() async => hasToken;
+
+  @override
+  Future<Map<String, dynamic>> login(String email, String password) {
+    return loginResults.removeAt(0).call();
+  }
+
+  @override
+  Future<void> saveToken(String token) async {
+    savedTokens.add(token);
+  }
+}
+
+class _FakeFcmSessionClient implements FcmSessionClient {
+  var registerCalls = 0;
+  var revokeCalls = 0;
+  var invalidateCalls = 0;
+  Object? registerError;
+  Object? revokeError;
+  Object? invalidateError;
+  Completer<void>? registerStarted;
+  Completer<void>? registerBlock;
+  final operations = <String>[];
+
+  @override
+  Future<void> registerCurrentToken() async {
+    registerCalls += 1;
+    final call = registerCalls;
+    operations.add('register-start:$call');
+    final started = registerStarted;
+    if (started != null && !started.isCompleted) started.complete();
+    final block = registerBlock;
+    registerBlock = null;
+    if (block != null) await block.future;
+    if (registerError case final error?) throw error;
+    operations.add('register-complete:$call');
+  }
+
+  @override
+  Future<void> revokeCurrentToken() async {
+    revokeCalls += 1;
+    operations.add('revoke');
+    if (revokeError case final error?) throw error;
+  }
+
+  Future<void> invalidateLocalToken() async {
+    invalidateCalls += 1;
+    operations.add('invalidate');
+    if (invalidateError case final error?) throw error;
+  }
+}
+
+Map<String, dynamic> _customerLoginResponse({
+  String token = 'active-token',
+  int id = 11,
+  String email = 'mark@example.com',
+}) => {
+  'access_token': token,
+  'user': {
+    'id': id,
+    'email': email,
+    'fullName': 'Mark Prado',
+    'role': 'customer',
+    'isProfileComplete': true,
+    'tutorialSeenKeys': <String>[],
+    'printingPreferences': <String>[],
+  },
+};
+
+Map<String, dynamic> _heldCompletionResponse() => {
+  'accountStatus': 'beta_held',
+  'user': {'fullName': 'Mark Prado', 'email': 'mark@example.com'},
+  'betaPhotoUploaded': true,
+  'betaSharedOnSocial': false,
+  'betaCompletedAt': '2026-07-10T00:00:00.000Z',
+};
+
+DioException _dioFailure(int statusCode, Map<String, dynamic> data) {
+  final request = RequestOptions(path: '/test');
+  return DioException(
+    requestOptions: request,
+    response: Response(
+      requestOptions: request,
+      statusCode: statusCode,
+      data: data,
+    ),
+  );
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -98,6 +221,70 @@ void main() {
       expect(devNotifier.state.isLoading, false);
     });
 
+    test('a new session clears addresses owned by the previous customer', () {
+      final oldAddress = Address(
+        id: 'old-address',
+        userId: 'old-customer',
+        label: 'Old home',
+        fullAddress: 'Previous customer address',
+        city: 'Davao City',
+        latitude: 7.06,
+        longitude: 125.60,
+        isDefault: true,
+        createdAt: DateTime(2026),
+        updatedAt: DateTime(2026),
+      );
+      final addressNotifier = AddressNotifier(
+        initialState: [oldAddress],
+        skipBootstrap: true,
+        realFlow: false,
+      );
+      final container = ProviderContainer(
+        overrides: [
+          authProvider.overrideWith((ref) => AuthNotifier(ref, true)),
+          addressProvider.overrideWith((ref) => addressNotifier),
+        ],
+      );
+      addTearDown(container.dispose);
+      expect(container.read(addressProvider).single.id, 'old-address');
+
+      container.read(authProvider.notifier).devBypass('customer');
+      expect(container.read(addressProvider), isEmpty);
+    });
+
+    test('logout clears addresses owned by the current customer', () async {
+      final oldAddress = Address(
+        id: 'old-address',
+        userId: 'old-customer',
+        label: 'Old home',
+        fullAddress: 'Previous customer address',
+        city: 'Davao City',
+        latitude: 7.06,
+        longitude: 125.60,
+        isDefault: true,
+        createdAt: DateTime(2026),
+        updatedAt: DateTime(2026),
+      );
+      final container = ProviderContainer(
+        overrides: [
+          authProvider.overrideWith((ref) => AuthNotifier(ref, true)),
+          addressProvider.overrideWith(
+            (ref) => AddressNotifier(
+              initialState: [oldAddress],
+              skipBootstrap: true,
+              realFlow: false,
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      expect(container.read(addressProvider).single.id, 'old-address');
+
+      await container.read(authProvider.notifier).logout();
+
+      expect(container.read(addressProvider), isEmpty);
+    });
+
     test('login sets error on connection failure (no server)', () async {
       await notifier.login('test@test.com', 'password');
 
@@ -170,6 +357,356 @@ void main() {
         AccountGateStatus.unknown,
       );
     });
+
+    test(
+      'auto-login restores verified beta-held state without clearing token',
+      () async {
+        final client = _FakeAuthSessionClient();
+        client.completionResult = () async => _heldCompletionResponse();
+        client.profileResult = () async =>
+            _customerLoginResponse()['user'] as Map<String, dynamic>;
+        final heldNotifier = AuthNotifier(null, false, client);
+
+        await heldNotifier.tryAutoLogin();
+
+        expect(client.completionCalls, 1);
+        expect(client.profileCalls, 0);
+        expect(client.clearTokenCalls, 0);
+        expect(heldNotifier.state.status, AuthStatus.unauthenticated);
+        expect(heldNotifier.state.betaLocked?.fullName, 'Mark Prado');
+        expect(heldNotifier.state.betaLocked?.betaPhotoUploaded, isTrue);
+      },
+    );
+
+    test(
+      'auto-login reaches normal customer state after beta-off self-heal',
+      () async {
+        final client = _FakeAuthSessionClient();
+        client.completionResult = () async => {'accountStatus': 'active'};
+        client.profileResult = () async =>
+            _customerLoginResponse()['user'] as Map<String, dynamic>;
+        final restoredNotifier = AuthNotifier(null, false, client);
+
+        await restoredNotifier.tryAutoLogin();
+
+        expect(client.completionCalls, 1);
+        expect(client.profileCalls, 1);
+        expect(client.clearTokenCalls, 0);
+        expect(restoredNotifier.state.status, AuthStatus.authenticated);
+        expect(restoredNotifier.state.user?.role, 'customer');
+        expect(restoredNotifier.state.betaLocked, isNull);
+      },
+    );
+
+    test(
+      'same credentials transition from beta-held to normal login',
+      () async {
+        final client = _FakeAuthSessionClient()
+          ..loginResults.addAll([
+            () async => throw _dioFailure(403, {
+              'code': 'beta_held',
+              'access_token': 'held-token',
+              ..._heldCompletionResponse(),
+            }),
+            () async => _customerLoginResponse(),
+          ]);
+        final restoredNotifier = AuthNotifier(null, false, client);
+
+        await restoredNotifier.login('mark@example.com', 'password');
+        expect(restoredNotifier.state.betaLocked?.fullName, 'Mark Prado');
+        expect(client.savedTokens, ['held-token']);
+
+        await restoredNotifier.login('mark@example.com', 'password');
+        expect(restoredNotifier.state.status, AuthStatus.authenticated);
+        expect(restoredNotifier.state.betaLocked, isNull);
+        expect(client.savedTokens, ['held-token', 'active-token']);
+      },
+    );
+
+    test(
+      'invalid stored token is cleared only after completion and profile fail',
+      () async {
+        final client = _FakeAuthSessionClient();
+        client.completionResult = () async =>
+            throw _dioFailure(403, {'message': 'Completion unavailable'});
+        client.profileResult = () async =>
+            throw _dioFailure(401, {'message': 'Unauthorized'});
+        final invalidNotifier = AuthNotifier(null, false, client);
+
+        await invalidNotifier.tryAutoLogin();
+
+        expect(client.completionCalls, 1);
+        expect(client.profileCalls, 1);
+        expect(client.clearTokenCalls, 1);
+        expect(invalidNotifier.state.status, AuthStatus.unauthenticated);
+        expect(invalidNotifier.state.betaLocked, isNull);
+      },
+    );
+
+    test(
+      'a delayed profile refresh cannot restore a logged-out user',
+      () async {
+        final profile = Completer<Map<String, dynamic>>();
+        final client = _FakeAuthSessionClient()
+          ..loginResults.add(() async => _customerLoginResponse())
+          ..profileResult = () => profile.future;
+        final sessionNotifier = AuthNotifier(null, false, client);
+        addTearDown(sessionNotifier.dispose);
+        await sessionNotifier.login('mark@example.com', 'password');
+
+        final refresh = sessionNotifier.refreshProfile();
+        await sessionNotifier.logout();
+        profile.complete(
+          _customerLoginResponse()['user'] as Map<String, dynamic>,
+        );
+        await refresh;
+
+        expect(sessionNotifier.state.status, AuthStatus.unauthenticated);
+        expect(sessionNotifier.state.user, isNull);
+      },
+    );
+
+    test('a delayed login cannot authenticate after logout', () async {
+      final response = Completer<Map<String, dynamic>>();
+      final client = _FakeAuthSessionClient()
+        ..loginResults.add(() => response.future);
+      final sessionNotifier = AuthNotifier(null, false, client);
+      addTearDown(sessionNotifier.dispose);
+
+      final login = sessionNotifier.login('mark@example.com', 'password');
+      await sessionNotifier.logout();
+      response.complete(_customerLoginResponse());
+      await login;
+
+      expect(sessionNotifier.state.status, AuthStatus.unauthenticated);
+      expect(sessionNotifier.state.user, isNull);
+      expect(client.savedTokens, isEmpty);
+    });
+
+    test('a delayed auto-login cannot authenticate after logout', () async {
+      final completion = Completer<Map<String, dynamic>>();
+      final client = _FakeAuthSessionClient();
+      client.completionResult = () => completion.future;
+      client.profileResult = () async =>
+          _customerLoginResponse()['user'] as Map<String, dynamic>;
+      final sessionNotifier = AuthNotifier(null, false, client);
+      addTearDown(sessionNotifier.dispose);
+
+      final autoLogin = sessionNotifier.tryAutoLogin();
+      await Future<void>.delayed(Duration.zero);
+      await sessionNotifier.logout();
+      completion.complete({'accountStatus': 'active'});
+      await autoLogin;
+
+      expect(sessionNotifier.state.status, AuthStatus.unauthenticated);
+      expect(sessionNotifier.state.user, isNull);
+      expect(client.profileCalls, 0);
+    });
+
+    test(
+      'logout revokes the authenticated device token before clearing auth',
+      () async {
+        final client = _FakeAuthSessionClient()
+          ..loginResults.add(() async => _customerLoginResponse());
+        final fcmClient = _FakeFcmSessionClient();
+        final sessionNotifier = AuthNotifier(null, false, client, fcmClient);
+        addTearDown(sessionNotifier.dispose);
+        await sessionNotifier.login('mark@example.com', 'password');
+
+        await sessionNotifier.logout();
+
+        expect(fcmClient.registerCalls, 1);
+        expect(fcmClient.revokeCalls, 1);
+        expect(client.clearTokenCalls, 1);
+        expect(sessionNotifier.state.status, AuthStatus.unauthenticated);
+      },
+    );
+
+    test('logout still clears auth when remote FCM revocation fails', () async {
+      final client = _FakeAuthSessionClient()
+        ..loginResults.add(() async => _customerLoginResponse());
+      final fcmClient = _FakeFcmSessionClient()
+        ..revokeError = StateError('offline');
+      final sessionNotifier = AuthNotifier(null, false, client, fcmClient);
+      addTearDown(sessionNotifier.dispose);
+      await sessionNotifier.login('mark@example.com', 'password');
+
+      await sessionNotifier.logout();
+
+      expect(fcmClient.revokeCalls, 1);
+      expect(fcmClient.invalidateCalls, 1);
+      expect(client.clearTokenCalls, 1);
+      expect(sessionNotifier.state.status, AuthStatus.unauthenticated);
+    });
+
+    test(
+      'failed token transfer invalidates previous-account push delivery',
+      () async {
+        final client = _FakeAuthSessionClient()
+          ..loginResults.add(() async => _customerLoginResponse());
+        final fcmClient = _FakeFcmSessionClient()
+          ..registerError = StateError('offline');
+        final sessionNotifier = AuthNotifier(null, false, client, fcmClient);
+        addTearDown(sessionNotifier.dispose);
+
+        await sessionNotifier.login('ven@example.com', 'password');
+
+        expect(sessionNotifier.state.status, AuthStatus.authenticated);
+        expect(fcmClient.registerCalls, 1);
+        expect(fcmClient.invalidateCalls, 1);
+      },
+    );
+
+    test(
+      'login fails closed when transfer and invalidation both fail',
+      () async {
+        final client = _FakeAuthSessionClient()
+          ..loginResults.add(() async => _customerLoginResponse());
+        final fcmClient = _FakeFcmSessionClient()
+          ..registerError = StateError('registration offline')
+          ..invalidateError = StateError('deletion offline');
+        final sessionNotifier = AuthNotifier(null, false, client, fcmClient);
+        addTearDown(sessionNotifier.dispose);
+
+        await sessionNotifier.login('ven@example.com', 'password');
+
+        expect(sessionNotifier.state.status, AuthStatus.unauthenticated);
+        expect(sessionNotifier.state.errorMessage, isNotNull);
+        expect(client.clearTokenCalls, 1);
+      },
+    );
+
+    test('real login in a dev-auth build still revokes on logout', () async {
+      final client = _FakeAuthSessionClient()
+        ..loginResults.add(() async => _customerLoginResponse());
+      final fcmClient = _FakeFcmSessionClient();
+      final sessionNotifier = AuthNotifier(null, true, client, fcmClient);
+      addTearDown(sessionNotifier.dispose);
+      await sessionNotifier.login('mark@example.com', 'password');
+
+      await sessionNotifier.logout();
+
+      expect(fcmClient.revokeCalls, 1);
+      expect(client.clearTokenCalls, 1);
+    });
+
+    test('logout revokes a token from a beta-held session', () async {
+      final client = _FakeAuthSessionClient()
+        ..completionResult = () async => _heldCompletionResponse();
+      final fcmClient = _FakeFcmSessionClient();
+      final sessionNotifier = AuthNotifier(null, false, client, fcmClient);
+      addTearDown(sessionNotifier.dispose);
+      await sessionNotifier.tryAutoLogin();
+      expect(sessionNotifier.state.betaLocked, isNotNull);
+
+      await sessionNotifier.logout();
+
+      expect(fcmClient.revokeCalls, 1);
+      expect(client.clearTokenCalls, 1);
+    });
+
+    test(
+      'invalid auto-login revokes device delivery before clearing auth',
+      () async {
+        final client = _FakeAuthSessionClient()
+          ..completionResult = () async {
+            throw _dioFailure(403, {'message': 'Completion unavailable'});
+          }
+          ..profileResult = () async {
+            throw _dioFailure(401, {'message': 'Unauthorized'});
+          };
+        final fcmClient = _FakeFcmSessionClient();
+        final sessionNotifier = AuthNotifier(null, false, client, fcmClient);
+        addTearDown(sessionNotifier.dispose);
+
+        await sessionNotifier.tryAutoLogin();
+
+        expect(fcmClient.revokeCalls, 1);
+        expect(client.clearTokenCalls, 1);
+        expect(sessionNotifier.state.status, AuthStatus.unauthenticated);
+      },
+    );
+
+    test(
+      'delayed registration is compensated before logout completes',
+      () async {
+        final client = _FakeAuthSessionClient()
+          ..loginResults.add(() async => _customerLoginResponse());
+        final registerStarted = Completer<void>();
+        final registerBlock = Completer<void>();
+        final fcmClient = _FakeFcmSessionClient()
+          ..registerStarted = registerStarted
+          ..registerBlock = registerBlock;
+        final sessionNotifier = AuthNotifier(null, false, client, fcmClient);
+        addTearDown(sessionNotifier.dispose);
+
+        final login = sessionNotifier.login('mark@example.com', 'password');
+        await registerStarted.future;
+        final logout = sessionNotifier.logout();
+        registerBlock.complete();
+        await Future.wait([login, logout]);
+
+        expect(sessionNotifier.state.status, AuthStatus.unauthenticated);
+        expect(fcmClient.operations.last, 'revoke');
+        expect(client.clearTokenCalls, 1);
+      },
+    );
+
+    test(
+      'older registration cannot overwrite a newer account session',
+      () async {
+        final client = _FakeAuthSessionClient()
+          ..loginResults.addAll([
+            () async => _customerLoginResponse(),
+            () async => _customerLoginResponse(
+              token: 'ven-token',
+              id: 12,
+              email: 'ven@example.com',
+            ),
+          ]);
+        final firstRegisterStarted = Completer<void>();
+        final firstRegisterBlock = Completer<void>();
+        final fcmClient = _FakeFcmSessionClient()
+          ..registerStarted = firstRegisterStarted
+          ..registerBlock = firstRegisterBlock;
+        final sessionNotifier = AuthNotifier(null, false, client, fcmClient);
+        addTearDown(sessionNotifier.dispose);
+
+        final markLogin = sessionNotifier.login('mark@example.com', 'password');
+        await firstRegisterStarted.future;
+        final venLogin = sessionNotifier.login('ven@example.com', 'password');
+        firstRegisterBlock.complete();
+        await Future.wait([markLogin, venLogin]);
+
+        expect(sessionNotifier.state.user?.email, 'ven@example.com');
+        expect(fcmClient.operations, [
+          'register-start:1',
+          'register-complete:1',
+          'revoke',
+          'register-start:2',
+          'register-complete:2',
+        ]);
+      },
+    );
+
+    test(
+      'a refreshed FCM token is registered for the current session',
+      () async {
+        final client = _FakeAuthSessionClient()
+          ..loginResults.add(() async => _customerLoginResponse());
+        final fcmClient = _FakeFcmSessionClient();
+        final sessionNotifier = AuthNotifier(null, false, client, fcmClient);
+        addTearDown(sessionNotifier.dispose);
+        await sessionNotifier.login('mark@example.com', 'password');
+
+        NotificationService.emitTokenRefreshForTest('rotated-token');
+        await Future<void>.delayed(Duration.zero);
+        await Future<void>.delayed(Duration.zero);
+
+        expect(fcmClient.registerCalls, 2);
+        expect(fcmClient.operations.last, 'register-complete:2');
+      },
+    );
   });
 
   group('AuthState', () {

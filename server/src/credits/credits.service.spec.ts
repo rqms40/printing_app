@@ -1,6 +1,11 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { EntityManager, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  getMetadataArgsStorage,
+  Repository,
+} from 'typeorm';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { CreditsService } from './credits.service';
 import {
@@ -21,6 +26,7 @@ describe('CreditsService', () => {
   let settingsRepo: jest.Mocked<Partial<Repository<CreditSettings>>>;
   let usersService: jest.Mocked<Partial<UsersService>>;
   let notificationsService: jest.Mocked<Partial<NotificationsService>>;
+  let dataSource: { transaction: jest.Mock };
 
   const mockUser = { id: 1, email: 'user@gridgo.ph', credits: 1000 } as User;
   const mockSettings = { id: 1, conversionRate: 1.0 } as CreditSettings;
@@ -54,6 +60,9 @@ describe('CreditsService', () => {
       createForAllAdmins: jest.fn().mockResolvedValue(undefined),
       triggerCreditsUpdate: jest.fn().mockResolvedValue(undefined),
     };
+    dataSource = {
+      transaction: jest.fn(),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -73,6 +82,7 @@ describe('CreditsService', () => {
             notifyUserCreditsUpdate: jest.fn(),
           },
         },
+        { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
 
@@ -159,19 +169,36 @@ describe('CreditsService', () => {
         status: CreditTransactionStatus.APPROVED,
         referenceId: 'ORD-10001',
       } as CreditTransaction;
-      txRepo.create.mockReturnValue(refundTx);
-      txRepo.save.mockResolvedValue(refundTx);
+      const lockedUser = { ...mockUser } as User;
+      const userRepo = {
+        findOne: jest.fn().mockResolvedValue(lockedUser),
+        save: jest.fn().mockImplementation(async (user: User) => user),
+      };
+      const managerTxRepo = {
+        find: jest.fn().mockResolvedValue([]),
+        findOne: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockReturnValue(refundTx),
+        save: jest.fn().mockResolvedValue(refundTx),
+      };
+      dataSource.transaction.mockImplementation(
+        async (work: (manager: EntityManager) => Promise<unknown>) => {
+          return work({
+            getRepository: (entity: unknown) =>
+              entity === User ? userRepo : managerTxRepo,
+          } as unknown as EntityManager);
+        },
+      );
 
       await service.refundCredits(1, 250, 'ORD-10001');
 
-      expect(usersService.updateProfile).toHaveBeenCalledWith(1, {
-        credits: 1250,
-      });
+      expect(userRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ credits: 1250 }),
+      );
       expect(notificationsService.triggerCreditsUpdate).toHaveBeenCalledWith(
         1,
         1250,
       );
-      expect(txRepo.create).toHaveBeenCalledWith(
+      expect(managerTxRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 1,
           type: CreditTransactionType.TOP_UP,
@@ -180,6 +207,266 @@ describe('CreditsService', () => {
           referenceId: 'ORD-10001',
         }),
       );
+    });
+
+    it('locks and refunds through a supplied transaction manager', async () => {
+      const lockedUser = { ...mockUser, credits: 100 } as User;
+      const userRepo = {
+        findOne: jest.fn().mockResolvedValue(lockedUser),
+        save: jest.fn().mockImplementation(async (user: User) => user),
+      };
+      const managerTxRepo = {
+        find: jest.fn().mockResolvedValue([]),
+        findOne: jest.fn().mockResolvedValue(null),
+        create: jest.fn(
+          (value: Partial<CreditTransaction>) => value as CreditTransaction,
+        ),
+        save: jest
+          .fn()
+          .mockImplementation(async (transaction: CreditTransaction) => ({
+            id: 12,
+            ...transaction,
+          })),
+      };
+      const manager = {
+        getRepository: (entity: unknown) =>
+          entity === User ? userRepo : managerTxRepo,
+      } as unknown as EntityManager;
+
+      await service.refundCredits(1, 85, 'BATCH-REFUND:BATCH-10001', manager);
+
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(userRepo.findOne).toHaveBeenCalledWith({
+        where: { id: 1 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      expect(userRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ credits: 185 }),
+      );
+      expect(managerTxRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 1,
+          amountCredits: 85,
+          referenceId: 'BATCH-REFUND:BATCH-10001',
+        }),
+      );
+    });
+
+    it('returns the existing matching refund without adding balance again', async () => {
+      const existing = {
+        id: 12,
+        userId: 1,
+        type: CreditTransactionType.TOP_UP,
+        amountCredits: 85,
+        status: CreditTransactionStatus.APPROVED,
+        referenceId: 'BATCH-REFUND:BATCH-10001',
+      } as CreditTransaction;
+      const userRepo = {
+        findOne: jest.fn().mockResolvedValue({ ...mockUser, credits: 185 }),
+        save: jest.fn(),
+      };
+      const managerTxRepo = {
+        find: jest.fn().mockResolvedValue([existing]),
+        findOne: jest.fn().mockResolvedValue(existing),
+        create: jest.fn(),
+        save: jest.fn(),
+      };
+      const manager = {
+        getRepository: (entity: unknown) =>
+          entity === User ? userRepo : managerTxRepo,
+      } as unknown as EntityManager;
+
+      await expect(
+        service.refundCredits(1, 85, 'BATCH-REFUND:BATCH-10001', manager),
+      ).resolves.toEqual({
+        transaction: existing,
+        userId: 1,
+        balance: 185,
+        balanceChanged: false,
+      });
+
+      expect(userRepo.save).not.toHaveBeenCalled();
+      expect(managerTxRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('defers a manager-aware balance event until the owner publishes after commit', async () => {
+      const lockedUser = { ...mockUser, credits: 100 } as User;
+      const refundTx = {
+        id: 13,
+        userId: 1,
+        type: CreditTransactionType.TOP_UP,
+        amountCredits: 25,
+        status: CreditTransactionStatus.APPROVED,
+        referenceId: 'ORDER-REFUND:ORD-10001',
+      } as CreditTransaction;
+      const userRepo = {
+        findOne: jest.fn().mockResolvedValue(lockedUser),
+        save: jest.fn().mockImplementation(async (user: User) => user),
+      };
+      const managerTxRepo = {
+        find: jest.fn().mockResolvedValue([]),
+        findOne: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockReturnValue(refundTx),
+        save: jest.fn().mockResolvedValue(refundTx),
+      };
+      const manager = {
+        getRepository: (entity: unknown) =>
+          entity === User ? userRepo : managerTxRepo,
+      } as unknown as EntityManager;
+
+      const mutation = await service.refundCredits(
+        1,
+        25,
+        'ORDER-REFUND:ORD-10001',
+        manager,
+      );
+
+      expect(notificationsService.triggerCreditsUpdate).not.toHaveBeenCalled();
+      (
+        service as CreditsService & {
+          publishCreditMutation(result: unknown): void;
+        }
+      ).publishCreditMutation(mutation);
+      expect(notificationsService.triggerCreditsUpdate).toHaveBeenCalledWith(
+        1,
+        125,
+      );
+    });
+
+    it('publishes a standalone balance event only after its transaction commits', async () => {
+      const events: string[] = [];
+      const lockedUser = { ...mockUser, credits: 100 } as User;
+      const refundTx = {
+        id: 14,
+        userId: 1,
+        type: CreditTransactionType.TOP_UP,
+        amountCredits: 25,
+        status: CreditTransactionStatus.APPROVED,
+        referenceId: 'ORDER-REFUND:ORD-10002',
+      } as CreditTransaction;
+      const userRepo = {
+        findOne: jest.fn().mockResolvedValue(lockedUser),
+        save: jest.fn().mockImplementation(async (user: User) => user),
+      };
+      const managerTxRepo = {
+        find: jest.fn().mockResolvedValue([]),
+        findOne: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockReturnValue(refundTx),
+        save: jest.fn().mockResolvedValue(refundTx),
+      };
+      dataSource.transaction.mockImplementation(async (work) => {
+        events.push('transaction-start');
+        const result: unknown = await work({
+          getRepository: (entity: unknown) =>
+            entity === User ? userRepo : managerTxRepo,
+        } as unknown as EntityManager);
+        events.push('transaction-commit');
+        return result;
+      });
+      notificationsService.triggerCreditsUpdate?.mockImplementation(() => {
+        events.push('balance-event');
+      });
+
+      await service.refundCredits(1, 25, 'ORDER-REFUND:ORD-10002');
+
+      expect(events).toEqual([
+        'transaction-start',
+        'transaction-commit',
+        'balance-event',
+      ]);
+    });
+
+    it.each([
+      ['user', { userId: 2 }],
+      ['type', { type: CreditTransactionType.DEDUCTION }],
+      ['status', { status: CreditTransactionStatus.REJECTED }],
+      ['purchased top-up', { amountPhp: 25 }],
+    ])(
+      'rejects a mismatched legacy refund alias %s instead of crediting again',
+      async (_label, mismatch) => {
+        const lockedUser = { ...mockUser, credits: 100 } as User;
+        const mismatched = {
+          id: 15,
+          userId: 1,
+          type: CreditTransactionType.TOP_UP,
+          amountCredits: 25,
+          status: CreditTransactionStatus.APPROVED,
+          referenceId: 'ORD-10003',
+          ...mismatch,
+        } as CreditTransaction;
+        const userRepo = {
+          findOne: jest.fn().mockResolvedValue(lockedUser),
+          save: jest.fn(),
+        };
+        const managerTxRepo = {
+          find: jest.fn().mockResolvedValue([mismatched]),
+          findOne: jest.fn().mockResolvedValue(null),
+          create: jest.fn(),
+          save: jest.fn(),
+        };
+        const manager = {
+          getRepository: (entity: unknown) =>
+            entity === User ? userRepo : managerTxRepo,
+        } as unknown as EntityManager;
+
+        await expect(
+          (
+            service.refundCredits as unknown as (
+              userId: number,
+              amount: number,
+              reference: string,
+              manager: EntityManager,
+              aliases: string[],
+            ) => Promise<unknown>
+          )(1, 25, 'ORDER-REFUND:ORD-10003', manager, ['ORD-10003']),
+        ).rejects.toThrow('Credit refund ledger reference mismatch');
+        expect(userRepo.save).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects legacy refund totals above the authoritative charge', async () => {
+      const lockedUser = { ...mockUser, credits: 190 } as User;
+      const existing = ['ORD-10004', 'ORD-10005'].map(
+        (referenceId, index) =>
+          ({
+            id: 16 + index,
+            userId: 1,
+            type: CreditTransactionType.TOP_UP,
+            amountCredits: 45,
+            status: CreditTransactionStatus.APPROVED,
+            referenceId,
+          }) as CreditTransaction,
+      );
+      const userRepo = {
+        findOne: jest.fn().mockResolvedValue(lockedUser),
+        save: jest.fn(),
+      };
+      const managerTxRepo = {
+        find: jest.fn().mockResolvedValue(existing),
+        findOne: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+        save: jest.fn(),
+      };
+      const manager = {
+        getRepository: (entity: unknown) =>
+          entity === User ? userRepo : managerTxRepo,
+      } as unknown as EntityManager;
+
+      await expect(
+        (
+          service.refundCredits as unknown as (
+            userId: number,
+            amount: number,
+            reference: string,
+            manager: EntityManager,
+            aliases: string[],
+          ) => Promise<unknown>
+        )(1, 85, 'BATCH-REFUND:BATCH-10001', manager, [
+          'ORD-10004',
+          'ORD-10005',
+        ]),
+      ).rejects.toThrow('Credit refund ledger reference mismatch');
+      expect(userRepo.save).not.toHaveBeenCalled();
     });
   });
 
@@ -215,6 +502,235 @@ describe('CreditsService', () => {
       );
       expect(managerTxRepo.save).toHaveBeenCalled();
       expect(usersService.updateProfile).not.toHaveBeenCalled();
+      expect(notificationsService.triggerCreditsUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('grantBetaEnrollmentCredits', () => {
+    it('records an approved grant and increments the balance in one transaction', async () => {
+      const managerTxRepo = {
+        findOne: jest.fn().mockResolvedValue(null),
+        insert: jest.fn().mockResolvedValue({ identifiers: [{ id: 10 }] }),
+      };
+      const userRepo = {
+        findOne: jest.fn().mockResolvedValue({
+          id: 9,
+          credits: 0,
+          betaCreditsGranted: false,
+        }),
+        increment: jest.fn().mockResolvedValue({ affected: 1 }),
+        update: jest.fn().mockResolvedValue({ affected: 1 }),
+      };
+      dataSource.transaction.mockImplementation(
+        async (work: (manager: EntityManager) => Promise<unknown>) => {
+          await work({
+            getRepository: (entity: unknown) =>
+              entity === CreditTransaction ? managerTxRepo : userRepo,
+          } as unknown as EntityManager);
+        },
+      );
+
+      await (
+        service as CreditsService & {
+          grantBetaEnrollmentCredits(
+            userId: number,
+            amount: number,
+          ): Promise<void>;
+        }
+      ).grantBetaEnrollmentCredits(9, 100);
+
+      expect(managerTxRepo.insert).toHaveBeenCalledWith({
+        userId: 9,
+        type: CreditTransactionType.TOP_UP,
+        amountCredits: 100,
+        status: CreditTransactionStatus.APPROVED,
+        referenceId: 'BETA-ENROLLMENT:9',
+      });
+      expect(userRepo.findOne).toHaveBeenCalledWith({
+        where: { id: 9 },
+        lock: { mode: 'pessimistic_write' },
+      });
+      expect(userRepo.increment).toHaveBeenCalledWith(
+        { id: 9 },
+        'credits',
+        100,
+      );
+      expect(userRepo.update).toHaveBeenCalledWith(9, {
+        betaCreditsGranted: true,
+      });
+    });
+
+    it('repairs a false grant flag without incrementing when the enrollment ledger already exists', async () => {
+      const managerTxRepo = {
+        findOne: jest.fn().mockResolvedValue({
+          id: 10,
+          userId: 9,
+          type: CreditTransactionType.TOP_UP,
+          amountCredits: 100,
+          status: CreditTransactionStatus.APPROVED,
+          referenceId: 'BETA-ENROLLMENT:9',
+        }),
+        insert: jest.fn(),
+      };
+      const userRepo = {
+        findOne: jest.fn().mockResolvedValue({
+          id: 9,
+          credits: 100,
+          betaCreditsGranted: false,
+        }),
+        increment: jest.fn(),
+        update: jest.fn(),
+      };
+      dataSource.transaction.mockImplementation(
+        async (work: (manager: EntityManager) => Promise<unknown>) => {
+          await work({
+            getRepository: (entity: unknown) =>
+              entity === CreditTransaction ? managerTxRepo : userRepo,
+          } as unknown as EntityManager);
+        },
+      );
+
+      await (
+        service as CreditsService & {
+          grantBetaEnrollmentCredits(
+            userId: number,
+            amount: number,
+          ): Promise<void>;
+        }
+      ).grantBetaEnrollmentCredits(9, 100);
+
+      expect(managerTxRepo.insert).not.toHaveBeenCalled();
+      expect(userRepo.increment).not.toHaveBeenCalled();
+      expect(userRepo.update).toHaveBeenCalledWith(9, {
+        betaCreditsGranted: true,
+      });
+    });
+
+    it('backfills a legacy granted user ledger without changing the balance', async () => {
+      const managerTxRepo = {
+        findOne: jest.fn().mockResolvedValue(null),
+        insert: jest.fn().mockResolvedValue({ identifiers: [{ id: 11 }] }),
+      };
+      const userRepo = {
+        findOne: jest.fn().mockResolvedValue({
+          id: 9,
+          credits: 100,
+          betaCreditsGranted: true,
+        }),
+        increment: jest.fn(),
+        update: jest.fn(),
+      };
+      const manager = {
+        getRepository: (entity: unknown) =>
+          entity === CreditTransaction ? managerTxRepo : userRepo,
+      } as unknown as EntityManager;
+
+      await service.grantBetaEnrollmentCredits(9, 100, manager);
+
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(managerTxRepo.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 9,
+          amountCredits: 100,
+          referenceId: 'BETA-ENROLLMENT:9',
+        }),
+      );
+      expect(userRepo.increment).not.toHaveBeenCalled();
+      expect(userRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a beta enrollment reference owned by another user', async () => {
+      const managerTxRepo = {
+        findOne: jest.fn().mockResolvedValue({
+          id: 10,
+          userId: 8,
+          type: CreditTransactionType.TOP_UP,
+          amountCredits: 100,
+          status: CreditTransactionStatus.APPROVED,
+          referenceId: 'BETA-ENROLLMENT:9',
+        }),
+      };
+      const userRepo = {
+        findOne: jest.fn().mockResolvedValue({
+          id: 9,
+          credits: 0,
+          betaCreditsGranted: false,
+        }),
+      };
+      const manager = {
+        getRepository: (entity: unknown) =>
+          entity === CreditTransaction ? managerTxRepo : userRepo,
+      } as unknown as EntityManager;
+
+      await expect(
+        service.grantBetaEnrollmentCredits(9, 100, manager),
+      ).rejects.toThrow('Beta enrollment ledger reference mismatch');
+    });
+
+    it('treats a concurrent unique-key loser as an idempotent success', async () => {
+      dataSource.transaction
+        .mockRejectedValueOnce({
+          driverError: {
+            code: '23505',
+            constraint: 'uq_credit_transactions_beta_enrollment_reference',
+          },
+        })
+        .mockResolvedValueOnce(undefined);
+
+      await expect(
+        service.grantBetaEnrollmentCredits(9, 100),
+      ).resolves.toBeUndefined();
+    });
+
+    it('does not hide an unrelated unique-constraint failure', async () => {
+      dataSource.transaction.mockRejectedValue({
+        driverError: { code: '23505', constraint: 'some_other_constraint' },
+      });
+
+      await expect(
+        service.grantBetaEnrollmentCredits(9, 100),
+      ).rejects.toMatchObject({
+        driverError: {
+          code: '23505',
+          constraint: 'some_other_constraint',
+        },
+      });
+    });
+
+    it('does not hide non-unique transaction failures', async () => {
+      dataSource.transaction.mockRejectedValue(new Error('database offline'));
+
+      await expect(service.grantBetaEnrollmentCredits(9, 100)).rejects.toThrow(
+        'database offline',
+      );
+    });
+  });
+
+  it('declares beta enrollment references unique without constraining other references', () => {
+    const index = getMetadataArgsStorage().indices.find(
+      (candidate) =>
+        candidate.target === CreditTransaction &&
+        candidate.name === 'uq_credit_transactions_beta_enrollment_reference',
+    );
+
+    expect(index).toMatchObject({
+      unique: true,
+      where: `"reference_id" LIKE 'BETA-ENROLLMENT:%'`,
+    });
+  });
+
+  it('declares stable order and batch refund references unique without constraining other references', () => {
+    const index = getMetadataArgsStorage().indices.find(
+      (candidate) =>
+        candidate.target === CreditTransaction &&
+        candidate.name === 'uq_credit_transactions_refund_reference',
+    );
+
+    expect(index).toMatchObject({
+      unique: true,
+      where:
+        `"reference_id" LIKE 'ORDER-REFUND:%' OR ` +
+        `"reference_id" LIKE 'BATCH-REFUND:%'`,
     });
   });
 });

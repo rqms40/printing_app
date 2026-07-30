@@ -8,6 +8,7 @@ describe('UsersController — storage settings', () => {
   const mockService = {
     findById: jest.fn(),
     updateFcmToken: jest.fn(),
+    clearFcmToken: jest.fn(),
     updateProfile: jest.fn(),
     getStorageSettings: jest.fn(),
     updateStorageSettings: jest.fn(),
@@ -60,5 +61,12 @@ describe('UsersController — storage settings', () => {
       holds: [{ requirementId: 123, orderId: 55 }],
     });
     expect(mockTamSurveysService.getAccountState).toHaveBeenCalledWith(42);
+  });
+
+  it('DELETE /users/fcm-token revokes only this device token', async () => {
+    await expect(
+      controller.clearFcmToken(mockReq, { token: 'device-token' }),
+    ).resolves.toEqual({ success: true });
+    expect(mockService.clearFcmToken).toHaveBeenCalledWith(42, 'device-token');
   });
 });

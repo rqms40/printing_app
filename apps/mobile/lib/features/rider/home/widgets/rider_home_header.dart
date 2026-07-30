@@ -65,7 +65,7 @@ class RiderHomeHeader extends StatelessWidget {
           ),
         ),
         GestureDetector(
-          onTap: () => context.go('/rider/alerts'),
+          onTap: () => context.go('/rider/notifications'),
           child: Container(
             width: 38,
             height: 38,

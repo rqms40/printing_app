@@ -88,6 +88,9 @@ class ApiClient {
   Future<Response<T>> patch<T>(String path, {dynamic data, Options? options}) =>
       dio.patch<T>(path, data: data, options: options);
 
-  Future<Response<T>> delete<T>(String path, {Options? options}) =>
-      dio.delete<T>(path, options: options);
+  Future<Response<T>> delete<T>(
+    String path, {
+    dynamic data,
+    Options? options,
+  }) => dio.delete<T>(path, data: data, options: options);
 }

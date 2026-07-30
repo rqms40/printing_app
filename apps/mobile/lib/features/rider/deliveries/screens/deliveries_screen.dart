@@ -18,6 +18,8 @@ import 'package:printing_app/shared/widgets/empty_state.dart';
 import 'package:printing_app/shared/widgets/pill_tab_bar.dart';
 import 'package:printing_app/shared/widgets/skeleton_screens.dart';
 import 'package:printing_app/utils/formatters.dart';
+import 'package:printing_app/features/rider/shared/widgets/rider_stale_route_banner.dart';
+import 'package:printing_app/features/rider/shared/widgets/rider_decline_dialog.dart';
 
 /// Rider delivery queue — new, in-progress, and completed assignments.
 class DeliveriesScreen extends ConsumerStatefulWidget {
@@ -61,11 +63,12 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             RiderPageHeader(
-                  title: 'Orders',
+                  title: 'Deliveries',
                   subtitle: profile.isAvailable
                       ? 'You are online and ready for routes'
                       : 'Go online to receive new assignments',
                   trailing: IconButton(
+                    tooltip: 'Refresh assignments',
                     onPressed: state.isRefreshing
                         ? null
                         : () => notifier.refreshAssignments(),
@@ -78,16 +81,24 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
                               color: colors.accent,
                             ),
                           )
-                        : HugeIcon(
-                            icon: HugeIcons.strokeRoundedRefresh,
-                            color: colors.onBackground,
-                            size: 22,
+                        : ExcludeSemantics(
+                            child: HugeIcon(
+                              icon: HugeIcons.strokeRoundedRefresh,
+                              color: colors.onBackground,
+                              size: 22,
+                            ),
                           ),
                   ),
                 )
                 .animate()
                 .fadeIn(duration: 350.ms)
                 .slideY(begin: 0.02, duration: 350.ms),
+
+            if (state.dataStale)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                child: RiderStaleRouteBanner(),
+              ),
 
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
@@ -222,8 +233,17 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen> {
                                             },
                                             onAccept: () => notifier
                                                 .acceptAssignment(view.id),
-                                            onDecline: () => notifier
-                                                .declineAssignment(view.id),
+                                            onDecline: () async {
+                                              final reason =
+                                                  await showRiderDeclineDialog(
+                                                    context,
+                                                  );
+                                              if (reason == null) return;
+                                              await notifier.declineAssignment(
+                                                view.id,
+                                                reason: reason,
+                                              );
+                                            },
                                           )
                                           .animate()
                                           .fadeIn(

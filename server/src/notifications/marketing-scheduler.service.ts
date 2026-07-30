@@ -1,10 +1,17 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { MarketingNotification } from './entities/marketing-notification.entity';
 import { FirebaseService } from '../firebase/firebase.service';
 import { UsersService } from '../users/users.service';
+
+export interface MarketingSendResult {
+  sentTo: number;
+  failed: number;
+  fcmAvailable: boolean;
+  tokens: number;
+}
 
 @Injectable()
 export class MarketingSchedulerService {
@@ -28,9 +35,13 @@ export class MarketingSchedulerService {
 
     for (const notif of activeNotifications) {
       if (this.shouldSend(notif, now)) {
-        await this.sendNotification(notif);
-        notif.lastSentAt = now;
-        await this.marketingNotifRepo.save(notif);
+        try {
+          await this.sendNotification(notif);
+        } catch (err) {
+          this.logger.error(
+            `Failed to send marketing notification ${notif.id}: ${err}`,
+          );
+        }
       }
     }
   }
@@ -76,35 +87,65 @@ export class MarketingSchedulerService {
     }
   }
 
-  private async sendNotification(notif: MarketingNotification) {
+  async sendNotificationById(id: number): Promise<MarketingSendResult> {
+    const notif = await this.marketingNotifRepo.findOne({ where: { id } });
+    if (!notif) throw new NotFoundException('Marketing notification not found');
+
+    return this.sendNotification(notif);
+  }
+
+  async sendNotification(
+    notif: MarketingNotification,
+  ): Promise<MarketingSendResult> {
     this.logger.log(`Sending marketing notification: ${notif.header}`);
 
-    // Fetch all users with device tokens
     const users = await this.usersService.findAll();
     const tokens = users
-      .map((u) => u.fcmToken)
+      .map((user) => user.fcmToken)
       .filter(
         (token): token is string =>
-          !!token && typeof token === 'string' && token.trim() !== '',
+          typeof token === 'string' && token.trim() !== '',
       );
 
     if (tokens.length === 0) {
       this.logger.warn('No FCM tokens found for any user. Skipping push.');
-      return;
+      return {
+        sentTo: 0,
+        failed: 0,
+        fcmAvailable: this.firebaseService.isAvailable,
+        tokens: 0,
+      };
     }
 
-    try {
-      await this.firebaseService.sendToMultiple(
-        tokens,
-        notif.header,
-        notif.body,
-        { type: 'marketing' },
-      );
-      this.logger.log(
-        `Successfully sent marketing push to ${tokens.length} devices.`,
-      );
-    } catch (err) {
-      this.logger.error(`Failed to send marketing push: ${err}`);
+    const imageUrl = notif.imageUrl ?? undefined;
+    const result = await this.firebaseService.sendToMultiple(
+      tokens,
+      notif.header,
+      notif.body,
+      {
+        type: 'marketing',
+        ...(imageUrl === undefined ? {} : { imageUrl }),
+      },
+      imageUrl,
+    );
+
+    if (!result) {
+      return {
+        sentTo: 0,
+        failed: 0,
+        fcmAvailable: false,
+        tokens: tokens.length,
+      };
     }
+
+    notif.lastSentAt = new Date();
+    await this.marketingNotifRepo.save(notif);
+
+    return {
+      sentTo: result.successCount,
+      failed: result.failureCount,
+      fcmAvailable: true,
+      tokens: tokens.length,
+    };
   }
 }

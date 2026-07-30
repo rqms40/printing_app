@@ -18,6 +18,7 @@ import {
   BETA_ORDER_LIMIT_REACHED,
 } from './dto/beta-order-limit.error';
 import { Order, OrderStatus } from './entities/order.entity';
+import { OrderStatusHistory } from './entities/order-status-history.entity';
 import { BatchOrder } from './entities/batch-order.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { OrderItemSpecValue } from './entities/order-item-spec-value.entity';
@@ -29,7 +30,11 @@ import {
 import { OrdersGateway } from './orders.gateway';
 import { FirebaseService } from '../firebase/firebase.service';
 import { UsersService } from '../users/users.service';
-import { CreditsService } from '../credits/credits.service';
+import { User, UserRole } from '../users/entities/user.entity';
+import {
+  CreditMutationResult,
+  CreditsService,
+} from '../credits/credits.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { FilesService } from '../files/files.service';
 import { FileMetadata } from '../files/entities/file-metadata.entity';
@@ -51,12 +56,18 @@ import {
 } from '../delivery-slots/exceptions';
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
 import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
+import { TamSurveyRequirement } from '../tam-surveys/entities/tam-survey-requirement.entity';
 import { CatalogPricingService } from '../products/catalog-pricing.service';
 import {
-  orderDeliveryAssignmentsByRoute,
-  SHOP_LOCATION,
-  toGeoPoint,
-} from '../riders/delivery-route';
+  DispatchPlan,
+  DispatchPlanStatus,
+} from '../riders/entities/dispatch-plan.entity';
+import { DispatchStopStatus } from '../riders/entities/dispatch-plan-stop.entity';
+import { BetaModeSettings } from '../beta-mode/entities/beta-mode-settings.entity';
+import {
+  assertOrderStatusTransition,
+  parseOrderStatus,
+} from './order-status-transition';
 
 // Slot definitions live in operator-local time (Asia/Manila, UTC+8). The API
 // server may run in UTC, so we never use server-local Date#getHours/setHours
@@ -65,6 +76,13 @@ const PH_OFFSET_MINUTES = 8 * 60;
 const AUTO_SLOT_SEARCH_DAYS = 14;
 const STANDARD_DELIVERY_FEE = 25;
 const SERVICE_FEE = 2;
+const RIDER_ASSIGNMENT_WORKFLOW_STATUSES = new Set<OrderStatus>([
+  OrderStatus.RIDER_ASSIGNED,
+  OrderStatus.PICKED_UP,
+  OrderStatus.ON_THE_WAY,
+  OrderStatus.ARRIVED_AT_DESTINATION,
+  OrderStatus.DELIVERED,
+]);
 
 function phMinutesSinceMidnight(date: Date): number {
   const utcMin = date.getUTCHours() * 60 + date.getUTCMinutes();
@@ -122,7 +140,7 @@ type SlotCandidate = {
 };
 
 type AssignedSlot = SlotCandidate & {
-  bookingId: number;
+  bookingId?: number;
 };
 
 type AssignedRiderContact = {
@@ -151,6 +169,54 @@ type CreateBatchResult = {
   orders: Order[];
   assignedSlot?: AssignedSlot;
 };
+
+type ChargeComponent = number | string | null | undefined;
+
+export type ChargeComponents = {
+  subtotal?: ChargeComponent;
+  totalPrice?: ChargeComponent;
+  deliveryFee?: ChargeComponent;
+  priorityFee?: ChargeComponent;
+  extraDestinationFee?: ChargeComponent;
+};
+
+export type OrderStatusChangeContext = {
+  actorUserId: number;
+  reason: string;
+};
+
+export type OrderCompletionTransactionResult = {
+  previous: Order;
+  surveyRequirement: TamSurveyRequirement | null;
+};
+
+function numericChargeComponent(
+  name: keyof ChargeComponents,
+  value: ChargeComponent,
+): number {
+  if (value == null) return 0;
+  if (typeof value === 'string' && value.trim() === '') {
+    throw new BadRequestException(`Invalid ${name} charge component`);
+  }
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new BadRequestException(`Invalid ${name} charge component`);
+  }
+  return amount;
+}
+
+export function calculateChargeTotal(components: ChargeComponents): number {
+  const subtotalKey = components.subtotal == null ? 'totalPrice' : 'subtotal';
+  return (
+    numericChargeComponent(subtotalKey, components[subtotalKey]) +
+    numericChargeComponent('deliveryFee', components.deliveryFee) +
+    numericChargeComponent('priorityFee', components.priorityFee) +
+    numericChargeComponent(
+      'extraDestinationFee',
+      components.extraDestinationFee,
+    )
+  );
+}
 
 @Injectable()
 export class OrdersService {
@@ -192,6 +258,8 @@ export class OrdersService {
     private catalogPricingService: CatalogPricingService,
     @InjectRepository(FileMetadata)
     private readonly fileMetadataRepo: Repository<FileMetadata>,
+    @InjectRepository(DispatchPlan)
+    private readonly dispatchPlanRepo: Repository<DispatchPlan>,
   ) {}
 
   async findByUser(userId: number): Promise<Order[]> {
@@ -217,9 +285,34 @@ export class OrdersService {
     const orderIds = orders.map((order) => order.id).filter(Boolean);
     if (orderIds.length === 0) return orders;
 
+    const batchOrderIds = [
+      ...new Set(
+        orders
+          .map((order) => order.batchOrderId)
+          .filter((id): id is number => id != null),
+      ),
+    ];
+    const slotBookings =
+      batchOrderIds.length === 0
+        ? []
+        : await this.dataSource.getRepository(DeliverySlotBooking).find({
+            where: { batchOrderId: In(batchOrderIds) },
+            relations: ['slotTemplate'],
+          });
+    const assignedSlotByBatchOrderId = new Map<number, AssignedSlot>();
+    for (const booking of slotBookings) {
+      assignedSlotByBatchOrderId.set(booking.batchOrderId, {
+        slotTemplateId: booking.slotTemplateId,
+        date: booking.date,
+        startTime: booking.slotTemplate.startTime,
+        endTime: booking.slotTemplate.endTime,
+      });
+    }
+
     const assignments = await this.deliveryAssignmentRepo.find({
       where: {
         orderId: In(orderIds),
+        isCurrent: true,
         status: In([
           DeliveryStatus.ASSIGNED,
           DeliveryStatus.ACCEPTED,
@@ -246,45 +339,38 @@ export class OrdersService {
           .filter((id): id is number => id != null),
       ),
     ];
-    const activeRouteAssignments =
+    const plans =
       riderIds.length === 0
         ? []
-        : await this.deliveryAssignmentRepo.find({
+        : await this.dispatchPlanRepo.find({
             where: {
               riderId: In(riderIds),
-              status: In([
-                DeliveryStatus.ASSIGNED,
-                DeliveryStatus.ACCEPTED,
-                DeliveryStatus.PICKED_UP,
-                DeliveryStatus.ON_THE_WAY,
-                DeliveryStatus.ARRIVED,
-              ]),
+              status: DispatchPlanStatus.ACTIVE,
             },
-            relations: ['order', 'order.destination', 'rider', 'rider.user'],
+            relations: ['stops'],
           });
-    const routeByRiderId = new Map<number, DeliveryAssignment[]>();
-    for (const riderId of riderIds) {
-      const riderAssignments = activeRouteAssignments.filter(
-        (assignment) => assignment.riderId === riderId,
-      );
-      const rider = riderAssignments[0]?.rider;
-      const startPoint =
-        toGeoPoint(rider?.lastLatitude, rider?.lastLongitude) ?? SHOP_LOCATION;
-      routeByRiderId.set(
-        riderId,
-        orderDeliveryAssignmentsByRoute(riderAssignments, startPoint),
-      );
-    }
+    const planByRiderId = new Map(plans.map((plan) => [plan.riderId, plan]));
 
     return orders.map((order) => {
       const assignment = assignmentByOrderId.get(order.id);
-      const route = assignment?.riderId
-        ? (routeByRiderId.get(assignment.riderId) ?? [])
-        : [];
+      const plan = assignment?.riderId
+        ? planByRiderId.get(assignment.riderId)
+        : undefined;
+      const remainingStops = (plan?.stops ?? [])
+        .filter((stop) => stop.status === DispatchStopStatus.PENDING)
+        .sort((left, right) => left.sequence - right.sequence);
+      const plannedStop = assignment
+        ? plan?.stops?.find(
+            (candidate) => candidate.assignmentId === assignment.id,
+          )
+        : undefined;
       const routeIndex = assignment
-        ? route.findIndex((candidate) => candidate.id === assignment.id)
+        ? remainingStops.findIndex(
+            (candidate) => candidate.assignmentId === assignment.id,
+          )
         : -1;
       const queuePosition = routeIndex >= 0 ? routeIndex + 1 : null;
+      const currentStop = routeIndex === 0 ? remainingStops[0] : null;
       const canTrackDelivery =
         queuePosition === 1 &&
         assignment != null &&
@@ -295,12 +381,31 @@ export class OrdersService {
       return Object.assign(order, {
         deliveryAssignmentId: canTrackDelivery ? assignment?.id : null,
         deliveryQueuePosition: queuePosition,
-        deliveryQueueSize: route.length || null,
+        deliveryQueueSize:
+          routeIndex >= 0 ? remainingStops.length || null : null,
+        deliveryPlanState: plannedStop ? 'planned' : 'unplanned',
+        deliveryPlanVersion: plannedStop ? (plan?.version ?? null) : null,
+        deliveryRouteGeometry: canTrackDelivery
+          ? (currentStop?.legGeometry ?? null)
+          : null,
+        deliveryLegDurationSeconds: canTrackDelivery
+          ? (currentStop?.legDurationSeconds ?? null)
+          : null,
+        deliveryLegDistanceMeters: canTrackDelivery
+          ? (currentStop?.legDistanceMeters ?? null)
+          : null,
+        deliveryRoutingDataStale: canTrackDelivery
+          ? (plan?.routingDataStale ?? false)
+          : null,
         canTrackDelivery,
         assignedRiderContact: this.assignedRiderContactFromAssignment(
           assignment,
           canTrackDelivery,
         ),
+        assignedSlot:
+          order.batchOrderId == null
+            ? undefined
+            : assignedSlotByBatchOrderId.get(order.batchOrderId),
       });
     });
   }
@@ -342,9 +447,18 @@ export class OrdersService {
   async assertBetaOrderLimit(
     userId: number,
     ordersRepo: Repository<Order> = this.ordersRepo,
+    isBetaModeEnabled = true,
   ): Promise<void> {
     const user = await this.usersService.findById(userId);
-    if (!user?.isBetaUser || !user.betaEnrolledAt) return;
+    if (
+      user?.role !== UserRole.CUSTOMER ||
+      !user.isBetaUser ||
+      !user.betaEnrolledAt
+    ) {
+      return;
+    }
+
+    if (!isBetaModeEnabled) return;
 
     const count = await ordersRepo.count({
       where: {
@@ -386,13 +500,6 @@ export class OrdersService {
       specialInstructions?: unknown;
     },
   ): Promise<Order> {
-    if (data.userId != null) {
-      await this.assertBetaOrderLimit(Number(data.userId));
-      await this.assertBetaPaymentMethod(
-        Number(data.userId),
-        String(data.paymentMethod ?? ''),
-      );
-    }
     const {
       paperSpecs,
       threeDSpecs,
@@ -441,66 +548,86 @@ export class OrdersService {
     orderData.totalPrice = quote.subtotal;
     orderData.category = quoteItem.categorySlug;
 
-    // Validate and deduct credits if payment method is credits
-    if (
-      OrdersService.isCreditPaymentMethod(orderData.paymentMethod) &&
-      Number(orderData.totalPrice ?? 0) + Number(orderData.deliveryFee ?? 0) > 0
-    ) {
-      if (!orderData.userId) {
-        throw new Error('User ID is required to process credit payment');
-      }
-
-      const userId = orderData.userId;
-      const amountCredits =
-        Number(orderData.totalPrice ?? 0) + Number(orderData.deliveryFee ?? 0);
-
-      // Attempt subtraction, will throw BadRequestException if insufficient
-      await this.creditsService.subtractCredits(
-        userId,
-        amountCredits,
-        'order_placed',
-      );
-    }
-    orderData.paymentStatus = OrdersService.isCreditPaymentMethod(
+    const creditPayment = OrdersService.isCreditPaymentMethod(
       orderData.paymentMethod,
-    )
-      ? 'paid'
-      : 'pending';
-
-    const count = await this.ordersRepo.count();
-    const orderId = `ORD-${(10001 + count).toString().padStart(5, '0')}`;
-    const order = this.ordersRepo.create({ ...orderData, orderId });
-    const savedOrder = await this.ordersRepo.save(order);
-    const savedItem = await this.orderItemsRepo.save(
-      this.orderItemsRepo.create({
-        orderId: savedOrder.id,
-        category: savedOrder.category,
-        quantity: savedOrder.quantity,
-        totalPrice: savedOrder.totalPrice,
-        fileName: savedOrder.fileName,
-        fileUrl: savedOrder.fileUrl,
-        fileMetadataId: savedOrder.fileMetadataId,
-        specialInstructions:
-          this.normalizeSpecialInstructions(specialInstructions),
-        categoryId: quoteItem.categoryId,
-        categorySlug: quoteItem.categorySlug,
-        categoryName: quoteItem.categoryName,
-        pricingModel: quoteItem.pricingModel,
-      }),
     );
-
-    for (const snapshot of quoteItem.specSnapshots) {
-      await this.orderItemSpecValueRepo.save(
-        this.orderItemSpecValueRepo.create({
-          orderItemId: savedItem.id,
-          ...snapshot,
+    const amountCredits = creditPayment
+      ? calculateChargeTotal({
+          totalPrice: orderData.totalPrice,
+          deliveryFee: orderData.deliveryFee,
+        })
+      : 0;
+    orderData.paymentStatus = creditPayment ? 'paid' : 'pending';
+    const creation = await this.dataSource.transaction(async (manager) => {
+      const transactionOrdersRepo = manager.getRepository(Order);
+      const transactionItemsRepo = manager.getRepository(OrderItem);
+      const transactionSpecValuesRepo =
+        manager.getRepository(OrderItemSpecValue);
+      if (orderData.userId != null) {
+        const isBetaModeEnabled = await this.lockBetaModeEnabled(manager);
+        await this.assertBetaOrderLimit(
+          Number(orderData.userId),
+          transactionOrdersRepo,
+          isBetaModeEnabled,
+        );
+        await this.assertBetaPaymentMethod(
+          Number(orderData.userId),
+          String(orderData.paymentMethod ?? ''),
+          isBetaModeEnabled,
+        );
+      }
+      const { orderRef } = await this.nextBatchReferences(manager);
+      const order = transactionOrdersRepo.create({
+        ...orderData,
+        orderId: orderRef,
+      });
+      const persistedOrder = await transactionOrdersRepo.save(order);
+      const savedItem = await transactionItemsRepo.save(
+        transactionItemsRepo.create({
+          orderId: persistedOrder.id,
+          category: persistedOrder.category,
+          quantity: persistedOrder.quantity,
+          totalPrice: persistedOrder.totalPrice,
+          fileName: persistedOrder.fileName,
+          fileUrl: persistedOrder.fileUrl,
+          fileMetadataId: persistedOrder.fileMetadataId,
+          specialInstructions:
+            this.normalizeSpecialInstructions(specialInstructions),
+          categoryId: quoteItem.categoryId,
+          categorySlug: quoteItem.categorySlug,
+          categoryName: quoteItem.categoryName,
+          pricingModel: quoteItem.pricingModel,
         }),
       );
-    }
 
-    await this.notifyOrderPlaced(savedOrder);
+      for (const snapshot of quoteItem.specSnapshots) {
+        await transactionSpecValuesRepo.save(
+          transactionSpecValuesRepo.create({
+            orderItemId: savedItem.id,
+            ...snapshot,
+          }),
+        );
+      }
 
-    return savedOrder;
+      let creditMutation: CreditMutationResult | null = null;
+      if (creditPayment && amountCredits > 0) {
+        if (!orderData.userId) {
+          throw new Error('User ID is required to process credit payment');
+        }
+        creditMutation = await this.creditsService.subtractCredits(
+          orderData.userId,
+          amountCredits,
+          `ORDER-DEBIT:${orderRef}`,
+          manager,
+        );
+      }
+      return { savedOrder: persistedOrder, creditMutation };
+    });
+
+    this.creditsService.publishCreditMutation?.(creation.creditMutation);
+    await this.notifyOrderPlaced(creation.savedOrder);
+
+    return creation.savedOrder;
   }
 
   quote(dto: QuoteOrderDto) {
@@ -511,8 +638,6 @@ export class OrdersService {
     userId: number,
     dto: CreateBatchOrderDto,
   ): Promise<CreateBatchResult> {
-    await this.assertBetaOrderLimit(userId);
-    await this.assertBetaPaymentMethod(userId, dto.paymentMethod);
     if (!dto.items || dto.items.length === 0) {
       throw new BadRequestException('Batch order requires at least one item');
     }
@@ -682,8 +807,12 @@ export class OrdersService {
     const extraDestCount = Math.max(0, resolvedDestinations.length - 1);
     const extraDestinationFee =
       extraDestCount * Number(settings.extraDestinationSurcharge);
-    const totalPrice =
-      subtotal + deliveryFee + priorityFee + extraDestinationFee;
+    const totalPrice = calculateChargeTotal({
+      subtotal,
+      deliveryFee,
+      priorityFee,
+      extraDestinationFee,
+    });
 
     // --- 3D bounds enforcement ---
     const profile = await this.printerProfileService.getProfile();
@@ -736,8 +865,14 @@ export class OrdersService {
       const txSpecValueRepo = manager.getRepository(OrderItemSpecValue);
       const txDestinationRepo = manager.getRepository(DeliveryDestination);
 
+      const isBetaModeEnabled = await this.lockBetaModeEnabled(manager);
+      await this.assertBetaOrderLimit(userId, txOrdersRepo, isBetaModeEnabled);
+      await this.assertBetaPaymentMethod(
+        userId,
+        dto.paymentMethod,
+        isBetaModeEnabled,
+      );
       const { batchRef, orderRef } = await this.nextBatchReferences(manager);
-      await this.assertBetaOrderLimit(userId, txOrdersRepo);
       const creditPayment = OrdersService.isCreditPaymentMethod(
         dto.paymentMethod,
       );
@@ -895,14 +1030,15 @@ export class OrdersService {
         }
       }
 
+      let creditMutation: CreditMutationResult | null = null;
       if (
         OrdersService.isCreditPaymentMethod(dto.paymentMethod) &&
         totalPrice > 0
       ) {
-        await this.creditsService.subtractCredits(
+        creditMutation = await this.creditsService.subtractCredits(
           userId,
           totalPrice,
-          'order_placed',
+          `ORDER-DEBIT:${orderRef}`,
           manager,
         );
       }
@@ -916,8 +1052,11 @@ export class OrdersService {
         batchRef: savedBatch.batchRef,
         orders: [orderWithItems],
         assignedSlot,
+        creditMutation,
       };
     });
+
+    this.creditsService.publishCreditMutation?.(orders.creditMutation);
 
     // --- After transaction: emit WS event if local ---
     if (deliveryType === 'local' && orders.assignedSlot) {
@@ -986,7 +1125,11 @@ export class OrdersService {
           {
             orderId: savedOrder.orderId,
             status: 'order_placed',
+            type: 'delivery_status',
+            progressCurrent: '1',
+            progressTotal: '5',
           },
+          { dataOnly: true },
         );
       }
     } catch (err) {
@@ -1028,15 +1171,12 @@ export class OrdersService {
   private async assertBetaPaymentMethod(
     userId: number,
     paymentMethod: string,
+    isBetaModeEnabled = true,
   ): Promise<void> {
     const user = await this.usersService.findById(userId);
-    if (!user?.isBetaUser) return;
-
-    const rows = await this.dataSource.query<Array<{ is_enabled: boolean }>>(
-      'SELECT is_enabled FROM beta_mode_settings ORDER BY id LIMIT 1',
-    );
+    if (user?.role !== UserRole.CUSTOMER || !user.isBetaUser) return;
     if (
-      rows[0]?.is_enabled &&
+      isBetaModeEnabled &&
       !OrdersService.isCreditPaymentMethod(paymentMethod)
     ) {
       throw new ForbiddenException({
@@ -1046,16 +1186,24 @@ export class OrdersService {
     }
   }
 
+  private async lockBetaModeEnabled(manager: EntityManager): Promise<boolean> {
+    const settings = await manager.getRepository(BetaModeSettings).findOne({
+      where: {},
+      order: { id: 'ASC' },
+      lock: { mode: 'pessimistic_write' },
+    });
+    return settings?.isEnabled ?? false;
+  }
+
   private async nextBatchReferences(manager: EntityManager): Promise<{
     batchRef: string;
     orderRef: string;
   }> {
+    await manager.query('SELECT pg_advisory_xact_lock(1196573522)');
     const rows = await manager.query<
       Array<{ max_batch_ref: string | number; max_order_ref: string | number }>
     >(`
-      WITH reference_lock AS (
-        SELECT pg_advisory_xact_lock(1196573522)
-      ), batch_max AS (
+      WITH batch_max AS (
         SELECT COALESCE(
           MAX(substring(batch_ref FROM '^BATCH-([0-9]+)$')::bigint),
           10000
@@ -1071,7 +1219,7 @@ export class OrdersService {
       SELECT
         batch_max.value AS max_batch_ref,
         order_max.value AS max_order_ref
-      FROM reference_lock, batch_max, order_max
+      FROM batch_max, order_max
     `);
     const maxBatchRef = Number(rows[0]?.max_batch_ref ?? 10000);
     const maxOrderRef = Number(rows[0]?.max_order_ref ?? 10000);
@@ -1424,84 +1572,396 @@ export class OrdersService {
   }
 
   async cancelBatch(batchOrderId: number, userId: number): Promise<void> {
-    const orders = await this.ordersRepo.find({
-      where: { batchOrderId, userId },
-    });
-    if (orders.length === 0) {
-      throw new NotFoundException('Batch order not found');
-    }
-    for (const order of orders) {
-      if (!OrdersService.CANCELLABLE_STATUSES.includes(order.orderStatus)) {
-        throw new BadRequestException(
-          `Order ${order.orderId} in status "${order.orderStatus}" cannot be cancelled`,
-        );
-      }
-    }
-    const batch = await this.batchOrdersRepo.findOne({
-      where: { id: batchOrderId, userId },
-    });
-    if (batch?.slotBookingId) {
-      try {
-        await this.dataSource.transaction(async (manager) => {
-          await this.slotsService.releaseSlot(manager, batch.slotBookingId!);
-          batch.slotBookingId = null;
-          await manager.save(batch);
-        });
-      } catch (err) {
-        if (err instanceof CancellationClosedException) {
-          throw err;
-        }
-        this.logger.warn(
-          `Failed to release slot for batch ${batchOrderId}: ${err}`,
-        );
-      }
-    }
-    for (const order of orders) {
-      await this.cancelOrder(order.id, userId);
+    const cancellation = await this.cancelBatchInTransaction(
+      batchOrderId,
+      userId,
+    );
+    this.creditsService.publishCreditMutation?.(cancellation.creditMutation);
+    this.slotsService.publishReleasedSlot?.(cancellation.releasedSlotDate);
+    for (const previous of cancellation.previousOrders) {
+      await this.publishStatusUpdate(previous, previous.id, 'cancelled');
     }
   }
 
   async cancelOrder(id: number, userId: number): Promise<Order> {
-    const order = await this.ordersRepo.findOneOrFail({
+    const candidate = await this.ordersRepo.findOneOrFail({
       where: { id },
-      relations: OrdersService.ORDER_RELATIONS,
     });
-    if (order.userId !== userId) {
+    if (candidate.userId !== userId) {
       throw new Error('Forbidden');
     }
-    if (!OrdersService.CANCELLABLE_STATUSES.includes(order.orderStatus)) {
-      throw new Error('Order cannot be cancelled at this stage');
-    }
-
-    if (
-      OrdersService.isCreditPaymentMethod(order.paymentMethod) &&
-      Number(order.totalPrice) + Number(order.deliveryFee ?? 0) > 0
-    ) {
-      const refundAmount =
-        Number(order.totalPrice) + Number(order.deliveryFee ?? 0);
-      await this.creditsService.refundCredits(
-        order.userId,
-        refundAmount,
-        order.orderId,
+    if (candidate.batchOrderId != null) {
+      const cancellation = await this.cancelBatchInTransaction(
+        candidate.batchOrderId,
+        userId,
       );
-      return this.updateStatus(id, 'cancelled', { paymentStatus: 'refunded' });
+      this.creditsService.publishCreditMutation?.(cancellation.creditMutation);
+      this.slotsService.publishReleasedSlot?.(cancellation.releasedSlotDate);
+      for (const previous of cancellation.previousOrders) {
+        await this.publishStatusUpdate(previous, previous.id, 'cancelled');
+      }
+      const order = await this.findById(id);
+      if (!order) throw new NotFoundException('Order not found');
+      return order;
     }
 
-    return this.updateStatus(id, 'cancelled');
+    const cancellation = await this.dataSource.transaction(async (manager) => {
+      const transactionOrdersRepo = manager.getRepository(Order);
+      const order = await transactionOrdersRepo.findOneOrFail({
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (order.userId !== userId) throw new Error('Forbidden');
+      const alreadyCancelled = order.orderStatus === OrderStatus.CANCELLED;
+      if (
+        !alreadyCancelled &&
+        !OrdersService.CANCELLABLE_STATUSES.includes(order.orderStatus)
+      ) {
+        throw new Error('Order cannot be cancelled at this stage');
+      }
+
+      const creditPayment = OrdersService.isCreditPaymentMethod(
+        order.paymentMethod,
+      );
+      let creditMutation: CreditMutationResult | null = null;
+      if (creditPayment) {
+        const refundAmount = calculateChargeTotal({
+          totalPrice: order.totalPrice,
+          deliveryFee: order.deliveryFee,
+        });
+        if (refundAmount > 0) {
+          creditMutation = await this.creditsService.refundCredits(
+            order.userId,
+            refundAmount,
+            `ORDER-REFUND:${order.orderId}`,
+            manager,
+            [order.orderId],
+          );
+        }
+      }
+      const updateResult = await transactionOrdersRepo.update(
+        { id, orderStatus: order.orderStatus },
+        {
+          orderStatus: OrderStatus.CANCELLED,
+          ...(creditPayment ? { paymentStatus: 'refunded' } : {}),
+        },
+      );
+      if (updateResult?.affected != null && updateResult.affected !== 1) {
+        throw new BadRequestException('Order changed during cancellation');
+      }
+      if (!alreadyCancelled) {
+        await manager.getRepository(OrderStatusHistory).insert({
+          orderId: order.id,
+          fromStatus: order.orderStatus,
+          toStatus: OrderStatus.CANCELLED,
+          changedByUserId: userId,
+          notes: 'Customer cancelled order',
+        });
+      }
+      return {
+        previous: alreadyCancelled ? null : order,
+        creditMutation,
+      };
+    });
+
+    this.creditsService.publishCreditMutation?.(cancellation.creditMutation);
+    if (cancellation.previous) {
+      return this.publishStatusUpdate(cancellation.previous, id, 'cancelled');
+    }
+    const order = await this.findById(id);
+    if (!order) throw new NotFoundException('Order not found');
+    return order;
+  }
+
+  private async cancelBatchInTransaction(
+    batchOrderId: number,
+    userId: number,
+  ): Promise<{
+    previousOrders: Order[];
+    creditMutation: CreditMutationResult | null;
+    releasedSlotDate: string | null;
+  }> {
+    return this.dataSource.transaction(async (manager) => {
+      const transactionBatchRepo = manager.getRepository(BatchOrder);
+      const transactionOrdersRepo = manager.getRepository(Order);
+      const batch = await transactionBatchRepo.findOne({
+        where: { id: batchOrderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!batch || batch.userId !== userId) {
+        throw new NotFoundException('Batch order not found');
+      }
+      const orders = await transactionOrdersRepo.find({
+        where: { batchOrderId },
+        order: { id: 'ASC' },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (
+        orders.length === 0 ||
+        orders.some((order) => order.userId !== userId)
+      ) {
+        throw new NotFoundException('Batch order not found');
+      }
+
+      const pending = orders.filter(
+        (order) => order.orderStatus !== OrderStatus.CANCELLED,
+      );
+      for (const order of pending) {
+        if (!OrdersService.CANCELLABLE_STATUSES.includes(order.orderStatus)) {
+          throw new BadRequestException(
+            `Order ${order.orderId} in status "${order.orderStatus}" cannot be cancelled`,
+          );
+        }
+      }
+
+      let releasedSlotDate: string | null = null;
+      if (batch.slotBookingId) {
+        try {
+          releasedSlotDate = await this.slotsService.releaseSlot(
+            manager,
+            batch.slotBookingId,
+          );
+          batch.slotBookingId = null;
+        } catch (error) {
+          if (error instanceof CancellationClosedException) throw error;
+          this.logger.warn(
+            `Failed to release slot for batch ${batchOrderId}: ${error}`,
+          );
+        }
+      }
+
+      const creditPayment = OrdersService.isCreditPaymentMethod(
+        batch.paymentMethod,
+      );
+      let creditMutation: CreditMutationResult | null = null;
+      if (creditPayment) {
+        const refundAmount = calculateChargeTotal(batch);
+        if (refundAmount > 0) {
+          creditMutation = await this.creditsService.refundCredits(
+            batch.userId,
+            refundAmount,
+            `BATCH-REFUND:${batch.batchRef}`,
+            manager,
+            orders.map((order) => order.orderId),
+          );
+        }
+        batch.paymentStatus = 'refunded';
+      }
+      await transactionBatchRepo.save(batch);
+      const updateResult = await transactionOrdersRepo.update(
+        {
+          id: In(orders.map((order) => order.id)),
+          batchOrderId,
+          userId,
+          orderStatus: In([
+            ...OrdersService.CANCELLABLE_STATUSES,
+            OrderStatus.CANCELLED,
+          ]),
+        },
+        {
+          orderStatus: OrderStatus.CANCELLED,
+          ...(creditPayment ? { paymentStatus: 'refunded' } : {}),
+        },
+      );
+      if (
+        updateResult?.affected != null &&
+        updateResult.affected !== orders.length
+      ) {
+        throw new BadRequestException('Batch changed during cancellation');
+      }
+      if (pending.length > 0) {
+        await manager.getRepository(OrderStatusHistory).insert(
+          pending.map((order) => ({
+            orderId: order.id,
+            fromStatus: order.orderStatus,
+            toStatus: OrderStatus.CANCELLED,
+            changedByUserId: userId,
+            notes: 'Customer cancelled batch',
+          })),
+        );
+      }
+      return {
+        previousOrders: pending,
+        creditMutation,
+        releasedSlotDate,
+      };
+    });
   }
 
   async updateStatus(
     id: number,
     status: string,
     updates: Partial<Order> = {},
+    context?: OrderStatusChangeContext,
+  ): Promise<Order> {
+    const orderStatus = parseOrderStatus(status);
+    const candidate = await this.ordersRepo.findOneOrFail({ where: { id } });
+    const completion = await this.dataSource.transaction(async (manager) => {
+      if (candidate.batchOrderId != null) {
+        await manager.getRepository(BatchOrder).findOneOrFail({
+          where: { id: candidate.batchOrderId },
+          lock: { mode: 'pessimistic_write' },
+        });
+      }
+      const transactionOrdersRepo = manager.getRepository(Order);
+      const locked = await transactionOrdersRepo.findOneOrFail({
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (locked.batchOrderId !== candidate.batchOrderId) {
+        throw new BadRequestException('Order batch changed during update');
+      }
+      if (locked.orderStatus === orderStatus) {
+        return { previous: null, surveyRequirement: null };
+      }
+      if (orderStatus === OrderStatus.CANCELLED) {
+        throw new BadRequestException('Use the cancellation workflow');
+      }
+      if (
+        RIDER_ASSIGNMENT_WORKFLOW_STATUSES.has(orderStatus) ||
+        (locked.orderStatus === OrderStatus.RIDER_ASSIGNED &&
+          orderStatus === OrderStatus.READY_FOR_DISPATCH)
+      ) {
+        throw new BadRequestException('Use the rider assignment workflow');
+      }
+      if (
+        orderStatus === OrderStatus.COMPLETED_PICKUP &&
+        locked.deliveryOption !== 'pickup'
+      ) {
+        throw new BadRequestException(
+          'Completed pickup requires a pickup order',
+        );
+      }
+      assertOrderStatusTransition(locked.orderStatus, orderStatus);
+      if (
+        !Number.isInteger(context?.actorUserId) ||
+        context!.actorUserId <= 0
+      ) {
+        throw new BadRequestException('Status change actor is required');
+      }
+      const reason = context?.reason?.trim();
+      if (!reason) {
+        throw new BadRequestException('Status change reason is required');
+      }
+      const updateResult = await transactionOrdersRepo.update(
+        { id, orderStatus: locked.orderStatus },
+        {
+          ...updates,
+          orderStatus,
+        },
+      );
+      if (updateResult?.affected != null && updateResult.affected !== 1) {
+        throw new BadRequestException('Order changed during status update');
+      }
+      await manager.getRepository(OrderStatusHistory).insert({
+        orderId: id,
+        fromStatus: locked.orderStatus,
+        toStatus: orderStatus,
+        changedByUserId: context!.actorUserId,
+        notes: reason,
+      });
+      const surveyRequirement =
+        orderStatus === OrderStatus.COMPLETED_PICKUP
+          ? await this.prepareCompletionRecords(manager, locked)
+          : null;
+      return { previous: locked, surveyRequirement };
+    });
+    if (!completion.previous) {
+      const current = await this.findById(id);
+      if (!current) throw new NotFoundException('Order not found');
+      return current;
+    }
+    try {
+      return await this.publishStatusUpdate(
+        completion.previous,
+        id,
+        status,
+        completion.surveyRequirement,
+      );
+    } catch {
+      this.logger.warn(
+        `Post-commit status publication failed for order ${id}; returning committed state`,
+      );
+      try {
+        const current = await this.findById(id);
+        if (current) return current;
+      } catch {
+        // The status transaction is already committed. Fall through to the
+        // transaction-derived snapshot when the publication reload is down.
+      }
+      return {
+        ...completion.previous,
+        ...updates,
+        orderStatus,
+      } as Order;
+    }
+  }
+
+  async completeDelivery(
+    manager: EntityManager,
+    orderId: number,
+    actorUserId: number,
+  ): Promise<OrderCompletionTransactionResult> {
+    const ordersRepo = manager.getRepository(Order);
+    const order = await ordersRepo.findOneOrFail({
+      where: { id: orderId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (order.deliveryOption !== 'delivery') {
+      throw new BadRequestException('Delivery completion requires delivery');
+    }
+    assertOrderStatusTransition(order.orderStatus, OrderStatus.DELIVERED);
+    const updateResult = await ordersRepo.update(
+      { id: order.id, orderStatus: order.orderStatus },
+      { orderStatus: OrderStatus.DELIVERED },
+    );
+    if (updateResult?.affected != null && updateResult.affected !== 1) {
+      throw new BadRequestException('Order changed during rider update');
+    }
+    await manager.getRepository(OrderStatusHistory).insert({
+      orderId: order.id,
+      fromStatus: order.orderStatus,
+      toStatus: OrderStatus.DELIVERED,
+      changedByUserId: actorUserId,
+      notes: 'Rider completed delivery',
+    });
+    const surveyRequirement = await this.prepareCompletionRecords(
+      manager,
+      order,
+    );
+    return { previous: order, surveyRequirement };
+  }
+
+  private async prepareCompletionRecords(
+    manager: EntityManager,
+    order: Order,
+  ): Promise<TamSurveyRequirement | null> {
+    if (order.fileMetadataId != null) {
+      const owner = await manager.getRepository(User).findOne({
+        where: { id: order.userId },
+        select: ['id', 'fileRetentionDays'],
+      });
+      if (owner?.fileRetentionDays != null) {
+        await this.filesService.stampExpiry(
+          order.fileMetadataId,
+          owner.fileRetentionDays,
+          manager,
+        );
+      }
+    }
+    return this.tamSurveysService.createPostDeliveryRequirementIfNeeded(
+      order,
+      manager,
+    );
+  }
+
+  async publishStatusUpdate(
+    existing: Order,
+    id: number,
+    status: string,
+    surveyRequirement?: TamSurveyRequirement | null,
   ): Promise<Order> {
     const orderStatus = status as OrderStatus;
-    const existing = await this.ordersRepo.findOneOrFail({ where: { id } });
-
-    await this.ordersRepo.update(id, {
-      orderStatus,
-      ...updates,
-    });
     const order = await this.ordersRepo.findOneOrFail({
       where: { id },
       relations: OrdersService.ORDER_RELATIONS,
@@ -1510,88 +1970,65 @@ export class OrdersService {
       order,
     ]);
 
-    // Stamp file expiry when order reaches either terminal completion status
-    if (
-      (orderStatus === OrderStatus.COMPLETED_PICKUP ||
-        orderStatus === OrderStatus.DELIVERED) &&
-      order.fileMetadataId != null
-    ) {
-      const owner = await this.usersService.findById(order.userId);
-      if (owner?.fileRetentionDays != null) {
-        await this.filesService.stampExpiry(
-          order.fileMetadataId,
-          owner.fileRetentionDays,
-        );
-      }
-    }
-
-    if (
-      orderStatus === OrderStatus.DELIVERED ||
-      orderStatus === OrderStatus.COMPLETED_PICKUP
-    ) {
+    if (surveyRequirement) {
       try {
-        const surveyReq =
-          await this.tamSurveysService.createPostDeliveryRequirementIfNeeded(
-            order,
+        const surveyReq = surveyRequirement;
+        // Real-time WebSocket push — client refreshes accountState instantly
+        try {
+          this.ordersGateway.notifySurveyRequired(order.userId, {
+            requirementId: surveyReq.id,
+            orderId: order.id,
+            orderRef: order.orderId,
+          });
+        } catch (wsErr) {
+          this.logger.warn(
+            `survey-required WS emit failed for user ${order.userId}: ${wsErr}`,
           );
-        if (surveyReq) {
-          // Real-time WebSocket push — client refreshes accountState instantly
-          try {
-            this.ordersGateway.notifySurveyRequired(order.userId, {
-              requirementId: surveyReq.id,
+        }
+
+        // In-app notification (best-effort)
+        try {
+          await this.notificationsService.create({
+            userId: order.userId,
+            title: 'Order delivered — share your feedback',
+            message:
+              'Your order has been delivered. Please complete a quick survey to continue.',
+            type: 'survey_required',
+            orderRef: order.orderId,
+            metadata: {
               orderId: order.id,
-              orderRef: order.orderId,
-            });
-          } catch (wsErr) {
-            this.logger.warn(
-              `survey-required WS emit failed for user ${order.userId}: ${wsErr}`,
-            );
-          }
+              requirementId: surveyReq.id,
+            },
+          });
+        } catch (notifErr) {
+          this.logger.warn(
+            `survey_required in-app notification failed for order ${order.orderId}: ${notifErr}`,
+          );
+        }
 
-          // In-app notification (best-effort)
-          try {
-            await this.notificationsService.create({
-              userId: order.userId,
-              title: 'Order delivered — share your feedback',
-              message:
-                'Your order has been delivered. Please complete a quick survey to continue.',
-              type: 'survey_required',
-              orderRef: order.orderId,
-              metadata: {
-                orderId: order.id,
-                requirementId: surveyReq.id,
+        // FCM push (best-effort — no token = skip)
+        try {
+          const fcmToken = await this.usersService.getFcmToken(order.userId);
+          if (fcmToken) {
+            await this.firebaseService.sendToDevice(
+              fcmToken,
+              'Order delivered — share your feedback',
+              'Your order has been delivered. Please complete a quick survey to continue.',
+              {
+                type: 'survey_required',
+                orderId: String(order.id),
+                requirementId: String(surveyReq.id),
               },
-            });
-          } catch (notifErr) {
-            this.logger.warn(
-              `survey_required in-app notification failed for order ${order.orderId}: ${notifErr}`,
             );
           }
-
-          // FCM push (best-effort — no token = skip)
-          try {
-            const fcmToken = await this.usersService.getFcmToken(order.userId);
-            if (fcmToken) {
-              await this.firebaseService.sendToDevice(
-                fcmToken,
-                'Order delivered — share your feedback',
-                'Your order has been delivered. Please complete a quick survey to continue.',
-                {
-                  type: 'survey_required',
-                  orderId: String(order.id),
-                  requirementId: String(surveyReq.id),
-                },
-              );
-            }
-          } catch (fcmErr) {
-            this.logger.warn(
-              `survey_required FCM push failed for order ${order.orderId}: ${fcmErr}`,
-            );
-          }
+        } catch (fcmErr) {
+          this.logger.warn(
+            `survey_required FCM push failed for order ${order.orderId}: ${fcmErr}`,
+          );
         }
       } catch (err) {
         this.logger.warn(
-          `Post-delivery survey requirement failed for order ${order.orderId}: ${err}`,
+          `Post-delivery survey publication failed for order ${order.orderId}: ${err}`,
         );
       }
     }
@@ -1679,25 +2116,56 @@ export class OrdersService {
     }
 
     // Send push notification to order owner
-    const fcmToken = await this.usersService.getFcmToken(existing.userId);
-    if (fcmToken && statusMsg) {
-      await this.firebaseService.sendToDevice(
-        fcmToken,
-        statusMsg.title,
-        statusMsg.body,
-        {
-          orderId: order.orderId,
-          status: status,
-          ...dynamicMetadata,
-        },
-      );
+    try {
+      const fcmToken = await this.usersService.getFcmToken(existing.userId);
+      if (fcmToken && statusMsg) {
+        const progressByStatus: Partial<Record<OrderStatus, string>> = {
+          [OrderStatus.ORDER_PLACED]: '1',
+          [OrderStatus.PRINTING_IN_PROGRESS]: '2',
+          [OrderStatus.QUALITY_CHECKED]: '3',
+          [OrderStatus.ON_THE_WAY]: '4',
+          [OrderStatus.ARRIVED_AT_DESTINATION]: '4',
+          [OrderStatus.DELIVERED]: '5',
+        };
+        const progressCurrent = progressByStatus[orderStatus];
+        const pushData = Object.fromEntries(
+          Object.entries({
+            orderId: order.orderId,
+            status,
+            ...dynamicMetadata,
+          })
+            .filter(([, value]) => value != null)
+            .map(([key, value]) => [key, String(value)]),
+        );
+        await this.firebaseService.sendToDevice(
+          fcmToken,
+          statusMsg.title,
+          statusMsg.body,
+          {
+            ...pushData,
+            type: 'delivery_status',
+            ...(progressCurrent === undefined
+              ? {}
+              : { progressCurrent, progressTotal: '5' }),
+          },
+          { dataOnly: true },
+        );
+      }
+    } catch (err) {
+      this.logger.warn(`Customer FCM push failed for status ${status}: ${err}`);
     }
 
     // Emit WebSocket order update
-    void this.ordersGateway.notifyOrderUpdate(
-      orderWithAssignment.orderId,
-      orderWithAssignment,
-    );
+    try {
+      await Promise.resolve(
+        this.ordersGateway.notifyOrderUpdate(
+          orderWithAssignment.orderId,
+          orderWithAssignment,
+        ),
+      );
+    } catch (err) {
+      this.logger.warn(`Customer order WS update failed: ${err}`);
+    }
 
     // Create in-app notification for the customer (also emitted via WS)
     if (statusMsg) {

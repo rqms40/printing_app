@@ -19,6 +19,7 @@ import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/status_badge.dart';
 import 'package:printing_app/utils/formatters.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:printing_app/features/rider/shared/widgets/rider_decline_dialog.dart';
 
 /// Assignment overview before or after active navigation.
 class DeliveryDetailScreen extends ConsumerStatefulWidget {
@@ -78,11 +79,20 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
     context.push(uri.toString());
   }
 
+  void _showLaunchFailure(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _callCustomer(String? phone) async {
     if (phone == null || phone.isEmpty) return;
     final uri = Uri.parse('tel:$phone');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
+    } else {
+      _showLaunchFailure('Could not open — no app available');
     }
   }
 
@@ -94,6 +104,8 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
     );
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      _showLaunchFailure('Could not open — no app available');
     }
   }
 
@@ -165,12 +177,18 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
               children: [
                 Positioned.fill(
                   child: RiderMapView(
+                    planOrigin: ref.watch(
+                      deliveriesProvider.select((s) => s.planOrigin),
+                    ),
                     assignmentId: view.id,
                     destination: destLatLng,
+                    planStop: view.planStop,
                     trackLocation: false,
                     interactive: true,
                     showLiveBadge: false,
                     showRoute: view.isInProgress,
+                    // Keep the recenter control below the floating back row.
+                    overlayTopInset: 52,
                   ),
                 ),
                 SafeArea(
@@ -315,9 +333,13 @@ class _DeliveryDetailScreenState extends ConsumerState<DeliveryDetailScreen> {
               setState(() => _isAdvancing = false);
               context.pushReplacement('/rider/deliveries/${view.id}/active');
             },
-            onDecline: () => ref
-                .read(deliveriesProvider.notifier)
-                .declineAssignment(view.id),
+            onDecline: () async {
+              final reason = await showRiderDeclineDialog(context);
+              if (reason == null) return;
+              await ref
+                  .read(deliveriesProvider.notifier)
+                  .declineAssignment(view.id, reason: reason);
+            },
           ),
         ],
       ),

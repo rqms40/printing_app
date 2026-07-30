@@ -25,8 +25,6 @@ class TutorialBubble extends StatelessWidget {
   final VoidCallback onSkip;
 
   /// When non-null, renders a "Got it →" button on the right that calls this.
-  /// When null (most pipeline steps), only Skip is shown — the user advances
-  /// by tapping the spotlighted target itself.
   final VoidCallback? onAdvance;
 
   @override

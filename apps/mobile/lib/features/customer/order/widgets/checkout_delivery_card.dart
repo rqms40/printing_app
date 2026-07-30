@@ -97,87 +97,95 @@ class _SingleAddressRow extends StatelessWidget {
     final title =
         tempAddr?.displayLabel ?? addr?.label ?? 'Pick a delivery address';
     final subtitle = tempAddr?.fullAddress ?? addr?.fullAddress;
-    return InkWell(
-      borderRadius: AppRadius.borderLg,
-      onTap: () async {
-        final picked = await AddressPickerSheet.showSelection(
-          context,
-          mapTilesEnabled: mapTilesEnabled,
-          initialTemporaryAddress: tempAddr,
-        );
-        if (picked != null) {
-          final notifier = ref.read(checkoutProvider.notifier);
-          final saved = picked.savedAddress;
-          final temporary = picked.temporaryAddress;
-          if (saved != null) {
-            notifier.setSingleAddress(saved);
-          } else if (temporary != null) {
-            notifier.setTemporaryAddress(temporary);
-          }
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: colors.background,
+    Future<void> openAddressPicker() async {
+      final picked = await AddressPickerSheet.showSelection(
+        context,
+        mapTilesEnabled: mapTilesEnabled,
+        initialTemporaryAddress: tempAddr,
+      );
+      if (picked == null) return;
+      final notifier = ref.read(checkoutProvider.notifier);
+      final saved = picked.savedAddress;
+      final temporary = picked.temporaryAddress;
+      if (saved != null) {
+        notifier.setSingleAddress(saved);
+      } else if (temporary != null) {
+        notifier.setTemporaryAddress(temporary);
+      }
+    }
+
+    return Semantics(
+      button: true,
+      label: [title, ?subtitle].join('. '),
+      onTap: openAddressPicker,
+      child: ExcludeSemantics(
+        child: InkWell(
           borderRadius: AppRadius.borderLg,
-          border: Border.all(
-            color: addr == null && tempAddr == null
-                ? colors.brand.withValues(alpha: 0.4)
-                : colors.outline.withValues(alpha: 0.4),
-            style: addr == null ? BorderStyle.solid : BorderStyle.solid,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: colors.brand.withValues(alpha: 0.14),
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: HugeIcon(
-                  icon: HugeIcons.strokeRoundedLocation01,
-                  size: 18,
-                  color: colors.brand,
-                ),
+          onTap: openAddressPicker,
+          child: Container(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(
+              color: colors.background,
+              borderRadius: AppRadius.borderLg,
+              border: Border.all(
+                color: addr == null && tempAddr == null
+                    ? colors.brand.withValues(alpha: 0.4)
+                    : colors.outline.withValues(alpha: 0.4),
+                style: addr == null ? BorderStyle.solid : BorderStyle.solid,
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: AppTypography.bodyBold.copyWith(
-                      color: colors.onBackground,
-                      fontSize: 14,
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: colors.brand.withValues(alpha: 0.14),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: HugeIcon(
+                      icon: HugeIcons.strokeRoundedLocation01,
+                      size: 18,
+                      color: colors.brand,
                     ),
                   ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.caption.copyWith(
-                        color: colors.onSurfaceDim,
-                        fontSize: 11,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: AppTypography.bodyBold.copyWith(
+                          color: colors.onBackground,
+                          fontSize: 14,
+                        ),
                       ),
-                    ),
-                  ],
-                ],
-              ),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.caption.copyWith(
+                            color: colors.onSurfaceDim,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                HugeIcon(
+                  icon: HugeIcons.strokeRoundedArrowRight01,
+                  size: 18,
+                  color: colors.onSurfaceDim,
+                ),
+              ],
             ),
-            HugeIcon(
-              icon: HugeIcons.strokeRoundedArrowRight01,
-              size: 18,
-              color: colors.onSurfaceDim,
-            ),
-          ],
+          ),
         ),
       ),
     );

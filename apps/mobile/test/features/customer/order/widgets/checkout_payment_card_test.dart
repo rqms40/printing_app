@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +13,7 @@ void main() {
   testWidgets('shows "Choose payment method" when none selected', (
     tester,
   ) async {
+    final semantics = tester.ensureSemantics();
     final container = ProviderContainer();
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -19,6 +22,17 @@ void main() {
       ),
     );
     expect(find.text('Choose payment method'), findsOneWidget);
+    final paymentControl = find.bySemanticsLabel('Choose payment method');
+    expect(paymentControl, findsOneWidget);
+    expect(
+      tester
+          .getSemantics(paymentControl)
+          .getSemanticsData()
+          .hasAction(ui.SemanticsAction.tap),
+      isTrue,
+      reason: 'the web semantics button must activate the payment picker',
+    );
+    semantics.dispose();
   });
 
   testWidgets('shows method label when selected', (tester) async {

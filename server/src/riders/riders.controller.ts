@@ -1,11 +1,13 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
   Param,
   Body,
   UseGuards,
   Request,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -58,10 +60,20 @@ export class RidersController {
     return this.ridersService.getActiveAssignments(req.user.sub);
   }
 
+  @Get('dispatch-plan')
+  getDispatchPlan(@Request() req: RequestWithUser) {
+    return this.ridersService.getDispatchPlan(req.user.sub);
+  }
+
+  @Post('dispatch-plan/re-optimize')
+  reoptimizeDispatchPlan(@Request() req: RequestWithUser) {
+    return this.ridersService.reoptimizeOwnDispatchPlan(req.user.sub);
+  }
+
   @Patch('assignments/:id/status')
   updateDeliveryStatus(
     @Request() req: RequestWithUser,
-    @Param('id') id: number,
+    @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateDeliveryStatusDto,
   ) {
     return this.ridersService.updateDeliveryStatus(

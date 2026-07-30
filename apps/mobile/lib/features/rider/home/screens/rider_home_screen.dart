@@ -16,8 +16,8 @@ import 'package:printing_app/features/rider/home/widgets/rider_home_header.dart'
 import 'package:printing_app/features/rider/home/widgets/rider_recent_deliveries_section.dart';
 import 'package:printing_app/features/rider/home/widgets/rider_today_route_section.dart';
 import 'package:printing_app/features/rider/shared/models/rider_order_context.dart';
-import 'package:printing_app/shared/models/enums.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:printing_app/features/rider/shared/widgets/rider_stale_route_banner.dart';
 
 /// Rider home — mirrors the customer home layout with rider content.
 class RiderHomeScreen extends ConsumerWidget {
@@ -32,18 +32,30 @@ class RiderHomeScreen extends ConsumerWidget {
     final apiOrderRef = int.tryParse(order.orderInternalId) == null
         ? order.orderRef
         : order.orderInternalId;
-    final conv =
-        await ref.read(chatProvider.notifier).openOrderConversation(apiOrderRef);
+    final conv = await ref
+        .read(chatProvider.notifier)
+        .openOrderConversation(apiOrderRef);
     if (!context.mounted || conv == null) return;
     context.push(
       '/rider/chat/${conv.id}?type=${conv.type.name}&orderRef=${order.orderRef}',
     );
   }
 
-  Future<void> _call(String? phone) async {
-    if (phone == null || phone.isEmpty) return;
+  Future<void> _call(BuildContext context, String? phone) async {
+    if (phone == null || phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No phone number on file')),
+      );
+      return;
+    }
     final uri = Uri.parse('tel:$phone');
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open — no app available')),
+      );
+    }
   }
 
   @override
@@ -56,17 +68,15 @@ class RiderHomeScreen extends ConsumerWidget {
     final firstName = (auth.user?.fullName ?? 'Rider').split(' ').first;
     final active = state.activeDelivery;
     final routeStops = state.routeStops;
-    final delivered = state.completedAssignments
-        .where((v) => v.status == DeliveryStatus.delivered)
-        .toList();
-    final upcoming = routeStops.where((v) => v.id != active?.id).toList();
-    final mapStops = <RiderAssignmentView>[
-      ...delivered,
-      ?active,
-      ...upcoming,
-    ];
-    final completedCount = delivered.length;
-    final currentStopIndex = active != null ? delivered.length + 1 : 0;
+    final mapStops = state.plannedRoute.isNotEmpty
+        ? state.plannedRoute
+        : routeStops;
+    final completedCount = mapStops
+        .where(
+          (view) => view.planStop?.status == RiderDispatchStopStatus.completed,
+        )
+        .length;
+    final currentStopIndex = active?.planSequence ?? 0;
 
     return Stack(
       children: [
@@ -76,35 +86,40 @@ class RiderHomeScreen extends ConsumerWidget {
             child: RefreshIndicator(
               color: colors.brand,
               backgroundColor: colors.surface,
-              onRefresh:
-                  ref.read(deliveriesProvider.notifier).refreshAssignments,
+              onRefresh: ref
+                  .read(deliveriesProvider.notifier)
+                  .refreshAssignments,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 clipBehavior: Clip.none,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: AppSpacing.lg),
-                    RiderHomeHeader(firstName: firstName)
-                        .animate()
-                        .fadeIn(duration: 400.ms, curve: Curves.easeOut),
+                    RiderHomeHeader(
+                      firstName: firstName,
+                    ).animate().fadeIn(duration: 400.ms, curve: Curves.easeOut),
                     const SizedBox(height: AppSpacing.lg),
 
                     const HeroBanner(),
                     const SizedBox(height: AppSpacing.sm + 2),
 
+                    if (state.dataStale) const RiderStaleRouteBanner(),
+
                     SizedBox(
                       height: 380,
                       child: RiderCockpitMap(
                         mapStops: mapStops,
+                        planOrigin: state.planOrigin,
                         activeStop: active,
                         completedCount: completedCount,
                         currentStopIndex: currentStopIndex,
                         onMapTap: () {
                           if (active != null) {
-                            context.push('/rider/deliveries/${active.id}/active');
+                            context.push(
+                              '/rider/deliveries/${active.id}/active',
+                            );
                           } else {
                             context.go('/rider/deliveries');
                           }
@@ -119,10 +134,11 @@ class RiderHomeScreen extends ConsumerWidget {
                     if (active != null)
                       RiderActiveStopCard(
                         view: active,
-                        onTap: () =>
-                            context.push('/rider/deliveries/${active.id}/active'),
+                        onTap: () => context.push(
+                          '/rider/deliveries/${active.id}/active',
+                        ),
                         onMessage: () => _openChat(context, ref, active),
-                        onCall: () => _call(active.order.customerPhone),
+                        onCall: () => _call(context, active.order.customerPhone),
                       )
                     else
                       Padding(
@@ -131,7 +147,7 @@ class RiderHomeScreen extends ConsumerWidget {
                           vertical: AppSpacing.sm,
                         ),
                         child: Text(
-                          'No active stop — check Orders for assignments.',
+                          'No active stop — check Deliveries for assignments.',
                           style: AppTypography.caption.copyWith(
                             color: colors.onSurfaceDim,
                           ),
@@ -143,26 +159,21 @@ class RiderHomeScreen extends ConsumerWidget {
                       stops: routeStops,
                       onTapStop: (v) =>
                           context.push('/rider/deliveries/${v.id}'),
-                    )
-                        .animate()
-                        .fadeIn(
-                          duration: 400.ms,
-                          delay: 200.ms,
-                          curve: Curves.easeOut,
-                        ),
+                    ).animate().fadeIn(
+                      duration: 400.ms,
+                      delay: 200.ms,
+                      curve: Curves.easeOut,
+                    ),
 
                     const SizedBox(height: AppSpacing.lg),
                     RiderRecentDeliveriesSection(
                       completed: state.completedAssignments,
-                      onTap: (v) =>
-                          context.push('/rider/deliveries/${v.id}'),
-                    )
-                        .animate()
-                        .fadeIn(
-                          duration: 400.ms,
-                          delay: 300.ms,
-                          curve: Curves.easeOut,
-                        ),
+                      onTap: (v) => context.push('/rider/deliveries/${v.id}'),
+                    ).animate().fadeIn(
+                      duration: 400.ms,
+                      delay: 300.ms,
+                      curve: Curves.easeOut,
+                    ),
 
                     const SizedBox(height: AppSpacing.xxl),
                   ],
@@ -174,7 +185,9 @@ class RiderHomeScreen extends ConsumerWidget {
         if (active != null)
           Positioned(
             right: AppSpacing.xl,
-            bottom: 90,
+            // The shell reports the nav bar's true height (66 + device inset)
+            // via MediaQuery padding — anchor above it instead of hard-coding.
+            bottom: MediaQuery.of(context).padding.bottom + AppSpacing.md,
             child: Material(
               color: colors.accent,
               elevation: 6,

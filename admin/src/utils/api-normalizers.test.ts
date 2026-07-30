@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   humanizeEnumValue,
   normalizeAdminUser,
+  normalizeAdminRider,
+  normalizeDispatchPlan,
   normalizeOrder,
   normalizeProductSpecDefinition,
   normalizeServiceAddon,
@@ -10,7 +12,183 @@ import {
   normalizeSpecOption,
 } from "./api-normalizers";
 
+const validDispatchStop = (overrides: Record<string, unknown> = {}) => ({
+  id: 21,
+  planId: 12,
+  assignmentId: 201,
+  sequence: 1,
+  status: "pending",
+  destinationLatitude: 7.071,
+  destinationLongitude: 125.612,
+  legDurationSeconds: 10,
+  legDistanceMeters: 100,
+  legGeometry: {
+    type: "LineString",
+    coordinates: [[125.6079, 7.064], [125.612, 7.071]],
+  },
+  ...overrides,
+});
+
+const validDispatchPlan = (overrides: Record<string, unknown> = {}) => ({
+  id: 12,
+  riderId: 10,
+  version: 1,
+  status: "active",
+  originLatitude: 7.064,
+  originLongitude: 125.6079,
+  provider: "osrm",
+  profile: "driving",
+  totalDurationSeconds: 10,
+  totalDistanceMeters: 100,
+  routingDataStale: false,
+  plannedAt: "2026-07-10T10:00:00.000Z",
+  stops: [validDispatchStop()],
+  ...overrides,
+});
+
 describe("api normalizers", () => {
+  it("preserves only server-provided admin status capabilities", () => {
+    const order = normalizeOrder({
+      id: 7,
+      order_id: "ORD-10007",
+      user_id: 3,
+      category: "paper",
+      total_price: 20,
+      delivery_fee: 0,
+      payment_method: "grid_credits",
+      payment_status: "paid",
+      order_status: "order_placed",
+      allowed_next_statuses: ["file_verified", "file_declined"],
+      delivery_option: "delivery",
+      created_at: "2026-07-10T10:00:00.000Z",
+      updated_at: "2026-07-10T10:00:00.000Z",
+    });
+
+    expect(order.allowed_next_statuses).toEqual([
+      "file_verified",
+      "file_declined",
+    ]);
+  });
+
+  it("preserves server-computed rider assignment eligibility", () => {
+    expect(
+      normalizeAdminRider({
+        id: 10,
+        user_id: 20,
+        full_name: "Juan Rider",
+        vehicle_type: "motorcycle",
+        is_available: true,
+        assignment_eligible: false,
+      }),
+    ).toMatchObject({
+      id: 10,
+      is_available: true,
+      assignment_eligible: false,
+    });
+  });
+
+  it("strictly normalizes persisted dispatch plans and orders stops by sequence", () => {
+    const plan = normalizeDispatchPlan({
+      id: "12",
+      riderId: "10",
+      version: "2",
+      status: "active",
+      originLatitude: "7.0640000",
+      originLongitude: "125.6079000",
+      provider: "osrm",
+      profile: "driving",
+      totalDurationSeconds: "352",
+      totalDistanceMeters: "2188",
+      routingDataStale: false,
+      plannedAt: "2026-07-10T10:00:00.000Z",
+      stops: [
+        {
+          id: "22",
+          planId: "12",
+          assignmentId: "202",
+          sequence: "2",
+          status: "pending",
+          destinationLatitude: "7.0900000",
+          destinationLongitude: "125.6200000",
+          legDurationSeconds: "170",
+          legDistanceMeters: "1134",
+          legGeometry: {
+            type: "LineString",
+            coordinates: [[125.612, 7.071], [125.62, 7.09]],
+          },
+          assignment: { order: { orderId: "ORD-MARK" } },
+        },
+        {
+          id: 21,
+          planId: 12,
+          assignmentId: 201,
+          sequence: 1,
+          status: "pending",
+          destinationLatitude: 7.071,
+          destinationLongitude: 125.612,
+          legDurationSeconds: 182,
+          legDistanceMeters: 1054,
+          legGeometry: {
+            type: "LineString",
+            coordinates: [[125.6079, 7.064], [125.612, 7.071]],
+          },
+          assignment: { order: { orderId: "ORD-VEN" } },
+        },
+      ],
+    });
+
+    expect(plan).toMatchObject({
+      id: 12,
+      rider_profile_id: 10,
+      version: 2,
+      provider: "osrm",
+      profile: "driving",
+      total_duration_seconds: 352,
+      total_distance_meters: 2188,
+      routing_data_stale: false,
+      stops: [
+        { sequence: 1, assignment_id: 201, order_ref: "ORD-VEN" },
+        { sequence: 2, assignment_id: 202, order_ref: "ORD-MARK" },
+      ],
+    });
+  });
+
+  it.each([
+    [{ type: "Polygon", coordinates: [] }, "LineString"],
+    [{ type: "LineString", coordinates: [["125.6", 7.06]] }, "coordinate"],
+    [{ type: "LineString", coordinates: [[125.6]] }, "coordinate"],
+  ])("rejects malformed persisted route geometry %#", (geometry, message) => {
+    expect(() =>
+      normalizeDispatchPlan(validDispatchPlan({
+        stops: [validDispatchStop({ legGeometry: geometry })],
+      })),
+    ).toThrow(message);
+  });
+
+  it.each([
+    [validDispatchPlan({ stops: [] }), "stops"],
+    [validDispatchPlan({ plannedAt: "not-a-date" }), "timestamp"],
+    [validDispatchPlan({ originLatitude: 91 }), "metrics"],
+    [validDispatchPlan({ stops: [validDispatchStop({ destinationLongitude: 181 })] }), "coordinate"],
+    [
+      validDispatchPlan({
+        stops: [
+          validDispatchStop(),
+          validDispatchStop({ id: 22, sequence: 2 }),
+        ],
+      }),
+      "assignment",
+    ],
+  ])("rejects invalid persisted dispatch invariants %#", (payload, message) => {
+    expect(() => normalizeDispatchPlan(payload)).toThrow(message);
+  });
+
+  it.each([
+    validDispatchPlan({ routingDataStale: undefined }),
+    validDispatchPlan({ routingDataStale: "unknown" }),
+  ])("requires an explicit persisted routing stale flag", (payload) => {
+    expect(() => normalizeDispatchPlan(payload)).toThrow("stale");
+  });
   it("maps camelCase admin orders into the snake_case UI shape", () => {
     const order = normalizeOrder({
       id: 7,

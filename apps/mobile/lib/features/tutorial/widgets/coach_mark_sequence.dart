@@ -24,9 +24,9 @@ class TutorialStep {
   /// If null, align is auto-resolved per-step from target Y position.
   final ContentAlign? align;
 
-  /// True for steps where the user taps the spotlighted widget itself
-  /// to advance (the bubble shows only Skip). False for sections that
-  /// need an explicit "Got it →" button (passed as `onAdvance` to the bubble).
+  /// True for steps where tapping the spotlighted widget performs the action.
+  /// The bubble also exposes an accessible "Got it →" fallback that performs
+  /// the same action after closing the coach mark.
   final bool advanceOnSpotlightTap;
 
   /// Fires when the user taps the spotlighted target. Use this to trigger
@@ -93,7 +93,12 @@ void showCoachMark(
             step: i + 1,
             totalSteps: steps.length,
             onSkip: controller.skip,
-            onAdvance: step.advanceOnSpotlightTap ? null : controller.next,
+            onAdvance: step.advanceOnSpotlightTap
+                ? () {
+                    controller.next();
+                    step.onSpotlightTap?.call();
+                  }
+                : controller.next,
           ),
         ),
       ],
