@@ -2,6 +2,8 @@ import { useEffect, useState, useRef } from 'react';
 import type { ForwardRefExoticComponent, HTMLAttributes, RefAttributes } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PhoneScene } from './components/PhoneScene';
+import { ReactiveBackground } from './components/ReactiveBackground';
+import { EcosystemSection } from './components/EcosystemSection';
 import { Menu, X, MessageCircle, Zap, ShieldCheck, ChevronUp, Moon, Sun } from 'lucide-react';
 import { HardDriveUploadIcon, TruckIcon, ListIcon, TimerIcon, MessageCircleIcon } from 'lucide-animated';
 import { Link } from 'react-router-dom';
@@ -33,17 +35,17 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
         className="fixed top-0 left-0 right-0 z-[60] px-8 py-4 flex items-center justify-between"
       >
         {/* Logo */}
-        <a href="#hero" className="flex items-center gap-3 cursor-pointer px-5 py-2.5 rounded-full border border-white/10 bg-black text-white shadow-[0_0_15px_rgba(0,0,0,0.5)] hover:bg-black/80 transition-all duration-500">
+        <a href="#hero" className="flex items-center gap-3 cursor-pointer px-5 py-2.5 rounded-full border border-black/10 dark:border-white/10 bg-transparent backdrop-blur-md text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-500">
           <div className="grid grid-cols-3 gap-1">
-            <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-            <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+            <div className="w-1.5 h-1.5 bg-black dark:bg-white rounded-full"></div>
+            <div className="w-1.5 h-1.5 bg-black dark:bg-white rounded-full"></div>
             <div className="w-1.5 h-1.5 bg-[var(--color-primary)] rounded-full"></div>
-            <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-            <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-            <div className="w-1.5 h-1.5 bg-gray-500 rounded-full"></div>
-            <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-            <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-            <div className="w-1.5 h-1.5 bg-gray-500 rounded-full"></div>
+            <div className="w-1.5 h-1.5 bg-black dark:bg-white rounded-full"></div>
+            <div className="w-1.5 h-1.5 bg-black dark:bg-white rounded-full"></div>
+            <div className="w-1.5 h-1.5 bg-gray-400 rounded-full"></div>
+            <div className="w-1.5 h-1.5 bg-black dark:bg-white rounded-full"></div>
+            <div className="w-1.5 h-1.5 bg-black dark:bg-white rounded-full"></div>
+            <div className="w-1.5 h-1.5 bg-gray-400 rounded-full"></div>
           </div>
           <span className="text-xl font-bold tracking-widest uppercase">
             GRID<span className="text-[var(--color-primary)]">GO</span>
@@ -54,9 +56,9 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
         <div className={`hidden md:flex rounded-full px-6 py-2.5 items-center gap-8 text-sm font-medium absolute left-1/2 -translate-x-1/2 border transition-all duration-500 ${isScrolled ? 'bg-white dark:bg-black/60 backdrop-blur-md border-black/10 dark:border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}>
           <a href="#features" className="hover:text-[var(--color-primary)] transition-colors">Features</a>
           <a href="#process" className="hover:text-[var(--color-primary)] transition-colors">How it Works</a>
+          <a href="#ecosystem" className="hover:text-[var(--color-primary)] transition-colors">Ecosystem</a>
           <a href="#support" className="hover:text-[var(--color-primary)] transition-colors">Support</a>
           <a href="#about" className="hover:text-[var(--color-primary)] transition-colors">About Us</a>
-          <a href="#download" className="hover:text-[var(--color-primary)] transition-colors">Download</a>
         </div>
 
         {/* Right Nav */}
@@ -66,20 +68,26 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
         </div> */}
 
 
-        {/* Dark Mode Toggle */}
-        <button
-          onClick={toggleDarkMode}
-          className={`md:flex p-2 rounded-full z-50 relative border transition-all duration-500 ${isScrolled ? 'bg-white/80 dark:bg-black/60 backdrop-blur-md border-black/10 dark:border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}
-        >
-          {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-        </button>
-        {/* Mobile Hamburger Button */}
-        <button
-          className={`md:hidden p-2 rounded-full z-50 relative border transition-all duration-500 ${isScrolled ? 'bg-white dark:bg-black/60 backdrop-blur-md border-black/10 dark:border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}
-          onClick={() => setIsOpen(!isOpen)}
-        >
-          {isOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
+        <div className="flex items-center gap-3 z-50">
+          <a href="#download" className="hidden md:flex items-center px-6 py-2 bg-[var(--color-primary)] text-black font-bold text-sm rounded-full hover:brightness-110 transition-all shadow-[0_0_15px_rgba(255,222,88,0.3)]">
+            Download
+          </a>
+
+          {/* Dark Mode Toggle */}
+          <button
+            onClick={toggleDarkMode}
+            className={`p-2 rounded-full relative border transition-all duration-500 ${isScrolled ? 'bg-white/80 dark:bg-black/60 backdrop-blur-md border-black/10 dark:border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}
+          >
+            {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+          {/* Mobile Hamburger Button */}
+          <button
+            className={`md:hidden p-2 rounded-full relative border transition-all duration-500 ${isScrolled ? 'bg-white dark:bg-black/60 backdrop-blur-md border-black/10 dark:border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}
+            onClick={() => setIsOpen(!isOpen)}
+          >
+            {isOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
       </motion.nav>
 
       {/* Mobile Menu Overlay */}
@@ -93,6 +101,7 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
           >
             <a href="#features" onClick={() => setIsOpen(false)} className="text-2xl font-bold hover:text-[var(--color-primary)] transition-colors">Features</a>
             <a href="#process" onClick={() => setIsOpen(false)} className="text-2xl font-bold hover:text-[var(--color-primary)] transition-colors">How it Works</a>
+            <a href="#ecosystem" onClick={() => setIsOpen(false)} className="text-2xl font-bold hover:text-[var(--color-primary)] transition-colors">Ecosystem</a>
             <a href="#support" onClick={() => setIsOpen(false)} className="text-2xl font-bold hover:text-[var(--color-primary)] transition-colors">Support</a>
             <a href="#about" onClick={() => setIsOpen(false)} className="text-2xl font-bold hover:text-[var(--color-primary)] transition-colors">About Us</a>
             <a href="#download" onClick={() => setIsOpen(false)} className="text-2xl font-bold hover:text-[var(--color-primary)] transition-colors">Download</a>
@@ -110,6 +119,7 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
 function HeroSection() {
   return (
     <section id="hero" className="h-[100vh] flex flex-col items-center justify-center relative z-10 pointer-events-none">
+      <ReactiveBackground />
       {/* The Hero text is now fully rendered in 3D within PhoneScene.tsx */}
     </section>
   );
@@ -117,7 +127,7 @@ function HeroSection() {
 
 function ProcessSection({ isDarkMode }: { isDarkMode?: boolean }) {
   return (
-    <section className="h-[100vh] flex flex-col items-center justify-end pb-32 relative z-10 bg-map" style={{ backgroundImage: `url(${isDarkMode ? "/GRIDGO_BG.png" : "/GRIDGO_BG_WHITE.png"})` }}>
+    <section className="h-[100vh] flex flex-col items-center justify-end pb-16 relative z-10 bg-map" style={{ backgroundImage: `url(${isDarkMode ? "/GRIDGO_BG.png" : "/GRIDGO_BG_WHITE.png"})` }}>
       <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-0 pointer-events-none dark:hidden" />
       <motion.div
         initial={{ opacity: 0, y: 50, filter: 'blur(20px)' }}
@@ -393,7 +403,7 @@ function AboutSection({ isDarkMode }: { isDarkMode?: boolean }) {
             viewport={{ once: true, margin: '-100px' }}
             className="w-full flex justify-center h-full"
           >
-            <img src="/office.png" alt="GRIDGO Office" className="w-full h-full object-cover grayscale aspect-[4/5]" />
+            <img src="/office.png" alt="GRIDGO Office" className="w-full h-full object-cover aspect-[4/5]" />
           </motion.div>
 
           <div className="flex flex-col justify-between h-full py-1">
@@ -446,7 +456,7 @@ function TeamMember({ image, role, name, quote, delay = 0, reverse = false }: Te
       className={`flex flex-col ${reverse ? 'md:flex-row-reverse' : 'md:flex-row'} items-center gap-12 max-w-5xl mx-auto mb-32`}
     >
       <div className="w-full md:w-1/2 flex justify-center">
-        <img src={image} alt={name} className="w-64 h-64 object-cover rounded-full grayscale" />
+        <img src={image} alt={name} className="w-64 h-64 object-cover rounded-full" />
       </div>
       <div className={`w-full md:w-1/2 ${reverse ? 'text-right' : 'text-left'}`}>
         <p className="text-[var(--color-primary)] font-semibold mb-1">Meet the {role}</p>
@@ -613,16 +623,17 @@ function FooterSection() {
           <div className="flex flex-col gap-6">
             <h4 className="text-[#666] text-[13px] lowercase font-mono">services</h4>
             <div className="flex flex-col gap-5">
-              <a href="#" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">DOCUMENT PRINTING</a>
-              <a href="#" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">3D PRINTING</a>
-              <a href="#" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">DELIVERY</a>
-              <a href="#" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">THE QUEUE</a>
+              <a href="#features" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">DOCUMENT PRINTING</a>
+              <a href="#features" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">3D PRINTING</a>
+              <a href="#features" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">DELIVERY</a>
+              <a href="#features" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">THE QUEUE</a>
             </div>
           </div>
 
           <div className="flex flex-col gap-6">
             <h4 className="text-[#666] text-[13px] lowercase font-mono">resources</h4>
             <div className="flex flex-col gap-5">
+              <a href="#ecosystem" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">ECOSYSTEM</a>
               <a href="#support" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">SUPPORT</a>
               <a href="#process" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">HOW IT WORKS</a>
               <a href="#features" className="text-white text-[12px] font-bold tracking-widest uppercase hover:text-[var(--color-primary)] transition-colors">FEATURES</a>
@@ -717,6 +728,7 @@ function App() {
         <ProcessSection isDarkMode={isDarkMode} />
         <FeaturesSection />
         <HowItWorksSection />
+        <EcosystemSection isDarkMode={isDarkMode} />
         <SupportSection isDarkMode={isDarkMode} />
         <AboutSection isDarkMode={isDarkMode} />
         <TeamSection isDarkMode={isDarkMode} />

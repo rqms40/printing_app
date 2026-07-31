@@ -30,6 +30,9 @@ function GridTextLayer({ index, isDarkMode }: { index: number, isDarkMode?: bool
     const retreatZ = index === 0 ? 1.5 : 2.5 + index * 1.2
     mesh.current.position.z = THREE.MathUtils.lerp(baseZ, baseZ - retreatZ, ease)
 
+    // Scroll the text UP naturally with the page (1 vh is roughly 6.6 units in this camera setup)
+    mesh.current.position.y = vh * 6.6
+
     // ── Viewport-responsive scale ─────────────────────────────────────────
     // Camera z=8, vertical fov=45° → visible height = 6.63 units.
     // Visible WIDTH = 6.63 × aspect, which shrinks dramatically on portrait mobile.
@@ -53,6 +56,11 @@ function GridTextLayer({ index, isDarkMode }: { index: number, isDarkMode?: bool
 
     // Keep rotation absolutely still
     mesh.current.rotation.set(0, 0, 0)
+
+    // Force troika text to sync its properties
+    if (typeof mesh.current.sync === 'function') {
+      mesh.current.sync()
+    }
   })
 
   return (
@@ -113,9 +121,10 @@ function getPhoneState(vh: number, fromBottomVh: number) {
   if (vh <= 1.0) {
     const t = THREE.MathUtils.clamp(vh, 0, 1)
     const x = mobile ? THREE.MathUtils.lerp(-0.08, 0.04, t) : 0.02
+    // Move phone much higher on mobile at vh=1 to avoid overlapping text, matching startY of next section
     const y = mobile
-      ? THREE.MathUtils.lerp(0, 1.5, t)
-      : THREE.MathUtils.lerp(0, 1.2, t)
+      ? THREE.MathUtils.lerp(0, 1.9, t)
+      : THREE.MathUtils.lerp(0, 0.5, t)
     const scale = mobile
       ? THREE.MathUtils.lerp(0.92, 0.96, t)
       : THREE.MathUtils.lerp(1.16, 1.16, t)
@@ -129,31 +138,36 @@ function getPhoneState(vh: number, fromBottomVh: number) {
 
   if (fromBottomVh <= 1.2) {
     const t = THREE.MathUtils.clamp(1.2 - fromBottomVh, 0, 1.2) / 1.2
+    
+    // Adjust final target for mobile to ensure it stays on-screen
+    const targetX = mobile ? -0.8 : -2.5
+    const targetScale = mobile ? 1.3 : 1.8
+    
     return {
       pos: [
-        THREE.MathUtils.lerp(-8, -2.5, Math.pow(t, 2)),
+        THREE.MathUtils.lerp(-8, targetX, Math.pow(t, 2)),
         THREE.MathUtils.lerp(8, -0.2, t),
         0,
       ] as [number, number, number],
       rot: [BETA_ROT_X, BETA_ROT_Y, BETA_ROT_Z] as [number, number, number],
-      scale: THREE.MathUtils.lerp(0.5, 1.8, t),
+      scale: THREE.MathUtils.lerp(0.5, targetScale, t),
     }
   }
 
   if (vh > 1.0 && vh <= 2.0) {
     const t = THREE.MathUtils.clamp(vh - 1.0, 0, 1)
-    const startY = mobile ? 4.0 : 1.5
+    const startY = mobile ? 1.9 : 0.5
     const startScale = mobile ? 0.9 : 1.4
     return {
       pos: [0, THREE.MathUtils.lerp(startY, 12, t), 0] as [number, number, number],
-      rot: [0, THREE.MathUtils.lerp(0, Math.PI, t), 0] as [number, number, number],
+      rot: [HERO_ROT_X, HERO_ROT_Y, HERO_ROT_Z] as [number, number, number],
       scale: THREE.MathUtils.lerp(startScale, 0.5, t),
     }
   }
 
   return {
     pos: [0, 12, 0] as [number, number, number],
-    rot: [0, Math.PI, 0] as [number, number, number],
+    rot: [HERO_ROT_X, HERO_ROT_Y, HERO_ROT_Z] as [number, number, number],
     scale: 0.5,
   }
 }
@@ -161,6 +175,13 @@ function getPhoneState(vh: number, fromBottomVh: number) {
 // ─── Phone rig ──────────────────────────────────────────────────────────────
 function PhoneRig() {
   const group = useRef<THREE.Group>(null)
+  const [mobile, setMobile] = React.useState(window.innerWidth < 768)
+
+  React.useEffect(() => {
+    const handleResize = () => setMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   useFrame(() => {
     if (!group.current) return
