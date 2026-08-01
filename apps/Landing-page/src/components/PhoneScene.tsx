@@ -264,6 +264,14 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 
 // ─── Scene export ────────────────────────────────────────────────────────────
 export function PhoneScene({ isDarkMode }: { isDarkMode?: boolean }) {
+  const [mobile, setMobile] = React.useState(window.innerWidth < 768)
+
+  React.useEffect(() => {
+    const handleResize = () => setMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
   return (
     <div className="fixed inset-0 pointer-events-none z-30">
       <ErrorBoundary>
@@ -283,16 +291,18 @@ export function PhoneScene({ isDarkMode }: { isDarkMode?: boolean }) {
 
           <CameraRig />
           <GridTextLayers isDarkMode={isDarkMode} />
-          <PhoneRig />
-
-          <ContactShadows
-            position={[0, -2.5, 0]}
-            opacity={0.3}
-            scale={12}
-            blur={2.5}
-            far={5}
-            color="#FFDE58"
-          />
+          
+          <group visible={!mobile}>
+            <PhoneRig />
+            <ContactShadows
+              position={[0, -2.5, 0]}
+              opacity={0.3}
+              scale={12}
+              blur={2.5}
+              far={5}
+              color="#FFDE58"
+            />
+          </group>
         </Canvas>
       </ErrorBoundary>
     </div>
