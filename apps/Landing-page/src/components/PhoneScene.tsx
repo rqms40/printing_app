@@ -118,24 +118,6 @@ function getPhoneState(vh: number, fromBottomVh: number) {
   const BETA_ROT_Z = 0.4       // + = leans left,      - = leans right
   // ╚══════════════════════════════════════════════╝
 
-  if (vh <= 1.0) {
-    const t = THREE.MathUtils.clamp(vh, 0, 1)
-    const x = mobile ? THREE.MathUtils.lerp(-0.08, 0.04, t) : 0.02
-    // Move phone much higher on mobile at vh=1 to avoid overlapping text, matching startY of next section
-    const y = mobile
-      ? THREE.MathUtils.lerp(0, 1.9, t)
-      : THREE.MathUtils.lerp(0, 0.5, t)
-    const scale = mobile
-      ? THREE.MathUtils.lerp(0.92, 0.96, t)
-      : THREE.MathUtils.lerp(1.16, 1.16, t)
-
-    return {
-      pos: [x, y, 0.35] as [number, number, number],
-      rot: [HERO_ROT_X, HERO_ROT_Y, HERO_ROT_Z] as [number, number, number],
-      scale,
-    }
-  }
-
   if (fromBottomVh <= 1.2) {
     const t = THREE.MathUtils.clamp(1.2 - fromBottomVh, 0, 1.2) / 1.2
     
@@ -151,17 +133,6 @@ function getPhoneState(vh: number, fromBottomVh: number) {
       ] as [number, number, number],
       rot: [BETA_ROT_X, BETA_ROT_Y, BETA_ROT_Z] as [number, number, number],
       scale: THREE.MathUtils.lerp(0.5, targetScale, t),
-    }
-  }
-
-  if (vh > 1.0 && vh <= 2.0) {
-    const t = THREE.MathUtils.clamp(vh - 1.0, 0, 1)
-    const startY = mobile ? 1.9 : 0.5
-    const startScale = mobile ? 0.9 : 1.4
-    return {
-      pos: [0, THREE.MathUtils.lerp(startY, 12, t), 0] as [number, number, number],
-      rot: [HERO_ROT_X, HERO_ROT_Y, HERO_ROT_Z] as [number, number, number],
-      scale: THREE.MathUtils.lerp(startScale, 0.5, t),
     }
   }
 
@@ -290,7 +261,6 @@ export function PhoneScene({ isDarkMode }: { isDarkMode?: boolean }) {
           <Environment preset="city" />
 
           <CameraRig />
-          <GridTextLayers isDarkMode={isDarkMode} />
           
           <group visible={!mobile}>
             <PhoneRig />

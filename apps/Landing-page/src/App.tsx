@@ -2,7 +2,6 @@ import { useEffect, useState, useRef } from 'react';
 import type { ForwardRefExoticComponent, HTMLAttributes, RefAttributes } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PhoneScene } from './components/PhoneScene';
-import { ReactiveBackground } from './components/ReactiveBackground';
 import { EcosystemSection } from './components/EcosystemSection';
 import { Menu, X, MessageCircle, Zap, ShieldCheck, ChevronUp, Moon, Sun } from 'lucide-react';
 import { HardDriveUploadIcon, TruckIcon, ListIcon, TimerIcon, MessageCircleIcon } from 'lucide-animated';
@@ -116,36 +115,67 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
   );
 }
 
-function HeroSection() {
+function HeroSection({ isDarkMode }: { isDarkMode?: boolean }) {
   return (
-    <section id="hero" className="h-[100vh] flex flex-col items-center justify-center relative z-10 pointer-events-none">
-      <ReactiveBackground />
-      {/* The Hero text is now fully rendered in 3D within PhoneScene.tsx */}
-    </section>
-  );
-}
+    <section id="hero" className="h-[100vh] flex flex-col items-center justify-center relative z-10 bg-map bg-cover bg-center overflow-hidden" style={{ backgroundImage: `url(${isDarkMode ? "/Dark_route_animation.gif" : "/Light-lights-route-animation.gif"})` }}>
+      <div className="absolute inset-0 bg-white/60 dark:bg-black/40 backdrop-blur-sm dark:backdrop-blur-[3px] z-0 pointer-events-none" />
 
-function ProcessSection({ isDarkMode }: { isDarkMode?: boolean }) {
-  return (
-    <section className="h-[100vh] flex flex-col items-center justify-end pb-16 relative z-10 bg-map" style={{ backgroundImage: `url(${isDarkMode ? "/GRIDGO_BG.png" : "/GRIDGO_BG_WHITE.png"})` }}>
-      <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-0 pointer-events-none dark:hidden" />
-      <motion.div
-        initial={{ opacity: 0, y: 50, filter: 'blur(20px)' }}
-        whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-        transition={{ duration: 1, ease: 'easeOut' }}
-        viewport={{ once: true, margin: "-100px" }}
-        className="text-center max-w-2xl px-4 relative z-10"
-      >
-        <p className="text-xs md:text-sm tracking-[0.3em] uppercase text-gray-600 dark:text-gray-400 mb-2">
-          MAPPING THE FUTURE OF PRINTING
-        </p>
-        <h2 className="text-5xl md:text-6xl font-bold text-[var(--color-primary)] mb-6">
-          Design. Tap. Print.
-        </h2>
-        <p className="text-lg text-gray-700 dark:text-gray-300">
-          Send your files from the app straight to our printers. We'll handle the printing and deliver it to your door so you don't have to leave your seat.
-        </p>
-      </motion.div>
+      {/* Content wrapper */}
+      <div className="relative z-10 flex flex-col items-center text-center px-4 w-full h-full pt-32">
+        {/* Logo and Tagline */}
+        <motion.div
+          initial={{ opacity: 0, y: 20, filter: 'blur(10px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.8 }}
+          className="flex flex-col items-center mb-8"
+        >
+          {/* 3x3 Grid Logo */}
+          <div className="grid grid-cols-3 gap-1.5 mb-2">
+            <div className="w-2.5 h-2.5 bg-black dark:bg-white rounded-full"></div>
+            <div className="w-2.5 h-2.5 bg-black dark:bg-white rounded-full"></div>
+            <div className="w-2.5 h-2.5 bg-[var(--color-primary)] rounded-full"></div>
+            <div className="w-2.5 h-2.5 bg-black dark:bg-white rounded-full"></div>
+            <div className="w-2.5 h-2.5 bg-black dark:bg-white rounded-full"></div>
+            <div className="w-2.5 h-2.5 bg-gray-400 rounded-full"></div>
+            <div className="w-2.5 h-2.5 bg-black dark:bg-white rounded-full"></div>
+            <div className="w-2.5 h-2.5 bg-black dark:bg-white rounded-full"></div>
+            <div className="w-2.5 h-2.5 bg-gray-400 rounded-full"></div>
+          </div>
+          <span className="text-4xl font-black tracking-widest uppercase mt-2">GRID<span className="text-[var(--color-primary)]">GO</span></span>
+          <p className="text-[11px] md:text-sm tracking-[0.3em] uppercase mt-3 font-semibold text-gray-800 dark:text-gray-200">
+            MAPPING THE FUTURE OF PRINTING.
+          </p>
+        </motion.div>
+
+        {/* Main Headings */}
+        <motion.div
+          initial={{ opacity: 0, y: 20, filter: 'blur(10px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.8, delay: 0.2 }}
+          className="max-w-3xl flex flex-col items-center"
+        >
+          <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-[var(--color-primary)] mb-6 tracking-tight">
+            Design. Tap. Print.
+          </h1>
+          <p className="text-lg md:text-xl text-gray-700 dark:text-gray-300 max-w-2xl mx-auto mb-10 font-medium leading-relaxed">
+            Send your files from the app straight to our printers. We'll handle the printing and deliver it to your door so you don't have to leave your seat.
+          </p>
+        </motion.div>
+
+        {/* Phone Mockup at bottom */}
+        <motion.div
+          initial={{ opacity: 0, y: 100, filter: 'blur(10px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 1, delay: 0.4, ease: "easeOut" }}
+          className="mt-auto relative w-[280px] md:w-[360px] h-[350px] md:h-[450px]"
+        >
+          <img
+            src="/GIRDGO_PHONE.png"
+            alt="GRIDGO App"
+            className="absolute bottom-0 left-0 w-full h-full object-contain object-bottom drop-shadow-[0_0_40px_rgba(255,222,88,0.15)]"
+          />
+        </motion.div>
+      </div>
     </section>
   );
 }
@@ -193,7 +223,7 @@ function FeatureCard({ icon: Icon, title, desc }: { icon: AnimatedIconComponent,
 
 function FeaturesSection() {
   return (
-    <section id="features" className="min-h-screen bg-[var(--color-primary)] text-black py-20 relative z-10 flex flex-col justify-center">
+    <section id="features" className="min-h-screen bg-[#FFDE58] text-black py-20 relative z-10 flex flex-col justify-center">
       <div className="max-w-6xl mx-auto px-4 w-full">
         <h2 className="font-heading text-[36px] md:text-[42px] tracking-tight font-bold text-center mb-16">Features</h2>
 
@@ -719,13 +749,12 @@ function App() {
     <div className="w-full relative custom-scrollbar bg-white dark:bg-black text-black dark:text-white">
       <Navbar isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
 
-      {/* The 3D Parallax Canvas stays fixed in the background */}
+      {/* The 3D Parallax Canvas stays fixed in the background but is now hidden in the hero section */}
       <PhoneScene isDarkMode={isDarkMode} />
 
       {/* Scrollable Content */}
       <div className="relative w-full">
-        <HeroSection />
-        <ProcessSection isDarkMode={isDarkMode} />
+        <HeroSection isDarkMode={isDarkMode} />
         <FeaturesSection />
         <HowItWorksSection />
         <EcosystemSection isDarkMode={isDarkMode} />
