@@ -1,13 +1,16 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditEvent } from './entities/audit-event.entity';
+import { AuditService } from './audit.service';
 
 /**
- * Audit event scaffold (Task 1.3).
- * Append-only writers hook from orders/quality/matching/payments later.
+ * Append-only audit events (Task 2.3).
+ * Import AuditModule and inject AuditService from orders, quality,
+ * matching, payments, payouts, etc.
  */
 @Module({
   imports: [TypeOrmModule.forFeature([AuditEvent])],
-  exports: [TypeOrmModule],
+  providers: [AuditService],
+  exports: [AuditService, TypeOrmModule],
 })
 export class AuditModule {}

@@ -77,6 +77,7 @@ import {
   assertOrderStatusTransition,
   parseOrderStatus,
 } from './order-status-transition';
+import { AuditService } from '../audit/audit.service';
 
 // Slot definitions live in operator-local time (Asia/Manila, UTC+8). The API
 // server may run in UTC, so we never use server-local Date#getHours/setHours
@@ -191,6 +192,8 @@ export type ChargeComponents = {
 export type OrderStatusChangeContext = {
   actorUserId: number;
   reason: string;
+  /** Role at time of change (client, ops_admin, system, …). */
+  actorRole?: string | null;
 };
 
 export type OrderCompletionTransactionResult = {
@@ -299,6 +302,7 @@ export class OrdersService {
     private readonly fileMetadataRepo: Repository<FileMetadata>,
     @InjectRepository(DispatchPlan)
     private readonly dispatchPlanRepo: Repository<DispatchPlan>,
+    private readonly auditService: AuditService,
   ) {}
 
   async findByUser(userId: number): Promise<Order[]> {
@@ -1738,6 +1742,17 @@ export class OrdersService {
           changedByUserId: userId,
           notes: 'Customer cancelled order',
         });
+        await this.auditService.recordOrderStatusTransition(
+          {
+            orderId: order.id,
+            fromStatus: order.orderStatus,
+            toStatus: OrderStatus.CANCELLED,
+            actorUserId: userId,
+            actorRole: 'client',
+            reason: 'Customer cancelled order',
+          },
+          manager,
+        );
       }
       return {
         previous: alreadyCancelled ? null : order,
@@ -1860,6 +1875,19 @@ export class OrdersService {
             notes: 'Customer cancelled batch',
           })),
         );
+        for (const order of pending) {
+          await this.auditService.recordOrderStatusTransition(
+            {
+              orderId: order.id,
+              fromStatus: order.orderStatus,
+              toStatus: OrderStatus.CANCELLED,
+              actorUserId: userId,
+              actorRole: 'client',
+              reason: 'Customer cancelled batch',
+            },
+            manager,
+          );
+        }
       }
       return {
         previousOrders: pending,
@@ -1941,6 +1969,17 @@ export class OrdersService {
         changedByUserId: context!.actorUserId,
         notes: reason,
       });
+      await this.auditService.recordOrderStatusTransition(
+        {
+          orderId: id,
+          fromStatus: locked.orderStatus,
+          toStatus: orderStatus,
+          actorUserId: context!.actorUserId,
+          actorRole: context?.actorRole ?? null,
+          reason,
+        },
+        manager,
+      );
       const surveyRequirement =
         orderStatus === OrderStatus.COLLECTED_BY_CUSTOMER
           ? await this.prepareCompletionRecords(manager, locked)
@@ -2006,6 +2045,17 @@ export class OrdersService {
       changedByUserId: actorUserId,
       notes: 'Rider completed delivery',
     });
+    await this.auditService.recordOrderStatusTransition(
+      {
+        orderId: order.id,
+        fromStatus: order.orderStatus,
+        toStatus: OrderStatus.DELIVERED,
+        actorUserId,
+        actorRole: 'rider',
+        reason: 'Rider completed delivery',
+      },
+      manager,
+    );
     const surveyRequirement = await this.prepareCompletionRecords(
       manager,
       order,

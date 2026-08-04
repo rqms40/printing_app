@@ -132,6 +132,7 @@ export class OrdersController {
       {},
       {
         actorUserId: req.user.sub,
+        actorRole: req.user.role ?? null,
         reason: dto.notes?.trim() || 'Admin status update',
       },
     );

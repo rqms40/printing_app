@@ -57,6 +57,7 @@ import {
 } from '../riders/entities/dispatch-plan.entity';
 import { DispatchStopStatus } from '../riders/entities/dispatch-plan-stop.entity';
 import { BetaModeSettings } from '../beta-mode/entities/beta-mode-settings.entity';
+import { AuditService } from '../audit/audit.service';
 
 const specValueRepoProvider = () => ({
   provide: getRepositoryToken(OrderItemSpecValue),
@@ -217,6 +218,10 @@ describe('OrdersService', () => {
   let notificationsService: Partial<NotificationsService>;
   let catalogPricingService: { quote: jest.Mock };
   let fileMetadataRepo: jest.Mocked<Partial<Repository<FileMetadata>>>;
+  let auditService: {
+    recordOrderStatusTransition: jest.Mock;
+    append: jest.Mock;
+  };
   let transactionQuery: jest.Mock;
   let transactionBetaSettingsRepo: { findOne: jest.Mock };
 
@@ -410,6 +415,10 @@ describe('OrdersService', () => {
         };
       }),
     };
+    auditService = {
+      recordOrderStatusTransition: jest.fn().mockResolvedValue({ id: 1 }),
+      append: jest.fn().mockResolvedValue({ id: 1 }),
+    };
     orderItemsRepo.create.mockImplementation((data) => data as OrderItem);
     orderItemsRepo.save.mockImplementation(
       async (item) =>
@@ -538,6 +547,7 @@ describe('OrdersService', () => {
         },
         catalogPricingProvider(),
         { provide: CatalogPricingService, useValue: catalogPricingService },
+        { provide: AuditService, useValue: auditService },
       ],
     }).compile();
 
@@ -1724,6 +1734,63 @@ describe('OrdersService', () => {
       );
     });
 
+    it('writes an AuditEvent on controlled status change', async () => {
+      const placedOrder = {
+        ...mockOrder,
+        orderStatus: OrderStatus.SUBMITTED,
+      } as Order;
+      repo.findOneOrFail.mockResolvedValue(placedOrder);
+
+      await service.updateStatus(
+        1,
+        OrderStatus.APPROVED_FOR_MATCHING,
+        {},
+        {
+          actorUserId: 7,
+          actorRole: 'ops_admin',
+          reason: 'Admin production update',
+        },
+      );
+
+      expect(auditService.recordOrderStatusTransition).toHaveBeenCalledWith(
+        {
+          orderId: 1,
+          fromStatus: OrderStatus.SUBMITTED,
+          toStatus: OrderStatus.APPROVED_FOR_MATCHING,
+          actorUserId: 7,
+          actorRole: 'ops_admin',
+          reason: 'Admin production update',
+        },
+        expect.anything(),
+      );
+      expect(
+        auditService.recordOrderStatusTransition.mock.invocationCallOrder[0],
+      ).toBeGreaterThan(historyRepo.insert.mock.invocationCallOrder[0]);
+      expect(
+        auditService.recordOrderStatusTransition.mock.invocationCallOrder[0],
+      ).toBeLessThan(
+        (gateway.notifyOrderUpdate as jest.Mock).mock.invocationCallOrder[0],
+      );
+    });
+
+    it('does not write audit on no-op same-status update', async () => {
+      const current = {
+        ...mockOrder,
+        orderStatus: OrderStatus.APPROVED_FOR_MATCHING,
+      } as Order;
+      repo.findOneOrFail.mockResolvedValue(current);
+      repo.findOne.mockResolvedValue(current);
+
+      await service.updateStatus(
+        1,
+        OrderStatus.APPROVED_FOR_MATCHING,
+        {},
+        statusContext,
+      );
+
+      expect(auditService.recordOrderStatusTransition).not.toHaveBeenCalled();
+    });
+
     it('should update status and emit WebSocket event', async () => {
       repo.update.mockResolvedValue(undefined as any);
       repo.findOneOrFail.mockResolvedValue(mockOrder);
@@ -2538,6 +2605,13 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
           },
         },
         catalogPricingProvider(),
+        {
+          provide: AuditService,
+          useValue: {
+            recordOrderStatusTransition: jest.fn().mockResolvedValue({ id: 1 }),
+            append: jest.fn().mockResolvedValue({ id: 1 }),
+          },
+        },
       ],
     }).compile();
     service = module.get<OrdersService>(OrdersService);
@@ -2588,6 +2662,19 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       changedByUserId: 51,
       notes: 'Rider completed delivery',
     });
+    expect(
+      (service as any).auditService.recordOrderStatusTransition,
+    ).toHaveBeenCalledWith(
+      {
+        orderId: arrived.id,
+        fromStatus: OrderStatus.OUT_FOR_DELIVERY,
+        toStatus: OrderStatus.DELIVERED,
+        actorUserId: 51,
+        actorRole: 'rider',
+        reason: 'Rider completed delivery',
+      },
+      manager,
+    );
     expect(mockFilesService.stampExpiry).toHaveBeenCalledWith(
       arrived.fileMetadataId,
       7,
@@ -3313,6 +3400,13 @@ describe('createBatch with slot + destinations', () => {
           },
         },
         catalogPricingProvider(),
+        {
+          provide: AuditService,
+          useValue: {
+            recordOrderStatusTransition: jest.fn().mockResolvedValue({ id: 1 }),
+            append: jest.fn().mockResolvedValue({ id: 1 }),
+          },
+        },
       ],
     }).compile();
 
@@ -4305,6 +4399,13 @@ describe('cancelBatch', () => {
           },
         },
         catalogPricingProvider(),
+        {
+          provide: AuditService,
+          useValue: {
+            recordOrderStatusTransition: jest.fn().mockResolvedValue({ id: 1 }),
+            append: jest.fn().mockResolvedValue({ id: 1 }),
+          },
+        },
       ],
     }).compile();
 
@@ -4499,6 +4600,13 @@ describe('updateManualStatus', () => {
           },
         },
         catalogPricingProvider(),
+        {
+          provide: AuditService,
+          useValue: {
+            recordOrderStatusTransition: jest.fn().mockResolvedValue({ id: 1 }),
+            append: jest.fn().mockResolvedValue({ id: 1 }),
+          },
+        },
       ],
     }).compile();
 
@@ -4662,6 +4770,13 @@ describe('createBatch — 3D bounds enforcement', () => {
         },
         { provide: PrinterProfileService, useValue: printerProfileService },
         catalogPricingProvider(),
+        {
+          provide: AuditService,
+          useValue: {
+            recordOrderStatusTransition: jest.fn().mockResolvedValue({ id: 1 }),
+            append: jest.fn().mockResolvedValue({ id: 1 }),
+          },
+        },
       ],
     }).compile();
 
@@ -4825,6 +4940,13 @@ describe('listExternalDeliveries and updateExternalDeliveryStatus', () => {
           },
         },
         catalogPricingProvider(),
+        {
+          provide: AuditService,
+          useValue: {
+            recordOrderStatusTransition: jest.fn().mockResolvedValue({ id: 1 }),
+            append: jest.fn().mockResolvedValue({ id: 1 }),
+          },
+        },
       ],
     }).compile();
 
