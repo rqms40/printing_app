@@ -184,8 +184,8 @@ describe('CreditsService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('runs grant → reserve → spend without double-debiting on spend', async () => {
-      const lockedUser = { ...mockUser, credits: 0 } as User;
+    function ledgerHarness(initialCredits = 0) {
+      const lockedUser = { ...mockUser, credits: initialCredits } as User;
       const ledgerByKey = new Map<string, CreditTransaction>();
       let nextId = 1;
 
@@ -209,7 +209,7 @@ describe('CreditsService', () => {
           .fn()
           .mockImplementation(async (transaction: CreditTransaction) => {
             const saved = {
-              id: nextId++,
+              id: transaction.id ?? nextId++,
               ...transaction,
             } as CreditTransaction;
             if (saved.idempotencyKey) {
@@ -225,6 +225,11 @@ describe('CreditsService', () => {
       dataSource.transaction.mockImplementation(
         async (work: (m: EntityManager) => Promise<unknown>) => work(manager),
       );
+      return { lockedUser, ledgerByKey, userRepo, managerTxRepo, manager };
+    }
+
+    it('runs grant → reserve → spend without double-debiting on spend', async () => {
+      const { lockedUser, ledgerByKey } = ledgerHarness(0);
 
       await service.grantPilotCredits(
         { userId: 1, amount: 200, reason: 'QA pilot pack' },
@@ -245,13 +250,66 @@ describe('CreditsService', () => {
       expect(Number(lockedUser.credits)).toBe(125);
       expect(spend.transaction.type).toBe(CreditTransactionType.SPEND);
       expect(spend.balanceChanged).toBe(false);
+      expect(ledgerByKey.get('reserve:order:42')?.status).toBe(
+        CreditTransactionStatus.SETTLED,
+      );
 
-      // Idempotent spend replay
+      // Idempotent spend replay (same spend key)
       const replay = await service.spendCredits(1, 75, 'spend:order:42', {
         reserveIdempotencyKey: 'reserve:order:42',
       });
       expect(replay.balanceChanged).toBe(false);
       expect(Number(lockedUser.credits)).toBe(125);
+    });
+
+    it('rejects free release without a matching reserve (mint hole)', async () => {
+      await expect(
+        service.releaseCredits(1, 50, 'release:free:1'),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.releaseCredits(1, 50, 'release:free:2', {}),
+      ).rejects.toThrow(/matching unsettled reserve/i);
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects double-release of the same reserve', async () => {
+      const { lockedUser } = ledgerHarness(100);
+
+      await service.reserveCredits(1, 40, 'reserve:order:99');
+      expect(Number(lockedUser.credits)).toBe(60);
+
+      const first = await service.releaseCredits(1, 40, 'release:order:99:a', {
+        reserveIdempotencyKey: 'reserve:order:99',
+      });
+      expect(Number(lockedUser.credits)).toBe(100);
+      expect(first.transaction.type).toBe(CreditTransactionType.RELEASE);
+
+      await expect(
+        service.releaseCredits(1, 40, 'release:order:99:b', {
+          reserveIdempotencyKey: 'reserve:order:99',
+        }),
+      ).rejects.toThrow(/already settled/i);
+      expect(Number(lockedUser.credits)).toBe(100);
+    });
+
+    it('rejects double-spend of the same reserve', async () => {
+      const { lockedUser } = ledgerHarness(100);
+
+      await service.reserveCredits(1, 30, 'reserve:order:77');
+      expect(Number(lockedUser.credits)).toBe(70);
+
+      const first = await service.spendCredits(1, 30, 'spend:order:77:a', {
+        reserveIdempotencyKey: 'reserve:order:77',
+      });
+      expect(Number(lockedUser.credits)).toBe(70);
+      expect(first.balanceChanged).toBe(false);
+
+      await expect(
+        service.spendCredits(1, 30, 'spend:order:77:b', {
+          reserveIdempotencyKey: 'reserve:order:77',
+        }),
+      ).rejects.toThrow(/already settled/i);
+      expect(Number(lockedUser.credits)).toBe(70);
     });
 
     it('rejects reserve/spend without idempotency key', async () => {

@@ -160,7 +160,9 @@ export class CreditsService {
   /**
    * Spend Pilot Credits. Requires idempotency key.
    * When `reserveIdempotencyKey` is provided, settles a prior reserve without
-   * a second balance deduction (reserve already held funds).
+   * a second balance deduction (reserve already held funds) and marks the
+   * reserve SETTLED so it cannot be spent/released again.
+   * Service-layer only — not exposed on the HTTP controller.
    */
   async spendCredits(
     userId: number,
@@ -187,25 +189,15 @@ export class CreditsService {
       }
 
       if (options.reserveIdempotencyKey) {
-        const reserve = await this.findByIdempotencyKey(
+        const reserve = await this.loadOpenReserve(
           manager,
           options.reserveIdempotencyKey,
+          userId,
+          amount,
+          'spend',
         );
-        if (!reserve) {
-          throw new BadRequestException('Reserve not found for spend');
-        }
-        if (
-          reserve.userId !== userId ||
-          reserve.type !== CreditTransactionType.RESERVE ||
-          reserve.status !== CreditTransactionStatus.APPROVED ||
-          Number(reserve.amountCredits) !== amount
-        ) {
-          throw new BadRequestException(
-            'Reserve ledger reference mismatch for spend',
-          );
-        }
         // Balance already reduced at reserve time.
-        return this.applyBalanceDeltaWithManager({
+        const mutation = await this.applyBalanceDeltaWithManager({
           userId,
           amountDelta: 0,
           type: CreditTransactionType.SPEND,
@@ -217,6 +209,8 @@ export class CreditsService {
           amountCreditsOverride: amount,
           manager,
         });
+        await this.markReserveSettled(manager, reserve);
+        return mutation;
       }
 
       return this.applyBalanceDeltaWithManager({
@@ -241,7 +235,10 @@ export class CreditsService {
   }
 
   /**
-   * Release a prior reserve back to available balance. Requires idempotency key.
+   * Release a prior open reserve back to available balance.
+   * Requires a matching unsettled reserve — free release is rejected (mint hole).
+   * Marks the reserve SETTLED so it cannot be released/spent again.
+   * Service-layer only — not exposed on the HTTP controller.
    */
   async releaseCredits(
     userId: number,
@@ -251,6 +248,12 @@ export class CreditsService {
   ): Promise<CreditMutationResult> {
     this.assertPositiveAmount(amount);
     this.assertIdempotencyKey(idempotencyKey);
+
+    if (!options.reserveIdempotencyKey?.trim()) {
+      throw new BadRequestException(
+        'Release requires a matching unsettled reserve (reserveIdempotencyKey)',
+      );
+    }
 
     const run = async (manager: EntityManager) => {
       const existing = await this.findByIdempotencyKey(
@@ -267,36 +270,27 @@ export class CreditsService {
         );
       }
 
-      if (options.reserveIdempotencyKey) {
-        const reserve = await this.findByIdempotencyKey(
-          manager,
-          options.reserveIdempotencyKey,
-        );
-        if (!reserve) {
-          throw new BadRequestException('Reserve not found for release');
-        }
-        if (
-          reserve.userId !== userId ||
-          reserve.type !== CreditTransactionType.RESERVE ||
-          Number(reserve.amountCredits) !== amount
-        ) {
-          throw new BadRequestException(
-            'Reserve ledger reference mismatch for release',
-          );
-        }
-      }
+      const reserve = await this.loadOpenReserve(
+        manager,
+        options.reserveIdempotencyKey!,
+        userId,
+        amount,
+        'release',
+      );
 
-      return this.applyBalanceDeltaWithManager({
+      const mutation = await this.applyBalanceDeltaWithManager({
         userId,
         amountDelta: amount,
         type: CreditTransactionType.RELEASE,
         status: CreditTransactionStatus.APPROVED,
-        referenceId: options.referenceId ?? null,
+        referenceId: options.referenceId ?? reserve.referenceId,
         reason: options.reason ?? null,
         actorUserId: options.actorUserId ?? null,
         idempotencyKey,
         manager,
       });
+      await this.markReserveSettled(manager, reserve);
+      return mutation;
     };
 
     if (options.manager) {
@@ -445,6 +439,50 @@ export class CreditsService {
     return manager.getRepository(CreditTransaction).findOne({
       where: { idempotencyKey },
     });
+  }
+
+  /**
+   * Load an open (APPROVED) reserve for settlement under a write lock.
+   * Settled / mismatched reserves are rejected.
+   */
+  private async loadOpenReserve(
+    manager: EntityManager,
+    reserveIdempotencyKey: string,
+    userId: number,
+    amount: number,
+    action: 'spend' | 'release',
+  ): Promise<CreditTransaction> {
+    const reserve = await manager.getRepository(CreditTransaction).findOne({
+      where: { idempotencyKey: reserveIdempotencyKey },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!reserve) {
+      throw new BadRequestException(`Reserve not found for ${action}`);
+    }
+    if (reserve.status === CreditTransactionStatus.SETTLED) {
+      throw new BadRequestException(
+        `Reserve already settled; cannot ${action} again`,
+      );
+    }
+    if (
+      reserve.userId !== userId ||
+      reserve.type !== CreditTransactionType.RESERVE ||
+      reserve.status !== CreditTransactionStatus.APPROVED ||
+      Number(reserve.amountCredits) !== amount
+    ) {
+      throw new BadRequestException(
+        `Reserve ledger reference mismatch for ${action}`,
+      );
+    }
+    return reserve;
+  }
+
+  private async markReserveSettled(
+    manager: EntityManager,
+    reserve: CreditTransaction,
+  ): Promise<void> {
+    reserve.status = CreditTransactionStatus.SETTLED;
+    await manager.getRepository(CreditTransaction).save(reserve);
   }
 
   private async idempotentReplay(

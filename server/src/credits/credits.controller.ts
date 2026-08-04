@@ -17,9 +17,6 @@ import { CreditsService } from './credits.service';
 import {
   GrantPilotCreditsDto,
   ManualAdjustmentDto,
-  ReleaseCreditsDto,
-  ReserveCreditsDto,
-  SpendCreditsDto,
   UpdateSettingsDto,
 } from './dto/credits.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -47,6 +44,8 @@ export class CreditsController {
 
   /**
    * Client balance + ledger history (Pilot Credits).
+   * Reserve/spend/release are service-layer only (order payment path);
+   * they are not exposed as client HTTP mint/debit endpoints.
    */
   @Get('me')
   getMyCredits(
@@ -84,50 +83,6 @@ export class CreditsController {
     @Body() dto: ManualAdjustmentDto,
   ) {
     return this.creditsService.manualAdjustment(dto, req.user.sub);
-  }
-
-  /**
-   * Internal/service-style reserve (authenticated account owner).
-   * Marketplace payment flow will call service methods in-process;
-   * this endpoint exists for tests and controlled clients.
-   */
-  @Post('reserve')
-  reserve(
-    @Request() req: RequestWithUser,
-    @Body() dto: ReserveCreditsDto,
-  ) {
-    return this.creditsService.reserveCredits(
-      req.user.sub,
-      dto.amount,
-      dto.idempotencyKey,
-      { referenceId: dto.referenceId },
-    );
-  }
-
-  @Post('spend')
-  spend(@Request() req: RequestWithUser, @Body() dto: SpendCreditsDto) {
-    return this.creditsService.spendCredits(
-      req.user.sub,
-      dto.amount,
-      dto.idempotencyKey,
-      {
-        referenceId: dto.referenceId,
-        reserveIdempotencyKey: dto.reserveIdempotencyKey,
-      },
-    );
-  }
-
-  @Post('release')
-  release(@Request() req: RequestWithUser, @Body() dto: ReleaseCreditsDto) {
-    return this.creditsService.releaseCredits(
-      req.user.sub,
-      dto.amount,
-      dto.idempotencyKey,
-      {
-        referenceId: dto.referenceId,
-        reserveIdempotencyKey: dto.reserveIdempotencyKey,
-      },
-    );
   }
 
   /**

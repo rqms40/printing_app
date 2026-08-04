@@ -25,4 +25,11 @@ describe('CreditsController authorization metadata', () => {
       Reflect.getMetadata(ROLES_KEY, CreditsController.prototype.getMyCredits),
     ).toBeUndefined();
   });
+
+  it('does not expose reserve/spend/release as client-callable mint endpoints', () => {
+    const proto = CreditsController.prototype as Record<string, unknown>;
+    expect(proto.reserve).toBeUndefined();
+    expect(proto.spend).toBeUndefined();
+    expect(proto.release).toBeUndefined();
+  });
 });

@@ -31,6 +31,8 @@ export enum CreditTransactionStatus {
   PENDING = 'pending',
   APPROVED = 'approved',
   REJECTED = 'rejected',
+  /** Reserve hold has been spent or released (no longer open). */
+  SETTLED = 'settled',
 }
 
 @Entity('credit_transactions')
