@@ -9,8 +9,16 @@ import { FilesService } from '../files/files.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource, MoreThanOrEqual, Repository } from 'typeorm';
 import { BETA_ORDER_LIMIT_REACHED } from './dto/beta-order-limit.error';
-import { calculateChargeTotal, OrdersService } from './orders.service';
-import { Order, OrderStatus } from './entities/order.entity';
+import {
+  applyMarketplacePaymentDefaults,
+  calculateChargeTotal,
+  OrdersService,
+} from './orders.service';
+import {
+  Order,
+  OrderStatus,
+  PaymentAuthorizationStatus,
+} from './entities/order.entity';
 import { OrderStatusHistory } from './entities/order-status-history.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { OrderItemSpecValue } from './entities/order-item-spec-value.entity';
@@ -147,6 +155,42 @@ describe('calculateChargeTotal', () => {
         deliveryFee: '20.00',
       }),
     ).toThrow('Invalid totalPrice charge component');
+  });
+});
+
+describe('applyMarketplacePaymentDefaults', () => {
+  it('sets minor totals, none authorization, and empty snapshot', () => {
+    const defaults = applyMarketplacePaymentDefaults({
+      totalPrice: 100,
+      deliveryFee: 25,
+      paymentMethod: 'gridCredits',
+    });
+
+    expect(defaults.finalTotalMinor).toBe('12500');
+    expect(defaults.deliveryFeeMinor).toBe('2500');
+    expect(defaults.paymentAuthorizationStatus).toBe(
+      PaymentAuthorizationStatus.NONE,
+    );
+    expect(defaults.codEligible).toBe(false);
+    expect(defaults.authorizationSnapshot).toBeNull();
+  });
+
+  it('preserves explicitly provided minor / eligibility values', () => {
+    const defaults = applyMarketplacePaymentDefaults({
+      totalPrice: 100,
+      deliveryFee: 25,
+      finalTotalMinor: '999',
+      deliveryFeeMinor: '100',
+      codEligible: true,
+      paymentAuthorizationStatus: PaymentAuthorizationStatus.FAILED,
+    });
+
+    expect(defaults.finalTotalMinor).toBe('999');
+    expect(defaults.deliveryFeeMinor).toBe('100');
+    expect(defaults.codEligible).toBe(true);
+    expect(defaults.paymentAuthorizationStatus).toBe(
+      PaymentAuthorizationStatus.FAILED,
+    );
   });
 });
 
@@ -500,6 +544,49 @@ describe('OrdersService', () => {
     service = module.get(OrdersService);
   });
 
+  describe('freezeAuthorizationSnapshot', () => {
+    it('freezes commercial snapshot and marks payment authorized', () => {
+      const order = {
+        id: 9,
+        totalPrice: 100,
+        deliveryFee: 20,
+        paymentMethod: 'pilot_credit',
+        paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
+        authorizationSnapshot: null,
+        finalTotalMinor: '12000',
+        deliveryFeeMinor: '2000',
+        category: 'paper',
+        quantity: 1,
+        fileMetadataId: 7,
+        estimatedCompletionAt: null,
+      } as Order;
+
+      const frozen = service.freezeAuthorizationSnapshot(order, {
+        frozenAt: '2026-08-04T15:00:00.000Z',
+        commissionMinor: 100,
+      });
+
+      expect(frozen.paymentAuthorizationStatus).toBe(
+        PaymentAuthorizationStatus.AUTHORIZED,
+      );
+      const snap = frozen.authorizationSnapshot as {
+        finalTotalMinor: string;
+        commissionMinor: string;
+        artworkVersion: number;
+        priceMinor: string;
+      };
+      expect(snap.finalTotalMinor).toBe('12000');
+      expect(snap.commissionMinor).toBe('100');
+      expect(snap.artworkVersion).toBe(7);
+
+      // Second freeze is a no-op (immutable)
+      service.freezeAuthorizationSnapshot(order, { priceMinor: 1 });
+      expect(
+        (order.authorizationSnapshot as { priceMinor: string }).priceMinor,
+      ).toBe('10000');
+    });
+  });
+
   describe('create', () => {
     it('should generate orderId, save order', async () => {
       repo.count.mockResolvedValue(0);
@@ -590,6 +677,30 @@ describe('OrdersService', () => {
       );
       expect(repo.create).toHaveBeenCalledWith(
         expect.objectContaining({ paymentStatus: 'paid' }),
+      );
+    });
+
+    it('sets marketplace payment authorization defaults on create', async () => {
+      repo.count.mockResolvedValue(0);
+      repo.create.mockReturnValue(mockOrder);
+      repo.save.mockResolvedValue(mockOrder);
+
+      await service.create({
+        userId: 1,
+        category: 'paper',
+        paymentMethod: 'gcash',
+        deliveryFee: 30,
+      } as Partial<Order>);
+
+      // catalog mock: paper subtotal 120 + delivery 30 = 150 major → 15000 minor
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          finalTotalMinor: '15000',
+          deliveryFeeMinor: '3000',
+          paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
+          codEligible: false,
+          authorizationSnapshot: null,
+        }),
       );
     });
 

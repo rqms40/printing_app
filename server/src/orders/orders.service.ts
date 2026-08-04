@@ -17,12 +17,21 @@ import {
   BETA_ORDER_LIMIT_MESSAGE,
   BETA_ORDER_LIMIT_REACHED,
 } from './dto/beta-order-limit.error';
-import { Order, OrderStatus } from './entities/order.entity';
+import {
+  Order,
+  OrderStatus,
+  PaymentAuthorizationStatus,
+} from './entities/order.entity';
 import { OrderStatusHistory } from './entities/order-status-history.entity';
 import { BatchOrder } from './entities/batch-order.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { OrderItemSpecValue } from './entities/order-item-spec-value.entity';
 import { DeliveryDestination } from './entities/delivery-destination.entity';
+import {
+  freezeAuthorizationSnapshotOnOrder,
+  pesosToMinor,
+  type FreezeAuthorizationInput,
+} from './order-authorization-snapshot';
 import {
   DeliveryAssignment,
   DeliveryStatus,
@@ -215,6 +224,37 @@ export function calculateChargeTotal(components: ChargeComponents): number {
       components.extraDestinationFee,
     )
   );
+}
+
+/**
+ * Marketplace money/authorization defaults for new orders.
+ * Snapshot stays null until freezeAuthorizationSnapshot (payment module).
+ */
+export function applyMarketplacePaymentDefaults(
+  order: Partial<Order>,
+): Partial<Order> {
+  const deliveryFee = Number(order.deliveryFee ?? 0);
+  const totalPrice = Number(order.totalPrice ?? 0);
+  const finalMajor = calculateChargeTotal({
+    totalPrice,
+    deliveryFee,
+  });
+
+  return {
+    ...order,
+    deliveryFeeMinor:
+      order.deliveryFeeMinor != null && order.deliveryFeeMinor !== ''
+        ? order.deliveryFeeMinor
+        : pesosToMinor(deliveryFee),
+    finalTotalMinor:
+      order.finalTotalMinor != null && order.finalTotalMinor !== ''
+        ? order.finalTotalMinor
+        : pesosToMinor(finalMajor),
+    paymentAuthorizationStatus:
+      order.paymentAuthorizationStatus ?? PaymentAuthorizationStatus.NONE,
+    codEligible: order.codEligible ?? false,
+    authorizationSnapshot: order.authorizationSnapshot ?? null,
+  };
 }
 
 @Injectable()
@@ -557,6 +597,10 @@ export class OrdersService {
         })
       : 0;
     orderData.paymentStatus = creditPayment ? 'paid' : 'pending';
+    Object.assign(
+      orderData,
+      applyMarketplacePaymentDefaults(orderData as Partial<Order>),
+    );
     const creation = await this.dataSource.transaction(async (manager) => {
       const transactionOrdersRepo = manager.getRepository(Order);
       const transactionItemsRepo = manager.getRepository(OrderItem);
@@ -973,29 +1017,34 @@ export class OrdersService {
       const firstDestId =
         savedDestinations[normalizedItems[0]?.destinationIndex ?? 0]?.id ??
         null;
-      const aggregateOrder = txOrdersRepo.create({
-        userId,
-        orderId: orderRef,
-        category: normalizedItems.length > 1 ? 'batch' : firstItem.category,
-        quantity: normalizedItems.reduce((sum, item) => sum + item.quantity, 0),
-        totalPrice: subtotal,
-        deliveryFee,
-        paymentMethod: dto.paymentMethod,
-        paymentStatus,
-        deliveryOption: dto.deliveryOption,
-        deliveryAddressId: validatedDeliveryAddressId,
-        fileName:
-          normalizedItems.length > 1
-            ? `${normalizedItems.length} print jobs`
-            : firstItem.fileName,
-        fileUrl: normalizedItems.length === 1 ? firstItem.fileUrl : undefined,
-        fileMetadataId:
-          normalizedItems.length === 1
-            ? (firstItem.fileMetadataId ?? null)
-            : null,
-        batchOrderId: savedBatch.id,
-        destinationId: firstDestId,
-      } as Partial<Order>);
+      const aggregateOrder = txOrdersRepo.create(
+        applyMarketplacePaymentDefaults({
+          userId,
+          orderId: orderRef,
+          category: normalizedItems.length > 1 ? 'batch' : firstItem.category,
+          quantity: normalizedItems.reduce(
+            (sum, item) => sum + item.quantity,
+            0,
+          ),
+          totalPrice: subtotal,
+          deliveryFee,
+          paymentMethod: dto.paymentMethod,
+          paymentStatus,
+          deliveryOption: dto.deliveryOption,
+          deliveryAddressId: validatedDeliveryAddressId,
+          fileName:
+            normalizedItems.length > 1
+              ? `${normalizedItems.length} print jobs`
+              : firstItem.fileName,
+          fileUrl: normalizedItems.length === 1 ? firstItem.fileUrl : undefined,
+          fileMetadataId:
+            normalizedItems.length === 1
+              ? (firstItem.fileMetadataId ?? null)
+              : null,
+          batchOrderId: savedBatch.id,
+          destinationId: firstDestId,
+        }) as Partial<Order>,
+      );
       const savedOrder = await txOrdersRepo.save(aggregateOrder);
 
       for (const [index, item] of normalizedItems.entries()) {
@@ -1164,7 +1213,40 @@ export class OrdersService {
 
   private static isCreditPaymentMethod(paymentMethod?: string): boolean {
     const normalized = paymentMethod?.replace(/[_-]/g, '').toLowerCase();
-    return normalized === 'credits' || normalized === 'gridcredits';
+    return (
+      normalized === 'credits' ||
+      normalized === 'gridcredits' ||
+      normalized === 'pilotcredit' ||
+      normalized === 'pilotcredits'
+    );
+  }
+
+  /**
+   * Freeze immutable commercial snapshot at payment authorization.
+   * Intended for the payments module when entering `payment_authorized`.
+   * Idempotent: a second call leaves the existing snapshot unchanged.
+   */
+  freezeAuthorizationSnapshot(
+    order: Order,
+    input: FreezeAuthorizationInput = {},
+  ): Order {
+    return freezeAuthorizationSnapshotOnOrder(order, input);
+  }
+
+  /**
+   * Load order, freeze authorization snapshot, persist.
+   * Does not perform status transition (payment module owns that).
+   */
+  async persistAuthorizationSnapshot(
+    orderId: number,
+    input: FreezeAuthorizationInput = {},
+  ): Promise<Order> {
+    const order = await this.ordersRepo.findOne({ where: { id: orderId } });
+    if (!order) {
+      throw new NotFoundException(`Order ${orderId} not found`);
+    }
+    const frozen = this.freezeAuthorizationSnapshot(order, input);
+    return this.ordersRepo.save(frozen);
   }
 
   private async assertBetaPaymentMethod(
