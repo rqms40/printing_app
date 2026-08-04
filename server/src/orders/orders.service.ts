@@ -1313,6 +1313,461 @@ export class OrdersService {
     return this.ordersRepo.save(frozen);
   }
 
+  /** Default client payment window after supplier accept (PRD §6.3). */
+  static readonly PAYMENT_AUTH_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+
+  static creditReserveIdempotencyKey(orderId: number): string {
+    return `payment-auth:reserve:order:${orderId}`;
+  }
+
+  static creditSpendIdempotencyKey(orderId: number): string {
+    return `payment-auth:spend:order:${orderId}`;
+  }
+
+  /**
+   * Authorize payment for production (Task 3.3).
+   *
+   * Allowed from `supplier_accepted` or `awaiting_payment`.
+   * - pilot_credit / gridCredits: reserve → spend (idempotent) unless already paid
+   * - COD: re-check eligibility; authorize for collection (not cash in hand)
+   * Freezes commercial snapshot and transitions to `payment_authorized`.
+   */
+  async authorizePayment(
+    orderId: number,
+    context: OrderStatusChangeContext,
+  ): Promise<Order> {
+    if (
+      !Number.isInteger(context?.actorUserId) ||
+      context.actorUserId <= 0
+    ) {
+      throw new BadRequestException('Status change actor is required');
+    }
+    const reason =
+      context.reason?.trim() || 'Payment authorization';
+
+    const precheck = await this.ordersRepo.findOne({ where: { id: orderId } });
+    if (!precheck) {
+      throw new NotFoundException(`Order ${orderId} not found`);
+    }
+
+    const actorRole = (context.actorRole ?? '').toLowerCase();
+    const isOps =
+      actorRole === 'ops_admin' ||
+      actorRole === 'super_admin' ||
+      actorRole === 'system';
+    if (!isOps && precheck.userId !== context.actorUserId) {
+      throw new ForbiddenException({
+        code: 'not_order_owner',
+        message: 'You can only authorize payment on your own orders',
+      });
+    }
+
+    // Idempotent: already authorized.
+    if (
+      precheck.orderStatus === OrderStatus.PAYMENT_AUTHORIZED &&
+      precheck.paymentAuthorizationStatus ===
+        PaymentAuthorizationStatus.AUTHORIZED
+    ) {
+      return (await this.findById(orderId)) ?? precheck;
+    }
+
+    if (
+      precheck.orderStatus !== OrderStatus.SUPPLIER_ACCEPTED &&
+      precheck.orderStatus !== OrderStatus.AWAITING_PAYMENT
+    ) {
+      throw new BadRequestException({
+        code: 'invalid_status_for_authorization',
+        message: `Cannot authorize payment from status ${precheck.orderStatus}`,
+      });
+    }
+
+    let creditMutation: CreditMutationResult | null = null;
+
+    const result = await this.dataSource.transaction(async (manager) => {
+      const ordersRepo = manager.getRepository(Order);
+      const locked = await ordersRepo.findOneOrFail({
+        where: { id: orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (
+        locked.orderStatus === OrderStatus.PAYMENT_AUTHORIZED &&
+        locked.paymentAuthorizationStatus ===
+          PaymentAuthorizationStatus.AUTHORIZED
+      ) {
+        return { previous: null as Order | null, order: locked };
+      }
+
+      if (
+        locked.orderStatus !== OrderStatus.SUPPLIER_ACCEPTED &&
+        locked.orderStatus !== OrderStatus.AWAITING_PAYMENT
+      ) {
+        throw new BadRequestException({
+          code: 'invalid_status_for_authorization',
+          message: `Cannot authorize payment from status ${locked.orderStatus}`,
+        });
+      }
+
+      assertOrderStatusTransition(
+        locked.orderStatus,
+        OrderStatus.PAYMENT_AUTHORIZED,
+      );
+
+      const paymentMethod = String(locked.paymentMethod ?? '');
+      const isCredit = OrdersService.isCreditPaymentMethod(paymentMethod);
+      const isCod = isCodPaymentMethod(paymentMethod);
+
+      if (!isCredit && !isCod) {
+        throw new BadRequestException({
+          code: 'unsupported_payment_method',
+          message: `Payment authorization does not support method '${paymentMethod}'`,
+        });
+      }
+
+      if (isCredit) {
+        creditMutation = await this.settlePilotCreditsForAuthorization(
+          locked,
+          context.actorUserId,
+          manager,
+        );
+        locked.paymentStatus = 'paid';
+      } else {
+        // COD: authorize for collection — cash remains pending until rider collect.
+        const codResult =
+          await this.paymentsService.assertCodEligibleForCheckout({
+            userId: locked.userId,
+            paymentMethod,
+            finalTotalMinor: locked.finalTotalMinor,
+            excludeOrderId: locked.id,
+          });
+        locked.codEligible = codResult?.eligible === true;
+        await this.paymentsService.ensurePendingCodCollection({
+          orderId: locked.id,
+          amountMinor: String(locked.finalTotalMinor ?? '0'),
+          eligible: locked.codEligible,
+          eligibilityReason: codResult?.message ?? null,
+        });
+        // paymentStatus stays pending until cash_collected.
+      }
+
+      this.freezeAuthorizationSnapshot(locked, {
+        paymentMethod,
+      });
+
+      const fromStatus = locked.orderStatus;
+      locked.orderStatus = OrderStatus.PAYMENT_AUTHORIZED;
+
+      const saved = await ordersRepo.save(locked);
+
+      await manager.getRepository(OrderStatusHistory).insert({
+        orderId: locked.id,
+        fromStatus,
+        toStatus: OrderStatus.PAYMENT_AUTHORIZED,
+        changedByUserId: context.actorUserId,
+        notes: reason,
+      });
+      await this.auditService.recordOrderStatusTransition(
+        {
+          orderId: locked.id,
+          fromStatus,
+          toStatus: OrderStatus.PAYMENT_AUTHORIZED,
+          actorUserId: context.actorUserId,
+          actorRole: context.actorRole ?? null,
+          reason,
+        },
+        manager,
+      );
+
+      return { previous: { ...locked, orderStatus: fromStatus } as Order, order: saved };
+    });
+
+    this.creditsService.publishCreditMutation?.(creditMutation);
+
+    if (!result.previous) {
+      return (await this.findById(orderId)) ?? result.order;
+    }
+
+    try {
+      return await this.publishStatusUpdate(
+        result.previous,
+        orderId,
+        OrderStatus.PAYMENT_AUTHORIZED,
+        null,
+      );
+    } catch {
+      this.logger.warn(
+        `Post-commit auth publication failed for order ${orderId}; returning committed state`,
+      );
+      return (await this.findById(orderId)) ?? result.order;
+    }
+  }
+
+  /**
+   * Pilot Credits path: reserve then spend with stable per-order idempotency keys.
+   * Skips ledger when payment was already marked paid (legacy create-time debit).
+   */
+  private async settlePilotCreditsForAuthorization(
+    order: Order,
+    actorUserId: number,
+    manager: EntityManager,
+  ): Promise<CreditMutationResult | null> {
+    const amountCredits = calculateChargeTotal({
+      totalPrice: order.totalPrice,
+      deliveryFee: order.deliveryFee,
+    });
+
+    if (amountCredits <= 0) {
+      return null;
+    }
+
+    // Legacy create() already debited gridCredits — do not double-spend.
+    if (String(order.paymentStatus ?? '').toLowerCase() === 'paid') {
+      return null;
+    }
+
+    const reserveKey = OrdersService.creditReserveIdempotencyKey(order.id);
+    const spendKey = OrdersService.creditSpendIdempotencyKey(order.id);
+    const referenceId = order.orderId ?? `ORDER:${order.id}`;
+
+    await this.creditsService.reserveCredits(
+      order.userId,
+      amountCredits,
+      reserveKey,
+      {
+        referenceId,
+        reason: `Payment auth reserve for ${referenceId}`,
+        actorUserId,
+        manager,
+      },
+    );
+
+    return this.creditsService.spendCredits(
+      order.userId,
+      amountCredits,
+      spendKey,
+      {
+        reserveIdempotencyKey: reserveKey,
+        referenceId,
+        reason: `Payment auth spend for ${referenceId}`,
+        actorUserId,
+        manager,
+      },
+    );
+  }
+
+  /**
+   * Expire orders still waiting for client payment after supplier accept (24h).
+   * Releases supplier assignment (stub when matching service absent) and returns
+   * the order to `approved_for_matching` for re-match.
+   *
+   * Invoked by PaymentTimeoutSchedulerService; also unit-testable with `now`.
+   */
+  async expireStalePaymentAuthorizations(
+    now: Date = new Date(),
+  ): Promise<{ expiredOrderIds: number[]; scanned: number }> {
+    const waitingStatuses = [
+      OrderStatus.SUPPLIER_ACCEPTED,
+      OrderStatus.AWAITING_PAYMENT,
+    ];
+    const candidates = await this.ordersRepo.find({
+      where: waitingStatuses.map((orderStatus) => ({ orderStatus })),
+      order: { id: 'ASC' },
+    });
+
+    const expiredOrderIds: number[] = [];
+    const cutoff = now.getTime() - OrdersService.PAYMENT_AUTH_TIMEOUT_MS;
+
+    for (const candidate of candidates) {
+      const waitStartedAt = await this.resolvePaymentWaitStartedAt(candidate);
+      if (waitStartedAt.getTime() > cutoff) {
+        continue;
+      }
+
+      try {
+        await this.expirePaymentWait(candidate.id, now);
+        expiredOrderIds.push(candidate.id);
+      } catch (err) {
+        this.logger.warn(
+          `Payment timeout expiry failed for order ${candidate.id}: ${err}`,
+        );
+      }
+    }
+
+    return { expiredOrderIds, scanned: candidates.length };
+  }
+
+  /**
+   * When payment wait started: prefer status-history entry into current status;
+   * fall back to updatedAt / createdAt.
+   */
+  private async resolvePaymentWaitStartedAt(order: Order): Promise<Date> {
+    try {
+      const history = await this.dataSource
+        .getRepository(OrderStatusHistory)
+        .find({
+          where: {
+            orderId: order.id,
+            toStatus: order.orderStatus,
+          },
+          order: { id: 'DESC' },
+          take: 1,
+        });
+      if (history[0]?.createdAt) {
+        return new Date(history[0].createdAt);
+      }
+    } catch {
+      // History unavailable — fall through.
+    }
+    return new Date(order.updatedAt ?? order.createdAt ?? Date.now());
+  }
+
+  /**
+   * Single-order payment timeout: mark expired, stub-release assignment,
+   * return to approved_for_matching.
+   */
+  async expirePaymentWait(
+    orderId: number,
+    now: Date = new Date(),
+  ): Promise<Order> {
+    const systemActorId = 0;
+    const reason = `Payment authorization timed out after 24h (${now.toISOString()})`;
+
+    const result = await this.dataSource.transaction(async (manager) => {
+      const ordersRepo = manager.getRepository(Order);
+      const locked = await ordersRepo.findOneOrFail({
+        where: { id: orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (
+        locked.orderStatus !== OrderStatus.SUPPLIER_ACCEPTED &&
+        locked.orderStatus !== OrderStatus.AWAITING_PAYMENT
+      ) {
+        return { previous: null as Order | null, order: locked };
+      }
+
+      assertOrderStatusTransition(
+        locked.orderStatus,
+        OrderStatus.APPROVED_FOR_MATCHING,
+      );
+
+      // Best-effort: release any open pilot credit reserve for this order.
+      await this.releaseOpenAuthReserveIfAny(locked, manager);
+
+      // Stub reassignment: mark accepted/pending supplier assignments cancelled.
+      await this.stubReleaseSupplierAssignments(
+        manager,
+        locked.id,
+        'payment_timeout',
+      );
+
+      const fromStatus = locked.orderStatus;
+      locked.orderStatus = OrderStatus.APPROVED_FOR_MATCHING;
+      locked.paymentAuthorizationStatus = PaymentAuthorizationStatus.EXPIRED;
+
+      const saved = await ordersRepo.save(locked);
+
+      await manager.getRepository(OrderStatusHistory).insert({
+        orderId: locked.id,
+        fromStatus,
+        toStatus: OrderStatus.APPROVED_FOR_MATCHING,
+        changedByUserId: systemActorId,
+        notes: reason,
+      });
+      await this.auditService.recordOrderStatusTransition(
+        {
+          orderId: locked.id,
+          fromStatus,
+          toStatus: OrderStatus.APPROVED_FOR_MATCHING,
+          actorUserId: systemActorId,
+          actorRole: 'system',
+          reason,
+        },
+        manager,
+      );
+
+      return {
+        previous: { ...locked, orderStatus: fromStatus } as Order,
+        order: saved,
+      };
+    });
+
+    if (!result.previous) {
+      return result.order;
+    }
+    try {
+      return await this.publishStatusUpdate(
+        result.previous,
+        orderId,
+        OrderStatus.APPROVED_FOR_MATCHING,
+        null,
+      );
+    } catch {
+      return (await this.findById(orderId)) ?? result.order;
+    }
+  }
+
+  private async releaseOpenAuthReserveIfAny(
+    order: Order,
+    manager: EntityManager,
+  ): Promise<void> {
+    if (!OrdersService.isCreditPaymentMethod(order.paymentMethod)) {
+      return;
+    }
+    const amountCredits = calculateChargeTotal({
+      totalPrice: order.totalPrice,
+      deliveryFee: order.deliveryFee,
+    });
+    if (amountCredits <= 0) return;
+
+    const reserveKey = OrdersService.creditReserveIdempotencyKey(order.id);
+    const releaseKey = `payment-auth:release:order:${order.id}:timeout`;
+    try {
+      await this.creditsService.releaseCredits(
+        order.userId,
+        amountCredits,
+        releaseKey,
+        {
+          reserveIdempotencyKey: reserveKey,
+          referenceId: order.orderId ?? `ORDER:${order.id}`,
+          reason: 'Payment auth timeout release',
+          actorUserId: 0,
+          manager,
+        },
+      );
+    } catch {
+      // No open reserve (already spent/released/never reserved) — ignore.
+    }
+  }
+
+  /**
+   * Stub: cancel open supplier_assignments for the order so capacity can re-match.
+   * Matching service will own richer reassignment in Phase 4/5.
+   */
+  private async stubReleaseSupplierAssignments(
+    manager: EntityManager,
+    orderId: number,
+    reason: string,
+  ): Promise<void> {
+    try {
+      await manager.query(
+        `UPDATE supplier_assignments
+         SET decision = 'cancelled',
+             decision_reason = $2,
+             decided_at = NOW(),
+             updated_at = NOW()
+         WHERE order_id = $1
+           AND decision IN ('pending', 'accepted')`,
+        [orderId, reason],
+      );
+    } catch (err) {
+      // Table may not exist in unit tests / early envs.
+      this.logger.debug?.(
+        `stubReleaseSupplierAssignments skipped for order ${orderId}: ${err}`,
+      );
+    }
+  }
+
   private async assertBetaPaymentMethod(
     userId: number,
     paymentMethod: string,
@@ -2002,6 +2457,22 @@ export class OrdersService {
         );
       }
       assertOrderStatusTransition(locked.orderStatus, orderStatus);
+      // Production requires payment authorization (PRD §5.3 / Task 3.3).
+      // Graph already requires payment_authorized status; also enforce the
+      // independent paymentAuthorizationStatus flag (COD auth ≠ cash collected).
+      if (orderStatus === OrderStatus.PRODUCTION) {
+        if (
+          locked.paymentAuthorizationStatus !==
+            PaymentAuthorizationStatus.AUTHORIZED ||
+          locked.orderStatus !== OrderStatus.PAYMENT_AUTHORIZED
+        ) {
+          throw new BadRequestException({
+            code: 'payment_not_authorized',
+            message:
+              'Cannot enter production without payment authorization (payment_authorized)',
+          });
+        }
+      }
       if (
         !Number.isInteger(context?.actorUserId) ||
         context!.actorUserId <= 0

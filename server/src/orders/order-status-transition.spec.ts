@@ -110,6 +110,47 @@ describe('order status transitions (marketplace)', () => {
       ).toBe(false);
     });
 
+    it('allows client payment authorization from supplier_accepted / awaiting_payment', () => {
+      expect(
+        canTransition(
+          OrderStatus.SUPPLIER_ACCEPTED,
+          OrderStatus.PAYMENT_AUTHORIZED,
+          'client',
+        ),
+      ).toBe(true);
+      expect(
+        canTransition(
+          OrderStatus.AWAITING_PAYMENT,
+          OrderStatus.PAYMENT_AUTHORIZED,
+          'client',
+        ),
+      ).toBe(true);
+    });
+
+    it('allows system payment-timeout rematch to approved_for_matching', () => {
+      expect(
+        canTransition(
+          OrderStatus.SUPPLIER_ACCEPTED,
+          OrderStatus.APPROVED_FOR_MATCHING,
+          'system',
+        ),
+      ).toBe(true);
+      expect(
+        canTransition(
+          OrderStatus.AWAITING_PAYMENT,
+          OrderStatus.APPROVED_FOR_MATCHING,
+          'system',
+        ),
+      ).toBe(true);
+      expect(
+        canTransition(
+          OrderStatus.AWAITING_PAYMENT,
+          OrderStatus.APPROVED_FOR_MATCHING,
+          'client',
+        ),
+      ).toBe(false);
+    });
+
     it('rejects supplier advancing before accept', () => {
       expect(() =>
         assertTransition(

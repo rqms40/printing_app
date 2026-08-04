@@ -12,6 +12,7 @@ import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
 import { ExternalDeliveriesController } from './external-deliveries.controller';
 import { OrdersGateway } from './orders.gateway';
+import { PaymentTimeoutScheduler } from './payment-timeout.scheduler';
 import { UsersModule } from '../users/users.module';
 import { CreditsModule } from '../credits/credits.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -61,7 +62,7 @@ import { PaymentsModule } from '../payments/payments.module';
     AuditModule,
     PaymentsModule,
   ],
-  providers: [OrdersService, OrdersGateway],
+  providers: [OrdersService, OrdersGateway, PaymentTimeoutScheduler],
   controllers: [OrdersController, ExternalDeliveriesController],
   exports: [OrdersService, OrdersGateway],
 })

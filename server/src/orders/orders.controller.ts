@@ -91,6 +91,25 @@ export class OrdersController {
     return this.ordersService.quote(dto);
   }
 
+  /**
+   * Client/ops: authorize payment after supplier_accepted / awaiting_payment.
+   * Pilot Credits: reserve→spend; COD: eligibility approval for collection.
+   * Freezes commercial snapshot and enters payment_authorized.
+   */
+  @Post(':id/authorize-payment')
+  @UseGuards(RolesGuard)
+  @Roles('client', 'ops_admin', 'super_admin')
+  authorizePayment(
+    @Request() req: RequestWithUser,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.ordersService.authorizePayment(id, {
+      actorUserId: req.user.sub,
+      actorRole: req.user.role ?? null,
+      reason: 'Client/ops payment authorization',
+    });
+  }
+
   @Patch(':id/cancel')
   async cancelOrder(@Request() req: RequestWithUser, @Param('id') id: number) {
     try {

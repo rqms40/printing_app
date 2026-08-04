@@ -88,10 +88,22 @@ export const ORDER_STATUS_TRANSITIONS: Record<
   ],
   [OrderStatus.SUPPLIER_ACCEPTED]: [
     { to: OrderStatus.AWAITING_PAYMENT, actors: SYSTEM_OR_OPS },
+    // Payment auth can skip intermediate awaiting_payment (client/ops/system).
+    {
+      to: OrderStatus.PAYMENT_AUTHORIZED,
+      actors: ['client', 'system', 'ops_admin', 'super_admin'],
+    },
+    // 24h payment timeout: release capacity and re-enter matching.
+    { to: OrderStatus.APPROVED_FOR_MATCHING, actors: ['system'] },
     { to: OrderStatus.CANCELLED, actors: OPS },
   ],
   [OrderStatus.AWAITING_PAYMENT]: [
-    { to: OrderStatus.PAYMENT_AUTHORIZED, actors: SYSTEM_OR_OPS },
+    {
+      to: OrderStatus.PAYMENT_AUTHORIZED,
+      actors: ['client', 'system', 'ops_admin', 'super_admin'],
+    },
+    // 24h payment timeout: release capacity and re-enter matching.
+    { to: OrderStatus.APPROVED_FOR_MATCHING, actors: ['system'] },
     { to: OrderStatus.CANCELLED, actors: CLIENT_OR_OPS },
   ],
   [OrderStatus.PAYMENT_AUTHORIZED]: [

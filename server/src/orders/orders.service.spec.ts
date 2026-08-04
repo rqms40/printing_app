@@ -364,6 +364,25 @@ describe('OrdersService', () => {
     creditsService = {
       subtractCredits: jest.fn().mockResolvedValue(undefined),
       refundCredits: jest.fn().mockResolvedValue(undefined),
+      reserveCredits: jest.fn().mockResolvedValue({
+        balance: 25,
+        balanceChanged: true,
+        userId: 1,
+        transaction: { type: 'reserve' },
+      }),
+      spendCredits: jest.fn().mockResolvedValue({
+        balance: 25,
+        balanceChanged: false,
+        userId: 1,
+        transaction: { type: 'spend' },
+      }),
+      releaseCredits: jest.fn().mockResolvedValue({
+        balance: 100,
+        balanceChanged: true,
+        userId: 1,
+        transaction: { type: 'release' },
+      }),
+      publishCreditMutation: jest.fn(),
     };
     paymentsService = {
       assertCodEligibleForCheckout: jest.fn().mockResolvedValue(null),
@@ -604,6 +623,368 @@ describe('OrdersService', () => {
       expect(
         (order.authorizationSnapshot as { priceMinor: string }).priceMinor,
       ).toBe('10000');
+    });
+  });
+
+  describe('authorizePayment (Task 3.3)', () => {
+    const authContext = {
+      actorUserId: 1,
+      actorRole: 'client',
+      reason: 'Client payment authorization',
+    };
+
+    function awaitingPilotCreditOrder(
+      overrides: Partial<Order> = {},
+    ): Order {
+      return {
+        id: 42,
+        orderId: 'ORD-10042',
+        userId: 1,
+        orderStatus: OrderStatus.AWAITING_PAYMENT,
+        paymentMethod: 'pilot_credit',
+        paymentStatus: 'pending',
+        paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
+        authorizationSnapshot: null,
+        totalPrice: 100,
+        deliveryFee: 25,
+        finalTotalMinor: '12500',
+        deliveryFeeMinor: '2500',
+        category: 'paper',
+        quantity: 1,
+        fileMetadataId: null,
+        estimatedCompletionAt: null,
+        codEligible: false,
+        ...overrides,
+      } as Order;
+    }
+
+    it('reserves+spends pilot credits, freezes snapshot, enters payment_authorized', async () => {
+      const order = awaitingPilotCreditOrder();
+      repo.findOne.mockResolvedValue(order);
+      repo.findOneOrFail.mockResolvedValue(order);
+      repo.save.mockImplementation(async (o) => o as Order);
+      assignmentRepo.find!.mockResolvedValue([]);
+
+      const result = await service.authorizePayment(42, authContext);
+
+      expect(creditsService.reserveCredits).toHaveBeenCalledWith(
+        1,
+        125,
+        OrdersService.creditReserveIdempotencyKey(42),
+        expect.objectContaining({
+          manager: expect.anything(),
+          referenceId: 'ORD-10042',
+        }),
+      );
+      expect(creditsService.spendCredits).toHaveBeenCalledWith(
+        1,
+        125,
+        OrdersService.creditSpendIdempotencyKey(42),
+        expect.objectContaining({
+          reserveIdempotencyKey:
+            OrdersService.creditReserveIdempotencyKey(42),
+          manager: expect.anything(),
+        }),
+      );
+      expect(creditsService.publishCreditMutation).toHaveBeenCalled();
+      expect(result.orderStatus).toBe(OrderStatus.PAYMENT_AUTHORIZED);
+      expect(result.paymentAuthorizationStatus).toBe(
+        PaymentAuthorizationStatus.AUTHORIZED,
+      );
+      expect(result.paymentStatus).toBe('paid');
+      expect(result.authorizationSnapshot).toEqual(
+        expect.objectContaining({
+          finalTotalMinor: '12500',
+          paymentMethod: 'pilot_credit',
+        }),
+      );
+      expect(historyRepo.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: 42,
+          fromStatus: OrderStatus.AWAITING_PAYMENT,
+          toStatus: OrderStatus.PAYMENT_AUTHORIZED,
+        }),
+      );
+    });
+
+    it('skips ledger when pilot credits already paid at create (no double spend)', async () => {
+      const order = awaitingPilotCreditOrder({ paymentStatus: 'paid' });
+      repo.findOne.mockResolvedValue(order);
+      repo.findOneOrFail.mockResolvedValue(order);
+      repo.save.mockImplementation(async (o) => o as Order);
+      assignmentRepo.find!.mockResolvedValue([]);
+
+      await service.authorizePayment(42, authContext);
+
+      expect(creditsService.reserveCredits).not.toHaveBeenCalled();
+      expect(creditsService.spendCredits).not.toHaveBeenCalled();
+      expect(order.paymentAuthorizationStatus).toBe(
+        PaymentAuthorizationStatus.AUTHORIZED,
+      );
+    });
+
+    it('authorizes eligible COD without collecting cash', async () => {
+      const order = awaitingPilotCreditOrder({
+        paymentMethod: 'cod',
+        paymentStatus: 'pending',
+        finalTotalMinor: '100000',
+        totalPrice: 1000,
+        deliveryFee: 0,
+      });
+      repo.findOne.mockResolvedValue(order);
+      repo.findOneOrFail.mockResolvedValue(order);
+      repo.save.mockImplementation(async (o) => o as Order);
+      assignmentRepo.find!.mockResolvedValue([]);
+      paymentsService.assertCodEligibleForCheckout.mockResolvedValue({
+        eligible: true,
+        reasons: [],
+        message: 'Eligible',
+        amountMinor: '100000',
+        maxAmountMinor: 150000,
+      });
+
+      const result = await service.authorizePayment(42, authContext);
+
+      expect(creditsService.reserveCredits).not.toHaveBeenCalled();
+      expect(paymentsService.assertCodEligibleForCheckout).toHaveBeenCalled();
+      expect(paymentsService.ensurePendingCodCollection).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: 42,
+          amountMinor: '100000',
+          eligible: true,
+        }),
+      );
+      expect(result.orderStatus).toBe(OrderStatus.PAYMENT_AUTHORIZED);
+      expect(result.paymentAuthorizationStatus).toBe(
+        PaymentAuthorizationStatus.AUTHORIZED,
+      );
+      expect(result.paymentStatus).toBe('pending');
+      expect(result.codEligible).toBe(true);
+    });
+
+    it('rejects authorization from submitted (wrong status)', async () => {
+      const order = awaitingPilotCreditOrder({
+        orderStatus: OrderStatus.SUBMITTED,
+      });
+      repo.findOne.mockResolvedValue(order);
+
+      await expect(
+        service.authorizePayment(42, authContext),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'invalid_status_for_authorization',
+        }),
+      });
+      expect(creditsService.reserveCredits).not.toHaveBeenCalled();
+    });
+
+    it('rejects non-owner client', async () => {
+      const order = awaitingPilotCreditOrder({ userId: 99 });
+      repo.findOne.mockResolvedValue(order);
+
+      await expect(
+        service.authorizePayment(42, {
+          actorUserId: 1,
+          actorRole: 'client',
+          reason: 'Nope',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'not_order_owner' }),
+      });
+    });
+
+    it('is idempotent when already payment_authorized', async () => {
+      const order = awaitingPilotCreditOrder({
+        orderStatus: OrderStatus.PAYMENT_AUTHORIZED,
+        paymentAuthorizationStatus: PaymentAuthorizationStatus.AUTHORIZED,
+        authorizationSnapshot: { frozenAt: 'x' },
+      });
+      repo.findOne.mockResolvedValue(order);
+      repo.findOneOrFail.mockResolvedValue(order);
+      assignmentRepo.find!.mockResolvedValue([]);
+
+      const result = await service.authorizePayment(42, authContext);
+
+      expect(creditsService.reserveCredits).not.toHaveBeenCalled();
+      expect(result.orderStatus).toBe(OrderStatus.PAYMENT_AUTHORIZED);
+    });
+  });
+
+  describe('production requires payment authorization (Task 3.3)', () => {
+    it('blocks production when paymentAuthorizationStatus is not authorized', async () => {
+      const locked = {
+        ...mockOrder,
+        orderStatus: OrderStatus.PAYMENT_AUTHORIZED,
+        paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
+      } as Order;
+      repo.findOneOrFail.mockResolvedValue(locked);
+
+      await expect(
+        service.updateStatus(
+          1,
+          OrderStatus.PRODUCTION,
+          {},
+          {
+            actorUserId: 7,
+            actorRole: 'ops_admin',
+            reason: 'Start production',
+          },
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'payment_not_authorized',
+        }),
+      });
+      expect(repo.update).not.toHaveBeenCalled();
+    });
+
+    it('allows production when authorized from payment_authorized', async () => {
+      const locked = {
+        ...mockOrder,
+        orderStatus: OrderStatus.PAYMENT_AUTHORIZED,
+        paymentAuthorizationStatus: PaymentAuthorizationStatus.AUTHORIZED,
+      } as Order;
+      const after = {
+        ...locked,
+        orderStatus: OrderStatus.PRODUCTION,
+      } as Order;
+      // candidate → locked → publishStatusUpdate reload
+      repo.findOneOrFail
+        .mockResolvedValueOnce(locked)
+        .mockResolvedValueOnce(locked)
+        .mockResolvedValueOnce(after);
+      repo.findOne.mockResolvedValue(after);
+      assignmentRepo.find!.mockResolvedValue([]);
+
+      const result = await service.updateStatus(
+        1,
+        OrderStatus.PRODUCTION,
+        {},
+        {
+          actorUserId: 7,
+          actorRole: 'ops_admin',
+          reason: 'Start production',
+        },
+      );
+
+      expect(repo.update).toHaveBeenCalledWith(
+        { id: 1, orderStatus: OrderStatus.PAYMENT_AUTHORIZED },
+        { orderStatus: OrderStatus.PRODUCTION },
+      );
+      expect(result.orderStatus).toBe(OrderStatus.PRODUCTION);
+    });
+  });
+
+  describe('expireStalePaymentAuthorizations (24h timeout)', () => {
+    it('expires waiting orders older than 24h and returns to matching', async () => {
+      const stale = {
+        id: 7,
+        orderId: 'ORD-7',
+        userId: 1,
+        orderStatus: OrderStatus.AWAITING_PAYMENT,
+        paymentMethod: 'pilot_credit',
+        paymentStatus: 'pending',
+        paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
+        totalPrice: 50,
+        deliveryFee: 0,
+        updatedAt: new Date('2026-08-01T00:00:00.000Z'),
+        createdAt: new Date('2026-08-01T00:00:00.000Z'),
+      } as Order;
+      const fresh = {
+        ...stale,
+        id: 8,
+        orderId: 'ORD-8',
+        updatedAt: new Date('2026-08-04T20:00:00.000Z'),
+        createdAt: new Date('2026-08-04T20:00:00.000Z'),
+      } as Order;
+
+      repo.find.mockResolvedValue([stale, fresh]);
+      // History miss → use updatedAt; keep slot booking repo for publish path
+      (dataSource.getRepository as jest.Mock).mockImplementation(
+        (entity: { name?: string }) => {
+          if (entity?.name === 'OrderStatusHistory') {
+            return { find: jest.fn().mockResolvedValue([]) };
+          }
+          return slotBookingRepo;
+        },
+      );
+      repo.findOneOrFail.mockImplementation(async ({ where }: any) => {
+        if (where.id === 7) {
+          return {
+            ...stale,
+            paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
+          };
+        }
+        return { ...fresh };
+      });
+      repo.save.mockImplementation(async (o) => o as Order);
+      assignmentRepo.find!.mockResolvedValue([]);
+
+      const now = new Date('2026-08-04T12:00:00.000Z');
+      const result = await service.expireStalePaymentAuthorizations(now);
+
+      expect(result.scanned).toBe(2);
+      expect(result.expiredOrderIds).toEqual([7]);
+      expect(repo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 7,
+          orderStatus: OrderStatus.APPROVED_FOR_MATCHING,
+          paymentAuthorizationStatus: PaymentAuthorizationStatus.EXPIRED,
+        }),
+      );
+    });
+
+    it('expirePaymentWait stubs assignment release and marks expired', async () => {
+      const order = {
+        id: 9,
+        orderId: 'ORD-9',
+        userId: 2,
+        orderStatus: OrderStatus.SUPPLIER_ACCEPTED,
+        paymentMethod: 'cod',
+        paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
+        totalPrice: 10,
+        deliveryFee: 0,
+      } as Order;
+      const expired = {
+        ...order,
+        orderStatus: OrderStatus.APPROVED_FOR_MATCHING,
+        paymentAuthorizationStatus: PaymentAuthorizationStatus.EXPIRED,
+      } as Order;
+      repo.findOneOrFail.mockResolvedValue(order);
+      repo.save.mockImplementation(async (o) => o as Order);
+      repo.findOne.mockResolvedValue(expired);
+      assignmentRepo.find!.mockResolvedValue([]);
+      const txQuery = jest.fn().mockResolvedValue(undefined);
+      (dataSource as any).transaction = jest.fn(async (run) =>
+        run({
+          query: txQuery,
+          getRepository: (entity: { name?: string }) => {
+            if (entity?.name === 'Order') return repo;
+            if (entity?.name === 'OrderStatusHistory') return historyRepo;
+            throw new Error(`Unexpected repository ${entity?.name}`);
+          },
+        }),
+      );
+
+      const result = await service.expirePaymentWait(
+        9,
+        new Date('2026-08-04T12:00:00.000Z'),
+      );
+
+      expect(result.orderStatus).toBe(OrderStatus.APPROVED_FOR_MATCHING);
+      expect(result.paymentAuthorizationStatus).toBe(
+        PaymentAuthorizationStatus.EXPIRED,
+      );
+      expect(historyRepo.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: 9,
+          toStatus: OrderStatus.APPROVED_FOR_MATCHING,
+        }),
+      );
+      expect(txQuery).toHaveBeenCalledWith(
+        expect.stringContaining('supplier_assignments'),
+        [9, 'payment_timeout'],
+      );
     });
   });
 
@@ -1979,19 +2360,23 @@ describe('OrdersService', () => {
     });
 
     it.each([
-      [OrderStatus.FILE_REJECTED, 'File Rejected', OrderStatus.SUBMITTED],
+      [OrderStatus.FILE_REJECTED, 'File Rejected', OrderStatus.SUBMITTED, {}],
       [
         OrderStatus.PRODUCTION,
         'Printing Started',
         OrderStatus.PAYMENT_AUTHORIZED,
+        {
+          paymentAuthorizationStatus: PaymentAuthorizationStatus.AUTHORIZED,
+        },
       ],
     ])(
       'notifies the customer when status becomes %s',
-      async (status, title, fromStatus) => {
+      async (status, title, fromStatus, extras) => {
         repo.update.mockResolvedValue(undefined as any);
         repo.findOneOrFail.mockResolvedValue({
           ...mockOrder,
           orderStatus: fromStatus,
+          ...extras,
         } as Order);
 
         await service.updateStatus(1, status, {}, statusContext);
@@ -2012,6 +2397,7 @@ describe('OrdersService', () => {
       repo.findOneOrFail.mockResolvedValue({
         ...mockOrder,
         orderStatus: OrderStatus.PAYMENT_AUTHORIZED,
+        paymentAuthorizationStatus: PaymentAuthorizationStatus.AUTHORIZED,
       } as Order);
 
       await service.updateStatus(
