@@ -9,6 +9,7 @@ import { ADMIN_ROLES, User, UserRole } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import {
   AgeRange,
+  ClientAccountType,
   isProfileComplete,
   PrintingPreference,
   ProfileCategory,
@@ -26,6 +27,7 @@ type UserProfilingInput = {
   profileField?: ProfileField;
   course?: string;
   organization?: string;
+  clientAccountType?: ClientAccountType;
   printingPreferences?: PrintingPreference[];
 };
 
@@ -229,6 +231,10 @@ export class UsersService {
 
     if (data.organization !== undefined) {
       normalized.organization = data.organization?.trim() || null;
+    }
+
+    if (data.clientAccountType !== undefined) {
+      normalized.clientAccountType = data.clientAccountType ?? null;
     }
 
     if (data.printingPreferences !== undefined) {

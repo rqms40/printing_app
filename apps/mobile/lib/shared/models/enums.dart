@@ -12,6 +12,50 @@ enum UserRole {
   admin,
 }
 
+/// Marketplace client metadata only — not an auth role or shell.
+enum ClientAccountType {
+  business,
+  organization,
+  teacher,
+}
+
+extension ClientAccountTypeX on ClientAccountType {
+  String get apiValue {
+    switch (this) {
+      case ClientAccountType.business:
+        return 'business';
+      case ClientAccountType.organization:
+        return 'organization';
+      case ClientAccountType.teacher:
+        return 'teacher';
+    }
+  }
+
+  String get displayName {
+    switch (this) {
+      case ClientAccountType.business:
+        return 'Business';
+      case ClientAccountType.organization:
+        return 'Organization';
+      case ClientAccountType.teacher:
+        return 'Teacher';
+    }
+  }
+}
+
+ClientAccountType? parseClientAccountType(String? raw) {
+  switch (raw) {
+    case 'business':
+      return ClientAccountType.business;
+    case 'organization':
+      return ClientAccountType.organization;
+    case 'teacher':
+      return ClientAccountType.teacher;
+    default:
+      return null;
+  }
+}
+
 extension UserRoleX on UserRole {
   String get displayName {
     switch (this) {

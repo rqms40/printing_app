@@ -12,6 +12,7 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   AgeRange,
+  ClientAccountType,
   PrintingPreference,
   ProfileCategory,
   ProfileField,
@@ -76,6 +77,15 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   organization?: string;
+
+  /**
+   * Optional marketplace client metadata (business | organization | teacher).
+   * Not required so existing mobile register stays compatible.
+   */
+  @ApiPropertyOptional({ enum: ClientAccountType })
+  @IsOptional()
+  @IsEnum(ClientAccountType)
+  clientAccountType?: ClientAccountType;
 
   @ApiProperty({
     required: false,

@@ -508,6 +508,7 @@ describe("api normalizers", () => {
       profileField: "business_corporate",
       course: "Operations",
       organization: "Grid Print HQ",
+      clientAccountType: "business",
       printingPreferences: ["marketing_materials"],
       createdAt: "2026-03-01T00:00:00.000Z",
       updatedAt: "2026-03-15T00:00:00.000Z",
@@ -522,6 +523,7 @@ describe("api normalizers", () => {
       profile_field: "business_corporate",
       course: "Operations",
       organization: "Grid Print HQ",
+      client_account_type: "business",
       printing_preferences: ["marketing_materials"],
     });
     expect(humanizeEnumValue("ready_for_dispatch")).toBe("Ready For Dispatch");

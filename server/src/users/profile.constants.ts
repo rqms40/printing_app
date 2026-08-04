@@ -3,6 +3,16 @@ export enum ProfileCategory {
   PROFESSIONAL = 'professional',
 }
 
+/**
+ * Marketplace client account type metadata (PRD §4.2).
+ * Not a separate auth role or workflow fork — optional on clients only.
+ */
+export enum ClientAccountType {
+  BUSINESS = 'business',
+  ORGANIZATION = 'organization',
+  TEACHER = 'teacher',
+}
+
 export enum ProfileField {
   ARCHITECTURE = 'architecture',
   ENGINEERING = 'engineering',

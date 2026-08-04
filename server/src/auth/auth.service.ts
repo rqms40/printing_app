@@ -11,6 +11,7 @@ import { User, UserRole } from '../users/entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import {
   AgeRange,
+  ClientAccountType,
   PrintingPreference,
   ProfileCategory,
   ProfileField,
@@ -27,6 +28,7 @@ type RegisterProfileInput = {
   profileField: ProfileField;
   course?: string;
   organization?: string;
+  clientAccountType?: ClientAccountType;
   printingPreferences?: PrintingPreference[];
 };
 

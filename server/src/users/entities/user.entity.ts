@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import {
   AgeRange,
+  ClientAccountType,
   PrintingPreference,
   ProfileCategory,
   ProfileField,
@@ -98,6 +99,19 @@ export class User {
 
   @Column({ type: 'enum', enum: UserRole, default: UserRole.CLIENT })
   role: UserRole;
+
+  /**
+   * Optional client metadata: business | organization | teacher.
+   * Null for non-clients and for clients who have not set a type.
+   * Does not affect authorization or order workflows.
+   */
+  @Column({
+    name: 'client_account_type',
+    type: 'enum',
+    enum: ClientAccountType,
+    nullable: true,
+  })
+  clientAccountType: ClientAccountType | null;
 
   @Column({ name: 'is_profile_complete', default: false })
   isProfileComplete: boolean;

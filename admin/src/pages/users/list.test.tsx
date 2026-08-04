@@ -49,6 +49,7 @@ describe("UserList", () => {
         profile_field: "architecture",
         course: null,
         organization: null,
+        client_account_type: null,
         printing_preferences: [],
         created_at: "2026-03-01T00:00:00.000Z",
         updated_at: "2026-03-15T00:00:00.000Z",

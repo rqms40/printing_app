@@ -47,6 +47,7 @@ export interface AdminUserRecord {
   profile_field: string | null;
   course: string | null;
   organization: string | null;
+  client_account_type: string | null;
   printing_preferences: string[];
   created_at: string;
   updated_at: string;
@@ -986,6 +987,12 @@ export function normalizeAdminUser(input: unknown): AdminUserRecord {
       toOptionalString(record, "profile_field", "profileField") ?? null,
     course: toOptionalString(record, "course") ?? null,
     organization: toOptionalString(record, "organization") ?? null,
+    client_account_type:
+      toOptionalString(
+        record,
+        "client_account_type",
+        "clientAccountType",
+      ) ?? null,
     printing_preferences: toStringArray(
       read(record, "printing_preferences", "printingPreferences"),
     ),

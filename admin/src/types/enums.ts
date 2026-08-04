@@ -8,6 +8,9 @@ export type UserRole =
   | "customer"
   | "admin";
 
+/** Marketplace client metadata only — not an auth role. */
+export type ClientAccountType = "business" | "organization" | "teacher";
+
 /** Ops Admin + Super Admin (and legacy `admin`) may use the admin panel. */
 export function isAdminCapableRole(role: string | null | undefined): boolean {
   return (

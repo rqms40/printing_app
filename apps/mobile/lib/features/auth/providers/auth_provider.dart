@@ -149,6 +149,7 @@ class AuthUser {
     this.profileField,
     this.course,
     this.organization,
+    this.clientAccountType,
     this.printingPreferences = const [],
     this.tutorialSeenKeys = const [],
     this.defaultPaymentMethod,
@@ -169,6 +170,8 @@ class AuthUser {
   final String? profileField;
   final String? course;
   final String? organization;
+  /// Optional marketplace metadata: business | organization | teacher.
+  final String? clientAccountType;
   final List<String> printingPreferences;
   final List<String> tutorialSeenKeys;
   final PaymentMethod? defaultPaymentMethod;
@@ -189,6 +192,7 @@ class AuthUser {
     String? profileField,
     String? course,
     String? organization,
+    String? clientAccountType,
     List<String>? printingPreferences,
     List<String>? tutorialSeenKeys,
     PaymentMethod? defaultPaymentMethod,
@@ -209,6 +213,7 @@ class AuthUser {
       profileField: profileField ?? this.profileField,
       course: course ?? this.course,
       organization: organization ?? this.organization,
+      clientAccountType: clientAccountType ?? this.clientAccountType,
       printingPreferences: printingPreferences ?? this.printingPreferences,
       tutorialSeenKeys: tutorialSeenKeys ?? this.tutorialSeenKeys,
       defaultPaymentMethod: defaultPaymentMethod ?? this.defaultPaymentMethod,
@@ -897,6 +902,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       profileField: json['profileField'] as String?,
       course: json['course'] as String?,
       organization: json['organization'] as String?,
+      clientAccountType:
+          (json['clientAccountType'] ?? json['client_account_type']) as String?,
       printingPreferences: _parseStringList(
         json['printingPreferences'] ?? json['printing_preferences'],
       ),
