@@ -44,6 +44,8 @@ import {
   CreditMutationResult,
   CreditsService,
 } from '../credits/credits.service';
+import { PaymentsService } from '../payments/payments.service';
+import { isCodPaymentMethod } from '../payments/cod-eligibility';
 import { NotificationsService } from '../notifications/notifications.service';
 import { FilesService } from '../files/files.service';
 import { FileMetadata } from '../files/entities/file-metadata.entity';
@@ -289,6 +291,7 @@ export class OrdersService {
     private firebaseService: FirebaseService,
     private usersService: UsersService,
     private creditsService: CreditsService,
+    private paymentsService: PaymentsService,
     private notificationsService: NotificationsService,
     private filesService: FilesService,
     private tamSurveysService: TamSurveysService,
@@ -605,6 +608,23 @@ export class OrdersService {
       orderData,
       applyMarketplacePaymentDefaults(orderData as Partial<Order>),
     );
+
+    // Server-side COD eligibility (cap, pilot flag, concurrency, risk).
+    // Rejects ₱1,501+ even if client sends paymentMethod=cod.
+    if (
+      orderData.userId != null &&
+      isCodPaymentMethod(String(orderData.paymentMethod ?? ''))
+    ) {
+      const codResult = await this.paymentsService.assertCodEligibleForCheckout(
+        {
+          userId: Number(orderData.userId),
+          paymentMethod: String(orderData.paymentMethod ?? ''),
+          finalTotalMinor: orderData.finalTotalMinor,
+        },
+      );
+      orderData.codEligible = codResult?.eligible === true;
+    }
+
     const creation = await this.dataSource.transaction(async (manager) => {
       const transactionOrdersRepo = manager.getRepository(Order);
       const transactionItemsRepo = manager.getRepository(OrderItem);
@@ -629,6 +649,18 @@ export class OrdersService {
         orderId: orderRef,
       });
       const persistedOrder = await transactionOrdersRepo.save(order);
+
+      if (
+        isCodPaymentMethod(String(persistedOrder.paymentMethod ?? '')) &&
+        persistedOrder.codEligible
+      ) {
+        await this.paymentsService.ensurePendingCodCollection({
+          orderId: persistedOrder.id,
+          amountMinor: String(persistedOrder.finalTotalMinor ?? '0'),
+          eligible: true,
+          eligibilityReason: null,
+        });
+      }
       const savedItem = await transactionItemsRepo.save(
         transactionItemsRepo.create({
           orderId: persistedOrder.id,
@@ -919,6 +951,24 @@ export class OrdersService {
         dto.paymentMethod,
         isBetaModeEnabled,
       );
+
+      // Pre-compute marketplace money defaults for COD gate (same as aggregate order).
+      const paymentDefaultsPreview = applyMarketplacePaymentDefaults({
+        totalPrice: subtotal,
+        deliveryFee,
+        paymentMethod: dto.paymentMethod,
+      } as Partial<Order>);
+      let codEligibleForBatch = false;
+      if (isCodPaymentMethod(dto.paymentMethod)) {
+        const codResult =
+          await this.paymentsService.assertCodEligibleForCheckout({
+            userId,
+            paymentMethod: dto.paymentMethod,
+            finalTotalMinor: paymentDefaultsPreview.finalTotalMinor,
+          });
+        codEligibleForBatch = codResult?.eligible === true;
+      }
+
       const { batchRef, orderRef } = await this.nextBatchReferences(manager);
       const creditPayment = OrdersService.isCreditPaymentMethod(
         dto.paymentMethod,
@@ -1047,9 +1097,19 @@ export class OrdersService {
               : null,
           batchOrderId: savedBatch.id,
           destinationId: firstDestId,
+          codEligible: codEligibleForBatch,
         }) as Partial<Order>,
       );
       const savedOrder = await txOrdersRepo.save(aggregateOrder);
+
+      if (codEligibleForBatch && isCodPaymentMethod(dto.paymentMethod)) {
+        await this.paymentsService.ensurePendingCodCollection({
+          orderId: savedOrder.id,
+          amountMinor: String(savedOrder.finalTotalMinor ?? '0'),
+          eligible: true,
+          eligibilityReason: null,
+        });
+      }
 
       for (const [index, item] of normalizedItems.entries()) {
         const quoteItem = quote.items[index];

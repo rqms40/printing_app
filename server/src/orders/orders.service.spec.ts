@@ -28,6 +28,7 @@ import { OrdersGateway } from './orders.gateway';
 import { FirebaseService } from '../firebase/firebase.service';
 import { UsersService } from '../users/users.service';
 import { CreditsService } from '../credits/credits.service';
+import { PaymentsService } from '../payments/payments.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
   DeliveryAssignment,
@@ -215,6 +216,10 @@ describe('OrdersService', () => {
   let firebaseService: Partial<FirebaseService>;
   let usersService: Partial<UsersService>;
   let creditsService: Partial<CreditsService>;
+  let paymentsService: {
+    assertCodEligibleForCheckout: jest.Mock;
+    ensurePendingCodCollection: jest.Mock;
+  };
   let notificationsService: Partial<NotificationsService>;
   let catalogPricingService: { quote: jest.Mock };
   let fileMetadataRepo: jest.Mocked<Partial<Repository<FileMetadata>>>;
@@ -360,6 +365,10 @@ describe('OrdersService', () => {
       subtractCredits: jest.fn().mockResolvedValue(undefined),
       refundCredits: jest.fn().mockResolvedValue(undefined),
     };
+    paymentsService = {
+      assertCodEligibleForCheckout: jest.fn().mockResolvedValue(null),
+      ensurePendingCodCollection: jest.fn().mockResolvedValue({ id: 1 }),
+    };
     notificationsService = {
       create: jest.fn().mockResolvedValue(undefined),
       createForAllAdmins: jest.fn().mockResolvedValue(undefined),
@@ -497,6 +506,7 @@ describe('OrdersService', () => {
         { provide: FirebaseService, useValue: firebaseService },
         { provide: UsersService, useValue: usersService },
         { provide: CreditsService, useValue: creditsService },
+        { provide: PaymentsService, useValue: paymentsService },
         { provide: NotificationsService, useValue: notificationsService },
         {
           provide: TamSurveysService,
@@ -2551,6 +2561,13 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
         { provide: FirebaseService, useValue: mockFirebase },
         { provide: UsersService, useValue: mockUsersService },
         { provide: CreditsService, useValue: mockCredits },
+        {
+          provide: PaymentsService,
+          useValue: {
+            assertCodEligibleForCheckout: jest.fn().mockResolvedValue(null),
+            ensurePendingCodCollection: jest.fn().mockResolvedValue({ id: 1 }),
+          },
+        },
         { provide: NotificationsService, useValue: mockNotifications },
         { provide: TamSurveysService, useValue: mockTamSurveysService },
         { provide: FilesService, useValue: mockFilesService },
@@ -3358,6 +3375,13 @@ describe('createBatch with slot + destinations', () => {
           useValue: {
             subtractCredits: jest.fn().mockResolvedValue(undefined),
             refundCredits: jest.fn(),
+          },
+        },
+        {
+          provide: PaymentsService,
+          useValue: {
+            assertCodEligibleForCheckout: jest.fn().mockResolvedValue(null),
+            ensurePendingCodCollection: jest.fn().mockResolvedValue({ id: 1 }),
           },
         },
         {
@@ -4360,6 +4384,13 @@ describe('cancelBatch', () => {
           useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() },
         },
         {
+          provide: PaymentsService,
+          useValue: {
+            assertCodEligibleForCheckout: jest.fn().mockResolvedValue(null),
+            ensurePendingCodCollection: jest.fn().mockResolvedValue({ id: 1 }),
+          },
+        },
+        {
           provide: NotificationsService,
           useValue: {
             create: jest.fn().mockResolvedValue(undefined),
@@ -4559,6 +4590,13 @@ describe('updateManualStatus', () => {
           provide: CreditsService,
           useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() },
         },
+        {
+          provide: PaymentsService,
+          useValue: {
+            assertCodEligibleForCheckout: jest.fn().mockResolvedValue(null),
+            ensurePendingCodCollection: jest.fn().mockResolvedValue({ id: 1 }),
+          },
+        },
         { provide: NotificationsService, useValue: notificationsService },
         {
           provide: TamSurveysService,
@@ -4735,6 +4773,13 @@ describe('createBatch — 3D bounds enforcement', () => {
           useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() },
         },
         {
+          provide: PaymentsService,
+          useValue: {
+            assertCodEligibleForCheckout: jest.fn().mockResolvedValue(null),
+            ensurePendingCodCollection: jest.fn().mockResolvedValue({ id: 1 }),
+          },
+        },
+        {
           provide: NotificationsService,
           useValue: {
             createForAllAdmins: jest.fn().mockResolvedValue(undefined),
@@ -4897,6 +4942,13 @@ describe('listExternalDeliveries and updateExternalDeliveryStatus', () => {
         {
           provide: CreditsService,
           useValue: { subtractCredits: jest.fn(), refundCredits: jest.fn() },
+        },
+        {
+          provide: PaymentsService,
+          useValue: {
+            assertCodEligibleForCheckout: jest.fn().mockResolvedValue(null),
+            ensurePendingCodCollection: jest.fn().mockResolvedValue({ id: 1 }),
+          },
         },
         {
           provide: NotificationsService,

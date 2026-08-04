@@ -26,6 +26,7 @@ import { ProductsModule } from '../products/products.module';
 import { DispatchPlan } from '../riders/entities/dispatch-plan.entity';
 import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.module';
 import { AuditModule } from '../audit/audit.module';
+import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { AuditModule } from '../audit/audit.module';
     ProductsModule,
     RealtimeSessionsModule,
     AuditModule,
+    PaymentsModule,
   ],
   providers: [OrdersService, OrdersGateway],
   controllers: [OrdersController, ExternalDeliveriesController],

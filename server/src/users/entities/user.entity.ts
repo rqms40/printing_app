@@ -198,6 +198,21 @@ export class User {
   @Column({ name: 'beta_shared_on_social', type: 'boolean', default: false })
   betaSharedOnSocial: boolean;
 
+  /**
+   * Pilot COD allow-list. Default false — Ops/Super Admin must verify the
+   * client for cash-on-delivery before checkout can use method `cod`.
+   * Distinct from Order.codEligible (per-order evaluation result).
+   */
+  @Column({ name: 'pilot_cod_eligible', type: 'boolean', default: false })
+  pilotCodEligible: boolean;
+
+  /**
+   * Ops risk block for COD. When true, server rejects COD even if the client
+   * is otherwise pilot-verified and under the ₱1,500 cap.
+   */
+  @Column({ name: 'cod_ops_risk_blocked', type: 'boolean', default: false })
+  codOpsRiskBlocked: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

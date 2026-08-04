@@ -1,13 +1,39 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { PaymentTransaction } from './entities/payment-transaction.entity';
+import {
+  CodCollection,
+  CodCollectionStatus,
+} from './entities/cod-collection.entity';
+import { Order, OrderStatus } from '../orders/entities/order.entity';
+import { User } from '../users/entities/user.entity';
+import {
+  Payout,
+  PayoutSettlementState,
+} from '../payouts/entities/payout.entity';
+import {
+  COD_PAYOUT_HOLD_REASON,
+  CodIneligibilityReason,
+} from './cod-eligibility';
 
 describe('PaymentsService', () => {
   let service: PaymentsService;
   let txnRepo: jest.Mocked<Partial<Repository<PaymentTransaction>>>;
+  let codRepo: jest.Mocked<Partial<Repository<CodCollection>>>;
+  let ordersRepo: jest.Mocked<
+    Partial<Repository<Order>> & {
+      createQueryBuilder: jest.Mock;
+    }
+  >;
+  let usersRepo: jest.Mocked<Partial<Repository<User>>>;
+  let payoutRepo: jest.Mocked<Partial<Repository<Payout>>>;
 
   const mockTxn = {
     id: 1,
@@ -23,11 +49,32 @@ describe('PaymentsService', () => {
       create: jest.fn(),
       save: jest.fn(),
     };
+    codRepo = {
+      findOne: jest.fn(),
+      create: jest.fn((row) => row as CodCollection),
+      save: jest.fn(async (row) => ({ id: 10, ...row }) as CodCollection),
+    };
+    ordersRepo = {
+      findOne: jest.fn(),
+      save: jest.fn(async (o) => o as Order),
+      createQueryBuilder: jest.fn(),
+    };
+    usersRepo = {
+      findOne: jest.fn(),
+    };
+    payoutRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      save: jest.fn(async (p) => p as Payout),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
         PaymentsService,
         { provide: getRepositoryToken(PaymentTransaction), useValue: txnRepo },
+        { provide: getRepositoryToken(CodCollection), useValue: codRepo },
+        { provide: getRepositoryToken(Order), useValue: ordersRepo },
+        { provide: getRepositoryToken(User), useValue: usersRepo },
+        { provide: getRepositoryToken(Payout), useValue: payoutRepo },
       ],
     }).compile();
 
@@ -36,8 +83,8 @@ describe('PaymentsService', () => {
 
   describe('createIntent', () => {
     it('should create pending transaction and return checkout URL', async () => {
-      txnRepo.create.mockReturnValue(mockTxn);
-      txnRepo.save.mockResolvedValue(mockTxn);
+      txnRepo.create!.mockReturnValue(mockTxn);
+      txnRepo.save!.mockResolvedValue(mockTxn);
 
       const dto = { orderId: 1, paymentMethod: 'gcash', amount: 500 } as any;
       const result = await service.createIntent(dto);
@@ -62,8 +109,8 @@ describe('PaymentsService', () => {
         ...mockTxn,
         status: 'pending',
       } as PaymentTransaction;
-      txnRepo.findOne.mockResolvedValue(pendingTxn);
-      txnRepo.save.mockImplementation(async (t) => t as PaymentTransaction);
+      txnRepo.findOne!.mockResolvedValue(pendingTxn);
+      txnRepo.save!.mockImplementation(async (t) => t as PaymentTransaction);
 
       const result = await service.confirmPayment(1);
 
@@ -71,7 +118,7 @@ describe('PaymentsService', () => {
     });
 
     it('should throw NotFoundException if transaction not found', async () => {
-      txnRepo.findOne.mockResolvedValue(null);
+      txnRepo.findOne!.mockResolvedValue(null);
 
       await expect(service.confirmPayment(999)).rejects.toThrow(
         NotFoundException,
@@ -83,7 +130,7 @@ describe('PaymentsService', () => {
         ...mockTxn,
         status: 'success',
       } as PaymentTransaction;
-      txnRepo.findOne.mockResolvedValue(successTxn);
+      txnRepo.findOne!.mockResolvedValue(successTxn);
 
       await expect(service.confirmPayment(1)).rejects.toThrow(
         BadRequestException,
@@ -97,8 +144,8 @@ describe('PaymentsService', () => {
         ...mockTxn,
         status: 'success',
       } as PaymentTransaction;
-      txnRepo.findOne.mockResolvedValue(successTxn);
-      txnRepo.save.mockImplementation(async (t) => t as PaymentTransaction);
+      txnRepo.findOne!.mockResolvedValue(successTxn);
+      txnRepo.save!.mockImplementation(async (t) => t as PaymentTransaction);
 
       const result = await service.initiateRefund(1);
 
@@ -106,7 +153,7 @@ describe('PaymentsService', () => {
     });
 
     it('should throw NotFoundException if transaction not found', async () => {
-      txnRepo.findOne.mockResolvedValue(null);
+      txnRepo.findOne!.mockResolvedValue(null);
 
       await expect(service.initiateRefund(999)).rejects.toThrow(
         NotFoundException,
@@ -118,11 +165,282 @@ describe('PaymentsService', () => {
         ...mockTxn,
         status: 'pending',
       } as PaymentTransaction;
-      txnRepo.findOne.mockResolvedValue(pendingTxn);
+      txnRepo.findOne!.mockResolvedValue(pendingTxn);
 
       await expect(service.initiateRefund(1)).rejects.toThrow(
         BadRequestException,
       );
+    });
+  });
+
+  describe('assertCodEligibleForCheckout', () => {
+    function mockActiveCount(count: number) {
+      const qb = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getCount: jest.fn().mockResolvedValue(count),
+      };
+      ordersRepo.createQueryBuilder!.mockReturnValue(qb as any);
+      return qb;
+    }
+
+    it('passes through non-COD payment methods', async () => {
+      const result = await service.assertCodEligibleForCheckout({
+        userId: 1,
+        paymentMethod: 'pilot_credit',
+        finalTotalMinor: '200000',
+      });
+      expect(result).toBeNull();
+      expect(usersRepo.findOne).not.toHaveBeenCalled();
+    });
+
+    it('rejects ₱1,501 COD even when client is pilot verified', async () => {
+      usersRepo.findOne!.mockResolvedValue({
+        id: 1,
+        pilotCodEligible: true,
+        codOpsRiskBlocked: false,
+      } as User);
+      mockActiveCount(0);
+
+      await expect(
+        service.assertCodEligibleForCheckout({
+          userId: 1,
+          paymentMethod: 'cod',
+          finalTotalMinor: '150100',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'cod_not_eligible',
+          reasons: expect.arrayContaining([
+            CodIneligibilityReason.AMOUNT_EXCEEDS_CAP,
+          ]),
+        }),
+      });
+    });
+
+    it('rejects COD when client is not pilot verified', async () => {
+      usersRepo.findOne!.mockResolvedValue({
+        id: 1,
+        pilotCodEligible: false,
+        codOpsRiskBlocked: false,
+      } as User);
+      mockActiveCount(0);
+
+      await expect(
+        service.assertCodEligibleForCheckout({
+          userId: 1,
+          paymentMethod: 'cod',
+          finalTotalMinor: '50000',
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('allows eligible COD under the cap', async () => {
+      usersRepo.findOne!.mockResolvedValue({
+        id: 1,
+        pilotCodEligible: true,
+        codOpsRiskBlocked: false,
+      } as User);
+      mockActiveCount(0);
+
+      const result = await service.assertCodEligibleForCheckout({
+        userId: 1,
+        paymentMethod: 'cod',
+        finalTotalMinor: '150000',
+      });
+
+      expect(result?.eligible).toBe(true);
+      expect(result?.amountMinor).toBe('150000');
+    });
+
+    it('rejects when client already has an active unpaid COD order', async () => {
+      usersRepo.findOne!.mockResolvedValue({
+        id: 1,
+        pilotCodEligible: true,
+        codOpsRiskBlocked: false,
+      } as User);
+      mockActiveCount(1);
+
+      await expect(
+        service.assertCodEligibleForCheckout({
+          userId: 1,
+          paymentMethod: 'cod',
+          finalTotalMinor: '10000',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          reasons: expect.arrayContaining([
+            CodIneligibilityReason.ACTIVE_UNPAID_COD,
+          ]),
+        }),
+      });
+    });
+  });
+
+  describe('recordCashCollection + reconcile', () => {
+    const codOrder = {
+      id: 5,
+      paymentMethod: 'cod',
+      paymentStatus: 'pending',
+      finalTotalMinor: '12000',
+      codEligible: true,
+      orderStatus: OrderStatus.OUT_FOR_DELIVERY,
+    } as Order;
+
+    it('records OTP/photo refs and marks cash_collected', async () => {
+      ordersRepo.findOne!.mockResolvedValue({ ...codOrder });
+      codRepo.findOne!.mockResolvedValue({
+        id: 3,
+        orderId: 5,
+        status: CodCollectionStatus.PENDING,
+        amountMinor: '12000',
+        otpRef: null,
+        photoFileId: null,
+        receiptRefs: null,
+        riderId: null,
+      } as CodCollection);
+
+      const saved = await service.recordCashCollection(5, {
+        otpRef: 'otp-ref-abc',
+        photoFileId: 99,
+      });
+
+      expect(saved.status).toBe(CodCollectionStatus.COLLECTED);
+      expect(saved.otpRef).toBe('otp-ref-abc');
+      expect(saved.photoFileId).toBe(99);
+      expect(saved.collectedAt).toBeInstanceOf(Date);
+      expect(ordersRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ paymentStatus: 'paid' }),
+      );
+    });
+
+    it('requires proof refs for collection', async () => {
+      ordersRepo.findOne!.mockResolvedValue({ ...codOrder });
+      codRepo.findOne!.mockResolvedValue({
+        id: 3,
+        orderId: 5,
+        status: CodCollectionStatus.PENDING,
+      } as CodCollection);
+
+      await expect(service.recordCashCollection(5, {})).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'cod_proof_required' }),
+      });
+    });
+
+    it('reconciles collected cash and clears payout hold', async () => {
+      codRepo.findOne!.mockResolvedValue({
+        id: 3,
+        orderId: 5,
+        status: CodCollectionStatus.COLLECTED,
+        reconciledAt: null,
+        reconciledByUserId: null,
+      } as CodCollection);
+      const heldPayout = {
+        id: 7,
+        orderId: 5,
+        settlementState: PayoutSettlementState.HELD,
+        holdReason: COD_PAYOUT_HOLD_REASON,
+      } as Payout;
+      payoutRepo.find!.mockResolvedValue([heldPayout]);
+
+      const result = await service.reconcileCodCollection(5, 42, {});
+
+      expect(result.status).toBe(CodCollectionStatus.RECONCILED);
+      expect(result.reconciledByUserId).toBe(42);
+      expect(result.reconciledAt).toBeInstanceOf(Date);
+      expect(payoutRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          settlementState: PayoutSettlementState.PENDING,
+          holdReason: null,
+        }),
+      );
+    });
+
+    it('rejects recon before collection', async () => {
+      codRepo.findOne!.mockResolvedValue({
+        id: 3,
+        orderId: 5,
+        status: CodCollectionStatus.PENDING,
+      } as CodCollection);
+
+      await expect(
+        service.reconcileCodCollection(5, 1, {}),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'cod_not_collected' }),
+      });
+    });
+  });
+
+  describe('COD payout hold hook', () => {
+    it('holds payout until COD is reconciled', async () => {
+      ordersRepo.findOne!.mockResolvedValue({
+        id: 5,
+        paymentMethod: 'cod',
+      } as Order);
+      codRepo.findOne!.mockResolvedValue({
+        orderId: 5,
+        status: CodCollectionStatus.COLLECTED,
+      } as CodCollection);
+      const payout = {
+        id: 1,
+        orderId: 5,
+        settlementState: PayoutSettlementState.PENDING,
+        holdReason: null,
+      } as Payout;
+      payoutRepo.find!.mockResolvedValue([payout]);
+
+      await service.applyCodPayoutHold(5);
+
+      expect(payoutRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          settlementState: PayoutSettlementState.HELD,
+          holdReason: COD_PAYOUT_HOLD_REASON,
+        }),
+      );
+    });
+
+    it('blocks release when COD not reconciled', async () => {
+      ordersRepo.findOne!.mockResolvedValue({
+        id: 5,
+        paymentMethod: 'cod',
+      } as Order);
+      codRepo.findOne!.mockResolvedValue({
+        status: CodCollectionStatus.COLLECTED,
+      } as CodCollection);
+
+      await expect(
+        service.assertCodReconciledBeforePayout(5),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'cod_recon_required',
+          holdReason: COD_PAYOUT_HOLD_REASON,
+        }),
+      });
+    });
+
+    it('allows payout after cash_reconciled', async () => {
+      ordersRepo.findOne!.mockResolvedValue({
+        id: 5,
+        paymentMethod: 'cod',
+      } as Order);
+      codRepo.findOne!.mockResolvedValue({
+        status: CodCollectionStatus.RECONCILED,
+      } as CodCollection);
+
+      await expect(
+        service.assertCodReconciledBeforePayout(5),
+      ).resolves.toBeUndefined();
+    });
+
+    it('skips hold gate for non-COD orders', async () => {
+      ordersRepo.findOne!.mockResolvedValue({
+        id: 5,
+        paymentMethod: 'pilot_credit',
+      } as Order);
+
+      await expect(
+        service.assertCodReconciledBeforePayout(5),
+      ).resolves.toBeUndefined();
     });
   });
 });
