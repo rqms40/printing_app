@@ -92,6 +92,12 @@ const ACTIVE_LIST_DECISIONS: SupplierAssignmentDecision[] = [
   SupplierAssignmentDecision.ACCEPTED,
 ];
 
+/** Decisions that may be viewed via GET job detail (historical declined/expired blocked). */
+const VIEWABLE_JOB_DECISIONS: SupplierAssignmentDecision[] = [
+  SupplierAssignmentDecision.PENDING,
+  SupplierAssignmentDecision.ACCEPTED,
+];
+
 export type SupplierJobListItem = {
   id: number;
   orderId: number;
@@ -107,6 +113,15 @@ export type SupplierJobListItem = {
   decidedAt: Date | null;
   createdAt: Date;
   paymentAuthorizationStatus: PaymentAuthorizationStatus;
+};
+
+export type SupplierJobSpecValue = {
+  key: string;
+  label: string;
+  value: string;
+  displayValue: string;
+  optionId: number | null;
+  optionLabel: string | null;
 };
 
 export type SupplierJobDetail = {
@@ -137,7 +152,6 @@ export type SupplierJobDetail = {
     paymentAuthorizationStatus: PaymentAuthorizationStatus;
     deliveryOption: string;
     estimatedCompletionAt: Date | null;
-    specialInstructions: string | null;
     createdAt: Date;
     updatedAt: Date;
   };
@@ -147,7 +161,7 @@ export type SupplierJobDetail = {
     fileName: string | null;
     signedUrl: string | null;
   };
-  /** Spec snapshot for production (items + top-level fields). */
+  /** Spec snapshot for production (items + item-level production attributes). */
   specs: {
     category: string;
     quantity: number;
@@ -156,9 +170,11 @@ export type SupplierJobDetail = {
       category: string;
       categoryName: string | null;
       quantity: number;
+      /** Customer item notes only — never order.adminNotes. */
       specialInstructions: string | null;
       fileName: string | null;
       fileMetadataId: number | null;
+      specs: SupplierJobSpecValue[];
     }>;
   };
   allowedActions: string[];
@@ -293,7 +309,8 @@ export class SupplierJobsService {
 
   /**
    * Job detail with approved artwork + production specs.
-   * Gate: own assignment; order must already be past Ops QA (supplier_assigned+).
+   * Gate: own assignment with PENDING/ACCEPTED decision; order past Ops QA.
+   * Never returns order.adminNotes (ops-only).
    */
   async getJob(
     jobId: number,
@@ -305,6 +322,13 @@ export class SupplierJobsService {
     const assignment = await this.loadOwnedAssignment(jobId, profile.id, {
       order: true,
     });
+    if (!VIEWABLE_JOB_DECISIONS.includes(assignment.decision)) {
+      throw new ForbiddenException({
+        code: 'assignment_not_active',
+        message:
+          'Only pending or accepted assignments can be viewed; declined/expired/cancelled jobs are not available',
+      });
+    }
     const order = assignment.order;
     if (!order) {
       throw new NotFoundException(`Order for job ${jobId} not found`);
@@ -314,6 +338,7 @@ export class SupplierJobsService {
 
     const items = await this.ordersRepo.manager.getRepository(OrderItem).find({
       where: { orderId: order.id },
+      relations: { specValues: true },
       order: { id: 'ASC' },
     });
 
@@ -354,7 +379,6 @@ export class SupplierJobsService {
           order.paymentAuthorizationStatus ?? PaymentAuthorizationStatus.NONE,
         deliveryOption: order.deliveryOption,
         estimatedCompletionAt: order.estimatedCompletionAt,
-        specialInstructions: order.adminNotes ?? null,
         createdAt: order.createdAt,
         updatedAt: order.updatedAt,
       },
@@ -374,6 +398,7 @@ export class SupplierJobsService {
           specialInstructions: item.specialInstructions,
           fileName: item.fileName ?? null,
           fileMetadataId: item.fileMetadataId ?? null,
+          specs: this.mapItemSpecValues(item.specValues),
         })),
       },
       allowedActions: this.computeAllowedActions(assignment, order),
@@ -1335,6 +1360,30 @@ export class SupplierJobsService {
       paymentAuthorizationStatus:
         order.paymentAuthorizationStatus ?? PaymentAuthorizationStatus.NONE,
     };
+  }
+
+  /** Production attributes from order_item_spec_values (no pricing internals). */
+  private mapItemSpecValues(
+    values:
+      | {
+          specKey: string;
+          specLabel: string;
+          value: string;
+          displayValue: string;
+          optionId: number | null;
+          optionLabel: string | null;
+        }[]
+      | undefined
+      | null,
+  ): SupplierJobSpecValue[] {
+    return (values ?? []).map((sv) => ({
+      key: sv.specKey,
+      label: sv.specLabel,
+      value: sv.value,
+      displayValue: sv.displayValue,
+      optionId: sv.optionId ?? null,
+      optionLabel: sv.optionLabel ?? null,
+    }));
   }
 
   private computeAllowedActions(

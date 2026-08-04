@@ -828,6 +828,125 @@ describe('SupplierJobsService', () => {
     });
   });
 
+  describe('getJob privacy and production specs', () => {
+    it('never exposes adminNotes (or as specialInstructions) on job detail', async () => {
+      const order = baseOrder({
+        adminNotes: 'OPS INTERNAL: escalate pricing to finance',
+      });
+      assignmentRepo.findOne!.mockResolvedValue(baseAssignment({ order }));
+      filesService.findById!.mockResolvedValue({
+        id: 99,
+        objectKey: 'uploads/paper/flyer.pdf',
+      } as FileMetadata);
+
+      const detail = await service.getJob(7, actor, 'localhost');
+      const payload = JSON.stringify(detail);
+
+      expect(payload).not.toContain('OPS INTERNAL');
+      expect(payload).not.toContain('adminNotes');
+      expect(detail.order).not.toHaveProperty('specialInstructions');
+      expect(detail.order).not.toHaveProperty('adminNotes');
+    });
+
+    it('includes item-level production specs when present', async () => {
+      const order = baseOrder();
+      assignmentRepo.findOne!.mockResolvedValue(baseAssignment({ order }));
+      const itemFind = jest.fn().mockResolvedValue([
+        {
+          id: 501,
+          category: 'paper',
+          categoryName: 'Paper Prints',
+          quantity: 50,
+          specialInstructions: 'Trim to crop marks',
+          fileName: 'flyer.pdf',
+          fileMetadataId: 99,
+          specValues: [
+            {
+              specKey: 'paper_size',
+              specLabel: 'Paper size',
+              value: 'a4',
+              displayValue: 'A4',
+              optionId: 1,
+              optionLabel: 'A4',
+            },
+            {
+              specKey: 'color_mode',
+              specLabel: 'Color',
+              value: 'cmyk',
+              displayValue: 'Full color',
+              optionId: 2,
+              optionLabel: 'CMYK',
+            },
+          ],
+        },
+      ]);
+      (ordersRepo.manager as { getRepository: jest.Mock }).getRepository =
+        jest.fn().mockReturnValue({ find: itemFind });
+
+      const detail = await service.getJob(7, actor);
+
+      expect(itemFind).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { orderId: 42 },
+          relations: { specValues: true },
+        }),
+      );
+      expect(detail.specs.items).toHaveLength(1);
+      expect(detail.specs.items[0]).toMatchObject({
+        id: 501,
+        category: 'paper',
+        quantity: 50,
+        specialInstructions: 'Trim to crop marks',
+      });
+      expect(detail.specs.items[0].specs).toEqual([
+        {
+          key: 'paper_size',
+          label: 'Paper size',
+          value: 'a4',
+          displayValue: 'A4',
+          optionId: 1,
+          optionLabel: 'A4',
+        },
+        {
+          key: 'color_mode',
+          label: 'Color',
+          value: 'cmyk',
+          displayValue: 'Full color',
+          optionId: 2,
+          optionLabel: 'CMYK',
+        },
+      ]);
+    });
+
+    it('rejects getJob for declined assignment', async () => {
+      assignmentRepo.findOne!.mockResolvedValue(
+        baseAssignment({
+          decision: SupplierAssignmentDecision.DECLINED,
+          decisionReason: 'no capacity',
+          order: baseOrder({ orderStatus: OrderStatus.APPROVED_FOR_MATCHING }),
+        }),
+      );
+
+      await expect(service.getJob(7, actor)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'assignment_not_active' }),
+      });
+      expect(filesService.getPresignedUrlForKey).not.toHaveBeenCalled();
+    });
+
+    it('rejects getJob for expired assignment', async () => {
+      assignmentRepo.findOne!.mockResolvedValue(
+        baseAssignment({
+          decision: SupplierAssignmentDecision.EXPIRED,
+          order: baseOrder(),
+        }),
+      );
+
+      await expect(service.getJob(7, actor)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'assignment_not_active' }),
+      });
+    });
+  });
+
   describe('listJobs', () => {
     it('returns only own assignments matching filter', async () => {
       const assigned = baseAssignment({
