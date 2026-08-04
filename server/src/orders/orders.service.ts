@@ -2441,6 +2441,15 @@ export class OrdersService {
       if (orderStatus === OrderStatus.CANCELLED) {
         throw new BadRequestException('Use the cancellation workflow');
       }
+      // Money transitions must freeze snapshot / settle credits via authorizePayment.
+      // Status-only jumps to payment_authorized skip the authorization gate.
+      if (orderStatus === OrderStatus.PAYMENT_AUTHORIZED) {
+        throw new BadRequestException({
+          code: 'use_authorize_payment',
+          message:
+            'Use POST /orders/:id/authorize-payment to enter payment_authorized',
+        });
+      }
       if (
         RIDER_ASSIGNMENT_WORKFLOW_STATUSES.has(orderStatus) ||
         (locked.orderStatus === OrderStatus.RIDER_ASSIGNED &&

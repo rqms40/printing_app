@@ -810,6 +810,64 @@ describe('OrdersService', () => {
     });
   });
 
+  describe('updateStatus rejects status-only payment_authorized (Task 3.3 stuck-path)', () => {
+    it('rejects updateStatus to payment_authorized and points to authorize-payment', async () => {
+      const locked = {
+        ...mockOrder,
+        orderStatus: OrderStatus.AWAITING_PAYMENT,
+        paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
+      } as Order;
+      repo.findOneOrFail.mockResolvedValue(locked);
+
+      await expect(
+        service.updateStatus(
+          1,
+          OrderStatus.PAYMENT_AUTHORIZED,
+          {},
+          {
+            actorUserId: 7,
+            actorRole: 'ops_admin',
+            reason: 'Authorize via status',
+          },
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'use_authorize_payment',
+          message: expect.stringMatching(/authorize-payment/i),
+        }),
+      });
+      expect(repo.update).not.toHaveBeenCalled();
+      expect(creditsService.reserveCredits).not.toHaveBeenCalled();
+    });
+
+    it('also rejects ops jump from approved_for_matching to payment_authorized', async () => {
+      const locked = {
+        ...mockOrder,
+        orderStatus: OrderStatus.APPROVED_FOR_MATCHING,
+        paymentAuthorizationStatus: PaymentAuthorizationStatus.NONE,
+      } as Order;
+      repo.findOneOrFail.mockResolvedValue(locked);
+
+      await expect(
+        service.updateStatus(
+          1,
+          OrderStatus.PAYMENT_AUTHORIZED,
+          {},
+          {
+            actorUserId: 7,
+            actorRole: 'ops_admin',
+            reason: 'Skip matching money path',
+          },
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'use_authorize_payment',
+        }),
+      });
+      expect(repo.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe('production requires payment authorization (Task 3.3)', () => {
     it('blocks production when paymentAuthorizationStatus is not authorized', async () => {
       const locked = {

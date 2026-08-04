@@ -76,9 +76,10 @@ export const ORDER_STATUS_TRANSITIONS: Record<
   ],
   [OrderStatus.APPROVED_FOR_MATCHING]: [
     { to: OrderStatus.SUPPLIER_ASSIGNED, actors: SYSTEM_OR_OPS },
-    // Temp: ops may skip matching/payment wiring until those modules land.
+    // Temp: ops may skip matching wiring until those modules land.
+    // Money transitions must use authorizePayment — no status-only jump to
+    // payment_authorized from matching.
     { to: OrderStatus.AWAITING_PAYMENT, actors: OPS },
-    { to: OrderStatus.PAYMENT_AUTHORIZED, actors: OPS },
     { to: OrderStatus.CANCELLED, actors: OPS },
   ],
   [OrderStatus.SUPPLIER_ASSIGNED]: [
@@ -88,10 +89,11 @@ export const ORDER_STATUS_TRANSITIONS: Record<
   ],
   [OrderStatus.SUPPLIER_ACCEPTED]: [
     { to: OrderStatus.AWAITING_PAYMENT, actors: SYSTEM_OR_OPS },
-    // Payment auth can skip intermediate awaiting_payment (client/ops/system).
+    // Money transition: authorizePayment only (client/system). Ops must use
+    // POST /orders/:id/authorize-payment — not generic updateStatus.
     {
       to: OrderStatus.PAYMENT_AUTHORIZED,
-      actors: ['client', 'system', 'ops_admin', 'super_admin'],
+      actors: ['client', 'system'],
     },
     // 24h payment timeout: release capacity and re-enter matching.
     { to: OrderStatus.APPROVED_FOR_MATCHING, actors: ['system'] },
@@ -100,7 +102,7 @@ export const ORDER_STATUS_TRANSITIONS: Record<
   [OrderStatus.AWAITING_PAYMENT]: [
     {
       to: OrderStatus.PAYMENT_AUTHORIZED,
-      actors: ['client', 'system', 'ops_admin', 'super_admin'],
+      actors: ['client', 'system'],
     },
     // 24h payment timeout: release capacity and re-enter matching.
     { to: OrderStatus.APPROVED_FOR_MATCHING, actors: ['system'] },
@@ -273,6 +275,8 @@ export function adminAllowedNextOrderStatuses(
   return allowedNextStatuses(fromStatus, 'ops_admin').filter(
     (toStatus) =>
       toStatus !== OrderStatus.CANCELLED &&
+      // Money path: use POST /orders/:id/authorize-payment, not status dropdown.
+      toStatus !== OrderStatus.PAYMENT_AUTHORIZED &&
       toStatus !== OrderStatus.RIDER_ASSIGNED &&
       toStatus !== OrderStatus.PICKED_UP &&
       toStatus !== OrderStatus.OUT_FOR_DELIVERY &&

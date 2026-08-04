@@ -63,9 +63,8 @@ describe('order status transitions (marketplace)', () => {
       [OrderStatus.PAYMENT_AUTHORIZED, OrderStatus.PRODUCTION],
       [OrderStatus.PRODUCTION, OrderStatus.SUPPLIER_SELF_QC],
       [OrderStatus.SUPPLIER_SELF_QC, OrderStatus.READY_FOR_DISPATCH],
-      // Fast-track until matching/payment modules land
+      // Fast-track until matching modules land (not money transitions)
       [OrderStatus.SUBMITTED, OrderStatus.APPROVED_FOR_MATCHING],
-      [OrderStatus.APPROVED_FOR_MATCHING, OrderStatus.PAYMENT_AUTHORIZED],
     ])(
       'allows ops_admin and super_admin for production-like %s → %s',
       (from, to) => {
@@ -73,6 +72,45 @@ describe('order status transitions (marketplace)', () => {
         expect(() => assertTransition(from, to, 'super_admin')).not.toThrow();
       },
     );
+
+    it('does not allow status-only ops jump to payment_authorized', () => {
+      expect(
+        canTransition(
+          OrderStatus.APPROVED_FOR_MATCHING,
+          OrderStatus.PAYMENT_AUTHORIZED,
+          'ops_admin',
+        ),
+      ).toBe(false);
+      expect(
+        canTransition(
+          OrderStatus.AWAITING_PAYMENT,
+          OrderStatus.PAYMENT_AUTHORIZED,
+          'ops_admin',
+        ),
+      ).toBe(false);
+      expect(
+        canTransition(
+          OrderStatus.SUPPLIER_ACCEPTED,
+          OrderStatus.PAYMENT_AUTHORIZED,
+          'ops_admin',
+        ),
+      ).toBe(false);
+      // Structure edge still exists for authorizePayment (client/system).
+      expect(
+        canTransition(
+          OrderStatus.AWAITING_PAYMENT,
+          OrderStatus.PAYMENT_AUTHORIZED,
+          'client',
+        ),
+      ).toBe(true);
+      expect(
+        canTransition(
+          OrderStatus.SUPPLIER_ACCEPTED,
+          OrderStatus.PAYMENT_AUTHORIZED,
+          'system',
+        ),
+      ).toBe(true);
+    });
   });
 
   describe('illegal jumps and role violations', () => {
