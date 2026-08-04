@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import {
   NotFoundException,
@@ -34,6 +35,7 @@ describe('PaymentsService', () => {
   >;
   let usersRepo: jest.Mocked<Partial<Repository<User>>>;
   let payoutRepo: jest.Mocked<Partial<Repository<Payout>>>;
+  let configValues: Record<string, string | undefined>;
 
   const mockTxn = {
     id: 1,
@@ -43,7 +45,23 @@ describe('PaymentsService', () => {
     status: 'pending',
   } as PaymentTransaction;
 
-  beforeEach(async () => {
+  async function buildService(
+    env: Record<string, string | undefined> = {},
+  ): Promise<PaymentsService> {
+    configValues = {
+      PAYMONGO_LIVE_ENABLED: 'false',
+      PAYMONGO_SECRET_KEY: undefined,
+      ...env,
+    };
+    const mockConfig = {
+      get: jest.fn((key: string, def?: string) => {
+        if (Object.prototype.hasOwnProperty.call(configValues, key)) {
+          return configValues[key] ?? def;
+        }
+        return def;
+      }),
+    };
+
     txnRepo = {
       findOne: jest.fn(),
       create: jest.fn(),
@@ -75,10 +93,15 @@ describe('PaymentsService', () => {
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
         { provide: getRepositoryToken(User), useValue: usersRepo },
         { provide: getRepositoryToken(Payout), useValue: payoutRepo },
+        { provide: ConfigService, useValue: mockConfig },
       ],
     }).compile();
 
-    service = module.get(PaymentsService);
+    return module.get(PaymentsService);
+  }
+
+  beforeEach(async () => {
+    service = await buildService();
   });
 
   describe('createIntent', () => {
@@ -100,6 +123,108 @@ describe('PaymentsService', () => {
         'https://checkout.paymongo.com/mock/',
       );
       expect(result.checkoutUrl).toContain(String(mockTxn.id));
+    });
+  });
+
+  describe('PayMongo sandbox-only guard (Task 3.4)', () => {
+    it('defaults live enabled to false', () => {
+      expect(service.isPayMongoLiveEnabled()).toBe(false);
+    });
+
+    it('allows mock createIntent when live flag off and no live secret', async () => {
+      txnRepo.create!.mockReturnValue(mockTxn);
+      txnRepo.save!.mockResolvedValue(mockTxn);
+
+      await expect(
+        service.createIntent({
+          orderId: 1,
+          paymentMethod: 'gcash',
+          amount: 500,
+        } as any),
+      ).resolves.toBeDefined();
+    });
+
+    it('allows sandbox sk_test_ secret when live flag is off', async () => {
+      service = await buildService({
+        PAYMONGO_LIVE_ENABLED: 'false',
+        PAYMONGO_SECRET_KEY: 'sk_test_sandbox_key',
+      });
+      txnRepo.create!.mockReturnValue(mockTxn);
+      txnRepo.save!.mockResolvedValue(mockTxn);
+
+      await expect(
+        service.createIntent({
+          orderId: 1,
+          paymentMethod: 'gcash',
+          amount: 500,
+        } as any),
+      ).resolves.toBeDefined();
+      expect(service.isPayMongoLiveSecretConfigured()).toBe(false);
+    });
+
+    it('blocks createIntent when sk_live_ secret and live flag off', async () => {
+      service = await buildService({
+        PAYMONGO_LIVE_ENABLED: 'false',
+        PAYMONGO_SECRET_KEY: 'sk_live_real_money',
+      });
+
+      await expect(
+        service.createIntent({
+          orderId: 1,
+          paymentMethod: 'gcash',
+          amount: 500,
+        } as any),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'paymongo_live_disabled',
+        }),
+      });
+      expect(txnRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('blocks confirmPayment / refund / webhook with live secret and flag off', async () => {
+      service = await buildService({
+        PAYMONGO_LIVE_ENABLED: 'false',
+        PAYMONGO_SECRET_KEY: 'sk_live_real_money',
+      });
+
+      await expect(service.confirmPayment(1)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'paymongo_live_disabled' }),
+      });
+      await expect(service.initiateRefund(1)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'paymongo_live_disabled' }),
+      });
+      await expect(
+        service.handleWebhook({
+          data: {
+            attributes: {
+              reference_number: 'ref-1',
+              type: 'payment.paid',
+            },
+          },
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'paymongo_live_disabled' }),
+      });
+    });
+
+    it('allows live secret only when PAYMONGO_LIVE_ENABLED is true', async () => {
+      service = await buildService({
+        PAYMONGO_LIVE_ENABLED: 'true',
+        PAYMONGO_SECRET_KEY: 'sk_live_real_money',
+      });
+      expect(service.isPayMongoLiveEnabled()).toBe(true);
+
+      txnRepo.create!.mockReturnValue(mockTxn);
+      txnRepo.save!.mockResolvedValue(mockTxn);
+
+      await expect(
+        service.createIntent({
+          orderId: 1,
+          paymentMethod: 'gcash',
+          amount: 500,
+        } as any),
+      ).resolves.toBeDefined();
     });
   });
 

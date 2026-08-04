@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PaymentTransaction } from './entities/payment-transaction.entity';
@@ -36,6 +37,12 @@ const COD_INACTIVE_ORDER_STATUSES: OrderStatus[] = [
   OrderStatus.FILE_REJECTED,
 ];
 
+/**
+ * Truthy values for PAYMONGO_LIVE_ENABLED.
+ * Default is false — live digital collection is post-pilot only.
+ */
+const LIVE_ENABLED_TRUTHY = new Set(['true', '1', 'yes', 'on']);
+
 export type AssertCodCheckoutInput = {
   userId: number;
   paymentMethod: string;
@@ -59,11 +66,64 @@ export class PaymentsService {
     private usersRepo: Repository<User>,
     @InjectRepository(Payout)
     private payoutRepo: Repository<Payout>,
+    private readonly config: ConfigService,
   ) {}
+
+  // ---------------------------------------------------------------------------
+  // PayMongo sandbox-only guard (Task 3.4)
+  // Live digital collection is post-pilot. PAYMONGO_LIVE_ENABLED defaults false.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Whether live PayMongo charges are explicitly unlocked.
+   * Default: false (sandbox / mock only during pilot).
+   */
+  isPayMongoLiveEnabled(): boolean {
+    const raw = (
+      this.config.get<string>('PAYMONGO_LIVE_ENABLED') ?? 'false'
+    )
+      .toString()
+      .trim()
+      .toLowerCase();
+    return LIVE_ENABLED_TRUTHY.has(raw);
+  }
+
+  /**
+   * True when PAYMONGO_SECRET_KEY is a live key (`sk_live_...`).
+   * Test keys (`sk_test_...`) and missing keys are not live.
+   */
+  isPayMongoLiveSecretConfigured(): boolean {
+    const key = (this.config.get<string>('PAYMONGO_SECRET_KEY') ?? '').trim();
+    return key.startsWith('sk_live_');
+  }
+
+  /**
+   * Fail-closed: block live PayMongo charge/refund paths unless
+   * PAYMONGO_LIVE_ENABLED is explicitly true (post-pilot only).
+   * Sandbox (`sk_test_`) and mock checkout remain allowed.
+   */
+  assertPayMongoLiveChargesAllowed(operation: string): void {
+    if (this.isPayMongoLiveEnabled()) {
+      return;
+    }
+    if (!this.isPayMongoLiveSecretConfigured()) {
+      return;
+    }
+    throw new ForbiddenException({
+      code: 'paymongo_live_disabled',
+      message:
+        `PayMongo live charges are disabled during pilot (${operation}). ` +
+        'Live digital collection is post-pilot. Set PAYMONGO_LIVE_ENABLED=true ' +
+        'only after explicit pilot approval, or use sandbox (sk_test_) keys / mock checkout.',
+    });
+  }
 
   async createIntent(
     dto: CreatePaymentIntentDto,
   ): Promise<{ transaction: PaymentTransaction; checkoutUrl: string }> {
+    // Block live-key charging when sandbox-only pilot guard is on.
+    this.assertPayMongoLiveChargesAllowed('createIntent');
+
     const txn = this.txnRepo.create({
       orderId: dto.orderId,
       paymentMethod: dto.paymentMethod,
@@ -72,13 +132,16 @@ export class PaymentsService {
     });
     const saved = await this.txnRepo.save(txn);
 
-    // Mock checkout URL — replace with real PayMongo integration later
+    // Pilot / sandbox: mock checkout only. Real hosted checkout is post-pilot
+    // (requires PAYMONGO_LIVE_ENABLED=true and a future live adapter).
     const checkoutUrl = `https://checkout.paymongo.com/mock/${saved.id}`;
 
     return { transaction: saved, checkoutUrl };
   }
 
   async confirmPayment(id: number): Promise<PaymentTransaction> {
+    this.assertPayMongoLiveChargesAllowed('confirmPayment');
+
     const txn = await this.txnRepo.findOne({ where: { id } });
     if (!txn) throw new NotFoundException('Payment transaction not found');
     if (txn.status !== 'pending') {
@@ -93,6 +156,9 @@ export class PaymentsService {
   async handleWebhook(
     payload: Record<string, any>,
   ): Promise<PaymentTransaction> {
+    // Live-key webhooks that would mark real money success are blocked in pilot.
+    this.assertPayMongoLiveChargesAllowed('handleWebhook');
+
     const data = payload?.data as Record<string, any> | undefined;
     const attributes = data?.attributes as Record<string, any> | undefined;
     const externalRefId = attributes?.reference_number as string | undefined;
@@ -120,6 +186,8 @@ export class PaymentsService {
   }
 
   async initiateRefund(id: number): Promise<PaymentTransaction> {
+    this.assertPayMongoLiveChargesAllowed('initiateRefund');
+
     const txn = await this.txnRepo.findOne({ where: { id } });
     if (!txn) throw new NotFoundException('Payment transaction not found');
     if (txn.status !== 'success') {
