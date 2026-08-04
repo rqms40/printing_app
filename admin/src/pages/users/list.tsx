@@ -9,6 +9,7 @@ import {
   humanizeEnumValue,
   type AdminUserRecord,
 } from "@/utils/api-normalizers";
+import { isAdminCapableRole } from "@/types/enums";
 
 const { Text } = Typography;
 
@@ -134,7 +135,7 @@ export function UserList() {
               {visibleUsers.filter((u) => u.role === "rider").length} Riders
             </Tag>
             <Tag color="red" style={{ margin: 0, padding: "2px 10px" }}>
-              {visibleUsers.filter((u) => u.role === "admin").length} Admins
+              {visibleUsers.filter((u) => isAdminCapableRole(u.role)).length} Admins
             </Tag>
           </Space>
         </Space>

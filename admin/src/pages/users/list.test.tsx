@@ -42,7 +42,7 @@ describe("UserList", () => {
         full_name: "Casey Customer",
         email: "casey@example.com",
         phone_number: "+639171111111",
-        role: "customer",
+        role: "client",
         is_active: true,
         is_profile_complete: false,
         profile_category: "student",

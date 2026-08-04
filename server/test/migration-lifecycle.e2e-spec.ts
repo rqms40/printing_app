@@ -94,7 +94,7 @@ describe('production migration lifecycle (e2e)', () => {
     try {
       const [user] = await dataSource.query<Array<{ id: number }>>(
         `INSERT INTO users (email, password_hash, role, is_beta_user)
-         VALUES ($1, 'not-used', 'customer', true)
+         VALUES ($1, 'not-used', 'client', true)
          RETURNING id`,
         [`pending-adoption-${database}@example.test`],
       );
@@ -334,7 +334,7 @@ describe('production migration lifecycle (e2e)', () => {
            (email, password_hash, role, beta_photo_file_id,
             beta_photo_uploaded_at, beta_shared_on_social)
          VALUES
-           ($1, 'not-used', 'customer', 900001, NOW(), true),
+           ($1, 'not-used', 'client', 900001, NOW(), true),
            ($2, 'not-used', 'rider', NULL, NULL, false)
          RETURNING id`,
         [
@@ -772,7 +772,7 @@ describe('production migration lifecycle (e2e)', () => {
       const users = await dataSource.query<Array<{ id: number }>>(
         `INSERT INTO users (email, password_hash, role, is_active)
          VALUES
-           ($1, 'not-used', 'customer', true),
+           ($1, 'not-used', 'client', true),
            ($2, 'not-used', 'rider', true),
            ($3, 'not-used', 'rider', true),
            ($4, 'not-used', 'rider', true)
@@ -886,7 +886,7 @@ describe('production migration lifecycle (e2e)', () => {
       const users = await dataSource.query<Array<{ id: number }>>(
         `INSERT INTO users (email, password_hash, role, is_active)
          VALUES
-           ($1, 'not-used', 'customer', true),
+           ($1, 'not-used', 'client', true),
            ($2, 'not-used', 'rider', true),
            ($3, 'not-used', 'rider', true),
            ($4, 'not-used', 'rider', true)
