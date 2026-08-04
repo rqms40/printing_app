@@ -68,14 +68,17 @@ class DashboardKpisNotifier extends StateNotifier<DashboardKpis> {
       final orders = MockData.orders;
 
       final newOrders = orders
-          .where((o) => o.orderStatus == OrderStatus.orderPlaced)
+          .where((o) =>
+              o.orderStatus == OrderStatus.submitted ||
+              o.orderStatus == OrderStatus.needsQa ||
+              o.orderStatus == OrderStatus.approvedForMatching)
           .length;
 
       final inProduction = orders
           .where((o) =>
-              o.orderStatus == OrderStatus.printingInProgress ||
-              o.orderStatus == OrderStatus.finishingMounting ||
-              o.orderStatus == OrderStatus.qualityChecked)
+              o.orderStatus == OrderStatus.paymentAuthorized ||
+              o.orderStatus == OrderStatus.production ||
+              o.orderStatus == OrderStatus.supplierSelfQc)
           .length;
 
       final readyForPickup = orders
@@ -89,7 +92,7 @@ class DashboardKpisNotifier extends StateNotifier<DashboardKpis> {
       final delivered = orders
           .where((o) =>
               o.orderStatus == OrderStatus.delivered ||
-              o.orderStatus == OrderStatus.completedPickup)
+              o.orderStatus == OrderStatus.collectedByCustomer)
           .length;
 
       state = DashboardKpis(

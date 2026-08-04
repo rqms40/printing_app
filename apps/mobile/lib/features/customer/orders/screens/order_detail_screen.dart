@@ -125,7 +125,7 @@ class OrderDetailScreen extends ConsumerWidget {
 
     final isCancellable = cancellableStatuses.contains(order.orderStatus);
 
-    final isOnTheWay = order.orderStatus == OrderStatus.onTheWay;
+    final isOnTheWay = order.orderStatus == OrderStatus.outForDelivery;
 
     // Find the delivery address if applicable.
     Address? address;

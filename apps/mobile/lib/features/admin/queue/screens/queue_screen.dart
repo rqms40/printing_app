@@ -55,19 +55,20 @@ class _QueueScreenState extends ConsumerState<QueueScreen> {
     final orders = queueState.orders;
     final newCount = orders
         .where((o) =>
-            o.orderStatus == OrderStatus.orderPlaced ||
-            o.orderStatus == OrderStatus.fileVerified)
+            o.orderStatus == OrderStatus.submitted ||
+            o.orderStatus == OrderStatus.needsQa ||
+            o.orderStatus == OrderStatus.approvedForMatching)
         .length;
     final prodCount = orders
         .where((o) =>
-            o.orderStatus == OrderStatus.printingInProgress ||
-            o.orderStatus == OrderStatus.finishingMounting ||
-            o.orderStatus == OrderStatus.qualityChecked)
+            o.orderStatus == OrderStatus.paymentAuthorized ||
+            o.orderStatus == OrderStatus.production ||
+            o.orderStatus == OrderStatus.supplierSelfQc)
         .length;
     final doneCount = orders
         .where((o) =>
             o.orderStatus == OrderStatus.delivered ||
-            o.orderStatus == OrderStatus.completedPickup)
+            o.orderStatus == OrderStatus.collectedByCustomer)
         .length;
     return [newCount, prodCount, doneCount, orders.length];
   }

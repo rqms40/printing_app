@@ -224,7 +224,7 @@ export class AdminController {
         if (
           order.paymentStatus !== 'paid' ||
           order.orderStatus === OrderStatus.CANCELLED ||
-          order.orderStatus === OrderStatus.FILE_DECLINED
+          order.orderStatus === OrderStatus.FILE_REJECTED
         ) {
           continue;
         }
@@ -258,7 +258,7 @@ export class AdminController {
       if (
         order.createdAt < earliestBucket ||
         order.orderStatus === OrderStatus.CANCELLED ||
-        order.orderStatus === OrderStatus.FILE_DECLINED
+        order.orderStatus === OrderStatus.FILE_REJECTED
       ) {
         continue;
       }
@@ -642,15 +642,18 @@ export class AdminController {
 
     const newOrders = orders.filter(
       (o) =>
-        o.orderStatus === OrderStatus.ORDER_PLACED ||
-        o.orderStatus === OrderStatus.FILE_VERIFIED,
+        o.orderStatus === OrderStatus.SUBMITTED ||
+        o.orderStatus === OrderStatus.NEEDS_QA ||
+        o.orderStatus === OrderStatus.CLIENT_CORRECTION ||
+        o.orderStatus === OrderStatus.PROOF_APPROVAL ||
+        o.orderStatus === OrderStatus.APPROVED_FOR_MATCHING,
     ).length;
 
     const inProduction = orders.filter(
       (o) =>
-        o.orderStatus === OrderStatus.PRINTING_IN_PROGRESS ||
-        o.orderStatus === OrderStatus.FINISHING_MOUNTING ||
-        o.orderStatus === OrderStatus.QUALITY_CHECKED,
+        o.orderStatus === OrderStatus.PAYMENT_AUTHORIZED ||
+        o.orderStatus === OrderStatus.PRODUCTION ||
+        o.orderStatus === OrderStatus.SUPPLIER_SELF_QC,
     ).length;
 
     const readyForPickup = orders.filter(
@@ -660,7 +663,7 @@ export class AdminController {
     const delivered = orders.filter(
       (o) =>
         o.orderStatus === OrderStatus.DELIVERED ||
-        o.orderStatus === OrderStatus.COMPLETED_PICKUP,
+        o.orderStatus === OrderStatus.COLLECTED_BY_CUSTOMER,
     ).length;
 
     const monthlyRevenue = orders
@@ -681,7 +684,11 @@ export class AdminController {
   async getBadgeCounts() {
     const newOrders = await this.ordersRepo.count({
       where: {
-        orderStatus: In([OrderStatus.ORDER_PLACED, OrderStatus.FILE_VERIFIED]),
+        orderStatus: In([
+          OrderStatus.SUBMITTED,
+          OrderStatus.NEEDS_QA,
+          OrderStatus.APPROVED_FOR_MATCHING,
+        ]),
       },
     });
     const pendingTopUps = await this.creditsService.getPendingCount();

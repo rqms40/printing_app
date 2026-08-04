@@ -359,8 +359,8 @@ describe('Rider dispatch workflow (e2e)', () => {
     const transitions: Array<[DeliveryStatus, OrderStatus]> = [
       [DeliveryStatus.ACCEPTED, OrderStatus.RIDER_ASSIGNED],
       [DeliveryStatus.PICKED_UP, OrderStatus.PICKED_UP],
-      [DeliveryStatus.ON_THE_WAY, OrderStatus.ON_THE_WAY],
-      [DeliveryStatus.ARRIVED, OrderStatus.ARRIVED_AT_DESTINATION],
+      [DeliveryStatus.ON_THE_WAY, OrderStatus.OUT_FOR_DELIVERY],
+      [DeliveryStatus.ARRIVED, OrderStatus.OUT_FOR_DELIVERY],
     ];
 
     for (const [deliveryStatus, orderStatus] of transitions) {
@@ -441,16 +441,16 @@ describe('Rider dispatch workflow (e2e)', () => {
       },
       {
         from: OrderStatus.PICKED_UP,
-        to: OrderStatus.ON_THE_WAY,
+        to: OrderStatus.OUT_FOR_DELIVERY,
         actor: rider.id,
       },
       {
-        from: OrderStatus.ON_THE_WAY,
-        to: OrderStatus.ARRIVED_AT_DESTINATION,
+        from: OrderStatus.OUT_FOR_DELIVERY,
+        to: OrderStatus.OUT_FOR_DELIVERY,
         actor: rider.id,
       },
       {
-        from: OrderStatus.ARRIVED_AT_DESTINATION,
+        from: OrderStatus.OUT_FOR_DELIVERY,
         to: OrderStatus.DELIVERED,
         actor: rider.id,
       },
@@ -907,7 +907,7 @@ describe('Rider dispatch workflow (e2e)', () => {
     await request(app.getHttpServer())
       .patch('/api/orders/not-an-order-id/status')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ status: OrderStatus.FILE_VERIFIED })
+      .send({ status: OrderStatus.APPROVED_FOR_MATCHING })
       .expect(400);
 
     await request(app.getHttpServer())
@@ -931,7 +931,7 @@ describe('Rider dispatch workflow (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/api/admin/orders/${deliveryOrder.id}/status`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ status: OrderStatus.COMPLETED_PICKUP })
+      .send({ status: OrderStatus.COLLECTED_BY_CUSTOMER })
       .expect(400);
     await request(app.getHttpServer())
       .post(`/api/admin/orders/${pickupOrder.id}/assign`)
@@ -1309,7 +1309,7 @@ describe('Rider dispatch workflow (e2e)', () => {
         deliveryFee: 0,
         paymentMethod: 'cod',
         deliveryOption: 'pickup',
-        orderStatus: OrderStatus.ORDER_PLACED,
+        orderStatus: OrderStatus.SUBMITTED,
       }),
     );
     const adminToken = jwtService.sign({
@@ -1338,12 +1338,12 @@ describe('Rider dispatch workflow (e2e)', () => {
       await request(app.getHttpServer())
         .patch(`/api/admin/orders/${order.id}/status`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: OrderStatus.FILE_VERIFIED })
+        .send({ status: OrderStatus.APPROVED_FOR_MATCHING })
         .expect(500);
 
       await expect(
         ordersRepo.findOneOrFail({ where: { id: order.id } }),
-      ).resolves.toMatchObject({ orderStatus: OrderStatus.ORDER_PLACED });
+      ).resolves.toMatchObject({ orderStatus: OrderStatus.SUBMITTED });
       await expect(
         statusHistoryRepo.countBy({ orderId: order.id }),
       ).resolves.toBe(0);
@@ -1506,7 +1506,7 @@ describe('Rider dispatch workflow (e2e)', () => {
       await expect(
         ordersRepo.findOneOrFail({ where: { id: order.id } }),
       ).resolves.toMatchObject({
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       });
       await expect(
         fileRepo.findOneOrFail({ where: { id: orderFile.id } }),

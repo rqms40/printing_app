@@ -132,55 +132,203 @@ UserRole? parseUserRole(String? raw) {
   }
 }
 
+/// Marketplace order lifecycle. API values are snake_case (e.g. `needs_qa`).
 enum OrderStatus {
-  orderPlaced,
-  fileVerified,
-  fileDeclined,
-  printingInProgress,
-  finishingMounting,
-  qualityChecked,
+  draft,
+  submitted,
+  needsQa,
+  clientCorrection,
+  proofApproval,
+  approvedForMatching,
+  supplierAssigned,
+  supplierAccepted,
+  awaitingPayment,
+  paymentAuthorized,
+  production,
+  supplierSelfQc,
   readyForDispatch,
   riderAssigned,
   pickedUp,
-  onTheWay,
-  arrivedAtDestination,
+  outForDelivery,
   delivered,
-  completedPickup,
+  collectedByCustomer,
+  issueWindowOpen,
+  completed,
   cancelled,
+  fileRejected,
 }
 
 extension OrderStatusX on OrderStatus {
+  String get apiValue {
+    switch (this) {
+      case OrderStatus.draft:
+        return 'draft';
+      case OrderStatus.submitted:
+        return 'submitted';
+      case OrderStatus.needsQa:
+        return 'needs_qa';
+      case OrderStatus.clientCorrection:
+        return 'client_correction';
+      case OrderStatus.proofApproval:
+        return 'proof_approval';
+      case OrderStatus.approvedForMatching:
+        return 'approved_for_matching';
+      case OrderStatus.supplierAssigned:
+        return 'supplier_assigned';
+      case OrderStatus.supplierAccepted:
+        return 'supplier_accepted';
+      case OrderStatus.awaitingPayment:
+        return 'awaiting_payment';
+      case OrderStatus.paymentAuthorized:
+        return 'payment_authorized';
+      case OrderStatus.production:
+        return 'production';
+      case OrderStatus.supplierSelfQc:
+        return 'supplier_self_qc';
+      case OrderStatus.readyForDispatch:
+        return 'ready_for_dispatch';
+      case OrderStatus.riderAssigned:
+        return 'rider_assigned';
+      case OrderStatus.pickedUp:
+        return 'picked_up';
+      case OrderStatus.outForDelivery:
+        return 'out_for_delivery';
+      case OrderStatus.delivered:
+        return 'delivered';
+      case OrderStatus.collectedByCustomer:
+        return 'collected_by_customer';
+      case OrderStatus.issueWindowOpen:
+        return 'issue_window_open';
+      case OrderStatus.completed:
+        return 'completed';
+      case OrderStatus.cancelled:
+        return 'cancelled';
+      case OrderStatus.fileRejected:
+        return 'file_rejected';
+    }
+  }
+
   String get displayName {
     switch (this) {
-      case OrderStatus.orderPlaced:
-        return 'Order Placed';
-      case OrderStatus.fileVerified:
-        return 'File Verified';
-      case OrderStatus.fileDeclined:
-        return 'File Declined';
-      case OrderStatus.printingInProgress:
-        return 'Printing in Progress';
-      case OrderStatus.finishingMounting:
-        return 'Finishing & Mounting';
-      case OrderStatus.qualityChecked:
-        return 'Quality Checked';
+      case OrderStatus.draft:
+        return 'Draft';
+      case OrderStatus.submitted:
+        return 'Submitted';
+      case OrderStatus.needsQa:
+        return 'Needs QA';
+      case OrderStatus.clientCorrection:
+        return 'Client Correction';
+      case OrderStatus.proofApproval:
+        return 'Proof Approval';
+      case OrderStatus.approvedForMatching:
+        return 'Approved for Matching';
+      case OrderStatus.supplierAssigned:
+        return 'Supplier Assigned';
+      case OrderStatus.supplierAccepted:
+        return 'Supplier Accepted';
+      case OrderStatus.awaitingPayment:
+        return 'Awaiting Payment';
+      case OrderStatus.paymentAuthorized:
+        return 'Payment Authorized';
+      case OrderStatus.production:
+        return 'Production';
+      case OrderStatus.supplierSelfQc:
+        return 'Supplier Self-QC';
       case OrderStatus.readyForDispatch:
         return 'Ready for Dispatch';
       case OrderStatus.riderAssigned:
         return 'Rider Assigned';
       case OrderStatus.pickedUp:
         return 'Picked Up';
-      case OrderStatus.onTheWay:
-        return 'On the Way';
-      case OrderStatus.arrivedAtDestination:
-        return 'Arrived at Destination';
+      case OrderStatus.outForDelivery:
+        return 'Out for Delivery';
       case OrderStatus.delivered:
         return 'Delivered';
-      case OrderStatus.completedPickup:
-        return 'Completed (Pickup)';
+      case OrderStatus.collectedByCustomer:
+        return 'Collected by Customer';
+      case OrderStatus.issueWindowOpen:
+        return 'Issue Window Open';
+      case OrderStatus.completed:
+        return 'Completed';
       case OrderStatus.cancelled:
         return 'Cancelled';
+      case OrderStatus.fileRejected:
+        return 'File Rejected';
     }
+  }
+}
+
+/// Parse API snake_case (or camelCase) including legacy shop-queue labels.
+OrderStatus parseMarketplaceOrderStatus(
+  String value, {
+  OrderStatus fallback = OrderStatus.submitted,
+}) {
+  final normalized = value.trim().toLowerCase().replaceAll('-', '_');
+  switch (normalized) {
+    // Legacy → marketplace
+    case 'order_placed':
+      return OrderStatus.submitted;
+    case 'file_verified':
+      return OrderStatus.approvedForMatching;
+    case 'file_declined':
+      return OrderStatus.fileRejected;
+    case 'printing_in_progress':
+    case 'finishing_mounting':
+      return OrderStatus.production;
+    case 'quality_checked':
+      return OrderStatus.supplierSelfQc;
+    case 'on_the_way':
+    case 'arrived_at_destination':
+      return OrderStatus.outForDelivery;
+    case 'completed_pickup':
+      return OrderStatus.collectedByCustomer;
+    // Marketplace + same-name
+    case 'draft':
+      return OrderStatus.draft;
+    case 'submitted':
+      return OrderStatus.submitted;
+    case 'needs_qa':
+      return OrderStatus.needsQa;
+    case 'client_correction':
+      return OrderStatus.clientCorrection;
+    case 'proof_approval':
+      return OrderStatus.proofApproval;
+    case 'approved_for_matching':
+      return OrderStatus.approvedForMatching;
+    case 'supplier_assigned':
+      return OrderStatus.supplierAssigned;
+    case 'supplier_accepted':
+      return OrderStatus.supplierAccepted;
+    case 'awaiting_payment':
+      return OrderStatus.awaitingPayment;
+    case 'payment_authorized':
+      return OrderStatus.paymentAuthorized;
+    case 'production':
+      return OrderStatus.production;
+    case 'supplier_self_qc':
+      return OrderStatus.supplierSelfQc;
+    case 'ready_for_dispatch':
+      return OrderStatus.readyForDispatch;
+    case 'rider_assigned':
+      return OrderStatus.riderAssigned;
+    case 'picked_up':
+      return OrderStatus.pickedUp;
+    case 'out_for_delivery':
+      return OrderStatus.outForDelivery;
+    case 'delivered':
+      return OrderStatus.delivered;
+    case 'collected_by_customer':
+      return OrderStatus.collectedByCustomer;
+    case 'issue_window_open':
+      return OrderStatus.issueWindowOpen;
+    case 'completed':
+      return OrderStatus.completed;
+    case 'cancelled':
+      return OrderStatus.cancelled;
+    case 'file_rejected':
+      return OrderStatus.fileRejected;
+    default:
+      return fallback;
   }
 }
 

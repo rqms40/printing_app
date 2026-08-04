@@ -33,7 +33,9 @@ class _OrderCardState extends State<OrderCard> {
   _OrderVisual _visual(AppColorSet colors) {
     switch (widget.order.orderStatus) {
       case OrderStatus.delivered:
-      case OrderStatus.completedPickup:
+      case OrderStatus.collectedByCustomer:
+      case OrderStatus.issueWindowOpen:
+      case OrderStatus.completed:
         return _OrderVisual(
           HugeIcons.strokeRoundedCheckmarkCircle02,
           colors.success.withValues(alpha: 0.1),
@@ -47,25 +49,27 @@ class _OrderCardState extends State<OrderCard> {
           colors.error,
           'Cancelled',
         );
-      case OrderStatus.fileDeclined:
+      case OrderStatus.fileRejected:
         return _OrderVisual(
           HugeIcons.strokeRoundedCancel01,
           colors.error.withValues(alpha: 0.1),
           colors.error,
           'Declined',
         );
-      case OrderStatus.onTheWay:
+      case OrderStatus.outForDelivery:
       case OrderStatus.pickedUp:
-      case OrderStatus.arrivedAtDestination:
         return _OrderVisual(
           HugeIcons.strokeRoundedDeliveryTruck02,
           colors.info.withValues(alpha: 0.1),
           colors.info,
           'In Delivery',
         );
-      case OrderStatus.printingInProgress:
-      case OrderStatus.finishingMounting:
-      case OrderStatus.qualityChecked:
+      case OrderStatus.production:
+      case OrderStatus.supplierSelfQc:
+      case OrderStatus.paymentAuthorized:
+      case OrderStatus.awaitingPayment:
+      case OrderStatus.supplierAssigned:
+      case OrderStatus.supplierAccepted:
         return _OrderVisual(
           HugeIcons.strokeRoundedPrinter,
           colors.warning.withValues(alpha: 0.1),
@@ -80,7 +84,12 @@ class _OrderCardState extends State<OrderCard> {
           colors.success,
           'Ready',
         );
-      default:
+      case OrderStatus.draft:
+      case OrderStatus.submitted:
+      case OrderStatus.needsQa:
+      case OrderStatus.clientCorrection:
+      case OrderStatus.proofApproval:
+      case OrderStatus.approvedForMatching:
         return _OrderVisual(
           HugeIcons.strokeRoundedClock01,
           colors.accent.withValues(alpha: 0.08),

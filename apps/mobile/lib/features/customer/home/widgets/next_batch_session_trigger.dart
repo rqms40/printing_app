@@ -56,8 +56,7 @@ class _NextBatchSessionTriggerState
         .read(activeOrdersProvider)
         .any(
           (o) =>
-              o.orderStatus == OrderStatus.onTheWay ||
-              o.orderStatus == OrderStatus.arrivedAtDestination,
+              o.orderStatus == OrderStatus.outForDelivery,
         );
   }
 

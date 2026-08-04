@@ -69,8 +69,7 @@ T _parseEnum<T extends Enum>(Iterable<T> values, String? value, T fallback) {
 }
 
 OrderStatus _parseOrderStatus(String value) {
-  // Handle snake_case from server (e.g. 'order_placed' → 'orderPlaced')
-  return _parseEnum(OrderStatus.values, value, OrderStatus.orderPlaced);
+  return parseMarketplaceOrderStatus(value);
 }
 
 PaymentMethod _parsePaymentMethod(String value) {
@@ -259,7 +258,7 @@ Order _parseOrder(Map<String, dynamic> json) {
     ),
     orderStatus: _parseOrderStatus(
       _readJsonValue(json, 'orderStatus', 'order_status')?.toString() ??
-          'orderPlaced',
+          'submitted',
     ),
     declineReason: _readJsonValue(
       json,
@@ -390,8 +389,9 @@ class QueueState {
         result = result
             .where(
               (o) =>
-                  o.orderStatus == OrderStatus.orderPlaced ||
-                  o.orderStatus == OrderStatus.fileVerified,
+                  o.orderStatus == OrderStatus.submitted ||
+                  o.orderStatus == OrderStatus.needsQa ||
+                  o.orderStatus == OrderStatus.approvedForMatching,
             )
             .toList();
         break;
@@ -399,9 +399,9 @@ class QueueState {
         result = result
             .where(
               (o) =>
-                  o.orderStatus == OrderStatus.printingInProgress ||
-                  o.orderStatus == OrderStatus.finishingMounting ||
-                  o.orderStatus == OrderStatus.qualityChecked,
+                  o.orderStatus == OrderStatus.paymentAuthorized ||
+                  o.orderStatus == OrderStatus.production ||
+                  o.orderStatus == OrderStatus.supplierSelfQc,
             )
             .toList();
         break;
@@ -410,7 +410,7 @@ class QueueState {
             .where(
               (o) =>
                   o.orderStatus == OrderStatus.delivered ||
-                  o.orderStatus == OrderStatus.completedPickup,
+                  o.orderStatus == OrderStatus.collectedByCustomer,
             )
             .toList();
         break;

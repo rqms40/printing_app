@@ -255,8 +255,7 @@ class _MapTrackingTileState extends ConsumerState<MapTrackingTile> {
 
         final canShowLiveMap =
             state.status == LiveMapStatus.active &&
-            (state.orderStatus == OrderStatus.onTheWay ||
-                state.orderStatus == OrderStatus.arrivedAtDestination) &&
+            state.orderStatus == OrderStatus.outForDelivery &&
             state.canTrackDelivery &&
             state.deliveryAssignmentId != null &&
             state.planVersion != null;
@@ -370,8 +369,7 @@ class _DeliveryStatusAndMapLayout extends StatelessWidget {
 
   bool get _hasActiveDelivery =>
       liveState?.status == LiveMapStatus.active &&
-      (liveState?.orderStatus == OrderStatus.onTheWay ||
-          liveState?.orderStatus == OrderStatus.arrivedAtDestination);
+      liveState?.orderStatus == OrderStatus.outForDelivery;
 
   bool get _isQueued =>
       _hasActiveDelivery && liveState?.canTrackDelivery == false;

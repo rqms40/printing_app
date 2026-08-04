@@ -286,7 +286,7 @@ export function OrderShow() {
     order.assigned_rider_contact?.nickname;
 
   const handleStatusChange = (newStatus: OrderStatus) => {
-    if (newStatus === "file_declined") {
+    if (newStatus === "file_rejected") {
       setDeclineModalOpen(true);
       return;
     }
@@ -328,7 +328,7 @@ export function OrderShow() {
     }
     try {
       await apiClient.patch(`/admin/orders/${id}/status`, {
-        status: "file_declined",
+        status: "file_rejected",
         notes: declineReason,
       });
       void message.success("Order declined");
@@ -836,7 +836,7 @@ export function OrderShow() {
           onVerify={async () => {
             try {
               await apiClient.patch(`/admin/orders/${id}/status`, {
-                status: "file_verified",
+                status: "approved_for_matching",
               });
               void message.success("File verified successfully");
               setFileInspectorOpen(false);

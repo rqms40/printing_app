@@ -37,8 +37,7 @@ import 'package:printing_app/shared/models/enums.dart';
 const _activeDeliveryTutorialBlockingStatuses = {
   OrderStatus.riderAssigned,
   OrderStatus.pickedUp,
-  OrderStatus.onTheWay,
-  OrderStatus.arrivedAtDestination,
+  OrderStatus.outForDelivery,
 };
 
 bool shouldDeferHomeTutorial({

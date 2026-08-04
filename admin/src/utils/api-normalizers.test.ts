@@ -57,16 +57,16 @@ describe("api normalizers", () => {
       delivery_fee: 0,
       payment_method: "grid_credits",
       payment_status: "paid",
-      order_status: "order_placed",
-      allowed_next_statuses: ["file_verified", "file_declined"],
+      order_status: "submitted",
+      allowed_next_statuses: ["approved_for_matching", "file_rejected"],
       delivery_option: "delivery",
       created_at: "2026-07-10T10:00:00.000Z",
       updated_at: "2026-07-10T10:00:00.000Z",
     });
 
     expect(order.allowed_next_statuses).toEqual([
-      "file_verified",
-      "file_declined",
+      "approved_for_matching",
+      "file_rejected",
     ]);
   });
 
@@ -199,7 +199,7 @@ describe("api normalizers", () => {
       deliveryFee: "50",
       paymentMethod: "gcash",
       paymentStatus: "paid",
-      orderStatus: "printing_in_progress",
+      orderStatus: "production",
       deliveryOption: "delivery",
       createdAt: "2026-03-31T10:00:00.000Z",
       updatedAt: "2026-03-31T10:30:00.000Z",
@@ -213,7 +213,7 @@ describe("api normalizers", () => {
       total_price: 120.5,
       delivery_fee: 50,
       payment_status: "paid",
-      order_status: "printing_in_progress",
+      order_status: "production",
       delivery_option: "delivery",
       admin_notes: "Rush",
       created_at: "2026-03-31T10:00:00.000Z",
@@ -231,7 +231,7 @@ describe("api normalizers", () => {
       delivery_fee: 0,
       payment_method: "gcash",
       payment_status: "pending",
-      order_status: "order_placed",
+      order_status: "submitted",
       delivery_option: "delivery",
       delivery_address: {
         label: "Test",

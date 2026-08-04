@@ -134,7 +134,7 @@ describe('AdminController analytics', () => {
         category: 'paper',
         paymentStatus: 'pending',
         totalPrice: 80,
-        orderStatus: OrderStatus.PRINTING_IN_PROGRESS,
+        orderStatus: OrderStatus.PRODUCTION,
         createdAt: new Date('2026-03-30T09:00:00.000Z'),
         items: [
           {
@@ -316,8 +316,9 @@ describe('AdminController analytics', () => {
       expect(ordersRepo.count).toHaveBeenCalledWith({
         where: {
           orderStatus: In([
-            OrderStatus.ORDER_PLACED,
-            OrderStatus.FILE_VERIFIED,
+            OrderStatus.SUBMITTED,
+            OrderStatus.NEEDS_QA,
+            OrderStatus.APPROVED_FOR_MATCHING,
           ]),
         },
       });
@@ -348,7 +349,7 @@ describe('AdminController analytics', () => {
         deliveryFee: 0,
         paymentMethod: 'gcash',
         paymentStatus: 'pending',
-        orderStatus: OrderStatus.ORDER_PLACED,
+        orderStatus: OrderStatus.SUBMITTED,
         deliveryOption: 'delivery',
         destination: {
           id: 1,
@@ -450,8 +451,9 @@ describe('AdminController analytics', () => {
       expect(mapped.delivery_slot_booking_id).toBe(5);
       expect(mapped.extra_destination_fee).toBe(20);
       expect(mapped.allowed_next_statuses).toEqual([
-        OrderStatus.FILE_VERIFIED,
-        OrderStatus.FILE_DECLINED,
+        OrderStatus.NEEDS_QA,
+        OrderStatus.APPROVED_FOR_MATCHING,
+        OrderStatus.FILE_REJECTED,
       ]);
     });
 
@@ -481,12 +483,14 @@ describe('AdminController analytics', () => {
         } as unknown as Order).allowed_next_statuses;
 
       expect(map(OrderStatus.READY_FOR_DISPATCH, 'pickup')).toEqual([
-        OrderStatus.COMPLETED_PICKUP,
+        OrderStatus.COLLECTED_BY_CUSTOMER,
       ]);
       expect(map(OrderStatus.READY_FOR_DISPATCH, 'delivery')).toEqual([]);
       expect(map(OrderStatus.RIDER_ASSIGNED, 'delivery')).toEqual([]);
-      expect(map(OrderStatus.FILE_VERIFIED, 'delivery')).toEqual([
-        OrderStatus.PRINTING_IN_PROGRESS,
+      expect(map(OrderStatus.APPROVED_FOR_MATCHING, 'delivery')).toEqual([
+        OrderStatus.SUPPLIER_ASSIGNED,
+        OrderStatus.AWAITING_PAYMENT,
+        OrderStatus.PAYMENT_AUTHORIZED,
       ]);
     });
 
@@ -538,7 +542,7 @@ describe('AdminController analytics', () => {
     it('records an admin-provided status reason without accepting an actor id', async () => {
       const savedOrder = { id: 42 } as Order;
       const dto = {
-        status: OrderStatus.FILE_DECLINED,
+        status: OrderStatus.FILE_REJECTED,
         notes: 'Customer file is corrupted',
       };
       ordersService.updateStatus.mockResolvedValue(savedOrder);
@@ -547,7 +551,7 @@ describe('AdminController analytics', () => {
 
       expect(ordersService.updateStatus).toHaveBeenCalledWith(
         42,
-        OrderStatus.FILE_DECLINED,
+        OrderStatus.FILE_REJECTED,
         {},
         {
           actorUserId: 31,
@@ -563,14 +567,14 @@ describe('AdminController analytics', () => {
       await expect(
         controller.updateOrderStatus(
           42,
-          { status: OrderStatus.FILE_VERIFIED },
+          { status: OrderStatus.APPROVED_FOR_MATCHING },
           { user: { sub: 31 } },
         ),
       ).resolves.toBe(savedOrder);
 
       expect(ordersService.updateStatus).toHaveBeenCalledWith(
         42,
-        OrderStatus.FILE_VERIFIED,
+        OrderStatus.APPROVED_FOR_MATCHING,
         {},
         {
           actorUserId: 31,

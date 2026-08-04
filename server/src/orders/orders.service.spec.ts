@@ -180,7 +180,7 @@ describe('OrdersService', () => {
     id: 1,
     orderId: 'ORD-10001',
     userId: 1,
-    orderStatus: OrderStatus.ORDER_PLACED,
+    orderStatus: OrderStatus.SUBMITTED,
     createdAt: new Date(),
   } as Order;
   const statusContext = {
@@ -1459,7 +1459,7 @@ describe('OrdersService', () => {
     it('rejects generic cancellation before credit, batch, and slot accounting can be bypassed', async () => {
       repo.findOneOrFail.mockResolvedValue({
         ...mockOrder,
-        orderStatus: OrderStatus.ORDER_PLACED,
+        orderStatus: OrderStatus.SUBMITTED,
       } as Order);
 
       await expect(
@@ -1476,7 +1476,7 @@ describe('OrdersService', () => {
       OrderStatus.PICKED_UP,
       OrderStatus.DELIVERED,
       OrderStatus.CANCELLED,
-      OrderStatus.FILE_VERIFIED,
+      OrderStatus.APPROVED_FOR_MATCHING,
     ])('treats a repeated %s status as an event-free no-op', async (status) => {
       const current = { ...mockOrder, orderStatus: status } as Order;
       repo.findOneOrFail.mockResolvedValue(current);
@@ -1512,7 +1512,7 @@ describe('OrdersService', () => {
         await expect(
           service.updateStatus(
             1,
-            OrderStatus.COMPLETED_PICKUP,
+            OrderStatus.COLLECTED_BY_CUSTOMER,
             {},
             statusContext,
           ),
@@ -1532,14 +1532,14 @@ describe('OrdersService', () => {
 
       await service.updateStatus(
         1,
-        OrderStatus.COMPLETED_PICKUP,
+        OrderStatus.COLLECTED_BY_CUSTOMER,
         {},
         statusContext,
       );
 
       expect(repo.update).toHaveBeenCalledWith(
         { id: 1, orderStatus: OrderStatus.READY_FOR_DISPATCH },
-        { orderStatus: OrderStatus.COMPLETED_PICKUP },
+        { orderStatus: OrderStatus.COLLECTED_BY_CUSTOMER },
       );
     });
 
@@ -1547,7 +1547,7 @@ describe('OrdersService', () => {
       [OrderStatus.READY_FOR_DISPATCH, OrderStatus.RIDER_ASSIGNED],
       [OrderStatus.RIDER_ASSIGNED, OrderStatus.READY_FOR_DISPATCH],
       [OrderStatus.RIDER_ASSIGNED, OrderStatus.PICKED_UP],
-      [OrderStatus.ARRIVED_AT_DESTINATION, OrderStatus.DELIVERED],
+      [OrderStatus.OUT_FOR_DELIVERY, OrderStatus.DELIVERED],
     ])(
       'rejects generic admin assignment-owned transition %s to %s',
       async (fromStatus, toStatus) => {
@@ -1568,14 +1568,14 @@ describe('OrdersService', () => {
     it('rejects a skipped production transition', async () => {
       const placedOrder = {
         ...mockOrder,
-        orderStatus: OrderStatus.ORDER_PLACED,
+        orderStatus: OrderStatus.SUBMITTED,
       } as Order;
       repo.findOneOrFail.mockResolvedValue(placedOrder);
 
       await expect(
         service.updateStatus(1, OrderStatus.READY_FOR_DISPATCH),
       ).rejects.toThrow(
-        'Cannot transition from order_placed to ready_for_dispatch',
+        'Cannot transition from submitted to ready_for_dispatch',
       );
 
       expect(repo.update).not.toHaveBeenCalled();
@@ -1585,13 +1585,13 @@ describe('OrdersService', () => {
     it('writes actor-aware status history in the status transaction', async () => {
       const placedOrder = {
         ...mockOrder,
-        orderStatus: OrderStatus.ORDER_PLACED,
+        orderStatus: OrderStatus.SUBMITTED,
       } as Order;
       repo.findOneOrFail.mockResolvedValue(placedOrder);
 
       await service.updateStatus(
         1,
-        OrderStatus.FILE_VERIFIED,
+        OrderStatus.APPROVED_FOR_MATCHING,
         {},
         {
           actorUserId: 7,
@@ -1602,8 +1602,8 @@ describe('OrdersService', () => {
       expect(historyRepo.insert).toHaveBeenCalledWith(
         expect.objectContaining({
           orderId: 1,
-          fromStatus: OrderStatus.ORDER_PLACED,
-          toStatus: OrderStatus.FILE_VERIFIED,
+          fromStatus: OrderStatus.SUBMITTED,
+          toStatus: OrderStatus.APPROVED_FOR_MATCHING,
           changedByUserId: 7,
           notes: 'Admin production update',
         }),
@@ -1619,14 +1619,14 @@ describe('OrdersService', () => {
 
       const result = await service.updateStatus(
         1,
-        OrderStatus.FILE_VERIFIED,
+        OrderStatus.APPROVED_FOR_MATCHING,
         {},
         statusContext,
       );
 
       expect(repo.update).toHaveBeenCalledWith(
         { id: 1, orderStatus: mockOrder.orderStatus },
-        { orderStatus: OrderStatus.FILE_VERIFIED },
+        { orderStatus: OrderStatus.APPROVED_FOR_MATCHING },
       );
       expect(gateway.notifyOrderUpdate).toHaveBeenCalledWith(
         mockOrder.orderId,
@@ -1643,7 +1643,7 @@ describe('OrdersService', () => {
       repo.findOneOrFail.mockResolvedValue(cancelled);
 
       await expect(
-        service.updateStatus(1, OrderStatus.PRINTING_IN_PROGRESS),
+        service.updateStatus(1, OrderStatus.PRODUCTION),
       ).rejects.toThrow('Cancelled orders are terminal');
 
       expect(repo.update).not.toHaveBeenCalled();
@@ -1655,7 +1655,7 @@ describe('OrdersService', () => {
       repo.update.mockResolvedValue({ affected: 0 } as any);
 
       await expect(
-        service.updateStatus(1, OrderStatus.FILE_VERIFIED, {}, statusContext),
+        service.updateStatus(1, OrderStatus.APPROVED_FOR_MATCHING, {}, statusContext),
       ).rejects.toThrow('Order changed during status update');
 
       expect(gateway.notifyOrderUpdate).not.toHaveBeenCalled();
@@ -1666,15 +1666,18 @@ describe('OrdersService', () => {
     it('sends delivery progress as string data in a data-only status push', async () => {
       const updated = {
         ...mockOrder,
-        orderStatus: OrderStatus.PRINTING_IN_PROGRESS,
+        orderStatus: OrderStatus.PRODUCTION,
       } as Order;
       repo.findOneOrFail.mockResolvedValue(updated);
       (usersService.getFcmToken as jest.Mock).mockResolvedValue('token-1');
 
       await service.publishStatusUpdate(
-        { ...mockOrder, orderStatus: OrderStatus.FILE_VERIFIED } as Order,
+        {
+          ...mockOrder,
+          orderStatus: OrderStatus.PAYMENT_AUTHORIZED,
+        } as Order,
         updated.id,
-        OrderStatus.PRINTING_IN_PROGRESS,
+        OrderStatus.PRODUCTION,
       );
 
       expect(firebaseService.sendToDevice).toHaveBeenCalledWith(
@@ -1683,8 +1686,8 @@ describe('OrdersService', () => {
         `Your order ${mockOrder.orderId} is being printed.`,
         {
           orderId: String(mockOrder.id),
-          status: OrderStatus.PRINTING_IN_PROGRESS,
-          toStatus: OrderStatus.PRINTING_IN_PROGRESS,
+          status: OrderStatus.PRODUCTION,
+          toStatus: OrderStatus.PRODUCTION,
           type: 'delivery_status',
           progressCurrent: '2',
           progressTotal: '5',
@@ -1696,22 +1699,25 @@ describe('OrdersService', () => {
     it('omits journey progress for an unmapped status push', async () => {
       const updated = {
         ...mockOrder,
-        orderStatus: OrderStatus.FILE_VERIFIED,
+        orderStatus: OrderStatus.SUPPLIER_ASSIGNED,
       } as Order;
       repo.findOneOrFail.mockResolvedValue(updated);
       (usersService.getFcmToken as jest.Mock).mockResolvedValue('token-1');
 
       await service.publishStatusUpdate(
-        { ...mockOrder, orderStatus: OrderStatus.ORDER_PLACED } as Order,
+        {
+          ...mockOrder,
+          orderStatus: OrderStatus.APPROVED_FOR_MATCHING,
+        } as Order,
         updated.id,
-        OrderStatus.FILE_VERIFIED,
+        OrderStatus.SUPPLIER_ASSIGNED,
       );
 
       const data = (firebaseService.sendToDevice as jest.Mock).mock.calls[0][3];
       expect(data).toEqual(
         expect.objectContaining({
           type: 'delivery_status',
-          status: OrderStatus.FILE_VERIFIED,
+          status: OrderStatus.SUPPLIER_ASSIGNED,
         }),
       );
       expect(data).not.toHaveProperty('progressCurrent');
@@ -1724,7 +1730,7 @@ describe('OrdersService', () => {
     it('keeps publication best-effort when customer FCM delivery fails', async () => {
       const updated = {
         ...mockOrder,
-        orderStatus: OrderStatus.FILE_VERIFIED,
+        orderStatus: OrderStatus.APPROVED_FOR_MATCHING,
       } as Order;
       repo.findOneOrFail.mockResolvedValue(updated);
       (usersService.getFcmToken as jest.Mock).mockResolvedValue('token-1');
@@ -1734,14 +1740,14 @@ describe('OrdersService', () => {
 
       await expect(
         service.publishStatusUpdate(
-          { ...mockOrder, orderStatus: OrderStatus.ORDER_PLACED } as Order,
+          { ...mockOrder, orderStatus: OrderStatus.SUBMITTED } as Order,
           updated.id,
-          OrderStatus.FILE_VERIFIED,
+          OrderStatus.APPROVED_FOR_MATCHING,
         ),
       ).resolves.toEqual(expect.objectContaining({ id: updated.id }));
 
       expect(notificationsService.create).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'order_file_verified' }),
+        expect.objectContaining({ type: 'order_approved_for_matching' }),
       );
     });
 
@@ -1750,7 +1756,7 @@ describe('OrdersService', () => {
         ...mockOrder,
         userId: 1,
         paymentMethod: 'gcash',
-        orderStatus: OrderStatus.ORDER_PLACED,
+        orderStatus: OrderStatus.SUBMITTED,
       } as Order;
       repo.update.mockResolvedValue(undefined as any);
       repo.findOneOrFail.mockResolvedValue(placedOrder);
@@ -1765,13 +1771,13 @@ describe('OrdersService', () => {
       );
     });
 
-    it('notifies admins when status becomes file_declined', async () => {
+    it('notifies admins when status becomes file_rejected', async () => {
       repo.update.mockResolvedValue(undefined as any);
       repo.findOneOrFail.mockResolvedValue(mockOrder);
 
       await service.updateStatus(
         1,
-        OrderStatus.FILE_DECLINED,
+        OrderStatus.FILE_REJECTED,
         {},
         statusContext,
       );
@@ -1785,11 +1791,11 @@ describe('OrdersService', () => {
     });
 
     it.each([
-      [OrderStatus.FILE_DECLINED, 'File Declined', OrderStatus.ORDER_PLACED],
+      [OrderStatus.FILE_REJECTED, 'File Rejected', OrderStatus.SUBMITTED],
       [
-        OrderStatus.FINISHING_MOUNTING,
-        'Finishing Started',
-        OrderStatus.PRINTING_IN_PROGRESS,
+        OrderStatus.PRODUCTION,
+        'Printing Started',
+        OrderStatus.PAYMENT_AUTHORIZED,
       ],
     ])(
       'notifies the customer when status becomes %s',
@@ -1817,12 +1823,12 @@ describe('OrdersService', () => {
       repo.update.mockResolvedValue(undefined as any);
       repo.findOneOrFail.mockResolvedValue({
         ...mockOrder,
-        orderStatus: OrderStatus.FILE_VERIFIED,
+        orderStatus: OrderStatus.PAYMENT_AUTHORIZED,
       } as Order);
 
       await service.updateStatus(
         1,
-        OrderStatus.PRINTING_IN_PROGRESS,
+        OrderStatus.PRODUCTION,
         {},
         statusContext,
       );
@@ -1837,7 +1843,7 @@ describe('OrdersService', () => {
         ...mockOrder,
         userId: 7,
         paymentMethod: 'gcash',
-        orderStatus: OrderStatus.ORDER_PLACED,
+        orderStatus: OrderStatus.SUBMITTED,
       } as Order;
       repo.findOneOrFail.mockResolvedValue(placedOrder);
 
@@ -1845,7 +1851,7 @@ describe('OrdersService', () => {
 
       expect(historyRepo.insert).toHaveBeenCalledWith({
         orderId: placedOrder.id,
-        fromStatus: OrderStatus.ORDER_PLACED,
+        fromStatus: OrderStatus.SUBMITTED,
         toStatus: OrderStatus.CANCELLED,
         changedByUserId: placedOrder.userId,
         notes: 'Customer cancelled order',
@@ -1859,7 +1865,7 @@ describe('OrdersService', () => {
         totalPrice: 250,
         deliveryFee: 30,
         paymentMethod: 'gridCredits',
-        orderStatus: OrderStatus.ORDER_PLACED,
+        orderStatus: OrderStatus.SUBMITTED,
       } as Order;
       repo.findOneOrFail.mockResolvedValue(creditOrder);
       repo.update.mockResolvedValue(undefined as any);
@@ -1889,7 +1895,7 @@ describe('OrdersService', () => {
         totalPrice: '40.00',
         deliveryFee: '20.00',
         paymentMethod: 'gridCredits',
-        orderStatus: OrderStatus.ORDER_PLACED,
+        orderStatus: OrderStatus.SUBMITTED,
       } as unknown as Order;
       repo.findOneOrFail.mockResolvedValue(creditOrder);
       repo.update.mockResolvedValue(undefined as any);
@@ -1911,7 +1917,7 @@ describe('OrdersService', () => {
         userId: 1,
         totalPrice: 250,
         paymentMethod: 'grid_credits',
-        orderStatus: OrderStatus.FILE_VERIFIED,
+        orderStatus: OrderStatus.APPROVED_FOR_MATCHING,
       } as Order;
       repo.findOneOrFail.mockResolvedValue(creditOrder);
       repo.update.mockResolvedValue(undefined as any);
@@ -1933,7 +1939,7 @@ describe('OrdersService', () => {
         userId: 1,
         totalPrice: 250,
         paymentMethod: 'gcash',
-        orderStatus: OrderStatus.ORDER_PLACED,
+        orderStatus: OrderStatus.SUBMITTED,
       } as Order;
       repo.findOneOrFail.mockResolvedValue(gcashOrder);
       repo.update.mockResolvedValue(undefined as any);
@@ -1949,7 +1955,7 @@ describe('OrdersService', () => {
         userId: 1,
         totalPrice: 'legacy-invalid-value',
         paymentMethod: 'gcash',
-        orderStatus: OrderStatus.ORDER_PLACED,
+        orderStatus: OrderStatus.SUBMITTED,
       } as unknown as Order;
       repo.findOneOrFail.mockResolvedValue(gcashOrder);
       repo.update.mockResolvedValue(undefined as any);
@@ -1985,7 +1991,7 @@ describe('OrdersService', () => {
             orderId: `ORD-1002${id}`,
             userId: batch.userId,
             batchOrderId: batch.id,
-            orderStatus: OrderStatus.ORDER_PLACED,
+            orderStatus: OrderStatus.SUBMITTED,
           }) as Order,
       );
       repo.find.mockResolvedValue(orders);
@@ -1999,7 +2005,7 @@ describe('OrdersService', () => {
       expect(historyRepo.insert).toHaveBeenCalledWith(
         orders.map((order) => ({
           orderId: order.id,
-          fromStatus: OrderStatus.ORDER_PLACED,
+          fromStatus: OrderStatus.SUBMITTED,
           toStatus: OrderStatus.CANCELLED,
           changedByUserId: batch.userId,
           notes: 'Customer cancelled batch',
@@ -2030,7 +2036,7 @@ describe('OrdersService', () => {
             batchOrderId: batch.id,
             batchOrder: batch,
             paymentMethod: 'gridCredits',
-            orderStatus: OrderStatus.ORDER_PLACED,
+            orderStatus: OrderStatus.SUBMITTED,
           }) as Order,
       );
       repo.find.mockResolvedValue(orders);
@@ -2078,7 +2084,7 @@ describe('OrdersService', () => {
             orderId: `ORD-1001${id}`,
             userId: 1,
             batchOrderId: batch.id,
-            orderStatus: OrderStatus.ORDER_PLACED,
+            orderStatus: OrderStatus.SUBMITTED,
           }) as Order,
       );
       repo.find.mockResolvedValue(orders);
@@ -2308,7 +2314,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       orderId: 'ORD-10001',
       userId: 99,
       fileMetadataId: 5,
-      orderStatus: OrderStatus.COMPLETED_PICKUP,
+      orderStatus: OrderStatus.COLLECTED_BY_CUSTOMER,
       ...overrides,
     }) as Order;
 
@@ -2428,7 +2434,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
 
   it('completes delivery, history, expiry, and survey using one manager', async () => {
     const arrived = makeOrder({
-      orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+      orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       deliveryOption: 'delivery',
     });
     const historyRepo = { insert: jest.fn().mockResolvedValue({}) };
@@ -2460,13 +2466,13 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
     expect(ordersRepo.update).toHaveBeenCalledWith(
       {
         id: arrived.id,
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       },
       { orderStatus: OrderStatus.DELIVERED },
     );
     expect(historyRepo.insert).toHaveBeenCalledWith({
       orderId: arrived.id,
-      fromStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+      fromStatus: OrderStatus.OUT_FOR_DELIVERY,
       toStatus: OrderStatus.DELIVERED,
       changedByUserId: 51,
       notes: 'Rider completed delivery',
@@ -2520,7 +2526,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       deliveryOption: 'pickup',
     });
     const completed = makeOrder({
-      orderStatus: OrderStatus.COMPLETED_PICKUP,
+      orderStatus: OrderStatus.COLLECTED_BY_CUSTOMER,
       deliveryOption: 'pickup',
     });
     const surveyRequirement = { id: 88 } as TamSurveyRequirement;
@@ -2541,7 +2547,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
 
     await service.updateStatus(
       ready.id,
-      OrderStatus.COMPLETED_PICKUP,
+      OrderStatus.COLLECTED_BY_CUSTOMER,
       {},
       { actorUserId: 51, reason: 'Customer collected pickup' },
     );
@@ -2569,7 +2575,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       deliveryOption: 'pickup',
     });
     const completed = makeOrder({
-      orderStatus: OrderStatus.COMPLETED_PICKUP,
+      orderStatus: OrderStatus.COLLECTED_BY_CUSTOMER,
       deliveryOption: 'pickup',
     });
     const surveyRequirement = { id: 89 } as TamSurveyRequirement;
@@ -2591,7 +2597,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
     await expect(
       service.updateStatus(
         ready.id,
-        OrderStatus.COMPLETED_PICKUP,
+        OrderStatus.COLLECTED_BY_CUSTOMER,
         {},
         { actorUserId: 51, reason: 'Customer collected pickup' },
       ),
@@ -2607,7 +2613,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
     await expect(
       service.updateStatus(
         completed.id,
-        OrderStatus.COMPLETED_PICKUP,
+        OrderStatus.COLLECTED_BY_CUSTOMER,
         {},
         { actorUserId: 51, reason: 'Retry after response failure' },
       ),
@@ -2627,7 +2633,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       deliveryOption: 'pickup',
     });
     const completed = makeOrder({
-      orderStatus: OrderStatus.COMPLETED_PICKUP,
+      orderStatus: OrderStatus.COLLECTED_BY_CUSTOMER,
       deliveryOption: 'pickup',
     });
     ordersRepo.findOneOrFail
@@ -2650,7 +2656,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
     await expect(
       service.updateStatus(
         ready.id,
-        OrderStatus.COMPLETED_PICKUP,
+        OrderStatus.COLLECTED_BY_CUSTOMER,
         {},
         { actorUserId: 51, reason: 'Customer collected pickup' },
       ),
@@ -2666,7 +2672,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       deliveryOption: 'pickup',
     });
     const completed = makeOrder({
-      orderStatus: OrderStatus.COMPLETED_PICKUP,
+      orderStatus: OrderStatus.COLLECTED_BY_CUSTOMER,
       deliveryOption: 'pickup',
     });
     ordersRepo.findOneOrFail
@@ -2692,7 +2698,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
     await expect(
       service.updateStatus(
         ready.id,
-        OrderStatus.COMPLETED_PICKUP,
+        OrderStatus.COLLECTED_BY_CUSTOMER,
         {},
         { actorUserId: 51, reason: 'Customer collected pickup' },
       ),
@@ -2744,7 +2750,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
   });
 
   it('does not stamp for non-completion statuses', async () => {
-    const order = makeOrder({ orderStatus: OrderStatus.FILE_VERIFIED });
+    const order = makeOrder({ orderStatus: OrderStatus.APPROVED_FOR_MATCHING });
     ordersRepo.findOneOrFail.mockResolvedValue(order);
     ordersRepo.update.mockResolvedValue({});
     mockUsersService.getFcmToken.mockResolvedValue(null);
@@ -2784,7 +2790,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
   });
 
   it('does not create a survey requirement during pickup publication', async () => {
-    const order = makeOrder({ orderStatus: OrderStatus.COMPLETED_PICKUP });
+    const order = makeOrder({ orderStatus: OrderStatus.COLLECTED_BY_CUSTOMER });
     ordersRepo.findOneOrFail.mockResolvedValue(order);
     ordersRepo.update.mockResolvedValue({});
     mockUsersService.findById.mockResolvedValue({ fileRetentionDays: null });
@@ -2833,7 +2839,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
   });
 
   it('does not create a survey requirement for non-completion statuses', async () => {
-    const order = makeOrder({ orderStatus: OrderStatus.FILE_VERIFIED });
+    const order = makeOrder({ orderStatus: OrderStatus.APPROVED_FOR_MATCHING });
     ordersRepo.findOneOrFail.mockResolvedValue(order);
     ordersRepo.update.mockResolvedValue({});
     mockUsersService.getFcmToken.mockResolvedValue(null);
@@ -4207,13 +4213,13 @@ describe('cancelBatch', () => {
         id: 11,
         userId: 1,
         batchOrderId: 1,
-        orderStatus: OrderStatus.ORDER_PLACED,
+        orderStatus: OrderStatus.SUBMITTED,
       } as Order,
     ]);
     ordersRepo.findOneOrFail.mockResolvedValue({
       id: 11,
       userId: 1,
-      orderStatus: OrderStatus.ORDER_PLACED,
+      orderStatus: OrderStatus.SUBMITTED,
     } as Order);
     batchOrdersRepo.findOneOrFail.mockResolvedValue(fakeBatch as any);
     batchOrdersRepo.findOne.mockResolvedValue(fakeBatch as any);
@@ -4237,13 +4243,13 @@ describe('cancelBatch', () => {
         id: 11,
         userId: 1,
         batchOrderId: 1,
-        orderStatus: OrderStatus.ORDER_PLACED,
+        orderStatus: OrderStatus.SUBMITTED,
       } as Order,
     ]);
     ordersRepo.findOneOrFail.mockResolvedValue({
       id: 11,
       userId: 1,
-      orderStatus: OrderStatus.ORDER_PLACED,
+      orderStatus: OrderStatus.SUBMITTED,
     } as Order);
     batchOrdersRepo.findOneOrFail.mockResolvedValue(fakeBatch as any);
     batchOrdersRepo.findOne.mockResolvedValue(fakeBatch as any);

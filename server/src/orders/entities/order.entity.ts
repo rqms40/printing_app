@@ -18,21 +18,33 @@ import { DeliveryDestination } from './delivery-destination.entity';
 import type { PaperSpec } from './paper-specs.entity';
 import type { ThreeDSpec } from './three-d-specs.entity';
 
+/**
+ * Marketplace order lifecycle (API: snake_case string values).
+ * Legacy shop-queue labels are migrated in 1784333200000-marketplace-order-status.
+ */
 export enum OrderStatus {
-  ORDER_PLACED = 'order_placed',
-  FILE_VERIFIED = 'file_verified',
-  FILE_DECLINED = 'file_declined',
-  PRINTING_IN_PROGRESS = 'printing_in_progress',
-  FINISHING_MOUNTING = 'finishing_mounting',
-  QUALITY_CHECKED = 'quality_checked',
+  DRAFT = 'draft',
+  SUBMITTED = 'submitted',
+  NEEDS_QA = 'needs_qa',
+  CLIENT_CORRECTION = 'client_correction',
+  PROOF_APPROVAL = 'proof_approval',
+  APPROVED_FOR_MATCHING = 'approved_for_matching',
+  SUPPLIER_ASSIGNED = 'supplier_assigned',
+  SUPPLIER_ACCEPTED = 'supplier_accepted',
+  AWAITING_PAYMENT = 'awaiting_payment',
+  PAYMENT_AUTHORIZED = 'payment_authorized',
+  PRODUCTION = 'production',
+  SUPPLIER_SELF_QC = 'supplier_self_qc',
   READY_FOR_DISPATCH = 'ready_for_dispatch',
   RIDER_ASSIGNED = 'rider_assigned',
   PICKED_UP = 'picked_up',
-  ON_THE_WAY = 'on_the_way',
-  ARRIVED_AT_DESTINATION = 'arrived_at_destination',
+  OUT_FOR_DELIVERY = 'out_for_delivery',
   DELIVERED = 'delivered',
-  COMPLETED_PICKUP = 'completed_pickup',
+  COLLECTED_BY_CUSTOMER = 'collected_by_customer',
+  ISSUE_WINDOW_OPEN = 'issue_window_open',
+  COMPLETED = 'completed',
   CANCELLED = 'cancelled',
+  FILE_REJECTED = 'file_rejected',
 }
 
 @Entity('orders')
@@ -106,7 +118,7 @@ export class Order {
     name: 'order_status',
     type: 'enum',
     enum: OrderStatus,
-    default: OrderStatus.ORDER_PLACED,
+    default: OrderStatus.SUBMITTED,
   })
   orderStatus: OrderStatus;
 

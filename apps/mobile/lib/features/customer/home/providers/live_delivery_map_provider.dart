@@ -185,8 +185,7 @@ final liveDeliveryMapProvider =
       final onTheWayOrder = orders
           .where(
             (o) =>
-                o.orderStatus == OrderStatus.onTheWay ||
-                o.orderStatus == OrderStatus.arrivedAtDestination,
+                o.orderStatus == OrderStatus.outForDelivery,
           )
           .firstOrNull;
 

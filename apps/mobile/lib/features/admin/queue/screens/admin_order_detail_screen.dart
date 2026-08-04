@@ -157,8 +157,8 @@ class _AdminOrderDetailScreenState
           ],
           if (order.orderStatus != OrderStatus.cancelled &&
               order.orderStatus != OrderStatus.delivered &&
-              order.orderStatus != OrderStatus.completedPickup &&
-              order.orderStatus != OrderStatus.fileDeclined) ...[
+              order.orderStatus != OrderStatus.collectedByCustomer &&
+              order.orderStatus != OrderStatus.fileRejected) ...[
             AppButton(
               label: 'Decline',
               variant: AppButtonVariant.secondary,
@@ -565,7 +565,7 @@ class _AdminOrderDetailScreenState
       onConfirm: () {
         ref
             .read(queueProvider.notifier)
-            .updateOrderStatus(order.id, OrderStatus.fileDeclined);
+            .updateOrderStatus(order.id, OrderStatus.fileRejected);
         Navigator.of(context).pop();
       },
       onCancel: () => Navigator.of(context).pop(),

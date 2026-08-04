@@ -37,7 +37,7 @@ Order? selectDeliveryTrackingOrder(List<Order> orders, String? routeId) {
   if (routeId != null) return _findOrderByRouteId(orders, routeId);
 
   for (final order in orders) {
-    if (order.orderStatus == OrderStatus.onTheWay &&
+    if (order.orderStatus == OrderStatus.outForDelivery &&
         order.canTrackDelivery &&
         order.deliveryAssignmentId != null &&
         (order.assignedRider != null ||

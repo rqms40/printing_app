@@ -265,7 +265,7 @@ describe('RidersService', () => {
     it('rejects assignment before the order is ready for dispatch', async () => {
       orderRepo.findOneOrFail.mockResolvedValue({
         id: 1,
-        orderStatus: OrderStatus.PRINTING_IN_PROGRESS,
+        orderStatus: OrderStatus.PRODUCTION,
       } as Order);
       profileRepo.findOne.mockResolvedValue({
         ...mockProfile,
@@ -743,7 +743,7 @@ describe('RidersService', () => {
         id: arrivedAssignment.orderId,
         orderId: 'ORD-1',
         batchOrderId: null,
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       } as Order;
       profileRepo.findOne.mockResolvedValue(mockProfile);
       assignmentRepo.findOne.mockResolvedValue(arrivedAssignment);
@@ -969,14 +969,14 @@ describe('RidersService', () => {
         id: 1,
         orderId: 'ORD-1',
         batchOrderId: null,
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       } as Order);
       const surveyRequirement = { id: 70 };
       ordersService.completeDelivery.mockResolvedValue({
         previous: {
           id: 1,
           batchOrderId: null,
-          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+          orderStatus: OrderStatus.OUT_FOR_DELIVERY,
         },
         surveyRequirement,
       });
@@ -1024,7 +1024,7 @@ describe('RidersService', () => {
       expect(ordersService.publishStatusUpdate).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 1,
-          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+          orderStatus: OrderStatus.OUT_FOR_DELIVERY,
         }),
         1,
         OrderStatus.DELIVERED,
@@ -1072,7 +1072,7 @@ describe('RidersService', () => {
         orderId: 'VEN-1',
         userId: 21,
         batchOrderId: null,
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       } as Order);
       ordersService.completeDelivery.mockResolvedValue({
         previous: {
@@ -1080,7 +1080,7 @@ describe('RidersService', () => {
           orderId: 'VEN-1',
           userId: 21,
           batchOrderId: null,
-          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+          orderStatus: OrderStatus.OUT_FOR_DELIVERY,
         },
         surveyRequirement: { id: 70 },
       });
@@ -1181,7 +1181,7 @@ describe('RidersService', () => {
         orderId: 'VEN-1',
         userId: 21,
         batchOrderId: null,
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       } as Order);
       ordersService.completeDelivery.mockResolvedValue({
         previous: {
@@ -1189,7 +1189,7 @@ describe('RidersService', () => {
           orderId: 'VEN-1',
           userId: 21,
           batchOrderId: null,
-          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+          orderStatus: OrderStatus.OUT_FOR_DELIVERY,
         },
         surveyRequirement: null,
       });
@@ -1268,14 +1268,14 @@ describe('RidersService', () => {
           orderId: 'VEN-1',
           userId: 21,
           batchOrderId: null,
-          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+          orderStatus: OrderStatus.OUT_FOR_DELIVERY,
         } as Order);
         const previous = {
           id: 1,
           orderId: 'VEN-1',
           userId: 21,
           batchOrderId: null,
-          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+          orderStatus: OrderStatus.OUT_FOR_DELIVERY,
         } as Order;
         ordersService.completeDelivery.mockResolvedValue({
           previous,
@@ -1323,13 +1323,13 @@ describe('RidersService', () => {
       orderRepo.findOneOrFail.mockResolvedValue({
         id: 1,
         batchOrderId: null,
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       } as Order);
       ordersService.completeDelivery.mockResolvedValue({
         previous: {
           id: 1,
           batchOrderId: null,
-          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+          orderStatus: OrderStatus.OUT_FOR_DELIVERY,
         },
         surveyRequirement: null,
       });
@@ -1362,13 +1362,13 @@ describe('RidersService', () => {
       orderRepo.findOneOrFail.mockResolvedValue({
         id: 1,
         batchOrderId: null,
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       } as Order);
       ordersService.completeDelivery.mockResolvedValue({
         previous: {
           id: 1,
           batchOrderId: null,
-          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+          orderStatus: OrderStatus.OUT_FOR_DELIVERY,
         },
         surveyRequirement: null,
       });
@@ -1400,7 +1400,7 @@ describe('RidersService', () => {
       orderRepo.findOneOrFail.mockResolvedValue({
         id: 1,
         batchOrderId: null,
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       } as Order);
 
       await expect(
@@ -1472,7 +1472,7 @@ describe('RidersService', () => {
       orderRepo.findOneOrFail.mockResolvedValue({
         id: 1,
         batchOrderId: null,
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       } as Order);
 
       await expect(
@@ -1548,8 +1548,8 @@ describe('RidersService', () => {
         OrderStatus.RIDER_ASSIGNED,
         OrderStatus.RIDER_ASSIGNED,
         OrderStatus.PICKED_UP,
-        OrderStatus.ON_THE_WAY,
-        OrderStatus.ARRIVED_AT_DESTINATION,
+        OrderStatus.OUT_FOR_DELIVERY,
+        OrderStatus.OUT_FOR_DELIVERY,
       ];
       let orderRead = 0;
       orderRepo.findOneOrFail.mockImplementation(
@@ -1602,7 +1602,7 @@ describe('RidersService', () => {
       expect(ordersService.publishStatusUpdate).toHaveBeenLastCalledWith(
         expect.objectContaining({ orderStatus: OrderStatus.PICKED_UP }),
         1,
-        OrderStatus.ON_THE_WAY,
+        OrderStatus.OUT_FOR_DELIVERY,
       );
 
       // ON_THE_WAY -> ARRIVED
@@ -1628,7 +1628,7 @@ describe('RidersService', () => {
         previous: {
           id: 1,
           batchOrderId: null,
-          orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+          orderStatus: OrderStatus.OUT_FOR_DELIVERY,
         },
         surveyRequirement: null,
       });
@@ -1668,7 +1668,7 @@ describe('RidersService', () => {
       orderRepo.findOneOrFail.mockResolvedValue({
         id: later.orderId,
         batchOrderId: null,
-        orderStatus: OrderStatus.ON_THE_WAY,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
       } as Order);
       dispatchPlanService.assertCurrentStop.mockRejectedValueOnce(
         new BadRequestException(

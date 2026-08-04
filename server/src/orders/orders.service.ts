@@ -79,8 +79,7 @@ const SERVICE_FEE = 2;
 const RIDER_ASSIGNMENT_WORKFLOW_STATUSES = new Set<OrderStatus>([
   OrderStatus.RIDER_ASSIGNED,
   OrderStatus.PICKED_UP,
-  OrderStatus.ON_THE_WAY,
-  OrderStatus.ARRIVED_AT_DESTINATION,
+  OrderStatus.OUT_FOR_DELIVERY,
   OrderStatus.DELIVERED,
 ]);
 
@@ -1159,8 +1158,8 @@ export class OrdersService {
   }
 
   private static readonly CANCELLABLE_STATUSES: OrderStatus[] = [
-    OrderStatus.ORDER_PLACED,
-    OrderStatus.FILE_VERIFIED,
+    OrderStatus.SUBMITTED,
+    OrderStatus.APPROVED_FOR_MATCHING,
   ];
 
   private static isCreditPaymentMethod(paymentMethod?: string): boolean {
@@ -1825,7 +1824,7 @@ export class OrdersService {
         throw new BadRequestException('Use the rider assignment workflow');
       }
       if (
-        orderStatus === OrderStatus.COMPLETED_PICKUP &&
+        orderStatus === OrderStatus.COLLECTED_BY_CUSTOMER &&
         locked.deliveryOption !== 'pickup'
       ) {
         throw new BadRequestException(
@@ -1861,7 +1860,7 @@ export class OrdersService {
         notes: reason,
       });
       const surveyRequirement =
-        orderStatus === OrderStatus.COMPLETED_PICKUP
+        orderStatus === OrderStatus.COLLECTED_BY_CUSTOMER
           ? await this.prepareCompletionRecords(manager, locked)
           : null;
       return { previous: locked, surveyRequirement };
@@ -2035,25 +2034,53 @@ export class OrdersService {
 
     // Status → notification copy (shared by FCM push + in-app notification)
     const messages: Record<string, { title: string; body: string }> = {
-      file_verified: {
-        title: 'File Verified',
-        body: `Your order ${order.orderId} file has been verified.`,
+      submitted: {
+        title: 'Order Submitted',
+        body: `Your order ${order.orderId} was submitted.`,
       },
-      file_declined: {
-        title: 'File Declined',
-        body: `Your order ${order.orderId} file was declined. Please review the details and upload a replacement.`,
+      needs_qa: {
+        title: 'In Quality Review',
+        body: `Your order ${order.orderId} is being reviewed by our quality team.`,
       },
-      printing_in_progress: {
+      client_correction: {
+        title: 'Correction Needed',
+        body: `Your order ${order.orderId} needs a file correction. Please upload a revised file.`,
+      },
+      proof_approval: {
+        title: 'Proof Ready',
+        body: `A proof for order ${order.orderId} is ready for your approval.`,
+      },
+      approved_for_matching: {
+        title: 'Approved for Matching',
+        body: `Your order ${order.orderId} is approved and waiting for a supplier.`,
+      },
+      supplier_assigned: {
+        title: 'Supplier Assigned',
+        body: `A supplier has been assigned to order ${order.orderId}.`,
+      },
+      supplier_accepted: {
+        title: 'Supplier Accepted',
+        body: `A supplier accepted order ${order.orderId}.`,
+      },
+      awaiting_payment: {
+        title: 'Awaiting Payment',
+        body: `Payment authorization is needed for order ${order.orderId}.`,
+      },
+      payment_authorized: {
+        title: 'Payment Authorized',
+        body: `Payment for order ${order.orderId} is authorized. Production can begin.`,
+      },
+      production: {
         title: 'Printing Started',
         body: `Your order ${order.orderId} is being printed.`,
       },
-      finishing_mounting: {
-        title: 'Finishing Started',
-        body: `Your order ${order.orderId} is now in finishing and mounting.`,
+      supplier_self_qc: {
+        title: 'Quality Check',
+        body: `Your order ${order.orderId} is in supplier quality check.`,
       },
-      quality_checked: {
-        title: 'Quality Checked',
-        body: `Your order ${order.orderId} passed quality check.`,
+      file_rejected: {
+        title: 'File Rejected',
+        body: `Your order ${order.orderId} file was rejected. Please review the details and upload a replacement.`,
       },
       ready_for_dispatch: {
         title: 'Ready for Dispatch',
@@ -2067,17 +2094,25 @@ export class OrdersService {
         title: 'Picked Up',
         body: `Your order ${order.orderId} has been picked up.`,
       },
-      on_the_way: {
-        title: 'On The Way',
-        body: `Your order ${order.orderId} is on the way!`,
-      },
-      arrived_at_destination: {
-        title: 'Rider Arrived',
-        body: `Your delivery for ${order.orderId} has arrived!`,
+      out_for_delivery: {
+        title: 'Out for Delivery',
+        body: `Your order ${order.orderId} is out for delivery!`,
       },
       delivered: {
         title: 'Delivered',
         body: `Your order ${order.orderId} has been delivered. Thank you!`,
+      },
+      collected_by_customer: {
+        title: 'Collected',
+        body: `Your order ${order.orderId} was collected. Thank you!`,
+      },
+      issue_window_open: {
+        title: 'Issue Window Open',
+        body: `You can report material issues for order ${order.orderId} within 24 hours.`,
+      },
+      completed: {
+        title: 'Order Completed',
+        body: `Your order ${order.orderId} is complete.`,
       },
       cancelled: {
         title: 'Order Cancelled',
@@ -2120,12 +2155,18 @@ export class OrdersService {
       const fcmToken = await this.usersService.getFcmToken(existing.userId);
       if (fcmToken && statusMsg) {
         const progressByStatus: Partial<Record<OrderStatus, string>> = {
-          [OrderStatus.ORDER_PLACED]: '1',
-          [OrderStatus.PRINTING_IN_PROGRESS]: '2',
-          [OrderStatus.QUALITY_CHECKED]: '3',
-          [OrderStatus.ON_THE_WAY]: '4',
-          [OrderStatus.ARRIVED_AT_DESTINATION]: '4',
+          [OrderStatus.SUBMITTED]: '1',
+          [OrderStatus.NEEDS_QA]: '1',
+          [OrderStatus.APPROVED_FOR_MATCHING]: '2',
+          [OrderStatus.PAYMENT_AUTHORIZED]: '2',
+          [OrderStatus.PRODUCTION]: '2',
+          [OrderStatus.SUPPLIER_SELF_QC]: '3',
+          [OrderStatus.READY_FOR_DISPATCH]: '3',
+          [OrderStatus.RIDER_ASSIGNED]: '3',
+          [OrderStatus.PICKED_UP]: '4',
+          [OrderStatus.OUT_FOR_DELIVERY]: '4',
           [OrderStatus.DELIVERED]: '5',
+          [OrderStatus.COLLECTED_BY_CUSTOMER]: '5',
         };
         const progressCurrent = progressByStatus[orderStatus];
         const pushData = Object.fromEntries(
@@ -2190,7 +2231,7 @@ export class OrdersService {
     // slotted batch and the new status is terminal (cancelled / declined).
     if (
       (orderStatus === OrderStatus.CANCELLED ||
-        orderStatus === OrderStatus.FILE_DECLINED) &&
+        orderStatus === OrderStatus.FILE_REJECTED) &&
       order.batchOrderId != null
     ) {
       try {
@@ -2211,7 +2252,7 @@ export class OrdersService {
     // Notify admins of cancellation / decline
     if (
       orderStatus === OrderStatus.CANCELLED ||
-      orderStatus === OrderStatus.FILE_DECLINED
+      orderStatus === OrderStatus.FILE_REJECTED
     ) {
       const type =
         orderStatus === OrderStatus.CANCELLED

@@ -484,7 +484,7 @@ describe('Evidence file deletion races (e2e)', () => {
         paymentMethod: 'cash',
         paymentStatus: 'paid',
         deliveryOption: 'delivery',
-        orderStatus: OrderStatus.ARRIVED_AT_DESTINATION,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
         assignedRiderId: rider.id,
         batchOrderId: batch.id,
         destinationId: destination.id,
@@ -551,7 +551,7 @@ describe('Evidence file deletion races (e2e)', () => {
         paymentMethod: 'cash',
         paymentStatus: 'paid',
         deliveryOption: 'pickup',
-        orderStatus: OrderStatus.COMPLETED_PICKUP,
+        orderStatus: OrderStatus.COLLECTED_BY_CUSTOMER,
       }),
     );
     const item = await orderItemsRepo.save(

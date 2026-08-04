@@ -21,12 +21,21 @@ import 'package:printing_app/shared/services/websocket_service.dart';
 /// Terminal statuses that mark an order as completed/done.
 const terminalStatuses = {
   OrderStatus.delivered,
-  OrderStatus.completedPickup,
+  OrderStatus.collectedByCustomer,
+  OrderStatus.completed,
   OrderStatus.cancelled,
+  OrderStatus.fileRejected,
 };
 
 /// Statuses eligible for customer-initiated cancellation.
-const cancellableStatuses = {OrderStatus.orderPlaced, OrderStatus.fileVerified};
+const cancellableStatuses = {
+  OrderStatus.draft,
+  OrderStatus.submitted,
+  OrderStatus.needsQa,
+  OrderStatus.clientCorrection,
+  OrderStatus.proofApproval,
+  OrderStatus.approvedForMatching,
+};
 
 dynamic _readJsonValue(
   Map<String, dynamic> json,
@@ -93,15 +102,7 @@ String? _readSpecialInstructions(
 }
 
 OrderStatus _parseOrderStatus(String value) {
-  // Handle snake_case from server (e.g. 'order_placed' → 'orderPlaced')
-  final camelCase = value.replaceAllMapped(
-    RegExp(r'_([a-z])'),
-    (m) => m.group(1)!.toUpperCase(),
-  );
-  return OrderStatus.values.firstWhere(
-    (e) => e.name == camelCase,
-    orElse: () => OrderStatus.orderPlaced,
-  );
+  return parseMarketplaceOrderStatus(value);
 }
 
 PaymentMethod _parsePaymentMethod(String value) {
@@ -804,7 +805,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
           next[index] = updated;
           state = next;
           if (updated.orderStatus == OrderStatus.delivered ||
-              updated.orderStatus == OrderStatus.completedPickup) {
+              updated.orderStatus == OrderStatus.collectedByCustomer) {
             unawaited(onCompletionUpdate?.call());
           }
         } else {

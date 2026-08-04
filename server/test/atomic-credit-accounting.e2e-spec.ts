@@ -429,7 +429,7 @@ describe('atomic credit accounting (e2e)', () => {
       );
       await service.updateStatus(
         order.id,
-        OrderStatus.FILE_VERIFIED,
+        OrderStatus.APPROVED_FOR_MATCHING,
         {},
         {
           actorUserId: fixture.userId,
@@ -444,7 +444,7 @@ describe('atomic credit accounting (e2e)', () => {
       ]);
       const statusAttempt = service.updateStatus(
         order.id,
-        OrderStatus.PRINTING_IN_PROGRESS,
+        OrderStatus.PRODUCTION,
         {},
         {
           actorUserId: fixture.userId,
@@ -506,7 +506,7 @@ describe('atomic credit accounting (e2e)', () => {
       );
       await service.updateStatus(
         order.id,
-        OrderStatus.FILE_VERIFIED,
+        OrderStatus.APPROVED_FOR_MATCHING,
         {},
         {
           actorUserId: fixture.userId,
@@ -526,7 +526,7 @@ describe('atomic credit accounting (e2e)', () => {
       await waitForOrderLockWaiters(dataSource, 1);
       const statusAttempt = service.updateStatus(
         order.id,
-        OrderStatus.PRINTING_IN_PROGRESS,
+        OrderStatus.PRODUCTION,
         {},
         {
           actorUserId: fixture.userId,

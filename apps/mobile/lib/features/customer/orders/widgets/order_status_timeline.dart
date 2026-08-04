@@ -21,24 +21,24 @@ class OrderStatusTimeline extends StatelessWidget {
   List<OrderStatus> _pipeline() {
     final isPickup = order.deliveryOption == 'pickup';
 
-    // Common production steps
+    // Simplified marketplace pipeline for client timeline UI.
     final steps = <OrderStatus>[
-      OrderStatus.orderPlaced,
-      OrderStatus.fileVerified,
-      OrderStatus.printingInProgress,
-      OrderStatus.finishingMounting,
-      OrderStatus.qualityChecked,
+      OrderStatus.submitted,
+      OrderStatus.needsQa,
+      OrderStatus.approvedForMatching,
+      OrderStatus.paymentAuthorized,
+      OrderStatus.production,
+      OrderStatus.supplierSelfQc,
     ];
 
     if (isPickup) {
-      steps.add(OrderStatus.completedPickup);
+      steps.add(OrderStatus.collectedByCustomer);
     } else {
       steps.addAll([
         OrderStatus.readyForDispatch,
         OrderStatus.riderAssigned,
         OrderStatus.pickedUp,
-        OrderStatus.onTheWay,
-        OrderStatus.arrivedAtDestination,
+        OrderStatus.outForDelivery,
         OrderStatus.delivered,
       ]);
     }
@@ -50,7 +50,7 @@ class OrderStatusTimeline extends StatelessWidget {
   /// the order status history entries.
   String? _timestampFor(OrderStatus status) {
     // The first status (orderPlaced) uses the order's createdAt.
-    if (status == OrderStatus.orderPlaced) {
+    if (status == OrderStatus.submitted) {
       return formatDateTime(order.createdAt);
     }
 
@@ -66,16 +66,16 @@ class OrderStatusTimeline extends StatelessWidget {
   Widget build(BuildContext context) {
     // Handle special terminal statuses that break the normal pipeline.
     if (order.orderStatus == OrderStatus.cancelled ||
-        order.orderStatus == OrderStatus.fileDeclined) {
+        order.orderStatus == OrderStatus.fileRejected) {
       final steps = <TimelineStep>[
         TimelineStep(
-          label: OrderStatus.orderPlaced.displayName,
+          label: OrderStatus.submitted.displayName,
           timestamp: formatDateTime(order.createdAt),
         ),
-        if (order.orderStatus == OrderStatus.fileDeclined)
+        if (order.orderStatus == OrderStatus.fileRejected)
           TimelineStep(
-            label: OrderStatus.fileDeclined.displayName,
-            timestamp: _timestampFor(OrderStatus.fileDeclined),
+            label: OrderStatus.fileRejected.displayName,
+            timestamp: _timestampFor(OrderStatus.fileRejected),
           )
         else
           TimelineStep(

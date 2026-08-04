@@ -59,8 +59,8 @@ const ORDER_STATUS_BY_DELIVERY_STATUS: Partial<
 > = {
   [DeliveryStatus.ACCEPTED]: OrderStatus.RIDER_ASSIGNED,
   [DeliveryStatus.PICKED_UP]: OrderStatus.PICKED_UP,
-  [DeliveryStatus.ON_THE_WAY]: OrderStatus.ON_THE_WAY,
-  [DeliveryStatus.ARRIVED]: OrderStatus.ARRIVED_AT_DESTINATION,
+  [DeliveryStatus.ON_THE_WAY]: OrderStatus.OUT_FOR_DELIVERY,
+  [DeliveryStatus.ARRIVED]: OrderStatus.OUT_FOR_DELIVERY,
   [DeliveryStatus.DELIVERED]: OrderStatus.DELIVERED,
 };
 

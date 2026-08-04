@@ -104,7 +104,7 @@ String _getBucketKey(DateTime date, DashboardAnalyticsPeriod period) {
 }
 
 bool _isExcludedFromPaperDemand(OrderStatus status) {
-  return status == OrderStatus.cancelled || status == OrderStatus.fileDeclined;
+  return status == OrderStatus.cancelled || status == OrderStatus.fileRejected;
 }
 
 DashboardAnalyticsResponse _deriveDashboardAnalyticsFromOrders(
