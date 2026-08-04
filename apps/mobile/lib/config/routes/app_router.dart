@@ -49,7 +49,7 @@ import 'package:printing_app/features/customer/profile/screens/account_details_s
 import 'package:printing_app/features/customer/profile/screens/support_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/terms_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/privacy_screen.dart';
-import 'package:printing_app/features/customer/profile/screens/top_up_screen.dart';
+import 'package:printing_app/features/customer/profile/screens/credits_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/tam_survey_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/required_tam_survey_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/storage_settings_screen.dart';
@@ -584,8 +584,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             slideTransition(const PrivacyScreen(), state),
       ),
       GoRoute(
+        path: '/customer/profile/credits',
+        pageBuilder: (_, state) =>
+            slideTransition(const CreditsScreen(), state),
+      ),
+      // Legacy top-up path redirects to Pilot Credits balance/history.
+      GoRoute(
         path: '/customer/profile/top-up',
-        pageBuilder: (_, state) => slideTransition(const TopUpScreen(), state),
+        redirect: (_, __) => '/customer/profile/credits',
       ),
       GoRoute(
         path: '/customer/profile/survey',

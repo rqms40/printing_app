@@ -375,7 +375,7 @@ extension PaymentMethodX on PaymentMethod {
       case PaymentMethod.cod:
         return 'Cash on Delivery';
       case PaymentMethod.gridCredits:
-        return 'GRIDGO Credits';
+        return 'Pilot Credits';
     }
   }
 }

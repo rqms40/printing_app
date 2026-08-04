@@ -48,7 +48,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('#007'), findsOneWidget);
-    expect(find.text('100 GRIDGO Credits'), findsOneWidget);
+    expect(find.text('100 Pilot Credits'), findsOneWidget);
     expect(find.text('Start printing'), findsOneWidget);
     expect(find.text('FOUNDING TESTER'), findsOneWidget);
   });

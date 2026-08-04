@@ -227,9 +227,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         TutorialStep(
           targetKey: _creditsTutorialKey,
           icon: HugeIcons.strokeRoundedCoins01,
-          title: 'GRIDGO Credits',
+          title: 'Pilot Credits',
           body:
-              'Top up GRIDGO Credits and pay at checkout — no GCash OTP, no app-switching.',
+              'Your Pilot Credits balance for pilot checkout — grant-only test credits, no purchase needed.',
           advanceOnSpotlightTap: false,
         ),
         TutorialStep(
@@ -688,11 +688,11 @@ class _CreditsWidgetState extends State<_CreditsWidget>
                       child: _CreditsDropdown(
                         colors: widget.colors,
                         credits: widget.credits,
-                        onTopUp: () {
+                        onViewHistory: () {
                           _close();
                           Future.delayed(const Duration(milliseconds: 180), () {
                             if (stateCtx.mounted) {
-                              stateCtx.push('/customer/profile/top-up');
+                              stateCtx.push('/customer/profile/credits');
                             }
                           });
                         },
@@ -759,16 +759,15 @@ class _CreditsDropdown extends StatelessWidget {
   const _CreditsDropdown({
     required this.colors,
     required this.credits,
-    required this.onTopUp,
+    required this.onViewHistory,
   });
 
   final AppColorSet colors;
   final int credits;
-  final VoidCallback onTopUp;
+  final VoidCallback onViewHistory;
 
   @override
   Widget build(BuildContext context) {
-    final pesoEquiv = _formatCredits(credits);
     final brand = colors.brand;
 
     return Container(
@@ -820,7 +819,7 @@ class _CreditsDropdown extends StatelessWidget {
               ),
               const SizedBox(width: AppSpacing.sm),
               Text(
-                'GRIDGO CREDITS',
+                'PILOT CREDITS',
                 style: AppTypography.overline.copyWith(
                   color: colors.onSurfaceDim,
                   fontSize: 9,
@@ -844,7 +843,7 @@ class _CreditsDropdown extends StatelessWidget {
           ),
           const SizedBox(height: 3),
           Text(
-            'G$pesoEquiv equivalent',
+            'Test credits · grant only',
             style: AppTypography.caption.copyWith(
               color: colors.onSurfaceDim,
               fontSize: 10,
@@ -859,9 +858,9 @@ class _CreditsDropdown extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.sm),
 
-          // ── Top Up row ───────────────────────────────────────────────
+          // ── History row (no top-up CTA) ─────────────────────────────
           GestureDetector(
-            onTap: onTopUp,
+            onTap: onViewHistory,
             child: Row(
               children: [
                 Container(
@@ -873,7 +872,7 @@ class _CreditsDropdown extends StatelessWidget {
                   ),
                   child: const Center(
                     child: Icon(
-                      Icons.add_rounded,
+                      Icons.history_rounded,
                       size: 18,
                       color: Colors.black,
                     ),
@@ -881,7 +880,7 @@ class _CreditsDropdown extends StatelessWidget {
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 Text(
-                  'Top Up Credits',
+                  'View history',
                   style: AppTypography.bodyBold.copyWith(
                     color: colors.onBackground,
                     fontSize: 12,

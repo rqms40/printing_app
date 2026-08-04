@@ -46,7 +46,7 @@ void main() {
         child: const MaterialApp(home: Scaffold(body: CheckoutPaymentCard())),
       ),
     );
-    expect(find.textContaining('GRIDGO Credits'), findsOneWidget);
+    expect(find.textContaining('Pilot Credits'), findsOneWidget);
     expect(find.text('Change'), findsOneWidget);
   });
 
@@ -116,7 +116,7 @@ void main() {
 
     expect(container.read(checkoutProvider).paymentMethod, isNull);
     expect(find.text('Choose payment method'), findsOneWidget);
-    expect(find.text('Beta orders use GRIDGO Credits only.'), findsOneWidget);
+    expect(find.text('Beta orders use Pilot Credits only.'), findsOneWidget);
   });
 
   testWidgets('credits-only mode clears unavailable COD selection', (
@@ -145,7 +145,7 @@ void main() {
 
     expect(container.read(checkoutProvider).paymentMethod, isNull);
     expect(find.text('Choose payment method'), findsOneWidget);
-    expect(find.text('Beta orders use GRIDGO Credits only.'), findsOneWidget);
+    expect(find.text('Beta orders use Pilot Credits only.'), findsOneWidget);
   });
 }
 

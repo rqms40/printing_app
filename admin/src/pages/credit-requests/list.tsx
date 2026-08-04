@@ -69,7 +69,11 @@ export const CreditRequestsList = () => {
   };
 
   return (
-    <List title="Pending Top-Up Requests">
+    <List title="Legacy Top-Up Requests (deprecated)">
+      <Text type="secondary" style={{ display: "block", marginBottom: 12 }}>
+        Client top-up is disabled. Use Grant Pilot Credits above. This queue only
+        remains for any historical pending requests.
+      </Text>
       <Table {...tableProps} rowKey="id">
         <Table.Column 
           dataIndex="id" 
@@ -92,8 +96,8 @@ export const CreditRequestsList = () => {
         />
         <Table.Column 
           dataIndex="amountCredits" 
-          title="Equivalent Credits" 
-          render={(val) => <Text strong>{val} Credits</Text>}
+          title="Equivalent Pilot Credits" 
+          render={(val) => <Text strong>{val} Pilot Credits</Text>}
         />
         <Table.Column
           dataIndex="proofOfPaymentUrl"

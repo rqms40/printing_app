@@ -114,8 +114,8 @@ void main() {
     );
     expect(
       find.text(
-        'Beta checkout uses GRIDGO Credits only. '
-        'Switch your payment method to GRIDGO Credits.',
+        'Beta checkout uses Pilot Credits only. '
+        'Switch your payment method to Pilot Credits.',
       ),
       findsOneWidget,
     );

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+
 import 'package:hugeicons/hugeicons.dart';
 import 'package:printing_app/config/theme/app_colors.dart';
 import 'package:printing_app/config/theme/app_radius.dart';
@@ -81,9 +81,9 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
         TutorialStep(
           targetKey: _creditsCoachKey,
           icon: HugeIcons.strokeRoundedCoins01,
-          title: 'Pay with GRIDGO Credits',
+          title: 'Pay with Pilot Credits',
           body:
-              'Top up once and pay instantly — no GCash OTP, no app-switching.',
+              'Use your Pilot Credits balance at checkout — free test credits for the pilot.',
           align: ContentAlign.top,
           advanceOnSpotlightTap: false,
         ),
@@ -171,7 +171,7 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
               !settingsReady
                   ? 'Checking payment availability'
                   : creditsOnlyMode
-                  ? 'Only GRIDGO Credits is available during beta testing'
+                  ? 'Only Pilot Credits is available during beta testing'
                   : 'Pick how you want to pay',
               style: AppTypography.caption.copyWith(
                 color: colors.onSurfaceDim,
@@ -330,7 +330,7 @@ class _MethodRow extends StatelessWidget {
       case PaymentMethod.cod:
         return 'Cash on Delivery';
       case PaymentMethod.gridCredits:
-        return 'GRIDGO Credits';
+        return 'Pilot Credits';
     }
   }
 
@@ -340,7 +340,7 @@ class _MethodRow extends StatelessWidget {
       if (creditsBalance > 0) {
         return '${formatCurrency(creditsBalance)} available';
       } else {
-        return 'No credits — top up to use';
+        return 'No Pilot Credits available';
       }
     }
     switch (m) {
@@ -351,7 +351,7 @@ class _MethodRow extends StatelessWidget {
       case PaymentMethod.cod:
         return 'Pay cash to the rider';
       case PaymentMethod.gridCredits:
-        return 'Use your GRIDGO balance';
+        return 'Use your Pilot Credits balance';
     }
   }
 
@@ -416,20 +416,12 @@ class _MethodRow extends StatelessWidget {
                     ),
                   ),
                   if (_disabled && _isCredits) ...[
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.of(context).pop();
-                        context.push('/customer/profile/top-up');
-                      },
-                      child: Text(
-                        'Top up',
-                        style: AppTypography.caption.copyWith(
-                          color: colors.brand,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          decoration: TextDecoration.underline,
-                          decorationColor: colors.brand,
-                        ),
+                    Text(
+                      'Grant only',
+                      style: AppTypography.caption.copyWith(
+                        color: colors.onSurfaceDim,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ] else ...[

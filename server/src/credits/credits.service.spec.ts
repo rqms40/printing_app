@@ -6,7 +6,11 @@ import {
   getMetadataArgsStorage,
   Repository,
 } from 'typeorm';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  NotFoundException,
+  BadRequestException,
+  GoneException,
+} from '@nestjs/common';
 import { CreditsService } from './credits.service';
 import {
   CreditTransaction,
@@ -38,6 +42,35 @@ describe('CreditsService', () => {
     amountCredits: 500,
     status: CreditTransactionStatus.PENDING,
   } as CreditTransaction;
+
+  function mockLedgerManager(
+    lockedUser: User,
+    findByKey: jest.Mock = jest.fn().mockResolvedValue(null),
+  ) {
+    let nextId = 100;
+    const userRepo = {
+      findOne: jest.fn().mockResolvedValue(lockedUser),
+      save: jest.fn().mockImplementation(async (user: User) => user),
+    };
+    const managerTxRepo = {
+      findOne: findByKey,
+      find: jest.fn().mockResolvedValue([]),
+      create: jest.fn(
+        (value: Partial<CreditTransaction>) => value as CreditTransaction,
+      ),
+      save: jest
+        .fn()
+        .mockImplementation(async (transaction: CreditTransaction) => ({
+          id: nextId++,
+          ...transaction,
+        })),
+    };
+    const manager = {
+      getRepository: (entity: unknown) =>
+        entity === User ? userRepo : managerTxRepo,
+    } as unknown as EntityManager;
+    return { userRepo, managerTxRepo, manager };
+  }
 
   beforeEach(async () => {
     txRepo = {
@@ -90,20 +123,156 @@ describe('CreditsService', () => {
   });
 
   describe('requestTopUp', () => {
-    it('saves the transaction and notifies all admins', async () => {
-      txRepo.create.mockReturnValue(mockTx);
-      txRepo.save.mockResolvedValue(mockTx);
-
-      const result = await service.requestTopUp(1, {
-        amountPhp: 500,
-        proofOfPaymentUrl: 'https://example.com/proof.jpg',
-      });
-
-      expect(txRepo.save).toHaveBeenCalled();
-      expect(notificationsService.createForAllAdmins).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'topup_request' }),
+    it('rejects client top-up with 410 Gone (grant-only Pilot Credits)', async () => {
+      await expect(service.requestTopUp()).rejects.toBeInstanceOf(
+        GoneException,
       );
-      expect(result).toEqual(mockTx);
+      await expect(service.requestTopUp()).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'pilot_credits_topup_disabled',
+        }),
+      });
+      expect(txRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('pilot ledger grant → reserve → spend', () => {
+    it('grants Pilot Credits with reason and optional expiry', async () => {
+      const lockedUser = { ...mockUser, credits: 0 } as User;
+      const { userRepo, managerTxRepo, manager } =
+        mockLedgerManager(lockedUser);
+      dataSource.transaction.mockImplementation(
+        async (work: (m: EntityManager) => Promise<unknown>) => work(manager),
+      );
+
+      const result = await service.grantPilotCredits(
+        {
+          userId: 1,
+          amount: 100,
+          reason: 'Pilot cohort grant',
+          expiresAt: '2026-12-31T00:00:00.000Z',
+        },
+        99,
+      );
+
+      expect(userRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ credits: 100 }),
+      );
+      expect(managerTxRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: CreditTransactionType.GRANT,
+          amountCredits: 100,
+          reason: 'Pilot cohort grant',
+          actorUserId: 99,
+          balanceBefore: 0,
+          balanceAfter: 100,
+        }),
+      );
+      expect(result.balance).toBe(100);
+      expect(notificationsService.triggerCreditsUpdate).toHaveBeenCalledWith(
+        1,
+        100,
+      );
+    });
+
+    it('requires a grant reason', async () => {
+      await expect(
+        service.grantPilotCredits(
+          { userId: 1, amount: 50, reason: '   ' },
+          99,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('runs grant → reserve → spend without double-debiting on spend', async () => {
+      const lockedUser = { ...mockUser, credits: 0 } as User;
+      const ledgerByKey = new Map<string, CreditTransaction>();
+      let nextId = 1;
+
+      const userRepo = {
+        findOne: jest.fn().mockResolvedValue(lockedUser),
+        save: jest.fn().mockImplementation(async (user: User) => user),
+      };
+      const managerTxRepo = {
+        findOne: jest.fn(
+          async ({ where }: { where: { idempotencyKey?: string } }) => {
+            if (where.idempotencyKey) {
+              return ledgerByKey.get(where.idempotencyKey) ?? null;
+            }
+            return null;
+          },
+        ),
+        create: jest.fn(
+          (value: Partial<CreditTransaction>) => value as CreditTransaction,
+        ),
+        save: jest
+          .fn()
+          .mockImplementation(async (transaction: CreditTransaction) => {
+            const saved = {
+              id: nextId++,
+              ...transaction,
+            } as CreditTransaction;
+            if (saved.idempotencyKey) {
+              ledgerByKey.set(saved.idempotencyKey, saved);
+            }
+            return saved;
+          }),
+      };
+      const manager = {
+        getRepository: (entity: unknown) =>
+          entity === User ? userRepo : managerTxRepo,
+      } as unknown as EntityManager;
+      dataSource.transaction.mockImplementation(
+        async (work: (m: EntityManager) => Promise<unknown>) => work(manager),
+      );
+
+      await service.grantPilotCredits(
+        { userId: 1, amount: 200, reason: 'QA pilot pack' },
+        7,
+      );
+      expect(Number(lockedUser.credits)).toBe(200);
+
+      await service.reserveCredits(1, 75, 'reserve:order:42', {
+        referenceId: 'ORD-42',
+      });
+      expect(Number(lockedUser.credits)).toBe(125);
+
+      const spend = await service.spendCredits(1, 75, 'spend:order:42', {
+        reserveIdempotencyKey: 'reserve:order:42',
+        referenceId: 'ORD-42',
+      });
+      // Spend settling a reserve does not deduct again
+      expect(Number(lockedUser.credits)).toBe(125);
+      expect(spend.transaction.type).toBe(CreditTransactionType.SPEND);
+      expect(spend.balanceChanged).toBe(false);
+
+      // Idempotent spend replay
+      const replay = await service.spendCredits(1, 75, 'spend:order:42', {
+        reserveIdempotencyKey: 'reserve:order:42',
+      });
+      expect(replay.balanceChanged).toBe(false);
+      expect(Number(lockedUser.credits)).toBe(125);
+    });
+
+    it('rejects reserve/spend without idempotency key', async () => {
+      await expect(service.reserveCredits(1, 10, '  ')).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.spendCredits(1, 10, '')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('rejects insufficient balance on reserve', async () => {
+      const lockedUser = { ...mockUser, credits: 5 } as User;
+      const { manager } = mockLedgerManager(lockedUser);
+      dataSource.transaction.mockImplementation(
+        async (work: (m: EntityManager) => Promise<unknown>) => work(manager),
+      );
+
+      await expect(
+        service.reserveCredits(1, 50, 'reserve:too-much'),
+      ).rejects.toThrow('Insufficient Pilot Credits');
     });
   });
 
@@ -545,6 +714,7 @@ describe('CreditsService', () => {
         amountCredits: 100,
         status: CreditTransactionStatus.APPROVED,
         referenceId: 'BETA-ENROLLMENT:9',
+        reason: 'Beta enrollment grant',
       });
       expect(userRepo.findOne).toHaveBeenCalledWith({
         where: { id: 9 },
@@ -733,4 +903,18 @@ describe('CreditsService', () => {
         `"reference_id" LIKE 'BATCH-REFUND:%'`,
     });
   });
+
+  it('declares idempotency keys unique when present', () => {
+    const index = getMetadataArgsStorage().indices.find(
+      (candidate) =>
+        candidate.target === CreditTransaction &&
+        candidate.name === 'uq_credit_transactions_idempotency_key',
+    );
+
+    expect(index).toMatchObject({
+      unique: true,
+      where: `"idempotency_key" IS NOT NULL`,
+    });
+  });
 });
+

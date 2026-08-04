@@ -30,7 +30,7 @@ class CheckoutPaymentSettings {
       return 'Unavailable during beta testing';
     }
     if (method == PaymentMethod.gridCredits && creditsBalance <= 0) {
-      return 'No credits — top up to use';
+      return 'No Pilot Credits available';
     }
     return null;
   }

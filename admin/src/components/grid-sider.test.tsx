@@ -34,7 +34,7 @@ const menuItems = [
   {
     key: "/credit-requests",
     name: "credit-requests",
-    label: "Top-Up Requests",
+    label: "Pilot Credits",
     icon: null,
     list: "/credit-requests",
   },
@@ -71,7 +71,7 @@ describe("GridSider", () => {
     expect(screen.queryByText("1")).not.toBeInTheDocument();
   });
 
-  it("shows Top-Up Requests badge with correct count", () => {
+  it("shows Pilot Credits badge with correct count", () => {
     render(<GridSider />);
     expect(screen.getAllByText("1").length).toBeGreaterThan(0);
   });

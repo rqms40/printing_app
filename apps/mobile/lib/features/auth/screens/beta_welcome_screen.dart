@@ -44,8 +44,8 @@ class _BetaWelcomeScreenState extends ConsumerState<BetaWelcomeScreen> {
         ? '#${beta!.rank.toString().padLeft(3, '0')}'
         : '#000';
     final creditsLabel = credits != null
-        ? '${double.tryParse(credits)?.toStringAsFixed(0) ?? credits} GRIDGO Credits'
-        : '100 GRIDGO Credits';
+        ? '${double.tryParse(credits)?.toStringAsFixed(0) ?? credits} Pilot Credits'
+        : '100 Pilot Credits';
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
 
     Widget stamp(Widget child, {int delayMs = 0}) {

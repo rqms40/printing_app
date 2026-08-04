@@ -160,21 +160,14 @@ class _ProfileTab extends ConsumerWidget {
               .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
           const SizedBox(height: AppSpacing.lg),
 
-          // WALLET section
-          _SectionHeader(label: 'WALLET', colors: colors)
+          // PILOT CREDITS section (grant-only; no top-up)
+          _SectionHeader(label: 'PILOT CREDITS', colors: colors)
               .animate()
               .fadeIn(duration: 400.ms, delay: 25.ms, curve: Curves.easeOut),
           _MenuRow(
             icon: HugeIcons.strokeRoundedCoins01,
-            title: 'GRIDGO Credits: ${user?.credits ?? "0.00"}',
-            onTap: () {},
-            colors: colors,
-          ),
-          _Divider(colors: colors),
-          _MenuRow(
-            icon: HugeIcons.strokeRoundedWalletAdd01,
-            title: 'Top-Up Credits',
-            onTap: () => context.push('/customer/profile/top-up'),
+            title: 'Pilot Credits: ${user?.credits ?? "0.00"}',
+            onTap: () => context.push('/customer/profile/credits'),
             colors: colors,
           ),
           const SizedBox(height: AppSpacing.lg),

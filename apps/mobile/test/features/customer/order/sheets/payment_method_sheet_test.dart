@@ -44,7 +44,7 @@ void main() {
     expect(find.text('GCash'), findsOneWidget);
     expect(find.text('Maya'), findsOneWidget);
     expect(find.text('Cash on Delivery'), findsOneWidget);
-    expect(find.text('GRIDGO Credits'), findsOneWidget);
+    expect(find.text('Pilot Credits'), findsOneWidget);
     final mayaControl = find.bySemanticsLabel(RegExp(r'^Maya\.'));
     expect(mayaControl, findsOneWidget);
     expect(
@@ -201,15 +201,15 @@ void main() {
       expect(find.text('GCash'), findsOneWidget);
       expect(find.text('Maya'), findsOneWidget);
       expect(find.text('Cash on Delivery'), findsOneWidget);
-      expect(find.text('GRIDGO Credits'), findsOneWidget);
-      expect(find.text('Only GRIDGO Credits is available during beta testing'), findsOneWidget);
+      expect(find.text('Pilot Credits'), findsOneWidget);
+      expect(find.text('Only Pilot Credits is available during beta testing'), findsOneWidget);
       expect(find.text('Unavailable during beta testing'), findsNWidgets(3));
       expect(find.text('Top up'), findsNothing);
 
       await tester.tap(find.text('GCash'));
       await tester.pump();
       expect(picked, isNull);
-      await tester.tap(find.text('GRIDGO Credits'));
+      await tester.tap(find.text('Pilot Credits'));
       await tester.pump();
       await tester.tap(find.text('Use this'));
       await tester.pumpAndSettle();

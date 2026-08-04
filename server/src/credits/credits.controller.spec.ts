@@ -7,11 +7,22 @@ describe('CreditsController authorization metadata', () => {
     'getPendingRequests',
     'approveTopUp',
     'rejectTopUp',
+    'grantPilotCredits',
+    'manualAdjustment',
   ] as const) {
-    it(`restricts ${method} to admins`, () => {
+    it(`restricts ${method} to ops_admin / super_admin`, () => {
       expect(
         Reflect.getMetadata(ROLES_KEY, CreditsController.prototype[method]),
       ).toEqual(['ops_admin', 'super_admin']);
     });
   }
+
+  it('does not expose grant to unauthenticated roles metadata on client endpoints', () => {
+    expect(
+      Reflect.getMetadata(ROLES_KEY, CreditsController.prototype.requestTopUp),
+    ).toBeUndefined();
+    expect(
+      Reflect.getMetadata(ROLES_KEY, CreditsController.prototype.getMyCredits),
+    ).toBeUndefined();
+  });
 });

@@ -125,7 +125,7 @@ function App() {
               {
                 name: "credit-requests",
                 list: "/credit-requests",
-                meta: { label: "Top-Up Requests", icon: <WalletOutlined /> },
+                meta: { label: "Pilot Credits", icon: <WalletOutlined /> },
               },
               {
                 name: "products",
