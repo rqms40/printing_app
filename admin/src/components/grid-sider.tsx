@@ -22,18 +22,29 @@ interface GridSiderProps {
   initialCollapsed?: boolean;
 }
 
+type MenuRoleMode = "unknown" | "supplier" | "ops";
+
+/**
+ * Role-filter the Refine menu.
+ * - unknown: default-deny — hide ops and supplier items until identity loads
+ *   (avoids flashing full ops nav for suppliers during getIdentity).
+ * - supplier: only supplier portal resources
+ * - ops: all non-supplier resources
+ */
 function filterMenuForRole(
   items: ITreeMenu[],
-  supplier: boolean,
+  mode: MenuRoleMode,
 ): ITreeMenu[] {
+  if (mode === "unknown") return [];
+
   return items
     .map((item) => {
       const isSupplierRes = SUPPLIER_PORTAL_RESOURCES.has(item.name);
-      if (supplier) {
+      if (mode === "supplier") {
         // Suppliers only see supplier portal resources
         if (isSupplierRes) return item;
         if (item.children?.length) {
-          const children = filterMenuForRole(item.children, supplier);
+          const children = filterMenuForRole(item.children, mode);
           if (children.length === 0) return null;
           return { ...item, children };
         }
@@ -42,7 +53,7 @@ function filterMenuForRole(
       // Ops: hide supplier portal resources
       if (isSupplierRes) return null;
       if (item.children?.length) {
-        const children = filterMenuForRole(item.children, supplier);
+        const children = filterMenuForRole(item.children, mode);
         return { ...item, children };
       }
       return item;
@@ -56,12 +67,19 @@ export function GridSider({ initialCollapsed = false }: GridSiderProps) {
   const { menuItems, selectedKey } = useMenu();
   const { push } = useNavigation();
   const { badgeCounts } = useNotificationsContext();
-  const { data: identity } = useGetIdentity<AdminIdentity>();
+  const { data: identity, isLoading: identityLoading } =
+    useGetIdentity<AdminIdentity>();
+  const roleKnown = !identityLoading && identity?.role != null;
   const supplier = isSupplierRole(identity?.role);
+  const menuMode: MenuRoleMode = !roleKnown
+    ? "unknown"
+    : supplier
+      ? "supplier"
+      : "ops";
 
   const visibleMenuItems = useMemo(
-    () => filterMenuForRole(menuItems, supplier),
-    [menuItems, supplier],
+    () => filterMenuForRole(menuItems, menuMode),
+    [menuItems, menuMode],
   );
 
   const defaultOpenKeys = visibleMenuItems
@@ -69,7 +87,8 @@ export function GridSider({ initialCollapsed = false }: GridSiderProps) {
     .map((item) => item.key)
     .filter((key): key is string => typeof key === "string");
 
-  const brandLabel = supplier ? "GRIDGO Supplier" : "GRIDGO Admin";
+  const brandLabel =
+    !roleKnown ? "GRIDGO" : supplier ? "GRIDGO Supplier" : "GRIDGO Admin";
 
   function buildItems(items: ITreeMenu[]): MenuProps["items"] {
     return items.map((item) => {

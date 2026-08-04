@@ -10,9 +10,13 @@ const { Text } = Typography;
 export function CustomHeader() {
   const { token } = theme.useToken();
   const { modal } = App.useApp();
-  const { data: identity } = useGetIdentity<AdminIdentity>();
+  const { data: identity, isLoading: identityLoading } =
+    useGetIdentity<AdminIdentity>();
   const { mutate: logout } = useLogout();
+  const roleKnown = !identityLoading && identity?.role != null;
   const supplier = isSupplierRole(identity?.role);
+  // Default-deny ops chrome until role is known (suppliers must not see notif bell).
+  const showOpsChrome = roleKnown && !supplier;
 
   const handleLogout = () => {
     modal.confirm({
@@ -67,7 +71,7 @@ export function CustomHeader() {
         zIndex: 1000,
       }}
     >
-      {!supplier && <NotificationBell />}
+      {showOpsChrome && <NotificationBell />}
       <Dropdown menu={{ items: menuItems }} trigger={["click"]} placement="bottomRight">
         <Space style={{ cursor: "pointer" }}>
           <Avatar

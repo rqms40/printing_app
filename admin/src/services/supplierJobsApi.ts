@@ -219,10 +219,10 @@ export async function submitSupplierSelfQc(
     if (payload.notes) {
       form.append('notes', payload.notes);
     }
+    // Do not set Content-Type — browser must attach multipart boundary.
     const res = await apiClient.post<SupplierJobActionResult>(
       `/supplier/jobs/${jobId}/self-qc`,
       form,
-      { headers: { 'Content-Type': 'multipart/form-data' } },
     );
     return res.data;
   }

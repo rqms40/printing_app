@@ -184,6 +184,22 @@ export function SupplierJobShowPage() {
   const canSelfQc = hasAction(detail, 'self-qc');
   const canReady = hasAction(detail, 'ready-for-pickup');
 
+  // Live clock so Accept UI disables the moment the SLA window ends.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!canAccept || !detail?.assignment.acceptanceDeadline) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [canAccept, detail?.assignment.acceptanceDeadline]);
+
+  const acceptDeadlineMs = detail
+    ? new Date(detail.assignment.acceptanceDeadline).getTime()
+    : NaN;
+  const acceptDeadlinePassed =
+    Number.isFinite(acceptDeadlineMs) && acceptDeadlineMs <= now;
+  /** Server allows accept AND the client-side SLA window is still open. */
+  const acceptWindowOpen = canAccept && !acceptDeadlinePassed;
+
   const pipeline = useMemo(() => {
     const status = detail?.order.orderStatus ?? '';
     const steps = [
@@ -227,6 +243,10 @@ export function SupplierJobShowPage() {
   }, [detail?.order.orderStatus]);
 
   const handleAccept = () => {
+    if (acceptDeadlinePassed) {
+      message.warning('Acceptance window has expired');
+      return;
+    }
     if (pricePesos == null || pricePesos <= 0) {
       message.warning('Enter a final price in pesos');
       return;
@@ -592,14 +612,14 @@ export function SupplierJobShowPage() {
         </Col>
 
         <Col xs={24} lg={10}>
-          {(canAccept || canDecline) && (
+          {(acceptWindowOpen || canDecline) && (
             <Card
               title="Accept or decline"
               size="small"
               style={{ marginBottom: 16 }}
             >
               <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                {canAccept && (
+                {acceptWindowOpen && (
                   <>
                     <div>
                       <Title level={5} style={{ marginTop: 0 }}>
@@ -636,11 +656,20 @@ export function SupplierJobShowPage() {
                       size="large"
                       icon={<CheckCircleOutlined />}
                       loading={submitting}
+                      disabled={acceptDeadlinePassed}
                       onClick={handleAccept}
                     >
                       Accept job
                     </Button>
                   </>
+                )}
+                {canAccept && acceptDeadlinePassed && (
+                  <Alert
+                    type="error"
+                    showIcon
+                    message="Accept disabled — deadline passed"
+                    description="You can still decline, or wait for ops reassignment."
+                  />
                 )}
 
                 {canDecline && (
