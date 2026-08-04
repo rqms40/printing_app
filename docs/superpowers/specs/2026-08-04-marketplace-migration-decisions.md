@@ -195,15 +195,39 @@ Copied from the plan for implementers — do not weaken without an explicit deci
 
 ## Appendix A — Baseline test snapshot
 
-*(Task 0.2 fills this appendix with server/admin/mobile/e2e baseline results. Pre-existing failures are noted, not “fixed” inside unrelated phases.)*
+Captured on **2026-08-04** at `a22fdbb` (Task 0.1 complete) on Windows PowerShell, branch `GRIDGOv3`. Pre-existing failures are recorded only — do **not** “fix” them inside unrelated marketplace phases without a tracked issue.
 
-| Check | Command | Result | Date |
-|-------|---------|--------|------|
-| Server unit | `cd server && npm test` | _pending Task 0.2_ | |
-| Admin typecheck | `cd admin && npx tsc --noEmit` | _pending Task 0.2_ | |
-| Mobile analyze | `cd apps/mobile && fvm flutter analyze lib/` | _pending Task 0.2_ | |
-| Beta e2e contract | `cd e2e/mobile-web && MOBILE_WEB_E2E_NO_SERVER=1 npm test -- tests/beta-workflow.spec.ts` | _pending Task 0.2_ | |
+| Check | Command (PowerShell-adapted) | Result | Date |
+|-------|------------------------------|--------|------|
+| Server unit | `cd server; npm test -- --passWithNoTests` | **FAIL** — 90/93 suites passed; **4 tests failed** / 922 passed (926 total); ~127s | 2026-08-04 |
+| Admin typecheck | `cd admin; npx --no-install tsc --noEmit` | **PASS** — exit 0, no diagnostics | 2026-08-04 |
+| Mobile analyze | `cd apps/mobile; flutter analyze lib/` *(fvm not on PATH; used system Flutter)* | **PASS** — `No issues found!` (~218s after pub get) | 2026-08-04 |
+| Beta e2e contract | `cd e2e/mobile-web; $env:MOBILE_WEB_E2E_NO_SERVER=1; npm test -- tests/beta-workflow.spec.ts` | **PASS** — 14 passed, 2 skipped (opt-in live preflight); ~1.6s | 2026-08-04 |
+
+### Environment notes
+
+- Host: Windows / PowerShell; Flutter via `C:\flutter\bin\flutter.bat` (no `fvm` on PATH).
+- `e2e/mobile-web`: `node_modules` was missing; ran `npm ci` first, then the contract suite succeeded. Initial run failed with `'playwright' is not recognized`.
+- Unrelated dirty tree at capture time: `apps/Landing-page/src/App.tsx` (not part of this baseline commit).
+
+### Notable pre-existing server failures (do not fix in Phase 0–N without an issue)
+
+1. **`src/seed.spec.ts` — `isolates release signing from publication with job-level least privilege`**  
+   Regex expects two consecutive newlines between “Build signed release APK” and “Remove decoded signing material after build”; workflow YAML on this checkout does not match that gap (likely formatting / line-ending sensitivity).
+
+2. **`src/seed.spec.ts` — `seeds beta mode disabled after reset`**  
+   Expects literal multi-line substring `[\n    false,\n  ]` in `seed.ts`; current source formatting does not contain that exact string (seed still inserts `false` for `is_enabled`, but not in the expected layout).
+
+3. **`src/files/files.service.spec.ts` — disk-backed upload without multer buffer**  
+   `EPERM: operation not permitted, lstat` under `%TEMP%\gridgo-test-upload-*\upload.jpg` — Windows temp / file-lock behavior during cleanup.
+
+4. **`src/database/migration-config.spec.ts` — registers migrations path**  
+   Assertion expects `stringContaining('migrations/*{.ts,.js}')` but Windows resolves to an absolute path with backslashes (`C:\...\server\migrations\*{.ts,.js}`), so the deep-equality check fails on path separators.
+
+### Baseline one-liner for later comparison
+
+`server: 922/926 pass (4 fail, env/Windows-sensitive); admin tsc: pass; mobile analyze: pass; beta e2e contract: 14 pass / 2 skip.`
 
 ---
 
-*Decisions version 1.0 — 2026-08-04 — frozen for marketplace migration Phase 0.*
+*Decisions version 1.0 — 2026-08-04 — frozen for marketplace migration Phase 0. Appendix A filled by Task 0.2.*
