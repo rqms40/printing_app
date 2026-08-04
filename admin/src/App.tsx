@@ -26,6 +26,7 @@ import {
   RocketOutlined,
   MessageOutlined,
   PrinterOutlined,
+  AuditOutlined,
 } from "@ant-design/icons";
 
 import { gridTheme } from "@/config/theme";
@@ -59,6 +60,8 @@ import { DeliverySlotTemplatesPage } from '@/pages/delivery-slots/templates';
 import { ExternalDeliveriesPage } from '@/pages/external-deliveries';
 import { DeliverySettingsPage } from '@/pages/admin-settings/delivery';
 import { PrinterProfilePage } from '@/pages/admin-settings/printer';
+import { QaQueuePage } from '@/pages/qa/queue';
+import { QaWorkspacePage } from '@/pages/qa/workspace';
 
 function App() {
   return (
@@ -86,6 +89,12 @@ function App() {
                 list: "/orders",
                 show: "/orders/show/:id",
                 meta: { label: "Orders", icon: <ShoppingCartOutlined /> },
+              },
+              {
+                name: "ops-qa",
+                list: "/qa",
+                show: "/qa/workspace/:id",
+                meta: { label: "QA Queue", icon: <AuditOutlined /> },
               },
               {
                 name: "riders",
@@ -216,6 +225,10 @@ function App() {
                 <Route path="/orders">
                   <Route index element={<OrderList />} />
                   <Route path="show/:id" element={<OrderShow />} />
+                </Route>
+                <Route path="/qa">
+                  <Route index element={<QaQueuePage />} />
+                  <Route path="workspace/:id" element={<QaWorkspacePage />} />
                 </Route>
                 <Route path="/riders" element={<RiderList />} />
                 <Route path="/users">
