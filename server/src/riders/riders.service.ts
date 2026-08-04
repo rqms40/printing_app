@@ -42,6 +42,7 @@ import {
   DeliveryQueueUpdatedPayload,
   OrdersGateway,
 } from '../orders/orders.gateway';
+import { AuditService } from '../audit/audit.service';
 
 // Valid state transitions for delivery status
 const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
@@ -148,13 +149,19 @@ export class RidersService {
     private chatGateway: ChatGateway,
     private dataSource: DataSource,
     private dispatchPlanService: DispatchPlanService,
+    private auditService: AuditService,
   ) {}
 
   async assignOrderToRider(
     orderId: number,
     riderId: number,
     adminUserId: number,
+    actorRole?: string | null,
   ): Promise<RiderAssignmentResult> {
+    const auditActorRole =
+      actorRole === UserRole.OPS_ADMIN || actorRole === UserRole.SUPER_ADMIN
+        ? actorRole
+        : UserRole.OPS_ADMIN;
     const candidate = await this.dataSource
       .getRepository(Order)
       .findOneOrFail({ where: { id: orderId } });
@@ -243,13 +250,25 @@ export class RidersService {
             'Order changed during rider assignment',
           );
         }
+        const assignReason = `Admin assigned rider ${riderId}`;
         await manager.getRepository(OrderStatusHistory).insert({
           orderId,
           fromStatus: order.orderStatus,
           toStatus: OrderStatus.RIDER_ASSIGNED,
           changedByUserId: adminUserId,
-          notes: `Admin assigned rider ${riderId}`,
+          notes: assignReason,
         });
+        await this.auditService.recordOrderStatusTransition(
+          {
+            orderId,
+            fromStatus: order.orderStatus,
+            toStatus: OrderStatus.RIDER_ASSIGNED,
+            actorUserId: adminUserId,
+            actorRole: auditActorRole,
+            reason: assignReason,
+          },
+          manager,
+        );
 
         return { assignment: savedAssignment, riderProfile, previous: order };
       });
@@ -953,6 +972,17 @@ export class RidersService {
       changedByUserId: actorUserId,
       notes: reason,
     });
+    await this.auditService.recordOrderStatusTransition(
+      {
+        orderId: order.id,
+        fromStatus: order.orderStatus,
+        toStatus,
+        actorUserId,
+        actorRole: UserRole.RIDER,
+        reason,
+      },
+      manager,
+    );
     return order;
   }
 

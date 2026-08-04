@@ -623,7 +623,12 @@ describe('AdminController analytics', () => {
         controller.assignRider(42, 7, { user: { sub: 31 } }),
       ).resolves.toBe(order);
 
-      expect(ridersService.assignOrderToRider).toHaveBeenCalledWith(42, 7, 31);
+      expect(ridersService.assignOrderToRider).toHaveBeenCalledWith(
+        42,
+        7,
+        31,
+        null,
+      );
       expect(assignmentsRepo.save).not.toHaveBeenCalled();
       expect(ordersService.updateStatus).not.toHaveBeenCalled();
     });
@@ -656,7 +661,12 @@ describe('AdminController analytics', () => {
         controller.assignRider(42, 7, { user: { sub: 31 } }),
       ).resolves.toBe(savedOrder);
 
-      expect(ridersService.assignOrderToRider).toHaveBeenCalledWith(42, 7, 31);
+      expect(ridersService.assignOrderToRider).toHaveBeenCalledWith(
+        42,
+        7,
+        31,
+        null,
+      );
       expect(ordersRepo.update).not.toHaveBeenCalled();
       expect(ordersGateway.notifyOrderUpdate).not.toHaveBeenCalled();
       expect(ordersGateway.notifyRiderAssignment).toHaveBeenCalledWith(70, {
@@ -717,7 +727,12 @@ describe('AdminController analytics', () => {
         controller.assignRider(42, 7, { user: { sub: 31 } }),
       ).rejects.toThrow(BadRequestException);
 
-      expect(ridersService.assignOrderToRider).toHaveBeenCalledWith(42, 7, 31);
+      expect(ridersService.assignOrderToRider).toHaveBeenCalledWith(
+        42,
+        7,
+        31,
+        null,
+      );
       expect(ordersGateway.notifyRiderAssignment).not.toHaveBeenCalled();
     });
   });

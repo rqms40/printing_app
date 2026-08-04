@@ -29,6 +29,7 @@ import { DispatchPlanService } from './dispatch-plan.service';
 import { DispatchPlanStatus } from './entities/dispatch-plan.entity';
 import { DispatchStopStatus } from './entities/dispatch-plan-stop.entity';
 import { OrdersGateway } from '../orders/orders.gateway';
+import { AuditService } from '../audit/audit.service';
 
 describe('RidersService', () => {
   let service: RidersService;
@@ -63,6 +64,7 @@ describe('RidersService', () => {
     advanceStop: jest.Mock;
     skipStopIfPlanned: jest.Mock;
   };
+  let auditService: { recordOrderStatusTransition: jest.Mock };
   const validSignatureProof = JSON.stringify({
     format: 'gridgo-signature-v1',
     points: [
@@ -217,6 +219,9 @@ describe('RidersService', () => {
       advanceStop: jest.fn().mockResolvedValue(undefined),
       skipStopIfPlanned: jest.fn().mockResolvedValue(undefined),
     };
+    auditService = {
+      recordOrderStatusTransition: jest.fn().mockResolvedValue({ id: 1 }),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -233,6 +238,7 @@ describe('RidersService', () => {
         { provide: ChatGateway, useValue: chatGateway },
         { provide: DataSource, useValue: dataSource },
         { provide: DispatchPlanService, useValue: dispatchPlanService },
+        { provide: AuditService, useValue: auditService },
       ],
     }).compile();
 
@@ -348,11 +354,75 @@ describe('RidersService', () => {
         changedByUserId: 7,
         notes: `Admin assigned rider ${rider.id}`,
       });
+      expect(auditService.recordOrderStatusTransition).toHaveBeenCalledWith(
+        {
+          orderId: readyOrder.id,
+          fromStatus: OrderStatus.READY_FOR_DISPATCH,
+          toStatus: OrderStatus.RIDER_ASSIGNED,
+          actorUserId: 7,
+          actorRole: UserRole.OPS_ADMIN,
+          reason: `Admin assigned rider ${rider.id}`,
+        },
+        expect.anything(),
+      );
+      expect(
+        auditService.recordOrderStatusTransition.mock.invocationCallOrder[0],
+      ).toBeGreaterThan(historyRepo.insert.mock.invocationCallOrder[0]);
       expect(result).toMatchObject({
         assignment: savedAssignment,
         riderProfile: rider,
         order: { orderStatus: OrderStatus.RIDER_ASSIGNED },
       });
+    });
+
+    it('records super_admin actor role on assign when provided from JWT', async () => {
+      const readyOrder = {
+        id: 1,
+        orderId: 'ORD-1',
+        batchOrderId: null,
+        deliveryOption: 'delivery',
+        orderStatus: OrderStatus.READY_FOR_DISPATCH,
+      } as Order;
+      const rider = {
+        ...mockProfile,
+        userId: 21,
+        user: {
+          id: 21,
+          role: UserRole.RIDER,
+          isActive: true,
+        } as User,
+      } as RiderProfile;
+      orderRepo.findOneOrFail.mockResolvedValue(readyOrder);
+      orderRepo.update.mockResolvedValue({ affected: 1 } as never);
+      assignmentRepo.findOne.mockResolvedValue(null);
+      profileRepo.findOne.mockResolvedValue(rider);
+      assignmentRepo.save.mockResolvedValue({
+        id: 301,
+        orderId: readyOrder.id,
+        riderId: rider.id,
+        status: DeliveryStatus.ASSIGNED,
+        isCurrent: true,
+      } as DeliveryAssignment);
+      ordersService.publishStatusUpdate.mockResolvedValue({
+        ...readyOrder,
+        orderStatus: OrderStatus.RIDER_ASSIGNED,
+      } as Order);
+
+      await service.assignOrderToRider(
+        readyOrder.id,
+        rider.id,
+        7,
+        UserRole.SUPER_ADMIN,
+      );
+
+      expect(auditService.recordOrderStatusTransition).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actorRole: UserRole.SUPER_ADMIN,
+          actorUserId: 7,
+          toStatus: OrderStatus.RIDER_ASSIGNED,
+        }),
+        expect.anything(),
+      );
     });
 
     it('returns the committed assignment when post-commit customer publication fails', async () => {
@@ -687,6 +757,20 @@ describe('RidersService', () => {
         changedByUserId: mockProfile.userId,
         notes: 'Rider updated delivery to picked_up',
       });
+      expect(auditService.recordOrderStatusTransition).toHaveBeenCalledWith(
+        {
+          orderId: assignedOrder.id,
+          fromStatus: OrderStatus.RIDER_ASSIGNED,
+          toStatus: OrderStatus.PICKED_UP,
+          actorUserId: mockProfile.userId,
+          actorRole: UserRole.RIDER,
+          reason: 'Rider updated delivery to picked_up',
+        },
+        expect.anything(),
+      );
+      expect(
+        auditService.recordOrderStatusTransition.mock.invocationCallOrder[0],
+      ).toBeGreaterThan(historyRepo.insert.mock.invocationCallOrder[0]);
       expect(ordersService.updateStatus).not.toHaveBeenCalled();
       expect(ordersService.publishStatusUpdate).toHaveBeenCalledWith(
         assignedOrder,
@@ -839,6 +923,17 @@ describe('RidersService', () => {
           toStatus: OrderStatus.READY_FOR_DISPATCH,
           notes: 'Rider declined assignment: Too far',
         }),
+      );
+      expect(auditService.recordOrderStatusTransition).toHaveBeenCalledWith(
+        {
+          orderId: assignedOrder.id,
+          fromStatus: OrderStatus.RIDER_ASSIGNED,
+          toStatus: OrderStatus.READY_FOR_DISPATCH,
+          actorUserId: mockProfile.userId,
+          actorRole: UserRole.RIDER,
+          reason: 'Rider declined assignment: Too far',
+        },
+        expect.anything(),
       );
       expect(ordersGateway.notifyRiderAssignment).toHaveBeenCalledWith(
         mockProfile.userId,

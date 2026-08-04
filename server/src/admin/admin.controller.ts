@@ -783,7 +783,12 @@ export class AdminController {
       order,
       assignment: savedAssignment,
       riderProfile,
-    } = await this.ridersService.assignOrderToRider(id, riderId, req.user.sub);
+    } = await this.ridersService.assignOrderToRider(
+      id,
+      riderId,
+      req.user.sub,
+      req.user.role ?? null,
+    );
 
     try {
       await Promise.resolve(
