@@ -27,6 +27,11 @@ import { PrinterProfileModule } from './printer-profile/printer-profile.module';
 import { SupportTicketsModule } from './support-tickets/support-tickets.module';
 import { HomeFeedModule } from './home-feed/home-feed.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
+import { QualityModule } from './quality/quality.module';
+import { MatchingModule } from './matching/matching.module';
+import { IssuesModule } from './issues/issues.module';
+import { PayoutsModule } from './payouts/payouts.module';
+import { AuditModule } from './audit/audit.module';
 import {
   createTypeOrmOptions,
   initializeDataSourceWithPreSyncNormalization,
@@ -83,6 +88,11 @@ import {
     SupportTicketsModule,
     HomeFeedModule,
     SuppliersModule,
+    QualityModule,
+    MatchingModule,
+    IssuesModule,
+    PayoutsModule,
+    AuditModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
