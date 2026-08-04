@@ -21,6 +21,7 @@ import 'package:printing_app/shared/widgets/status_badge.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/file_preview_sheet.dart';
 import 'package:printing_app/features/customer/orders/widgets/admin_status_banner.dart';
+import 'package:printing_app/features/customer/orders/widgets/marketplace_order_actions.dart';
 import 'package:printing_app/features/customer/tracking/widgets/rider_info_card.dart';
 import 'package:printing_app/utils/formatters.dart';
 
@@ -163,6 +164,17 @@ class OrderDetailScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
             ],
+
+            // --- Marketplace QA / payment actions (Phases 3–4) ---
+            MarketplaceOrderActions(order: order)
+                .animate()
+                .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
+            if (order.orderStatus == OrderStatus.clientCorrection ||
+                order.orderStatus == OrderStatus.proofApproval ||
+                order.orderStatus == OrderStatus.awaitingPayment ||
+                order.orderStatus == OrderStatus.supplierAccepted)
+              const SizedBox(height: AppSpacing.md),
 
             // --- Status Timeline ---
             AppCard(

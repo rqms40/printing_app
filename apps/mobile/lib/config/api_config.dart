@@ -7,14 +7,18 @@ import 'package:flutter/foundation.dart';
 // Web (LAN access): when you open the app at e.g. http://192.168.40.201:8080,
 // API calls automatically target http://192.168.40.201:3000 — no rebuild needed.
 //
-// Mobile / override: keep a local apps/mobile/dart_defines.json (gitignored):
-//   { "SERVER_URL": "http://192.168.x.x:3000" }
+// Local native run (recommended so flutter run hits Docker API):
+//   flutter run --dart-define-from-file=dart_defines.json
+// dart_defines.json example:
+//   { "SERVER_URL": "http://127.0.0.1:3000" }   // desktop / iOS simulator
+//   { "SERVER_URL": "http://10.0.2.2:3000" }    // Android emulator
 //
-// Build / run with override:
-//   flutter build web --release --no-tree-shake-icons --dart-define-from-file=dart_defines.json
-//   flutter run -d chrome --dart-define-from-file=dart_defines.json
+// Without dart_defines, native defaults are:
+//   Android → http://10.0.2.2:3000 (host machine from emulator)
+//   else    → http://127.0.0.1:3000
 
 const String kDefaultServerUrl = 'http://127.0.0.1:3000';
+const String kAndroidEmulatorServerUrl = 'http://10.0.2.2:3000';
 const int kDefaultApiPort = 3000;
 
 const String _compileTimeServerUrl = String.fromEnvironment(
@@ -27,13 +31,18 @@ const String _compileTimeServerUrl = String.fromEnvironment(
 /// Priority:
 /// 1. `--dart-define=SERVER_URL=...` (or dart_defines.json) at build time
 /// 2. On web: same host as the page, API port [kDefaultApiPort]
-/// 3. [kDefaultServerUrl]
+/// 3. Android emulator host loopback [kAndroidEmulatorServerUrl]
+/// 4. [kDefaultServerUrl]
 String get kServerUrl {
   if (_compileTimeServerUrl.isNotEmpty) {
     return _compileTimeServerUrl;
   }
   if (kIsWeb) {
     return _webServerUrl();
+  }
+  // defaultTargetPlatform is safe on native (not web).
+  if (defaultTargetPlatform == TargetPlatform.android) {
+    return kAndroidEmulatorServerUrl;
   }
   return kDefaultServerUrl;
 }

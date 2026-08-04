@@ -34,8 +34,8 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
         className="fixed top-0 left-0 right-0 z-[60] px-8 py-4 flex items-center justify-between"
       >
         {/* Logo */}
-        <a href="#hero" className="flex items-center gap-3 cursor-pointer px-5 py-2.5 rounded-full border border-black/10 dark:border-white/10 bg-transparent backdrop-blur-md text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-500">
-          <div className="grid grid-cols-3 gap-1">
+        <a href="#hero" className="flex items-center gap-3 cursor-pointer px-5 py-2.5 rounded-full border border-black/10 dark:border-white/10 bg-transparent backdrop-blur-md text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/5 transition duration-500">
+          <div className="grid grid-cols-3 gap-1 shrink-0">
             <div className="w-1.5 h-1.5 bg-black dark:bg-white rounded-full"></div>
             <div className="w-1.5 h-1.5 bg-black dark:bg-white rounded-full"></div>
             <div className="w-1.5 h-1.5 bg-[var(--color-primary)] rounded-full"></div>
@@ -52,7 +52,7 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
         </a>
 
         {/* Center Nav */}
-        <div className={`hidden md:flex rounded-full px-6 py-2.5 items-center gap-8 text-sm font-medium absolute left-1/2 -translate-x-1/2 border transition-all duration-500 ${isScrolled ? 'bg-white dark:bg-black/60 backdrop-blur-md border-black/10 dark:border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}>
+        <div className={`hidden md:flex rounded-full px-6 py-2.5 items-center gap-8 text-sm font-medium absolute left-1/2 -translate-x-1/2 border transition duration-500 ${isScrolled ? 'bg-white dark:bg-black/60 backdrop-blur-md border-black/10 dark:border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}>
           <a href="#features" className="hover:text-[var(--color-primary)] transition-colors">Features</a>
           <a href="#process" className="hover:text-[var(--color-primary)] transition-colors">How it Works</a>
           <a href="#ecosystem" className="hover:text-[var(--color-primary)] transition-colors">Ecosystem</a>
@@ -61,27 +61,21 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
         </div>
 
         {/* Right Nav */}
-        {/* <div className={`hidden md:flex rounded-full items-center text-sm font-medium overflow-hidden p-1 border transition-all duration-500 ${isScrolled ? 'bg-white dark:bg-black/60 backdrop-blur-md border-black/10 dark:border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}>
-          <button className="px-6 py-2 hover:bg-white/10 rounded-full transition-colors">Log In</button>
-          <button className="px-6 py-2 bg-white text-black rounded-full hover:bg-gray-200 transition-colors">Sign Up</button>
-        </div> */}
-
-
         <div className="flex items-center gap-3 z-50">
-          <a href="#download" className="hidden md:flex items-center px-6 py-2 bg-[var(--color-primary)] text-black font-bold text-sm rounded-full hover:brightness-110 transition-all shadow-[0_0_15px_rgba(255,222,88,0.3)]">
+          <a href="#download" className="hidden md:flex items-center px-6 py-2 bg-[var(--color-primary)] text-black font-bold text-sm rounded-full hover:brightness-110 transition shadow-[0_0_15px_rgba(255,222,88,0.3)]">
             Download
           </a>
 
           {/* Dark Mode Toggle */}
           <button
             onClick={toggleDarkMode}
-            className={`p-2 rounded-full relative border transition-all duration-500 ${isScrolled ? 'bg-white/80 dark:bg-black/60 backdrop-blur-md border-black/10 dark:border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}
+            className={`p-2 rounded-full relative border transition duration-500 ${isScrolled ? 'bg-white/80 dark:bg-black/60 backdrop-blur-md border-black/10 dark:border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}
           >
             {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
           </button>
           {/* Mobile Hamburger Button */}
           <button
-            className={`md:hidden p-2 rounded-full relative border transition-all duration-500 ${isScrolled ? 'bg-white dark:bg-black/60 backdrop-blur-md border-black/10 dark:border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}
+            className={`md:hidden p-2 rounded-full relative border transition duration-500 ${isScrolled ? 'bg-white dark:bg-black/60 backdrop-blur-md border-black/10 dark:border-white/10' : 'bg-transparent border-transparent backdrop-blur-none'}`}
             onClick={() => setIsOpen(!isOpen)}
           >
             {isOpen ? <X size={24} /> : <Menu size={24} />}
@@ -117,17 +111,17 @@ function Navbar({ isDarkMode, toggleDarkMode }: { isDarkMode: boolean, toggleDar
 
 function HeroSection({ isDarkMode }: { isDarkMode?: boolean }) {
   return (
-    <section id="hero" className="h-[100vh] flex flex-col items-center justify-center relative z-10 bg-map bg-cover bg-center overflow-hidden" style={{ backgroundImage: `url(${isDarkMode ? "/Dark_route_animation.gif" : "/Light-lights-route-animation.gif"})` }}>
+    <section id="hero" className="min-h-[100vh] flex flex-col items-center justify-center relative z-10 bg-map bg-cover bg-center overflow-hidden" style={{ backgroundImage: `url(${isDarkMode ? "/Dark_route_animation.gif" : "/Light-lights-route-animation.gif"})` }}>
       <div className="absolute inset-0 bg-white/60 dark:bg-black/40 backdrop-blur-sm dark:backdrop-blur-[3px] z-0 pointer-events-none" />
 
       {/* Content wrapper */}
-      <div className="relative z-10 flex flex-col items-center text-center px-4 w-full h-full pt-32">
+      <div className="relative z-10 flex flex-col items-center text-center px-4 w-full h-full pt-24 md:pt-32">
         {/* Logo and Tagline */}
         <motion.div
           initial={{ opacity: 0, y: 20, filter: 'blur(10px)' }}
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           transition={{ duration: 0.8 }}
-          className="flex flex-col items-center mb-8"
+          className="flex flex-col items-center mb-6 md:mb-8"
         >
           {/* 3x3 Grid Logo */}
           <div className="grid grid-cols-3 gap-1.5 mb-2">
@@ -143,7 +137,7 @@ function HeroSection({ isDarkMode }: { isDarkMode?: boolean }) {
           </div>
           <span className="text-4xl font-black tracking-widest uppercase mt-2">GRID<span className="text-[var(--color-primary)]">GO</span></span>
           <p className="text-[11px] md:text-sm tracking-[0.3em] uppercase mt-3 font-semibold text-gray-800 dark:text-gray-200">
-            MAPPING THE FUTURE OF PRINTING.
+            DAVAO MANAGED PRINT MARKETPLACE
           </p>
         </motion.div>
 
@@ -155,10 +149,10 @@ function HeroSection({ isDarkMode }: { isDarkMode?: boolean }) {
           className="max-w-3xl flex flex-col items-center"
         >
           <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-[var(--color-primary)] mb-6 tracking-tight">
-            Design. Tap. Print.
+            Request. Reviewed. Delivered.
           </h1>
-          <p className="text-lg md:text-xl text-gray-700 dark:text-gray-300 max-w-2xl mx-auto mb-10 font-medium leading-relaxed">
-            Send your files from the app straight to our printers. We'll handle the printing and deliver it to your door so you don't have to leave your seat.
+          <p className="text-lg md:text-xl text-gray-700 dark:text-gray-300 max-w-2xl mx-auto mb-8 md:mb-10 font-medium leading-relaxed">
+            GRIDGO is a managed printing marketplace for businesses, schools, and organizations in Davao City — structured print requests, artwork QA, verified suppliers, Pilot Credits or eligible COD, and tracked rider delivery.
           </p>
         </motion.div>
 
@@ -167,12 +161,12 @@ function HeroSection({ isDarkMode }: { isDarkMode?: boolean }) {
           initial={{ opacity: 0, y: 100, filter: 'blur(10px)' }}
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
           transition={{ duration: 1, delay: 0.4, ease: "easeOut" }}
-          className="mt-auto relative w-[280px] md:w-[360px] h-[350px] md:h-[450px]"
+          className="mt-auto relative w-[320px] md:w-[550px] lg:w-[750px] h-[400px] md:h-[600px] lg:h-[750px]"
         >
           <img
             src="/GIRDGO_PHONE.png"
             alt="GRIDGO App"
-            className="absolute bottom-0 left-0 w-full h-full object-contain object-bottom drop-shadow-[0_0_40px_rgba(255,222,88,0.15)]"
+            className="absolute bottom-0 left-0 w-full h-full object-contain object-bottom drop-shadow-[0_0_40px_rgba(255,222,88,0.15)] scale-160 lg:scale-130 origin-bottom"
           />
         </motion.div>
       </div>
@@ -230,31 +224,31 @@ function FeaturesSection() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-4 mb-10">
           <FeatureCard
             icon={HardDriveUploadIcon}
-            title="One-Tap Upload"
-            desc="No more carrying USB sticks or emailing files to yourself. Directly upload your documents or 3D designs from your phone or cloud storage in seconds."
+            title="Structured print requests"
+            desc="Upload final artwork with product specs — dimensions, material, quantity, deadline, and Davao delivery address — no Messenger file chaos."
           />
           <FeatureCard
             icon={TruckIcon}
-            title="Live Order Tracking"
-            desc="Watch your project move from the printer to the delivery rider in real-time. You'll know exactly when your package is arriving, just like a food delivery app."
+            title="Tracked delivery"
+            desc="After pickup, follow the active rider trip with live location. Tracking starts at confirmed pickup and stops when the job is delivered."
           />
           <FeatureCard
             icon={ListIcon}
-            title="The Queue"
-            desc="Need a document and a 3D model at the same time? Add different types of prints to a single order and have them all delivered in one go to save on shipping."
+            title="Artwork QA gate"
+            desc="Supplier Operations reviews every job for bleed, resolution, and feasibility before matching a verified printer. Corrections stay in one accountable thread."
           />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 max-w-4xl mx-auto">
           <FeatureCard
             icon={TimerIcon}
-            title="24/7 App Operations"
-            desc="Inspiration doesn't have a closing time. Whether it's 2 PM or 2 AM, you can upload your files and start the process. Our system works 24/7 so your project never has to wait for a shop to open."
+            title="Verified suppliers"
+            desc="GRIDGO matches vetted Davao print partners. You don't bid or browse an open directory — you get a committed price and promised date."
           />
           <FeatureCard
             icon={MessageCircleIcon}
-            title="Live Support & Tracking"
-            desc="From upload to doorstep, help is just a tap away. Chat live with your delivery rider for drop-off updates, or message our support team anytime. We bridge the gap to your print."
+            title="Pilot Credits & COD"
+            desc="The free pilot uses Ops-granted Pilot Credits (test credits, not a wallet) and limited Cash on Delivery up to ₱1,500 for eligible verified clients."
           />
         </div>
       </div>
@@ -277,9 +271,9 @@ function HowItWorksSection() {
             className="flex flex-col items-center"
           >
             <div className="text-7xl md:text-8xl font-bold text-gray-500 mb-6 tracking-tighter">01</div>
-            <h3 className="text-2xl font-bold mb-4">Upload</h3>
+            <h3 className="text-2xl font-bold mb-4">Request</h3>
             <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed max-w-sm mx-auto">
-              No more carrying USB sticks or emailing files to yourself. Directly upload your documents or 3D designs from your phone or cloud storage in seconds.
+              Place a structured print request and upload final artwork from the GRIDGO client app — flyers, tarps, stickers, cards, apparel, and school materials.
             </p>
           </motion.div>
 
@@ -291,9 +285,9 @@ function HowItWorksSection() {
             className="flex flex-col items-center"
           >
             <div className="text-7xl md:text-8xl font-bold text-gray-500 mb-6 tracking-tighter">02</div>
-            <h3 className="text-2xl font-bold mb-4">Print</h3>
+            <h3 className="text-2xl font-bold mb-4">QA &amp; match</h3>
             <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed max-w-sm mx-auto">
-              Select your printing preferences, paper types, or 3D materials. Our system instantly routes your files directly to our high-quality printing hubs.
+              Operations reviews artwork and print feasibility, then matches a verified supplier who accepts a final price and promised date.
             </p>
           </motion.div>
 
@@ -305,9 +299,9 @@ function HowItWorksSection() {
             className="flex flex-col items-center"
           >
             <div className="text-7xl md:text-8xl font-bold text-gray-500 mb-6 tracking-tighter">03</div>
-            <h3 className="text-2xl font-bold mb-4">Receive</h3>
+            <h3 className="text-2xl font-bold mb-4">Pay &amp; deliver</h3>
             <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed max-w-sm mx-auto">
-              Watch your project move from the printer to the delivery rider in real-time. You'll know exactly when your package is arriving at your door.
+              Authorize Pilot Credits or eligible COD, production and self-QC run, then a rider picks up and delivers with proof and a 24-hour issue window.
             </p>
           </motion.div>
 
@@ -524,6 +518,13 @@ function TeamSection({ isDarkMode }: { isDarkMode?: boolean }) {
           name="Rovenado Nesta Villotes"
           quote="People are not driven by past causes but move toward goals that they themselves set."
         />
+        <TeamMember
+          image="/Justin.png.png"
+          role="Marketing Lead"
+          name="Justin Vince Oroña"
+          quote="Make them click, make it stick."
+          reverse={true}
+        />
       </div>
     </section>
   );
@@ -642,7 +643,7 @@ function FooterSection() {
 
           <div className="text-gray-400 text-[13px] font-mono space-y-3 mb-12">
             <p>GRIDGO Team</p>
-            <p className="leading-relaxed">The essential digital printing partner in the global market, making the transition from digital design to physical reality effortless.</p>
+            <p className="leading-relaxed">Davao City managed printing marketplace — structured requests, artwork QA, verified suppliers, and tracked delivery.</p>
           </div>
 
           <p className="text-[#666] text-[11px] tracking-widest font-mono uppercase">SUPPORT@GRIDGO.APP</p>
@@ -685,7 +686,7 @@ function FooterSection() {
       {/* Bottom bar */}
       <div className="max-w-[1100px] mx-auto flex flex-col md:flex-row justify-between items-end gap-6 pt-10 text-[#666] text-[11px] font-mono tracking-wide">
         <p className="max-w-[400px] leading-relaxed">
-          A modern platform for digital printing combining precision technology, high-quality output, and seamless logistics.
+          Managed print marketplace for Davao businesses and schools — QA, verified suppliers, Pilot Credits, and rider delivery.
         </p>
         <div className="flex gap-8 uppercase tracking-widest">
           <span>&copy; 2026 GRIDGO</span>
