@@ -19,14 +19,14 @@ export class ExternalDeliveriesController {
 
   @Get('admin/external-deliveries')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   async list(@Query('status') status?: string) {
     return this.ordersService.listExternalDeliveries(status);
   }
 
   @Patch('admin/external-deliveries/:id/status')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   async updateStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: { status: 'pending_admin' | 'booked' | 'delivered' },

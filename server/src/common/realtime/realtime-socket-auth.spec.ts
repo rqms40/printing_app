@@ -13,11 +13,11 @@ describe('realtime socket authentication', () => {
   it('accepts only an active database identity matching the signed role', async () => {
     jwtService.verifyAsync.mockResolvedValue({
       sub: 10,
-      role: UserRole.CUSTOMER,
+      role: UserRole.CLIENT,
     });
     usersService.findSocketIdentity.mockResolvedValue({
       id: 10,
-      role: UserRole.CUSTOMER,
+      role: UserRole.CLIENT,
       isActive: true,
     });
     const socket = makeSocket();
@@ -28,20 +28,20 @@ describe('realtime socket authentication', () => {
         usersService as any,
         socket as any,
       ),
-    ).resolves.toMatchObject({ id: 10, role: UserRole.CUSTOMER });
-    expect(socket.data).toEqual({ userId: 10, role: UserRole.CUSTOMER });
+    ).resolves.toMatchObject({ id: 10, role: UserRole.CLIENT });
+    expect(socket.data).toEqual({ userId: 10, role: UserRole.CLIENT });
   });
 
   it.each([
     [undefined, null],
     [0, null],
     [10, null],
-    [10, { id: 10, role: UserRole.CUSTOMER, isActive: false }],
+    [10, { id: 10, role: UserRole.CLIENT, isActive: false }],
     [10, { id: 10, role: UserRole.RIDER, isActive: true }],
   ])('rejects invalid or unauthorized identity %#', async (sub, identity) => {
     jwtService.verifyAsync.mockResolvedValue({
       sub,
-      role: UserRole.CUSTOMER,
+      role: UserRole.CLIENT,
     });
     usersService.findSocketIdentity.mockResolvedValue(identity);
 
@@ -57,11 +57,11 @@ describe('realtime socket authentication', () => {
   it('reloads activity and role before an existing socket action', async () => {
     usersService.findSocketIdentity.mockResolvedValue({
       id: 10,
-      role: UserRole.CUSTOMER,
+      role: UserRole.CLIENT,
       isActive: false,
     });
     const socket = makeSocket();
-    socket.data = { userId: 10, role: UserRole.CUSTOMER };
+    socket.data = { userId: 10, role: UserRole.CLIENT };
 
     await expect(
       reauthorizeRealtimeSocket(usersService as any, socket as any),

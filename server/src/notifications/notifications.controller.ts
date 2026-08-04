@@ -29,35 +29,35 @@ export class NotificationsController {
 
   @Get('marketing')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   getMarketingNotifications() {
     return this.notificationsService.getMarketingNotifications();
   }
 
   @Post('marketing')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   createMarketingNotification(@Body() data: any) {
     return this.notificationsService.createMarketingNotification(data);
   }
 
   @Patch('marketing/:id')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   updateMarketingNotification(@Param('id') id: string, @Body() data: any) {
     return this.notificationsService.updateMarketingNotification(+id, data);
   }
 
   @Delete('marketing/:id')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   deleteMarketingNotification(@Param('id') id: string) {
     return this.notificationsService.deleteMarketingNotification(+id);
   }
 
   @Post('marketing/:id/send')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   sendMarketingNotification(@Param('id') id: string) {
     return this.marketingSchedulerService.sendNotificationById(+id);
   }

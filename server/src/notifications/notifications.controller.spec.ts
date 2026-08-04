@@ -34,7 +34,7 @@ describe('NotificationsController', () => {
       'sendMarketingNotification',
     ]) {
       const handler = handlerFor(name);
-      expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual(['admin']);
+      expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual(['ops_admin', 'super_admin']);
       const guards = Reflect.getMetadata('__guards__', handler) as unknown[];
       expect(guards).toContain(RolesGuard);
     }

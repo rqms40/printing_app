@@ -39,7 +39,11 @@ export class OrdersController {
   async getOrder(@Request() req: RequestWithUser, @Param('id') id: number) {
     const order = await this.ordersService.findById(id);
     if (!order) throw new NotFoundException('Order not found');
-    if (order.userId !== req.user.sub && req.user.role !== 'admin') {
+    if (
+      order.userId !== req.user.sub &&
+      req.user.role !== 'ops_admin' &&
+      req.user.role !== 'super_admin'
+    ) {
       throw new ForbiddenException('You can only view your own orders');
     }
     return order;
@@ -112,7 +116,7 @@ export class OrdersController {
   }
 
   @Patch(':id/status')
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   @UseGuards(RolesGuard)
   updateStatus(
     @Request() req: RequestWithUser,
@@ -135,7 +139,7 @@ export class OrdersController {
 
   @Patch('admin/orders/:id/manual-status')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   async updateManualStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateManualStatusDto,

@@ -11,7 +11,7 @@ describe('CreditsController authorization metadata', () => {
     it(`restricts ${method} to admins`, () => {
       expect(
         Reflect.getMetadata(ROLES_KEY, CreditsController.prototype[method]),
-      ).toEqual(['admin']);
+      ).toEqual(['ops_admin', 'super_admin']);
     });
   }
 });

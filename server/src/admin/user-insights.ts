@@ -91,7 +91,7 @@ type Bucket = {
 };
 
 const PAID_STATUS = 'paid';
-const CUSTOMER_ROLE = UserRole.CUSTOMER;
+const CUSTOMER_ROLE = UserRole.CLIENT;
 
 const PROFILE_CATEGORY_LABELS: Record<string, string> = {
   student: 'Student',

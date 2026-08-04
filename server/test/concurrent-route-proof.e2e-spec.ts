@@ -187,7 +187,7 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
         email: emails.admin,
         passwordHash: 'not-used',
         fullName: 'Route E2E Admin',
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       }),
     );
@@ -580,7 +580,7 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
         email: customerEmail(stop),
         passwordHash: 'not-used',
         fullName: `Route ${stop.label} Customer`,
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: true,
       }),
     );

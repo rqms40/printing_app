@@ -106,15 +106,17 @@ describe("BetaModePage", () => {
     expect(JSON.stringify(confirmation)).not.toMatch(/re-login|log back in/i);
   });
 
-  it("offers manual beta enrollment only to customer identities", () => {
+  it("offers manual beta enrollment only to client identities", () => {
     expect(
       eligibleBetaEnrollUsers([
-        { id: 1, email: "mark@example.test", full_name: "Mark", role: "customer" },
+        { id: 1, email: "mark@example.test", full_name: "Mark", role: "client" },
         { id: 2, email: "juan@example.test", full_name: "Juan", role: "rider" },
-        { id: 3, email: "admin@example.test", full_name: "Admin", role: "admin" },
+        { id: 3, email: "admin@example.test", full_name: "Admin", role: "ops_admin" },
+        { id: 4, email: "legacy@example.test", full_name: "Legacy", role: "customer" },
       ]),
     ).toEqual([
-      { id: 1, email: "mark@example.test", full_name: "Mark", role: "customer" },
+      { id: 1, email: "mark@example.test", full_name: "Mark", role: "client" },
+      { id: 4, email: "legacy@example.test", full_name: "Legacy", role: "customer" },
     ]);
   });
 

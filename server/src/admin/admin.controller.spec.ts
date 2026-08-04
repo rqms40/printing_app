@@ -726,7 +726,7 @@ describe('AdminController analytics', () => {
           fullName: 'Maria Santos',
           email: 'maria@gridgo.ph',
           phoneNumber: '+639171234567',
-          role: 'customer',
+          role: 'client',
           isActive: true,
           isProfileComplete: true,
           profileCategory: 'student',

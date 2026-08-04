@@ -14,9 +14,23 @@ import {
 } from '../profile.constants';
 
 export enum UserRole {
-  CUSTOMER = 'customer',
+  CLIENT = 'client',
+  SUPPLIER = 'supplier',
   RIDER = 'rider',
-  ADMIN = 'admin',
+  OPS_ADMIN = 'ops_admin',
+  SUPER_ADMIN = 'super_admin',
+}
+
+/** Ops Admin and Super Admin — former single `admin` capability surface. */
+export const ADMIN_ROLES: readonly UserRole[] = [
+  UserRole.OPS_ADMIN,
+  UserRole.SUPER_ADMIN,
+] as const;
+
+export function isAdminRole(
+  role: string | UserRole | null | undefined,
+): boolean {
+  return role === UserRole.OPS_ADMIN || role === UserRole.SUPER_ADMIN;
 }
 
 @Entity('users')
@@ -82,7 +96,7 @@ export class User {
   })
   printingPreferences: PrintingPreference[] | null;
 
-  @Column({ type: 'enum', enum: UserRole, default: UserRole.CUSTOMER })
+  @Column({ type: 'enum', enum: UserRole, default: UserRole.CLIENT })
   role: UserRole;
 
   @Column({ name: 'is_profile_complete', default: false })

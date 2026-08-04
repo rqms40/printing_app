@@ -164,7 +164,7 @@ async function seed() {
         PrintingPreference.PLOTTING_BLUEPRINTS,
         PrintingPreference.HIGH_RES_COLOR,
       ].join(','),
-      role: 'customer',
+      role: 'client',
       is_profile_complete: true,
       is_active: true,
     },
@@ -186,7 +186,7 @@ async function seed() {
     {
       email: 'admin@gridgo.ph',
       password_hash: adminPasswordHash,
-      full_name: 'Admin User',
+      full_name: 'Ops Admin',
       phone_number: '+639191234567',
       gender: 'male',
       profile_category: ProfileCategory.PROFESSIONAL,
@@ -194,7 +194,37 @@ async function seed() {
       course: null,
       organization: 'Grid Print HQ',
       printing_preferences: [PrintingPreference.MARKETING_MATERIALS].join(','),
-      role: 'admin',
+      role: 'ops_admin',
+      is_profile_complete: true,
+      is_active: true,
+    },
+    {
+      email: 'superadmin@gridgo.ph',
+      password_hash: adminPasswordHash,
+      full_name: 'Super Admin',
+      phone_number: '+639192234567',
+      gender: 'female',
+      profile_category: ProfileCategory.PROFESSIONAL,
+      profile_field: ProfileField.BUSINESS_CORPORATE,
+      course: null,
+      organization: 'Grid Print HQ',
+      printing_preferences: [PrintingPreference.MARKETING_MATERIALS].join(','),
+      role: 'super_admin',
+      is_profile_complete: true,
+      is_active: true,
+    },
+    {
+      email: 'supplier@gridgo.ph',
+      password_hash: customerPasswordHash,
+      full_name: 'Demo Supplier',
+      phone_number: '+639193234567',
+      gender: 'male',
+      profile_category: ProfileCategory.PROFESSIONAL,
+      profile_field: ProfileField.BUSINESS_CORPORATE,
+      course: null,
+      organization: 'Davao Print Co',
+      printing_preferences: [PrintingPreference.HIGH_RES_COLOR].join(','),
+      role: 'supplier',
       is_profile_complete: true,
       is_active: true,
     },
@@ -259,7 +289,9 @@ async function seed() {
       ],
     );
   }
-  console.log('✅ 3 users created (maria/customer, juan/rider, admin)');
+  console.log(
+    '✅ 5 users created (maria/client, juan/rider, admin/ops_admin, superadmin/super_admin, supplier/supplier)',
+  );
 
   // Get user IDs
   const [maria] = await typedQuery<IdRow>(

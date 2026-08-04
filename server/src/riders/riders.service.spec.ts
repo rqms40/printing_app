@@ -500,7 +500,7 @@ describe('RidersService', () => {
     it.each([
       ['offline', false, true, UserRole.RIDER],
       ['inactive', true, false, UserRole.RIDER],
-      ['non-rider', true, true, UserRole.CUSTOMER],
+      ['non-rider', true, true, UserRole.CLIENT],
     ])(
       'rejects an %s rider profile',
       async (_label, isAvailable, isActive, role) => {
@@ -585,7 +585,7 @@ describe('RidersService', () => {
       ['eligible', true, true, UserRole.RIDER, true],
       ['unavailable', false, true, UserRole.RIDER, false],
       ['inactive', true, false, UserRole.RIDER, false],
-      ['wrong role', true, true, UserRole.CUSTOMER, false],
+      ['wrong role', true, true, UserRole.CLIENT, false],
     ])(
       'projects %s assignment eligibility from server-owned identity state',
       async (_label, isAvailable, isActive, role, expected) => {

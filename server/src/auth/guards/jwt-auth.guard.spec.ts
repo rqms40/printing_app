@@ -23,7 +23,7 @@ describe('JwtAuthGuard beta-held access', () => {
         {
           sub: 1,
           email: 'held@test.com',
-          role: 'customer',
+          role: 'client',
           betaTestimonialPending: true,
         },
         null,
@@ -37,7 +37,7 @@ describe('JwtAuthGuard beta-held access', () => {
     const user = {
       sub: 1,
       email: 'held@test.com',
-      role: 'customer',
+      role: 'client',
       betaTestimonialPending: true,
     };
 

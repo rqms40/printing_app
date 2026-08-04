@@ -615,7 +615,7 @@ describe('OrdersService', () => {
     it('rejects non-credit legacy orders for beta customers', async () => {
       (usersService.findById as jest.Mock).mockResolvedValue({
         id: 1,
-        role: 'customer',
+        role: 'client',
         isBetaUser: true,
         betaEnrolledAt: null,
       });
@@ -637,7 +637,7 @@ describe('OrdersService', () => {
     it('cannot commit non-credit payment if beta enables before persistence', async () => {
       (usersService.findById as jest.Mock).mockResolvedValue({
         id: 1,
-        role: 'customer',
+        role: 'client',
         isBetaUser: true,
         betaEnrolledAt: null,
       });
@@ -671,7 +671,7 @@ describe('OrdersService', () => {
       const enrolledAt = new Date('2026-04-01T00:00:00Z');
       (usersService.findById as jest.Mock).mockResolvedValue({
         id: 1,
-        role: 'customer',
+        role: 'client',
         isBetaUser: true,
         betaEnrolledAt: enrolledAt,
       });
@@ -936,7 +936,7 @@ describe('OrdersService', () => {
     it('rejects non-credit payment methods for beta customers while beta mode is enabled', async () => {
       (usersService.findById as jest.Mock).mockResolvedValue({
         id: 1,
-        role: 'customer',
+        role: 'client',
         isBetaUser: true,
         betaEnrolledAt: null,
       });
@@ -958,7 +958,7 @@ describe('OrdersService', () => {
     it('allows normal payment methods for beta customers after beta mode is disabled', async () => {
       (usersService.findById as jest.Mock).mockResolvedValue({
         id: 1,
-        role: 'customer',
+        role: 'client',
         isBetaUser: true,
       });
       (dataSource as any).query = jest
@@ -970,7 +970,7 @@ describe('OrdersService', () => {
       ).resolves.toBeUndefined();
     });
 
-    it.each(['rider', 'admin'])(
+    it.each(['rider', 'ops_admin'])(
       'never restricts a %s identity to beta credits',
       async (role) => {
         (usersService.findById as jest.Mock).mockResolvedValue({
@@ -993,7 +993,7 @@ describe('OrdersService', () => {
     it('keeps the beta credits restriction for a survey-exempt beta customer', async () => {
       (usersService.findById as jest.Mock).mockResolvedValue({
         id: 1,
-        role: 'customer',
+        role: 'client',
         isBetaUser: true,
         isBetaSurveyExempt: true,
       });
@@ -1057,7 +1057,7 @@ describe('OrdersService', () => {
     it('rechecks the beta order cap after acquiring the transaction lock', async () => {
       (usersService.findById as jest.Mock).mockResolvedValue({
         id: 1,
-        role: 'customer',
+        role: 'client',
         isBetaUser: true,
         betaEnrolledAt: new Date('2026-07-01T00:00:00Z'),
       });
@@ -2111,7 +2111,7 @@ describe('OrdersService', () => {
     it('allows beta users with zero orders since enrollment', async () => {
       (usersService.findById as jest.Mock).mockResolvedValue({
         id: 7,
-        role: 'customer',
+        role: 'client',
         isBetaUser: true,
         betaEnrolledAt: enrolledAt,
       });
@@ -2122,7 +2122,7 @@ describe('OrdersService', () => {
     it('throws BETA_ORDER_LIMIT_REACHED for beta users with >=1 order since enrollment', async () => {
       (usersService.findById as jest.Mock).mockResolvedValue({
         id: 7,
-        role: 'customer',
+        role: 'client',
         isBetaUser: true,
         betaEnrolledAt: enrolledAt,
       });
@@ -2138,7 +2138,7 @@ describe('OrdersService', () => {
     it('counts only orders with createdAt >= betaEnrolledAt', async () => {
       (usersService.findById as jest.Mock).mockResolvedValue({
         id: 7,
-        role: 'customer',
+        role: 'client',
         isBetaUser: true,
         betaEnrolledAt: enrolledAt,
       });
@@ -2157,7 +2157,7 @@ describe('OrdersService', () => {
     it('treats missing betaEnrolledAt as no limit (defensive)', async () => {
       (usersService.findById as jest.Mock).mockResolvedValue({
         id: 7,
-        role: 'customer',
+        role: 'client',
         isBetaUser: true,
         betaEnrolledAt: null,
       });
@@ -2170,7 +2170,7 @@ describe('OrdersService', () => {
     it('bypasses the beta order cap when beta mode is disabled', async () => {
       (usersService.findById as jest.Mock).mockResolvedValue({
         id: 7,
-        role: 'customer',
+        role: 'client',
         isBetaUser: true,
         betaEnrolledAt: enrolledAt,
       });
@@ -2208,7 +2208,7 @@ describe('OrdersService', () => {
     it('keeps the beta order cap for a survey-exempt beta customer', async () => {
       (usersService.findById as jest.Mock).mockResolvedValue({
         id: 7,
-        role: 'customer',
+        role: 'client',
         isBetaUser: true,
         isBetaSurveyExempt: true,
         betaEnrolledAt: enrolledAt,
@@ -2230,7 +2230,7 @@ describe('OrdersService', () => {
     beforeEach(() => {
       (usersService.findById as jest.Mock).mockResolvedValue({
         id: 7,
-        role: 'customer',
+        role: 'client',
         isBetaUser: true,
         betaEnrolledAt: enrolledAt,
       });

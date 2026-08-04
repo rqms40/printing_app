@@ -69,7 +69,9 @@ interface AdminUser {
 }
 
 export function eligibleBetaEnrollUsers<T extends { role?: string }>(users: T[]): T[] {
-  return users.filter((user) => user.role === 'customer');
+  return users.filter(
+    (user) => user.role === 'client' || user.role === 'customer',
+  );
 }
 
 export function betaSurveyExemptionConfirmation(member: {

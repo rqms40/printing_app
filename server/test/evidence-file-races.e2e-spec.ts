@@ -111,7 +111,7 @@ describe('Evidence file deletion races (e2e)', () => {
         email: `evidence-customer-${runId}@example.test`,
         passwordHash: 'not-used',
         fullName: 'Evidence Customer',
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: true,
         isBetaUser: true,
         betaCompletedAt: new Date(),

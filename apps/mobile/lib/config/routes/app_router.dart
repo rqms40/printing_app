@@ -109,15 +109,19 @@ class _AuthChangeNotifier extends ChangeNotifier {
   final Ref _ref;
 }
 
-String _roleHome(String? role) => switch (role) {
+String _roleHome(String? role) => switch (_effectiveRole(role)) {
   'rider' => '/rider/home',
   'admin' => '/admin/dashboard',
   _ => '/customer/home',
 };
 
+/// Map marketplace + legacy API role strings onto shell buckets.
 String _effectiveRole(String? role) => switch (role) {
   'rider' => 'rider',
-  'admin' => 'admin',
+  'admin' || 'ops_admin' || 'super_admin' => 'admin',
+  // clients (and legacy customers) use customer shell; suppliers stay
+  // non-crashing on customer home until supplier UI lands.
+  'client' || 'customer' || 'supplier' => 'customer',
   _ => 'customer',
 };
 
@@ -141,7 +145,7 @@ bool _isSafeRoleDeepLink(String? rawLocation, String? role) {
       path == '/customer/survey/required') {
     return false;
   }
-  return switch (role) {
+  return switch (_effectiveRole(role)) {
     'customer' => path.startsWith('/customer/'),
     'rider' => path.startsWith('/rider/'),
     'admin' => path.startsWith('/admin/'),

@@ -157,7 +157,7 @@ class AuthUser {
   final String id;
   final String email;
   final String fullName;
-  final String role; // 'customer', 'rider', 'admin'
+  final String role; // client|supplier|rider|ops_admin|super_admin (+ legacy)
   final bool isProfileComplete;
   final String? nickname;
   final String? phone;
@@ -744,8 +744,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   void markBetaCompletionSubmitted() {
+    final role = state.user?.role;
     if (state.status != AuthStatus.authenticated ||
-        state.user?.role != 'customer') {
+        (role != 'client' && role != 'customer')) {
       return;
     }
     _beginAuthOperation();
@@ -864,12 +865,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  /// Prefer marketplace role strings; keep legacy values as-is for dual-read.
+  static String _normalizeRole(String? raw) {
+    switch (raw) {
+      case 'client':
+      case 'supplier':
+      case 'rider':
+      case 'ops_admin':
+      case 'super_admin':
+      case 'customer':
+      case 'admin':
+        return raw!;
+      default:
+        return 'client';
+    }
+  }
+
   AuthUser _parseUser(Map<String, dynamic> json) {
     return AuthUser(
       id: json['id'].toString(),
       email: json['email'] as String,
       fullName: (json['fullName'] as String?) ?? '',
-      role: json['role'] as String? ?? 'customer',
+      role: _normalizeRole(json['role'] as String?),
       isProfileComplete: json['isProfileComplete'] as bool? ?? false,
       nickname: (json['nickname'] ?? json['nickName']) as String?,
       phone: json['phoneNumber'] as String?,

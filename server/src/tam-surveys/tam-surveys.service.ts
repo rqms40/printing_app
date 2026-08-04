@@ -136,7 +136,7 @@ export class TamSurveysService {
       lock: { mode: 'pessimistic_write' },
     });
     if (
-      user?.role !== UserRole.CUSTOMER ||
+      user?.role !== UserRole.CLIENT ||
       !user.isBetaUser ||
       user.isBetaSurveyExempt
     ) {
@@ -178,7 +178,7 @@ export class TamSurveysService {
       select: ['id', 'role', 'isBetaUser', 'isBetaSurveyExempt'],
     });
     if (
-      user?.role !== UserRole.CUSTOMER ||
+      user?.role !== UserRole.CLIENT ||
       !user.isBetaUser ||
       user.isBetaSurveyExempt
     ) {
@@ -231,7 +231,7 @@ export class TamSurveysService {
       if (!user) throw new NotFoundException('User not found');
 
       const holdPolicyApplies =
-        user.role === UserRole.CUSTOMER &&
+        user.role === UserRole.CLIENT &&
         user.isBetaUser &&
         !user.isBetaSurveyExempt &&
         (await this.isBetaModeEnabled(betaModeSettingsRepo));

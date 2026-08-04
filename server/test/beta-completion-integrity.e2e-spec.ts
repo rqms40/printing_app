@@ -64,7 +64,7 @@ describe('beta completion integrity (e2e)', () => {
         usersRepo.create({
           email: `${database}@example.test`,
           passwordHash: 'not-used',
-          role: UserRole.CUSTOMER,
+          role: UserRole.CLIENT,
           isActive: false,
           isBetaUser: true,
           accountHoldReason: 'beta_survey_complete',
@@ -122,7 +122,7 @@ describe('beta completion integrity (e2e)', () => {
         usersRepo.create({
           email: `${database}@example.test`,
           passwordHash: 'not-used',
-          role: UserRole.CUSTOMER,
+          role: UserRole.CLIENT,
           isActive: true,
           isBetaUser: true,
           betaEnrolledAt: new Date(),
@@ -180,7 +180,7 @@ describe('beta completion integrity (e2e)', () => {
         usersRepo.create({
           email: `${database}@example.test`,
           passwordHash: 'not-used',
-          role: UserRole.CUSTOMER,
+          role: UserRole.CLIENT,
           isActive: true,
           isBetaUser: true,
           betaEnrolledAt: new Date(),

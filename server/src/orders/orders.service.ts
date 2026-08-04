@@ -451,7 +451,7 @@ export class OrdersService {
   ): Promise<void> {
     const user = await this.usersService.findById(userId);
     if (
-      user?.role !== UserRole.CUSTOMER ||
+      user?.role !== UserRole.CLIENT ||
       !user.isBetaUser ||
       !user.betaEnrolledAt
     ) {
@@ -1174,7 +1174,7 @@ export class OrdersService {
     isBetaModeEnabled = true,
   ): Promise<void> {
     const user = await this.usersService.findById(userId);
-    if (user?.role !== UserRole.CUSTOMER || !user.isBetaUser) return;
+    if (user?.role !== UserRole.CLIENT || !user.isBetaUser) return;
     if (
       isBetaModeEnabled &&
       !OrdersService.isCreditPaymentMethod(paymentMethod)

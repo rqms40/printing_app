@@ -30,7 +30,7 @@ export class CreditsController {
 
   @Put('settings')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   updateSettings(@Body() updateSettingsDto: UpdateSettingsDto) {
     return this.creditsService.updateSettings(updateSettingsDto);
   }
@@ -45,21 +45,21 @@ export class CreditsController {
 
   @Get('requests/pending')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   getPendingRequests() {
     return this.creditsService.getPendingRequests();
   }
 
   @Post('approve/:id')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   approveTopUp(@Param('id', ParseIntPipe) id: number) {
     return this.creditsService.approveTopUp(id);
   }
 
   @Post('reject/:id')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   rejectTopUp(@Param('id', ParseIntPipe) id: number) {
     return this.creditsService.rejectTopUp(id);
   }

@@ -45,28 +45,28 @@ export class HomeFeedController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.OPS_ADMIN, UserRole.SUPER_ADMIN)
   @Get('settings')
   getSettings() {
     return this.service.getSettings();
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.OPS_ADMIN, UserRole.SUPER_ADMIN)
   @Patch('settings')
   updateSettings(@Body() dto: UpdateHomeFeedSettingsDto) {
     return this.service.updateSettings(dto);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.OPS_ADMIN, UserRole.SUPER_ADMIN)
   @Get('promo-cards')
   getPromoCards() {
     return this.service.getPromoCards();
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.OPS_ADMIN, UserRole.SUPER_ADMIN)
   @Post('promo-cards')
   createPromoCard(@Body() dto: CreateHomeFeedPromoCardDto) {
     return this.service.createPromoCard(dto);
@@ -74,7 +74,7 @@ export class HomeFeedController {
 
   /** Must be declared before :id to avoid route collision. */
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.OPS_ADMIN, UserRole.SUPER_ADMIN)
   @Patch('promo-cards/reorder')
   reorderPromoCards(@Body() dto: ReorderHomeFeedPromoCardsDto) {
     return this.service.reorderPromoCards(dto.ids);
@@ -82,7 +82,7 @@ export class HomeFeedController {
 
   @ApiConsumes('multipart/form-data')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.OPS_ADMIN, UserRole.SUPER_ADMIN)
   @Post('admin/upload-image')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -119,7 +119,7 @@ export class HomeFeedController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.OPS_ADMIN, UserRole.SUPER_ADMIN)
   @Patch('promo-cards/:id')
   updatePromoCard(
     @Param('id', ParseIntPipe) id: number,
@@ -129,7 +129,7 @@ export class HomeFeedController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.OPS_ADMIN, UserRole.SUPER_ADMIN)
   @Delete('promo-cards/:id')
   removePromoCard(@Param('id', ParseIntPipe) id: number) {
     return this.service.removePromoCard(id);

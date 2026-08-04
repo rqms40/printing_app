@@ -115,7 +115,7 @@ describe('TamSurveysService', () => {
     email: 'beta@test.com',
     isBetaUser: true,
     isActive: true,
-    role: 'customer',
+    role: 'client',
     isBetaSurveyExempt: false,
   };
 
@@ -425,8 +425,8 @@ describe('TamSurveysService', () => {
 
   it.each([
     { role: 'rider', isBetaUser: true },
-    { role: 'admin', isBetaUser: true },
-    { role: 'customer', isBetaUser: false },
+    { role: 'ops_admin', isBetaUser: true },
+    { role: 'client', isBetaUser: false },
   ])(
     'ignores stale pending holds for $role beta=$isBetaUser',
     async (identity) => {

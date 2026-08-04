@@ -92,7 +92,8 @@ export class FilesController {
     @Param('id', ParseIntPipe) id: number,
     @Request() req: RequestWithUser,
   ): Promise<PresignedUrlResponseDto> {
-    const isAdmin = req.user.role === 'admin';
+    const isAdmin =
+      req.user.role === 'ops_admin' || req.user.role === 'super_admin';
     const url = await this.filesService.getPresignedUrl(
       id,
       req.user.sub,
@@ -109,7 +110,8 @@ export class FilesController {
     @Query('paperSize') paperSize?: string,
   ): Promise<FileInspectionDto> {
     const file = await this.filesService.findById(id);
-    const isAdmin = req.user.role === 'admin';
+    const isAdmin =
+      req.user.role === 'ops_admin' || req.user.role === 'super_admin';
     if (
       !isAdmin &&
       (file.uploadedBy == null || file.uploadedBy !== req.user.sub)
@@ -218,7 +220,8 @@ export class FilesController {
     @Request() req: RequestWithUser,
   ) {
     const file = await this.filesService.findById(id);
-    const isAdmin = req.user.role === 'admin';
+    const isAdmin =
+      req.user.role === 'ops_admin' || req.user.role === 'super_admin';
     if (
       !isAdmin &&
       (file.uploadedBy == null || file.uploadedBy !== req.user.sub)
@@ -234,7 +237,8 @@ export class FilesController {
     @Param('id', ParseIntPipe) id: number,
     @Request() req: RequestWithUser,
   ): Promise<void> {
-    const isAdmin = req.user.role === 'admin';
+    const isAdmin =
+      req.user.role === 'ops_admin' || req.user.role === 'super_admin';
     await this.filesService.deleteOwnedFile(id, req.user.sub, isAdmin);
   }
 }

@@ -202,7 +202,7 @@ describe('Rider dispatch workflow (e2e)', () => {
         email: emails.customer,
         passwordHash: 'not-used',
         fullName: 'E2E Customer',
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: true,
       }),
     );
@@ -211,7 +211,7 @@ describe('Rider dispatch workflow (e2e)', () => {
         email: emails.admin,
         passwordHash: 'not-used',
         fullName: 'E2E Admin',
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       }),
     );
@@ -463,13 +463,13 @@ describe('Rider dispatch workflow (e2e)', () => {
       usersRepo.create({
         email: `customer-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: true,
       }),
       usersRepo.create({
         email: `admin-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       }),
       usersRepo.create({
@@ -663,13 +663,13 @@ describe('Rider dispatch workflow (e2e)', () => {
       usersRepo.create({
         email: `customer-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: true,
       }),
       usersRepo.create({
         email: `admin-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       }),
       usersRepo.create({
@@ -775,14 +775,14 @@ describe('Rider dispatch workflow (e2e)', () => {
       usersRepo.create({
         email: `customer-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         fcmToken: 'failing-customer-token',
         isActive: true,
       }),
       usersRepo.create({
         email: `admin-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       }),
       usersRepo.create({
@@ -851,13 +851,13 @@ describe('Rider dispatch workflow (e2e)', () => {
       usersRepo.create({
         email: `customer-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: true,
       }),
       usersRepo.create({
         email: `admin-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       }),
       usersRepo.create({
@@ -971,13 +971,13 @@ describe('Rider dispatch workflow (e2e)', () => {
       usersRepo.create({
         email: `customer-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: true,
       }),
       usersRepo.create({
         email: `admin-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       }),
       usersRepo.create({
@@ -1289,13 +1289,13 @@ describe('Rider dispatch workflow (e2e)', () => {
       usersRepo.create({
         email: `customer-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: true,
       }),
       usersRepo.create({
         email: `admin-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       }),
     ]);
@@ -1364,7 +1364,7 @@ describe('Rider dispatch workflow (e2e)', () => {
       usersRepo.create({
         email: `customer-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: true,
         isBetaUser: true,
         fileRetentionDays: 7,
@@ -1372,7 +1372,7 @@ describe('Rider dispatch workflow (e2e)', () => {
       usersRepo.create({
         email: `admin-${suffix}@example.com`,
         passwordHash: 'not-used',
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       }),
       usersRepo.create({

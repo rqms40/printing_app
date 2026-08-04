@@ -76,11 +76,11 @@ describe('Orders websocket realtime rooms (e2e)', () => {
     usersRepo = dataSource.getRepository(User);
     [customer, otherCustomer, adminUser, rider, inactiveCustomer] =
       await usersRepo.save([
-        makeUser('customer', UserRole.CUSTOMER),
-        makeUser('other', UserRole.CUSTOMER),
-        makeUser('admin', UserRole.ADMIN),
+        makeUser('customer', UserRole.CLIENT),
+        makeUser('other', UserRole.CLIENT),
+        makeUser('admin', UserRole.OPS_ADMIN),
         makeUser('rider', UserRole.RIDER),
-        makeUser('inactive', UserRole.CUSTOMER, false),
+        makeUser('inactive', UserRole.CLIENT, false),
       ]);
   });
 
@@ -167,10 +167,10 @@ describe('Orders websocket realtime rooms (e2e)', () => {
         tokenFor({
           id: 2_000_000_000,
           email: 'missing@example.com',
-          role: UserRole.CUSTOMER,
+          role: UserRole.CLIENT,
         } as User),
     ],
-    ['role-mismatched identity', () => tokenFor(customer, UserRole.ADMIN)],
+    ['role-mismatched identity', () => tokenFor(customer, UserRole.OPS_ADMIN)],
   ])('disconnects a signed socket with a %s', async (_label, makeToken) => {
     const reason = await connectUntilServerDisconnect(makeToken());
     expect(reason).toBe('io server disconnect');

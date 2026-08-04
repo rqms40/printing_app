@@ -21,7 +21,7 @@ const makeUser = (overrides: Partial<User> = {}): User =>
     betaEnrolledAt: null,
     betaCreditsGranted: false,
     credits: 50,
-    role: 'customer',
+    role: 'client',
     ...overrides,
   }) as User;
 
@@ -809,7 +809,7 @@ describe('BetaModeService', () => {
     it('updates betaEnrolledAt to a recent timestamp for a beta user', async () => {
       userRepo.findOne.mockResolvedValue({
         id: 7,
-        role: 'customer',
+        role: 'client',
         isBetaUser: true,
         betaEnrolledAt: new Date('2026-04-01T00:00:00Z'),
       } as any);
@@ -840,7 +840,7 @@ describe('BetaModeService', () => {
     it('throws NotFoundException when user is not a beta member', async () => {
       userRepo.findOne.mockResolvedValue({
         id: 7,
-        role: 'customer',
+        role: 'client',
         isBetaUser: false,
       } as any);
       await expect(service.resetOrderLimit(7)).rejects.toThrow(/not a beta/i);

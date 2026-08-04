@@ -39,7 +39,7 @@ export class PaymentsController {
   @Post('refund/:id')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   initiateRefund(@Param('id', ParseIntPipe) id: number) {
     return this.paymentsService.initiateRefund(id);
   }

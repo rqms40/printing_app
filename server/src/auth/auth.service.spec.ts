@@ -22,7 +22,7 @@ describe('AuthService', () => {
     id: 1,
     email: 'test@example.com',
     passwordHash: 'hashed-password',
-    role: 'customer',
+    role: 'client',
     profileCategory: 'student',
     profileField: 'architecture',
     printingPreferences: ['plotting_blueprints'],
@@ -165,7 +165,7 @@ describe('AuthService', () => {
       );
     });
 
-    it('auto-enrolls a new customer and returns the credited user when beta mode is enabled', async () => {
+    it('auto-enrolls a new client and returns the credited user when beta mode is enabled', async () => {
       const enrolledUser = {
         ...mockUser,
         isBetaUser: true,
@@ -195,7 +195,7 @@ describe('AuthService', () => {
       );
     });
 
-    it('does not auto-enroll a new customer when beta mode is disabled', async () => {
+    it('does not auto-enroll a new client when beta mode is disabled', async () => {
       (usersService.create as jest.Mock).mockResolvedValue(mockUser);
       (betaModeService.getSettings as jest.Mock).mockResolvedValue({
         id: 1,
@@ -210,6 +210,23 @@ describe('AuthService', () => {
       expect(betaModeService.enrollUser).not.toHaveBeenCalled();
       expect(usersService.findById).not.toHaveBeenCalled();
     });
+
+    it.each(['rider', 'ops_admin', 'super_admin', 'supplier'])(
+      'does not auto-enroll a %s when beta mode is enabled',
+      async (role) => {
+        (usersService.create as jest.Mock).mockResolvedValue({
+          ...mockUser,
+          role,
+        });
+
+        await authService.register('test@example.com', 'password123', {
+          profileCategory: 'student',
+          profileField: 'architecture',
+        });
+
+        expect(betaModeService.enrollUser).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('login', () => {
@@ -379,7 +396,7 @@ describe('AuthService', () => {
       );
     });
 
-    it.each(['rider', 'admin'])(
+    it.each(['rider', 'ops_admin'])(
       'does not issue beta-held access to an inactive %s',
       async (role) => {
         const hashedPassword = await bcrypt.hash('password123', 10);

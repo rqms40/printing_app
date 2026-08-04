@@ -4,8 +4,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
-import { User, UserRole } from './entities/user.entity';
+import { DataSource, In, Repository } from 'typeorm';
+import { ADMIN_ROLES, User, UserRole } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import {
   AgeRange,
@@ -68,7 +68,7 @@ export class UsersService {
     email: string,
     password: string,
     profile: UserProfilingInput = {},
-    role = 'customer',
+    role = 'client',
   ): Promise<User> {
     const existing = await this.findByEmail(email);
     if (existing) throw new ConflictException('Email already registered');
@@ -146,6 +146,11 @@ export class UsersService {
 
   async findAllByRole(role: string): Promise<User[]> {
     return this.usersRepo.find({ where: { role: role as UserRole } });
+  }
+
+  /** Ops Admin + Super Admin accounts (former single `admin` role). */
+  async findAdminUsers(): Promise<User[]> {
+    return this.usersRepo.find({ where: { role: In([...ADMIN_ROLES]) } });
   }
 
   async findAll(): Promise<User[]> {

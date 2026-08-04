@@ -16,7 +16,7 @@ describe('UsersService', () => {
     id: 1,
     email: 'test@example.com',
     passwordHash: 'hashed-password',
-    role: 'customer',
+    role: 'client',
     fullName: null,
     profileCategory: 'student',
     profileField: 'architecture',
@@ -132,13 +132,13 @@ describe('UsersService', () => {
     it('loads only the authoritative socket identity fields', async () => {
       repo.findOne.mockResolvedValue({
         id: 1,
-        role: 'customer',
+        role: 'client',
         isActive: true,
       } as User);
 
       await expect(service.findSocketIdentity(1)).resolves.toEqual({
         id: 1,
-        role: 'customer',
+        role: 'client',
         isActive: true,
       });
       expect(repo.findOne).toHaveBeenCalledWith({
@@ -171,7 +171,7 @@ describe('UsersService', () => {
       expect(repo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           email: 'test@example.com',
-          role: 'customer',
+          role: 'client',
           profileCategory: 'student',
           profileField: 'architecture',
           printingPreferences: ['plotting_blueprints'],
@@ -313,20 +313,20 @@ describe('UsersService', () => {
   describe('findAllByRole', () => {
     it('returns all users with the given role', async () => {
       const admins = [
-        { id: 1, email: 'admin@gridgo.ph', role: 'admin' } as User,
+        { id: 1, email: 'admin@gridgo.ph', role: 'ops_admin' } as User,
       ];
       repo.find.mockResolvedValue(admins);
 
-      const result = await service.findAllByRole('admin');
+      const result = await service.findAllByRole('ops_admin');
 
-      expect(repo.find).toHaveBeenCalledWith({ where: { role: 'admin' } });
+      expect(repo.find).toHaveBeenCalledWith({ where: { role: 'ops_admin' } });
       expect(result).toEqual(admins);
     });
 
     it('returns empty array when no users with that role exist', async () => {
       repo.find.mockResolvedValue([]);
 
-      const result = await service.findAllByRole('admin');
+      const result = await service.findAllByRole('ops_admin');
 
       expect(result).toEqual([]);
     });

@@ -63,7 +63,7 @@ const MONTH_LABELS = [
 @ApiTags('admin')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin')
+@Roles('ops_admin', 'super_admin')
 @Controller('admin')
 export class AdminController {
   private readonly logger = new Logger(AdminController.name);

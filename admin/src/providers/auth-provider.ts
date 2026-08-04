@@ -4,6 +4,7 @@ import { TOKEN_KEY } from "@/providers/api-client";
 import { normalizeIdentity } from "@/utils/api-normalizers";
 import { disconnectLive } from "@/providers/live-provider";
 import { disconnectNotifications } from "@/providers/notification-ws";
+import { isAdminCapableRole } from "@/types/enums";
 
 export const authProvider: AuthProvider = {
   login: async ({ email, password }) => {
@@ -23,8 +24,8 @@ export const authProvider: AuthProvider = {
 
       const data = await response.json();
 
-      // Ensure only admin accounts can access the admin panel
-      if (data.user?.role !== "admin") {
+      // Ops Admin + Super Admin (and legacy admin during cutover)
+      if (!isAdminCapableRole(data.user?.role)) {
         return {
           success: false,
           error: {
@@ -68,7 +69,7 @@ export const authProvider: AuthProvider = {
       }
 
       const user = await response.json();
-      if (user.role !== "admin") {
+      if (!isAdminCapableRole(user.role)) {
         localStorage.removeItem(TOKEN_KEY);
         return {
           authenticated: false,

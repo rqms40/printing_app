@@ -51,12 +51,12 @@ describe('ChatGateway', () => {
       assertCanAccessConversationForActor: jest.fn().mockResolvedValue({}),
     };
     jwtService = {
-      verifyAsync: jest.fn().mockResolvedValue({ sub: 42, role: 'customer' }),
+      verifyAsync: jest.fn().mockResolvedValue({ sub: 42, role: 'client' }),
     };
     usersService = {
       findSocketIdentity: jest.fn(async (id: number) => ({
         id,
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: true,
       })),
     };
@@ -93,7 +93,7 @@ describe('ChatGateway', () => {
       const socket = makeSocket();
       await gateway.handleConnection(socket as any);
       expect(socket.data.userId).toBe(42);
-      expect(socket.data.role).toBe('customer');
+      expect(socket.data.role).toBe('client');
       expect(realtimeSessions.register).toHaveBeenCalledWith(42, socket);
       expect(socket.emit).toHaveBeenCalledWith('session-ready', {
         userId: 42,
@@ -101,10 +101,10 @@ describe('ChatGateway', () => {
     });
 
     it('joins admin_inbox room for admin role', async () => {
-      jwtService.verifyAsync.mockResolvedValue({ sub: 1, role: 'admin' });
+      jwtService.verifyAsync.mockResolvedValue({ sub: 1, role: 'ops_admin' });
       usersService.findSocketIdentity.mockResolvedValue({
         id: 1,
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       });
       const socket = makeSocket();
@@ -122,7 +122,7 @@ describe('ChatGateway', () => {
     it('disconnects an inactive database identity', async () => {
       usersService.findSocketIdentity.mockResolvedValue({
         id: 42,
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: false,
       });
       const socket = makeSocket();
@@ -136,7 +136,7 @@ describe('ChatGateway', () => {
 
   describe('handleJoinConversation', () => {
     it('joins the conversation room for the owning customer', async () => {
-      const socket = makeSocket({ data: { userId: 1, role: 'customer' } });
+      const socket = makeSocket({ data: { userId: 1, role: 'client' } });
       chatService.findConversation.mockResolvedValue({ customerId: 1 });
       await gateway.handleJoinConversation(
         { conversationId: 5 },
@@ -146,7 +146,7 @@ describe('ChatGateway', () => {
     });
 
     it('rejects room joins by non-owner customers', async () => {
-      const socket = makeSocket({ data: { userId: 1, role: 'customer' } });
+      const socket = makeSocket({ data: { userId: 1, role: 'client' } });
       chatService.assertCanAccessConversationForActor.mockRejectedValue(
         new Error('Forbidden'),
       );
@@ -158,7 +158,7 @@ describe('ChatGateway', () => {
     });
 
     it('rejects assigned rider access when the socket role is not rider', async () => {
-      const socket = makeSocket({ data: { userId: 12, role: 'customer' } });
+      const socket = makeSocket({ data: { userId: 12, role: 'client' } });
       chatService.assertCanAccessConversationForActor.mockRejectedValue(
         new Error('Forbidden'),
       );
@@ -191,10 +191,10 @@ describe('ChatGateway', () => {
     it('disconnects a newly held customer before accepting a message', async () => {
       usersService.findSocketIdentity.mockResolvedValue({
         id: 1,
-        role: UserRole.CUSTOMER,
+        role: UserRole.CLIENT,
         isActive: false,
       });
-      const socket = makeSocket({ data: { userId: 1, role: 'customer' } });
+      const socket = makeSocket({ data: { userId: 1, role: 'client' } });
 
       await expect(
         gateway.handleSendMessage(
@@ -226,7 +226,7 @@ describe('ChatGateway', () => {
     });
 
     it('saves message and broadcasts message-received', async () => {
-      const socket = makeSocket({ data: { userId: 1, role: 'customer' } });
+      const socket = makeSocket({ data: { userId: 1, role: 'client' } });
       const saved = { id: 10, conversationId: 5, content: 'Hi' };
       chatService.saveMessageForActor.mockResolvedValue(saved);
       chatService.findConversation.mockResolvedValue({
@@ -252,7 +252,7 @@ describe('ChatGateway', () => {
     });
 
     it('emits bot-typing then bot-response for AI conversations', async () => {
-      const socket = makeSocket({ data: { userId: 1, role: 'customer' } });
+      const socket = makeSocket({ data: { userId: 1, role: 'client' } });
       const botMsg = { id: 11, senderRole: 'bot', content: 'Hi there!' };
       chatService.saveMessageForActor.mockResolvedValueOnce({
         id: 10,
@@ -282,7 +282,7 @@ describe('ChatGateway', () => {
     });
 
     it('emits a fallback bot-response when the bot pipeline fails', async () => {
-      const socket = makeSocket({ data: { userId: 1, role: 'customer' } });
+      const socket = makeSocket({ data: { userId: 1, role: 'client' } });
       chatService.saveMessageForActor.mockResolvedValueOnce({
         id: 10,
         content: 'Hello',
@@ -330,10 +330,10 @@ describe('ChatGateway', () => {
     it('does not trigger GridBot for admin messages in AI conversations', async () => {
       usersService.findSocketIdentity.mockResolvedValue({
         id: 7,
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       });
-      const socket = makeSocket({ data: { userId: 7, role: 'admin' } });
+      const socket = makeSocket({ data: { userId: 7, role: 'ops_admin' } });
       const saved = { id: 12, conversationId: 3, content: 'I can help' };
       chatService.saveMessageForActor.mockResolvedValue(saved);
       chatService.findConversation.mockResolvedValue({
@@ -357,7 +357,7 @@ describe('ChatGateway', () => {
 
   describe('handleReadMessages', () => {
     it('marks messages read and emits messages-read', async () => {
-      const socket = makeSocket({ data: { userId: 7, role: 'customer' } });
+      const socket = makeSocket({ data: { userId: 7, role: 'client' } });
       chatService.markMessagesReadForActor.mockResolvedValue(undefined);
       await gateway.handleReadMessages({ conversationId: 5 }, socket as any);
       expect(chatService.markMessagesReadForActor).toHaveBeenCalledWith(
@@ -385,10 +385,10 @@ describe('ChatGateway', () => {
     it('broadcasts user-typing with mapped SenderRole to room peers (not sender)', async () => {
       usersService.findSocketIdentity.mockResolvedValue({
         id: 1,
-        role: UserRole.ADMIN,
+        role: UserRole.OPS_ADMIN,
         isActive: true,
       });
-      const socket = makeSocket({ data: { userId: 1, role: 'admin' } });
+      const socket = makeSocket({ data: { userId: 1, role: 'ops_admin' } });
       chatService.findConversation.mockResolvedValue({ customerId: 42 });
       await gateway.handleTyping({ conversationId: 7 }, socket as any);
       expect(socket.to).toHaveBeenCalledWith('conversation:7');
@@ -426,7 +426,7 @@ describe('ChatGateway', () => {
 
   describe('handleLeaveConversation', () => {
     it('leaves the conversation room', () => {
-      const socket = makeSocket({ data: { userId: 1, role: 'customer' } });
+      const socket = makeSocket({ data: { userId: 1, role: 'client' } });
       gateway.handleLeaveConversation({ conversationId: 9 }, socket as any);
       expect(socket.leave).toHaveBeenCalledWith('conversation:9');
     });

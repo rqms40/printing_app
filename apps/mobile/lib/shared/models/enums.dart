@@ -1,18 +1,90 @@
 /// All domain enums for GRIDGO with displayName extensions.
 library;
 
-enum UserRole { customer, rider, admin }
+enum UserRole {
+  client,
+  supplier,
+  rider,
+  opsAdmin,
+  superAdmin,
+  /// Legacy aliases accepted when parsing API payloads during cutover.
+  customer,
+  admin,
+}
 
 extension UserRoleX on UserRole {
   String get displayName {
     switch (this) {
+      case UserRole.client:
       case UserRole.customer:
-        return 'Customer';
+        return 'Client';
+      case UserRole.supplier:
+        return 'Supplier';
       case UserRole.rider:
         return 'Rider';
+      case UserRole.opsAdmin:
+        return 'Ops Admin';
+      case UserRole.superAdmin:
+        return 'Super Admin';
       case UserRole.admin:
         return 'Admin';
     }
+  }
+
+  /// API wire value (snake_case).
+  String get apiValue {
+    switch (this) {
+      case UserRole.client:
+      case UserRole.customer:
+        return 'client';
+      case UserRole.supplier:
+        return 'supplier';
+      case UserRole.rider:
+        return 'rider';
+      case UserRole.opsAdmin:
+        return 'ops_admin';
+      case UserRole.superAdmin:
+        return 'super_admin';
+      case UserRole.admin:
+        return 'ops_admin';
+    }
+  }
+
+  /// Collapse legacy/marketplace role strings into routing buckets.
+  String get effectiveShell {
+    switch (this) {
+      case UserRole.rider:
+        return 'rider';
+      case UserRole.opsAdmin:
+      case UserRole.superAdmin:
+      case UserRole.admin:
+        return 'admin';
+      case UserRole.client:
+      case UserRole.customer:
+      case UserRole.supplier:
+        return 'customer';
+    }
+  }
+}
+
+UserRole? parseUserRole(String? raw) {
+  switch (raw) {
+    case 'client':
+      return UserRole.client;
+    case 'supplier':
+      return UserRole.supplier;
+    case 'rider':
+      return UserRole.rider;
+    case 'ops_admin':
+      return UserRole.opsAdmin;
+    case 'super_admin':
+      return UserRole.superAdmin;
+    case 'customer':
+      return UserRole.customer;
+    case 'admin':
+      return UserRole.admin;
+    default:
+      return null;
   }
 }
 

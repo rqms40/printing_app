@@ -1,4 +1,21 @@
-export type UserRole = "customer" | "rider" | "admin";
+export type UserRole =
+  | "client"
+  | "supplier"
+  | "rider"
+  | "ops_admin"
+  | "super_admin"
+  /** @deprecated legacy — accept until clients fully cut over */
+  | "customer"
+  | "admin";
+
+/** Ops Admin + Super Admin (and legacy `admin`) may use the admin panel. */
+export function isAdminCapableRole(role: string | null | undefined): boolean {
+  return (
+    role === "ops_admin" ||
+    role === "super_admin" ||
+    role === "admin"
+  );
+}
 
 export type OrderStatus =
   | "order_placed"

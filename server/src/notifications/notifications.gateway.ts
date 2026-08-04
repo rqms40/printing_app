@@ -9,7 +9,7 @@ import { Notification } from './entities/notification.entity';
 import { UsersService } from '../users/users.service';
 import { RealtimeSessionRegistry } from '../common/realtime/realtime-session-registry';
 import { authenticateRealtimeSocket } from '../common/realtime/realtime-socket-auth';
-import { UserRole } from '../users/entities/user.entity';
+import { isAdminRole } from '../users/entities/user.entity';
 
 @WebSocketGateway({ namespace: '/ws/notifications', cors: { origin: '*' } })
 export class NotificationsGateway implements OnGatewayConnection {
@@ -32,7 +32,7 @@ export class NotificationsGateway implements OnGatewayConnection {
       client.disconnect();
       return;
     }
-    if (identity.role === UserRole.ADMIN) {
+    if (isAdminRole(identity.role)) {
       await client.join('admin_notifications');
     }
     await client.join(`user_${identity.id}`);

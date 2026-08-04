@@ -74,7 +74,7 @@ export class AuthService {
 
     if (user.isActive === false) {
       if (
-        user.role === UserRole.CUSTOMER &&
+        user.role === UserRole.CLIENT &&
         user.isBetaUser &&
         !user.isBetaSurveyExempt &&
         user.accountHoldReason === 'beta_survey_complete'
@@ -121,7 +121,7 @@ export class AuthService {
 
   private async ensureBetaEnrollment(user: User): Promise<User> {
     const betaSettings = await this.betaModeService.getSettings();
-    if (!betaSettings.isEnabled || user.role !== UserRole.CUSTOMER) return user;
+    if (!betaSettings.isEnabled || user.role !== UserRole.CLIENT) return user;
 
     await this.betaModeService.enrollUser(user.id);
     return (await this.usersService.findById(user.id)) ?? user;

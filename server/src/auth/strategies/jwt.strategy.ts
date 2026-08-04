@@ -37,7 +37,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // testimonial photo on BetaSuccessWallScreen before logging out.
     const isBetaTestimonialPending =
       user.isActive === false &&
-      user.role === UserRole.CUSTOMER &&
+      user.role === UserRole.CLIENT &&
       user.isBetaUser &&
       !user.isBetaSurveyExempt &&
       user.accountHoldReason === BETA_TESTIMONIAL_HOLD_REASON;

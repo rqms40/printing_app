@@ -20,8 +20,15 @@ import { CreateConversationDto } from './dto/create-conversation.dto';
 import { ConversationType } from './entities/conversation.entity';
 import type { Conversation } from './entities/conversation.entity';
 import type { ChatMessage } from './entities/chat-message.entity';
+import { isAdminRole, UserRole } from '../users/entities/user.entity';
 
-type JwtUser = { sub: number; role: ChatActorRole; email: string };
+type JwtUser = { sub: number; role: string; email: string };
+
+function toChatActorRole(role: string): ChatActorRole {
+  if (isAdminRole(role)) return 'admin';
+  if (role === UserRole.RIDER || role === 'rider') return 'rider';
+  return 'customer';
+}
 
 @Controller('chat')
 @UseGuards(JwtAuthGuard)
@@ -58,14 +65,14 @@ export class ChatController {
       throw new BadRequestException('Invalid order id');
     }
 
-    if (req.user.role === 'rider') {
+    if (req.user.role === UserRole.RIDER || req.user.role === 'rider') {
       return this.chatService.getOrCreateRiderOrderConversation(
         req.user.sub,
         orderRef,
       );
     }
 
-    if (req.user.role !== 'customer') {
+    if (req.user.role !== UserRole.CLIENT && req.user.role !== 'client') {
       throw new ForbiddenException();
     }
 
@@ -99,7 +106,7 @@ export class ChatController {
     return this.chatService.getMessagesForActor(
       +id,
       req.user.sub,
-      req.user.role,
+      toChatActorRole(req.user.role),
       +page,
       cappedLimit,
     );
@@ -107,7 +114,7 @@ export class ChatController {
 
   @Get('admin/conversations')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   getAdminConversations(
     @Query('status') status?: string,
     @Query('type') type?: string,
@@ -117,7 +124,7 @@ export class ChatController {
 
   @Patch('conversations/:id/assign')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   assignConversation(
     @Param('id') id: string,
     @Request() req: { user: JwtUser },
@@ -127,7 +134,7 @@ export class ChatController {
 
   @Patch('conversations/:id/close')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('ops_admin', 'super_admin')
   async closeConversation(@Param('id') id: string): Promise<Conversation> {
     const conversation = await this.chatService.closeConversation(+id);
     this.chatGateway.notifyConversationClosed([conversation.id]);

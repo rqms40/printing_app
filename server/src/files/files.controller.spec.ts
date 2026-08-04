@@ -30,7 +30,7 @@ const makeFile = (overrides: Partial<FileMetadata> = {}) =>
 
 const makeRequest = (
   sub: number,
-  role = 'customer',
+  role = 'client',
   betaTestimonialPending = false,
   hostname = 'localhost',
 ) =>
@@ -77,7 +77,7 @@ describe('FilesController', () => {
     const file = makeFile({ uploadedBy: 42 });
     jest.mocked(filesService.findById).mockResolvedValue(file);
 
-    await expect(controller.getFile(1, makeRequest(1, 'admin'))).resolves.toBe(
+    await expect(controller.getFile(1, makeRequest(1, 'ops_admin'))).resolves.toBe(
       file,
     );
   });
@@ -99,7 +99,7 @@ describe('FilesController', () => {
 
     await controller.getPresignedUrl(
       1,
-      makeRequest(42, 'customer', false, '10.0.2.2'),
+      makeRequest(42, 'client', false, '10.0.2.2'),
     );
 
     expect(filesService.getPresignedUrl).toHaveBeenCalledWith(
@@ -111,7 +111,7 @@ describe('FilesController', () => {
   });
 
   it('allows beta-held users to upload only testimonial photos', async () => {
-    const request = makeRequest(42, 'customer', true);
+    const request = makeRequest(42, 'client', true);
 
     await expect(
       controller.uploadFile({} as Express.Multer.File, request, 'general'),
@@ -133,7 +133,7 @@ describe('FilesController', () => {
     await expect(
       controller.uploadFile(
         undefined as unknown as Express.Multer.File,
-        makeRequest(42, 'customer', true),
+        makeRequest(42, 'client', true),
         'general',
       ),
     ).rejects.toThrow(ForbiddenException);
@@ -163,7 +163,7 @@ describe('FilesController upload HTTP cleanup', () => {
           httpRequest.user = {
             sub: 42,
             email: 'held@example.test',
-            role: 'customer',
+            role: 'client',
             betaTestimonialPending: true,
           };
           return true;
@@ -251,7 +251,7 @@ describe('FilesController inspect with 3D bounds', () => {
       maxFileSizeMb: 200,
     });
     const out = await controller.inspect(9, {
-      user: { sub: 1, role: 'customer' },
+      user: { sub: 1, role: 'client' },
     } as any);
     expect(out.modelBounds).toEqual(
       expect.objectContaining({
@@ -297,7 +297,7 @@ describe('FilesController inspect with 3D bounds', () => {
       maxFileSizeMb: 200,
     });
     const out = await controller.inspect(10, {
-      user: { sub: 1, role: 'customer' },
+      user: { sub: 1, role: 'client' },
     } as any);
     expect(out.printerLimits!.fits).toBe(false);
     expect(out.printerLimits!.overflowAxes.sort()).toEqual(['height', 'width']);
@@ -335,7 +335,7 @@ describe('FilesController inspect with 3D bounds', () => {
     });
 
     const out = await controller.inspect(11, {
-      user: { sub: 1, role: 'customer' },
+      user: { sub: 1, role: 'client' },
       hostname: '10.0.2.2',
     } as any);
 
