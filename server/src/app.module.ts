@@ -26,6 +26,7 @@ import { DeliverySlotsModule } from './delivery-slots/delivery-slots.module';
 import { PrinterProfileModule } from './printer-profile/printer-profile.module';
 import { SupportTicketsModule } from './support-tickets/support-tickets.module';
 import { HomeFeedModule } from './home-feed/home-feed.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
 import {
   createTypeOrmOptions,
   initializeDataSourceWithPreSyncNormalization,
@@ -81,6 +82,7 @@ import {
     PrinterProfileModule,
     SupportTicketsModule,
     HomeFeedModule,
+    SuppliersModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
