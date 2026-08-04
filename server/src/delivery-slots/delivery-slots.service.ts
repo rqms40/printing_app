@@ -1,10 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
+import { OrderStatus } from '../orders/entities/order.entity';
 import { DeliverySlotTemplate } from './entities/delivery-slot-template.entity';
 import { DeliverySlotBooking } from './entities/delivery-slot-booking.entity';
 import { SlotFullException, CancellationClosedException } from './exceptions';
 import { DeliverySlotsGateway } from './delivery-slots.gateway';
+
+/** Terminal / non-consuming order statuses excluded from active slot counts. */
+const SLOT_EXCLUDED_ORDER_STATUSES = [
+  OrderStatus.CANCELLED,
+  OrderStatus.FILE_REJECTED,
+] as const;
 
 export interface SlotAvailability {
   templateId: number;
@@ -58,7 +65,7 @@ export class DeliverySlotsService {
         'orders',
         'o',
         'o.batch_order_id = bo.id AND o.order_status NOT IN (:...excluded)',
-        { excluded: ['cancelled', 'file_declined'] },
+        { excluded: [...SLOT_EXCLUDED_ORDER_STATUSES] },
       )
       .where('b.date = :date', { date })
       .select('b.slot_template_id', 'slotTemplateId')
@@ -109,7 +116,7 @@ export class DeliverySlotsService {
         'orders',
         'o',
         'o.batch_order_id = bo.id AND o.order_status NOT IN (:...excluded)',
-        { excluded: ['cancelled', 'file_declined'] },
+        { excluded: [...SLOT_EXCLUDED_ORDER_STATUSES] },
       )
       .where('b.slot_template_id = :tid', { tid: input.slotTemplateId })
       .andWhere('b.date = :date', { date: input.date })
@@ -192,7 +199,7 @@ export class DeliverySlotsService {
         'orders',
         'o',
         'o.batch_order_id = bo.id AND o.order_status NOT IN (:...excluded)',
-        { excluded: ['cancelled', 'file_declined'] },
+        { excluded: [...SLOT_EXCLUDED_ORDER_STATUSES] },
       )
       .where('b.date >= :start AND b.date < :end', {
         start: weekStart,

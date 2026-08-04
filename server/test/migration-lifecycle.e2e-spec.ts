@@ -349,7 +349,7 @@ describe('production migration lifecycle (e2e)', () => {
             delivery_option, order_status)
          VALUES
            ($1, $2, 'paper', 'https://audit/order', 'order-audit.pdf',
-            900002, 10, 0, 'cash', 'delivery', 'arrived_at_destination')
+            900002, 10, 0, 'cash', 'delivery', 'out_for_delivery')
          RETURNING id`,
         [`EVIDENCE-${database}`, users[0].id],
       );
@@ -957,15 +957,15 @@ describe('production migration lifecycle (e2e)', () => {
       const orderIds = {
         ready: await insertOrder('STATE-READY', 'ready_for_dispatch'),
         cancelled: await insertOrder('STATE-CANCELLED', 'cancelled'),
-        declined: await insertOrder('STATE-DECLINED', 'file_declined'),
-        pickup: await insertOrder('STATE-PICKUP', 'completed_pickup'),
+        declined: await insertOrder('STATE-DECLINED', 'file_rejected'),
+        pickup: await insertOrder('STATE-PICKUP', 'collected_by_customer'),
         delivered: await insertOrder('STATE-DELIVERED', 'delivered'),
         compatible: await insertOrder(
           'STATE-COMPATIBLE',
           'picked_up',
           users[1].id,
         ),
-        exact: await insertOrder('STATE-EXACT', 'on_the_way', users[3].id),
+        exact: await insertOrder('STATE-EXACT', 'out_for_delivery', users[3].id),
       };
 
       await insertAssignment(
@@ -1359,9 +1359,9 @@ describe('production migration lifecycle (e2e)', () => {
            delivery_option
          ) VALUES
            ('ORD-LEGACY-MIGRATION-I', $1, NULL, 'paper', 40, 20,
-            'gridCredits', 'paid', 'order_placed', 'pickup'),
+            'gridCredits', 'paid', 'submitted', 'pickup'),
            ('ORD-LEGACY-MIGRATION-B', $1, $2, 'paper', 40, 20,
-            'gridCredits', 'paid', 'order_placed', 'pickup')`,
+            'gridCredits', 'paid', 'submitted', 'pickup')`,
         [user.id, batch.id],
       );
       const inserted = await dataSource.query<
