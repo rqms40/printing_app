@@ -125,13 +125,13 @@ class _MarketplaceOrderActionsState
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: colors.primary.withValues(alpha: 0.15),
+                  color: colors.brand.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
                 child: HugeIcon(
                   icon: HugeIcons.strokeRoundedCheckmarkCircle02,
                   size: 22,
-                  color: colors.primary,
+                  color: colors.brand,
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),

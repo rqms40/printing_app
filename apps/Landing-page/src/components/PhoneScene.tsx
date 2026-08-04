@@ -195,7 +195,7 @@ function PhoneRig() {
   })
 
   return (
-    <group ref={group} scale={1.8}>
+    <group ref={group} position={[0, 12, 0]} rotation={[-1.42, 0.08, 0.28]} scale={0.5}>
       <Float speed={1.5} rotationIntensity={0.05} floatIntensity={0.2}>
         <Phone />
       </Float>

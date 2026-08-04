@@ -137,7 +137,7 @@ function HeroSection({ isDarkMode }: { isDarkMode?: boolean }) {
           </div>
           <span className="text-4xl font-black tracking-widest uppercase mt-2">GRID<span className="text-[var(--color-primary)]">GO</span></span>
           <p className="text-[11px] md:text-sm tracking-[0.3em] uppercase mt-3 font-semibold text-gray-800 dark:text-gray-200">
-            DAVAO MANAGED PRINT MARKETPLACE
+            MAPPING THE FUTURE OF PRINTING.
           </p>
         </motion.div>
 
@@ -149,10 +149,10 @@ function HeroSection({ isDarkMode }: { isDarkMode?: boolean }) {
           className="max-w-3xl flex flex-col items-center"
         >
           <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-[var(--color-primary)] mb-6 tracking-tight">
-            Request. Reviewed. Delivered.
+            Design. Tap. Print.
           </h1>
           <p className="text-lg md:text-xl text-gray-700 dark:text-gray-300 max-w-2xl mx-auto mb-8 md:mb-10 font-medium leading-relaxed">
-            GRIDGO is a managed printing marketplace for businesses, schools, and organizations in Davao City — structured print requests, artwork QA, verified suppliers, Pilot Credits or eligible COD, and tracked rider delivery.
+            Send your files from the app straight to our printers. We'll handle the printing and deliver it to your door so you don't have to leave your seat.
           </p>
         </motion.div>
 
@@ -166,7 +166,7 @@ function HeroSection({ isDarkMode }: { isDarkMode?: boolean }) {
           <img
             src="/GIRDGO_PHONE.png"
             alt="GRIDGO App"
-            className="absolute bottom-0 left-0 w-full h-full object-contain object-bottom drop-shadow-[0_0_40px_rgba(255,222,88,0.15)] scale-160 lg:scale-130 origin-bottom"
+            className="absolute bottom-0 left-0 w-full h-full object-contain object-bottom drop-shadow-[0_0_40px_rgba(255,222,88,0.15)] scale-160 lg:scale-120 origin-bottom"
           />
         </motion.div>
       </div>
@@ -224,31 +224,31 @@ function FeaturesSection() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-4 mb-10">
           <FeatureCard
             icon={HardDriveUploadIcon}
-            title="Structured print requests"
-            desc="Upload final artwork with product specs — dimensions, material, quantity, deadline, and Davao delivery address — no Messenger file chaos."
+            title="One-Tap Upload"
+            desc="No more carrying USB sticks or emailing files to yourself. Directly upload your documents or 3D designs from your phone or cloud storage in seconds."
           />
           <FeatureCard
             icon={TruckIcon}
-            title="Tracked delivery"
-            desc="After pickup, follow the active rider trip with live location. Tracking starts at confirmed pickup and stops when the job is delivered."
+            title="Live Order Tracking"
+            desc="Watch your project move from the printer to the delivery rider in real-time. You'll know exactly when your package is arriving, just like a food delivery app."
           />
           <FeatureCard
             icon={ListIcon}
-            title="Artwork QA gate"
-            desc="Supplier Operations reviews every job for bleed, resolution, and feasibility before matching a verified printer. Corrections stay in one accountable thread."
+            title="The Queue"
+            desc="Need a document and a 3D model at the same time? Add different types of prints to a single order and have them all delivered in one go to save on shipping."
           />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 max-w-4xl mx-auto">
           <FeatureCard
             icon={TimerIcon}
-            title="Verified suppliers"
-            desc="GRIDGO matches vetted Davao print partners. You don't bid or browse an open directory — you get a committed price and promised date."
+            title="24/7 App Operations"
+            desc="Inspiration doesn't have a closing time. Whether it's 2 PM or 2 AM, you can upload your files and start the process. Our system works 24/7 so your project never has to wait for a shop to open."
           />
           <FeatureCard
             icon={MessageCircleIcon}
-            title="Pilot Credits & COD"
-            desc="The free pilot uses Ops-granted Pilot Credits (test credits, not a wallet) and limited Cash on Delivery up to ₱1,500 for eligible verified clients."
+            title="Live Support & Tracking"
+            desc="From upload to doorstep, help is just a tap away. Chat live with your delivery rider for drop-off updates, or message our support team anytime. We bridge the gap to your print."
           />
         </div>
       </div>
@@ -271,9 +271,9 @@ function HowItWorksSection() {
             className="flex flex-col items-center"
           >
             <div className="text-7xl md:text-8xl font-bold text-gray-500 mb-6 tracking-tighter">01</div>
-            <h3 className="text-2xl font-bold mb-4">Request</h3>
+            <h3 className="text-2xl font-bold mb-4">Upload</h3>
             <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed max-w-sm mx-auto">
-              Place a structured print request and upload final artwork from the GRIDGO client app — flyers, tarps, stickers, cards, apparel, and school materials.
+              No more carrying USB sticks or emailing files to yourself. Directly upload your documents or 3D designs from your phone or cloud storage in seconds.
             </p>
           </motion.div>
 
@@ -285,9 +285,9 @@ function HowItWorksSection() {
             className="flex flex-col items-center"
           >
             <div className="text-7xl md:text-8xl font-bold text-gray-500 mb-6 tracking-tighter">02</div>
-            <h3 className="text-2xl font-bold mb-4">QA &amp; match</h3>
+            <h3 className="text-2xl font-bold mb-4">Print</h3>
             <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed max-w-sm mx-auto">
-              Operations reviews artwork and print feasibility, then matches a verified supplier who accepts a final price and promised date.
+              Select your printing preferences, paper types, or 3D materials. Our system instantly routes your files directly to our high-quality printing hubs.
             </p>
           </motion.div>
 
@@ -299,9 +299,9 @@ function HowItWorksSection() {
             className="flex flex-col items-center"
           >
             <div className="text-7xl md:text-8xl font-bold text-gray-500 mb-6 tracking-tighter">03</div>
-            <h3 className="text-2xl font-bold mb-4">Pay &amp; deliver</h3>
+            <h3 className="text-2xl font-bold mb-4">Receive</h3>
             <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed max-w-sm mx-auto">
-              Authorize Pilot Credits or eligible COD, production and self-QC run, then a rider picks up and delivers with proof and a 24-hour issue window.
+              Watch your project move from the printer to the delivery rider in real-time. You'll know exactly when your package is arriving at your door.
             </p>
           </motion.div>
 
@@ -522,7 +522,7 @@ function TeamSection({ isDarkMode }: { isDarkMode?: boolean }) {
           image="/Justin.png.png"
           role="Marketing Lead"
           name="Justin Vince Oroña"
-          quote="Make them click, make it stick."
+          quote="Where my tendons have been torn, my psyche has been mended. This was a worthy trade"
           reverse={true}
         />
       </div>
@@ -643,7 +643,7 @@ function FooterSection() {
 
           <div className="text-gray-400 text-[13px] font-mono space-y-3 mb-12">
             <p>GRIDGO Team</p>
-            <p className="leading-relaxed">Davao City managed printing marketplace — structured requests, artwork QA, verified suppliers, and tracked delivery.</p>
+            <p className="leading-relaxed">The essential digital printing partner in the global market, making the transition from digital design to physical reality effortless.</p>
           </div>
 
           <p className="text-[#666] text-[11px] tracking-widest font-mono uppercase">SUPPORT@GRIDGO.APP</p>
@@ -686,7 +686,7 @@ function FooterSection() {
       {/* Bottom bar */}
       <div className="max-w-[1100px] mx-auto flex flex-col md:flex-row justify-between items-end gap-6 pt-10 text-[#666] text-[11px] font-mono tracking-wide">
         <p className="max-w-[400px] leading-relaxed">
-          Managed print marketplace for Davao businesses and schools — QA, verified suppliers, Pilot Credits, and rider delivery.
+          A modern platform for digital printing combining precision technology, high-quality output, and seamless logistics.
         </p>
         <div className="flex gap-8 uppercase tracking-widest">
           <span>&copy; 2026 GRIDGO</span>
