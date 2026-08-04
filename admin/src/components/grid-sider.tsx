@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useMenu, useNavigation } from "@refinedev/core";
+import { useMemo, useState } from "react";
+import { useGetIdentity, useMenu, useNavigation } from "@refinedev/core";
 import type { ITreeMenu } from "@refinedev/core";
 import { Button, ConfigProvider, Layout, Menu, Tag, theme } from "antd";
 import type { MenuProps } from "antd";
@@ -7,14 +7,47 @@ import { MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
 import { useNotificationsContext } from "@/context/notifications-context";
 import { GridLogo } from "@/components/grid-logo";
 import type { BadgeCounts } from "@/types/notification";
+import { isSupplierRole } from "@/types/enums";
+import type { AdminIdentity } from "@/utils/api-normalizers";
 
 const BADGE_MAP: Partial<Record<string, keyof BadgeCounts>> = {
   "admin/orders": "newOrders",
   "credit-requests": "pendingTopUps",
 };
 
+/** Resources exclusive to the supplier portal (not shown to ops). */
+const SUPPLIER_PORTAL_RESOURCES = new Set(["supplier-jobs"]);
+
 interface GridSiderProps {
   initialCollapsed?: boolean;
+}
+
+function filterMenuForRole(
+  items: ITreeMenu[],
+  supplier: boolean,
+): ITreeMenu[] {
+  return items
+    .map((item) => {
+      const isSupplierRes = SUPPLIER_PORTAL_RESOURCES.has(item.name);
+      if (supplier) {
+        // Suppliers only see supplier portal resources
+        if (isSupplierRes) return item;
+        if (item.children?.length) {
+          const children = filterMenuForRole(item.children, supplier);
+          if (children.length === 0) return null;
+          return { ...item, children };
+        }
+        return null;
+      }
+      // Ops: hide supplier portal resources
+      if (isSupplierRes) return null;
+      if (item.children?.length) {
+        const children = filterMenuForRole(item.children, supplier);
+        return { ...item, children };
+      }
+      return item;
+    })
+    .filter((item): item is ITreeMenu => item != null);
 }
 
 export function GridSider({ initialCollapsed = false }: GridSiderProps) {
@@ -23,10 +56,20 @@ export function GridSider({ initialCollapsed = false }: GridSiderProps) {
   const { menuItems, selectedKey } = useMenu();
   const { push } = useNavigation();
   const { badgeCounts } = useNotificationsContext();
+  const { data: identity } = useGetIdentity<AdminIdentity>();
+  const supplier = isSupplierRole(identity?.role);
 
-  const defaultOpenKeys = menuItems
+  const visibleMenuItems = useMemo(
+    () => filterMenuForRole(menuItems, supplier),
+    [menuItems, supplier],
+  );
+
+  const defaultOpenKeys = visibleMenuItems
     .filter((item) => item.children?.some((child) => child.key === selectedKey))
-    .map((item) => item.key);
+    .map((item) => item.key)
+    .filter((key): key is string => typeof key === "string");
+
+  const brandLabel = supplier ? "GRIDGO Supplier" : "GRIDGO Admin";
 
   function buildItems(items: ITreeMenu[]): MenuProps["items"] {
     return items.map((item) => {
@@ -151,7 +194,7 @@ export function GridSider({ initialCollapsed = false }: GridSiderProps) {
                   : "opacity 0.15s 0.12s, max-width 0.2s",
               }}
             >
-              GRIDGO Admin
+              {brandLabel}
             </span>
           </div>
 
@@ -161,7 +204,7 @@ export function GridSider({ initialCollapsed = false }: GridSiderProps) {
               selectedKeys={[selectedKey]}
               defaultOpenKeys={defaultOpenKeys}
               mode="inline"
-              items={buildItems(menuItems)}
+              items={buildItems(visibleMenuItems)}
               style={{ background: "transparent", border: "none" }}
             />
           </div>

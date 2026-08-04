@@ -5,16 +5,22 @@ import "@testing-library/jest-dom/vitest";
 import { GridSider } from "@/components/grid-sider";
 
 // ── Mocks ──────────────────────────────────────────────────────────
-const { mockUseMenu, mockUseNavigation, mockUseNotificationsContext } =
-  vi.hoisted(() => ({
-    mockUseMenu: vi.fn(),
-    mockUseNavigation: vi.fn(),
-    mockUseNotificationsContext: vi.fn(),
-  }));
+const {
+  mockUseMenu,
+  mockUseNavigation,
+  mockUseNotificationsContext,
+  mockUseGetIdentity,
+} = vi.hoisted(() => ({
+  mockUseMenu: vi.fn(),
+  mockUseNavigation: vi.fn(),
+  mockUseNotificationsContext: vi.fn(),
+  mockUseGetIdentity: vi.fn(),
+}));
 
 vi.mock("@refinedev/core", () => ({
   useMenu: mockUseMenu,
   useNavigation: mockUseNavigation,
+  useGetIdentity: mockUseGetIdentity,
 }));
 
 vi.mock("@refinedev/antd", () => ({
@@ -41,9 +47,16 @@ const menuItems = [
   { key: "/riders", name: "riders", label: "Riders", icon: null, list: "/riders" },
 ];
 
-function setupMocks(badgeCounts = { newOrders: 3, pendingTopUps: 1 }) {
+function setupMocks(
+  badgeCounts = { newOrders: 3, pendingTopUps: 1 },
+  role: string = "ops_admin",
+) {
   mockUseMenu.mockReturnValue({ menuItems, selectedKey: "/orders" });
   mockUseNavigation.mockReturnValue({ push: vi.fn() });
+  mockUseGetIdentity.mockReturnValue({
+    data: { id: "1", name: "Admin", email: "admin@gridgo.ph", role },
+    isLoading: false,
+  });
   mockUseNotificationsContext.mockReturnValue({
     badgeCounts,
     notifications: [],

@@ -1,4 +1,4 @@
-import { Refine, Authenticated } from "@refinedev/core";
+import { Refine, Authenticated, useGetIdentity } from "@refinedev/core";
 import {
   ThemedLayoutV2,
   useNotificationProvider,
@@ -6,12 +6,17 @@ import {
 } from "@refinedev/antd";
 import routerProvider, {
   CatchAllNavigate,
-  NavigateToResource,
   UnsavedChangesNotifier,
   DocumentTitleHandler,
 } from "@refinedev/react-router-v6";
-import { BrowserRouter, Routes, Route, Outlet } from "react-router-dom";
-import { ConfigProvider, App as AntdApp } from "antd";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Outlet,
+  Navigate,
+} from "react-router-dom";
+import { ConfigProvider, App as AntdApp, Spin } from "antd";
 import {
   ShoppingCartOutlined,
   DashboardOutlined,
@@ -27,6 +32,7 @@ import {
   MessageOutlined,
   PrinterOutlined,
   AuditOutlined,
+  ShopOutlined,
 } from "@ant-design/icons";
 
 import { gridTheme } from "@/config/theme";
@@ -36,6 +42,8 @@ import { GridLogo } from "@/components/grid-logo";
 import { CustomHeader } from "@/components/header";
 import { GridSider } from "@/components/grid-sider";
 import { NotificationsProvider } from "@/context/notifications-context";
+import { isSupplierRole } from "@/types/enums";
+import type { AdminIdentity } from "@/utils/api-normalizers";
 
 import { LoginPage } from "@/pages/login";
 import { DashboardPage } from "@/pages/dashboard";
@@ -62,6 +70,40 @@ import { DeliverySettingsPage } from '@/pages/admin-settings/delivery';
 import { PrinterProfilePage } from '@/pages/admin-settings/printer';
 import { QaQueuePage } from '@/pages/qa/queue';
 import { QaWorkspacePage } from '@/pages/qa/workspace';
+import { SupplierJobsListPage } from '@/pages/supplier/jobs-list';
+import { SupplierJobShowPage } from '@/pages/supplier/job-show';
+
+/** Home: ops dashboard or supplier jobs inbox. */
+function RoleHomeRedirect() {
+  const { data: identity, isLoading } = useGetIdentity<AdminIdentity>();
+  if (isLoading) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", padding: 80 }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+  if (isSupplierRole(identity?.role)) {
+    return <Navigate to="/supplier/jobs" replace />;
+  }
+  return <DashboardPage />;
+}
+
+/** Authenticated users hitting /login land on role home. */
+function AuthenticatedHomeRedirect() {
+  const { data: identity, isLoading } = useGetIdentity<AdminIdentity>();
+  if (isLoading) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", padding: 80 }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+  if (isSupplierRole(identity?.role)) {
+    return <Navigate to="/supplier/jobs" replace />;
+  }
+  return <Navigate to="/" replace />;
+}
 
 function App() {
   return (
@@ -83,6 +125,17 @@ function App() {
                 name: "dashboard",
                 list: "/",
                 meta: { label: "Dashboard", icon: <DashboardOutlined /> },
+              },
+              {
+                name: "supplier-jobs",
+                list: "/supplier/jobs",
+                show: "/supplier/jobs/:id",
+                meta: {
+                  label: "Jobs",
+                  icon: <ShopOutlined />,
+                  /** Shown only for supplier role (filtered in GridSider). */
+                  portal: "supplier",
+                },
               },
               {
                 name: "admin/orders",
@@ -221,7 +274,11 @@ function App() {
                   </Authenticated>
                 }
               >
-                <Route index element={<DashboardPage />} />
+                <Route index element={<RoleHomeRedirect />} />
+                <Route path="/supplier/jobs">
+                  <Route index element={<SupplierJobsListPage />} />
+                  <Route path=":id" element={<SupplierJobShowPage />} />
+                </Route>
                 <Route path="/orders">
                   <Route index element={<OrderList />} />
                   <Route path="show/:id" element={<OrderShow />} />
@@ -263,7 +320,7 @@ function App() {
                     key="auth-login"
                     fallback={<Outlet />}
                   >
-                    <NavigateToResource resource="dashboard" />
+                    <AuthenticatedHomeRedirect />
                   </Authenticated>
                 }
               >

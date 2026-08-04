@@ -4,7 +4,7 @@ import { TOKEN_KEY } from "@/providers/api-client";
 import { normalizeIdentity } from "@/utils/api-normalizers";
 import { disconnectLive } from "@/providers/live-provider";
 import { disconnectNotifications } from "@/providers/notification-ws";
-import { isAdminCapableRole } from "@/types/enums";
+import { isAdminAppLoginRole, isSupplierRole } from "@/types/enums";
 
 export const authProvider: AuthProvider = {
   login: async ({ email, password }) => {
@@ -24,19 +24,22 @@ export const authProvider: AuthProvider = {
 
       const data = await response.json();
 
-      // Ops Admin + Super Admin (and legacy admin during cutover)
-      if (!isAdminCapableRole(data.user?.role)) {
+      // Ops Admin + Super Admin (+ legacy admin) and Supplier portal
+      if (!isAdminAppLoginRole(data.user?.role)) {
         return {
           success: false,
           error: {
             name: "Login Failed",
-            message: "Access denied. Admin accounts only.",
+            message: "Access denied. Admin or supplier accounts only.",
           },
         };
       }
 
       localStorage.setItem(TOKEN_KEY, data.access_token);
-      return { success: true, redirectTo: "/" };
+      const redirectTo = isSupplierRole(data.user?.role)
+        ? "/supplier/jobs"
+        : "/";
+      return { success: true, redirectTo };
     } catch {
       return {
         success: false,
@@ -69,12 +72,15 @@ export const authProvider: AuthProvider = {
       }
 
       const user = await response.json();
-      if (!isAdminCapableRole(user.role)) {
+      if (!isAdminAppLoginRole(user.role)) {
         localStorage.removeItem(TOKEN_KEY);
         return {
           authenticated: false,
           redirectTo: "/login",
-          error: { name: "Forbidden", message: "Admin access only" },
+          error: {
+            name: "Forbidden",
+            message: "Admin or supplier access only",
+          },
         };
       }
 

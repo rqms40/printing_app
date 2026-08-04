@@ -20,6 +20,18 @@ export function isAdminCapableRole(role: string | null | undefined): boolean {
   );
 }
 
+/**
+ * Roles allowed to log into the Refine admin app.
+ * Suppliers get the supplier portal section only (not ops nav).
+ */
+export function isAdminAppLoginRole(role: string | null | undefined): boolean {
+  return isAdminCapableRole(role) || role === "supplier";
+}
+
+export function isSupplierRole(role: string | null | undefined): boolean {
+  return role === "supplier";
+}
+
 export type OrderStatus =
   | "draft"
   | "submitted"
