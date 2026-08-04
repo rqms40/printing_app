@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import {
   BadRequestException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
@@ -15,6 +16,10 @@ import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
 import { AuditService } from '../audit/audit.service';
 import { FilesService } from '../files/files.service';
+import {
+  FileMetadata,
+  FilePurpose,
+} from '../files/entities/file-metadata.entity';
 import {
   QualityDecisionDto,
   QualityDecisionInput,
@@ -66,8 +71,12 @@ describe('QualityService', () => {
   let txHistoryRepo: {
     insert: jest.Mock;
   };
+  let txFileRepo: {
+    findOne: jest.Mock;
+  };
 
   const actor = { userId: 7, role: 'ops_admin' as const };
+  const clientActor = { userId: 3, role: 'client' as const };
 
   function baseOrder(overrides: Partial<Order> = {}): Order {
     return {
@@ -114,6 +123,9 @@ describe('QualityService', () => {
     txHistoryRepo = {
       insert: jest.fn().mockResolvedValue(undefined),
     };
+    txFileRepo = {
+      findOne: jest.fn(),
+    };
 
     reviewRepo = {
       find: jest.fn().mockResolvedValue([]),
@@ -141,6 +153,7 @@ describe('QualityService', () => {
             if (entity === Order) return txOrdersRepo;
             if (entity === QualityReview) return txReviewRepo;
             if (entity === OrderStatusHistory) return txHistoryRepo;
+            if (entity === FileMetadata) return txFileRepo;
             throw new Error(`Unexpected repo: ${String(entity)}`);
           },
         }),
@@ -410,6 +423,221 @@ describe('QualityService', () => {
           },
         }),
       );
+    });
+  });
+
+  describe('resubmitCorrection', () => {
+    function ownedFile(overrides: Partial<FileMetadata> = {}): FileMetadata {
+      return {
+        id: 200,
+        originalName: 'revised.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        url: 'https://minio.example/revised.pdf',
+        objectKey: 'uploads/general/2026/08/revised.pdf',
+        uploadedBy: 3,
+        purpose: FilePurpose.GENERAL,
+        ...overrides,
+      } as FileMetadata;
+    }
+
+    it('client owner: client_correction → needs_qa with new artwork', async () => {
+      txOrdersRepo.findOne.mockResolvedValue(
+        baseOrder({
+          orderStatus: OrderStatus.CLIENT_CORRECTION,
+          userId: 3,
+          fileMetadataId: 99,
+        }),
+      );
+      txFileRepo.findOne.mockResolvedValue(ownedFile());
+
+      const result = await service.resubmitCorrection(
+        42,
+        { fileMetadataId: 200, notes: 'Fixed bleed' },
+        clientActor,
+      );
+
+      expect(result.fromStatus).toBe(OrderStatus.CLIENT_CORRECTION);
+      expect(result.toStatus).toBe(OrderStatus.NEEDS_QA);
+      expect(result.order.fileMetadataId).toBe(200);
+      expect(result.order.fileName).toBe('revised.pdf');
+      expect(txOrdersRepo.update).toHaveBeenCalledWith(
+        { id: 42, orderStatus: OrderStatus.CLIENT_CORRECTION },
+        expect.objectContaining({
+          orderStatus: OrderStatus.NEEDS_QA,
+          fileMetadataId: 200,
+          fileName: 'revised.pdf',
+        }),
+      );
+      expect(txHistoryRepo.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fromStatus: OrderStatus.CLIENT_CORRECTION,
+          toStatus: OrderStatus.NEEDS_QA,
+          changedByUserId: 3,
+        }),
+      );
+      expect(auditService.recordOrderStatusTransition).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actorRole: 'client',
+          toStatus: OrderStatus.NEEDS_QA,
+        }),
+        expect.anything(),
+      );
+      expect(auditService.append).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'client_correction_resubmit' }),
+        expect.anything(),
+      );
+    });
+
+    it('rejects non-owner client', async () => {
+      txOrdersRepo.findOne.mockResolvedValue(
+        baseOrder({
+          orderStatus: OrderStatus.CLIENT_CORRECTION,
+          userId: 3,
+        }),
+      );
+
+      await expect(
+        service.resubmitCorrection(
+          42,
+          { fileMetadataId: 200 },
+          { userId: 99, role: 'client' },
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('rejects file not owned by client', async () => {
+      txOrdersRepo.findOne.mockResolvedValue(
+        baseOrder({
+          orderStatus: OrderStatus.CLIENT_CORRECTION,
+          userId: 3,
+        }),
+      );
+      txFileRepo.findOne.mockResolvedValue(
+        ownedFile({ uploadedBy: 999 }),
+      );
+
+      await expect(
+        service.resubmitCorrection(
+          42,
+          { fileMetadataId: 200 },
+          clientActor,
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'file_not_owned' }),
+      });
+    });
+
+    it('rejects when order is not in client_correction', async () => {
+      txOrdersRepo.findOne.mockResolvedValue(
+        baseOrder({ orderStatus: OrderStatus.NEEDS_QA, userId: 3 }),
+      );
+
+      await expect(
+        service.resubmitCorrection(
+          42,
+          { fileMetadataId: 200 },
+          clientActor,
+        ),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'not_awaiting_correction',
+        }),
+      });
+    });
+  });
+
+  describe('approveProof', () => {
+    it('client owner: proof_approval → approved_for_matching', async () => {
+      txOrdersRepo.findOne.mockResolvedValue(
+        baseOrder({
+          orderStatus: OrderStatus.PROOF_APPROVAL,
+          userId: 3,
+        }),
+      );
+
+      const result = await service.approveProof(42, clientActor);
+
+      expect(result.fromStatus).toBe(OrderStatus.PROOF_APPROVAL);
+      expect(result.toStatus).toBe(OrderStatus.APPROVED_FOR_MATCHING);
+      expect(txOrdersRepo.update).toHaveBeenCalledWith(
+        { id: 42, orderStatus: OrderStatus.PROOF_APPROVAL },
+        { orderStatus: OrderStatus.APPROVED_FOR_MATCHING },
+      );
+      expect(auditService.append).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'client_proof_approve' }),
+        expect.anything(),
+      );
+    });
+
+    it('rejects non-owner client', async () => {
+      txOrdersRepo.findOne.mockResolvedValue(
+        baseOrder({
+          orderStatus: OrderStatus.PROOF_APPROVAL,
+          userId: 3,
+        }),
+      );
+
+      await expect(
+        service.approveProof(42, { userId: 99, role: 'client' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('rejects wrong status', async () => {
+      txOrdersRepo.findOne.mockResolvedValue(
+        baseOrder({
+          orderStatus: OrderStatus.CLIENT_CORRECTION,
+          userId: 3,
+        }),
+      );
+
+      await expect(service.approveProof(42, clientActor)).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'not_awaiting_proof' }),
+      });
+    });
+  });
+
+  describe('rejectProof', () => {
+    it('client owner: proof_approval → client_correction', async () => {
+      txOrdersRepo.findOne.mockResolvedValue(
+        baseOrder({
+          orderStatus: OrderStatus.PROOF_APPROVAL,
+          userId: 3,
+        }),
+      );
+
+      const result = await service.rejectProof(
+        42,
+        { reason: 'Colors look off' },
+        clientActor,
+      );
+
+      expect(result.fromStatus).toBe(OrderStatus.PROOF_APPROVAL);
+      expect(result.toStatus).toBe(OrderStatus.CLIENT_CORRECTION);
+      expect(txOrdersRepo.update).toHaveBeenCalledWith(
+        { id: 42, orderStatus: OrderStatus.PROOF_APPROVAL },
+        expect.objectContaining({
+          orderStatus: OrderStatus.CLIENT_CORRECTION,
+          adminNotes: 'Colors look off',
+        }),
+      );
+      expect(auditService.append).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'client_proof_reject' }),
+        expect.anything(),
+      );
+    });
+
+    it('rejects non-owner client', async () => {
+      txOrdersRepo.findOne.mockResolvedValue(
+        baseOrder({
+          orderStatus: OrderStatus.PROOF_APPROVAL,
+          userId: 3,
+        }),
+      );
+
+      await expect(
+        service.rejectProof(42, {}, { userId: 99, role: 'client' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
     });
   });
 });

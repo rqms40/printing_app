@@ -22,13 +22,20 @@ import { UpdateStatusDto } from './dto/update-status.dto';
 import { UpdateManualStatusDto } from './dto/update-manual-status.dto';
 import { OrderStatus } from './entities/order.entity';
 import type { RequestWithUser } from '../common/interfaces/request-with-user';
+import type { TransitionActor } from './order-status-transition';
+import { QualityService } from '../quality/quality.service';
+import { ResubmitCorrectionDto } from '../quality/dto/resubmit-correction.dto';
+import { RejectProofDto } from '../quality/dto/reject-proof.dto';
 
 @ApiTags('orders')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('orders')
 export class OrdersController {
-  constructor(private ordersService: OrdersService) {}
+  constructor(
+    private ordersService: OrdersService,
+    private qualityService: QualityService,
+  ) {}
 
   @Get()
   getOrders(@Request() req: RequestWithUser) {
@@ -107,6 +114,57 @@ export class OrdersController {
       actorUserId: req.user.sub,
       actorRole: req.user.role ?? null,
       reason: 'Client/ops payment authorization',
+    });
+  }
+
+  /**
+   * Client (owner): bind revised artwork and return order to needs_qa.
+   * Upload via POST /files/upload first, then pass fileMetadataId.
+   */
+  @Post(':id/resubmit-correction')
+  @UseGuards(RolesGuard)
+  @Roles('client', 'ops_admin', 'super_admin')
+  resubmitCorrection(
+    @Request() req: RequestWithUser,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ResubmitCorrectionDto,
+  ) {
+    return this.qualityService.resubmitCorrection(id, dto, {
+      userId: req.user.sub,
+      role: (req.user.role ?? 'client') as TransitionActor,
+    });
+  }
+
+  /**
+   * Client (owner): approve proof → approved_for_matching.
+   */
+  @Post(':id/approve-proof')
+  @UseGuards(RolesGuard)
+  @Roles('client', 'ops_admin', 'super_admin')
+  approveProof(
+    @Request() req: RequestWithUser,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.qualityService.approveProof(id, {
+      userId: req.user.sub,
+      role: (req.user.role ?? 'client') as TransitionActor,
+    });
+  }
+
+  /**
+   * Client (owner): reject proof → client_correction for revision.
+   */
+  @Post(':id/reject-proof')
+  @UseGuards(RolesGuard)
+  @Roles('client', 'ops_admin', 'super_admin')
+  rejectProof(
+    @Request() req: RequestWithUser,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: RejectProofDto,
+  ) {
+    return this.qualityService.rejectProof(id, dto ?? {}, {
+      userId: req.user.sub,
+      role: (req.user.role ?? 'client') as TransitionActor,
     });
   }
 

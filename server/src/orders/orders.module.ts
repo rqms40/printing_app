@@ -28,6 +28,7 @@ import { DispatchPlan } from '../riders/entities/dispatch-plan.entity';
 import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.module';
 import { AuditModule } from '../audit/audit.module';
 import { PaymentsModule } from '../payments/payments.module';
+import { QualityModule } from '../quality/quality.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { PaymentsModule } from '../payments/payments.module';
     RealtimeSessionsModule,
     AuditModule,
     PaymentsModule,
+    QualityModule,
   ],
   providers: [OrdersService, OrdersGateway, PaymentTimeoutScheduler],
   controllers: [OrdersController, ExternalDeliveriesController],

@@ -1186,6 +1186,40 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
       await _fetchOrders();
     }
   }
+
+  /// Client: resubmit revised artwork after Ops requested correction.
+  /// Upload via files API first, then pass [fileMetadataId].
+  Future<void> resubmitCorrection(
+    String orderId, {
+    required int fileMetadataId,
+    String? notes,
+  }) async {
+    await ApiClient.instance.post(
+      '/orders/$orderId/resubmit-correction',
+      data: {
+        'fileMetadataId': fileMetadataId,
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      },
+    );
+    await _fetchOrders();
+  }
+
+  /// Client: approve proof → approved_for_matching.
+  Future<void> approveProof(String orderId) async {
+    await ApiClient.instance.post('/orders/$orderId/approve-proof');
+    await _fetchOrders();
+  }
+
+  /// Client: reject proof → client_correction.
+  Future<void> rejectProof(String orderId, {String? reason}) async {
+    await ApiClient.instance.post(
+      '/orders/$orderId/reject-proof',
+      data: {
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
+    );
+    await _fetchOrders();
+  }
 }
 
 Map<String, dynamic> _cartItemPayload(CartItem item) {

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -14,6 +15,10 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { FilesService } from '../files/files.service';
 import {
+  FileMetadata,
+  FilePurpose,
+} from '../files/entities/file-metadata.entity';
+import {
   QualityReview,
   QualityReviewDecision,
   QualityReviewRiskLevel,
@@ -22,6 +27,8 @@ import {
   QualityDecisionDto,
   QualityDecisionInput,
 } from './dto/quality-decision.dto';
+import { ResubmitCorrectionDto } from './dto/resubmit-correction.dto';
+import { RejectProofDto } from './dto/reject-proof.dto';
 
 /** Queue statuses — submitted is auto-promoted into needs_qa on workspace/decision. */
 const QA_QUEUE_STATUSES: OrderStatus[] = [
@@ -128,6 +135,25 @@ export type QualityDecisionResult = {
   autoPromotedFromSubmitted: boolean;
 };
 
+export type ClientQaActionResult = {
+  order: {
+    id: number;
+    orderId: string;
+    orderStatus: OrderStatus;
+    fileMetadataId: number | null;
+    fileName: string | null;
+    fileUrl: string | null;
+  };
+  fromStatus: OrderStatus;
+  toStatus: OrderStatus;
+};
+
+/** Artwork purposes allowed when client revises a file for QA. */
+const CLIENT_ARTWORK_PURPOSES = new Set<FilePurpose>([
+  FilePurpose.GENERAL,
+  FilePurpose.PAPER,
+]);
+
 function mapDecisionInput(
   input: QualityDecisionInput,
 ): QualityReviewDecision {
@@ -179,6 +205,25 @@ function assertOpsActor(actor: QualityActor): void {
   if (!Number.isInteger(actor.userId) || actor.userId <= 0) {
     throw new BadRequestException('QA actor user id is required');
   }
+}
+
+function assertClientOrOpsActor(actor: QualityActor): void {
+  if (
+    actor.role !== 'client' &&
+    actor.role !== 'ops_admin' &&
+    actor.role !== 'super_admin'
+  ) {
+    throw new BadRequestException(
+      `Actor ${actor.role} cannot perform client QA actions`,
+    );
+  }
+  if (!Number.isInteger(actor.userId) || actor.userId <= 0) {
+    throw new BadRequestException('QA actor user id is required');
+  }
+}
+
+function isOpsRole(role: TransitionActor): boolean {
+  return role === 'ops_admin' || role === 'super_admin';
 }
 
 @Injectable()
@@ -535,6 +580,361 @@ export class QualityService {
         autoPromotedFromSubmitted,
       };
     });
+  }
+
+  /**
+   * Client (order owner) revises artwork after Ops requested correction.
+   * Transitions `client_correction` → `needs_qa` and binds the new file.
+   * Upload first via POST /files/upload, then pass fileMetadataId.
+   */
+  async resubmitCorrection(
+    orderId: number,
+    dto: ResubmitCorrectionDto,
+    actor: QualityActor,
+  ): Promise<ClientQaActionResult> {
+    assertClientOrOpsActor(actor);
+
+    const fileId = Number(dto.fileMetadataId);
+    if (!Number.isInteger(fileId) || fileId <= 0) {
+      throw new BadRequestException({
+        code: 'invalid_file_metadata_id',
+        message: 'fileMetadataId must be a positive integer',
+      });
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      const ordersRepo = manager.getRepository(Order);
+      const historyRepo = manager.getRepository(OrderStatusHistory);
+      const fileRepo = manager.getRepository(FileMetadata);
+
+      const locked = await ordersRepo.findOne({
+        where: { id: orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!locked) throw new NotFoundException('Order not found');
+
+      this.assertClientOrderAccess(locked, actor);
+
+      if (locked.orderStatus !== OrderStatus.CLIENT_CORRECTION) {
+        throw new BadRequestException({
+          code: 'not_awaiting_correction',
+          message: `Order status ${locked.orderStatus} is not open for correction resubmit (expected client_correction)`,
+        });
+      }
+
+      const file = await fileRepo.findOne({
+        where: { id: fileId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!file) {
+        throw new BadRequestException({
+          code: 'invalid_file_metadata_id',
+          message: 'Uploaded file not found',
+        });
+      }
+      // Client must own the upload; ops may attach any valid artwork purpose.
+      if (!isOpsRole(actor.role) && file.uploadedBy !== actor.userId) {
+        throw new ForbiddenException({
+          code: 'file_not_owned',
+          message: 'You can only resubmit files you uploaded',
+        });
+      }
+      if (!CLIENT_ARTWORK_PURPOSES.has(file.purpose)) {
+        throw new BadRequestException({
+          code: 'invalid_file_purpose',
+          message: `File purpose '${file.purpose}' is not valid artwork for correction`,
+        });
+      }
+      if (!file.objectKey?.trim()) {
+        throw new BadRequestException({
+          code: 'file_missing_storage',
+          message: 'Uploaded file has no storage object',
+        });
+      }
+
+      const fromStatus = OrderStatus.CLIENT_CORRECTION;
+      const toStatus = OrderStatus.NEEDS_QA;
+      assertTransition(fromStatus, toStatus, actor.role);
+
+      const notes =
+        dto.notes?.trim() ||
+        'Client resubmitted revised artwork for QA';
+
+      const previousFileMetadataId = locked.fileMetadataId;
+      const updateResult = await ordersRepo.update(
+        { id: locked.id, orderStatus: fromStatus },
+        {
+          orderStatus: toStatus,
+          fileMetadataId: file.id,
+          fileName: file.originalName,
+          fileUrl: file.url,
+        },
+      );
+      if (updateResult.affected != null && updateResult.affected !== 1) {
+        throw new BadRequestException(
+          'Order changed during correction resubmit',
+        );
+      }
+
+      await historyRepo.insert({
+        orderId: locked.id,
+        fromStatus,
+        toStatus,
+        changedByUserId: actor.userId,
+        notes,
+      });
+
+      await this.auditService.recordOrderStatusTransition(
+        {
+          orderId: locked.id,
+          fromStatus,
+          toStatus,
+          actorUserId: actor.userId,
+          actorRole: actor.role,
+          reason: notes,
+          metadata: {
+            source: 'quality.resubmitCorrection',
+            fileMetadataId: file.id,
+            previousFileMetadataId,
+          },
+        },
+        manager,
+      );
+
+      await this.auditService.append(
+        {
+          actorId: actor.userId,
+          actorRole: actor.role,
+          action: 'client_correction_resubmit',
+          entityType: 'order',
+          entityId: String(locked.id),
+          orderId: locked.id,
+          fromState: fromStatus,
+          toState: toStatus,
+          reason: notes,
+          metadata: {
+            fileMetadataId: file.id,
+            previousFileMetadataId,
+          },
+        },
+        manager,
+      );
+
+      return {
+        order: {
+          id: locked.id,
+          orderId: locked.orderId,
+          orderStatus: toStatus,
+          fileMetadataId: file.id,
+          fileName: file.originalName,
+          fileUrl: file.url,
+        },
+        fromStatus,
+        toStatus,
+      };
+    });
+  }
+
+  /**
+   * Client approves proof artwork → `approved_for_matching`.
+   */
+  async approveProof(
+    orderId: number,
+    actor: QualityActor,
+  ): Promise<ClientQaActionResult> {
+    assertClientOrOpsActor(actor);
+
+    return this.dataSource.transaction(async (manager) => {
+      const ordersRepo = manager.getRepository(Order);
+      const historyRepo = manager.getRepository(OrderStatusHistory);
+
+      const locked = await ordersRepo.findOne({
+        where: { id: orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!locked) throw new NotFoundException('Order not found');
+
+      this.assertClientOrderAccess(locked, actor);
+
+      if (locked.orderStatus !== OrderStatus.PROOF_APPROVAL) {
+        throw new BadRequestException({
+          code: 'not_awaiting_proof',
+          message: `Order status ${locked.orderStatus} is not open for proof approval (expected proof_approval)`,
+        });
+      }
+
+      const fromStatus = OrderStatus.PROOF_APPROVAL;
+      const toStatus = OrderStatus.APPROVED_FOR_MATCHING;
+      assertTransition(fromStatus, toStatus, actor.role);
+
+      const reason = 'Client approved proof';
+      const updateResult = await ordersRepo.update(
+        { id: locked.id, orderStatus: fromStatus },
+        { orderStatus: toStatus },
+      );
+      if (updateResult.affected != null && updateResult.affected !== 1) {
+        throw new BadRequestException('Order changed during proof approval');
+      }
+
+      await historyRepo.insert({
+        orderId: locked.id,
+        fromStatus,
+        toStatus,
+        changedByUserId: actor.userId,
+        notes: reason,
+      });
+
+      await this.auditService.recordOrderStatusTransition(
+        {
+          orderId: locked.id,
+          fromStatus,
+          toStatus,
+          actorUserId: actor.userId,
+          actorRole: actor.role,
+          reason,
+          metadata: { source: 'quality.approveProof' },
+        },
+        manager,
+      );
+
+      await this.auditService.append(
+        {
+          actorId: actor.userId,
+          actorRole: actor.role,
+          action: 'client_proof_approve',
+          entityType: 'order',
+          entityId: String(locked.id),
+          orderId: locked.id,
+          fromState: fromStatus,
+          toState: toStatus,
+          reason,
+        },
+        manager,
+      );
+
+      return {
+        order: {
+          id: locked.id,
+          orderId: locked.orderId,
+          orderStatus: toStatus,
+          fileMetadataId: locked.fileMetadataId ?? null,
+          fileName: locked.fileName ?? null,
+          fileUrl: locked.fileUrl ?? null,
+        },
+        fromStatus,
+        toStatus,
+      };
+    });
+  }
+
+  /**
+   * Client rejects proof → `client_correction` (revise artwork path).
+   * Ops may instead send `needs_qa` via Ops QA decision / status tools.
+   */
+  async rejectProof(
+    orderId: number,
+    dto: RejectProofDto,
+    actor: QualityActor,
+  ): Promise<ClientQaActionResult> {
+    assertClientOrOpsActor(actor);
+
+    return this.dataSource.transaction(async (manager) => {
+      const ordersRepo = manager.getRepository(Order);
+      const historyRepo = manager.getRepository(OrderStatusHistory);
+
+      const locked = await ordersRepo.findOne({
+        where: { id: orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!locked) throw new NotFoundException('Order not found');
+
+      this.assertClientOrderAccess(locked, actor);
+
+      if (locked.orderStatus !== OrderStatus.PROOF_APPROVAL) {
+        throw new BadRequestException({
+          code: 'not_awaiting_proof',
+          message: `Order status ${locked.orderStatus} is not open for proof rejection (expected proof_approval)`,
+        });
+      }
+
+      const fromStatus = OrderStatus.PROOF_APPROVAL;
+      const toStatus = OrderStatus.CLIENT_CORRECTION;
+      assertTransition(fromStatus, toStatus, actor.role);
+
+      const reason =
+        dto.reason?.trim() || 'Client rejected proof; revision required';
+
+      const updateResult = await ordersRepo.update(
+        { id: locked.id, orderStatus: fromStatus },
+        {
+          orderStatus: toStatus,
+          adminNotes: reason,
+        },
+      );
+      if (updateResult.affected != null && updateResult.affected !== 1) {
+        throw new BadRequestException('Order changed during proof rejection');
+      }
+
+      await historyRepo.insert({
+        orderId: locked.id,
+        fromStatus,
+        toStatus,
+        changedByUserId: actor.userId,
+        notes: reason,
+      });
+
+      await this.auditService.recordOrderStatusTransition(
+        {
+          orderId: locked.id,
+          fromStatus,
+          toStatus,
+          actorUserId: actor.userId,
+          actorRole: actor.role,
+          reason,
+          metadata: { source: 'quality.rejectProof' },
+        },
+        manager,
+      );
+
+      await this.auditService.append(
+        {
+          actorId: actor.userId,
+          actorRole: actor.role,
+          action: 'client_proof_reject',
+          entityType: 'order',
+          entityId: String(locked.id),
+          orderId: locked.id,
+          fromState: fromStatus,
+          toState: toStatus,
+          reason,
+        },
+        manager,
+      );
+
+      return {
+        order: {
+          id: locked.id,
+          orderId: locked.orderId,
+          orderStatus: toStatus,
+          fileMetadataId: locked.fileMetadataId ?? null,
+          fileName: locked.fileName ?? null,
+          fileUrl: locked.fileUrl ?? null,
+        },
+        fromStatus,
+        toStatus,
+      };
+    });
+  }
+
+  /** Clients act only on their own orders; ops may act on any. */
+  private assertClientOrderAccess(order: Order, actor: QualityActor): void {
+    if (isOpsRole(actor.role)) return;
+    if (order.userId !== actor.userId) {
+      throw new ForbiddenException({
+        code: 'not_order_owner',
+        message: 'You can only act on your own orders',
+      });
+    }
   }
 
   private async promoteSubmittedToNeedsQa(
