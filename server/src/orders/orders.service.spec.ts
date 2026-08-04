@@ -2155,7 +2155,7 @@ describe('OrdersService', () => {
     it('writes actor-aware status history in the status transaction', async () => {
       const placedOrder = {
         ...mockOrder,
-        orderStatus: OrderStatus.SUBMITTED,
+        orderStatus: OrderStatus.NEEDS_QA,
       } as Order;
       repo.findOneOrFail.mockResolvedValue(placedOrder);
 
@@ -2172,7 +2172,7 @@ describe('OrdersService', () => {
       expect(historyRepo.insert).toHaveBeenCalledWith(
         expect.objectContaining({
           orderId: 1,
-          fromStatus: OrderStatus.SUBMITTED,
+          fromStatus: OrderStatus.NEEDS_QA,
           toStatus: OrderStatus.APPROVED_FOR_MATCHING,
           changedByUserId: 7,
           notes: 'Admin production update',
@@ -2186,7 +2186,7 @@ describe('OrdersService', () => {
     it('writes an AuditEvent on controlled status change', async () => {
       const placedOrder = {
         ...mockOrder,
-        orderStatus: OrderStatus.SUBMITTED,
+        orderStatus: OrderStatus.NEEDS_QA,
       } as Order;
       repo.findOneOrFail.mockResolvedValue(placedOrder);
 
@@ -2204,7 +2204,7 @@ describe('OrdersService', () => {
       expect(auditService.recordOrderStatusTransition).toHaveBeenCalledWith(
         {
           orderId: 1,
-          fromStatus: OrderStatus.SUBMITTED,
+          fromStatus: OrderStatus.NEEDS_QA,
           toStatus: OrderStatus.APPROVED_FOR_MATCHING,
           actorUserId: 7,
           actorRole: 'ops_admin',
@@ -2241,8 +2241,12 @@ describe('OrdersService', () => {
     });
 
     it('should update status and emit WebSocket event', async () => {
+      const qaOrder = {
+        ...mockOrder,
+        orderStatus: OrderStatus.NEEDS_QA,
+      } as Order;
       repo.update.mockResolvedValue(undefined as any);
-      repo.findOneOrFail.mockResolvedValue(mockOrder);
+      repo.findOneOrFail.mockResolvedValue(qaOrder);
 
       const result = await service.updateStatus(
         1,
@@ -2252,14 +2256,14 @@ describe('OrdersService', () => {
       );
 
       expect(repo.update).toHaveBeenCalledWith(
-        { id: 1, orderStatus: mockOrder.orderStatus },
+        { id: 1, orderStatus: OrderStatus.NEEDS_QA },
         { orderStatus: OrderStatus.APPROVED_FOR_MATCHING },
       );
       expect(gateway.notifyOrderUpdate).toHaveBeenCalledWith(
-        mockOrder.orderId,
-        mockOrder,
+        qaOrder.orderId,
+        expect.objectContaining({ id: 1, orderId: 'ORD-10001' }),
       );
-      expect(result).toEqual(mockOrder);
+      expect(result).toEqual(expect.objectContaining({ id: 1 }));
     });
 
     it('rejects transitions out of cancelled after acquiring the row lock', async () => {
@@ -2278,7 +2282,11 @@ describe('OrdersService', () => {
     });
 
     it('rejects a status write when the expected row was not affected', async () => {
-      repo.findOneOrFail.mockResolvedValue(mockOrder);
+      const qaOrder = {
+        ...mockOrder,
+        orderStatus: OrderStatus.NEEDS_QA,
+      } as Order;
+      repo.findOneOrFail.mockResolvedValue(qaOrder);
       repo.update.mockResolvedValue({ affected: 0 } as any);
 
       await expect(

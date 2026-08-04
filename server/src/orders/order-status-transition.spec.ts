@@ -63,8 +63,6 @@ describe('order status transitions (marketplace)', () => {
       [OrderStatus.PAYMENT_AUTHORIZED, OrderStatus.PRODUCTION],
       [OrderStatus.PRODUCTION, OrderStatus.SUPPLIER_SELF_QC],
       [OrderStatus.SUPPLIER_SELF_QC, OrderStatus.READY_FOR_DISPATCH],
-      // Fast-track until matching modules land (not money transitions)
-      [OrderStatus.SUBMITTED, OrderStatus.APPROVED_FOR_MATCHING],
     ])(
       'allows ops_admin and super_admin for production-like %s → %s',
       (from, to) => {
@@ -72,6 +70,23 @@ describe('order status transitions (marketplace)', () => {
         expect(() => assertTransition(from, to, 'super_admin')).not.toThrow();
       },
     );
+
+    it('requires QA path: rejects submitted → approved_for_matching', () => {
+      expect(
+        canTransition(
+          OrderStatus.SUBMITTED,
+          OrderStatus.APPROVED_FOR_MATCHING,
+          'ops_admin',
+        ),
+      ).toBe(false);
+      expect(() =>
+        assertTransition(
+          OrderStatus.SUBMITTED,
+          OrderStatus.APPROVED_FOR_MATCHING,
+          'ops_admin',
+        ),
+      ).toThrow(/Cannot transition/);
+    });
 
     it('does not allow status-only ops jump to payment_authorized', () => {
       expect(
@@ -290,16 +305,18 @@ describe('order status transitions (marketplace)', () => {
   });
 
   describe('adminAllowedNextOrderStatuses', () => {
-    it('projects ops-operable QA/matching transitions from submitted', () => {
+    it('projects ops-operable QA transitions from submitted (no matching skip)', () => {
       expect(
         adminAllowedNextOrderStatuses(OrderStatus.SUBMITTED, 'delivery'),
       ).toEqual(
         expect.arrayContaining([
           OrderStatus.NEEDS_QA,
-          OrderStatus.APPROVED_FOR_MATCHING,
           OrderStatus.FILE_REJECTED,
         ]),
       );
+      expect(
+        adminAllowedNextOrderStatuses(OrderStatus.SUBMITTED, 'delivery'),
+      ).not.toContain(OrderStatus.APPROVED_FOR_MATCHING);
       expect(
         adminAllowedNextOrderStatuses(OrderStatus.SUBMITTED, 'delivery'),
       ).not.toContain(OrderStatus.CANCELLED);

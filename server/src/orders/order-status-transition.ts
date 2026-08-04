@@ -53,8 +53,7 @@ export const ORDER_STATUS_TRANSITIONS: Record<
   ],
   [OrderStatus.SUBMITTED]: [
     { to: OrderStatus.NEEDS_QA, actors: SYSTEM_OR_OPS },
-    // Temp fast-track: ops may approve without full QA module (until Phase 4).
-    { to: OrderStatus.APPROVED_FOR_MATCHING, actors: OPS },
+    // QA is mandatory (Task 4.1+): no skip from submitted → approved_for_matching.
     { to: OrderStatus.FILE_REJECTED, actors: OPS },
     { to: OrderStatus.CANCELLED, actors: CLIENT_OR_OPS },
   ],

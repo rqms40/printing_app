@@ -450,9 +450,9 @@ describe('AdminController analytics', () => {
       ]);
       expect(mapped.delivery_slot_booking_id).toBe(5);
       expect(mapped.extra_destination_fee).toBe(20);
+      // QA mandatory: submitted may only go to needs_qa / file_rejected (cancel filtered).
       expect(mapped.allowed_next_statuses).toEqual([
         OrderStatus.NEEDS_QA,
-        OrderStatus.APPROVED_FOR_MATCHING,
         OrderStatus.FILE_REJECTED,
       ]);
     });
@@ -487,10 +487,10 @@ describe('AdminController analytics', () => {
       ]);
       expect(map(OrderStatus.READY_FOR_DISPATCH, 'delivery')).toEqual([]);
       expect(map(OrderStatus.RIDER_ASSIGNED, 'delivery')).toEqual([]);
+      // payment_authorized is money-path only (authorize-payment), not status dropdown.
       expect(map(OrderStatus.APPROVED_FOR_MATCHING, 'delivery')).toEqual([
         OrderStatus.SUPPLIER_ASSIGNED,
         OrderStatus.AWAITING_PAYMENT,
-        OrderStatus.PAYMENT_AUTHORIZED,
       ]);
     });
 
@@ -555,6 +555,7 @@ describe('AdminController analytics', () => {
         {},
         {
           actorUserId: 31,
+          actorRole: null,
           reason: 'Customer file is corrupted',
         },
       );
@@ -578,6 +579,7 @@ describe('AdminController analytics', () => {
         {},
         {
           actorUserId: 31,
+          actorRole: null,
           reason: 'Admin status update',
         },
       );
