@@ -299,10 +299,10 @@ class SupplierJobDetailNotifier extends StateNotifier<SupplierJobDetailState> {
         ),
         if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
       });
+      // Do not set Content-Type manually — Dio must attach multipart boundary.
       await _api.post(
         '/supplier/jobs/$jobId/self-qc',
         data: form,
-        options: Options(contentType: 'multipart/form-data'),
       );
       return 'Self-QC submitted';
     });
