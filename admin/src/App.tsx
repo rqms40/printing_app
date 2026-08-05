@@ -33,6 +33,11 @@ import {
   PrinterOutlined,
   AuditOutlined,
   ShopOutlined,
+  SafetyCertificateOutlined,
+  EnvironmentOutlined,
+  FundOutlined,
+  BankOutlined,
+  ControlOutlined,
 } from "@ant-design/icons";
 
 import { gridTheme } from "@/config/theme";
@@ -72,6 +77,10 @@ import { QaQueuePage } from '@/pages/qa/queue';
 import { QaWorkspacePage } from '@/pages/qa/workspace';
 import { SupplierJobsListPage } from '@/pages/supplier/jobs-list';
 import { SupplierJobShowPage } from '@/pages/supplier/job-show';
+import { SuperVerificationPage } from '@/pages/super/verification';
+import { SuperZonesPage } from '@/pages/super/zones';
+import { SuperAuditPage } from '@/pages/super/audit';
+import { SuperFinancePage } from '@/pages/super/finance';
 
 /** Home: ops dashboard or supplier jobs inbox. */
 function RoleHomeRedirect() {
@@ -246,6 +255,49 @@ function App() {
                 list: '/settings/printer',
                 meta: { label: 'Printer Profile', icon: <PrinterOutlined /> },
               },
+              {
+                name: "super-admin",
+                meta: {
+                  label: "Super Admin",
+                  icon: <ControlOutlined />,
+                },
+              },
+              {
+                name: "super-verification",
+                list: "/super/verification",
+                meta: {
+                  label: "Verification",
+                  icon: <SafetyCertificateOutlined />,
+                  parent: "super-admin",
+                },
+              },
+              {
+                name: "super-zones",
+                list: "/super/zones",
+                meta: {
+                  label: "Zones & Fees",
+                  icon: <EnvironmentOutlined />,
+                  parent: "super-admin",
+                },
+              },
+              {
+                name: "super-audit",
+                list: "/super/audit",
+                meta: {
+                  label: "Health & Audit",
+                  icon: <FundOutlined />,
+                  parent: "super-admin",
+                },
+              },
+              {
+                name: "super-finance",
+                list: "/super/finance",
+                meta: {
+                  label: "COD & Payouts",
+                  icon: <BankOutlined />,
+                  parent: "super-admin",
+                },
+              },
             ]}
             options={{
               syncWithLocation: true,
@@ -312,6 +364,10 @@ function App() {
                 <Route path="/external-deliveries" element={<ExternalDeliveriesPage />} />
                 <Route path="/settings/delivery" element={<DeliverySettingsPage />} />
                 <Route path="/settings/printer" element={<PrinterProfilePage />} />
+                <Route path="/super/verification" element={<SuperVerificationPage />} />
+                <Route path="/super/zones" element={<SuperZonesPage />} />
+                <Route path="/super/audit" element={<SuperAuditPage />} />
+                <Route path="/super/finance" element={<SuperFinancePage />} />
               </Route>
 
               <Route

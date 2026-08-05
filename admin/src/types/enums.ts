@@ -32,6 +32,11 @@ export function isSupplierRole(role: string | null | undefined): boolean {
   return role === "supplier";
 }
 
+/** Super Admin governance surfaces (zones, verification, audit, finance). */
+export function isSuperAdminRole(role: string | null | undefined): boolean {
+  return role === "super_admin";
+}
+
 export type OrderStatus =
   | "draft"
   | "submitted"

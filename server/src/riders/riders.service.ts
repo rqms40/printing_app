@@ -8,7 +8,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomInt, timingSafeEqual } from 'crypto';
 import { DataSource, EntityManager, In, Not, Repository } from 'typeorm';
-import { RiderProfile } from './entities/rider-profile.entity';
+import {
+  RiderProfile,
+  RiderVerificationStatus,
+} from './entities/rider-profile.entity';
 import {
   DeliveryAssignment,
   DeliveryStatus,
@@ -395,10 +398,14 @@ export class RidersService {
       plate_number: p.plateNumber ?? null,
       license_number: p.licenseNumber ?? null,
       is_available: p.isAvailable,
+      verification_status:
+        p.verificationStatus ?? RiderVerificationStatus.PENDING,
       assignment_eligible:
         p.isAvailable &&
         p.user?.isActive === true &&
-        p.user.role === UserRole.RIDER,
+        p.user.role === UserRole.RIDER &&
+        (p.verificationStatus ?? RiderVerificationStatus.PENDING) ===
+          RiderVerificationStatus.VERIFIED,
       last_latitude: p.lastLatitude ? Number(p.lastLatitude) : null,
       last_longitude: p.lastLongitude ? Number(p.lastLongitude) : null,
       last_location_update: p.lastLocationUpdate ?? null,

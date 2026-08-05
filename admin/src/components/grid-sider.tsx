@@ -7,7 +7,7 @@ import { MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
 import { useNotificationsContext } from "@/context/notifications-context";
 import { GridLogo } from "@/components/grid-logo";
 import type { BadgeCounts } from "@/types/notification";
-import { isSupplierRole } from "@/types/enums";
+import { isSupplierRole, isSuperAdminRole } from "@/types/enums";
 import type { AdminIdentity } from "@/utils/api-normalizers";
 
 const BADGE_MAP: Partial<Record<string, keyof BadgeCounts>> = {
@@ -18,18 +18,28 @@ const BADGE_MAP: Partial<Record<string, keyof BadgeCounts>> = {
 /** Resources exclusive to the supplier portal (not shown to ops). */
 const SUPPLIER_PORTAL_RESOURCES = new Set(["supplier-jobs"]);
 
+/** Super Admin–only governance resources (hidden from ops_admin). */
+const SUPER_ONLY_RESOURCES = new Set([
+  "super-verification",
+  "super-zones",
+  "super-audit",
+  "super-finance",
+  "super-admin",
+]);
+
 interface GridSiderProps {
   initialCollapsed?: boolean;
 }
 
-type MenuRoleMode = "unknown" | "supplier" | "ops";
+type MenuRoleMode = "unknown" | "supplier" | "ops" | "super";
 
 /**
  * Role-filter the Refine menu.
  * - unknown: default-deny — hide ops and supplier items until identity loads
  *   (avoids flashing full ops nav for suppliers during getIdentity).
  * - supplier: only supplier portal resources
- * - ops: all non-supplier resources
+ * - ops: non-supplier, non-super-only resources
+ * - super: ops resources + super governance pages
  */
 function filterMenuForRole(
   items: ITreeMenu[],
@@ -40,8 +50,8 @@ function filterMenuForRole(
   return items
     .map((item) => {
       const isSupplierRes = SUPPLIER_PORTAL_RESOURCES.has(item.name);
+      const isSuperRes = SUPER_ONLY_RESOURCES.has(item.name);
       if (mode === "supplier") {
-        // Suppliers only see supplier portal resources
         if (isSupplierRes) return item;
         if (item.children?.length) {
           const children = filterMenuForRole(item.children, mode);
@@ -50,10 +60,13 @@ function filterMenuForRole(
         }
         return null;
       }
-      // Ops: hide supplier portal resources
+      // Ops + Super: hide supplier portal
       if (isSupplierRes) return null;
+      // Ops only: hide super-only resources
+      if (mode === "ops" && isSuperRes) return null;
       if (item.children?.length) {
         const children = filterMenuForRole(item.children, mode);
+        if (children.length === 0 && !item.list) return null;
         return { ...item, children };
       }
       return item;
@@ -71,11 +84,14 @@ export function GridSider({ initialCollapsed = false }: GridSiderProps) {
     useGetIdentity<AdminIdentity>();
   const roleKnown = !identityLoading && identity?.role != null;
   const supplier = isSupplierRole(identity?.role);
+  const superAdmin = isSuperAdminRole(identity?.role);
   const menuMode: MenuRoleMode = !roleKnown
     ? "unknown"
     : supplier
       ? "supplier"
-      : "ops";
+      : superAdmin
+        ? "super"
+        : "ops";
 
   const visibleMenuItems = useMemo(
     () => filterMenuForRole(menuItems, menuMode),
@@ -87,8 +103,13 @@ export function GridSider({ initialCollapsed = false }: GridSiderProps) {
     .map((item) => item.key)
     .filter((key): key is string => typeof key === "string");
 
-  const brandLabel =
-    !roleKnown ? "GRIDGO" : supplier ? "GRIDGO Supplier" : "GRIDGO Admin";
+  const brandLabel = !roleKnown
+    ? "GRIDGO"
+    : supplier
+      ? "GRIDGO Supplier"
+      : superAdmin
+        ? "GRIDGO Super"
+        : "GRIDGO Admin";
 
   function buildItems(items: ITreeMenu[]): MenuProps["items"] {
     return items.map((item) => {

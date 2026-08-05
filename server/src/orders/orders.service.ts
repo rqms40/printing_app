@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
@@ -63,8 +64,10 @@ import { DeliverySlotsGateway } from '../delivery-slots/delivery-slots.gateway';
 import { DeliverySlotBooking } from '../delivery-slots/entities/delivery-slot-booking.entity';
 import {
   CancellationClosedException,
+  ServiceAreaMismatchException,
   SlotFullException,
 } from '../delivery-slots/exceptions';
+import { GeoZonesService } from '../geo-zones/geo-zones.service';
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
 import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 import { TamSurveyRequirement } from '../tam-surveys/entities/tam-survey-requirement.entity';
@@ -306,6 +309,7 @@ export class OrdersService {
     @InjectRepository(DispatchPlan)
     private readonly dispatchPlanRepo: Repository<DispatchPlan>,
     private readonly auditService: AuditService,
+    @Optional() private readonly geoZonesService?: GeoZonesService,
   ) {}
 
   async findByUser(userId: number): Promise<Order[]> {
@@ -777,7 +781,8 @@ export class OrdersService {
     const subtotal = quote.subtotal;
     // Client totals are display hints only. Checkout charges are authoritative
     // on the server so a direct request cannot underpay a credit order.
-    const deliveryFee =
+    // May be overridden by geo-zone base fee after zone match below.
+    let deliveryFee =
       (dto.deliveryOption === 'delivery' ? STANDARD_DELIVERY_FEE : 0) +
       SERVICE_FEE;
     const deliveryAddressId =
@@ -879,6 +884,7 @@ export class OrdersService {
     }
 
     let deliveryType: 'local' | 'external' = 'local';
+    let zoneDeliveryFeePesos: number | null = null;
 
     for (const dest of resolvedDestinations) {
       const inside = await this.settingsService.isInsideServiceArea(
@@ -886,8 +892,37 @@ export class OrdersService {
         dest.longitude,
       );
       if (!inside) {
+        // Pilot policy: when geo zones are active and reject_outside_zones,
+        // refuse checkout instead of classifying as external.
+        if (this.geoZonesService) {
+          try {
+            const [hasZones, commerce] = await Promise.all([
+              this.geoZonesService.hasActiveZones(),
+              this.geoZonesService.getCommerceSettings(),
+            ]);
+            if (hasZones && commerce.rejectOutsideZones) {
+              throw new ServiceAreaMismatchException();
+            }
+          } catch (err) {
+            if (err instanceof ServiceAreaMismatchException) throw err;
+          }
+        }
         deliveryType = 'external';
         break;
+      }
+
+      if (this.geoZonesService && zoneDeliveryFeePesos == null) {
+        try {
+          const match = await this.geoZonesService.matchPoint(
+            dest.latitude,
+            dest.longitude,
+          );
+          if (match.inside && match.zone) {
+            zoneDeliveryFeePesos = Number(match.deliveryFeeMinor) / 100;
+          }
+        } catch {
+          /* optional zone fee */
+        }
       }
     }
 
@@ -899,6 +934,14 @@ export class OrdersService {
     const extraDestCount = Math.max(0, resolvedDestinations.length - 1);
     const extraDestinationFee =
       extraDestCount * Number(settings.extraDestinationSurcharge);
+    // Prefer zone base fee for local delivery when a zone match exists.
+    if (
+      deliveryType === 'local' &&
+      dto.deliveryOption === 'delivery' &&
+      zoneDeliveryFeePesos != null
+    ) {
+      deliveryFee = zoneDeliveryFeePesos + SERVICE_FEE;
+    }
     const totalPrice = calculateChargeTotal({
       subtotal,
       deliveryFee,

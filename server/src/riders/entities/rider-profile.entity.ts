@@ -9,6 +9,14 @@ import {
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 
+/** Super Admin verification lifecycle for marketplace riders. */
+export enum RiderVerificationStatus {
+  PENDING = 'pending',
+  UNDER_REVIEW = 'under_review',
+  VERIFIED = 'verified',
+  REJECTED = 'rejected',
+}
+
 @Entity('rider_profiles')
 export class RiderProfile {
   @PrimaryGeneratedColumn()
@@ -32,6 +40,32 @@ export class RiderProfile {
 
   @Column({ name: 'is_available', default: false })
   isAvailable: boolean;
+
+  @Column({
+    name: 'verification_status',
+    type: 'enum',
+    enum: RiderVerificationStatus,
+    enumName: 'rider_verification_status_enum',
+    default: RiderVerificationStatus.PENDING,
+  })
+  verificationStatus: RiderVerificationStatus;
+
+  @Column({ name: 'verification_notes', type: 'text', nullable: true })
+  verificationNotes: string | null;
+
+  @Column({ name: 'verification_reviewed_by', type: 'int', nullable: true })
+  verificationReviewedBy: number | null;
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'verification_reviewed_by' })
+  verificationReviewer: User | null;
+
+  @Column({
+    name: 'verification_reviewed_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  verificationReviewedAt: Date | null;
 
   @Column({
     name: 'last_latitude',

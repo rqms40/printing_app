@@ -29,6 +29,7 @@ import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.mod
 import { AuditModule } from '../audit/audit.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { QualityModule } from '../quality/quality.module';
+import { GeoZonesModule } from '../geo-zones/geo-zones.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { QualityModule } from '../quality/quality.module';
     AuditModule,
     PaymentsModule,
     QualityModule,
+    GeoZonesModule,
   ],
   providers: [OrdersService, OrdersGateway, PaymentTimeoutScheduler],
   controllers: [OrdersController, ExternalDeliveriesController],

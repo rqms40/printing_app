@@ -85,6 +85,7 @@ describe('RidersService', () => {
     id: 10,
     userId: 1,
     isAvailable: true,
+    verificationStatus: 'verified' as any,
     lastLatitude: 14.5,
     lastLongitude: 121.0,
     lastLocationUpdate: new Date(),
@@ -701,6 +702,7 @@ describe('RidersService', () => {
           {
             ...mockProfile,
             isAvailable,
+            verificationStatus: 'verified' as any,
             user: {
               id: mockProfile.userId,
               fullName: 'Juan Rider',
@@ -720,6 +722,30 @@ describe('RidersService', () => {
         ]);
       },
     );
+
+    it('requires verified status for assignment eligibility', async () => {
+      profileRepo.find.mockResolvedValue([
+        {
+          ...mockProfile,
+          isAvailable: true,
+          verificationStatus: 'pending' as any,
+          user: {
+            id: mockProfile.userId,
+            fullName: 'Juan Rider',
+            email: 'juan@example.test',
+            isActive: true,
+            role: UserRole.RIDER,
+          } as User,
+        } as RiderProfile,
+      ]);
+
+      await expect(service.getAllRidersWithUser()).resolves.toEqual([
+        expect.objectContaining({
+          assignment_eligible: false,
+          verification_status: 'pending',
+        }),
+      ]);
+    });
   });
 
   describe('setAvailability', () => {

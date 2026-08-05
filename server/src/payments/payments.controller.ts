@@ -7,6 +7,7 @@ import {
   UseGuards,
   ParseIntPipe,
   Request,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -98,6 +99,26 @@ export class PaymentsController {
       req.user.sub,
       dto,
     );
+  }
+
+  /**
+   * Ops/Super Admin: list COD collections for recon queue.
+   * Query: status=collected|pending|failed|reconciled (default collected).
+   */
+  @Get('cod')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ops_admin', 'super_admin')
+  listCodCollections(@Query('status') status?: string) {
+    const allowed = new Set([
+      'pending',
+      'collected',
+      'failed',
+      'reconciled',
+    ]);
+    const normalized =
+      status && allowed.has(status) ? status : 'collected';
+    return this.paymentsService.listCodCollections(normalized as any);
   }
 
   @Get('cod/:orderId')

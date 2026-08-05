@@ -551,6 +551,18 @@ export class PaymentsService {
     });
   }
 
+  /** Ops recon queue: list COD collections by status (default collected). */
+  async listCodCollections(
+    status: CodCollectionStatus = CodCollectionStatus.COLLECTED,
+  ): Promise<CodCollection[]> {
+    return this.codCollectionRepo.find({
+      where: { status },
+      order: { id: 'DESC' },
+      take: 200,
+      relations: { order: true },
+    });
+  }
+
   /**
    * Payout hook: when method is COD, block release until cash_reconciled.
    * Sets hold_reason = missing_cod_reconciliation and settlement_state = held

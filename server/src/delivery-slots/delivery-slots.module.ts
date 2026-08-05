@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -12,6 +12,7 @@ import { DeliverySlotsController } from './delivery-slots.controller';
 import { DeliverySlotsGateway } from './delivery-slots.gateway';
 import { UsersModule } from '../users/users.module';
 import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.module';
+import { GeoZonesModule } from '../geo-zones/geo-zones.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.mod
     }),
     UsersModule,
     RealtimeSessionsModule,
+    forwardRef(() => GeoZonesModule),
   ],
   controllers: [DeliverySlotsController],
   providers: [

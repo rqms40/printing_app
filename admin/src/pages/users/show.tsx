@@ -1,8 +1,11 @@
 import {
   Alert,
+  App,
+  Button,
   Card,
   Descriptions,
   Empty,
+  Select,
   Space,
   Spin,
   Table,
@@ -11,6 +14,7 @@ import {
 } from "antd";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router";
+import { useGetIdentity } from "@refinedev/core";
 
 import {
   buildAdminUserDetailViewModel,
@@ -24,6 +28,9 @@ import {
   formatDateTime,
   statusLabel,
 } from "@/utils/format";
+import { isSuperAdminRole } from "@/types/enums";
+import type { AdminIdentity } from "@/utils/api-normalizers";
+import { updateUserRole } from "@/services/superAdminApi";
 
 const { Paragraph, Text, Title } = Typography;
 
@@ -168,12 +175,25 @@ function RecentOrders({ orders }: { orders: AdminUserDetailPayload["recent_order
   );
 }
 
+const ROLE_OPTIONS = [
+  { value: "client", label: "Client" },
+  { value: "supplier", label: "Supplier" },
+  { value: "rider", label: "Rider" },
+  { value: "ops_admin", label: "Ops Admin" },
+  { value: "super_admin", label: "Super Admin" },
+];
+
 export function UserShow() {
   const { id } = useParams<{ id: string }>();
+  const { message } = App.useApp();
+  const { data: identity } = useGetIdentity<AdminIdentity>();
+  const canChangeRole = isSuperAdminRole(identity?.role);
   const [detail, setDetail] = useState<AdminUserDetailPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [nextRole, setNextRole] = useState<string | null>(null);
+  const [roleSaving, setRoleSaving] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -203,6 +223,7 @@ export function UserShow() {
         }
 
         setDetail(response);
+        setNextRole(response.user.role);
       })
       .catch(() => {
         if (!active) {
@@ -269,6 +290,23 @@ export function UserShow() {
     );
   }
 
+  const handleRoleSave = async () => {
+    if (!detail || !nextRole || nextRole === detail.user.role) return;
+    setRoleSaving(true);
+    try {
+      await updateUserRole(detail.user.id, nextRole);
+      message.success(`Role updated to ${nextRole}`);
+      setReloadKey((v) => v + 1);
+    } catch (e: unknown) {
+      const msg =
+        (e as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Role change failed (super_admin only)";
+      message.error(typeof msg === "string" ? msg : "Role change failed");
+    } finally {
+      setRoleSaving(false);
+    }
+  };
+
   return (
     <ShowPage
       title={view.detail.user.full_name ?? `User #${view.detail.user.id}`}
@@ -277,6 +315,26 @@ export function UserShow() {
     >
       <Space direction="vertical" size="large" style={{ width: "100%" }}>
         <UserHero detail={view.detail.user} />
+        {canChangeRole ? (
+          <Card title="Role (Super Admin)">
+            <Space wrap>
+              <Select
+                style={{ width: 200 }}
+                value={nextRole ?? view.detail.user.role}
+                options={ROLE_OPTIONS}
+                onChange={setNextRole}
+              />
+              <Button
+                type="primary"
+                loading={roleSaving}
+                disabled={!nextRole || nextRole === view.detail.user.role}
+                onClick={() => void handleRoleSave()}
+              >
+                Save role
+              </Button>
+            </Space>
+          </Card>
+        ) : null}
         <ProfileSummary detail={view.detail.user} />
         <PrintPreferences preferences={view.detail.user.printing_preferences} />
         <RecentOrders orders={view.detail.recent_orders} />
