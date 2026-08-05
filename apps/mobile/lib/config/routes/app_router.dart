@@ -782,7 +782,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               titleOverride: orderRef == null ? null : 'Order $orderRef',
               subtitleOverride: orderStatus == null
                   ? null
-                  : 'Customer · $orderStatus',
+                  : 'Client · $orderStatus',
               backFallback: '/rider/home',
             ),
             state,

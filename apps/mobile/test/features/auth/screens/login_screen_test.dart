@@ -46,7 +46,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
 
       expect(find.text('DEV LOGIN'), findsNothing);
-      expect(find.text('Customer'), findsNothing);
+      expect(find.text('Client'), findsNothing);
       expect(find.text('Rider'), findsNothing);
       expect(find.text('Admin'), findsNothing);
     });

@@ -279,7 +279,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 child: Semantics(
                   container: true,
                   focused: false,
-                  label: 'Customer home content',
+                  label: 'Client home content',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

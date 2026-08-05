@@ -502,20 +502,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
     }
 
+    const clientUser = AuthUser(
+      id: '1',
+      email: 'maria@test.com',
+      fullName: 'Maria Santos',
+      nickname: 'Mia',
+      role: 'client',
+      isProfileComplete: true,
+      ageRange: '18_24',
+      profileCategory: 'student',
+      profileField: 'architecture',
+      organization: 'Mapua University',
+      printingPreferences: ['plotting_blueprints'],
+    );
     final users = {
-      'customer': const AuthUser(
-        id: '1',
-        email: 'maria@test.com',
-        fullName: 'Maria Santos',
-        nickname: 'Mia',
-        role: 'customer',
-        isProfileComplete: true,
-        ageRange: '18_24',
-        profileCategory: 'student',
-        profileField: 'architecture',
-        organization: 'Mapua University',
-        printingPreferences: ['plotting_blueprints'],
-      ),
+      'client': clientUser,
+      // Legacy alias for older call sites / tests.
+      'customer': clientUser,
       'rider': const AuthUser(
         id: '2',
         email: 'juan@test.com',
@@ -948,6 +951,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return PaymentMethod.cod;
       case 'credits':
       case 'gridcredits':
+      case 'gridcredit':
+      case 'pilotcredit':
+      case 'pilotcredits':
         return PaymentMethod.gridCredits;
       default:
         return null;

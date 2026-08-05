@@ -172,8 +172,8 @@ class _DevBypassSection extends ConsumerWidget {
         const SizedBox(height: AppSpacing.sm),
         Row(
           children: [
-            for (final role in ['Customer', 'Rider', 'Admin']) ...[
-              if (role != 'Customer') const SizedBox(width: AppSpacing.sm),
+            for (final role in ['Client', 'Rider', 'Admin']) ...[
+              if (role != 'Client') const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: _DevRoleButton(
                   label: role,

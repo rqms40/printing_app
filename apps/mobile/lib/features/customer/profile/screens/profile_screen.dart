@@ -24,6 +24,17 @@ final surveyVisibilityProvider = FutureProvider.autoDispose<bool>((ref) async {
   }
 });
 
+/// User-facing role label for marketplace client accounts.
+String? _clientRoleLabel(String? role) {
+  switch (role) {
+    case 'client':
+    case 'customer':
+      return 'Client';
+    default:
+      return null;
+  }
+}
+
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
@@ -151,6 +162,16 @@ class _ProfileTab extends ConsumerWidget {
                       color: colors.onSurfaceDim,
                     ),
                   ),
+                  if (_clientRoleLabel(user?.role) != null) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      _clientRoleLabel(user?.role)!,
+                      style: AppTypography.caption.copyWith(
+                        color: colors.brand,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
