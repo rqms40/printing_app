@@ -13,6 +13,27 @@
 - `docs/PRD_SysArchi.md` (v2.0)
 - `C:\Mobile_App\GRIDGO-TINKER\` (ops, UX, research, acceptance)
 - Existing beta contract: `e2e/mobile-web/tests/beta-workflow.spec.ts` (preserve until Phase 11 replaces it)
+- Marketplace contract: `e2e/mobile-web/tests/marketplace-workflow.spec.ts` (Phase 11 skeleton; non-mutating CI)
+
+## Progress ledger (phases)
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| P0 Foundations & contract freeze | **done** | Decisions + baseline snapshot |
+| P1 Domain model + migrations | **done** | Roles, marketplace entities |
+| P2 Order state machine + audit | **done** | Transitions + client parse |
+| P3 Pilot Credits + COD | **done** | Grant-only + COD rules |
+| P4 Ops QA + matching APIs | **done** | QA queue + assign |
+| P5 Supplier APIs + portal/mobile | **done** | Jobs, accept, production, self-QC, payouts UI |
+| P6 Client mobile marketplace flow | **done** | Client copy, pilot_credit/COD rails, correction |
+| P7 Rider COD/OTP/tracking | **done** | OTP gates, active-trip window, COD UI, failed delivery |
+| P8 Super Admin config | **done** | Zones, verification, audit, COD/payouts |
+| P9 Product Preview + claims/payouts | **done** | Mockup render, 24h issue window, payout freeze |
+| P10 UX dual-theme polish | **done** | action yellow tokens; status chips use labels |
+| P11 Testing harness | **partial** | Contract skeleton green; live/destructive not wired; beta kept |
+| P12 Docs, seeds, cleanup | **partial** | Pilot cast documented; landing marketing copy not retouched |
+
+*Ledger updated 2026-08-05 — Phases 5–12 status after marketplace program implementation.*
 
 ## Global Constraints
 
@@ -714,14 +735,14 @@ export function assertTransition(
 - `admin/src/config/theme.ts`
 - Optional: `packages/design-tokens` if monorepo ready
 
-- [ ] Map `action-yellow` `#FFDE58`, surfaces, semantic status colors.
-- [ ] Ensure status chips use icon+label.
-- [ ] Commit
+- [x] Map `action-yellow` `#FFDE58`, surfaces, semantic status colors.
+- [x] Ensure status chips use icon+label.
+- [x] Commit (`feat(ux): dual-theme marketplace polish notes and tokens`)
 
 ### Task 10.2: Ops/Supplier dense UI yellow budget
 
-- [ ] Primary CTA only; no yellow row button grids.
-- [ ] Commit
+- [x] Primary CTA only; documented yellow budget on admin theme (no yellow button grids introduced).
+- [x] Commit (same as 10.1)
 
 **Phase 10 exit:** Visual parity checklist from PRD §8 reviewed on Client, Ops, Supplier, Rider primary screens.
 
@@ -796,11 +817,14 @@ cd e2e/mobile-web
 MOBILE_WEB_E2E_NO_SERVER=1 npm test -- tests/marketplace-workflow.spec.ts
 ```
 
+- [x] Non-mutating contract skeleton + README section committed (`test(e2e): marketplace workflow contract skeleton`)
+- [ ] Live preflight / destructive flags + fixtures (still open)
+
 ### Task 11.5: Beta retirement decision
 
-- [ ] If marketplace contract covers pilot, mark beta tests deprecated and stop requiring AGENTS.md beta section sync—or keep beta as optional historical.
+- [x] **Decision (2026-08-05):** Keep beta contract as historical multi-stop harness; marketplace skeleton does not yet cover live pilot. Do not strip AGENTS.md beta section.
 - [ ] Update `AGENTS.md` Development Commands / Beta section only when intentionally changing process (and fix any contract that asserts AGENTS.md content).
-- [ ] Commit
+- [x] Commit (skeleton only)
 
 **Phase 11 exit:** CI can run marketplace acceptance; known gaps listed.
 
@@ -814,30 +838,31 @@ MOBILE_WEB_E2E_NO_SERVER=1 npm test -- tests/marketplace-workflow.spec.ts
 
 | Account | Role |
 |---------|------|
-| `client@gridgo.ph` (or keep maria as client) | client + pilot credits |
-| `supplier@gridgo.ph` | supplier verified |
-| `juan@gridgo.ph` | rider verified |
-| `ops@gridgo.ph` | ops_admin |
-| `admin@gridgo.ph` | super_admin |
+| `maria@gridgo.ph` | client (+ pilot credits when granted) |
+| `supplier@gridgo.ph` | supplier |
+| `juan@gridgo.ph` | rider |
+| `admin@gridgo.ph` | ops_admin |
+| `superadmin@gridgo.ph` | super_admin |
 
-- [ ] Document passwords only in ignored env / CLAUDE.md seed notes without committing secrets.
-- [ ] Commit
+- [x] Document passwords only in ignored env / CLAUDE.md seed notes without committing secrets.
+- [x] Commit (`docs: marketplace pilot seed roles and progress`)
 
 ### Task 12.2: Landing + marketing claims audit
 
 **Files:** `apps/Landing-page/src/**`
 
-- [ ] Remove/avoid cheapest/same-day/unqualified claims; align to managed marketplace messaging.
+- [ ] Remove/avoid cheapest/same-day/unqualified claims; align to managed marketplace messaging. *(deferred — do not touch landing marketing copy in this pass)*
 - [ ] Run landing checks: `npm run lint`, content scripts, `npm run build`.
 
 ### Task 12.3: PRD/AGENTS cross-links
 
-- [ ] Ensure `PRD.md`, `docs/PRD_SysArchi.md`, this plan, and `AGENTS.md` commands stay consistent.
-- [ ] Commit
+- [x] Progress ledger + marketplace contract path in this plan; seed cast in CLAUDE.md / `seed.ts`.
+- [ ] Broader PRD/AGENTS command rewrites when live marketplace e2e lands.
+- [x] Commit (same as 12.1)
 
 ### Task 12.4: Dead code pass
 
-- [ ] Remove or quarantine unused top-up flows, obsolete admin-only production status paths that bypass supplier, and obsolete status strings.
+- [ ] Remove or quarantine unused top-up flows, obsolete admin-only production status paths that bypass supplier, and obsolete status strings. *(deferred — out of smallest scope)*
 - [ ] Commit
 
 **Phase 12 exit:** Local docker compose pilot cast can demo full marketplace path.

@@ -1,3 +1,17 @@
+/**
+ * GRIDGO demo seed — managed marketplace pilot cast (5 roles).
+ *
+ * Accounts (passwords from ignored env only; never commit secrets):
+ * | Email                 | Role          | Password env                    |
+ * |-----------------------|---------------|---------------------------------|
+ * | maria@gridgo.ph       | client        | GRIDGO_SEED_CUSTOMER_PASSWORD   |
+ * | supplier@gridgo.ph    | supplier      | GRIDGO_SEED_CUSTOMER_PASSWORD   |
+ * | juan@gridgo.ph        | rider         | GRIDGO_SEED_RIDER_PASSWORD      |
+ * | admin@gridgo.ph       | ops_admin     | GRIDGO_SEED_ADMIN_PASSWORD      |
+ * | superadmin@gridgo.ph  | super_admin   | GRIDGO_SEED_ADMIN_PASSWORD      |
+ *
+ * Keep CLAUDE.md seed table in sync when changing emails/roles.
+ */
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DataSource } from 'typeorm';

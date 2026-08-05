@@ -189,7 +189,9 @@ Copied from the plan for implementers — do not weaken without an explicit deci
 | `docs/superpowers/plans/2026-08-04-managed-marketplace-migration.md` | Phased implementation plan |
 | `PRD.md` | Product requirements (behavior, acceptance) |
 | `docs/PRD_SysArchi.md` | System architecture product model (includes future-stack diagrams) |
-| `e2e/mobile-web/tests/beta-workflow.spec.ts` | Current beta contract (until Phase 11) |
+| `e2e/mobile-web/tests/beta-workflow.spec.ts` | Current beta contract (kept; Phase 11 retirement deferred) |
+| `e2e/mobile-web/tests/marketplace-workflow.spec.ts` | Marketplace acceptance skeleton (non-mutating CI) |
+| `docs/superpowers/plans/2026-08-04-managed-marketplace-migration.md` | Progress ledger (Phases 0–12 status) |
 
 ---
 
