@@ -44,6 +44,7 @@ import {
   OrdersGateway,
 } from '../orders/orders.gateway';
 import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const OTP_SECRET_FIELDS = [
   'pickupOtpHash',
@@ -87,11 +88,28 @@ const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
   [DeliveryStatus.ASSIGNED]: [DeliveryStatus.ACCEPTED, DeliveryStatus.DECLINED],
   [DeliveryStatus.ACCEPTED]: [DeliveryStatus.PICKED_UP],
   [DeliveryStatus.DECLINED]: [],
-  [DeliveryStatus.PICKED_UP]: [DeliveryStatus.ON_THE_WAY],
-  [DeliveryStatus.ON_THE_WAY]: [DeliveryStatus.ARRIVED],
-  [DeliveryStatus.ARRIVED]: [DeliveryStatus.DELIVERED],
+  [DeliveryStatus.PICKED_UP]: [
+    DeliveryStatus.ON_THE_WAY,
+    DeliveryStatus.FAILED,
+  ],
+  [DeliveryStatus.ON_THE_WAY]: [
+    DeliveryStatus.ARRIVED,
+    DeliveryStatus.FAILED,
+  ],
+  [DeliveryStatus.ARRIVED]: [
+    DeliveryStatus.DELIVERED,
+    DeliveryStatus.FAILED,
+  ],
   [DeliveryStatus.DELIVERED]: [],
+  [DeliveryStatus.FAILED]: [],
 };
+
+/** Exact live tracking window: confirmed pickup through pre-terminal handoff. */
+export const ACTIVE_TRIP_TRACKING_STATUSES: readonly DeliveryStatus[] = [
+  DeliveryStatus.PICKED_UP,
+  DeliveryStatus.ON_THE_WAY,
+  DeliveryStatus.ARRIVED,
+];
 
 const ORDER_STATUS_BY_DELIVERY_STATUS: Partial<
   Record<DeliveryStatus, OrderStatus>
@@ -101,6 +119,7 @@ const ORDER_STATUS_BY_DELIVERY_STATUS: Partial<
   [DeliveryStatus.ON_THE_WAY]: OrderStatus.OUT_FOR_DELIVERY,
   [DeliveryStatus.ARRIVED]: OrderStatus.OUT_FOR_DELIVERY,
   [DeliveryStatus.DELIVERED]: OrderStatus.DELIVERED,
+  [DeliveryStatus.FAILED]: OrderStatus.DELIVERY_FAILED,
 };
 
 type DeliveryProofMetadata = {
@@ -188,6 +207,7 @@ export class RidersService {
     private dataSource: DataSource,
     private dispatchPlanService: DispatchPlanService,
     private auditService: AuditService,
+    private notificationsService: NotificationsService,
   ) {}
 
   async assignOrderToRider(
@@ -419,6 +439,24 @@ export class RidersService {
     dto: UpdateLocationDto,
   ): Promise<RiderProfile> {
     const profile = await this.getProfile(userId);
+
+    // Hard window: accept GPS pings only while at least one current job is in
+    // the active-trip tracking statuses (picked_up / out_for_delivery path).
+    const activeTripCount = await this.assignmentRepo.count({
+      where: {
+        riderId: profile.id,
+        isCurrent: true,
+        status: In([...ACTIVE_TRIP_TRACKING_STATUSES]),
+      },
+    });
+    if (activeTripCount === 0) {
+      throw new BadRequestException({
+        code: 'tracking_inactive',
+        message:
+          'Location pings are accepted only during an active trip (picked_up / out_for_delivery)',
+      });
+    }
+
     profile.lastLatitude = dto.latitude;
     profile.lastLongitude = dto.longitude;
     profile.lastLocationUpdate = new Date();
@@ -432,7 +470,7 @@ export class RidersService {
             id: currentStop.stop.assignmentId,
             riderId: profile.id,
             isCurrent: true,
-            status: In([DeliveryStatus.ON_THE_WAY, DeliveryStatus.ARRIVED]),
+            status: In([...ACTIVE_TRIP_TRACKING_STATUSES]),
           },
         })
       : null;
@@ -471,7 +509,11 @@ export class RidersService {
       .where('da.riderId = :riderId', { riderId: profile.id })
       .andWhere('da.isCurrent = true')
       .andWhere('da.status NOT IN (:...statuses)', {
-        statuses: [DeliveryStatus.DELIVERED, DeliveryStatus.DECLINED],
+        statuses: [
+          DeliveryStatus.DELIVERED,
+          DeliveryStatus.DECLINED,
+          DeliveryStatus.FAILED,
+        ],
       })
       .orderBy('da.createdAt', 'DESC')
       .getMany();
@@ -676,7 +718,8 @@ export class RidersService {
       }
 
       const riderConversations =
-        newStatus === DeliveryStatus.DECLINED
+        newStatus === DeliveryStatus.DECLINED ||
+        newStatus === DeliveryStatus.FAILED
           ? await manager.getRepository(Conversation).find({
               where: {
                 orderId: order.id,
@@ -703,6 +746,7 @@ export class RidersService {
       const now = new Date();
       let pickupProofMetadata: DeliveryProofMetadata | null = null;
       let deliveryProofMetadata: DeliveryProofMetadata | null = null;
+      let failureProofMetadata: DeliveryProofMetadata | null = null;
 
       if (newStatus === DeliveryStatus.PICKED_UP) {
         this.assertOtp(
@@ -734,6 +778,26 @@ export class RidersService {
           {
             manager,
             requirePhoto: false,
+            allowOptionalSignatureWithPhoto: true,
+          },
+        );
+      }
+
+      if (newStatus === DeliveryStatus.FAILED) {
+        const reason = declineReason?.trim() ?? '';
+        if (!reason) {
+          throw new BadRequestException({
+            code: 'failed_delivery_reason_required',
+            message: 'Failed delivery requires a reason',
+          });
+        }
+        // Evidence photo is mandatory — no unattended / empty failure close.
+        failureProofMetadata = await this.validateProofOfDelivery(
+          proof,
+          userId,
+          {
+            manager,
+            requirePhoto: true,
             allowOptionalSignatureWithPhoto: true,
           },
         );
@@ -779,6 +843,18 @@ export class RidersService {
           assignment.proofObjectKey = deliveryProofMetadata!.proofObjectKey;
           assignment.proofSignatureData =
             deliveryProofMetadata!.proofSignatureData;
+          assignment.proofCapturedAt = now;
+          assignment.proofCapturedByRiderId = profile.id;
+          break;
+        case DeliveryStatus.FAILED:
+          assignment.failedAt = now;
+          assignment.declineReason = declineReason?.trim() || '';
+          assignment.isCurrent = false;
+          assignment.proofType = failureProofMetadata!.proofType;
+          assignment.proofFileId = failureProofMetadata!.proofFileId;
+          assignment.proofObjectKey = failureProofMetadata!.proofObjectKey;
+          assignment.proofSignatureData =
+            failureProofMetadata!.proofSignatureData;
           assignment.proofCapturedAt = now;
           assignment.proofCapturedByRiderId = profile.id;
           break;
@@ -833,8 +909,11 @@ export class RidersService {
           userId,
           newStatus === DeliveryStatus.DECLINED
             ? `Rider declined assignment: ${declineReason?.trim() || 'No reason provided'}`
-            : `Rider updated delivery to ${newStatus}`,
-          newStatus === DeliveryStatus.DECLINED
+            : newStatus === DeliveryStatus.FAILED
+              ? `Failed delivery (return path): ${declineReason?.trim() || 'No reason provided'}. Redelivery requires new fee approval (ops).`
+              : `Rider updated delivery to ${newStatus}`,
+          newStatus === DeliveryStatus.DECLINED ||
+          newStatus === DeliveryStatus.FAILED
             ? { assignedRiderId: null }
             : {},
         );
@@ -855,8 +934,13 @@ export class RidersService {
           closedConversationIds,
           dispatchPlanProgress,
           orderRef: order.orderId,
+          notifyOpsFailedDelivery: false as const,
+          failureReason: null as string | null,
         };
-      } else if (newStatus === DeliveryStatus.DECLINED) {
+      } else if (
+        newStatus === DeliveryStatus.DECLINED ||
+        newStatus === DeliveryStatus.FAILED
+      ) {
         const dispatchPlanProgress =
           await this.dispatchPlanService.skipStopIfPlanned(
             manager,
@@ -871,6 +955,11 @@ export class RidersService {
           closedConversationIds,
           dispatchPlanProgress,
           orderRef: order.orderId,
+          notifyOpsFailedDelivery: newStatus === DeliveryStatus.FAILED,
+          failureReason:
+            newStatus === DeliveryStatus.FAILED
+              ? declineReason?.trim() || null
+              : null,
         };
       }
 
@@ -882,6 +971,8 @@ export class RidersService {
         closedConversationIds,
         dispatchPlanProgress: null,
         orderRef: order.orderId,
+        notifyOpsFailedDelivery: false as const,
+        failureReason: null as string | null,
       };
     });
 
@@ -890,6 +981,27 @@ export class RidersService {
       result.savedAssignment,
       result.orderRef,
     );
+    if (result.notifyOpsFailedDelivery) {
+      try {
+        await this.notificationsService.createForAllAdmins({
+          title: 'Failed delivery — return path',
+          message: `Order ${result.orderRef} failed delivery. Reason: ${result.failureReason ?? 'n/a'}. Redelivery requires new fee approval before redispatch.`,
+          type: 'failed_delivery',
+          orderRef: result.orderRef,
+          metadata: {
+            assignmentId: result.savedAssignment.id,
+            orderId: result.savedAssignment.orderId,
+            failureReason: result.failureReason,
+            redeliveryFeeRequired: true,
+            redeliveryFeeApproval: 'ops_stub',
+          },
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Ops failed-delivery notification failed for order ${result.orderRef}: ${error}`,
+        );
+      }
+    }
     if (result.dispatchPlanProgress) {
       await this.publishDispatchPlanProgress(
         userId,
@@ -898,7 +1010,10 @@ export class RidersService {
       );
     }
 
-    if (result.savedAssignment.status === DeliveryStatus.DELIVERED) {
+    if (
+      result.savedAssignment.status === DeliveryStatus.DELIVERED ||
+      result.savedAssignment.status === DeliveryStatus.FAILED
+    ) {
       try {
         await this.publishCurrentDeliveryQueue(profile.id);
       } catch (error) {

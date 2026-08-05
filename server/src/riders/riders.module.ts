@@ -19,6 +19,7 @@ import { OsrmRoutingProvider } from './routing/osrm-routing.provider';
 import { UsersModule } from '../users/users.module';
 import { RealtimeSessionsModule } from '../common/realtime/realtime-sessions.module';
 import { AuditModule } from '../audit/audit.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { AuditModule } from '../audit/audit.module';
     UsersModule,
     RealtimeSessionsModule,
     AuditModule,
+    NotificationsModule,
   ],
   controllers: [RidersController],
   providers: [

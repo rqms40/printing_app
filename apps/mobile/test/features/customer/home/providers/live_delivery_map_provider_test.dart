@@ -107,10 +107,10 @@ void main() {
       );
     });
 
-    test('60 seconds is stale and 61 seconds is offline', () {
+    test('120 seconds is stale and 121 seconds is offline', () {
       expect(
         classifyLocationHealth(
-          updatedAt: now.subtract(const Duration(seconds: 60)),
+          updatedAt: now.subtract(const Duration(seconds: 120)),
           now: now,
           connected: true,
         ),
@@ -118,7 +118,7 @@ void main() {
       );
       expect(
         classifyLocationHealth(
-          updatedAt: now.subtract(const Duration(seconds: 61)),
+          updatedAt: now.subtract(const Duration(seconds: 121)),
           now: now,
           connected: true,
         ),

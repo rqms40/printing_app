@@ -1326,13 +1326,10 @@ class _LiveDeliveryStatusTile extends StatelessWidget {
               colors: colors,
               icon: Icons.electric_moped_rounded,
               title: 'Rider is on the way',
-              subtitle: switch (locationHealth) {
-                LocationHealth.live => 'Live · location updating',
-                LocationHealth.stale => 'Paused · last known shown',
-                LocationHealth.offline when hasLiveRiderPoint =>
-                  'Offline · last known shown',
-                LocationHealth.offline => 'Waiting for rider GPS',
-              },
+              subtitle: locationHealthMessage(
+                locationHealth,
+                hasLastKnown: hasLiveRiderPoint,
+              ),
               outlined: true,
             ),
             if (liveState.routingHealth != RoutingHealth.current) ...[

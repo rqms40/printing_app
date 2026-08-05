@@ -19,6 +19,8 @@ export enum DeliveryStatus {
   ON_THE_WAY = 'on_the_way',
   ARRIVED = 'arrived',
   DELIVERED = 'delivered',
+  /** Failed attempt with evidence; not delivered; return / redelivery path. */
+  FAILED = 'failed',
 }
 
 export enum ProofOfDeliveryType {
@@ -79,6 +81,9 @@ export class DeliveryAssignment {
 
   @Column({ name: 'delivered_at', type: 'timestamp', nullable: true })
   deliveredAt: Date;
+
+  @Column({ name: 'failed_at', type: 'timestamp', nullable: true })
+  failedAt: Date | null;
 
   @Column({
     name: 'proof_type',

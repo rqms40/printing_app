@@ -33,6 +33,7 @@ import { DispatchPlanStatus } from './entities/dispatch-plan.entity';
 import { DispatchStopStatus } from './entities/dispatch-plan-stop.entity';
 import { OrdersGateway } from '../orders/orders.gateway';
 import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 describe('RidersService', () => {
   let service: RidersService;
@@ -68,6 +69,7 @@ describe('RidersService', () => {
     skipStopIfPlanned: jest.Mock;
   };
   let auditService: { recordOrderStatusTransition: jest.Mock };
+  let notificationsService: { createForAllAdmins: jest.Mock };
   const validSignatureProof = JSON.stringify({
     format: 'gridgo-signature-v1',
     points: [
@@ -147,6 +149,7 @@ describe('RidersService', () => {
     assignmentRepo = {
       findOne: jest.fn(),
       find: jest.fn(),
+      count: jest.fn().mockResolvedValue(0),
       save: jest.fn(),
       create: jest.fn((value) => value as DeliveryAssignment),
       createQueryBuilder: jest.fn(),
@@ -234,6 +237,9 @@ describe('RidersService', () => {
     auditService = {
       recordOrderStatusTransition: jest.fn().mockResolvedValue({ id: 1 }),
     };
+    notificationsService = {
+      createForAllAdmins: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -251,6 +257,7 @@ describe('RidersService', () => {
         { provide: DataSource, useValue: dataSource },
         { provide: DispatchPlanService, useValue: dispatchPlanService },
         { provide: AuditService, useValue: auditService },
+        { provide: NotificationsService, useValue: notificationsService },
       ],
     }).compile();
 
@@ -1814,6 +1821,83 @@ describe('RidersService', () => {
       );
     });
 
+    it('records failed delivery with evidence, does not deliver, notifies ops', async () => {
+      const arrived = {
+        ...mockAssignment,
+        status: DeliveryStatus.ARRIVED,
+      } as DeliveryAssignment;
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.findOne.mockResolvedValue(arrived);
+      assignmentRepo.save.mockImplementation(
+        async (a) => a as DeliveryAssignment,
+      );
+      orderRepo.findOneOrFail.mockResolvedValue({
+        id: 1,
+        orderId: 'ORD-FAIL-1',
+        batchOrderId: null,
+        orderStatus: OrderStatus.OUT_FOR_DELIVERY,
+      } as Order);
+      filesService.resolveDeliveryProofFile.mockResolvedValue({
+        id: 88,
+        objectKey: 'proofs/fail.jpg',
+      });
+      dispatchPlanService.skipStopIfPlanned.mockResolvedValue({
+        planId: 1,
+        riderId: 10,
+        planVersion: 1,
+        planStatus: DispatchPlanStatus.ACTIVE,
+        assignmentId: 100,
+        stopStatus: DispatchStopStatus.SKIPPED,
+      });
+
+      const result = await (service.updateDeliveryStatus as any)(
+        1,
+        100,
+        DeliveryStatus.FAILED,
+        'Customer unreachable',
+        { type: 'photo', fileId: 88 },
+      );
+
+      expect(result.status).toBe(DeliveryStatus.FAILED);
+      expect(result.isCurrent).toBe(false);
+      expect(result.proofFileId).toBe(88);
+      expect(result.failedAt).toBeInstanceOf(Date);
+      expect(orderRepo.update).toHaveBeenCalledWith(
+        { id: 1, orderStatus: OrderStatus.OUT_FOR_DELIVERY },
+        expect.objectContaining({
+          assignedRiderId: null,
+          orderStatus: OrderStatus.DELIVERY_FAILED,
+        }),
+      );
+      expect(ordersService.completeDelivery).not.toHaveBeenCalled();
+      expect(notificationsService.createForAllAdmins).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'failed_delivery',
+          orderRef: 'ORD-FAIL-1',
+          metadata: expect.objectContaining({
+            redeliveryFeeRequired: true,
+            redeliveryFeeApproval: 'ops_stub',
+          }),
+        }),
+      );
+    });
+
+    it('rejects failed delivery without evidence reason or photo', async () => {
+      profileRepo.findOne.mockResolvedValue(mockProfile);
+      assignmentRepo.findOne.mockResolvedValue({
+        ...mockAssignment,
+        status: DeliveryStatus.ON_THE_WAY,
+      } as DeliveryAssignment);
+
+      await expect(
+        service.updateDeliveryStatus(1, 100, DeliveryStatus.FAILED, ''),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'failed_delivery_reason_required',
+        }),
+      });
+    });
+
     it('should throw BadRequestException on invalid transition ASSIGNED -> DELIVERED', async () => {
       profileRepo.findOne.mockResolvedValue(mockProfile);
       assignmentRepo.findOne.mockResolvedValue({
@@ -2177,12 +2261,13 @@ describe('RidersService', () => {
     });
   });
 
-  describe('getActiveAssignments', () => {
+  describe('updateLocation active-trip window', () => {
     it('broadcasts the persisted plan version with current-stop location updates', async () => {
       profileRepo.findOne.mockResolvedValue({ ...mockProfile });
       profileRepo.save.mockImplementation(
         async (profile) => profile as RiderProfile,
       );
+      assignmentRepo.count = jest.fn().mockResolvedValue(1);
       dispatchPlanService.getCurrentPendingStopForRider.mockResolvedValue({
         stop: {
           assignmentId: 100,
@@ -2212,6 +2297,61 @@ describe('RidersService', () => {
         ),
       });
     });
+
+    it('rejects location pings when no active trip (picked_up / out_for_delivery)', async () => {
+      profileRepo.findOne.mockResolvedValue({ ...mockProfile });
+      assignmentRepo.count = jest.fn().mockResolvedValue(0);
+
+      await expect(
+        service.updateLocation(1, {
+          latitude: 7.06405,
+          longitude: 125.60795,
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'tracking_inactive' }),
+      });
+      expect(profileRepo.save).not.toHaveBeenCalled();
+      expect(locationGateway.broadcastLocation).not.toHaveBeenCalled();
+    });
+
+    it('accepts pings at picked_up and broadcasts for the current stop', async () => {
+      profileRepo.findOne.mockResolvedValue({ ...mockProfile });
+      profileRepo.save.mockImplementation(
+        async (profile) => profile as RiderProfile,
+      );
+      assignmentRepo.count = jest.fn().mockResolvedValue(1);
+      dispatchPlanService.getCurrentPendingStopForRider.mockResolvedValue({
+        stop: {
+          assignmentId: 100,
+          sequence: 1,
+          status: DispatchStopStatus.PENDING,
+        },
+        planVersion: 2,
+      });
+      assignmentRepo.findOne.mockResolvedValue({
+        ...mockAssignment,
+        isCurrent: true,
+        status: DeliveryStatus.PICKED_UP,
+      } as DeliveryAssignment);
+
+      await service.updateLocation(1, {
+        latitude: 7.07,
+        longitude: 125.61,
+      });
+
+      expect(locationGateway.broadcastLocation).toHaveBeenCalledWith(
+        '100',
+        expect.objectContaining({
+          assignmentId: '100',
+          planVersion: 2,
+          latitude: 7.07,
+          longitude: 125.61,
+        }),
+      );
+    });
+  });
+
+  describe('getActiveAssignments', () => {
 
     it('orders active assignments by the persisted dispatch plan', async () => {
       profileRepo.findOne.mockResolvedValue({

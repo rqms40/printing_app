@@ -16,6 +16,11 @@ final deliveryTrackingNowProvider = Provider<DateTime Function()>(
   (ref) => DateTime.now,
 );
 
+/// Active-trip location freshness (Task 7.2).
+/// Live: &lt;15s · Stale: 15–120s · Offline / missing: &gt;120s.
+const Duration kLocationLiveThreshold = Duration(seconds: 15);
+const Duration kLocationStaleThreshold = Duration(seconds: 120);
+
 LocationHealth classifyLocationHealth({
   required DateTime updatedAt,
   required DateTime now,
@@ -24,10 +29,26 @@ LocationHealth classifyLocationHealth({
   final age = now.difference(updatedAt);
   // A fresh update is proof of life even while the socket handshake state
   // lags behind (reconnect churn must not flash "GPS offline" mid-stream).
-  if (age < const Duration(seconds: 15)) return LocationHealth.live;
+  if (age < kLocationLiveThreshold) return LocationHealth.live;
   if (!connected) return LocationHealth.offline;
-  if (age <= const Duration(seconds: 60)) return LocationHealth.stale;
+  if (age <= kLocationStaleThreshold) return LocationHealth.stale;
   return LocationHealth.offline;
+}
+
+/// Rider-facing copy for location age / missing GPS during active trip.
+String locationHealthMessage(
+  LocationHealth health, {
+  bool hasLastKnown = false,
+}) {
+  return switch (health) {
+    LocationHealth.live => 'Live · location updating',
+    LocationHealth.stale => hasLastKnown
+        ? 'Location stale · last known shown (no update >15s)'
+        : 'Location stale · waiting for GPS',
+    LocationHealth.offline => hasLastKnown
+        ? 'GPS offline · last known shown (no update >120s)'
+        : 'Waiting for rider GPS',
+  };
 }
 
 const _urbanDeliveryMetersPerMinute = 220.0;
