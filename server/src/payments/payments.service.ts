@@ -14,6 +14,7 @@ import {
 } from './entities/cod-collection.entity';
 import { CreatePaymentIntentDto } from './dto/create-payment-intent.dto';
 import {
+  FailCodCollectionDto,
   RecordCodCollectionDto,
   ReconcileCodCollectionDto,
 } from './dto/cod-collection.dto';
@@ -419,6 +420,82 @@ export class PaymentsService {
 
     await this.applyCodPayoutHold(orderId);
     return saved;
+  }
+
+  /**
+   * Mark COD cash collection failed (customer could not pay / refused).
+   * Does not mark order paid. Evidence optional but recommended.
+   */
+  async recordCashCollectionFailed(
+    orderId: number,
+    dto: FailCodCollectionDto,
+  ): Promise<CodCollection> {
+    const order = await this.ordersRepo.findOne({ where: { id: orderId } });
+    if (!order) {
+      throw new NotFoundException(`Order ${orderId} not found`);
+    }
+    if (!isCodPaymentMethod(order.paymentMethod)) {
+      throw new BadRequestException({
+        code: 'not_cod_order',
+        message: 'Order payment method is not COD',
+      });
+    }
+
+    let collection = await this.codCollectionRepo.findOne({
+      where: { orderId },
+      order: { id: 'ASC' },
+    });
+
+    if (!collection) {
+      const amount =
+        order.finalTotalMinor != null && order.finalTotalMinor !== ''
+          ? order.finalTotalMinor
+          : '0';
+      collection = await this.ensurePendingCodCollection({
+        orderId,
+        amountMinor: amount,
+        eligible: order.codEligible === true,
+        eligibilityReason: null,
+        riderId: dto.riderId ?? null,
+      });
+    }
+
+    if (collection.status === CodCollectionStatus.RECONCILED) {
+      throw new BadRequestException({
+        code: 'cod_already_reconciled',
+        message: 'COD collection is already reconciled',
+      });
+    }
+    if (collection.status === CodCollectionStatus.COLLECTED) {
+      throw new BadRequestException({
+        code: 'cod_already_collected',
+        message: 'COD cash already collected for this order',
+      });
+    }
+
+    const reason = dto.returnReason?.trim() ?? '';
+    if (!reason) {
+      throw new BadRequestException({
+        code: 'cod_fail_reason_required',
+        message: 'COD failure requires returnReason',
+      });
+    }
+
+    collection.status = CodCollectionStatus.FAILED;
+    collection.returnReason = reason;
+    collection.failedAt = new Date();
+    collection.collectedAt = null;
+    if (dto.photoFileId != null) {
+      collection.photoFileId = dto.photoFileId;
+    }
+    if (dto.receiptRefs != null) {
+      collection.receiptRefs = dto.receiptRefs;
+    }
+    if (dto.riderId != null) {
+      collection.riderId = dto.riderId;
+    }
+
+    return this.codCollectionRepo.save(collection);
   }
 
   /**

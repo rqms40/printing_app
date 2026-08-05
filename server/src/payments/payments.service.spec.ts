@@ -452,6 +452,30 @@ describe('PaymentsService', () => {
       });
     });
 
+    it('records COD collection failure with reason', async () => {
+      ordersRepo.findOne!.mockResolvedValue({ ...codOrder });
+      codRepo.findOne!.mockResolvedValue({
+        id: 3,
+        orderId: 5,
+        status: CodCollectionStatus.PENDING,
+        amountMinor: '12000',
+      } as CodCollection);
+      codRepo.save!.mockImplementation(async (row) => row as CodCollection);
+
+      const saved = await service.recordCashCollectionFailed(5, {
+        returnReason: 'Customer has no cash',
+        photoFileId: 44,
+      });
+
+      expect(saved.status).toBe(CodCollectionStatus.FAILED);
+      expect(saved.returnReason).toBe('Customer has no cash');
+      expect(saved.failedAt).toBeInstanceOf(Date);
+      expect(saved.photoFileId).toBe(44);
+      expect(ordersRepo.save).not.toHaveBeenCalledWith(
+        expect.objectContaining({ paymentStatus: 'paid' }),
+      );
+    });
+
     it('reconciles collected cash and clears payout hold', async () => {
       codRepo.findOne!.mockResolvedValue({
         id: 3,

@@ -14,6 +14,7 @@ import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentIntentDto } from './dto/create-payment-intent.dto';
 import {
+  FailCodCollectionDto,
   RecordCodCollectionDto,
   ReconcileCodCollectionDto,
 } from './dto/cod-collection.dto';
@@ -63,6 +64,20 @@ export class PaymentsController {
     @Body() dto: RecordCodCollectionDto,
   ) {
     return this.paymentsService.recordCashCollection(orderId, dto);
+  }
+
+  /**
+   * Rider/ops: mark COD cash collection failed (no cash / refused).
+   */
+  @Post('cod/:orderId/fail')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('rider', 'ops_admin', 'super_admin')
+  failCodCollection(
+    @Param('orderId', ParseIntPipe) orderId: number,
+    @Body() dto: FailCodCollectionDto,
+  ) {
+    return this.paymentsService.recordCashCollectionFailed(orderId, dto);
   }
 
   /**

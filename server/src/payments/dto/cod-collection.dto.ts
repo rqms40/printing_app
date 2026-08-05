@@ -46,6 +46,43 @@ export class RecordCodCollectionDto {
   riderId?: number;
 }
 
+/** Rider/ops: mark COD cash collection failed (customer could not pay). */
+export class FailCodCollectionDto {
+  @ApiPropertyOptional({
+    description: 'Why cash could not be collected',
+    maxLength: 2000,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  returnReason?: string;
+
+  @ApiPropertyOptional({
+    description: 'Photo / evidence file metadata id',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  photoFileId?: number;
+
+  @ApiPropertyOptional({
+    description: 'Additional proof refs',
+    type: 'object',
+    additionalProperties: true,
+  })
+  @IsOptional()
+  @IsObject()
+  receiptRefs?: Record<string, unknown>;
+
+  @ApiPropertyOptional({
+    description: 'Rider profile id',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  riderId?: number;
+}
+
 /** Ops/Super Admin reconciliation of collected COD cash. */
 export class ReconcileCodCollectionDto {
   @ApiPropertyOptional({
