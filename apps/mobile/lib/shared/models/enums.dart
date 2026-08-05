@@ -151,6 +151,7 @@ enum OrderStatus {
   pickedUp,
   outForDelivery,
   delivered,
+  deliveryFailed,
   collectedByCustomer,
   issueWindowOpen,
   completed,
@@ -195,6 +196,8 @@ extension OrderStatusX on OrderStatus {
         return 'out_for_delivery';
       case OrderStatus.delivered:
         return 'delivered';
+      case OrderStatus.deliveryFailed:
+        return 'delivery_failed';
       case OrderStatus.collectedByCustomer:
         return 'collected_by_customer';
       case OrderStatus.issueWindowOpen:
@@ -244,6 +247,8 @@ extension OrderStatusX on OrderStatus {
         return 'Out for Delivery';
       case OrderStatus.delivered:
         return 'Delivered';
+      case OrderStatus.deliveryFailed:
+        return 'Delivery Failed';
       case OrderStatus.collectedByCustomer:
         return 'Collected by Customer';
       case OrderStatus.issueWindowOpen:
@@ -317,6 +322,8 @@ OrderStatus parseMarketplaceOrderStatus(
       return OrderStatus.outForDelivery;
     case 'delivered':
       return OrderStatus.delivered;
+    case 'delivery_failed':
+      return OrderStatus.deliveryFailed;
     case 'collected_by_customer':
       return OrderStatus.collectedByCustomer;
     case 'issue_window_open':
@@ -340,6 +347,7 @@ enum DeliveryStatus {
   onTheWay,
   arrived,
   delivered,
+  failed,
 }
 
 extension DeliveryStatusX on DeliveryStatus {
@@ -359,6 +367,8 @@ extension DeliveryStatusX on DeliveryStatus {
         return 'Arrived';
       case DeliveryStatus.delivered:
         return 'Delivered';
+      case DeliveryStatus.failed:
+        return 'Failed';
     }
   }
 }

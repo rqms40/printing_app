@@ -72,6 +72,13 @@ RiderDeliveryVisual riderDeliveryVisual(
         label: 'Declined',
         badgeVariant: StatusBadgeVariant.error,
       );
+    case DeliveryStatus.failed:
+      return RiderDeliveryVisual(
+        icon: HugeIcons.strokeRoundedAlert02,
+        tint: colors.error,
+        label: 'Failed delivery',
+        badgeVariant: StatusBadgeVariant.error,
+      );
   }
 }
 

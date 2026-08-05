@@ -33,6 +33,7 @@ class RecentOrdersSection extends ConsumerWidget {
         return StatusBadgeVariant.success;
       case OrderStatus.cancelled:
       case OrderStatus.fileRejected:
+      case OrderStatus.deliveryFailed:
         return StatusBadgeVariant.error;
       case OrderStatus.outForDelivery:
       case OrderStatus.pickedUp:

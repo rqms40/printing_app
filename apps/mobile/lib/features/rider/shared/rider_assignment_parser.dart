@@ -28,6 +28,7 @@ String serverDeliveryStatus(DeliveryStatus status) {
     DeliveryStatus.onTheWay => 'on_the_way',
     DeliveryStatus.arrived => 'arrived',
     DeliveryStatus.delivered => 'delivered',
+    DeliveryStatus.failed => 'failed',
   };
 }
 
@@ -166,6 +167,9 @@ RiderOrderContext _parseOrderContext(Map<String, dynamic>? json) {
   final destination = _parseDestination(_asMap(json['destination']));
 
   final customer = _asMap(json['user'] ?? json['customer']);
+  final codCollection = _asMap(
+    json['codCollection'] ?? json['cod_collection'],
+  );
   return RiderOrderContext(
     orderRef: _readString(json['orderId'] ?? json['order_id']) ?? 'Unknown',
     orderInternalId: _readId(json['id']),
@@ -178,6 +182,17 @@ RiderOrderContext _parseOrderContext(Map<String, dynamic>? json) {
       customer?['phoneNumber'] ?? customer?['phone_number'],
     ),
     destination: destination,
+    paymentMethod: _readString(
+      json['paymentMethod'] ?? json['payment_method'],
+    ),
+    finalTotalMinor: _readString(
+      json['finalTotalMinor'] ?? json['final_total_minor'],
+    ),
+    codCollectionStatus: _readString(
+      codCollection?['status'] ??
+          json['codCollectionStatus'] ??
+          json['cod_collection_status'],
+    ),
   );
 }
 

@@ -57,6 +57,7 @@ class StatusPicker extends StatelessWidget {
       case OrderStatus.collectedByCustomer:
       case OrderStatus.completed:
         return HugeIcons.strokeRoundedTickDouble01;
+      case OrderStatus.deliveryFailed:
       case OrderStatus.issueWindowOpen:
         return HugeIcons.strokeRoundedAlert02;
       case OrderStatus.fileRejected:

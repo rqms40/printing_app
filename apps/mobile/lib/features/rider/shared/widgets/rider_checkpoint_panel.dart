@@ -40,7 +40,8 @@ class RiderCheckpointPanel extends StatelessWidget {
     final colors = _colors(context);
 
     if (status == DeliveryStatus.delivered ||
-        status == DeliveryStatus.declined) {
+        status == DeliveryStatus.declined ||
+        status == DeliveryStatus.failed) {
       return const SizedBox.shrink();
     }
 

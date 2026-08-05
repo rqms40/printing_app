@@ -40,6 +40,8 @@ export enum OrderStatus {
   PICKED_UP = 'picked_up',
   OUT_FOR_DELIVERY = 'out_for_delivery',
   DELIVERED = 'delivered',
+  /** Failed delivery with evidence; awaiting return / paid redelivery. */
+  DELIVERY_FAILED = 'delivery_failed',
   COLLECTED_BY_CUSTOMER = 'collected_by_customer',
   ISSUE_WINDOW_OPEN = 'issue_window_open',
   COMPLETED = 'completed',

@@ -128,13 +128,20 @@ export const ORDER_STATUS_TRANSITIONS: Record<
   ],
   [OrderStatus.PICKED_UP]: [
     { to: OrderStatus.OUT_FOR_DELIVERY, actors: RIDER_OR_SYSTEM },
+    { to: OrderStatus.DELIVERY_FAILED, actors: RIDER_OR_SYSTEM },
   ],
   [OrderStatus.OUT_FOR_DELIVERY]: [
     { to: OrderStatus.DELIVERED, actors: RIDER_OR_SYSTEM },
+    { to: OrderStatus.DELIVERY_FAILED, actors: RIDER_OR_SYSTEM },
   ],
   [OrderStatus.DELIVERED]: [
     { to: OrderStatus.ISSUE_WINDOW_OPEN, actors: ['system'] },
     { to: OrderStatus.COMPLETED, actors: SYSTEM_OR_OPS },
+  ],
+  /** Ops stubs redelivery fee approval, then redispatch. */
+  [OrderStatus.DELIVERY_FAILED]: [
+    { to: OrderStatus.READY_FOR_DISPATCH, actors: OPS },
+    { to: OrderStatus.CANCELLED, actors: OPS },
   ],
   [OrderStatus.COLLECTED_BY_CUSTOMER]: [
     { to: OrderStatus.ISSUE_WINDOW_OPEN, actors: ['system'] },
