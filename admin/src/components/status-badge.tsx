@@ -2,6 +2,10 @@ import { Tag } from "antd";
 import type { OrderStatus } from "@/types/enums";
 import { statusLabel } from "@/utils/format";
 
+/**
+ * Semantic colors for marketplace order statuses.
+ * Always paired with [statusLabel] text — never rely on color alone.
+ */
 const STATUS_COLORS: Record<OrderStatus, string> = {
   draft: "default",
   submitted: "blue",
@@ -31,6 +35,12 @@ interface StatusBadgeProps {
   status: OrderStatus;
 }
 
+/** Order status chip: human label + optional color (label is required for a11y). */
 export function StatusBadge({ status }: StatusBadgeProps) {
-  return <Tag color={STATUS_COLORS[status]}>{statusLabel(status)}</Tag>;
+  const label = statusLabel(status);
+  return (
+    <Tag color={STATUS_COLORS[status] ?? "default"} title={label}>
+      {label}
+    </Tag>
+  );
 }

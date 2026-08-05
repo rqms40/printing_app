@@ -30,7 +30,10 @@ class _OrderCardState extends State<OrderCard> {
         : AppColors.light;
   }
 
+  /// Icon + semantic color for density; [statusLabel] always uses the
+  /// human-readable [OrderStatus.displayName] (never color alone).
   _OrderVisual _visual(AppColorSet colors) {
+    final label = widget.order.orderStatus.displayName;
     switch (widget.order.orderStatus) {
       case OrderStatus.delivered:
       case OrderStatus.collectedByCustomer:
@@ -40,21 +43,16 @@ class _OrderCardState extends State<OrderCard> {
           HugeIcons.strokeRoundedCheckmarkCircle02,
           colors.success.withValues(alpha: 0.1),
           colors.success,
-          'Completed',
+          label,
         );
       case OrderStatus.cancelled:
+      case OrderStatus.fileRejected:
+      case OrderStatus.deliveryFailed:
         return _OrderVisual(
           HugeIcons.strokeRoundedCancelCircle,
           colors.error.withValues(alpha: 0.1),
           colors.error,
-          'Cancelled',
-        );
-      case OrderStatus.fileRejected:
-        return _OrderVisual(
-          HugeIcons.strokeRoundedCancel01,
-          colors.error.withValues(alpha: 0.1),
-          colors.error,
-          'Declined',
+          label,
         );
       case OrderStatus.outForDelivery:
       case OrderStatus.pickedUp:
@@ -62,7 +60,7 @@ class _OrderCardState extends State<OrderCard> {
           HugeIcons.strokeRoundedDeliveryTruck02,
           colors.info.withValues(alpha: 0.1),
           colors.info,
-          'In Delivery',
+          label,
         );
       case OrderStatus.production:
       case OrderStatus.supplierSelfQc:
@@ -74,7 +72,7 @@ class _OrderCardState extends State<OrderCard> {
           HugeIcons.strokeRoundedPrinter,
           colors.warning.withValues(alpha: 0.1),
           colors.warning,
-          'In Production',
+          label,
         );
       case OrderStatus.readyForDispatch:
       case OrderStatus.riderAssigned:
@@ -82,7 +80,7 @@ class _OrderCardState extends State<OrderCard> {
           HugeIcons.strokeRoundedPackage,
           colors.success.withValues(alpha: 0.1),
           colors.success,
-          'Ready',
+          label,
         );
       case OrderStatus.draft:
       case OrderStatus.submitted:
@@ -94,7 +92,7 @@ class _OrderCardState extends State<OrderCard> {
           HugeIcons.strokeRoundedClock01,
           colors.accent.withValues(alpha: 0.08),
           colors.accent,
-          'Processing',
+          label,
         );
     }
   }
