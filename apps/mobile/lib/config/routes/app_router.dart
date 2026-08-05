@@ -54,6 +54,7 @@ import 'package:printing_app/features/customer/profile/screens/tam_survey_screen
 import 'package:printing_app/features/customer/profile/screens/required_tam_survey_screen.dart';
 import 'package:printing_app/features/customer/profile/screens/storage_settings_screen.dart';
 import 'package:printing_app/features/customer/uploads/screens/my_uploads_screen.dart';
+import 'package:printing_app/features/customer/order/screens/product_preview_screen.dart';
 import 'package:printing_app/features/customer/chat/models/chat_message.dart';
 import 'package:printing_app/features/customer/chat/models/conversation.dart';
 import 'package:printing_app/features/customer/chat/screens/chat_list_screen.dart';
@@ -533,6 +534,27 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/customer/order/checkout',
         pageBuilder: (_, state) =>
             slideUpTransition(const CheckoutScreen(), state),
+      ),
+      GoRoute(
+        path: '/customer/order/preview',
+        pageBuilder: (_, state) {
+          final extra = (state.extra as Map?) ?? const {};
+          final artworkFileId =
+              (extra['artworkFileId'] as num?)?.toInt() ?? 0;
+          final productType =
+              (extra['productType'] as String?) ?? 'flyer';
+          final orderId = (extra['orderId'] as num?)?.toInt();
+          final categoryHint = extra['categoryHint'] as String?;
+          return slideUpTransition(
+            ProductPreviewScreen(
+              artworkFileId: artworkFileId,
+              productType: productType,
+              orderId: orderId,
+              categoryHint: categoryHint,
+            ),
+            state,
+          );
+        },
       ),
       GoRoute(
         path: '/customer/order/success',

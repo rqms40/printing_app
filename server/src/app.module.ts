@@ -34,6 +34,7 @@ import { PayoutsModule } from './payouts/payouts.module';
 import { AuditModule } from './audit/audit.module';
 import { GeoZonesModule } from './geo-zones/geo-zones.module';
 import { SuperModule } from './super/super.module';
+import { MockupModule } from './mockup/mockup.module';
 import {
   createTypeOrmOptions,
   initializeDataSourceWithPreSyncNormalization,
@@ -97,6 +98,7 @@ import {
     AuditModule,
     GeoZonesModule,
     SuperModule,
+    MockupModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

@@ -263,6 +263,13 @@ export class Order {
   @Column({ name: 'tracking_link', nullable: true, type: 'text' })
   trackingLink: string;
 
+  /**
+   * Material issue window end (delivery proof + 24h). Set when entering
+   * `issue_window_open`. Null when window never opened.
+   */
+  @Column({ name: 'issue_window_ends_at', type: 'timestamptz', nullable: true })
+  issueWindowEndsAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
