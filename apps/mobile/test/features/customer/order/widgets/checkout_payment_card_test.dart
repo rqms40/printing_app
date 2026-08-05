@@ -63,9 +63,9 @@ void main() {
                 id: '1',
                 email: 'maria@test.com',
                 fullName: 'Maria Santos',
-                role: 'customer',
+                role: 'client',
                 isProfileComplete: true,
-                defaultPaymentMethod: PaymentMethod.maya,
+                defaultPaymentMethod: PaymentMethod.cod,
               ),
             ),
           ),
@@ -86,8 +86,8 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(container.read(checkoutProvider).paymentMethod, PaymentMethod.maya);
-    expect(find.text('Maya'), findsOneWidget);
+    expect(container.read(checkoutProvider).paymentMethod, PaymentMethod.cod);
+    expect(find.text('Cash on Delivery'), findsOneWidget);
   });
 
   testWidgets('credits-only mode clears an unavailable e-wallet selection', (

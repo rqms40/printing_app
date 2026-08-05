@@ -378,6 +378,39 @@ extension PaymentMethodX on PaymentMethod {
         return 'Pilot Credits';
     }
   }
+
+  /// Wire value for order create / batch checkout (server marketplace rails).
+  /// Server expects `pilot_credit` | `cod` (| sandbox `gcash`/`maya`).
+  String get orderApiValue {
+    switch (this) {
+      case PaymentMethod.gridCredits:
+        return 'pilot_credit';
+      case PaymentMethod.cod:
+        return 'cod';
+      case PaymentMethod.gcash:
+        return 'gcash';
+      case PaymentMethod.maya:
+        return 'maya';
+    }
+  }
+
+  /// Wire value for `PATCH /users/me/default-payment-method`.
+  /// Profile still accepts legacy `credits` (not pilot_credit).
+  String get defaultApiValue {
+    switch (this) {
+      case PaymentMethod.gridCredits:
+        return 'credits';
+      case PaymentMethod.cod:
+        return 'cod';
+      case PaymentMethod.gcash:
+        return 'gcash';
+      case PaymentMethod.maya:
+        return 'maya';
+    }
+  }
+
+  bool get isLiveWallet =>
+      this == PaymentMethod.gcash || this == PaymentMethod.maya;
 }
 
 enum PaymentStatus { pending, paid, failed, refunded }

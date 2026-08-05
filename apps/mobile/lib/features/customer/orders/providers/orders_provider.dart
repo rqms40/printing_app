@@ -107,7 +107,11 @@ OrderStatus _parseOrderStatus(String value) {
 
 PaymentMethod _parsePaymentMethod(String value) {
   final normalized = value.replaceAll(RegExp(r'[_-]'), '').toLowerCase();
-  if (normalized == 'credits' || normalized == 'gridcredit') {
+  if (normalized == 'credits' ||
+      normalized == 'gridcredit' ||
+      normalized == 'gridcredits' ||
+      normalized == 'pilotcredit' ||
+      normalized == 'pilotcredits') {
     return PaymentMethod.gridCredits;
   }
   if (normalized == 'cash' || normalized == 'cashondelivery') {
@@ -931,7 +935,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
           'quantity': order.quantity,
           'totalPrice': order.totalPrice,
           'deliveryFee': order.deliveryFee,
-          'paymentMethod': order.paymentMethod.name,
+          'paymentMethod': order.paymentMethod.orderApiValue,
           'deliveryOption': order.deliveryOption,
           'deliveryAddressId': _deliveryAddressIdValue(order.deliveryAddressId),
           'fileName': order.fileName,
@@ -1020,7 +1024,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     final body = <String, dynamic>{
       'items': mappedItems,
       'deliveryFee': deliveryFee,
-      'paymentMethod': paymentMethod.name,
+      'paymentMethod': paymentMethod.orderApiValue,
       'deliveryOption': deliveryOption,
       'deliveryAddressId': addressId,
       'speedTier': speedTier.toApi(),

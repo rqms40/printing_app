@@ -99,15 +99,6 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
     );
   }
 
-  String _wireValue(PaymentMethod m) {
-    switch (m) {
-      case PaymentMethod.gridCredits:
-        return 'credits';
-      default:
-        return m.name;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).brightness == Brightness.dark
@@ -121,6 +112,8 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
     final settingsReady = settings.hasValue;
     final paymentSettings = settings.valueOrNull;
     final creditsOnlyMode = paymentSettings?.creditsOnlyMode ?? false;
+    final visibleMethods = paymentSettings?.visibleMethods ??
+        const [PaymentMethod.gridCredits, PaymentMethod.cod];
     final effectiveChosen =
         settingsReady &&
             _chosen != null &&
@@ -172,16 +165,16 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
                   ? 'Checking payment availability'
                   : creditsOnlyMode
                   ? 'Only Pilot Credits is available during beta testing'
-                  : 'Pick how you want to pay',
+                  : 'Pilot Credits or eligible COD · live wallets stay sandbox-only',
               style: AppTypography.caption.copyWith(
                 color: colors.onSurfaceDim,
                 fontSize: 12,
               ),
             ),
             const SizedBox(height: AppSpacing.md),
-            for (var i = 0; i < PaymentMethod.values.length; i++) ...[
+            for (var i = 0; i < visibleMethods.length; i++) ...[
               if (i > 0) const SizedBox(height: 8),
-              if (PaymentMethod.values[i] == PaymentMethod.gridCredits)
+              if (visibleMethods[i] == PaymentMethod.gridCredits)
                 KeyedSubtree(
                   key: _creditsCoachKey,
                   child: _MethodRow(
@@ -209,24 +202,25 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
                 )
               else
                 _MethodRow(
-                  method: PaymentMethod.values[i],
-                  selected: effectiveChosen == PaymentMethod.values[i],
+                  method: visibleMethods[i],
+                  selected: effectiveChosen == visibleMethods[i],
                   colors: colors,
                   creditsBalance: creditsBalance,
                   disabledSubtitle: !settingsReady
                       ? 'Checking availability'
                       : paymentSettings!.disabledSubtitleFor(
-                          PaymentMethod.values[i],
+                          visibleMethods[i],
                           creditsBalance: creditsBalance,
                         ),
                   onTap:
                       !settingsReady ||
                           !paymentSettings!.isMethodEnabled(
-                            PaymentMethod.values[i],
+                            visibleMethods[i],
                             creditsBalance: creditsBalance,
                           )
                       ? null
-                      : () => setState(() => _chosen = PaymentMethod.values[i]),
+                      : () =>
+                            setState(() => _chosen = visibleMethods[i]),
                 ),
             ],
             const SizedBox(height: AppSpacing.md),
@@ -281,7 +275,7 @@ class _PaymentSheetBodyState extends ConsumerState<_PaymentSheetBody> {
                         try {
                           await ApiClient.instance.dio.patch(
                             '/users/me/default-payment-method',
-                            data: {'method': _wireValue(chosen)},
+                            data: {'method': chosen.defaultApiValue},
                           );
                           ref
                               .read(authProvider.notifier)
@@ -345,11 +339,11 @@ class _MethodRow extends StatelessWidget {
     }
     switch (m) {
       case PaymentMethod.gcash:
-        return 'e-wallet · instant';
+        return 'e-wallet · sandbox';
       case PaymentMethod.maya:
-        return 'e-wallet · instant';
+        return 'e-wallet · sandbox';
       case PaymentMethod.cod:
-        return 'Pay cash to the rider';
+        return CheckoutPaymentSettings.codRulesSubtitle;
       case PaymentMethod.gridCredits:
         return 'Use your Pilot Credits balance';
     }

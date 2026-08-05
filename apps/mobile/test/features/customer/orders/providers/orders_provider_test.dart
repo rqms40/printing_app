@@ -708,6 +708,7 @@ void main() {
       () async {
         final cases = {
           'gridCredits': PaymentMethod.gridCredits,
+          'pilot_credit': PaymentMethod.gridCredits,
           'gcash': PaymentMethod.gcash,
         };
 
@@ -802,7 +803,7 @@ void main() {
         expect(lastBatchPayload!['deliveryOption'], 'delivery');
         expect(lastBatchPayload!['deliveryAddressId'], 9);
         expect(lastBatchPayload!['deliveryFee'], 50);
-        expect(lastBatchPayload!['paymentMethod'], 'gridCredits');
+        expect(lastBatchPayload!['paymentMethod'], 'pilot_credit');
 
         final items = lastBatchPayload!['items'] as List<dynamic>;
         expect(items, hasLength(2));
