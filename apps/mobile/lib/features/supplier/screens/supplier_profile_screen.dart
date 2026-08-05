@@ -140,7 +140,7 @@ class SupplierProfileScreen extends ConsumerWidget {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Coming soon — payout notices after delivery',
+                              'Held after delivery · freeze on timely claims',
                               style: AppTypography.caption.copyWith(
                                 color: colors.onSurfaceDim,
                               ),
