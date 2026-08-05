@@ -30,6 +30,7 @@ import { AuditModule } from '../audit/audit.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { QualityModule } from '../quality/quality.module';
 import { GeoZonesModule } from '../geo-zones/geo-zones.module';
+import { PayoutsModule } from '../payouts/payouts.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { GeoZonesModule } from '../geo-zones/geo-zones.module';
     PaymentsModule,
     QualityModule,
     GeoZonesModule,
+    PayoutsModule,
   ],
   providers: [OrdersService, OrdersGateway, PaymentTimeoutScheduler],
   controllers: [OrdersController, ExternalDeliveriesController],

@@ -5,17 +5,21 @@ import { PayoutsService } from './payouts.service';
 import { PayoutsController } from './payouts.controller';
 import { PaymentsModule } from '../payments/payments.module';
 import { AuditModule } from '../audit/audit.module';
+import { Order } from '../orders/entities/order.entity';
+import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
+import { GeoZonesModule } from '../geo-zones/geo-zones.module';
 
 /**
- * Supplier payout list + approval (Phase 8).
+ * Supplier payout list + approval + issue-window holds (Phase 8–9).
  * COD recon gate: PaymentsService.assertCodReconciledBeforePayout.
- * Hold reason: missing_cod_reconciliation (cod-eligibility.ts).
+ * Hold reasons: missing_cod_reconciliation | issue_window | open_issue.
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payout]),
+    TypeOrmModule.forFeature([Payout, Order, SupplierAssignment]),
     forwardRef(() => PaymentsModule),
     AuditModule,
+    GeoZonesModule,
   ],
   controllers: [PayoutsController],
   providers: [PayoutsService],

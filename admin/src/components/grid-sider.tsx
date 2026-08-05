@@ -16,7 +16,10 @@ const BADGE_MAP: Partial<Record<string, keyof BadgeCounts>> = {
 };
 
 /** Resources exclusive to the supplier portal (not shown to ops). */
-const SUPPLIER_PORTAL_RESOURCES = new Set(["supplier-jobs"]);
+const SUPPLIER_PORTAL_RESOURCES = new Set([
+  "supplier-jobs",
+  "supplier-payouts",
+]);
 
 /** Super Admin–only governance resources (hidden from ops_admin). */
 const SUPER_ONLY_RESOURCES = new Set([

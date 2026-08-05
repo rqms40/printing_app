@@ -591,6 +591,13 @@ export class PaymentsService {
       ) {
         continue;
       }
+      // Do not clobber issue-window / open-issue holds (Phase 9).
+      if (
+        payout.holdReason === 'issue_window' ||
+        payout.holdReason === 'open_issue'
+      ) {
+        continue;
+      }
       payout.settlementState = PayoutSettlementState.HELD;
       payout.holdReason = COD_PAYOUT_HOLD_REASON;
       await this.payoutRepo.save(payout);

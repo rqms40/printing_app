@@ -3124,6 +3124,17 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       },
       { orderStatus: OrderStatus.DELIVERED },
     );
+    // Phase 9: delivered → issue_window_open with 24h window.
+    expect(ordersRepo.update).toHaveBeenCalledWith(
+      {
+        id: arrived.id,
+        orderStatus: OrderStatus.DELIVERED,
+      },
+      expect.objectContaining({
+        orderStatus: OrderStatus.ISSUE_WINDOW_OPEN,
+        issueWindowEndsAt: expect.any(Date),
+      }),
+    );
     expect(historyRepo.insert).toHaveBeenCalledWith({
       orderId: arrived.id,
       fromStatus: OrderStatus.OUT_FOR_DELIVERY,
@@ -3131,6 +3142,14 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       changedByUserId: 51,
       notes: 'Rider completed delivery',
     });
+    expect(historyRepo.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: arrived.id,
+        fromStatus: OrderStatus.DELIVERED,
+        toStatus: OrderStatus.ISSUE_WINDOW_OPEN,
+        changedByUserId: 0,
+      }),
+    );
     expect(
       (service as any).auditService.recordOrderStatusTransition,
     ).toHaveBeenCalledWith(

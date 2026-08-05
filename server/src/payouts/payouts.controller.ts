@@ -45,6 +45,22 @@ export class PayoutsController {
     });
   }
 
+  /** Supplier portal / mobile: own payouts only. */
+  @Get('mine')
+  @Roles(UserRole.SUPPLIER)
+  listMine(@Request() req: RequestWithUser) {
+    return this.payoutsService.listForSupplierUser(req.user.sub);
+  }
+
+  @Get('mine/:id')
+  @Roles(UserRole.SUPPLIER)
+  getMine(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: RequestWithUser,
+  ) {
+    return this.payoutsService.assertSupplierOwnsPayout(id, req.user.sub);
+  }
+
   @Get(':id')
   @Roles(UserRole.OPS_ADMIN, UserRole.SUPER_ADMIN)
   getOne(@Param('id', ParseIntPipe) id: number) {

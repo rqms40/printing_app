@@ -38,6 +38,8 @@ import {
   FundOutlined,
   BankOutlined,
   ControlOutlined,
+  AlertOutlined,
+  DollarOutlined,
 } from "@ant-design/icons";
 
 import { gridTheme } from "@/config/theme";
@@ -77,10 +79,12 @@ import { QaQueuePage } from '@/pages/qa/queue';
 import { QaWorkspacePage } from '@/pages/qa/workspace';
 import { SupplierJobsListPage } from '@/pages/supplier/jobs-list';
 import { SupplierJobShowPage } from '@/pages/supplier/job-show';
+import { SupplierPayoutsListPage } from '@/pages/supplier/payouts-list';
 import { SuperVerificationPage } from '@/pages/super/verification';
 import { SuperZonesPage } from '@/pages/super/zones';
 import { SuperAuditPage } from '@/pages/super/audit';
 import { SuperFinancePage } from '@/pages/super/finance';
+import { OpsClaimsPage } from '@/pages/ops/claims';
 
 /** Home: ops dashboard or supplier jobs inbox. */
 function RoleHomeRedirect() {
@@ -147,6 +151,15 @@ function App() {
                 },
               },
               {
+                name: "supplier-payouts",
+                list: "/supplier/payouts",
+                meta: {
+                  label: "Payouts",
+                  icon: <DollarOutlined />,
+                  portal: "supplier",
+                },
+              },
+              {
                 name: "admin/orders",
                 list: "/orders",
                 show: "/orders/show/:id",
@@ -157,6 +170,11 @@ function App() {
                 list: "/qa",
                 show: "/qa/workspace/:id",
                 meta: { label: "QA Queue", icon: <AuditOutlined /> },
+              },
+              {
+                name: "ops-claims",
+                list: "/ops/claims",
+                meta: { label: "Claims", icon: <AlertOutlined /> },
               },
               {
                 name: "riders",
@@ -331,6 +349,7 @@ function App() {
                   <Route index element={<SupplierJobsListPage />} />
                   <Route path=":id" element={<SupplierJobShowPage />} />
                 </Route>
+                <Route path="/supplier/payouts" element={<SupplierPayoutsListPage />} />
                 <Route path="/orders">
                   <Route index element={<OrderList />} />
                   <Route path="show/:id" element={<OrderShow />} />
@@ -339,6 +358,7 @@ function App() {
                   <Route index element={<QaQueuePage />} />
                   <Route path="workspace/:id" element={<QaWorkspacePage />} />
                 </Route>
+                <Route path="/ops/claims" element={<OpsClaimsPage />} />
                 <Route path="/riders" element={<RiderList />} />
                 <Route path="/users">
                   <Route index element={<UserList />} />

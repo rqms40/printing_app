@@ -83,6 +83,7 @@ import {
   parseOrderStatus,
 } from './order-status-transition';
 import { AuditService } from '../audit/audit.service';
+import { PayoutsService } from '../payouts/payouts.service';
 
 // Slot definitions live in operator-local time (Asia/Manila, UTC+8). The API
 // server may run in UTC, so we never use server-local Date#getHours/setHours
@@ -310,6 +311,7 @@ export class OrdersService {
     private readonly dispatchPlanRepo: Repository<DispatchPlan>,
     private readonly auditService: AuditService,
     @Optional() private readonly geoZonesService?: GeoZonesService,
+    @Optional() private readonly payoutsService?: PayoutsService,
   ) {}
 
   async findByUser(userId: number): Promise<Order[]> {
@@ -2627,6 +2629,7 @@ export class OrdersService {
       throw new BadRequestException('Delivery completion requires delivery');
     }
     assertOrderStatusTransition(order.orderStatus, OrderStatus.DELIVERED);
+    const fromStatus = order.orderStatus;
     const updateResult = await ordersRepo.update(
       { id: order.id, orderStatus: order.orderStatus },
       { orderStatus: OrderStatus.DELIVERED },
@@ -2636,7 +2639,7 @@ export class OrdersService {
     }
     await manager.getRepository(OrderStatusHistory).insert({
       orderId: order.id,
-      fromStatus: order.orderStatus,
+      fromStatus,
       toStatus: OrderStatus.DELIVERED,
       changedByUserId: actorUserId,
       notes: 'Rider completed delivery',
@@ -2644,7 +2647,7 @@ export class OrdersService {
     await this.auditService.recordOrderStatusTransition(
       {
         orderId: order.id,
-        fromStatus: order.orderStatus,
+        fromStatus,
         toStatus: OrderStatus.DELIVERED,
         actorUserId,
         actorRole: 'rider',
@@ -2652,10 +2655,71 @@ export class OrdersService {
       },
       manager,
     );
+
+    // Immediately open 24h material issue window + held payout (Phase 9.2).
+    assertOrderStatusTransition(
+      OrderStatus.DELIVERED,
+      OrderStatus.ISSUE_WINDOW_OPEN,
+    );
+    let issueWindowEndsAt: Date | null = null;
+    if (this.payoutsService) {
+      try {
+        const opened = await this.payoutsService.openIssueWindowOnDelivered(
+          order.id,
+          actorUserId,
+          manager,
+        );
+        issueWindowEndsAt = opened.issueWindowEndsAt;
+      } catch (err) {
+        this.logger.warn(
+          `Issue-window payout open failed for order ${order.id}: ${err}`,
+        );
+        // Still open the status window even if payout row fails (e.g. no supplier).
+        issueWindowEndsAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        await ordersRepo.update(
+          { id: order.id },
+          { issueWindowEndsAt },
+        );
+      }
+    } else {
+      issueWindowEndsAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await ordersRepo.update({ id: order.id }, { issueWindowEndsAt });
+    }
+
+    await ordersRepo.update(
+      { id: order.id, orderStatus: OrderStatus.DELIVERED },
+      {
+        orderStatus: OrderStatus.ISSUE_WINDOW_OPEN,
+        ...(issueWindowEndsAt ? { issueWindowEndsAt } : {}),
+      },
+    );
+    await manager.getRepository(OrderStatusHistory).insert({
+      orderId: order.id,
+      fromStatus: OrderStatus.DELIVERED,
+      toStatus: OrderStatus.ISSUE_WINDOW_OPEN,
+      changedByUserId: 0,
+      notes: '24h material issue window opened after delivery proof',
+    });
+    await this.auditService.recordOrderStatusTransition(
+      {
+        orderId: order.id,
+        fromStatus: OrderStatus.DELIVERED,
+        toStatus: OrderStatus.ISSUE_WINDOW_OPEN,
+        actorUserId: 0,
+        actorRole: 'system',
+        reason: 'issue_window_open',
+        metadata: {
+          issueWindowEndsAt: issueWindowEndsAt?.toISOString() ?? null,
+        },
+      },
+      manager,
+    );
+
     const surveyRequirement = await this.prepareCompletionRecords(
       manager,
       order,
     );
+    // previous snapshot used by publisher — reflect pre-delivery status.
     return { previous: order, surveyRequirement };
   }
 
