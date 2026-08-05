@@ -15,6 +15,7 @@ import 'package:printing_app/shared/widgets/app_card.dart';
 import 'package:printing_app/shared/widgets/app_text_field.dart';
 import 'package:printing_app/shared/widgets/status_badge.dart';
 import 'package:printing_app/utils/formatters.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Full supplier job workspace: accept/decline, payment gate, production,
 /// self-QC upload, and ready-for-pickup.
@@ -176,17 +177,31 @@ class _SupplierJobDetailScreenState
       withData: true,
     );
     if (result == null || result.files.isEmpty) return;
-    setState(() => _selfQcFile = result.files.first);
+    final picked = result.files.first;
+    final bytes = picked.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      _showSnack(
+        'Could not read the selected file. Try another file.',
+        isError: true,
+      );
+      return;
+    }
+    setState(() => _selfQcFile = picked);
   }
 
   Future<void> _onSelfQc() async {
     final file = _selfQcFile;
+    final bytes = file?.bytes;
+    if (file == null || bytes == null || bytes.isEmpty) {
+      _showSnack('Self-QC evidence file is required', isError: true);
+      return;
+    }
     final ok = await ref
         .read(supplierJobDetailProvider(widget.jobId).notifier)
         .submitSelfQc(
           notes: _selfQcNotesController.text,
-          fileBytes: file?.bytes,
-          fileName: file?.name,
+          fileBytes: bytes,
+          fileName: file.name,
         );
     final state = ref.read(supplierJobDetailProvider(widget.jobId));
     if (ok) {
@@ -197,6 +212,22 @@ class _SupplierJobDetailScreenState
       ref.read(supplierJobsProvider.notifier).refresh(silent: true);
     } else {
       _showSnack(state.errorMessage ?? 'Self-QC failed', isError: true);
+    }
+  }
+
+  Future<void> _openArtwork(String? signedUrl) async {
+    if (signedUrl == null || signedUrl.trim().isEmpty) return;
+    final uri = Uri.tryParse(signedUrl);
+    if (uri == null) {
+      _showSnack('Invalid artwork link', isError: true);
+      return;
+    }
+    final launched = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!launched && mounted) {
+      _showSnack('Could not open artwork', isError: true);
     }
   }
 
@@ -347,7 +378,11 @@ class _SupplierJobDetailScreenState
                       if (detail.artworkFileName != null ||
                           detail.artworkSignedUrl != null) ...[
                         const SizedBox(height: AppSpacing.lg),
-                        _ArtworkSection(detail: detail, colors: colors),
+                        _ArtworkSection(
+                          detail: detail,
+                          colors: colors,
+                          onOpen: () => _openArtwork(detail.artworkSignedUrl),
+                        ),
                       ],
                       if (detail.canAccept || detail.canDecline) ...[
                         const SizedBox(height: AppSpacing.lg),
@@ -647,14 +682,22 @@ class _SpecsSection extends StatelessWidget {
 }
 
 class _ArtworkSection extends StatelessWidget {
-  const _ArtworkSection({required this.detail, required this.colors});
+  const _ArtworkSection({
+    required this.detail,
+    required this.colors,
+    required this.onOpen,
+  });
 
   final SupplierJobDetail detail;
   final AppColorSet colors;
+  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
+    final canOpen = detail.artworkSignedUrl != null &&
+        detail.artworkSignedUrl!.trim().isNotEmpty;
     return AppCard(
+      onTap: canOpen ? onOpen : null,
       child: Row(
         children: [
           HugeIcon(
@@ -677,12 +720,19 @@ class _ArtworkSection extends StatelessWidget {
                 Text(
                   detail.artworkFileName ?? 'Attached file',
                   style: AppTypography.caption.copyWith(
-                    color: colors.onSurfaceDim,
+                    color: canOpen ? colors.accent : colors.onSurfaceDim,
+                    decoration: canOpen ? TextDecoration.underline : null,
                   ),
                 ),
               ],
             ),
           ),
+          if (canOpen)
+            HugeIcon(
+              icon: HugeIcons.strokeRoundedLinkSquare02,
+              color: colors.accent,
+              size: 18,
+            ),
         ],
       ),
     );
@@ -925,6 +975,11 @@ class _SelfQcSection extends StatelessWidget {
   final VoidCallback onClearFile;
   final VoidCallback onSubmit;
 
+  bool get _hasEvidence {
+    final bytes = file?.bytes;
+    return file != null && bytes != null && bytes.isNotEmpty;
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppCard(
@@ -939,7 +994,7 @@ class _SelfQcSection extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'Upload a photo or PDF of the finished print before marking ready.',
+            'Upload a photo or PDF of the finished print (required) before marking ready.',
             style: AppTypography.caption.copyWith(
               color: colors.onSurfaceDim,
             ),
@@ -1000,7 +1055,7 @@ class _SelfQcSection extends StatelessWidget {
             isFullWidth: true,
             isLoading: isSubmitting,
             icon: HugeIcons.strokeRoundedCheckmarkCircle02,
-            onTap: isSubmitting ? null : onSubmit,
+            onTap: (isSubmitting || !_hasEvidence) ? null : onSubmit,
           ),
         ],
       ),

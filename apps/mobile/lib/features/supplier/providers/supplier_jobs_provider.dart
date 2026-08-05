@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/features/supplier/models/supplier_job.dart';
 import 'package:printing_app/shared/services/api_client.dart';
+import 'package:printing_app/utils/file_helpers.dart';
 
 String extractSupplierApiError(Object error) {
   if (error is DioException) {
@@ -267,33 +268,42 @@ class SupplierJobDetailNotifier extends StateNotifier<SupplierJobDetailState> {
     });
   }
 
+  /// Submits self-QC evidence. Evidence file bytes are required — notes-only
+  /// posts are rejected client-side (server also returns `self_qc_evidence_required`).
   Future<bool> submitSelfQc({
     String? notes,
     Uint8List? fileBytes,
     String? fileName,
   }) async {
+    if (fileBytes == null ||
+        fileBytes.isEmpty ||
+        fileName == null ||
+        fileName.trim().isEmpty) {
+      state = state.copyWith(
+        isSubmitting: false,
+        errorMessage: () => 'Self-QC evidence file is required',
+        actionMessage: () => null,
+      );
+      return false;
+    }
+
     return _runAction(() async {
-      if (fileBytes != null && fileBytes.isNotEmpty) {
-        final form = FormData.fromMap({
-          'file': MultipartFile.fromBytes(
-            fileBytes,
-            filename: fileName ?? 'self-qc.jpg',
-          ),
-          if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
-        });
-        await _api.post(
-          '/supplier/jobs/$jobId/self-qc',
-          data: form,
-          options: Options(contentType: 'multipart/form-data'),
-        );
-      } else {
-        await _api.post(
-          '/supplier/jobs/$jobId/self-qc',
-          data: {
-            if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
-          },
-        );
-      }
+      final extension = getFileExtension(fileName);
+      final contentType =
+          DioMediaType.parse(mimeTypeForExtension(extension));
+      final form = FormData.fromMap({
+        'file': MultipartFile.fromBytes(
+          fileBytes,
+          filename: fileName,
+          contentType: contentType,
+        ),
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      });
+      await _api.post(
+        '/supplier/jobs/$jobId/self-qc',
+        data: form,
+        options: Options(contentType: 'multipart/form-data'),
+      );
       return 'Self-QC submitted';
     });
   }
