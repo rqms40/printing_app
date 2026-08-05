@@ -14,6 +14,7 @@
     "start:prod": "node dist/src/main.js",
     "seed": "ts-node -r tsconfig-paths/register src/seed.ts",
     "seed:if-empty": "node scripts/seed-if-empty.mjs",
+    "seed:sync-logins": "node scripts/sync-seed-logins.mjs",
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/database/data-source.ts",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/database/data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/database/data-source.ts",
