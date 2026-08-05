@@ -424,6 +424,18 @@ export class OrdersService {
           assignment.status,
         );
 
+      // Customer-facing delivery handoff OTP only (pickup OTP is supplier/ops).
+      const deliveryOtp =
+        assignment &&
+        !assignment.deliveryOtpVerifiedAt &&
+        [
+          DeliveryStatus.PICKED_UP,
+          DeliveryStatus.ON_THE_WAY,
+          DeliveryStatus.ARRIVED,
+        ].includes(assignment.status)
+          ? (assignment.deliveryOtpCode ?? null)
+          : null;
+
       return Object.assign(order, {
         deliveryAssignmentId: canTrackDelivery ? assignment?.id : null,
         deliveryQueuePosition: queuePosition,
@@ -444,6 +456,7 @@ export class OrdersService {
           ? (plan?.routingDataStale ?? false)
           : null,
         canTrackDelivery,
+        deliveryOtp,
         assignedRiderContact: this.assignedRiderContactFromAssignment(
           assignment,
           canTrackDelivery,

@@ -454,6 +454,7 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
       .set('Authorization', `Bearer ${riderToken}`)
       .send({
         status: DeliveryStatus.DELIVERED,
+        otp: (await readAssignmentOtps(nearAssignment.id)).deliveryOtpCode,
         proof: {
           type: ProofOfDeliveryType.SIGNATURE,
           signatureData: signatureProof,
@@ -539,6 +540,7 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
       .set('Authorization', `Bearer ${riderToken}`)
       .send({
         status: DeliveryStatus.DELIVERED,
+        otp: (await readAssignmentOtps(midAssignment.id)).deliveryOtpCode,
         proof: {
           type: ProofOfDeliveryType.PHOTO,
           fileId: photoProof.id,
@@ -652,12 +654,56 @@ describe('Concurrent order route and proof workflow (e2e)', () => {
     );
   }
 
+  async function readAssignmentOtps(assignmentId: number): Promise<{
+    pickupOtpCode: string | null;
+    deliveryOtpCode: string | null;
+  }> {
+    const row = await assignmentsRepo.findOneOrFail({
+      where: { id: assignmentId },
+      select: {
+        id: true,
+        pickupOtpCode: true,
+        deliveryOtpCode: true,
+      },
+    });
+    return {
+      pickupOtpCode: row.pickupOtpCode ?? null,
+      deliveryOtpCode: row.deliveryOtpCode ?? null,
+    };
+  }
+
   async function advanceToOnTheWay(assignmentId: number, riderToken: string) {
     for (const status of [
       DeliveryStatus.ACCEPTED,
       DeliveryStatus.PICKED_UP,
       DeliveryStatus.ON_THE_WAY,
     ]) {
+      if (status === DeliveryStatus.PICKED_UP) {
+        const { pickupOtpCode } = await readAssignmentOtps(assignmentId);
+        const photoUpload = await request(app.getHttpServer())
+          .post('/api/files/upload')
+          .set('Authorization', `Bearer ${riderToken}`)
+          .field('purpose', 'proof_of_delivery')
+          .attach('file', TINY_PNG, {
+            filename: `pickup-${assignmentId}-${runId}.png`,
+            contentType: 'image/png',
+          })
+          .expect(201);
+        storageObjectKeys.add(photoUpload.body.objectKey as string);
+        await request(app.getHttpServer())
+          .patch(`/api/riders/assignments/${assignmentId}/status`)
+          .set('Authorization', `Bearer ${riderToken}`)
+          .send({
+            status,
+            otp: pickupOtpCode,
+            proof: {
+              type: ProofOfDeliveryType.PHOTO,
+              fileId: photoUpload.body.id,
+            },
+          })
+          .expect(200);
+        continue;
+      }
       await request(app.getHttpServer())
         .patch(`/api/riders/assignments/${assignmentId}/status`)
         .set('Authorization', `Bearer ${riderToken}`)

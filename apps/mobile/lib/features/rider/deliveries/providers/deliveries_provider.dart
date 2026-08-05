@@ -357,7 +357,7 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
 
     final nextStatus = switch (current.status) {
       DeliveryStatus.assigned => DeliveryStatus.accepted,
-      DeliveryStatus.accepted => DeliveryStatus.pickedUp,
+      DeliveryStatus.accepted => null, // needs pickup OTP + photo
       DeliveryStatus.pickedUp => DeliveryStatus.onTheWay,
       DeliveryStatus.onTheWay => DeliveryStatus.arrived,
       DeliveryStatus.arrived => null,
@@ -366,6 +366,11 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
 
     if (nextStatus != null) {
       await _patchStatus(assignmentId, nextStatus);
+    } else if (current.status == DeliveryStatus.accepted) {
+      state = state.copyWith(
+        errorMessage: () =>
+            'Pickup OTP and photo proof are required before pickup',
+      );
     } else if (current.status == DeliveryStatus.arrived) {
       state = state.copyWith(
         errorMessage: () =>
@@ -374,29 +379,63 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
     }
   }
 
-  Future<void> completeDeliveryWithProof(
+  Future<void> completePickupWithProof(
     String assignmentId,
-    Map<String, dynamic> proof,
+    Map<String, dynamic> proofPayload,
   ) async {
     final current = state.viewById(assignmentId)?.assignment;
-    if (current == null || current.status != DeliveryStatus.arrived) return;
+    if (current == null || current.status != DeliveryStatus.accepted) return;
 
-    final proofType = proof['type']?.toString();
-    if (proofType == null || proofType.isEmpty) {
+    final proofType = proofPayload['type']?.toString();
+    final otp = proofPayload['otp']?.toString().trim();
+    if (proofType != 'photo' || otp == null || otp.isEmpty) {
       state = state.copyWith(
         errorMessage: () =>
-            'Proof of delivery is required before completing this stop',
+            'Pickup OTP and photo proof are required before pickup',
       );
       return;
     }
 
-    await _patchStatus(assignmentId, DeliveryStatus.delivered, proof: proof);
+    final proof = Map<String, dynamic>.from(proofPayload)..remove('otp');
+    await _patchStatus(
+      assignmentId,
+      DeliveryStatus.pickedUp,
+      proof: proof,
+      otp: otp,
+    );
+  }
+
+  Future<void> completeDeliveryWithProof(
+    String assignmentId,
+    Map<String, dynamic> proofPayload,
+  ) async {
+    final current = state.viewById(assignmentId)?.assignment;
+    if (current == null || current.status != DeliveryStatus.arrived) return;
+
+    final proofType = proofPayload['type']?.toString();
+    final otp = proofPayload['otp']?.toString().trim();
+    if (proofType == null || proofType.isEmpty || otp == null || otp.isEmpty) {
+      state = state.copyWith(
+        errorMessage: () =>
+            'Delivery OTP and proof are required before completing this stop',
+      );
+      return;
+    }
+
+    final proof = Map<String, dynamic>.from(proofPayload)..remove('otp');
+    await _patchStatus(
+      assignmentId,
+      DeliveryStatus.delivered,
+      proof: proof,
+      otp: otp,
+    );
   }
 
   Future<void> _patchStatus(
     String assignmentId,
     DeliveryStatus nextStatus, {
     Map<String, dynamic>? proof,
+    String? otp,
   }) async {
     try {
       final data = <String, dynamic>{
@@ -404,6 +443,9 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
       };
       if (proof != null) {
         data['proof'] = proof;
+      }
+      if (otp != null && otp.isNotEmpty) {
+        data['otp'] = otp;
       }
       await ApiClient.instance.patch(
         '/riders/assignments/$assignmentId/status',

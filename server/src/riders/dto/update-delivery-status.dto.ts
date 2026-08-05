@@ -90,6 +90,21 @@ export class UpdateDeliveryStatusDto {
   @IsString()
   declineReason?: string;
 
+  @ApiPropertyOptional({
+    description:
+      'One-time code from supplier (pickup) or customer (delivery). Required for picked_up and delivered.',
+    example: '483920',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @Transform(({ value }) => {
+    const rawValue: unknown = value;
+    return typeof rawValue === 'string' ? rawValue.trim() : rawValue;
+  })
+  @MaxLength(8)
+  otp?: string;
+
   @ApiPropertyOptional({ type: ProofOfDeliveryDto })
   @IsOptional()
   @IsObject()

@@ -6,6 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { createHash, randomInt, timingSafeEqual } from 'crypto';
 import { DataSource, EntityManager, In, Not, Repository } from 'typeorm';
 import { RiderProfile } from './entities/rider-profile.entity';
 import {
@@ -43,6 +44,43 @@ import {
   OrdersGateway,
 } from '../orders/orders.gateway';
 import { AuditService } from '../audit/audit.service';
+
+const OTP_SECRET_FIELDS = [
+  'pickupOtpHash',
+  'pickupOtpCode',
+  'deliveryOtpHash',
+  'deliveryOtpCode',
+] as const;
+
+export function generateDeliveryOtpCode(): string {
+  return String(randomInt(0, 1_000_000)).padStart(6, '0');
+}
+
+export function hashDeliveryOtp(code: string): string {
+  return createHash('sha256').update(code.trim()).digest('hex');
+}
+
+export function otpCodesMatch(
+  submitted: string | undefined,
+  expectedHash: string | null | undefined,
+): boolean {
+  if (!submitted?.trim() || !expectedHash) return false;
+  const left = Buffer.from(hashDeliveryOtp(submitted), 'utf8');
+  const right = Buffer.from(expectedHash, 'utf8');
+  if (left.length !== right.length) return false;
+  return timingSafeEqual(left, right);
+}
+
+/** Strip OTP secrets before serializing assignment to riders. */
+export function sanitizeAssignmentSecrets<T extends object>(
+  assignment: T,
+): T {
+  const clone = { ...assignment } as T & Record<string, unknown>;
+  for (const field of OTP_SECRET_FIELDS) {
+    delete clone[field];
+  }
+  return clone;
+}
 
 // Valid state transitions for delivery status
 const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
@@ -226,11 +264,18 @@ export class RidersService {
           );
         }
         riderProfile.user = riderUser;
+        const pickupOtpCode = generateDeliveryOtpCode();
         const assignment = assignmentRepo.create({
           orderId,
           riderId,
           status: DeliveryStatus.ASSIGNED,
           isCurrent: true,
+          pickupOtpCode,
+          pickupOtpHash: hashDeliveryOtp(pickupOtpCode),
+          pickupOtpVerifiedAt: null,
+          deliveryOtpCode: null,
+          deliveryOtpHash: null,
+          deliveryOtpVerifiedAt: null,
         });
         const savedAssignment = await assignmentRepo.save(assignment);
 
@@ -307,7 +352,7 @@ export class RidersService {
     }
     return {
       order,
-      assignment: assignmentResult.assignment,
+      assignment: sanitizeAssignmentSecrets(assignmentResult.assignment),
       riderProfile: assignmentResult.riderProfile,
     };
   }
@@ -406,11 +451,14 @@ export class RidersService {
 
   async getAssignments(userId: number): Promise<DeliveryAssignment[]> {
     const profile = await this.getProfile(userId);
-    return this.assignmentRepo.find({
+    const assignments = await this.assignmentRepo.find({
       where: { riderId: profile.id },
       relations: ['order'],
       order: { createdAt: 'DESC' },
     });
+    return assignments.map((assignment) =>
+      sanitizeAssignmentSecrets(assignment),
+    );
   }
 
   async getActiveAssignments(userId: number): Promise<DeliveryAssignment[]> {
@@ -435,7 +483,7 @@ export class RidersService {
       return [...assignments]
         .sort((left, right) => left.id - right.id)
         .map((assignment) =>
-          Object.assign(assignment, {
+          Object.assign(sanitizeAssignmentSecrets(assignment), {
             dispatchPlanState: 'unplanned',
             dispatchPlanVersion: null,
             routePosition: null,
@@ -455,7 +503,7 @@ export class RidersService {
       if (!assignment) return [];
       assignmentById.delete(stop.assignmentId);
       return [
-        Object.assign(assignment, {
+        Object.assign(sanitizeAssignmentSecrets(assignment), {
           dispatchPlanState: 'planned',
           dispatchPlanVersion: plan.version,
           routePosition: index + 1,
@@ -474,7 +522,7 @@ export class RidersService {
     const unplanned = [...assignmentById.values()]
       .sort((left, right) => left.id - right.id)
       .map((assignment) =>
-        Object.assign(assignment, {
+        Object.assign(sanitizeAssignmentSecrets(assignment), {
           dispatchPlanState: 'unplanned',
           dispatchPlanVersion: null,
           routePosition: null,
@@ -574,6 +622,7 @@ export class RidersService {
     newStatus: DeliveryStatus,
     declineReason?: string,
     proof?: ProofOfDeliveryDto,
+    otp?: string,
   ): Promise<DeliveryAssignment> {
     const profile = await this.getProfile(userId);
     const candidateAssignment = await this.assignmentRepo.findOne({
@@ -652,10 +701,43 @@ export class RidersService {
       }
 
       const now = new Date();
-      const proofMetadata =
-        newStatus === DeliveryStatus.DELIVERED
-          ? await this.validateProofOfDelivery(proof, userId, manager)
-          : null;
+      let pickupProofMetadata: DeliveryProofMetadata | null = null;
+      let deliveryProofMetadata: DeliveryProofMetadata | null = null;
+
+      if (newStatus === DeliveryStatus.PICKED_UP) {
+        this.assertOtp(
+          otp,
+          assignment.pickupOtpHash,
+          assignment.pickupOtpVerifiedAt,
+          'pickup',
+        );
+        // Pickup requires photo; signature is optional extra on the photo path.
+        pickupProofMetadata = await this.validateProofOfDelivery(proof, userId, {
+          manager,
+          requirePhoto: true,
+          allowOptionalSignatureWithPhoto: true,
+        });
+      }
+
+      if (newStatus === DeliveryStatus.DELIVERED) {
+        this.assertOtp(
+          otp,
+          assignment.deliveryOtpHash,
+          assignment.deliveryOtpVerifiedAt,
+          'delivery',
+        );
+        // Delivery: photo required; signature optional alongside photo, or
+        // signature-only still accepted for legacy clients until Phase 7 exit.
+        deliveryProofMetadata = await this.validateProofOfDelivery(
+          proof,
+          userId,
+          {
+            manager,
+            requirePhoto: false,
+            allowOptionalSignatureWithPhoto: true,
+          },
+        );
+      }
 
       assignment.status = newStatus;
 
@@ -667,9 +749,22 @@ export class RidersService {
           assignment.declineReason = declineReason || '';
           assignment.isCurrent = false;
           break;
-        case DeliveryStatus.PICKED_UP:
+        case DeliveryStatus.PICKED_UP: {
           assignment.pickedUpAt = now;
+          assignment.pickupOtpVerifiedAt = now;
+          assignment.pickupProofFileId = pickupProofMetadata!.proofFileId;
+          assignment.pickupProofObjectKey =
+            pickupProofMetadata!.proofObjectKey;
+          assignment.pickupProofSignatureData =
+            pickupProofMetadata!.proofSignatureData;
+          assignment.pickupProofCapturedAt = now;
+          // Issue delivery OTP at confirmed pickup window.
+          const deliveryOtpCode = generateDeliveryOtpCode();
+          assignment.deliveryOtpCode = deliveryOtpCode;
+          assignment.deliveryOtpHash = hashDeliveryOtp(deliveryOtpCode);
+          assignment.deliveryOtpVerifiedAt = null;
           break;
+        }
         case DeliveryStatus.ON_THE_WAY:
           assignment.onTheWayAt = now;
           break;
@@ -678,10 +773,12 @@ export class RidersService {
           break;
         case DeliveryStatus.DELIVERED:
           assignment.deliveredAt = now;
-          assignment.proofType = proofMetadata!.proofType;
-          assignment.proofFileId = proofMetadata!.proofFileId;
-          assignment.proofObjectKey = proofMetadata!.proofObjectKey;
-          assignment.proofSignatureData = proofMetadata!.proofSignatureData;
+          assignment.deliveryOtpVerifiedAt = now;
+          assignment.proofType = deliveryProofMetadata!.proofType;
+          assignment.proofFileId = deliveryProofMetadata!.proofFileId;
+          assignment.proofObjectKey = deliveryProofMetadata!.proofObjectKey;
+          assignment.proofSignatureData =
+            deliveryProofMetadata!.proofSignatureData;
           assignment.proofCapturedAt = now;
           assignment.proofCapturedByRiderId = profile.id;
           break;
@@ -844,7 +941,33 @@ export class RidersService {
       }
     }
 
-    return result.savedAssignment;
+    return sanitizeAssignmentSecrets(result.savedAssignment);
+  }
+
+  private assertOtp(
+    submitted: string | undefined,
+    expectedHash: string | null | undefined,
+    alreadyVerifiedAt: Date | null | undefined,
+    kind: 'pickup' | 'delivery',
+  ): void {
+    if (alreadyVerifiedAt) {
+      throw new BadRequestException(
+        `${kind === 'pickup' ? 'Pickup' : 'Delivery'} already completed`,
+      );
+    }
+    if (!submitted?.trim()) {
+      throw new BadRequestException(
+        `${kind === 'pickup' ? 'Pickup' : 'Delivery'} OTP is required`,
+      );
+    }
+    if (!expectedHash) {
+      throw new BadRequestException(
+        `${kind === 'pickup' ? 'Pickup' : 'Delivery'} OTP is not available`,
+      );
+    }
+    if (!otpCodesMatch(submitted, expectedHash)) {
+      throw new BadRequestException('Invalid OTP');
+    }
   }
 
   private async publishRiderAssignmentUpdated(
@@ -987,38 +1110,61 @@ export class RidersService {
   }
 
   private async validateProofOfDelivery(
-    proof?: ProofOfDeliveryDto,
-    riderUserId?: number,
-    manager?: EntityManager,
+    proof: ProofOfDeliveryDto | undefined,
+    riderUserId: number | undefined,
+    options: {
+      manager?: EntityManager;
+      requirePhoto: boolean;
+      allowOptionalSignatureWithPhoto: boolean;
+    },
   ): Promise<DeliveryProofMetadata> {
     if (!proof) {
       throw new BadRequestException('Proof of delivery is required');
     }
 
     if (proof.type === ProofOfDeliveryType.PHOTO) {
-      if (proof.signatureData != null) {
-        throw new BadRequestException('Unsupported mixed proof payload');
-      }
       if (!Number.isInteger(proof.fileId) || proof.fileId! <= 0) {
         throw new BadRequestException('Photo proof requires a file id');
       }
-      if (!riderUserId || !manager) {
+      if (!riderUserId || !options.manager) {
         throw new BadRequestException('Proof validation context is required');
       }
       const file = await this.filesService.resolveDeliveryProofFile(
         proof.fileId!,
         riderUserId,
-        manager,
+        options.manager,
       );
+
+      let signatureData: string | null = null;
+      if (proof.signatureData != null) {
+        if (!options.allowOptionalSignatureWithPhoto) {
+          throw new BadRequestException('Unsupported mixed proof payload');
+        }
+        const trimmed = proof.signatureData.trim();
+        if (!trimmed) {
+          throw new BadRequestException('Signature proof is required');
+        }
+        if (Buffer.byteLength(trimmed, 'utf8') > MAX_SIGNATURE_PROOF_BYTES) {
+          throw new BadRequestException('Signature proof is too large');
+        }
+        if (!hasValidSignatureStroke(trimmed)) {
+          throw new BadRequestException('Invalid signature proof');
+        }
+        signatureData = trimmed;
+      }
+
       return {
         proofType: ProofOfDeliveryType.PHOTO,
         proofFileId: file.id,
         proofObjectKey: file.objectKey,
-        proofSignatureData: null,
+        proofSignatureData: signatureData,
       };
     }
 
     if (proof.type === ProofOfDeliveryType.SIGNATURE) {
+      if (options.requirePhoto) {
+        throw new BadRequestException('Photo proof is required');
+      }
       if (proof.fileId != null || proof.objectKey != null) {
         throw new BadRequestException('Unsupported mixed proof payload');
       }
@@ -1047,11 +1193,12 @@ export class RidersService {
 
   async getHistory(userId: number): Promise<DeliveryAssignment[]> {
     const profile = await this.getProfile(userId);
-    return this.assignmentRepo.find({
+    const history = await this.assignmentRepo.find({
       where: { riderId: profile.id, status: DeliveryStatus.DELIVERED },
       relations: ['order', 'order.destination', 'order.user'],
       order: { deliveredAt: 'DESC' },
     });
+    return history.map((assignment) => sanitizeAssignmentSecrets(assignment));
   }
 
   async getEarnings(

@@ -88,6 +88,81 @@ describe('Rider dispatch workflow (e2e)', () => {
     rider: `e2e-rider-${runId}@example.com`,
   };
 
+  async function readAssignmentOtps(assignmentId: number): Promise<{
+    pickupOtpCode: string | null;
+    deliveryOtpCode: string | null;
+  }> {
+    const row = await assignmentsRepo.findOneOrFail({
+      where: { id: assignmentId },
+      select: {
+        id: true,
+        pickupOtpCode: true,
+        deliveryOtpCode: true,
+      },
+    });
+    return {
+      pickupOtpCode: row.pickupOtpCode ?? null,
+      deliveryOtpCode: row.deliveryOtpCode ?? null,
+    };
+  }
+
+  async function uploadProofPhoto(
+    riderToken: string,
+    filename: string,
+  ): Promise<number> {
+    // Minimal 1x1 PNG
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const res = await request(app.getHttpServer())
+      .post('/api/files/upload')
+      .set('Authorization', `Bearer ${riderToken}`)
+      .field('purpose', 'proof_of_delivery')
+      .attach('file', png, { filename, contentType: 'image/png' })
+      .expect(201);
+    return Number(res.body.id);
+  }
+
+  async function advanceStatus(
+    assignmentId: number,
+    riderToken: string,
+    status: DeliveryStatus,
+    extra: Record<string, unknown> = {},
+  ) {
+    if (status === DeliveryStatus.PICKED_UP) {
+      const { pickupOtpCode } = await readAssignmentOtps(assignmentId);
+      const fileId = await uploadProofPhoto(
+        riderToken,
+        `pickup-${assignmentId}.png`,
+      );
+      return request(app.getHttpServer())
+        .patch(`/api/riders/assignments/${assignmentId}/status`)
+        .set('Authorization', `Bearer ${riderToken}`)
+        .send({
+          status,
+          otp: pickupOtpCode,
+          proof: { type: ProofOfDeliveryType.PHOTO, fileId },
+          ...extra,
+        });
+    }
+    if (status === DeliveryStatus.DELIVERED) {
+      const { deliveryOtpCode } = await readAssignmentOtps(assignmentId);
+      return request(app.getHttpServer())
+        .patch(`/api/riders/assignments/${assignmentId}/status`)
+        .set('Authorization', `Bearer ${riderToken}`)
+        .send({
+          status,
+          otp: deliveryOtpCode,
+          ...extra,
+        });
+    }
+    return request(app.getHttpServer())
+      .patch(`/api/riders/assignments/${assignmentId}/status`)
+      .set('Authorization', `Bearer ${riderToken}`)
+      .send({ status, ...extra });
+  }
+
   beforeAll(async () => {
     if (!/^[a-z0-9_]+$/.test(isolatedDatabase)) {
       throw new Error('Unsafe isolated database identifier');
@@ -364,13 +439,12 @@ describe('Rider dispatch workflow (e2e)', () => {
     ];
 
     for (const [deliveryStatus, orderStatus] of transitions) {
-      await request(app.getHttpServer())
-        .patch(`/api/riders/assignments/${assignment.id}/status`)
-        .set('Authorization', `Bearer ${riderToken}`)
-        .send({ status: deliveryStatus })
+      await advanceStatus(assignment.id, riderToken, deliveryStatus)
         .expect(200)
         .expect((res) => {
           expect(res.body.status).toBe(deliveryStatus);
+          expect(res.body.pickupOtpCode).toBeUndefined();
+          expect(res.body.deliveryOtpCode).toBeUndefined();
         });
 
       await expect(
@@ -378,10 +452,11 @@ describe('Rider dispatch workflow (e2e)', () => {
       ).resolves.toMatchObject({ orderStatus });
     }
 
+    const { deliveryOtpCode } = await readAssignmentOtps(assignment.id);
     await request(app.getHttpServer())
       .patch(`/api/riders/assignments/${assignment.id}/status`)
       .set('Authorization', `Bearer ${riderToken}`)
-      .send({ status: DeliveryStatus.DELIVERED })
+      .send({ status: DeliveryStatus.DELIVERED, otp: deliveryOtpCode })
       .expect(400)
       .expect((res) => {
         expect(res.body.message).toBe('Proof of delivery is required');
@@ -392,17 +467,37 @@ describe('Rider dispatch workflow (e2e)', () => {
       .set('Authorization', `Bearer ${riderToken}`)
       .send({
         status: DeliveryStatus.DELIVERED,
+        otp: '000000',
         proof: {
           type: ProofOfDeliveryType.SIGNATURE,
           signatureData: signatureProof,
         },
       })
+      .expect(400)
+      .expect((res) => {
+        expect(res.body.message).toBe('Invalid OTP');
+      });
+
+    await advanceStatus(assignment.id, riderToken, DeliveryStatus.DELIVERED, {
+      proof: {
+        type: ProofOfDeliveryType.SIGNATURE,
+        signatureData: signatureProof,
+      },
+    })
       .expect(200)
       .expect((res) => {
         expect(res.body.status).toBe(DeliveryStatus.DELIVERED);
         expect(res.body.proofType).toBe(ProofOfDeliveryType.SIGNATURE);
         expect(res.body.proofSignatureData).toBe(signatureProof);
       });
+
+    // Double-complete is rejected.
+    await advanceStatus(assignment.id, riderToken, DeliveryStatus.DELIVERED, {
+      proof: {
+        type: ProofOfDeliveryType.SIGNATURE,
+        signatureData: signatureProof,
+      },
+    }).expect(400);
 
     await expect(
       ordersRepo.findOneOrFail({ where: { id: order.id } }),
@@ -619,11 +714,7 @@ describe('Rider dispatch workflow (e2e)', () => {
       DeliveryStatus.PICKED_UP,
       DeliveryStatus.ON_THE_WAY,
     ]) {
-      await request(app.getHttpServer())
-        .patch(`/api/riders/assignments/${farAssignment.id}/status`)
-        .set('Authorization', `Bearer ${riderToken}`)
-        .send({ status })
-        .expect(200);
+      await advanceStatus(farAssignment.id, riderToken, status).expect(200);
     }
     await request(app.getHttpServer())
       .get(`/api/orders/${farOrder.id}`)
@@ -1452,11 +1543,7 @@ describe('Rider dispatch workflow (e2e)', () => {
       DeliveryStatus.ON_THE_WAY,
       DeliveryStatus.ARRIVED,
     ]) {
-      await request(app.getHttpServer())
-        .patch(`/api/riders/assignments/${assignment.id}/status`)
-        .set('Authorization', `Bearer ${riderToken}`)
-        .send({ status })
-        .expect(200);
+      await advanceStatus(assignment.id, riderToken, status).expect(200);
     }
 
     const notificationCount = await notificationsRepo.countBy({
@@ -1488,6 +1575,7 @@ describe('Rider dispatch workflow (e2e)', () => {
         .set('Authorization', `Bearer ${riderToken}`)
         .send({
           status: DeliveryStatus.DELIVERED,
+          otp: (await readAssignmentOtps(assignment.id)).deliveryOtpCode,
           proof: {
             type: ProofOfDeliveryType.SIGNATURE,
             signatureData: signatureProof,

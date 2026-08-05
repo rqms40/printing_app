@@ -86,7 +86,7 @@ const riderCheckpoints = [
 String riderCheckpointActionLabel(DeliveryStatus status) {
   return switch (status) {
     DeliveryStatus.assigned => 'Accept delivery',
-    DeliveryStatus.accepted => 'Mark as picked up',
+    DeliveryStatus.accepted => 'Open pickup proof',
     DeliveryStatus.pickedUp => 'Start delivery',
     DeliveryStatus.onTheWay => 'Mark as arrived',
     DeliveryStatus.arrived => 'Confirm delivered',

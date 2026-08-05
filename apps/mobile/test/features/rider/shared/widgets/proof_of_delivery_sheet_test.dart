@@ -35,6 +35,8 @@ void main() {
       ),
     );
 
+    expect(find.byKey(const Key('proof-otp-field')), findsOneWidget);
+
     final signaturePad = find.bySemanticsLabel(RegExp(r'^Signature pad'));
     expect(signaturePad, findsOneWidget);
     final semantics = tester.getSemantics(signaturePad);
@@ -63,10 +65,37 @@ void main() {
       reason: 'each signature update must repaint the drawn stroke',
     );
 
-    final submit = tester.widget<AppButton>(
+    // OTP is required before submit is enabled.
+    var submit = tester.widget<AppButton>(
+      find.widgetWithText(AppButton, 'Submit proof'),
+    );
+    expect(submit.isDisabled, isTrue);
+
+    await tester.enterText(find.byKey(const Key('proof-otp-field')), '123456');
+    await tester.pump();
+
+    submit = tester.widget<AppButton>(
       find.widgetWithText(AppButton, 'Submit proof'),
     );
     expect(submit.isDisabled, isFalse);
     expect(submit.onTap, isNotNull);
+  });
+
+  testWidgets('pickup sheet defaults to photo-only mode', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ProofOfDeliverySheet(
+            orderRef: 'ORD-10001',
+            kind: ProofSheetKind.pickup,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Pickup proof'), findsOneWidget);
+    expect(find.text('Photo proof is required for pickup'), findsOneWidget);
+    expect(find.text('Take pickup photo'), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'^Signature pad')), findsNothing);
   });
 }

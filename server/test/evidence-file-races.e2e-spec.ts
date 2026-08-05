@@ -17,6 +17,7 @@ import {
   DeliveryStatus,
   ProofOfDeliveryType,
 } from '../src/riders/entities/delivery-assignment.entity';
+import { hashDeliveryOtp } from '../src/riders/riders.service';
 import { RiderProfile } from '../src/riders/entities/rider-profile.entity';
 import { StorageService } from '../src/storage/storage.service';
 import { User, UserRole } from '../src/users/entities/user.entity';
@@ -490,6 +491,7 @@ describe('Evidence file deletion races (e2e)', () => {
         destinationId: destination.id,
       }),
     );
+    const deliveryOtpCode = '654321';
     const assignment = await assignmentsRepo.save(
       assignmentsRepo.create({
         orderId: order.id,
@@ -500,6 +502,8 @@ describe('Evidence file deletion races (e2e)', () => {
         pickedUpAt: new Date(),
         onTheWayAt: new Date(),
         arrivedAt: new Date(),
+        deliveryOtpCode,
+        deliveryOtpHash: hashDeliveryOtp(deliveryOtpCode),
       }),
     );
     const activePlan = await dispatchPlanService.getActivePlanForRider(
@@ -584,6 +588,7 @@ describe('Evidence file deletion races (e2e)', () => {
       .set('Authorization', `Bearer ${sign(rider)}`)
       .send({
         status: DeliveryStatus.DELIVERED,
+        otp: '654321',
         proof: { type: ProofOfDeliveryType.PHOTO, fileId },
       })
       .then((response) => response);

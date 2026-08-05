@@ -104,6 +104,60 @@ export class DeliveryAssignment {
   @Column({ name: 'proof_captured_by_rider_id', type: 'int', nullable: true })
   proofCapturedByRiderId: number | null;
 
+  /** SHA-256 hex of pickup OTP. Never return to clients. */
+  @Column({ name: 'pickup_otp_hash', type: 'varchar', length: 64, nullable: true })
+  pickupOtpHash: string | null;
+
+  /**
+   * Plain pickup OTP for supplier/ops reveal only.
+   * Stripped from rider API responses.
+   */
+  @Column({ name: 'pickup_otp_code', type: 'varchar', length: 8, nullable: true })
+  pickupOtpCode: string | null;
+
+  @Column({ name: 'pickup_otp_verified_at', type: 'timestamp', nullable: true })
+  pickupOtpVerifiedAt: Date | null;
+
+  /** SHA-256 hex of delivery OTP. Never return to clients. */
+  @Column({
+    name: 'delivery_otp_hash',
+    type: 'varchar',
+    length: 64,
+    nullable: true,
+  })
+  deliveryOtpHash: string | null;
+
+  /**
+   * Plain delivery OTP for customer/ops reveal only.
+   * Stripped from rider API responses.
+   */
+  @Column({
+    name: 'delivery_otp_code',
+    type: 'varchar',
+    length: 8,
+    nullable: true,
+  })
+  deliveryOtpCode: string | null;
+
+  @Column({
+    name: 'delivery_otp_verified_at',
+    type: 'timestamp',
+    nullable: true,
+  })
+  deliveryOtpVerifiedAt: Date | null;
+
+  @Column({ name: 'pickup_proof_file_id', type: 'int', nullable: true })
+  pickupProofFileId: number | null;
+
+  @Column({ name: 'pickup_proof_object_key', type: 'varchar', nullable: true })
+  pickupProofObjectKey: string | null;
+
+  @Column({ name: 'pickup_proof_signature_data', type: 'text', nullable: true })
+  pickupProofSignatureData: string | null;
+
+  @Column({ name: 'pickup_proof_captured_at', type: 'timestamp', nullable: true })
+  pickupProofCapturedAt: Date | null;
+
   @Column({ name: 'decline_reason', nullable: true, type: 'text' })
   declineReason: string;
 

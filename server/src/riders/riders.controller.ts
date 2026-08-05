@@ -82,6 +82,7 @@ export class RidersController {
       dto.status,
       dto.declineReason,
       dto.proof,
+      dto.otp,
     );
   }
 

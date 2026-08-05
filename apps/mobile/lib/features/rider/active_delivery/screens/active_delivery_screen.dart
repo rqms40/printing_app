@@ -119,19 +119,37 @@ class _ActiveDeliveryScreenState extends ConsumerState<ActiveDeliveryScreen> {
     }
   }
 
+  Future<Map<String, dynamic>?> _openProofSheet(
+    String orderRef, {
+    required ProofSheetKind kind,
+  }) {
+    return showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _colors(context).surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+      ),
+      builder: (_) => ProofOfDeliverySheet(orderRef: orderRef, kind: kind),
+    );
+  }
+
   Future<void> _handleAdvance(String assignmentId) async {
     final current = ref.read(deliveriesProvider).viewById(assignmentId);
-    if (current?.status == DeliveryStatus.arrived) {
-      final proof = await showModalBottomSheet<Map<String, dynamic>>(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: _colors(context).surface,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(
-            top: Radius.circular(AppRadius.lg),
-          ),
-        ),
-        builder: (_) => ProofOfDeliverySheet(orderRef: current!.order.orderRef),
+    if (current?.status == DeliveryStatus.accepted) {
+      final proof = await _openProofSheet(
+        current!.order.orderRef,
+        kind: ProofSheetKind.pickup,
+      );
+      if (proof == null) return;
+      setState(() => _isAdvancing = true);
+      await ref
+          .read(deliveriesProvider.notifier)
+          .completePickupWithProof(assignmentId, proof);
+    } else if (current?.status == DeliveryStatus.arrived) {
+      final proof = await _openProofSheet(
+        current!.order.orderRef,
+        kind: ProofSheetKind.delivery,
       );
       if (proof == null) return;
       setState(() => _isAdvancing = true);
