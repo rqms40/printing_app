@@ -71,6 +71,14 @@ import 'package:printing_app/features/rider/home/screens/rider_home_screen.dart'
 import 'package:printing_app/features/rider/profile/screens/rider_profile_screen.dart';
 
 // ---------------------------------------------------------------------------
+// Supplier screens
+// ---------------------------------------------------------------------------
+import 'package:printing_app/features/supplier/screens/supplier_job_detail_screen.dart';
+import 'package:printing_app/features/supplier/screens/supplier_jobs_screen.dart';
+import 'package:printing_app/features/supplier/screens/supplier_payouts_screen.dart';
+import 'package:printing_app/features/supplier/screens/supplier_profile_screen.dart';
+
+// ---------------------------------------------------------------------------
 // Admin screens
 // ---------------------------------------------------------------------------
 import 'package:printing_app/features/admin/dashboard/screens/dashboard_screen.dart';
@@ -111,6 +119,7 @@ class _AuthChangeNotifier extends ChangeNotifier {
 
 String _roleHome(String? role) => switch (_effectiveRole(role)) {
   'rider' => '/rider/home',
+  'supplier' => '/supplier/jobs',
   'admin' => '/admin/dashboard',
   _ => '/customer/home',
 };
@@ -118,10 +127,10 @@ String _roleHome(String? role) => switch (_effectiveRole(role)) {
 /// Map marketplace + legacy API role strings onto shell buckets.
 String _effectiveRole(String? role) => switch (role) {
   'rider' => 'rider',
+  'supplier' => 'supplier',
   'admin' || 'ops_admin' || 'super_admin' => 'admin',
-  // clients (and legacy customers) use customer shell; suppliers stay
-  // non-crashing on customer home until supplier UI lands.
-  'client' || 'customer' || 'supplier' => 'customer',
+  // clients (and legacy customers) use the customer shell.
+  'client' || 'customer' => 'customer',
   _ => 'customer',
 };
 
@@ -129,6 +138,7 @@ bool _isProtectedPathOwnedByRole(String path, String? role) {
   final owner = switch (path) {
     final value when value.startsWith('/customer/') => 'customer',
     final value when value.startsWith('/rider/') => 'rider',
+    final value when value.startsWith('/supplier/') => 'supplier',
     final value when value.startsWith('/admin/') => 'admin',
     _ => null,
   };
@@ -148,6 +158,7 @@ bool _isSafeRoleDeepLink(String? rawLocation, String? role) {
   return switch (_effectiveRole(role)) {
     'customer' => path.startsWith('/customer/'),
     'rider' => path.startsWith('/rider/'),
+    'supplier' => path.startsWith('/supplier/'),
     'admin' => path.startsWith('/admin/'),
     _ => false,
   };
@@ -162,6 +173,7 @@ bool _isPotentialProtectedDeepLink(Uri uri) {
   }
   return path.startsWith('/customer/') ||
       path.startsWith('/rider/') ||
+      path.startsWith('/supplier/') ||
       path.startsWith('/admin/');
 }
 
@@ -776,6 +788,71 @@ final routerProvider = Provider<GoRouter>((ref) {
             state,
           );
         },
+      ),
+
+      // -----------------------------------------------------------------------
+      // Supplier shell (Jobs + Profile)
+      // -----------------------------------------------------------------------
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) => ScaffoldWithNav(
+          currentIndex: navigationShell.currentIndex,
+          showFab: false,
+          onTap: (i) => navigationShell.goBranch(
+            i,
+            initialLocation: i == navigationShell.currentIndex,
+          ),
+          items: const [
+            NavItem(
+              icon: HugeIcons.strokeRoundedPackage,
+              activeIcon: HugeIcons.strokeRoundedPackage,
+              label: 'Jobs',
+            ),
+            NavItem(
+              icon: HugeIcons.strokeRoundedUser,
+              activeIcon: HugeIcons.strokeRoundedUser,
+              label: 'Profile',
+            ),
+          ],
+          child: navigationShell,
+        ),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/supplier/jobs',
+                builder: (_, _) => const SupplierJobsScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/supplier/profile',
+                builder: (_, _) => const SupplierProfileScreen(),
+              ),
+            ],
+          ),
+        ],
+      ),
+
+      // -----------------------------------------------------------------------
+      // Supplier stack routes
+      // -----------------------------------------------------------------------
+      GoRoute(
+        path: '/supplier/jobs/:id',
+        pageBuilder: (_, state) {
+          final raw = state.pathParameters['id'] ?? '';
+          final jobId = int.tryParse(raw) ?? 0;
+          return slideTransition(
+            SupplierJobDetailScreen(jobId: jobId),
+            state,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/supplier/payouts',
+        pageBuilder: (_, state) =>
+            slideTransition(const SupplierPayoutsScreen(), state),
       ),
 
       // -----------------------------------------------------------------------
