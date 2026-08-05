@@ -238,6 +238,30 @@ export function ProductOptionsPage() {
     });
   };
 
+  const handleDeleteSpec = (spec: ProductSpecDefinition) => {
+    if (!isPersistedId(spec.id)) {
+      void message.warning('This spec is not saved yet.');
+      return;
+    }
+    modal.confirm({
+      title: `Delete Spec "${spec.label}"?`,
+      content: 'This will delete the spec and all its options. This cannot be undone.',
+      okText: 'Delete',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await apiClient.delete(`/products/spec-definitions/${spec.id}`);
+          void message.success('Spec deleted');
+          void fetchData();
+        } catch (err: unknown) {
+          if (axios.isAxiosError(err)) {
+            void message.error(err.response?.data?.message ?? 'Delete failed');
+          }
+        }
+      },
+    });
+  };
+
   const openAddOptionModal = (spec: ProductSpecDefinition) => {
     setActiveSpec(spec);
     optionForm.resetFields();
@@ -562,6 +586,13 @@ export function ProductOptionsPage() {
                         >
                           Settings
                         </Button>
+                        <Button
+                          size="small"
+                          danger
+                          icon={<DeleteOutlined />}
+                          onClick={() => handleDeleteSpec(spec)}
+                          style={{ borderColor: '#ff4d4f', background: 'transparent' }}
+                        />
                       </Space>
                     </div>
 

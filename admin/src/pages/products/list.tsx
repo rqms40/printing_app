@@ -2,11 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import {
   Row, Col, Card, Typography, Switch, Button, Drawer, Form, Input,
-  InputNumber, Select, Space, Tag, Divider, Spin, App,
+  InputNumber, Select, Space, Tag, Divider, Spin, App, Popconfirm
 } from 'antd';
 import {
   EditOutlined, PlusOutlined, FileTextOutlined,
-  AppstoreOutlined, SettingOutlined, ArrowRightOutlined,
+  AppstoreOutlined, SettingOutlined, ArrowRightOutlined, DeleteOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -92,7 +92,10 @@ export function ProductList() {
       const values = await form.validateFields();
       setSaving(true);
       const payload = {
-        ...values,
+        name: values.name,
+        slug: values.slug,
+        description: values.description,
+        icon: values.icon,
         allowedExtensions: JSON.stringify(
           (values.allowed_extensions as string)
             .split(',')
@@ -131,6 +134,16 @@ export function ProductList() {
       void fetchCategories();
     } catch {
       void message.error('Failed to update status');
+    }
+  };
+
+  const handleDeleteCategory = async (cat: ServiceCategory) => {
+    try {
+      await apiClient.delete(`/products/categories/${cat.id}`);
+      void message.success('Category deleted');
+      void fetchCategories();
+    } catch {
+      void message.error('Failed to delete category');
     }
   };
 
@@ -215,7 +228,7 @@ export function ProductList() {
               <Divider style={{ borderColor: '#2E2E2E', margin: '14px 0 12px' }} />
 
               {/* Action buttons */}
-              <Space size={8} style={{ width: '100%' }}>
+              <Space size={8} style={{ width: '100%', display: 'flex' }}>
                 <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(cat)}
                   style={{ background: '#1A1A1A', borderColor: '#333', color: '#F0F0F0', flex: 1 }}>
                   Edit
@@ -230,6 +243,16 @@ export function ProductList() {
                   style={{ background: '#1A1A1A', borderColor: '#333', color: '#F0F0F0', flex: 1 }}>
                   Addons
                 </Button>
+                <Popconfirm
+                  title="Delete Category"
+                  description="Are you sure you want to delete this category?"
+                  onConfirm={() => handleDeleteCategory(cat)}
+                  okText="Yes"
+                  cancelText="No"
+                  placement="topRight"
+                >
+                  <Button size="small" danger icon={<DeleteOutlined />} style={{ background: '#1A1A1A', borderColor: '#ff4d4f', flexShrink: 0 }} />
+                </Popconfirm>
               </Space>
             </Card>
           </Col>

@@ -84,7 +84,7 @@ export function LoginPage() {
             Ops / Super Admin / Supplier only. Clients and riders use the mobile
             app.
           </Text>
-          <Text
+          {/* <Text
             style={{
               display: "block",
               color: "#808080",
@@ -94,7 +94,7 @@ export function LoginPage() {
           >
             Pilot: admin@ / superadmin@ / supplier@ gridgo.ph (seed password from
             server/.env)
-          </Text>
+          </Text> */}
 
           <Form
             layout="vertical"

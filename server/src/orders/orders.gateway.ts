@@ -47,7 +47,8 @@ export type RiderAssignmentUpdatedPayload = {
     | 'picked_up'
     | 'on_the_way'
     | 'arrived'
-    | 'delivered';
+    | 'delivered'
+    | 'failed';
   change?: 'assigned' | 'statusUpdated' | 'unassigned';
 };
 
