@@ -134,13 +134,29 @@ describe('SuperService', () => {
       expect(riderRepo.save).toHaveBeenCalled();
     });
 
-    it('blocks demoting last super_admin', async () => {
+    it('blocks assigning super_admin to anyone', async () => {
+      usersRepo.findOne.mockResolvedValue({
+        id: 2,
+        email: 'x@test.com',
+        role: UserRole.CLIENT,
+      });
+      await expect(
+        service.updateUserRole(
+          2,
+          UserRole.SUPER_ADMIN,
+          1,
+          UserRole.SUPER_ADMIN,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(usersRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('blocks changing the existing super_admin account', async () => {
       usersRepo.findOne.mockResolvedValue({
         id: 1,
-        email: 'admin@test.com',
+        email: 'super@test.com',
         role: UserRole.SUPER_ADMIN,
       });
-      usersRepo.count.mockResolvedValue(1);
       await expect(
         service.updateUserRole(1, UserRole.OPS_ADMIN, 9, UserRole.SUPER_ADMIN),
       ).rejects.toBeInstanceOf(BadRequestException);
@@ -152,7 +168,6 @@ describe('SuperService', () => {
         email: 'admin@test.com',
         role: UserRole.SUPER_ADMIN,
       });
-      usersRepo.count.mockResolvedValue(2);
       await expect(
         service.updateUserRole(1, UserRole.OPS_ADMIN, 1, UserRole.SUPER_ADMIN),
       ).rejects.toBeInstanceOf(BadRequestException);

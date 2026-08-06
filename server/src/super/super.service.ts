@@ -78,6 +78,14 @@ export class SuperService {
       throw new ForbiddenException('Only super_admin can change roles');
     }
 
+    // Super Admin is a singular platform role: not assignable via this console.
+    // The seeded/existing super_admin account is the only intended holder.
+    if (role === UserRole.SUPER_ADMIN) {
+      throw new BadRequestException(
+        'super_admin cannot be assigned through role management. There is only one Super Admin account.',
+      );
+    }
+
     const user = await this.usersRepo.findOne({ where: { id: targetUserId } });
     if (!user) {
       throw new NotFoundException(`User ${targetUserId} not found`);
@@ -85,18 +93,11 @@ export class SuperService {
 
     const previousRole = user.role;
 
-    if (
-      previousRole === UserRole.SUPER_ADMIN &&
-      role !== UserRole.SUPER_ADMIN
-    ) {
-      const superCount = await this.usersRepo.count({
-        where: { role: UserRole.SUPER_ADMIN, isActive: true },
-      });
-      if (superCount <= 1) {
-        throw new BadRequestException(
-          'Cannot demote the last active super_admin',
-        );
-      }
+    // Never reassign the Super Admin account away from super_admin via this API.
+    if (previousRole === UserRole.SUPER_ADMIN) {
+      throw new BadRequestException(
+        'The Super Admin role cannot be changed on this account. It is limited to a single platform owner.',
+      );
     }
 
     if (targetUserId === actorUserId && role !== UserRole.SUPER_ADMIN) {

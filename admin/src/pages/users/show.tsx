@@ -175,12 +175,12 @@ function RecentOrders({ orders }: { orders: AdminUserDetailPayload["recent_order
   );
 }
 
+/** Assignable roles only — Super Admin is singular and never offered here. */
 const ROLE_OPTIONS = [
   { value: "client", label: "Client" },
   { value: "supplier", label: "Supplier" },
   { value: "rider", label: "Rider" },
   { value: "ops_admin", label: "Ops Admin" },
-  { value: "super_admin", label: "Super Admin" },
 ];
 
 export function UserShow() {
@@ -317,22 +317,45 @@ export function UserShow() {
         <UserHero detail={view.detail.user} />
         {canChangeRole ? (
           <Card title="Role (Super Admin)">
-            <Space wrap>
-              <Select
-                style={{ width: 200 }}
-                value={nextRole ?? view.detail.user.role}
-                options={ROLE_OPTIONS}
-                onChange={setNextRole}
+            {view.detail.user.role === "super_admin" ? (
+              <Alert
+                type="info"
+                showIcon
+                message="Super Admin is a single platform owner role"
+                description="This account is the only Super Admin. It is not reassignable and Super Admin is not offered when changing other users' roles."
               />
-              <Button
-                type="primary"
-                loading={roleSaving}
-                disabled={!nextRole || nextRole === view.detail.user.role}
-                onClick={() => void handleRoleSave()}
-              >
-                Save role
-              </Button>
-            </Space>
+            ) : (
+              <Space direction="vertical" size="small">
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  Assignable roles: Client, Supplier, Rider, Ops Admin. Super
+                  Admin is not listed (one account only).
+                </Text>
+                <Space wrap>
+                  <Select
+                    style={{ width: 200 }}
+                    value={
+                      ROLE_OPTIONS.some((o) => o.value === nextRole)
+                        ? nextRole
+                        : view.detail.user.role
+                    }
+                    options={ROLE_OPTIONS}
+                    onChange={setNextRole}
+                  />
+                  <Button
+                    type="primary"
+                    loading={roleSaving}
+                    disabled={
+                      !nextRole ||
+                      nextRole === view.detail.user.role ||
+                      nextRole === "super_admin"
+                    }
+                    onClick={() => void handleRoleSave()}
+                  >
+                    Save role
+                  </Button>
+                </Space>
+              </Space>
+            )}
           </Card>
         ) : null}
         <ProfileSummary detail={view.detail.user} />
