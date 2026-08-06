@@ -28,7 +28,17 @@ import { CreateSupplierCapabilityDto } from './dto/create-supplier-capability.dt
 export class SuppliersController {
   constructor(private readonly suppliersService: SuppliersService) {}
 
-  /** Supplier reads own profile. */
+  /**
+   * Access gate for supplier UIs. Allowed even when pending/under_review
+   * so clients can show a verification wall (not the jobs interface).
+   */
+  @Get('me/access')
+  @Roles(UserRole.SUPPLIER)
+  getAccess(@Request() req: RequestWithUser) {
+    return this.suppliersService.getAccessStatus(req.user.sub);
+  }
+
+  /** Supplier reads own profile (includes verification status). */
   @Get('me')
   @Roles(UserRole.SUPPLIER)
   getMine(@Request() req: RequestWithUser) {

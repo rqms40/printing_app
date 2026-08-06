@@ -23,6 +23,7 @@ import {
   PAYOUT_HOLD_ISSUE_WINDOW,
   PAYOUT_HOLD_OPEN_ISSUE,
 } from './payout-hold.constants';
+import { SuppliersService } from '../suppliers/suppliers.service';
 
 @Injectable()
 export class PayoutsService {
@@ -38,6 +39,7 @@ export class PayoutsService {
     private readonly paymentsService: PaymentsService,
     private readonly auditService: AuditService,
     private readonly geoZonesService: GeoZonesService,
+    private readonly suppliersService: SuppliersService,
   ) {}
 
   async list(params: {
@@ -429,6 +431,7 @@ export class PayoutsService {
 
   /** Supplier self-service list (own profile only). */
   async listForSupplierUser(userId: number): Promise<Payout[]> {
+    await this.suppliersService.assertVerifiedOperationalAccess(userId);
     const rows = await this.payoutRepo
       .createQueryBuilder('p')
       .innerJoinAndSelect('p.supplier', 's')
@@ -444,6 +447,7 @@ export class PayoutsService {
     payoutId: number,
     userId: number,
   ): Promise<Payout> {
+    await this.suppliersService.assertVerifiedOperationalAccess(userId);
     const payout = await this.payoutRepo.findOne({
       where: { id: payoutId },
       relations: { supplier: true, order: true },

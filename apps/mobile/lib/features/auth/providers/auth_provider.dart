@@ -17,6 +17,7 @@ import 'package:printing_app/features/tutorial/repository/tutorial_repository.da
 import 'package:printing_app/features/customer/notifications/providers/notifications_provider.dart';
 import 'package:printing_app/features/customer/orders/providers/orders_provider.dart';
 import 'package:printing_app/features/customer/tracking/providers/live_rider_location_provider.dart';
+import 'package:printing_app/features/supplier/providers/supplier_access_provider.dart';
 import 'package:printing_app/shared/models/enums.dart';
 
 // ---------------------------------------------------------------------------
@@ -379,6 +380,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (!_isAuthOperationCurrent(authGeneration)) return;
       await _ref?.read(accountStateProvider.notifier).refresh();
       if (!_isAuthOperationCurrent(authGeneration)) return;
+      if (user.role == 'supplier') {
+        try {
+          _ref?.invalidate(supplierAccessProvider);
+        } catch (_) {}
+      }
       _connectNotificationsWs();
       _startSessionScopedData();
     } on DioException catch (e) {

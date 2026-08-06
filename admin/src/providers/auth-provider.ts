@@ -35,6 +35,44 @@ export const authProvider: AuthProvider = {
         };
       }
 
+      // Suppliers may only use the portal when Super Admin has verified them.
+      if (isSupplierRole(data.user?.role)) {
+        const accessRes = await fetch(`${API_URL}/suppliers/me/access`, {
+          headers: { Authorization: `Bearer ${data.access_token}` },
+        });
+        if (accessRes.ok) {
+          const access = (await accessRes.json()) as {
+            canAccessSupplierInterface?: boolean;
+            verificationStatus?: string;
+            message?: string;
+          };
+          if (!access.canAccessSupplierInterface) {
+            return {
+              success: false,
+              error: {
+                name: "Verification required",
+                message:
+                  access.message ??
+                  `Supplier account is ${access.verificationStatus ?? "pending"}. You cannot access the supplier portal until Super Admin verifies you.`,
+              },
+            };
+          }
+        } else if (accessRes.status === 403 || accessRes.status === 404) {
+          const body = (await accessRes.json().catch(() => null)) as {
+            message?: string;
+          } | null;
+          return {
+            success: false,
+            error: {
+              name: "Verification required",
+              message:
+                (typeof body?.message === "string" && body.message) ||
+                "Supplier account is not verified yet.",
+            },
+          };
+        }
+      }
+
       localStorage.setItem(TOKEN_KEY, data.access_token);
       const redirectTo = isSupplierRole(data.user?.role)
         ? "/supplier/jobs"
@@ -82,6 +120,41 @@ export const authProvider: AuthProvider = {
             message: "Admin or supplier access only",
           },
         };
+      }
+
+      if (isSupplierRole(user.role)) {
+        const accessRes = await fetch(`${API_URL}/suppliers/me/access`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (accessRes.ok) {
+          const access = (await accessRes.json()) as {
+            canAccessSupplierInterface?: boolean;
+            message?: string;
+          };
+          if (!access.canAccessSupplierInterface) {
+            localStorage.removeItem(TOKEN_KEY);
+            return {
+              authenticated: false,
+              redirectTo: "/login",
+              error: {
+                name: "Verification required",
+                message:
+                  access.message ??
+                  "Supplier account is not verified. Contact Super Admin.",
+              },
+            };
+          }
+        } else if (accessRes.status === 403 || accessRes.status === 404) {
+          localStorage.removeItem(TOKEN_KEY);
+          return {
+            authenticated: false,
+            redirectTo: "/login",
+            error: {
+              name: "Verification required",
+              message: "Supplier account is not verified. Contact Super Admin.",
+            },
+          };
+        }
       }
 
       return { authenticated: true };

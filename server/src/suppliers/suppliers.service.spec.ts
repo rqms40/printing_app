@@ -4,6 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { SuppliersService } from './suppliers.service';
@@ -191,6 +192,38 @@ describe('SuppliersService', () => {
           99,
         ),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('assertVerifiedOperationalAccess', () => {
+    it('allows verified active suppliers', async () => {
+      profileRepo.findOne.mockResolvedValue({
+        id: 1,
+        userId: 10,
+        isActive: true,
+        verification: { status: SupplierVerificationStatus.VERIFIED },
+        capabilities: [],
+      });
+      await expect(
+        service.assertVerifiedOperationalAccess(10),
+      ).resolves.toMatchObject({ id: 1 });
+    });
+
+    it.each([
+      SupplierVerificationStatus.PENDING,
+      SupplierVerificationStatus.UNDER_REVIEW,
+      SupplierVerificationStatus.REJECTED,
+    ])('blocks %s suppliers', async (status) => {
+      profileRepo.findOne.mockResolvedValue({
+        id: 1,
+        userId: 10,
+        isActive: true,
+        verification: { status },
+        capabilities: [],
+      });
+      await expect(
+        service.assertVerifiedOperationalAccess(10),
+      ).rejects.toBeInstanceOf(ForbiddenException);
     });
   });
 });

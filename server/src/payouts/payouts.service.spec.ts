@@ -67,6 +67,9 @@ describe('PayoutsService', () => {
       paymentsService as any,
       auditService as any,
       geoZonesService as any,
+      {
+        assertVerifiedOperationalAccess: jest.fn().mockResolvedValue({}),
+      } as any,
     );
   });
 

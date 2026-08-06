@@ -74,8 +74,10 @@ import 'package:printing_app/features/rider/profile/screens/rider_profile_screen
 // ---------------------------------------------------------------------------
 // Supplier screens
 // ---------------------------------------------------------------------------
+import 'package:printing_app/features/supplier/providers/supplier_access_provider.dart';
 import 'package:printing_app/features/supplier/screens/supplier_job_detail_screen.dart';
 import 'package:printing_app/features/supplier/screens/supplier_jobs_screen.dart';
+import 'package:printing_app/features/supplier/screens/supplier_pending_verification_screen.dart';
 import 'package:printing_app/features/supplier/screens/supplier_payouts_screen.dart';
 import 'package:printing_app/features/supplier/screens/supplier_profile_screen.dart';
 
@@ -114,12 +116,14 @@ class _AuthChangeNotifier extends ChangeNotifier {
     _ref.listen(authProvider, (_, _) => notifyListeners());
     _ref.listen(accountStateProvider, (_, _) => notifyListeners());
     _ref.listen(betaStatusProvider, (_, _) => notifyListeners());
+    _ref.listen(supplierAccessProvider, (_, _) => notifyListeners());
   }
   final Ref _ref;
 }
 
 String _roleHome(String? role) => switch (_effectiveRole(role)) {
   'rider' => '/rider/home',
+  // Unverified suppliers are redirected to /supplier/pending by router logic.
   'supplier' => '/supplier/jobs',
   'admin' => '/admin/dashboard',
   _ => '/customer/home',
@@ -292,13 +296,36 @@ final routerProvider = Provider<GoRouter>((ref) {
       );
       final betaGloballyEnabled =
           ref.read(betaStatusProvider).valueOrNull?.globallyEnabled ?? false;
-      return resolveAppRedirect(
+      final baseRedirect = resolveAppRedirect(
         uri: state.uri,
         authState: authState,
         accountState: accountState,
         seenOnboarding: seenOnboarding,
         betaGloballyEnabled: betaGloballyEnabled,
       );
+      if (baseRedirect != null) return baseRedirect;
+
+      // Unverified suppliers may only see the pending verification wall.
+      if (authState.status == AuthStatus.authenticated &&
+          _effectiveRole(authState.user?.role) == 'supplier') {
+        final access = ref.read(supplierAccessProvider);
+        final path = state.uri.path;
+        final onPending = path == '/supplier/pending';
+        if (access.isLoading) {
+          // Keep users on pending until we know status; kick refresh if needed.
+          if (!onPending && !access.canAccess) {
+            return '/supplier/pending';
+          }
+          return null;
+        }
+        if (!access.canAccess && !onPending) {
+          return '/supplier/pending';
+        }
+        if (access.canAccess && onPending) {
+          return '/supplier/jobs';
+        }
+      }
+      return null;
     },
     routes: [
       // -----------------------------------------------------------------------
@@ -860,6 +887,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       // -----------------------------------------------------------------------
       // Supplier stack routes
       // -----------------------------------------------------------------------
+      GoRoute(
+        path: '/supplier/pending',
+        pageBuilder: (_, state) =>
+            fadeTransition(const SupplierPendingVerificationScreen(), state),
+      ),
       GoRoute(
         path: '/supplier/jobs/:id',
         pageBuilder: (_, state) {

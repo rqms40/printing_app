@@ -8,6 +8,7 @@ import { AuditModule } from '../audit/audit.module';
 import { Order } from '../orders/entities/order.entity';
 import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
 import { GeoZonesModule } from '../geo-zones/geo-zones.module';
+import { SuppliersModule } from '../suppliers/suppliers.module';
 
 /**
  * Supplier payout list + approval + issue-window holds (Phase 8–9).
@@ -20,6 +21,7 @@ import { GeoZonesModule } from '../geo-zones/geo-zones.module';
     forwardRef(() => PaymentsModule),
     AuditModule,
     GeoZonesModule,
+    SuppliersModule,
   ],
   controllers: [PayoutsController],
   providers: [PayoutsService],

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -88,6 +89,78 @@ export class SuppliersService {
       throw new NotFoundException(
         `Supplier profile for user ${userId} not found`,
       );
+    }
+    return profile;
+  }
+
+  /**
+   * Access status for supplier UI (always allowed to call so clients can
+   * show a pending/rejected wall without using job APIs).
+   */
+  async getAccessStatus(userId: number): Promise<{
+    hasProfile: boolean;
+    isActive: boolean;
+    verificationStatus: SupplierVerificationStatus | 'missing';
+    canAccessSupplierInterface: boolean;
+    message: string;
+    profileId: number | null;
+  }> {
+    try {
+      const profile = await this.findByUserId(userId);
+      const status =
+        profile.verification?.status ?? SupplierVerificationStatus.PENDING;
+      const canAccess =
+        profile.isActive && status === SupplierVerificationStatus.VERIFIED;
+      return {
+        hasProfile: true,
+        isActive: profile.isActive,
+        verificationStatus: status,
+        canAccessSupplierInterface: canAccess,
+        profileId: profile.id,
+        message: canAccess
+          ? 'Supplier interface available'
+          : status === SupplierVerificationStatus.REJECTED
+            ? 'Your supplier account was rejected. Contact Super Admin.'
+            : `Your supplier account is ${String(status).replace(/_/g, ' ')}. You cannot access jobs until Super Admin verifies you.`,
+      };
+    } catch (e) {
+      if (e instanceof NotFoundException) {
+        return {
+          hasProfile: false,
+          isActive: false,
+          verificationStatus: 'missing',
+          canAccessSupplierInterface: false,
+          profileId: null,
+          message:
+            'No supplier profile yet. Super Admin must promote your role and complete onboarding.',
+        };
+      }
+      throw e;
+    }
+  }
+
+  /** Blocks operational supplier APIs unless verified + active. */
+  async assertVerifiedOperationalAccess(
+    userId: number,
+  ): Promise<SupplierProfile> {
+    const profile = await this.findByUserId(userId);
+    if (!profile.isActive) {
+      throw new ForbiddenException({
+        code: 'supplier_inactive',
+        message: 'Supplier profile is inactive. Contact support.',
+      });
+    }
+    const status =
+      profile.verification?.status ?? SupplierVerificationStatus.PENDING;
+    if (status !== SupplierVerificationStatus.VERIFIED) {
+      throw new ForbiddenException({
+        code: 'supplier_not_verified',
+        message:
+          status === SupplierVerificationStatus.REJECTED
+            ? 'Your supplier account was rejected. Contact Super Admin.'
+            : `Your supplier account is ${String(status).replace(/_/g, ' ')}. You cannot access the supplier interface until Super Admin verifies your profile.`,
+        verificationStatus: status,
+      });
     }
     return profile;
   }

@@ -35,6 +35,9 @@ import {
 } from '../matching/entities/supplier-assignment.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SupplierProfile } from './entities/supplier-profile.entity';
+import {
+  SupplierVerificationStatus,
+} from './entities/supplier-verification.entity';
 import { AcceptSupplierJobDto } from './dto/accept-supplier-job.dto';
 import { DeclineSupplierJobDto } from './dto/decline-supplier-job.dto';
 import {
@@ -1258,12 +1261,38 @@ export class SupplierJobsService {
   // Internals
   // ---------------------------------------------------------------------------
 
+  /**
+   * Supplier job APIs require an active profile that Super Admin has
+   * verified. pending / under_review / rejected / missing verification
+   * cannot use the supplier interface.
+   */
   private async requireProfileForUser(userId: number): Promise<SupplierProfile> {
-    const profile = await this.profileRepo.findOne({ where: { userId } });
+    const profile = await this.profileRepo.findOne({
+      where: { userId },
+      relations: { verification: true },
+    });
     if (!profile) {
       throw new NotFoundException(
         `Supplier profile for user ${userId} not found`,
       );
+    }
+    if (!profile.isActive) {
+      throw new ForbiddenException({
+        code: 'supplier_inactive',
+        message: 'Supplier profile is inactive. Contact support.',
+      });
+    }
+    const status =
+      profile.verification?.status ?? SupplierVerificationStatus.PENDING;
+    if (status !== SupplierVerificationStatus.VERIFIED) {
+      throw new ForbiddenException({
+        code: 'supplier_not_verified',
+        message:
+          status === SupplierVerificationStatus.REJECTED
+            ? 'Your supplier account was rejected. Contact Super Admin.'
+            : `Your supplier account is ${String(status).replace(/_/g, ' ')}. You cannot access the supplier interface until Super Admin verifies your profile.`,
+        verificationStatus: status,
+      });
     }
     return profile;
   }
