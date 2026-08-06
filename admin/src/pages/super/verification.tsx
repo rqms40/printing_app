@@ -115,7 +115,11 @@ export function SuperVerificationPage() {
           type="info"
           showIcon
           message="Super Admin only"
-          description="Supplier and rider verification decisions are restricted to super_admin. Ops can read profiles but cannot approve."
+          description={
+            "This list shows supplier_profiles and rider_profiles — not bare user roles. " +
+            "Promoting a user to supplier/rider now auto-creates a pending profile so they appear here. " +
+            "Then verify (and for suppliers ensure capabilities match order categories for matching)."
+          }
         />
         {error ? (
           <Alert

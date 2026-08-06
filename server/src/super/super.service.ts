@@ -23,6 +23,11 @@ import {
   PayoutSettlementState,
 } from '../payouts/entities/payout.entity';
 import { SupplierProfile } from '../suppliers/entities/supplier-profile.entity';
+import {
+  SupplierVerification,
+  SupplierVerificationStatus,
+} from '../suppliers/entities/supplier-verification.entity';
+import { SupplierCapability } from '../suppliers/entities/supplier-capability.entity';
 import { DataSource } from 'typeorm';
 
 export type AuditListQuery = {
@@ -51,6 +56,10 @@ export class SuperService {
     private readonly payoutRepo: Repository<Payout>,
     @InjectRepository(SupplierProfile)
     private readonly supplierRepo: Repository<SupplierProfile>,
+    @InjectRepository(SupplierVerification)
+    private readonly supplierVerificationRepo: Repository<SupplierVerification>,
+    @InjectRepository(SupplierCapability)
+    private readonly supplierCapabilityRepo: Repository<SupplierCapability>,
     private readonly auditService: AuditService,
     private readonly dataSource: DataSource,
   ) {}
@@ -99,6 +108,14 @@ export class SuperService {
     user.role = role;
     const saved = await this.usersRepo.save(user);
 
+    // Verification queues list *profiles*, not bare user roles.
+    // Role change alone never created supplier_profiles / rider_profiles,
+    // so Super → Verification stayed empty. Ensure pending shells exist.
+    const provision = await this.ensureVerificationShellForRole(
+      saved,
+      previousRole,
+    );
+
     await this.auditService.append({
       actorId: actorUserId,
       actorRole,
@@ -108,10 +125,147 @@ export class SuperService {
       fromState: previousRole,
       toState: role,
       reason: 'super_admin_role_console',
-      metadata: { targetUserId, email: user.email },
+      metadata: {
+        targetUserId,
+        email: user.email,
+        verificationShell: provision,
+      },
     });
 
     return saved;
+  }
+
+  /**
+   * Creates pending supplier/rider verification rows when promoting a user.
+   * Does not auto-verify — Super still decides on the Verification console.
+   */
+  private async ensureVerificationShellForRole(
+    user: User,
+    previousRole: UserRole,
+  ): Promise<Record<string, unknown>> {
+    if (user.role === UserRole.SUPPLIER) {
+      return this.ensurePendingSupplierShell(user);
+    }
+    if (user.role === UserRole.RIDER) {
+      return this.ensurePendingRiderShell(user);
+    }
+    return {
+      action: 'none',
+      previousRole,
+      role: user.role,
+      note: 'No verification shell required for this role',
+    };
+  }
+
+  private async ensurePendingSupplierShell(
+    user: User,
+  ): Promise<Record<string, unknown>> {
+    let profile = await this.supplierRepo.findOne({
+      where: { userId: user.id },
+    });
+    let createdProfile = false;
+    if (!profile) {
+      const businessName =
+        (user.organization && user.organization.trim()) ||
+        (user.fullName && `${user.fullName.trim()} Prints`) ||
+        `Supplier ${user.id}`;
+      profile = this.supplierRepo.create({
+        userId: user.id,
+        businessName,
+        serviceZones: ['Davao City'],
+        isActive: true,
+        ratingAverage: 0,
+        ratingCount: 0,
+      });
+      profile = await this.supplierRepo.save(profile);
+      createdProfile = true;
+    } else if (!profile.isActive) {
+      profile.isActive = true;
+      profile = await this.supplierRepo.save(profile);
+    }
+
+    let verification = await this.supplierVerificationRepo.findOne({
+      where: { supplierId: profile.id },
+    });
+    let createdVerification = false;
+    if (!verification) {
+      verification = this.supplierVerificationRepo.create({
+        supplierId: profile.id,
+        status: SupplierVerificationStatus.PENDING,
+        payoutDetailsRef: null,
+        reviewedBy: null,
+        reviewedAt: null,
+        notes: 'Auto-created when user role set to supplier — pending Super review',
+      });
+      verification = await this.supplierVerificationRepo.save(verification);
+      createdVerification = true;
+    }
+
+    // Matching requires a product family; seed a broad default if none.
+    const capabilityCount = await this.supplierCapabilityRepo.count({
+      where: { supplierId: profile.id },
+    });
+    let createdCapability = false;
+    if (capabilityCount === 0) {
+      await this.supplierCapabilityRepo.save(
+        this.supplierCapabilityRepo.create({
+          supplierId: profile.id,
+          productFamily: 'flyers',
+          materials: ['glossy', 'matte'],
+          maxCapacity: 50,
+          leadTimeDays: 2,
+        }),
+      );
+      createdCapability = true;
+    }
+
+    return {
+      action: 'supplier_shell',
+      supplierProfileId: profile.id,
+      createdProfile,
+      createdVerification,
+      createdCapability,
+      verificationStatus: verification.status,
+    };
+  }
+
+  private async ensurePendingRiderShell(
+    user: User,
+  ): Promise<Record<string, unknown>> {
+    let profile = await this.riderRepo.findOne({ where: { userId: user.id } });
+    let createdProfile = false;
+    if (!profile) {
+      profile = this.riderRepo.create({
+        userId: user.id,
+        vehicleType: 'motorcycle',
+        plateNumber: '',
+        licenseNumber: '',
+        isAvailable: false,
+        verificationStatus: RiderVerificationStatus.PENDING,
+        verificationNotes:
+          'Auto-created when user role set to rider — pending Super review',
+        verificationReviewedBy: null,
+        verificationReviewedAt: null,
+      });
+      profile = await this.riderRepo.save(profile);
+      createdProfile = true;
+    } else if (
+      profile.verificationStatus !== RiderVerificationStatus.VERIFIED &&
+      profile.verificationStatus !== RiderVerificationStatus.REJECTED
+    ) {
+      // Keep existing verified/rejected; otherwise ensure visible as pending/under_review
+      if (!profile.verificationStatus) {
+        profile.verificationStatus = RiderVerificationStatus.PENDING;
+        profile = await this.riderRepo.save(profile);
+      }
+    }
+
+    return {
+      action: 'rider_shell',
+      riderProfileId: profile.id,
+      createdProfile,
+      verificationStatus: profile.verificationStatus,
+    };
   }
 
   async listAudit(query: AuditListQuery) {

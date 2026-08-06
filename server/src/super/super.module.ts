@@ -9,6 +9,8 @@ import { Order } from '../orders/entities/order.entity';
 import { CodCollection } from '../payments/entities/cod-collection.entity';
 import { Payout } from '../payouts/entities/payout.entity';
 import { SupplierProfile } from '../suppliers/entities/supplier-profile.entity';
+import { SupplierVerification } from '../suppliers/entities/supplier-verification.entity';
+import { SupplierCapability } from '../suppliers/entities/supplier-capability.entity';
 import { AuditModule } from '../audit/audit.module';
 
 @Module({
@@ -21,6 +23,8 @@ import { AuditModule } from '../audit/audit.module';
       CodCollection,
       Payout,
       SupplierProfile,
+      SupplierVerification,
+      SupplierCapability,
     ]),
     AuditModule,
   ],

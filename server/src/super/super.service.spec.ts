@@ -15,6 +15,22 @@ describe('SuperService', () => {
     findOne: jest.Mock;
     save: jest.Mock;
     find: jest.Mock;
+    create: jest.Mock;
+  };
+  let supplierRepo: {
+    findOne: jest.Mock;
+    save: jest.Mock;
+    create: jest.Mock;
+  };
+  let supplierVerificationRepo: {
+    findOne: jest.Mock;
+    save: jest.Mock;
+    create: jest.Mock;
+  };
+  let supplierCapabilityRepo: {
+    count: jest.Mock;
+    save: jest.Mock;
+    create: jest.Mock;
   };
 
   beforeEach(() => {
@@ -25,9 +41,25 @@ describe('SuperService', () => {
     };
     auditService = { append: jest.fn() };
     riderRepo = {
-      findOne: jest.fn(),
-      save: jest.fn(async (p) => p),
+      findOne: jest.fn().mockResolvedValue(null),
+      save: jest.fn(async (p) => ({ id: 99, ...p })),
       find: jest.fn(),
+      create: jest.fn((p) => p),
+    };
+    supplierRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+      save: jest.fn(async (p) => ({ id: 77, ...p })),
+      create: jest.fn((p) => p),
+    };
+    supplierVerificationRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+      save: jest.fn(async (p) => ({ id: 1, ...p })),
+      create: jest.fn((p) => p),
+    };
+    supplierCapabilityRepo = {
+      count: jest.fn().mockResolvedValue(0),
+      save: jest.fn(async (p) => p),
+      create: jest.fn((p) => p),
     };
 
     service = new SuperService(
@@ -37,13 +69,9 @@ describe('SuperService', () => {
       { count: jest.fn() } as any,
       { count: jest.fn() } as any,
       { count: jest.fn() } as any,
-      {
-        createQueryBuilder: jest.fn(() => ({
-          leftJoin: jest.fn().mockReturnThis(),
-          where: jest.fn().mockReturnThis(),
-          getCount: jest.fn().mockResolvedValue(0),
-        })),
-      } as any,
+      supplierRepo as any,
+      supplierVerificationRepo as any,
+      supplierCapabilityRepo as any,
       auditService as any,
       { query: jest.fn().mockResolvedValue([{ '?column?': 1 }]) } as any,
     );
@@ -61,6 +89,8 @@ describe('SuperService', () => {
         id: 2,
         email: 'x@test.com',
         role: UserRole.CLIENT,
+        fullName: 'X Test',
+        organization: 'X Prints',
       });
       const out = await service.updateUserRole(
         2,
@@ -69,6 +99,9 @@ describe('SuperService', () => {
         UserRole.SUPER_ADMIN,
       );
       expect(out.role).toBe(UserRole.SUPPLIER);
+      expect(supplierRepo.save).toHaveBeenCalled();
+      expect(supplierVerificationRepo.save).toHaveBeenCalled();
+      expect(supplierCapabilityRepo.save).toHaveBeenCalled();
       expect(auditService.append).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'role_change',
@@ -76,6 +109,29 @@ describe('SuperService', () => {
           toState: UserRole.SUPPLIER,
         }),
       );
+    });
+
+    it('creates pending rider profile when promoting to rider', async () => {
+      usersRepo.findOne.mockResolvedValue({
+        id: 5,
+        email: 'rider@test.com',
+        role: UserRole.CLIENT,
+        fullName: 'Rider Test',
+      });
+      const out = await service.updateUserRole(
+        5,
+        UserRole.RIDER,
+        1,
+        UserRole.SUPER_ADMIN,
+      );
+      expect(out.role).toBe(UserRole.RIDER);
+      expect(riderRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 5,
+          verificationStatus: RiderVerificationStatus.PENDING,
+        }),
+      );
+      expect(riderRepo.save).toHaveBeenCalled();
     });
 
     it('blocks demoting last super_admin', async () => {
