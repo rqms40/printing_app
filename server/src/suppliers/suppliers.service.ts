@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -17,6 +18,15 @@ import { CreateSupplierProfileDto } from './dto/create-supplier-profile.dto';
 import { UpdateSupplierProfileDto } from './dto/update-supplier-profile.dto';
 import { SetSupplierVerificationDto } from './dto/set-supplier-verification.dto';
 import { CreateSupplierCapabilityDto } from './dto/create-supplier-capability.dto';
+import {
+  FileMetadata,
+  FilePurpose,
+} from '../files/entities/file-metadata.entity';
+import { FilesService } from '../files/files.service';
+
+export type SupplierProfileView = SupplierProfile & {
+  logoUrl?: string | null;
+};
 
 @Injectable()
 export class SuppliersService {
@@ -27,6 +37,9 @@ export class SuppliersService {
     private readonly capabilityRepo: Repository<SupplierCapability>,
     @InjectRepository(SupplierVerification)
     private readonly verificationRepo: Repository<SupplierVerification>,
+    @InjectRepository(FileMetadata)
+    private readonly fileRepo: Repository<FileMetadata>,
+    @Optional() private readonly filesService?: FilesService,
   ) {}
 
   async createProfile(dto: CreateSupplierProfileDto): Promise<SupplierProfile> {
@@ -39,10 +52,19 @@ export class SuppliersService {
       );
     }
 
+    let serviceFocusRanks: string[] = [];
+    if (
+      Array.isArray(dto.serviceFocusRanks) &&
+      dto.serviceFocusRanks.length > 0
+    ) {
+      serviceFocusRanks = this.sanitizeServiceFocusRanks(dto.serviceFocusRanks);
+    }
+
     const profile = this.profileRepo.create({
       userId: dto.userId,
       businessName: dto.businessName,
       serviceZones: dto.serviceZones ?? [],
+      serviceFocusRanks,
       isActive: dto.isActive ?? true,
       ratingAverage: 0,
       ratingCount: 0,
@@ -62,14 +84,15 @@ export class SuppliersService {
     return this.findById(saved.id);
   }
 
-  async findAll(): Promise<SupplierProfile[]> {
-    return this.profileRepo.find({
+  async findAll(): Promise<SupplierProfileView[]> {
+    const rows = await this.profileRepo.find({
       relations: { verification: true, capabilities: true },
       order: { id: 'ASC' },
     });
+    return Promise.all(rows.map((row) => this.withLogoUrl(row)));
   }
 
-  async findById(id: number): Promise<SupplierProfile> {
+  async findById(id: number): Promise<SupplierProfileView> {
     const profile = await this.profileRepo.findOne({
       where: { id },
       relations: { verification: true, capabilities: true },
@@ -77,10 +100,10 @@ export class SuppliersService {
     if (!profile) {
       throw new NotFoundException(`Supplier profile ${id} not found`);
     }
-    return profile;
+    return this.withLogoUrl(profile);
   }
 
-  async findByUserId(userId: number): Promise<SupplierProfile> {
+  async findByUserId(userId: number): Promise<SupplierProfileView> {
     const profile = await this.profileRepo.findOne({
       where: { userId },
       relations: { verification: true, capabilities: true },
@@ -90,7 +113,46 @@ export class SuppliersService {
         `Supplier profile for user ${userId} not found`,
       );
     }
-    return profile;
+    return this.withLogoUrl(profile);
+  }
+
+  /** Soft lookup for admin user detail (null when no supplier shell yet). */
+  async findByUserIdOrNull(
+    userId: number,
+  ): Promise<SupplierProfileView | null> {
+    const profile = await this.profileRepo.findOne({
+      where: { userId },
+      relations: { verification: true, capabilities: true },
+    });
+    if (!profile) return null;
+    return this.withLogoUrl(profile);
+  }
+
+  /** Admin-facing snapshot of supplier self-edited shop details. */
+  toAdminSupplierSnapshot(profile: SupplierProfileView) {
+    return {
+      id: profile.id,
+      user_id: profile.userId,
+      business_name: profile.businessName,
+      description: profile.description ?? null,
+      contact_phone: profile.contactPhone ?? null,
+      contact_email: profile.contactEmail ?? null,
+      address: profile.address ?? null,
+      logo_file_id: profile.logoFileId ?? null,
+      logo_url: profile.logoUrl ?? null,
+      attributes: profile.attributes ?? {},
+      service_zones: profile.serviceZones ?? [],
+      is_active: profile.isActive,
+      verification_status: profile.verification?.status ?? null,
+      capabilities: (profile.capabilities ?? []).map((cap) => ({
+        id: cap.id,
+        product_family: cap.productFamily,
+        materials: cap.materials ?? [],
+        max_capacity: cap.maxCapacity,
+        lead_time_days: cap.leadTimeDays,
+      })),
+      updated_at: profile.updatedAt,
+    };
   }
 
   /**
@@ -104,6 +166,8 @@ export class SuppliersService {
     canAccessSupplierInterface: boolean;
     message: string;
     profileId: number | null;
+    needsServiceFocusSetup: boolean;
+    serviceFocusRanks: string[];
   }> {
     try {
       const profile = await this.findByUserId(userId);
@@ -111,12 +175,17 @@ export class SuppliersService {
         profile.verification?.status ?? SupplierVerificationStatus.PENDING;
       const canAccess =
         profile.isActive && status === SupplierVerificationStatus.VERIFIED;
+      const ranks = Array.isArray(profile.serviceFocusRanks)
+        ? profile.serviceFocusRanks
+        : [];
       return {
         hasProfile: true,
         isActive: profile.isActive,
         verificationStatus: status,
         canAccessSupplierInterface: canAccess,
         profileId: profile.id,
+        needsServiceFocusSetup: ranks.length === 0,
+        serviceFocusRanks: ranks,
         message: canAccess
           ? 'Supplier interface available'
           : status === SupplierVerificationStatus.REJECTED
@@ -131,6 +200,8 @@ export class SuppliersService {
           verificationStatus: 'missing',
           canAccessSupplierInterface: false,
           profileId: null,
+          needsServiceFocusSetup: false,
+          serviceFocusRanks: [],
           message:
             'No supplier profile yet. Super Admin must promote your role and complete onboarding.',
         };
@@ -168,13 +239,196 @@ export class SuppliersService {
   async updateProfile(
     id: number,
     dto: UpdateSupplierProfileDto,
-  ): Promise<SupplierProfile> {
+    options?: { allowIsActive?: boolean; actorUserId?: number },
+  ): Promise<SupplierProfileView> {
     const profile = await this.findById(id);
     if (dto.businessName !== undefined) profile.businessName = dto.businessName;
+    if (dto.description !== undefined) profile.description = dto.description;
+    if (dto.contactPhone !== undefined) profile.contactPhone = dto.contactPhone;
+    if (dto.contactEmail !== undefined) profile.contactEmail = dto.contactEmail;
+    if (dto.address !== undefined) profile.address = dto.address;
     if (dto.serviceZones !== undefined) profile.serviceZones = dto.serviceZones;
-    if (dto.isActive !== undefined) profile.isActive = dto.isActive;
+    if (dto.serviceFocusRanks !== undefined) {
+      profile.serviceFocusRanks = this.sanitizeServiceFocusRanks(
+        dto.serviceFocusRanks,
+      );
+    }
+    if (dto.attributes !== undefined) {
+      profile.attributes = this.sanitizeAttributes(dto.attributes);
+    }
+    if (dto.logoFileId !== undefined) {
+      if (dto.logoFileId === null) {
+        profile.logoFileId = null;
+      } else {
+        await this.assertLogoFileOwned(
+          dto.logoFileId,
+          options?.actorUserId ?? profile.userId,
+        );
+        profile.logoFileId = dto.logoFileId;
+      }
+    }
+    if (dto.isActive !== undefined) {
+      if (!options?.allowIsActive) {
+        throw new ForbiddenException(
+          'Suppliers cannot change isActive on their own profile',
+        );
+      }
+      profile.isActive = dto.isActive;
+    }
     await this.profileRepo.save(profile);
-    return this.findById(id);
+    return this.withLogoUrl(await this.findById(id));
+  }
+
+  /** Supplier self-service update (verified account required). */
+  async updateOwnProfile(
+    userId: number,
+    dto: UpdateSupplierProfileDto,
+  ): Promise<SupplierProfileView> {
+    const profile = await this.assertVerifiedOperationalAccess(userId);
+    // Strip isActive if client sends it
+    const { isActive: _ignored, ...safe } = dto;
+    return this.updateProfile(profile.id, safe, {
+      allowIsActive: false,
+      actorUserId: userId,
+    });
+  }
+
+  /**
+   * Onboarding / settings: set ordered service focuses without requiring
+   * verification (pending suppliers still complete this step).
+   */
+  async updateOwnServiceFocusRanks(
+    userId: number,
+    ranks: string[],
+  ): Promise<SupplierProfileView> {
+    const profile = await this.findByUserId(userId);
+    if (!profile.isActive) {
+      throw new ForbiddenException({
+        code: 'supplier_inactive',
+        message: 'Supplier profile is inactive. Contact support.',
+      });
+    }
+    profile.serviceFocusRanks = this.sanitizeServiceFocusRanks(ranks);
+    await this.profileRepo.save(profile);
+    return this.withLogoUrl(await this.findById(profile.id));
+  }
+
+  async addOwnCapability(
+    userId: number,
+    dto: CreateSupplierCapabilityDto,
+  ): Promise<SupplierCapability> {
+    const profile = await this.assertVerifiedOperationalAccess(userId);
+    return this.addCapability(profile.id, dto);
+  }
+
+  async removeOwnCapability(
+    userId: number,
+    capabilityId: number,
+  ): Promise<void> {
+    const profile = await this.assertVerifiedOperationalAccess(userId);
+    const cap = await this.capabilityRepo.findOne({
+      where: { id: capabilityId, supplierId: profile.id },
+    });
+    if (!cap) {
+      throw new NotFoundException(`Capability ${capabilityId} not found`);
+    }
+    await this.capabilityRepo.remove(cap);
+  }
+
+  private sanitizeAttributes(
+    raw: Record<string, string>,
+  ): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(raw ?? {})) {
+      const key = String(k).trim().slice(0, 80);
+      if (!key) continue;
+      out[key] = String(v ?? '').trim().slice(0, 500);
+    }
+    return out;
+  }
+
+  private sanitizeServiceFocusRanks(raw: string[]): string[] {
+    const allowed = new Set([
+      'signages',
+      'tarpaulins',
+      'document_printing',
+      'apparel',
+      'stickers_labels',
+      'large_format',
+      '3d_printing',
+      'invitations_cards',
+    ]);
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const item of raw ?? []) {
+      const key = String(item ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/[\s-]+/g, '_');
+      if (!key || !allowed.has(key) || seen.has(key)) continue;
+      seen.add(key);
+      out.push(key);
+    }
+    if (out.length === 0) {
+      throw new BadRequestException({
+        code: 'service_focus_required',
+        message:
+          'Select at least one service focus (e.g. signages, tarpaulins, document_printing, apparel).',
+      });
+    }
+    return out;
+  }
+
+  private async assertLogoFileOwned(
+    fileId: number,
+    userId: number,
+  ): Promise<void> {
+    const file = await this.fileRepo.findOne({ where: { id: fileId } });
+    if (!file) {
+      throw new BadRequestException({
+        code: 'logo_file_not_found',
+        message: `File ${fileId} not found`,
+      });
+    }
+    if (file.uploadedBy != null && file.uploadedBy !== userId) {
+      throw new ForbiddenException({
+        code: 'logo_file_not_owned',
+        message: 'Logo file must be uploaded by the supplier account',
+      });
+    }
+    if (
+      file.purpose &&
+      file.purpose !== FilePurpose.GENERAL &&
+      file.purpose !== FilePurpose.PAPER
+    ) {
+      throw new BadRequestException({
+        code: 'logo_file_invalid_purpose',
+        message: 'Logo must be a general image upload',
+      });
+    }
+  }
+
+  private async withLogoUrl(
+    profile: SupplierProfile,
+  ): Promise<SupplierProfileView> {
+    if (!profile.logoFileId || !this.filesService) {
+      return Object.assign(profile, { logoUrl: null });
+    }
+    try {
+      const file = await this.fileRepo.findOne({
+        where: { id: profile.logoFileId },
+      });
+      if (!file?.objectKey) {
+        return Object.assign(profile, { logoUrl: file?.url ?? null });
+      }
+      const signed = await this.filesService.getPresignedUrlForKey(
+        file.objectKey,
+        3600,
+      );
+      return Object.assign(profile, { logoUrl: signed });
+    } catch {
+      return Object.assign(profile, { logoUrl: null });
+    }
   }
 
   async setVerification(

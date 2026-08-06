@@ -24,11 +24,13 @@ import {
 import {
   CAPACITY_HOLDING_DECISIONS,
   DEFAULT_ACCEPTANCE_SLA_HOURS,
+  MATCHING_WEIGHTS,
   OrderMatchContext,
   rankSupplierCandidates,
   RankedSupplierCandidate,
   SupplierAcceptanceStats,
 } from './matching.ranking';
+import { SupplierVerificationStatus } from '../suppliers/entities/supplier-verification.entity';
 
 export type MatchingActor = {
   userId: number;
@@ -56,8 +58,24 @@ export type CandidatesResult = {
     quantity: number;
     zoneTokens: string[];
   };
+  /** Ranked eligible suppliers (capability + zone + capacity filters). */
   candidates: RankedSupplierCandidate[];
   excludedCount: number;
+  /**
+   * All verified active suppliers for ops manual assign UI.
+   * Includes suppliers that ranking may have excluded (capability/zone).
+   */
+  verifiedSuppliers: Array<{
+    supplierId: number;
+    businessName: string;
+    userId: number;
+    isEligibleCandidate: boolean;
+    score: number | null;
+    rankPosition: number | null;
+    excludeReason: string | null;
+    serviceZones: string[];
+    capabilities: string[];
+  }>;
 };
 
 function assertOpsActor(actor: MatchingActor): void {
@@ -108,6 +126,11 @@ export class MatchingService {
 
     const ctx = this.toMatchContext(order);
     const { candidates, excluded } = await this.rankForOrder(ctx);
+    const verifiedSuppliers = await this.listVerifiedSuppliersForOrder(
+      ctx,
+      candidates,
+      excluded,
+    );
 
     return {
       order: {
@@ -120,6 +143,7 @@ export class MatchingService {
       },
       candidates,
       excludedCount: excluded.length,
+      verifiedSuppliers,
     };
   }
 
@@ -135,7 +159,8 @@ export class MatchingService {
   }
 
   /**
-   * Ops selects a specific eligible supplier and creates a pending assignment.
+   * Ops selects a verified supplier and creates a pending assignment.
+   * Prefers ranked candidates; allows ops override for any verified active shop.
    */
   async assign(
     orderId: number,
@@ -146,12 +171,9 @@ export class MatchingService {
     assertOpsActor(actor);
 
     const ranked = await this.getCandidates(orderId);
-    const candidate = ranked.candidates.find((c) => c.supplierId === supplierId);
+    let candidate = ranked.candidates.find((c) => c.supplierId === supplierId);
     if (!candidate) {
-      throw new BadRequestException({
-        code: 'supplier_not_eligible',
-        message: `Supplier ${supplierId} is not an eligible candidate for order ${orderId}`,
-      });
+      candidate = await this.buildOpsOverrideCandidate(orderId, supplierId);
     }
 
     return this.createAssignment(orderId, candidate, actor, notes);
@@ -535,6 +557,121 @@ export class MatchingService {
     });
     if (!order) throw new NotFoundException('Order not found');
     return order;
+  }
+
+  /**
+   * Build assignable list for ops UI: every verified active supplier, with
+   * eligibility flags from ranking.
+   */
+  private async listVerifiedSuppliersForOrder(
+    ctx: OrderMatchContext,
+    candidates: RankedSupplierCandidate[],
+    excluded: Array<{ supplierId: number; reason: string }>,
+  ): Promise<CandidatesResult['verifiedSuppliers']> {
+    const profiles = await this.supplierRepo.find({
+      relations: { verification: true, capabilities: true },
+      order: { id: 'ASC' },
+    });
+    const candidateById = new Map(candidates.map((c) => [c.supplierId, c]));
+    const excludeById = new Map(excluded.map((e) => [e.supplierId, e.reason]));
+
+    const rows: CandidatesResult['verifiedSuppliers'] = [];
+    for (const profile of profiles) {
+      if (!profile.isActive) continue;
+      const status = profile.verification?.status;
+      if (status !== SupplierVerificationStatus.VERIFIED) continue;
+
+      const ranked = candidateById.get(profile.id);
+      rows.push({
+        supplierId: profile.id,
+        businessName: profile.businessName,
+        userId: profile.userId,
+        isEligibleCandidate: ranked != null,
+        score: ranked?.score ?? null,
+        rankPosition: ranked?.rankPosition ?? null,
+        excludeReason: ranked ? null : (excludeById.get(profile.id) ?? null),
+        serviceZones: profile.serviceZones ?? [],
+        capabilities: (profile.capabilities ?? []).map((c) => c.productFamily),
+      });
+    }
+
+    // Eligible first (by rank), then remaining alphabetically.
+    rows.sort((a, b) => {
+      if (a.isEligibleCandidate !== b.isEligibleCandidate) {
+        return a.isEligibleCandidate ? -1 : 1;
+      }
+      if (
+        a.rankPosition != null &&
+        b.rankPosition != null &&
+        a.rankPosition !== b.rankPosition
+      ) {
+        return a.rankPosition - b.rankPosition;
+      }
+      return a.businessName.localeCompare(b.businessName);
+    });
+    return rows;
+  }
+
+  /** Ops override: assign any verified active supplier even if ranking excluded them. */
+  private async buildOpsOverrideCandidate(
+    orderId: number,
+    supplierId: number,
+  ): Promise<RankedSupplierCandidate> {
+    const profile = await this.supplierRepo.findOne({
+      where: { id: supplierId },
+      relations: { verification: true, capabilities: true },
+    });
+    if (!profile) {
+      throw new NotFoundException(`Supplier ${supplierId} not found`);
+    }
+    if (!profile.isActive) {
+      throw new BadRequestException({
+        code: 'supplier_inactive',
+        message: `Supplier ${supplierId} is inactive`,
+      });
+    }
+    if (profile.verification?.status !== SupplierVerificationStatus.VERIFIED) {
+      throw new BadRequestException({
+        code: 'supplier_not_verified',
+        message: `Supplier ${supplierId} is not verified`,
+      });
+    }
+
+    const order = await this.loadOrderForMatching(orderId);
+    const ctx = this.toMatchContext(order);
+    const cap = profile.capabilities?.[0];
+
+    return {
+      supplierId: profile.id,
+      businessName: profile.businessName,
+      userId: profile.userId,
+      score: 0,
+      rankPosition: 0,
+      rankingInputs: {
+        formula: 'ops_manual_override',
+        weights: MATCHING_WEIGHTS,
+        capabilityFit: cap ? 1 : 0,
+        zoneFit: 1,
+        capacityFit: 1,
+        qualityScore: 0,
+        acceptanceRate: 0.5,
+        matchedProductFamily: cap?.productFamily ?? order.category ?? 'ops_override',
+        maxCapacity: cap?.maxCapacity ?? 0,
+        openLoad: 0,
+        remainingCapacity: null,
+        leadTimeDays: cap?.leadTimeDays ?? 1,
+        serviceZones: profile.serviceZones ?? [],
+        ratingAverage: Number(profile.ratingAverage ?? 0),
+        acceptanceStats: { accepted: 0, declined: 0, expired: 0 },
+        zoneTokens: ctx.zoneTokens,
+      },
+      capability: {
+        id: cap?.id ?? 0,
+        productFamily: cap?.productFamily ?? order.category ?? 'ops_override',
+        maxCapacity: cap?.maxCapacity ?? 0,
+        leadTimeDays: cap?.leadTimeDays ?? 1,
+      },
+    };
   }
 
   private toMatchContext(order: Order): OrderMatchContext {

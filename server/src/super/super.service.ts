@@ -94,16 +94,16 @@ export class SuperService {
     const previousRole = user.role;
 
     // Never reassign the Super Admin account away from super_admin via this API.
+    // Also blocks self-demotion: the only caller is super_admin, whose previousRole
+    // is super_admin and is rejected here before role assignment.
     if (previousRole === UserRole.SUPER_ADMIN) {
       throw new BadRequestException(
         'The Super Admin role cannot be changed on this account. It is limited to a single platform owner.',
       );
     }
 
-    if (targetUserId === actorUserId && role !== UserRole.SUPER_ADMIN) {
-      throw new BadRequestException(
-        'Cannot demote your own super_admin role',
-      );
+    if (targetUserId === actorUserId) {
+      throw new BadRequestException('Cannot change your own role');
     }
 
     user.role = role;

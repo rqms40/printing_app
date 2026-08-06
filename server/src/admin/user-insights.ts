@@ -43,6 +43,31 @@ type AdminUserInsightOrderPayload = {
   updated_at: Date;
 };
 
+/** Supplier shop fields as shown on admin/super user detail (self-edited). */
+export type AdminSupplierProfileSnapshot = {
+  id: number;
+  user_id: number;
+  business_name: string;
+  description: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  address: string | null;
+  logo_file_id: number | null;
+  logo_url: string | null;
+  attributes: Record<string, string>;
+  service_zones: string[];
+  is_active: boolean;
+  verification_status: string | null;
+  capabilities: Array<{
+    id: number;
+    product_family: string;
+    materials: string[];
+    max_capacity: number;
+    lead_time_days: number;
+  }>;
+  updated_at: Date;
+};
+
 export type AdminUserDetailPayload = {
   user: {
     id: number;
@@ -71,6 +96,8 @@ export type AdminUserDetailPayload = {
     last_paid_order_at: Date | null;
   };
   recent_orders: AdminUserInsightOrderPayload[];
+  /** Present when the user has a supplier_profiles row (role may still differ). */
+  supplier_profile: AdminSupplierProfileSnapshot | null;
 };
 
 export type AdminUsersAnalyticsPayload = {
@@ -128,6 +155,7 @@ export function normalizeUserInsightsPeriod(
 export function buildAdminUserDetailPayload(
   user: User,
   orders: Order[],
+  supplierProfile: AdminSupplierProfileSnapshot | null = null,
 ): AdminUserDetailPayload {
   const scopedOrders = orders.filter((order) => order.userId === user.id);
   const ordered = [...scopedOrders].sort(
@@ -169,6 +197,7 @@ export function buildAdminUserDetailPayload(
       last_paid_order_at: paidOrders[0]?.createdAt ?? null,
     },
     recent_orders: ordered.slice(0, 5).map(mapAdminInsightOrder),
+    supplier_profile: supplierProfile,
   };
 }
 

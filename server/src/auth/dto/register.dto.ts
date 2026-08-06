@@ -1,13 +1,17 @@
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsDateString,
   IsEmail,
   IsEnum,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   Matches,
   IsString,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
@@ -17,6 +21,7 @@ import {
   ProfileCategory,
   ProfileField,
 } from '../../users/profile.constants';
+import { SUPPLIER_SERVICE_FOCUS_KEYS } from '../../suppliers/dto/update-supplier-profile.dto';
 
 export class RegisterDto {
   @ApiProperty({ example: 'user@gridgo.ph' })
@@ -44,9 +49,14 @@ export class RegisterDto {
   @IsEnum(ProfileCategory)
   profileCategory: ProfileCategory;
 
-  @ApiProperty({ enum: ProfileField })
+  /**
+   * Required for student/professional. For supplier lane, server defaults to
+   * print_shop when omitted.
+   */
+  @ApiPropertyOptional({ enum: ProfileField })
+  @ValidateIf((o: RegisterDto) => o.profileCategory !== ProfileCategory.SUPPLIER)
   @IsEnum(ProfileField)
-  profileField: ProfileField;
+  profileField?: ProfileField;
 
   @ApiPropertyOptional({ enum: AgeRange })
   @IsOptional()
@@ -96,4 +106,20 @@ export class RegisterDto {
   @IsArray()
   @IsEnum(PrintingPreference, { each: true })
   printingPreferences?: PrintingPreference[];
+
+  /**
+   * Supplier lane only: ordered service focuses (1st = index 0).
+   * Required when profileCategory is supplier.
+   */
+  @ApiPropertyOptional({
+    example: ['signages', 'document_printing', 'apparel'],
+    type: [String],
+  })
+  @ValidateIf((o: RegisterDto) => o.profileCategory === ProfileCategory.SUPPLIER)
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(SUPPLIER_SERVICE_FOCUS_KEYS.length)
+  @IsString({ each: true })
+  @IsIn([...SUPPLIER_SERVICE_FOCUS_KEYS], { each: true })
+  serviceFocusRanks?: string[];
 }

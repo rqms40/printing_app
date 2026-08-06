@@ -34,6 +34,7 @@ import {
   DeliveryAssignment,
   DeliveryStatus,
 } from '../riders/entities/delivery-assignment.entity';
+import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
 import { Address } from '../addresses/entities/address.entity';
 import { DeliveryDestination } from './entities/delivery-destination.entity';
 import { DeliverySlotsService } from '../delivery-slots/delivery-slots.service';
@@ -504,6 +505,10 @@ describe('OrdersService', () => {
         {
           provide: getRepositoryToken(DeliveryAssignment),
           useValue: assignmentRepo,
+        },
+        {
+          provide: getRepositoryToken(SupplierAssignment),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
         },
         {
           provide: getRepositoryToken(DispatchPlan),
@@ -3006,6 +3011,10 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
           useValue: { find: jest.fn().mockResolvedValue([]) },
         },
         {
+          provide: getRepositoryToken(SupplierAssignment),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
+        {
           provide: getRepositoryToken(Address),
           useValue: { findOne: jest.fn() },
         },
@@ -3823,6 +3832,10 @@ describe('createBatch with slot + destinations', () => {
         {
           provide: getRepositoryToken(DeliveryAssignment),
           useValue: assignmentRepo,
+        },
+        {
+          provide: getRepositoryToken(SupplierAssignment),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
         },
         { provide: getRepositoryToken(Address), useValue: addressRepo },
         {
@@ -4827,6 +4840,10 @@ describe('cancelBatch', () => {
           useValue: { find: jest.fn().mockResolvedValue([]) },
         },
         {
+          provide: getRepositoryToken(SupplierAssignment),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
+        {
           provide: getRepositoryToken(Address),
           useValue: { findOne: jest.fn() },
         },
@@ -5034,6 +5051,10 @@ describe('updateManualStatus', () => {
           useValue: { find: jest.fn().mockResolvedValue([]) },
         },
         {
+          provide: getRepositoryToken(SupplierAssignment),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
+        {
           provide: getRepositoryToken(Address),
           useValue: { findOne: jest.fn() },
         },
@@ -5214,6 +5235,10 @@ describe('createBatch — 3D bounds enforcement', () => {
           useValue: { find: jest.fn().mockResolvedValue([]) },
         },
         {
+          provide: getRepositoryToken(SupplierAssignment),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
+        {
           provide: getRepositoryToken(Address),
           useValue: {
             findOne: jest.fn().mockResolvedValue({ id: 9, userId: 99 }),
@@ -5384,6 +5409,10 @@ describe('listExternalDeliveries and updateExternalDeliveryStatus', () => {
         },
         {
           provide: getRepositoryToken(DeliveryAssignment),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: getRepositoryToken(SupplierAssignment),
           useValue: { find: jest.fn().mockResolvedValue([]) },
         },
         {

@@ -40,6 +40,11 @@ import {
   CreateDispatchPlanDto,
   ReoptimizeDispatchPlanDto,
 } from '../riders/dto/create-dispatch-plan.dto';
+import { SuppliersService } from '../suppliers/suppliers.service';
+import {
+  SupplierAssignment,
+  SupplierAssignmentDecision,
+} from '../matching/entities/supplier-assignment.entity';
 
 type AnalyticsPeriod = '7D' | '30D' | '6M';
 type AnalyticsPoint = { label: string; value: number };
@@ -74,6 +79,7 @@ export class AdminController {
     private creditsService: CreditsService,
     private ordersGateway: OrdersGateway,
     private notificationsService: NotificationsService,
+    private suppliersService: SuppliersService,
     @InjectRepository(Order)
     private ordersRepo: Repository<Order>,
     @InjectRepository(User)
@@ -84,6 +90,8 @@ export class AdminController {
     private tamSurveySettingsRepo: Repository<TamSurveySettings>,
     @InjectRepository(DeliveryAssignment)
     private deliveryAssignmentsRepo: Repository<DeliveryAssignment>,
+    @InjectRepository(SupplierAssignment)
+    private supplierAssignmentsRepo: Repository<SupplierAssignment>,
   ) {}
 
   @Patch('tam-surveys/settings')
@@ -452,6 +460,38 @@ export class AdminController {
     };
   }
 
+  private assignedSupplierContact(order: Order) {
+    const contact = (
+      order as Order & {
+        assignedSupplierContact?: {
+          supplierId?: number;
+          businessName?: string;
+          decision?: string;
+          acceptanceDeadline?: Date | string | null;
+          assignmentId?: number;
+          logoUrl?: string | null;
+          address?: string | null;
+          broadAddress?: string | null;
+          selfQcEvidenceUrls?: string[];
+          selfQcEvidenceFileIds?: number[];
+        } | null;
+      }
+    ).assignedSupplierContact;
+    if (!contact) return null;
+    return {
+      supplier_id: contact.supplierId ?? null,
+      business_name: contact.businessName ?? null,
+      decision: contact.decision ?? null,
+      acceptance_deadline: contact.acceptanceDeadline ?? null,
+      assignment_id: contact.assignmentId ?? null,
+      logo_url: contact.logoUrl ?? null,
+      address: contact.address ?? null,
+      broad_address: contact.broadAddress ?? null,
+      self_qc_evidence_urls: contact.selfQcEvidenceUrls ?? [],
+      self_qc_evidence_file_ids: contact.selfQcEvidenceFileIds ?? [],
+    };
+  }
+
   private assignedRiderContactFromAssignment(
     assignment: DeliveryAssignment | undefined,
   ) {
@@ -505,8 +545,34 @@ export class AdminController {
       }
     }
 
+    const supplierAssignments = await this.supplierAssignmentsRepo.find({
+      where: {
+        orderId: In(orderIds),
+        decision: In([
+          SupplierAssignmentDecision.PENDING,
+          SupplierAssignmentDecision.ACCEPTED,
+        ]),
+      },
+      relations: { supplier: true },
+      order: { id: 'DESC' },
+    });
+    const supplierByOrderId = new Map<number, SupplierAssignment>();
+    for (const sa of supplierAssignments) {
+      if (!supplierByOrderId.has(sa.orderId)) {
+        supplierByOrderId.set(sa.orderId, sa);
+      }
+    }
+
+    // Prefer OrdersService enrichment when available (logo + self-QC URLs).
+    // Fallback: local attachment without signed media.
     return orders.map((order) => {
       const assignment = assignmentByOrderId.get(order.id);
+      const supplierAssignment = supplierByOrderId.get(order.id);
+      const existing = (
+        order as Order & {
+          assignedSupplierContact?: Record<string, unknown> | null;
+        }
+      ).assignedSupplierContact;
       return Object.assign(order, {
         assignedRiderContact:
           this.assignedRiderContactFromAssignment(assignment) ??
@@ -515,6 +581,26 @@ export class AdminController {
               assignedRiderContact?: Record<string, unknown> | null;
             }
           ).assignedRiderContact,
+        assignedSupplierContact:
+          existing ??
+          (supplierAssignment
+            ? {
+                supplierId: supplierAssignment.supplierId,
+                businessName:
+                  supplierAssignment.supplier?.businessName?.trim() ||
+                  `Supplier #${supplierAssignment.supplierId}`,
+                decision: supplierAssignment.decision,
+                acceptanceDeadline:
+                  supplierAssignment.acceptanceDeadline ?? null,
+                assignmentId: supplierAssignment.id,
+                logoUrl: null,
+                address: supplierAssignment.supplier?.address ?? null,
+                broadAddress: null,
+                selfQcEvidenceUrls: [],
+                selfQcEvidenceFileIds:
+                  supplierAssignment.selfQcEvidenceFileIds ?? [],
+              }
+            : null),
         deliveryProof: this.deliveryProofFromAssignment(assignment),
       });
     });
@@ -594,6 +680,7 @@ export class AdminController {
       estimated_completion_at: o.estimatedCompletionAt ?? null,
       assigned_rider_id: o.assignedRiderId ?? null,
       assigned_rider_contact: this.assignedRiderContact(o),
+      assigned_supplier_contact: this.assignedSupplierContact(o),
       delivery_proof: this.deliveryProof(o),
       created_at: o.createdAt,
       updated_at: o.updatedAt,
@@ -731,6 +818,22 @@ export class AdminController {
       ],
     });
     const [enriched] = await this.attachDeliveryAssignmentDetails([order]);
+    // Pull signed logo + self-QC evidence URLs from OrdersService enrichment.
+    try {
+      const withMedia = await this.ordersService.findById(id);
+      if (withMedia) {
+        const media = withMedia as Order & {
+          assignedSupplierContact?: Record<string, unknown> | null;
+        };
+        if (media.assignedSupplierContact) {
+          Object.assign(enriched, {
+            assignedSupplierContact: media.assignedSupplierContact,
+          });
+        }
+      }
+    } catch {
+      /* non-fatal — fall back to basic supplier contact */
+    }
     return this.mapOrder(enriched);
   }
 
@@ -901,7 +1004,14 @@ export class AdminController {
       order: { createdAt: 'DESC' },
     });
 
-    return buildAdminUserDetailPayload(user, orders);
+    // Soft-load supplier shop profile so self-edited shop details appear on
+    // admin/super user detail whenever a supplier_profiles row exists.
+    const profile = await this.suppliersService.findByUserIdOrNull(id);
+    const supplierProfile = profile
+      ? this.suppliersService.toAdminSupplierSnapshot(profile)
+      : null;
+
+    return buildAdminUserDetailPayload(user, orders, supplierProfile);
   }
 
   // Sales analytics for admin web dashboard

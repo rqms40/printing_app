@@ -37,6 +37,10 @@ import {
   DeliveryAssignment,
   DeliveryStatus,
 } from '../riders/entities/delivery-assignment.entity';
+import {
+  SupplierAssignment,
+  SupplierAssignmentDecision,
+} from '../matching/entities/supplier-assignment.entity';
 import { OrdersGateway } from './orders.gateway';
 import { FirebaseService } from '../firebase/firebase.service';
 import { UsersService } from '../users/users.service';
@@ -285,6 +289,8 @@ export class OrdersService {
     private orderItemSpecValueRepo: Repository<OrderItemSpecValue>,
     @InjectRepository(DeliveryAssignment)
     private deliveryAssignmentRepo: Repository<DeliveryAssignment>,
+    @InjectRepository(SupplierAssignment)
+    private supplierAssignmentRepo: Repository<SupplierAssignment>,
     @InjectRepository(Address)
     private addressRepo: Repository<Address>,
     @InjectRepository(DeliveryDestination)
@@ -384,6 +390,25 @@ export class OrdersService {
       }
     }
 
+    // Latest non-cancelled supplier assignment per order (pending/accepted).
+    const supplierAssignments = await this.supplierAssignmentRepo.find({
+      where: {
+        orderId: In(orderIds),
+        decision: In([
+          SupplierAssignmentDecision.PENDING,
+          SupplierAssignmentDecision.ACCEPTED,
+        ]),
+      },
+      relations: { supplier: true },
+      order: { id: 'DESC' },
+    });
+    const supplierByOrderId = new Map<number, SupplierAssignment>();
+    for (const sa of supplierAssignments ?? []) {
+      if (!supplierByOrderId.has(sa.orderId)) {
+        supplierByOrderId.set(sa.orderId, sa);
+      }
+    }
+
     const riderIds = [
       ...new Set(
         (assignments ?? [])
@@ -403,76 +428,244 @@ export class OrdersService {
           });
     const planByRiderId = new Map(plans.map((plan) => [plan.riderId, plan]));
 
-    return orders.map((order) => {
-      const assignment = assignmentByOrderId.get(order.id);
-      const plan = assignment?.riderId
-        ? planByRiderId.get(assignment.riderId)
-        : undefined;
-      const remainingStops = (plan?.stops ?? [])
-        .filter((stop) => stop.status === DispatchStopStatus.PENDING)
-        .sort((left, right) => left.sequence - right.sequence);
-      const plannedStop = assignment
-        ? plan?.stops?.find(
-            (candidate) => candidate.assignmentId === assignment.id,
-          )
-        : undefined;
-      const routeIndex = assignment
-        ? remainingStops.findIndex(
-            (candidate) => candidate.assignmentId === assignment.id,
-          )
-        : -1;
-      const queuePosition = routeIndex >= 0 ? routeIndex + 1 : null;
-      const currentStop = routeIndex === 0 ? remainingStops[0] : null;
-      const canTrackDelivery =
-        queuePosition === 1 &&
-        assignment != null &&
-        [DeliveryStatus.ON_THE_WAY, DeliveryStatus.ARRIVED].includes(
-          assignment.status,
-        );
+    return Promise.all(
+      orders.map(async (order) => {
+        const assignment = assignmentByOrderId.get(order.id);
+        const supplierAssignment = supplierByOrderId.get(order.id);
+        const plan = assignment?.riderId
+          ? planByRiderId.get(assignment.riderId)
+          : undefined;
+        const remainingStops = (plan?.stops ?? [])
+          .filter((stop) => stop.status === DispatchStopStatus.PENDING)
+          .sort((left, right) => left.sequence - right.sequence);
+        const plannedStop = assignment
+          ? plan?.stops?.find(
+              (candidate) => candidate.assignmentId === assignment.id,
+            )
+          : undefined;
+        const routeIndex = assignment
+          ? remainingStops.findIndex(
+              (candidate) => candidate.assignmentId === assignment.id,
+            )
+          : -1;
+        const queuePosition = routeIndex >= 0 ? routeIndex + 1 : null;
+        const currentStop = routeIndex === 0 ? remainingStops[0] : null;
+        const canTrackDelivery =
+          queuePosition === 1 &&
+          assignment != null &&
+          [DeliveryStatus.ON_THE_WAY, DeliveryStatus.ARRIVED].includes(
+            assignment.status,
+          );
 
-      // Customer-facing delivery handoff OTP only (pickup OTP is supplier/ops).
-      const deliveryOtp =
-        assignment &&
-        !assignment.deliveryOtpVerifiedAt &&
-        [
-          DeliveryStatus.PICKED_UP,
-          DeliveryStatus.ON_THE_WAY,
-          DeliveryStatus.ARRIVED,
-        ].includes(assignment.status)
-          ? (assignment.deliveryOtpCode ?? null)
-          : null;
+        // Customer-facing delivery handoff OTP only (pickup OTP is supplier/ops).
+        const deliveryOtp =
+          assignment &&
+          !assignment.deliveryOtpVerifiedAt &&
+          [
+            DeliveryStatus.PICKED_UP,
+            DeliveryStatus.ON_THE_WAY,
+            DeliveryStatus.ARRIVED,
+          ].includes(assignment.status)
+            ? (assignment.deliveryOtpCode ?? null)
+            : null;
 
-      return Object.assign(order, {
-        deliveryAssignmentId: canTrackDelivery ? assignment?.id : null,
-        deliveryQueuePosition: queuePosition,
-        deliveryQueueSize:
-          routeIndex >= 0 ? remainingStops.length || null : null,
-        deliveryPlanState: plannedStop ? 'planned' : 'unplanned',
-        deliveryPlanVersion: plannedStop ? (plan?.version ?? null) : null,
-        deliveryRouteGeometry: canTrackDelivery
-          ? (currentStop?.legGeometry ?? null)
-          : null,
-        deliveryLegDurationSeconds: canTrackDelivery
-          ? (currentStop?.legDurationSeconds ?? null)
-          : null,
-        deliveryLegDistanceMeters: canTrackDelivery
-          ? (currentStop?.legDistanceMeters ?? null)
-          : null,
-        deliveryRoutingDataStale: canTrackDelivery
-          ? (plan?.routingDataStale ?? false)
-          : null,
-        canTrackDelivery,
-        deliveryOtp,
-        assignedRiderContact: this.assignedRiderContactFromAssignment(
-          assignment,
+        return Object.assign(order, {
+          deliveryAssignmentId: canTrackDelivery ? assignment?.id : null,
+          deliveryQueuePosition: queuePosition,
+          deliveryQueueSize:
+            routeIndex >= 0 ? remainingStops.length || null : null,
+          deliveryPlanState: plannedStop ? 'planned' : 'unplanned',
+          deliveryPlanVersion: plannedStop ? (plan?.version ?? null) : null,
+          deliveryRouteGeometry: canTrackDelivery
+            ? (currentStop?.legGeometry ?? null)
+            : null,
+          deliveryLegDurationSeconds: canTrackDelivery
+            ? (currentStop?.legDurationSeconds ?? null)
+            : null,
+          deliveryLegDistanceMeters: canTrackDelivery
+            ? (currentStop?.legDistanceMeters ?? null)
+            : null,
+          deliveryRoutingDataStale: canTrackDelivery
+            ? (plan?.routingDataStale ?? false)
+            : null,
           canTrackDelivery,
-        ),
-        assignedSlot:
-          order.batchOrderId == null
-            ? undefined
-            : assignedSlotByBatchOrderId.get(order.batchOrderId),
-      });
-    });
+          deliveryOtp,
+          assignedRiderContact: this.assignedRiderContactFromAssignment(
+            assignment,
+            canTrackDelivery,
+          ),
+          assignedSupplierContact:
+            await this.assignedSupplierContactFromAssignment(
+              supplierAssignment,
+            ),
+          assignedSlot:
+            order.batchOrderId == null
+              ? undefined
+              : assignedSlotByBatchOrderId.get(order.batchOrderId),
+        });
+      }),
+    );
+  }
+
+  private assignedSupplierContactFromAssignment(
+    assignment: SupplierAssignment | undefined,
+  ): Promise<{
+    supplierId: number;
+    businessName: string;
+    decision: string;
+    acceptanceDeadline: Date | null;
+    assignmentId: number;
+    logoUrl: string | null;
+    address: string | null;
+    broadAddress: string | null;
+    selfQcEvidenceUrls: string[];
+    selfQcEvidenceFileIds: number[];
+  } | null> {
+    return this.buildAssignedSupplierContact(assignment);
+  }
+
+  private async buildAssignedSupplierContact(
+    assignment: SupplierAssignment | undefined,
+  ): Promise<{
+    supplierId: number;
+    businessName: string;
+    decision: string;
+    acceptanceDeadline: Date | null;
+    assignmentId: number;
+    logoUrl: string | null;
+    address: string | null;
+    broadAddress: string | null;
+    selfQcEvidenceUrls: string[];
+    selfQcEvidenceFileIds: number[];
+  } | null> {
+    if (!assignment) return null;
+    const supplier = assignment.supplier;
+    const address = supplier?.address?.trim() || null;
+    const broadAddress = this.formatBroadSupplierAddress(
+      address,
+      supplier?.serviceZones ?? [],
+    );
+    const logoUrl = await this.signFileId(supplier?.logoFileId ?? null);
+    let evidenceIds = this.normalizeFileIdList(
+      assignment.selfQcEvidenceFileIds,
+    );
+    // Historical self-QC may only exist in audit metadata (pre-persist).
+    if (evidenceIds.length === 0) {
+      evidenceIds = await this.loadSelfQcEvidenceFromAudit(assignment.id);
+    }
+    const selfQcEvidenceUrls: string[] = [];
+    for (const fileId of evidenceIds) {
+      const url = await this.signFileId(fileId);
+      if (url) selfQcEvidenceUrls.push(url);
+    }
+
+    return {
+      supplierId: assignment.supplierId,
+      businessName:
+        supplier?.businessName?.trim() || `Supplier #${assignment.supplierId}`,
+      decision: assignment.decision,
+      acceptanceDeadline: assignment.acceptanceDeadline ?? null,
+      assignmentId: assignment.id,
+      logoUrl,
+      address,
+      broadAddress,
+      selfQcEvidenceUrls,
+      selfQcEvidenceFileIds: evidenceIds,
+    };
+  }
+
+  private normalizeFileIdList(raw: unknown): number[] {
+    if (!Array.isArray(raw)) return [];
+    const out: number[] = [];
+    for (const item of raw) {
+      const n =
+        typeof item === 'number'
+          ? item
+          : typeof item === 'string'
+            ? Number(item)
+            : Number.NaN;
+      if (Number.isFinite(n) && Number.isInteger(n) && n > 0) {
+        out.push(n);
+      }
+    }
+    return [...new Set(out)];
+  }
+
+  /** Recover evidence file ids from supplier_self_qc audit when column is empty. */
+  private async loadSelfQcEvidenceFromAudit(
+    assignmentId: number,
+  ): Promise<number[]> {
+    try {
+      const rows = await this.dataSource.query(
+        `
+        SELECT metadata->'evidenceFileIds' AS evidence
+        FROM audit_events
+        WHERE action = 'supplier_self_qc'
+          AND entity_type = 'supplier_assignment'
+          AND entity_id = $1
+        ORDER BY id DESC
+        LIMIT 1
+        `,
+        [String(assignmentId)],
+      );
+      const evidence = rows?.[0]?.evidence;
+      return this.normalizeFileIdList(evidence);
+    } catch {
+      return [];
+    }
+  }
+
+  /** Public-facing short location, e.g. "San Pedro, Davao City". */
+  private formatBroadSupplierAddress(
+    address: string | null,
+    serviceZones: string[],
+  ): string | null {
+    // Prefer a short form of the real shop address when present.
+    if (address?.trim()) {
+      const parts = address
+        .split(',')
+        .map((p) => p.trim())
+        .filter(Boolean)
+        .filter(
+          (p) =>
+            !/^(philippines|ph|filipinas)$/i.test(p) &&
+            !/^\d{4,5}$/.test(p),
+        );
+      if (parts.length === 1) return parts[0];
+      if (parts.length >= 2) {
+        // "117 San Pedro Street, Davao City, ..." → "San Pedro Street, Davao City"
+        // or shorter: last 1–2 words of the street segment + city.
+        const city = parts[1];
+        let area = parts[0].replace(/^\d+\s+/, '');
+        const words = area.split(/\s+/).filter(Boolean);
+        if (words.length > 3) {
+          area = words.slice(0, 2).join(' ');
+        } else if (words.length === 3 && /street|st\.?|ave|road|rd\.?/i.test(words[2])) {
+          area = words.slice(0, 2).join(' ');
+        }
+        return `${area}, ${city}`;
+      }
+    }
+    const zones = (serviceZones ?? [])
+      .map((z) => String(z).trim())
+      .filter(Boolean);
+    if (zones.length > 0) {
+      return zones.slice(0, 2).join(', ');
+    }
+    return null;
+  }
+
+  private async signFileId(fileId: number | null): Promise<string | null> {
+    if (fileId == null || !Number.isInteger(fileId) || fileId <= 0) {
+      return null;
+    }
+    try {
+      const file = await this.filesService.findById(fileId);
+      if (!file?.objectKey) return file?.url ?? null;
+      return await this.filesService.getPresignedUrlForKey(file.objectKey, 3600);
+    } catch {
+      return null;
+    }
   }
 
   private assignedRiderContactFromAssignment(

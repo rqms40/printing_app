@@ -77,10 +77,38 @@ export interface AdminUserRecentOrderRecord {
   created_at: string;
 }
 
+export interface AdminSupplierCapabilityRecord {
+  id: number;
+  product_family: string;
+  materials: string[];
+  max_capacity: number;
+  lead_time_days: number;
+}
+
+/** Supplier shop profile self-edited fields (admin user detail). */
+export interface AdminSupplierProfileRecord {
+  id: number;
+  user_id: number;
+  business_name: string;
+  description: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  address: string | null;
+  logo_file_id: number | null;
+  logo_url: string | null;
+  attributes: Record<string, string>;
+  service_zones: string[];
+  is_active: boolean;
+  verification_status: string | null;
+  capabilities: AdminSupplierCapabilityRecord[];
+  updated_at: string | null;
+}
+
 export interface AdminUserDetailPayload {
   user: AdminUserDetailRecord;
   metrics: AdminUserMetricsRecord;
   recent_orders: AdminUserRecentOrderRecord[];
+  supplier_profile: AdminSupplierProfileRecord | null;
 }
 
 export interface AdminRiderRecord {
@@ -126,6 +154,7 @@ const ADMIN_USER_DETAIL_ORDER_STATUSES = new Set<OrderStatus>([
   "picked_up",
   "out_for_delivery",
   "delivered",
+  "delivery_failed",
   "collected_by_customer",
   "issue_window_open",
   "completed",
@@ -897,6 +926,55 @@ export function normalizeOrder(input: unknown): Order & {
       "assigned_rider_id",
       "assignedRiderId",
     ),
+    assigned_supplier_contact: (() => {
+      const raw = read(
+        record,
+        "assigned_supplier_contact",
+        "assignedSupplierContact",
+      );
+      if (raw == null) return null;
+      const c = asRecord(raw);
+      const evidenceUrlsRaw = read(
+        c,
+        "self_qc_evidence_urls",
+        "selfQcEvidenceUrls",
+      );
+      const evidenceUrls = Array.isArray(evidenceUrlsRaw)
+        ? evidenceUrlsRaw.map((u) => String(u)).filter((u) => u.trim())
+        : [];
+      const evidenceIdsRaw = read(
+        c,
+        "self_qc_evidence_file_ids",
+        "selfQcEvidenceFileIds",
+      );
+      const evidenceIds = Array.isArray(evidenceIdsRaw)
+        ? evidenceIdsRaw
+            .map((i) => Number(i))
+            .filter((n) => Number.isFinite(n) && n > 0)
+        : [];
+      return {
+        supplier_id:
+          read(c, "supplier_id", "supplierId") == null
+            ? null
+            : toNumberValue(c, 0, "supplier_id", "supplierId"),
+        business_name:
+          toOptionalString(c, "business_name", "businessName") ?? null,
+        decision: toOptionalString(c, "decision") ?? null,
+        acceptance_deadline:
+          toOptionalString(c, "acceptance_deadline", "acceptanceDeadline") ??
+          null,
+        assignment_id:
+          read(c, "assignment_id", "assignmentId") == null
+            ? null
+            : toNumberValue(c, 0, "assignment_id", "assignmentId"),
+        logo_url: toOptionalString(c, "logo_url", "logoUrl") ?? null,
+        address: toOptionalString(c, "address") ?? null,
+        broad_address:
+          toOptionalString(c, "broad_address", "broadAddress") ?? null,
+        self_qc_evidence_urls: evidenceUrls,
+        self_qc_evidence_file_ids: evidenceIds,
+      };
+    })(),
     assigned_rider_contact: normalizeAssignedRiderContact(
       read(
         record,
@@ -1079,6 +1157,91 @@ export function normalizeAdminUserRecentOrder(
   };
 }
 
+export function normalizeAdminSupplierProfile(
+  input: unknown,
+): AdminSupplierProfileRecord | null {
+  if (input === null || input === undefined) {
+    return null;
+  }
+  const record = asRecord(input);
+  if (Object.keys(record).length === 0) {
+    return null;
+  }
+
+  const attributesRaw = read(record, "attributes");
+  const attributes: Record<string, string> = {};
+  if (attributesRaw && typeof attributesRaw === "object" && !Array.isArray(attributesRaw)) {
+    for (const [key, value] of Object.entries(attributesRaw as Record<string, unknown>)) {
+      const k = key.trim();
+      if (!k) continue;
+      attributes[k] = value == null ? "" : String(value);
+    }
+  }
+
+  const zonesRaw = read(record, "service_zones", "serviceZones");
+  const service_zones = Array.isArray(zonesRaw)
+    ? zonesRaw.map((z) => String(z)).filter((z) => z.trim().length > 0)
+    : [];
+
+  const capsRaw = read(record, "capabilities");
+  const capabilities: AdminSupplierCapabilityRecord[] = [];
+  if (Array.isArray(capsRaw)) {
+    for (const cap of capsRaw) {
+      const c = asRecord(cap);
+      const materialsRaw = read(c, "materials");
+      const materials = Array.isArray(materialsRaw)
+        ? materialsRaw.map((m) => String(m)).filter(Boolean)
+        : [];
+      capabilities.push({
+        id: toNumberValue(c, 0, "id"),
+        product_family: toRequiredString(
+          c,
+          "",
+          "product_family",
+          "productFamily",
+        ),
+        materials,
+        max_capacity: toNumberValue(c, 0, "max_capacity", "maxCapacity"),
+        lead_time_days: toNumberValue(c, 0, "lead_time_days", "leadTimeDays"),
+      });
+    }
+  }
+
+  return {
+    id: toNumberValue(record, 0, "id"),
+    user_id: toNumberValue(record, 0, "user_id", "userId"),
+    business_name: toRequiredString(
+      record,
+      "",
+      "business_name",
+      "businessName",
+    ),
+    description: toOptionalString(record, "description") ?? null,
+    contact_phone:
+      toOptionalString(record, "contact_phone", "contactPhone") ?? null,
+    contact_email:
+      toOptionalString(record, "contact_email", "contactEmail") ?? null,
+    address: toOptionalString(record, "address") ?? null,
+    logo_file_id:
+      read(record, "logo_file_id", "logoFileId") === undefined ||
+      read(record, "logo_file_id", "logoFileId") === null
+        ? null
+        : toNumberValue(record, 0, "logo_file_id", "logoFileId"),
+    logo_url: toOptionalString(record, "logo_url", "logoUrl") ?? null,
+    attributes,
+    service_zones,
+    is_active:
+      read(record, "is_active", "isActive") === true ||
+      read(record, "is_active", "isActive") === "true",
+    verification_status:
+      toOptionalString(record, "verification_status", "verificationStatus") ??
+      null,
+    capabilities,
+    updated_at:
+      toOptionalString(record, "updated_at", "updatedAt") ?? null,
+  };
+}
+
 export function normalizeAdminUserDetail(
   payload: unknown,
 ): AdminUserDetailPayload | null {
@@ -1086,6 +1249,11 @@ export function normalizeAdminUserDetail(
   const userValue = read(record, "user");
   const metricsValue = read(record, "metrics");
   const recentOrdersValue = read(record, "recent_orders", "recentOrders");
+  const supplierProfileValue = read(
+    record,
+    "supplier_profile",
+    "supplierProfile",
+  );
 
   if (
     userValue === undefined ||
@@ -1101,6 +1269,7 @@ export function normalizeAdminUserDetail(
     user: normalizeAdminUserDetailRecord(userValue),
     metrics: normalizeAdminUserMetrics(metricsValue),
     recent_orders: recentOrdersValue.map(normalizeAdminUserRecentOrder),
+    supplier_profile: normalizeAdminSupplierProfile(supplierProfileValue),
   };
 }
 

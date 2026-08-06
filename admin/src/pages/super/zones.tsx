@@ -69,7 +69,9 @@ export function SuperZonesPage() {
     try {
       const updated = await updateCommerceSettings({
         defaultCommissionBps: values.defaultCommissionBps,
-        defaultDeliveryFeeMinor: Math.round(values.defaultDeliveryFeePesos * 100),
+        defaultDeliveryFeeMinor: String(
+          Math.round(values.defaultDeliveryFeePesos * 100),
+        ),
         rejectOutsideZones: values.rejectOutsideZones,
       });
       setCommerce(updated);

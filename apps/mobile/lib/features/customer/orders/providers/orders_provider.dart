@@ -362,6 +362,20 @@ AssignedRiderContact? _parseAssignedRider(Map<String, dynamic> json) {
   return null;
 }
 
+AssignedSupplierContact? _parseAssignedSupplier(Map<String, dynamic> json) {
+  final value =
+      _readJsonValue(
+        json,
+        'assignedSupplierContact',
+        'assigned_supplier_contact',
+      ) ??
+      _readJsonValue(json, 'assignedSupplier', 'assigned_supplier');
+  if (value is Map) {
+    return AssignedSupplierContact.fromJson(Map<String, dynamic>.from(value));
+  }
+  return null;
+}
+
 Order _parseOrder(Map<String, dynamic> json) {
   final batch = _readJsonValue(json, 'batchOrder', 'batch_order');
   final batchJson = batch is Map ? Map<String, dynamic>.from(batch) : null;
@@ -549,6 +563,7 @@ Order _parseOrder(Map<String, dynamic> json) {
     deliveryLegDistanceMeters: legDistance,
     deliveryRoutingDataStale: rawRoutingStale is bool ? rawRoutingStale : null,
     assignedRider: _parseAssignedRider(json),
+    assignedSupplier: _parseAssignedSupplier(json),
     estimatedCompletionAt: _parseDateNullable(
       _readJsonValue(json, 'estimatedCompletionAt', 'estimated_completion_at'),
     ),

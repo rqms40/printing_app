@@ -46,9 +46,32 @@ type OrderTypeMeta = {
 };
 
 const TAB_STATUSES: Record<TabFilter, OrderStatus[] | null> = {
-  new: ["submitted", "needs_qa", "approved_for_matching"],
-  production: ["payment_authorized", "production", "supplier_self_qc"],
-  done: ["delivered", "collected_by_customer"],
+  new: [
+    "submitted",
+    "needs_qa",
+    "client_correction",
+    "proof_approval",
+    "approved_for_matching",
+    "supplier_assigned",
+    "supplier_accepted",
+    "awaiting_payment",
+  ],
+  production: [
+    "payment_authorized",
+    "production",
+    "supplier_self_qc",
+    "ready_for_dispatch",
+    "rider_assigned",
+    "picked_up",
+    "out_for_delivery",
+  ],
+  done: [
+    "delivered",
+    "delivery_failed",
+    "collected_by_customer",
+    "issue_window_open",
+    "completed",
+  ],
   all: null,
 };
 

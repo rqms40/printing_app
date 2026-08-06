@@ -92,6 +92,90 @@ class AssignedRiderContact {
   }
 }
 
+class AssignedSupplierContact {
+  const AssignedSupplierContact({
+    required this.supplierId,
+    required this.businessName,
+    this.decision,
+    this.acceptanceDeadline,
+    this.assignmentId,
+    this.logoUrl,
+    this.address,
+    this.broadAddress,
+    this.selfQcEvidenceUrls = const [],
+    this.selfQcEvidenceFileIds = const [],
+  });
+
+  final int supplierId;
+  final String businessName;
+  final String? decision;
+  final DateTime? acceptanceDeadline;
+  final int? assignmentId;
+  final String? logoUrl;
+  final String? address;
+  final String? broadAddress;
+  final List<String> selfQcEvidenceUrls;
+  final List<int> selfQcEvidenceFileIds;
+
+  factory AssignedSupplierContact.fromJson(Map<String, dynamic> json) {
+    Object? read(String camel, String snake) => json[camel] ?? json[snake];
+
+    final idRaw = read('supplierId', 'supplier_id');
+    final id = idRaw is int
+        ? idRaw
+        : int.tryParse(idRaw?.toString() ?? '') ?? 0;
+    final name =
+        (read('businessName', 'business_name')?.toString().trim().isNotEmpty ==
+                true
+            ? read('businessName', 'business_name')!.toString().trim()
+            : 'Supplier');
+
+    DateTime? deadline;
+    final rawDeadline = read('acceptanceDeadline', 'acceptance_deadline');
+    if (rawDeadline != null) {
+      deadline = DateTime.tryParse(rawDeadline.toString());
+    }
+
+    final assignmentRaw = read('assignmentId', 'assignment_id');
+    final assignmentId = assignmentRaw is int
+        ? assignmentRaw
+        : int.tryParse(assignmentRaw?.toString() ?? '');
+
+    final urlsRaw =
+        read('selfQcEvidenceUrls', 'self_qc_evidence_urls');
+    final urls = <String>[];
+    if (urlsRaw is List) {
+      for (final u in urlsRaw) {
+        final s = u?.toString().trim() ?? '';
+        if (s.isNotEmpty) urls.add(s);
+      }
+    }
+
+    final idsRaw =
+        read('selfQcEvidenceFileIds', 'self_qc_evidence_file_ids');
+    final ids = <int>[];
+    if (idsRaw is List) {
+      for (final i in idsRaw) {
+        final n = i is int ? i : int.tryParse(i?.toString() ?? '');
+        if (n != null && n > 0) ids.add(n);
+      }
+    }
+
+    return AssignedSupplierContact(
+      supplierId: id,
+      businessName: name,
+      decision: read('decision', 'decision')?.toString(),
+      acceptanceDeadline: deadline,
+      assignmentId: assignmentId,
+      logoUrl: read('logoUrl', 'logo_url')?.toString(),
+      address: read('address', 'address')?.toString(),
+      broadAddress: read('broadAddress', 'broad_address')?.toString(),
+      selfQcEvidenceUrls: urls,
+      selfQcEvidenceFileIds: ids,
+    );
+  }
+}
+
 class OrderLineItem {
   const OrderLineItem({
     required this.id,
@@ -164,6 +248,7 @@ class Order {
     this.deliveryLegDistanceMeters,
     this.deliveryRoutingDataStale,
     this.assignedRider,
+    this.assignedSupplier,
     this.estimatedCompletionAt,
     this.adminStatusNote,
     this.adminStatusSetAt,
@@ -215,6 +300,7 @@ class Order {
   final int? deliveryLegDistanceMeters;
   final bool? deliveryRoutingDataStale;
   final AssignedRiderContact? assignedRider;
+  final AssignedSupplierContact? assignedSupplier;
   final DateTime? estimatedCompletionAt;
   final String? adminStatusNote;
   final DateTime? adminStatusSetAt;
@@ -316,6 +402,7 @@ class Order {
     int? deliveryLegDistanceMeters,
     bool? deliveryRoutingDataStale,
     AssignedRiderContact? assignedRider,
+    AssignedSupplierContact? assignedSupplier,
     DateTime? estimatedCompletionAt,
     String? adminStatusNote,
     DateTime? adminStatusSetAt,
@@ -373,6 +460,7 @@ class Order {
       deliveryRoutingDataStale:
           deliveryRoutingDataStale ?? this.deliveryRoutingDataStale,
       assignedRider: assignedRider ?? this.assignedRider,
+      assignedSupplier: assignedSupplier ?? this.assignedSupplier,
       estimatedCompletionAt:
           estimatedCompletionAt ?? this.estimatedCompletionAt,
       adminStatusNote: adminStatusNote ?? this.adminStatusNote,

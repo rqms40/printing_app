@@ -111,6 +111,42 @@ class OnboardingPageData {
     ),
   ];
 
+  /// Supplier onboarding: jobs → focus ranking → production → payouts.
+  static const List<OnboardingPageData> supplier = [
+    OnboardingPageData(
+      overline: 'SUPPLIER LANE',
+      heading: 'Jobs assigned\nto your shop',
+      body:
+          'Accept print jobs from GRIDGO, review artwork, '
+          'and commit price and turnaround.',
+      illustrationType: OnboardingIllustration.printer,
+    ),
+    OnboardingPageData(
+      overline: 'YOUR FOCUS',
+      heading: 'Rank what you\ndo best',
+      body:
+          'Tell us your main services — Signages, Tarpaulins, '
+          'Document Printing, Apparel — and order them by priority.',
+      illustrationType: OnboardingIllustration.cube3D,
+    ),
+    OnboardingPageData(
+      overline: 'PRODUCTION',
+      heading: 'Print, QC,\nthen ready',
+      body:
+          'Update production milestones, submit quality evidence, '
+          'and mark jobs ready for pickup.',
+      illustrationType: OnboardingIllustration.delivery,
+    ),
+    OnboardingPageData(
+      overline: 'PAYOUTS',
+      heading: 'Get paid after\ndelivery',
+      body:
+          'Payouts settle after successful delivery, with holds '
+          'when issues are reported in time.',
+      illustrationType: OnboardingIllustration.payment,
+    ),
+  ];
+
   /// Admin onboarding: dashboard → queue → dispatch.
   static const List<OnboardingPageData> admin = [
     OnboardingPageData(
@@ -144,7 +180,11 @@ class OnboardingPageData {
     switch (role) {
       case 'rider':
         return rider;
+      case 'supplier':
+        return supplier;
       case 'admin':
+      case 'ops_admin':
+      case 'super_admin':
         return admin;
       default:
         return customer;

@@ -5,8 +5,8 @@ import 'package:printing_app/shared/models/order_status_history.dart';
 import 'package:printing_app/shared/widgets/status_timeline.dart';
 import 'package:printing_app/utils/formatters.dart';
 
-/// Wrapper around [StatusTimeline] that maps an [Order]'s status pipeline
-/// into timeline steps.
+/// Wrapper around [StatusTimeline] that maps an [Order]'s marketplace status
+/// pipeline into timeline steps — including supplier matching statuses.
 class OrderStatusTimeline extends StatelessWidget {
   const OrderStatusTimeline({
     super.key,
@@ -17,39 +17,31 @@ class OrderStatusTimeline extends StatelessWidget {
   final Order order;
   final List<OrderStatusHistory> statusHistory;
 
-  /// Returns the ordered list of statuses in the pipeline for this order.
-  List<OrderStatus> _pipeline() {
-    final isPickup = order.deliveryOption == 'pickup';
-
-    // Simplified marketplace pipeline for client timeline UI.
-    final steps = <OrderStatus>[
-      OrderStatus.submitted,
-      OrderStatus.needsQa,
-      OrderStatus.approvedForMatching,
-      OrderStatus.paymentAuthorized,
-      OrderStatus.production,
-      OrderStatus.supplierSelfQc,
-    ];
-
-    if (isPickup) {
-      steps.add(OrderStatus.collectedByCustomer);
-    } else {
-      steps.addAll([
-        OrderStatus.readyForDispatch,
-        OrderStatus.riderAssigned,
-        OrderStatus.pickedUp,
-        OrderStatus.outForDelivery,
-        OrderStatus.delivered,
-      ]);
-    }
-
-    return steps;
+  bool get _isPickup {
+    final option = order.deliveryOption.trim().toLowerCase();
+    return option == 'pickup' || option == 'self_pickup' || option == 'collect';
   }
 
-  /// Finds the timestamp for when a status was reached by looking through
-  /// the order status history entries.
+  Set<OrderStatus> _relevantStatuses() {
+    final set = <OrderStatus>{order.orderStatus};
+    for (final entry in statusHistory) {
+      set.add(entry.toStatus);
+      set.add(entry.fromStatus);
+    }
+    return set;
+  }
+
+  /// Ordered marketplace pipeline for this order.
+  List<OrderStatus> _pipeline() {
+    final relevant = _relevantStatuses();
+    return customerOrderStatusPipeline(
+      isPickup: _isPickup,
+      includeOptional: relevant,
+    );
+  }
+
+  /// Finds the timestamp for when a status was reached.
   String? _timestampFor(OrderStatus status) {
-    // The first status (orderPlaced) uses the order's createdAt.
     if (status == OrderStatus.submitted) {
       return formatDateTime(order.createdAt);
     }
@@ -62,28 +54,46 @@ class OrderStatusTimeline extends StatelessWidget {
     return null;
   }
 
+  /// Resolve which pipeline step is "current".
+  ///
+  /// Exact match first; otherwise map by [OrderStatus.timelineRank] so
+  /// intermediate statuses still light the correct step.
+  int _currentIndex(List<OrderStatus> pipeline) {
+    final exact = pipeline.indexOf(order.orderStatus);
+    if (exact >= 0) return exact;
+
+    final rank = order.orderStatus.timelineRank;
+    if (rank == null) return 0;
+
+    var best = 0;
+    for (var i = 0; i < pipeline.length; i++) {
+      final stepRank = pipeline[i].timelineRank;
+      if (stepRank != null && stepRank <= rank) {
+        best = i;
+      }
+    }
+    return best;
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Handle special terminal statuses that break the normal pipeline.
+    // Terminal / branch statuses outside the happy path.
     if (order.orderStatus == OrderStatus.cancelled ||
-        order.orderStatus == OrderStatus.fileRejected) {
+        order.orderStatus == OrderStatus.fileRejected ||
+        order.orderStatus == OrderStatus.deliveryFailed) {
+      final terminal = order.orderStatus;
       final steps = <TimelineStep>[
         TimelineStep(
           label: OrderStatus.submitted.displayName,
           timestamp: formatDateTime(order.createdAt),
         ),
-        if (order.orderStatus == OrderStatus.fileRejected)
-          TimelineStep(
-            label: OrderStatus.fileRejected.displayName,
-            timestamp: _timestampFor(OrderStatus.fileRejected),
-          )
-        else
-          TimelineStep(
-            label: OrderStatus.cancelled.displayName,
-            timestamp: order.cancelledAt != null
-                ? formatDateTime(order.cancelledAt!)
-                : _timestampFor(OrderStatus.cancelled),
-          ),
+        TimelineStep(
+          label: terminal.displayName,
+          timestamp: order.cancelledAt != null &&
+                  terminal == OrderStatus.cancelled
+              ? formatDateTime(order.cancelledAt!)
+              : _timestampFor(terminal),
+        ),
       ];
 
       return StatusTimeline(
@@ -92,10 +102,23 @@ class OrderStatusTimeline extends StatelessWidget {
       );
     }
 
-    final pipeline = _pipeline();
-    final currentIndex = pipeline.indexOf(order.orderStatus);
-    final effectiveIndex = currentIndex >= 0 ? currentIndex : 0;
+    if (order.orderStatus == OrderStatus.draft) {
+      return StatusTimeline(
+        steps: [
+          TimelineStep(
+            label: OrderStatus.draft.displayName,
+            timestamp: formatDateTime(order.createdAt),
+          ),
+          TimelineStep(label: OrderStatus.submitted.displayName),
+        ],
+        currentIndex: 0,
+      );
+    }
 
+    final pipeline = _pipeline();
+    final currentIndex = _currentIndex(pipeline);
+
+    // Keep progress labels short — shop name lives in the supplier dropdown card.
     final steps = pipeline.map((status) {
       return TimelineStep(
         label: status.displayName,
@@ -105,7 +128,7 @@ class OrderStatusTimeline extends StatelessWidget {
 
     return StatusTimeline(
       steps: steps,
-      currentIndex: effectiveIndex,
+      currentIndex: currentIndex.clamp(0, steps.isEmpty ? 0 : steps.length - 1),
     );
   }
 }

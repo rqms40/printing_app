@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   UnauthorizedException,
@@ -7,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { BetaModeService } from '../beta-mode/beta-mode.service';
+import { SuppliersService } from '../suppliers/suppliers.service';
 import { User, UserRole } from '../users/entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import {
@@ -25,11 +27,12 @@ type RegisterProfileInput = {
   ageRange?: AgeRange;
   dateOfBirth?: string;
   profileCategory: ProfileCategory;
-  profileField: ProfileField;
+  profileField?: ProfileField;
   course?: string;
   organization?: string;
   clientAccountType?: ClientAccountType;
   printingPreferences?: PrintingPreference[];
+  serviceFocusRanks?: string[];
 };
 
 @Injectable()
@@ -39,6 +42,7 @@ export class AuthService {
     private jwtService: JwtService,
     private notificationsService: NotificationsService,
     private betaModeService: BetaModeService,
+    private suppliersService: SuppliersService,
   ) {}
 
   async register(
@@ -46,15 +50,69 @@ export class AuthService {
     password: string,
     profile: RegisterProfileInput,
   ) {
-    let user = await this.usersService.create(email, password, profile);
-    user = await this.ensureBetaEnrollment(user);
+    const isSupplierLane =
+      profile.profileCategory === ProfileCategory.SUPPLIER;
+
+    if (isSupplierLane) {
+      if (!profile.serviceFocusRanks?.length) {
+        throw new BadRequestException({
+          code: 'service_focus_required',
+          message:
+            'Supplier sign-up requires at least one ranked service focus.',
+        });
+      }
+    } else if (!profile.profileField) {
+      throw new BadRequestException({
+        code: 'profile_field_required',
+        message: 'profileField is required for student and professional lanes.',
+      });
+    }
+
+    const role = isSupplierLane ? UserRole.SUPPLIER : UserRole.CLIENT;
+    // serviceFocusRanks lives on supplier_profiles, not users.
+    const { serviceFocusRanks: _ranks, ...userProfile } = profile;
+    const normalizedProfile = {
+      ...userProfile,
+      profileField: isSupplierLane
+        ? ProfileField.PRINT_SHOP
+        : profile.profileField,
+    };
+
+    let user = await this.usersService.create(
+      email,
+      password,
+      normalizedProfile,
+      role,
+    );
+
+    if (isSupplierLane) {
+      const shopName =
+        profile.organization?.trim() ||
+        profile.fullName?.trim() ||
+        email.split('@')[0] ||
+        'New Print Shop';
+      await this.suppliersService.createProfile({
+        userId: user.id,
+        businessName: shopName,
+        serviceFocusRanks: profile.serviceFocusRanks,
+        isActive: true,
+      });
+    } else {
+      user = await this.ensureBetaEnrollment(user);
+    }
 
     try {
       await this.notificationsService.createForAllAdmins({
-        title: 'New User Registered',
-        message: `${email} just signed up.`,
+        title: isSupplierLane
+          ? 'New Supplier Registered'
+          : 'New User Registered',
+        message: `${email} just signed up${isSupplierLane ? ' as a supplier' : ''}.`,
         type: 'new_user',
-        metadata: { userId: user.id, email: user.email },
+        metadata: {
+          userId: user.id,
+          email: user.email,
+          role: user.role,
+        },
       });
     } catch {
       // notification failure must not break registration

@@ -48,27 +48,27 @@ class ProfilingFormSection extends StatelessWidget {
           style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
         ),
         const SizedBox(height: AppSpacing.lg),
-        Row(
+        Column(
           children: [
             for (final option in profileCategories) ...[
-              if (option != profileCategories.first)
-                const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: _CategoryCard(
-                  option: option,
-                  colors: colors,
-                  isSelected: value.profileCategory == option.value,
-                  onTap: () {
-                    onChanged(
-                      value.copyWith(
-                        profileCategory: option.value,
-                        profileField: null,
-                        printingPreferences: const [],
-                      ),
-                    );
-                  },
-                ),
+              _CategoryCard(
+                option: option,
+                colors: colors,
+                isSelected: value.profileCategory == option.value,
+                onTap: () {
+                  onChanged(
+                    value.copyWith(
+                      profileCategory: option.value,
+                      profileField: option.value == 'supplier'
+                          ? 'print_shop'
+                          : null,
+                      printingPreferences: const [],
+                    ),
+                  );
+                },
               ),
+              if (option != profileCategories.last)
+                const SizedBox(height: AppSpacing.sm),
             ],
           ],
         ),
@@ -79,7 +79,8 @@ class ProfilingFormSection extends StatelessWidget {
             style: AppTypography.caption.copyWith(color: colors.error),
           ),
         ],
-        if (value.profileCategory != null) ...[
+        if (value.profileCategory != null &&
+            value.profileCategory != 'supplier') ...[
           const SizedBox(height: AppSpacing.xl),
           Text(
             profilingPrompt(value.profileCategory),
@@ -123,7 +124,9 @@ class ProfilingFormSection extends StatelessWidget {
             label: profilingCourseLabel(value.profileCategory),
             hintText: value.profileCategory == 'professional'
                 ? 'e.g. Site Engineer'
-                : 'e.g. BS Architecture',
+                : value.profileCategory == 'supplier'
+                    ? 'e.g. Large-format & apparel'
+                    : 'e.g. BS Architecture',
           ),
           const SizedBox(height: AppSpacing.lg),
           AppTextField(
@@ -131,10 +134,13 @@ class ProfilingFormSection extends StatelessWidget {
             label: profilingOrganizationLabel(value.profileCategory),
             hintText: value.profileCategory == 'professional'
                 ? 'e.g. Grid Print Studio'
-                : 'e.g. Mapua University',
+                : value.profileCategory == 'supplier'
+                    ? 'e.g. Davao Print Co'
+                    : 'e.g. Mapua University',
           ),
         ],
-        if (value.profileField != null) ...[
+        if (value.profileField != null &&
+            value.profileCategory != 'supplier') ...[
           const SizedBox(height: AppSpacing.lg),
           Text(
             'Printing Preferences',

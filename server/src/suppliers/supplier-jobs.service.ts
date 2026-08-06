@@ -1043,6 +1043,16 @@ export class SupplierJobsService {
         dto.notes?.trim() ||
         `Supplier self-QC submitted with ${uniqueEvidenceIds.length} evidence file(s)`;
 
+      // Persist evidence on the assignment so clients can display it later.
+      // Use explicit update (not only save) so jsonb always lands even if the
+      // entity was loaded before the column existed in the process lifetime.
+      locked.selfQcEvidenceFileIds = uniqueEvidenceIds;
+      await assignmentRepo.update(
+        { id: locked.id },
+        { selfQcEvidenceFileIds: uniqueEvidenceIds },
+      );
+      await assignmentRepo.save(locked);
+
       const updateResult = await ordersRepo.update(
         { id: order.id, orderStatus: fromStatus },
         { orderStatus: toStatus },

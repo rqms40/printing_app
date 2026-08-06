@@ -30,9 +30,45 @@ export class SupplierProfile {
   @Column({ name: 'business_name', type: 'varchar', length: 200 })
   businessName: string;
 
+  /** Public description / about the shop. */
+  @Column({ type: 'text', nullable: true })
+  description: string | null;
+
+  @Column({ name: 'contact_phone', type: 'varchar', length: 40, nullable: true })
+  contactPhone: string | null;
+
+  @Column({
+    name: 'contact_email',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+  })
+  contactEmail: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  address: string | null;
+
+  /** Profile picture / logo file metadata id. */
+  @Column({ name: 'logo_file_id', type: 'int', nullable: true })
+  logoFileId: number | null;
+
+  /**
+   * Free-form supplier attributes (equipment, finishes, languages, etc.).
+   * Map of string key → string value for simple UI editing.
+   */
+  @Column({ type: 'jsonb', default: () => "'{}'" })
+  attributes: Record<string, string>;
+
   /** Service zone codes / labels the supplier covers (e.g. Davao barangays). */
   @Column({ name: 'service_zones', type: 'jsonb', default: () => "'[]'" })
   serviceZones: string[];
+
+  /**
+   * Ordered service-focus keys (priority rank). Index 0 = primary focus.
+   * Catalog keys: signages, tarpaulins, document_printing, apparel, etc.
+   */
+  @Column({ name: 'service_focus_ranks', type: 'jsonb', default: () => "'[]'" })
+  serviceFocusRanks: string[];
 
   @Column({ name: 'is_active', default: true })
   isActive: boolean;

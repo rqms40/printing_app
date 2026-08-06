@@ -162,6 +162,7 @@ describe('user-insights helpers', () => {
           created_at: new Date('2026-03-20T10:00:00.000Z'),
         }),
       ],
+      supplier_profile: null,
     });
   });
 

@@ -9,6 +9,8 @@ class SupplierAccessState {
     this.verificationStatus = 'pending',
     this.message,
     this.errorMessage,
+    this.needsServiceFocusSetup = false,
+    this.serviceFocusRanks = const [],
   });
 
   final bool isLoading;
@@ -16,6 +18,8 @@ class SupplierAccessState {
   final String verificationStatus;
   final String? message;
   final String? errorMessage;
+  final bool needsServiceFocusSetup;
+  final List<String> serviceFocusRanks;
 
   SupplierAccessState copyWith({
     bool? isLoading,
@@ -23,6 +27,8 @@ class SupplierAccessState {
     String? verificationStatus,
     String? message,
     String? errorMessage,
+    bool? needsServiceFocusSetup,
+    List<String>? serviceFocusRanks,
   }) {
     return SupplierAccessState(
       isLoading: isLoading ?? this.isLoading,
@@ -30,6 +36,9 @@ class SupplierAccessState {
       verificationStatus: verificationStatus ?? this.verificationStatus,
       message: message ?? this.message,
       errorMessage: errorMessage,
+      needsServiceFocusSetup:
+          needsServiceFocusSetup ?? this.needsServiceFocusSetup,
+      serviceFocusRanks: serviceFocusRanks ?? this.serviceFocusRanks,
     );
   }
 }
@@ -49,12 +58,23 @@ class SupplierAccessNotifier extends StateNotifier<SupplierAccessState> {
       final res = await _api.get('/suppliers/me/access');
       final data = res.data;
       if (data is Map) {
+        final ranksRaw = data['serviceFocusRanks'] ?? data['service_focus_ranks'];
+        final ranks = <String>[];
+        if (ranksRaw is List) {
+          for (final r in ranksRaw) {
+            final s = r?.toString().trim() ?? '';
+            if (s.isNotEmpty) ranks.add(s);
+          }
+        }
         state = SupplierAccessState(
           isLoading: false,
           canAccess: data['canAccessSupplierInterface'] == true,
           verificationStatus:
               (data['verificationStatus'] ?? 'pending').toString(),
           message: data['message']?.toString(),
+          needsServiceFocusSetup:
+              data['needsServiceFocusSetup'] == true || ranks.isEmpty,
+          serviceFocusRanks: ranks,
         );
         return;
       }

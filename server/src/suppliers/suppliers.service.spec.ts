@@ -14,6 +14,7 @@ import {
   SupplierVerification,
   SupplierVerificationStatus,
 } from './entities/supplier-verification.entity';
+import { FileMetadata } from '../files/entities/file-metadata.entity';
 
 describe('SuppliersService', () => {
   let service: SuppliersService;
@@ -26,17 +27,25 @@ describe('SuppliersService', () => {
   };
   const capabilityRepo = {
     find: jest.fn(),
+    findOne: jest.fn(),
     create: jest.fn((x) => x),
     save: jest.fn(),
+    remove: jest.fn(),
   };
   const verificationRepo = {
     findOne: jest.fn(),
     create: jest.fn((x) => x),
     save: jest.fn(),
   };
+  const fileRepo = {
+    findOne: jest.fn(),
+  };
 
   beforeEach(async () => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+    profileRepo.create.mockImplementation((x) => x);
+    capabilityRepo.create.mockImplementation((x) => x);
+    verificationRepo.create.mockImplementation((x) => x);
     const mod = await Test.createTestingModule({
       providers: [
         SuppliersService,
@@ -49,6 +58,7 @@ describe('SuppliersService', () => {
           provide: getRepositoryToken(SupplierVerification),
           useValue: verificationRepo,
         },
+        { provide: getRepositoryToken(FileMetadata), useValue: fileRepo },
       ],
     }).compile();
     service = mod.get(SuppliersService);
@@ -224,6 +234,151 @@ describe('SuppliersService', () => {
       await expect(
         service.assertVerifiedOperationalAccess(10),
       ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+  });
+
+  describe('updateOwnProfile', () => {
+    const verifiedProfile = {
+      id: 1,
+      userId: 10,
+      businessName: 'Davao Print Co',
+      description: null,
+      contactPhone: null,
+      contactEmail: null,
+      address: null,
+      serviceZones: ['Davao City'],
+      attributes: {},
+      logoFileId: null,
+      isActive: true,
+      verification: { status: SupplierVerificationStatus.VERIFIED },
+      capabilities: [],
+    };
+
+    it('updates description, attributes, and contact fields', async () => {
+      profileRepo.findOne
+        .mockResolvedValueOnce({ ...verifiedProfile }) // assertVerified
+        .mockResolvedValueOnce({ ...verifiedProfile }) // findById in updateProfile
+        .mockResolvedValueOnce({
+          ...verifiedProfile,
+          description: 'Large format shop',
+          contactPhone: '+639171234567',
+          attributes: { equipment: 'HP Latex' },
+        });
+      profileRepo.save.mockImplementation(async (p) => p);
+
+      const out = await service.updateOwnProfile(10, {
+        description: 'Large format shop',
+        contactPhone: '+639171234567',
+        attributes: { equipment: 'HP Latex', '': 'skip' },
+      });
+
+      expect(profileRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          description: 'Large format shop',
+          contactPhone: '+639171234567',
+          attributes: { equipment: 'HP Latex' },
+        }),
+      );
+      expect(out.attributes).toEqual({ equipment: 'HP Latex' });
+    });
+
+    it('sets logo when file is owned by the supplier', async () => {
+      profileRepo.findOne
+        .mockResolvedValueOnce({ ...verifiedProfile })
+        .mockResolvedValueOnce({ ...verifiedProfile })
+        .mockResolvedValueOnce({
+          ...verifiedProfile,
+          logoFileId: 42,
+        });
+      profileRepo.save.mockImplementation(async (p) => p);
+      fileRepo.findOne
+        .mockResolvedValueOnce({
+          id: 42,
+          uploadedBy: 10,
+          purpose: 'general',
+          objectKey: null,
+          url: null,
+        })
+        .mockResolvedValueOnce({
+          id: 42,
+          objectKey: null,
+          url: 'http://cdn/logo.jpg',
+        });
+
+      const out = await service.updateOwnProfile(10, { logoFileId: 42 });
+      expect(profileRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ logoFileId: 42 }),
+      );
+      expect(out.logoFileId).toBe(42);
+    });
+
+    it('rejects logo files owned by someone else', async () => {
+      profileRepo.findOne.mockResolvedValue({ ...verifiedProfile });
+      fileRepo.findOne.mockResolvedValue({
+        id: 42,
+        uploadedBy: 99,
+        purpose: 'general',
+      });
+
+      await expect(
+        service.updateOwnProfile(10, { logoFileId: 42 }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(profileRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('blocks pending suppliers from self-edit', async () => {
+      profileRepo.findOne.mockResolvedValue({
+        ...verifiedProfile,
+        verification: { status: SupplierVerificationStatus.PENDING },
+      });
+      await expect(
+        service.updateOwnProfile(10, { businessName: 'Nope' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+  });
+
+  describe('addOwnCapability / removeOwnCapability', () => {
+    const verifiedProfile = {
+      id: 1,
+      userId: 10,
+      isActive: true,
+      verification: { status: SupplierVerificationStatus.VERIFIED },
+      capabilities: [],
+    };
+
+    it('adds a capability on own profile', async () => {
+      profileRepo.findOne.mockResolvedValue({ ...verifiedProfile });
+      capabilityRepo.save.mockImplementation(async (c) => ({ ...c, id: 7 }));
+
+      const out = await service.addOwnCapability(10, {
+        productFamily: 'flyer',
+        materials: ['glossy'],
+        maxCapacity: 50,
+        leadTimeDays: 2,
+      });
+      expect(out.productFamily).toBe('flyer');
+      expect(capabilityRepo.save).toHaveBeenCalled();
+    });
+
+    it('removes only own capability', async () => {
+      profileRepo.findOne.mockResolvedValue({ ...verifiedProfile });
+      capabilityRepo.findOne.mockResolvedValue({
+        id: 7,
+        supplierId: 1,
+        productFamily: 'flyer',
+      });
+      capabilityRepo.remove.mockResolvedValue(undefined);
+
+      await service.removeOwnCapability(10, 7);
+      expect(capabilityRepo.remove).toHaveBeenCalled();
+    });
+
+    it('throws when capability is missing', async () => {
+      profileRepo.findOne.mockResolvedValue({ ...verifiedProfile });
+      capabilityRepo.findOne.mockResolvedValue(null);
+      await expect(service.removeOwnCapability(10, 404)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

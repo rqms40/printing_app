@@ -105,6 +105,7 @@ describe('MatchingService', () => {
 
     supplierRepo = {
       find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
     };
 
     auditService = {
@@ -274,13 +275,64 @@ describe('MatchingService', () => {
       );
     });
 
-    it('rejects ineligible supplier id', async () => {
+    it('rejects unknown supplier id on ops override path', async () => {
       ordersRepo.findOne!.mockResolvedValue(baseOrder());
       supplierRepo.find!.mockResolvedValue([]);
+      supplierRepo.findOne!.mockResolvedValue(null);
 
       await expect(service.assign(42, 999, actor)).rejects.toThrow(
-        /not an eligible candidate/,
+        NotFoundException,
       );
+    });
+
+    it('allows ops override assign of verified supplier not ranked by capability', async () => {
+      const order = baseOrder();
+      ordersRepo.findOne!.mockResolvedValue(order);
+      // Ranked list empty (no capability match) but supplier is verified active.
+      supplierRepo.find!.mockResolvedValue([
+        {
+          id: 20,
+          userId: 77,
+          businessName: 'Override Print',
+          serviceZones: [],
+          isActive: true,
+          ratingAverage: 0,
+          capabilities: [
+            {
+              id: 9,
+              supplierId: 20,
+              productFamily: 'shirts',
+              maxCapacity: 0,
+              leadTimeDays: 1,
+            },
+          ],
+          verification: { status: SupplierVerificationStatus.VERIFIED },
+        } as unknown as SupplierProfile,
+      ]);
+      supplierRepo.findOne!.mockResolvedValue({
+        id: 20,
+        userId: 77,
+        businessName: 'Override Print',
+        serviceZones: [],
+        isActive: true,
+        ratingAverage: 0,
+        capabilities: [
+          {
+            id: 9,
+            supplierId: 20,
+            productFamily: 'shirts',
+            maxCapacity: 0,
+            leadTimeDays: 1,
+          },
+        ],
+        verification: { status: SupplierVerificationStatus.VERIFIED },
+      } as unknown as SupplierProfile);
+      txOrdersRepo.findOne.mockResolvedValue(order);
+
+      const result = await service.assign(42, 20, actor, 'ops override');
+      expect(result.toStatus).toBe(OrderStatus.SUPPLIER_ASSIGNED);
+      expect(result.assignment.supplierId).toBe(20);
+      expect(result.candidate.businessName).toBe('Override Print');
     });
 
     it('rejects non-ops actors', async () => {

@@ -60,6 +60,12 @@ const profileCategories = [
     description: 'Client-ready prints, specs, and production documents.',
     icon: Icons.work_rounded,
   ),
+  ProfilingCategoryOption(
+    value: 'supplier',
+    label: 'Supplier',
+    description: 'Print shop — rank Signages, Tarpaulins, Apparel, and more.',
+    icon: Icons.storefront_rounded,
+  ),
 ];
 
 const profileFields = [
@@ -110,6 +116,12 @@ const profileFields = [
     value: 'business_corporate',
     label: 'Business / Corporate',
     description: 'Pre-selects Marketing Materials',
+  ),
+  ProfilingFieldOption(
+    category: 'supplier',
+    value: 'print_shop',
+    label: 'Print shop',
+    description: 'Rank your services by priority next',
   ),
 ];
 
@@ -233,6 +245,9 @@ String profilingPrompt(String? profileCategory) {
   if (profileCategory == 'professional') {
     return 'What is your field?';
   }
+  if (profileCategory == 'supplier') {
+    return 'What does your shop focus on? Rank by priority.';
+  }
 
   return 'What are you studying?';
 }
@@ -240,6 +255,9 @@ String profilingPrompt(String? profileCategory) {
 String profilingCourseLabel(String? profileCategory) {
   if (profileCategory == 'professional') {
     return 'Specialization / Title';
+  }
+  if (profileCategory == 'supplier') {
+    return 'Shop specialty (optional)';
   }
 
   return 'Course / Program';
@@ -249,9 +267,14 @@ String profilingOrganizationLabel(String? profileCategory) {
   if (profileCategory == 'professional') {
     return 'Company / Organization';
   }
+  if (profileCategory == 'supplier') {
+    return 'Shop / Business name';
+  }
 
   return 'School';
 }
+
+bool isSupplierLane(String? profileCategory) => profileCategory == 'supplier';
 
 String profileCategoryLabel(String? value) {
   return profileCategories

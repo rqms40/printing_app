@@ -33,4 +33,14 @@ export class CreateSupplierProfileDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  /** Ordered service-focus keys from supplier sign-up / onboarding. */
+  @ApiPropertyOptional({
+    example: ['signages', 'document_printing', 'apparel'],
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  serviceFocusRanks?: string[];
 }

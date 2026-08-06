@@ -8,10 +8,12 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { UsersModule } from '../users/users.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { BetaModeModule } from '../beta-mode/beta-mode.module';
+import { SuppliersModule } from '../suppliers/suppliers.module';
 
 @Module({
   imports: [
     UsersModule,
+    SuppliersModule,
     PassportModule,
     JwtModule.registerAsync({
       inject: [ConfigService],

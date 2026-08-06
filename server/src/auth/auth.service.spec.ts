@@ -3,6 +3,7 @@ import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   UnauthorizedException,
@@ -10,6 +11,8 @@ import {
 import * as bcrypt from 'bcrypt';
 import { NotificationsService } from '../notifications/notifications.service';
 import { BetaModeService } from '../beta-mode/beta-mode.service';
+import { SuppliersService } from '../suppliers/suppliers.service';
+import { UserRole } from '../users/entities/user.entity';
 
 describe('AuthService', () => {
   let authService: AuthService;
@@ -17,6 +20,7 @@ describe('AuthService', () => {
   let jwtService: Partial<JwtService>;
   let notificationsService: Partial<NotificationsService>;
   let betaModeService: Partial<BetaModeService>;
+  let suppliersService: Partial<SuppliersService>;
 
   const mockUser = {
     id: 1,
@@ -46,6 +50,9 @@ describe('AuthService', () => {
     jwtService = {
       sign: jest.fn().mockReturnValue('mock-jwt-token'),
     };
+    suppliersService = {
+      createProfile: jest.fn().mockResolvedValue({ id: 10 }),
+    };
 
     const module = await Test.createTestingModule({
       providers: [
@@ -54,6 +61,7 @@ describe('AuthService', () => {
         { provide: JwtService, useValue: jwtService },
         { provide: NotificationsService, useValue: notificationsService },
         { provide: BetaModeService, useValue: betaModeService },
+        { provide: SuppliersService, useValue: suppliersService },
       ],
     }).compile();
 
@@ -68,6 +76,7 @@ describe('AuthService', () => {
         'test@example.com',
         'password123',
         {
+          fullName: 'Test User',
           profileCategory: 'student',
           profileField: 'architecture',
           printingPreferences: ['plotting_blueprints'],
@@ -78,10 +87,12 @@ describe('AuthService', () => {
         'test@example.com',
         'password123',
         {
+          fullName: 'Test User',
           profileCategory: 'student',
           profileField: 'architecture',
           printingPreferences: ['plotting_blueprints'],
         },
+        UserRole.CLIENT,
       );
       expect(result.access_token).toBe('mock-jwt-token');
       expect(result.user).not.toHaveProperty('passwordHash');
@@ -130,7 +141,79 @@ describe('AuthService', () => {
           organization: 'Mapua University',
           printingPreferences: ['plotting_blueprints'],
         },
+        UserRole.CLIENT,
       );
+    });
+
+    it('registers a supplier with ranked service focus and creates a profile shell', async () => {
+      const supplierUser = {
+        ...mockUser,
+        role: UserRole.SUPPLIER,
+        profileCategory: 'supplier',
+        profileField: 'print_shop',
+        printingPreferences: [],
+        fullName: 'Davao Print Co',
+      };
+      (usersService.create as jest.Mock).mockResolvedValue(supplierUser);
+
+      const result = await authService.register(
+        'shop@example.com',
+        'password123',
+        {
+          fullName: 'Davao Print Co',
+          profileCategory: 'supplier',
+          serviceFocusRanks: ['signages', 'document_printing', 'apparel'],
+          organization: 'Davao Print Co',
+        },
+      );
+
+      expect(usersService.create).toHaveBeenCalledWith(
+        'shop@example.com',
+        'password123',
+        expect.objectContaining({
+          fullName: 'Davao Print Co',
+          profileCategory: 'supplier',
+          profileField: 'print_shop',
+        }),
+        UserRole.SUPPLIER,
+      );
+      expect(usersService.create).toHaveBeenCalledWith(
+        'shop@example.com',
+        'password123',
+        expect.not.objectContaining({
+          serviceFocusRanks: expect.anything(),
+        }),
+        UserRole.SUPPLIER,
+      );
+      expect(suppliersService.createProfile).toHaveBeenCalledWith({
+        userId: supplierUser.id,
+        businessName: 'Davao Print Co',
+        serviceFocusRanks: ['signages', 'document_printing', 'apparel'],
+        isActive: true,
+      });
+      expect(betaModeService.enrollUser).not.toHaveBeenCalled();
+      expect(notificationsService.createForAllAdmins).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'New Supplier Registered',
+          type: 'new_user',
+        }),
+      );
+      expect(result.access_token).toBe('mock-jwt-token');
+      expect(result.user).toEqual(
+        expect.objectContaining({ role: UserRole.SUPPLIER }),
+      );
+    });
+
+    it('rejects supplier registration without service focus ranks', async () => {
+      await expect(
+        authService.register('shop@example.com', 'password123', {
+          fullName: 'Shop',
+          profileCategory: 'supplier',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(usersService.create).not.toHaveBeenCalled();
+      expect(suppliersService.createProfile).not.toHaveBeenCalled();
     });
 
     it('should throw ConflictException if email already exists', async () => {
@@ -140,6 +223,7 @@ describe('AuthService', () => {
 
       await expect(
         authService.register('test@example.com', 'password123', {
+          fullName: 'Test User',
           profileCategory: 'student',
           profileField: 'architecture',
         }),
@@ -150,6 +234,7 @@ describe('AuthService', () => {
       (usersService.create as jest.Mock).mockResolvedValue(mockUser);
 
       await authService.register('test@example.com', 'password123', {
+        fullName: 'Test User',
         profileCategory: 'student',
         profileField: 'architecture',
       });
@@ -179,6 +264,7 @@ describe('AuthService', () => {
         'test@example.com',
         'password123',
         {
+          fullName: 'Test User',
           profileCategory: 'student',
           profileField: 'architecture',
         },
@@ -203,6 +289,7 @@ describe('AuthService', () => {
       });
 
       await authService.register('test@example.com', 'password123', {
+        fullName: 'Test User',
         profileCategory: 'student',
         profileField: 'architecture',
       });
@@ -211,22 +298,23 @@ describe('AuthService', () => {
       expect(usersService.findById).not.toHaveBeenCalled();
     });
 
-    it.each(['rider', 'ops_admin', 'super_admin', 'supplier'])(
-      'does not auto-enroll a %s when beta mode is enabled',
-      async (role) => {
-        (usersService.create as jest.Mock).mockResolvedValue({
-          ...mockUser,
-          role,
-        });
+    it('does not auto-enroll supplier lane registrations', async () => {
+      (usersService.create as jest.Mock).mockResolvedValue({
+        ...mockUser,
+        role: UserRole.SUPPLIER,
+        profileCategory: 'supplier',
+        profileField: 'print_shop',
+      });
 
-        await authService.register('test@example.com', 'password123', {
-          profileCategory: 'student',
-          profileField: 'architecture',
-        });
+      await authService.register('shop@example.com', 'password123', {
+        fullName: 'Shop',
+        profileCategory: 'supplier',
+        serviceFocusRanks: ['signages'],
+      });
 
-        expect(betaModeService.enrollUser).not.toHaveBeenCalled();
-      },
-    );
+      expect(betaModeService.enrollUser).not.toHaveBeenCalled();
+      expect(suppliersService.createProfile).toHaveBeenCalled();
+    });
   });
 
   describe('login', () => {

@@ -218,49 +218,204 @@ extension OrderStatusX on OrderStatus {
       case OrderStatus.submitted:
         return 'Submitted';
       case OrderStatus.needsQa:
-        return 'Needs QA';
+        return 'Under review';
       case OrderStatus.clientCorrection:
-        return 'Client Correction';
+        return 'Needs your update';
       case OrderStatus.proofApproval:
-        return 'Proof Approval';
+        return 'Proof approval';
       case OrderStatus.approvedForMatching:
-        return 'Approved for Matching';
+        return 'Approved for matching';
       case OrderStatus.supplierAssigned:
-        return 'Supplier Assigned';
+        return 'Supplier assigned';
       case OrderStatus.supplierAccepted:
-        return 'Supplier Accepted';
+        return 'Supplier accepted';
       case OrderStatus.awaitingPayment:
-        return 'Awaiting Payment';
+        return 'Awaiting payment';
       case OrderStatus.paymentAuthorized:
-        return 'Payment Authorized';
+        return 'Payment authorized';
       case OrderStatus.production:
-        return 'Production';
+        return 'In production';
       case OrderStatus.supplierSelfQc:
-        return 'Supplier Self-QC';
+        return 'Supplier quality check';
       case OrderStatus.readyForDispatch:
-        return 'Ready for Dispatch';
+        return 'Ready for dispatch';
       case OrderStatus.riderAssigned:
-        return 'Rider Assigned';
+        return 'Rider assigned';
       case OrderStatus.pickedUp:
-        return 'Picked Up';
+        return 'Picked up';
       case OrderStatus.outForDelivery:
-        return 'Out for Delivery';
+        return 'Out for delivery';
       case OrderStatus.delivered:
         return 'Delivered';
       case OrderStatus.deliveryFailed:
-        return 'Delivery Failed';
+        return 'Delivery failed';
       case OrderStatus.collectedByCustomer:
-        return 'Collected by Customer';
+        return 'Collected';
       case OrderStatus.issueWindowOpen:
-        return 'Issue Window Open';
+        return 'Issue window open';
       case OrderStatus.completed:
         return 'Completed';
       case OrderStatus.cancelled:
         return 'Cancelled';
       case OrderStatus.fileRejected:
-        return 'File Rejected';
+        return 'File rejected';
     }
   }
+
+  /// Short client-facing explanation under the status badge.
+  String get customerSummary {
+    switch (this) {
+      case OrderStatus.draft:
+        return 'This order is still a draft and has not been submitted.';
+      case OrderStatus.submitted:
+        return 'We received your order and will review the files next.';
+      case OrderStatus.needsQa:
+        return 'Ops is reviewing your artwork and specifications.';
+      case OrderStatus.clientCorrection:
+        return 'Please update your files or specs so review can continue.';
+      case OrderStatus.proofApproval:
+        return 'Review and approve the proof when you are ready.';
+      case OrderStatus.approvedForMatching:
+        return 'Your order is approved and will be matched to a supplier.';
+      case OrderStatus.supplierAssigned:
+        return 'A print supplier has been assigned to your order.';
+      case OrderStatus.supplierAccepted:
+        return 'The supplier accepted the job and will prepare production.';
+      case OrderStatus.awaitingPayment:
+        return 'Authorize payment so production can start.';
+      case OrderStatus.paymentAuthorized:
+        return 'Payment is authorized. Production can begin.';
+      case OrderStatus.production:
+        return 'Your order is being printed and finished.';
+      case OrderStatus.supplierSelfQc:
+        return 'The supplier is running a final quality check.';
+      case OrderStatus.readyForDispatch:
+        return 'Print is ready and waiting for dispatch.';
+      case OrderStatus.riderAssigned:
+        return 'A rider has been assigned for pickup or delivery.';
+      case OrderStatus.pickedUp:
+        return 'The rider picked up your order from the supplier.';
+      case OrderStatus.outForDelivery:
+        return 'Your order is on the way.';
+      case OrderStatus.delivered:
+        return 'Your order was delivered.';
+      case OrderStatus.deliveryFailed:
+        return 'Delivery could not be completed. Support will follow up.';
+      case OrderStatus.collectedByCustomer:
+        return 'You collected this order.';
+      case OrderStatus.issueWindowOpen:
+        return 'You can still report an issue for a limited time.';
+      case OrderStatus.completed:
+        return 'This order is fully complete.';
+      case OrderStatus.cancelled:
+        return 'This order was cancelled.';
+      case OrderStatus.fileRejected:
+        return 'The submitted file was rejected during review.';
+    }
+  }
+
+  /// Linear progress rank for customer timelines (higher = further along).
+  /// Terminal branch statuses (cancelled, rejected, failed) are not ranked.
+  int? get timelineRank {
+    switch (this) {
+      case OrderStatus.draft:
+        return 0;
+      case OrderStatus.submitted:
+        return 10;
+      case OrderStatus.needsQa:
+        return 20;
+      case OrderStatus.clientCorrection:
+        return 25;
+      case OrderStatus.proofApproval:
+        return 30;
+      case OrderStatus.approvedForMatching:
+        return 40;
+      case OrderStatus.supplierAssigned:
+        return 50;
+      case OrderStatus.supplierAccepted:
+        return 60;
+      case OrderStatus.awaitingPayment:
+        return 70;
+      case OrderStatus.paymentAuthorized:
+        return 80;
+      case OrderStatus.production:
+        return 90;
+      case OrderStatus.supplierSelfQc:
+        return 100;
+      case OrderStatus.readyForDispatch:
+        return 110;
+      case OrderStatus.riderAssigned:
+        return 120;
+      case OrderStatus.pickedUp:
+        return 130;
+      case OrderStatus.outForDelivery:
+        return 140;
+      case OrderStatus.delivered:
+      case OrderStatus.collectedByCustomer:
+        return 150;
+      case OrderStatus.issueWindowOpen:
+        return 160;
+      case OrderStatus.completed:
+        return 170;
+      case OrderStatus.cancelled:
+      case OrderStatus.fileRejected:
+      case OrderStatus.deliveryFailed:
+        return null;
+    }
+  }
+}
+
+/// Builds the customer-visible marketplace status pipeline for an order.
+///
+/// Always includes supplier matching/payment steps so statuses like
+/// `supplier_assigned` and `supplier_accepted` appear on the timeline.
+List<OrderStatus> customerOrderStatusPipeline({
+  required bool isPickup,
+  Set<OrderStatus> includeOptional = const {},
+}) {
+  final steps = <OrderStatus>[
+    OrderStatus.submitted,
+    OrderStatus.needsQa,
+  ];
+
+  if (includeOptional.contains(OrderStatus.clientCorrection)) {
+    steps.add(OrderStatus.clientCorrection);
+  }
+  if (includeOptional.contains(OrderStatus.proofApproval)) {
+    steps.add(OrderStatus.proofApproval);
+  }
+
+  steps.addAll([
+    OrderStatus.approvedForMatching,
+    OrderStatus.supplierAssigned,
+    OrderStatus.supplierAccepted,
+    OrderStatus.awaitingPayment,
+    OrderStatus.paymentAuthorized,
+    OrderStatus.production,
+    OrderStatus.supplierSelfQc,
+  ]);
+
+  if (isPickup) {
+    steps.add(OrderStatus.collectedByCustomer);
+  } else {
+    steps.addAll([
+      OrderStatus.readyForDispatch,
+      OrderStatus.riderAssigned,
+      OrderStatus.pickedUp,
+      OrderStatus.outForDelivery,
+      OrderStatus.delivered,
+    ]);
+  }
+
+  if (includeOptional.contains(OrderStatus.issueWindowOpen) ||
+      includeOptional.contains(OrderStatus.completed)) {
+    steps.add(OrderStatus.issueWindowOpen);
+  }
+  if (includeOptional.contains(OrderStatus.completed)) {
+    steps.add(OrderStatus.completed);
+  }
+
+  return steps;
 }
 
 /// Parse API snake_case (or camelCase) including legacy shop-queue labels.
@@ -268,7 +423,17 @@ OrderStatus parseMarketplaceOrderStatus(
   String value, {
   OrderStatus fallback = OrderStatus.submitted,
 }) {
-  final normalized = value.trim().toLowerCase().replaceAll('-', '_');
+  // camelCase → snake_case, then normalize separators.
+  final withSnake = value
+      .trim()
+      .replaceAllMapped(
+        RegExp(r'([a-z0-9])([A-Z])'),
+        (m) => '${m[1]}_${m[2]}',
+      )
+      .toLowerCase()
+      .replaceAll('-', '_')
+      .replaceAll(' ', '_');
+  final normalized = withSnake;
   switch (normalized) {
     // Legacy → marketplace
     case 'order_placed':

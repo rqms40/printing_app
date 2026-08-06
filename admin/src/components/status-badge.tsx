@@ -24,6 +24,7 @@ const STATUS_COLORS: Record<OrderStatus, string> = {
   picked_up: "gold",
   out_for_delivery: "gold",
   delivered: "green",
+  delivery_failed: "red",
   collected_by_customer: "green",
   issue_window_open: "lime",
   completed: "green",

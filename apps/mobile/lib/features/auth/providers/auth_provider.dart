@@ -426,7 +426,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String password, {
     required String fullName,
     required String profileCategory,
-    required String profileField,
+    String? profileField,
     String? nickname,
     String? phone,
     String? gender,
@@ -435,11 +435,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String? course,
     String? organization,
     List<String> printingPreferences = const [],
+    List<String> serviceFocusRanks = const [],
   }) async {
     final authGeneration = _beginAuthOperation();
     _isDevBypassSession = false;
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {
+      final isSupplier = profileCategory == 'supplier';
       final response = await ApiClient.instance.post(
         '/auth/register',
         data: {
@@ -448,7 +450,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
           'fullName': fullName,
           if (nickname != null && nickname.isNotEmpty) 'nickname': nickname,
           'profileCategory': profileCategory,
-          'profileField': profileField,
+          if (isSupplier)
+            'profileField': 'print_shop'
+          else if (profileField != null)
+            'profileField': profileField,
+          if (isSupplier && serviceFocusRanks.isNotEmpty)
+            'serviceFocusRanks': serviceFocusRanks,
           if (ageRange != null && ageRange.isNotEmpty) 'ageRange': ageRange,
           if (phone != null && phone.isNotEmpty) 'phoneNumber': phone,
           if (gender != null && gender.isNotEmpty) 'gender': gender,

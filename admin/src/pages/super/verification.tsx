@@ -4,6 +4,7 @@ import {
   App,
   Button,
   Card,
+  Descriptions,
   Space,
   Table,
   Tabs,
@@ -22,7 +23,7 @@ import {
   type RiderVerificationStatus,
 } from "@/services/superAdminApi";
 
-const { Text } = Typography;
+const { Text, Paragraph } = Typography;
 
 const STATUS_COLOR: Record<string, string> = {
   pending: "gold",
@@ -30,6 +31,74 @@ const STATUS_COLOR: Record<string, string> = {
   verified: "green",
   rejected: "red",
 };
+
+function SupplierExpandedDetails({ row }: { row: SupplierProfileRow }) {
+  const attrs = Object.entries(row.attributes ?? {});
+  const zones = row.serviceZones ?? [];
+  const caps = row.capabilities ?? [];
+
+  return (
+    <Space direction="vertical" size="small" style={{ width: "100%" }}>
+      <Descriptions size="small" column={2} bordered>
+        <Descriptions.Item label="Description" span={2}>
+          {row.description?.trim() || "—"}
+        </Descriptions.Item>
+        <Descriptions.Item label="Phone">
+          {row.contactPhone || "—"}
+        </Descriptions.Item>
+        <Descriptions.Item label="Email">
+          {row.contactEmail || "—"}
+        </Descriptions.Item>
+        <Descriptions.Item label="Address" span={2}>
+          {row.address || "—"}
+        </Descriptions.Item>
+        <Descriptions.Item label="Zones" span={2}>
+          {zones.length ? zones.join(", ") : "—"}
+        </Descriptions.Item>
+      </Descriptions>
+      <div>
+        <Text strong>Attributes</Text>
+        <div style={{ marginTop: 6 }}>
+          {attrs.length ? (
+            <Space wrap>
+              {attrs.map(([k, v]) => (
+                <Tag key={k}>
+                  {k}
+                  {v ? `: ${v}` : ""}
+                </Tag>
+              ))}
+            </Space>
+          ) : (
+            <Paragraph type="secondary" style={{ margin: 0 }}>
+              None
+            </Paragraph>
+          )}
+        </div>
+      </div>
+      <div>
+        <Text strong>Capabilities</Text>
+        <div style={{ marginTop: 6 }}>
+          {caps.length ? (
+            <Space wrap>
+              {caps.map((c) => (
+                <Tag key={c.id} color="purple">
+                  {c.productFamily}
+                  {c.materials?.length
+                    ? ` (${c.materials.join(", ")})`
+                    : ""}
+                </Tag>
+              ))}
+            </Space>
+          ) : (
+            <Paragraph type="secondary" style={{ margin: 0 }}>
+              None
+            </Paragraph>
+          )}
+        </div>
+      </div>
+    </Space>
+  );
+}
 
 export function SuperVerificationPage() {
   const { message } = App.useApp();
@@ -144,10 +213,47 @@ export function SuperVerificationPage() {
                   loading={loading}
                   dataSource={suppliers}
                   pagination={{ pageSize: 15 }}
+                  expandable={{
+                    expandedRowRender: (row) => (
+                      <SupplierExpandedDetails row={row} />
+                    ),
+                  }}
                   columns={[
                     { title: "ID", dataIndex: "id", width: 70 },
-                    { title: "Business", dataIndex: "businessName" },
+                    {
+                      title: "Business",
+                      dataIndex: "businessName",
+                      render: (name: string, row) => (
+                        <Space>
+                          {row.logoUrl ? (
+                            <img
+                              src={row.logoUrl}
+                              alt=""
+                              style={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: "50%",
+                                objectFit: "cover",
+                              }}
+                            />
+                          ) : null}
+                          <span>{name}</span>
+                        </Space>
+                      ),
+                    },
                     { title: "User", dataIndex: "userId", width: 90 },
+                    {
+                      title: "Contact",
+                      width: 180,
+                      render: (_, row) =>
+                        row.contactPhone || row.contactEmail || "—",
+                    },
+                    {
+                      title: "Attrs",
+                      width: 90,
+                      render: (_, row) =>
+                        Object.keys(row.attributes ?? {}).length,
+                    },
                     {
                       title: "Status",
                       render: (_, row) => {

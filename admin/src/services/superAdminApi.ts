@@ -16,7 +16,22 @@ export type SupplierProfileRow = {
   id: number;
   userId: number;
   businessName: string;
+  description?: string | null;
+  contactPhone?: string | null;
+  contactEmail?: string | null;
+  address?: string | null;
+  logoFileId?: number | null;
+  logoUrl?: string | null;
+  attributes?: Record<string, string> | null;
+  serviceZones?: string[];
   isActive: boolean;
+  capabilities?: Array<{
+    id: number;
+    productFamily: string;
+    materials?: string[];
+    maxCapacity?: number;
+    leadTimeDays?: number;
+  }>;
   verification?: {
     status: SupplierVerificationStatus;
     payoutDetailsRef?: string | null;

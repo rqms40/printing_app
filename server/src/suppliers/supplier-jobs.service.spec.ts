@@ -62,7 +62,8 @@ describe('SupplierJobsService', () => {
     userId: 55,
     businessName: 'PrintCo',
     isActive: true,
-  } as SupplierProfile;
+    verification: { status: 'verified' },
+  } as unknown as SupplierProfile;
 
   function baseOrder(overrides: Partial<Order> = {}): Order {
     return {
@@ -105,6 +106,7 @@ describe('SupplierJobsService', () => {
       finalPriceMinor: null,
       promisedDate: null,
       decidedAt: null,
+      selfQcEvidenceFileIds: [],
       createdAt: new Date('2026-08-02T00:00:00Z'),
       updatedAt: new Date('2026-08-02T00:00:00Z'),
       order: baseOrder(),
@@ -583,6 +585,7 @@ describe('SupplierJobsService', () => {
     }
 
     it('production → supplier_self_qc with owned evidence files', async () => {
+      // also persists evidence ids on the assignment for client display
       txAssignmentRepo.findOne.mockResolvedValue(
         baseAssignment({ decision: SupplierAssignmentDecision.ACCEPTED }),
       );
@@ -607,6 +610,9 @@ describe('SupplierJobsService', () => {
       expect(result.fromStatus).toBe(OrderStatus.PRODUCTION);
       expect(result.toStatus).toBe(OrderStatus.SUPPLIER_SELF_QC);
       expect(result.evidenceFileIds).toEqual([200]);
+      expect(txAssignmentRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ selfQcEvidenceFileIds: [200] }),
+      );
       expect(txOrdersRepo.update).toHaveBeenCalledWith(
         { id: 42, orderStatus: OrderStatus.PRODUCTION },
         { orderStatus: OrderStatus.SUPPLIER_SELF_QC },

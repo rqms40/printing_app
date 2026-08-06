@@ -18,6 +18,7 @@ import {
 import {
   ExclamationCircleOutlined,
   EnvironmentOutlined,
+  ShopOutlined,
   UserSwitchOutlined,
 } from "@ant-design/icons";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
@@ -228,6 +229,23 @@ export function OrderShow() {
   const [loading, setLoading] = useState(true);
 
   const [riderModalOpen, setRiderModalOpen] = useState(false);
+  const [supplierModalOpen, setSupplierModalOpen] = useState(false);
+  const [verifiedSuppliers, setVerifiedSuppliers] = useState<
+    {
+      supplierId: number;
+      businessName: string;
+      isEligibleCandidate: boolean;
+      score: number | null;
+      rankPosition: number | null;
+      excludeReason: string | null;
+      capabilities: string[];
+      serviceZones: string[];
+    }[]
+  >([]);
+  const [suppliersLoading, setSuppliersLoading] = useState(false);
+  const [assigningSupplierId, setAssigningSupplierId] = useState<number | null>(
+    null,
+  );
   const [declineModalOpen, setDeclineModalOpen] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
   const [fileInspectorOpen, setFileInspectorOpen] = useState(false);
@@ -280,10 +298,15 @@ export function OrderShow() {
     order.order_status === "ready_for_dispatch" &&
     order.delivery_option === "delivery" &&
     !order.assigned_rider_contact?.delivery_assignment_id;
+  const canAssignSupplier = order.order_status === "approved_for_matching";
   const assignedRiderName =
     order.assigned_rider_contact?.display_name ??
     order.assigned_rider_contact?.full_name ??
     order.assigned_rider_contact?.nickname;
+  const assignedSupplierName =
+    order.assigned_supplier_contact?.business_name ?? null;
+  const assignedSupplierDecision =
+    order.assigned_supplier_contact?.decision ?? null;
 
   const handleStatusChange = (newStatus: OrderStatus) => {
     if (newStatus === "file_rejected") {
@@ -318,6 +341,80 @@ export function OrderShow() {
       setOrder(normalizeOrder(res.data));
     } catch {
       void message.error("Failed to assign rider");
+    }
+  };
+
+  const openSupplierAssign = async () => {
+    setSupplierModalOpen(true);
+    setSuppliersLoading(true);
+    try {
+      const res = await apiClient.get(`/ops/matching/${id}/candidates`);
+      const list = Array.isArray(res.data?.verifiedSuppliers)
+        ? res.data.verifiedSuppliers
+        : Array.isArray(res.data?.candidates)
+          ? res.data.candidates.map(
+              (c: {
+                supplierId: number;
+                businessName: string;
+                score?: number;
+                rankPosition?: number;
+              }) => ({
+                supplierId: c.supplierId,
+                businessName: c.businessName,
+                isEligibleCandidate: true,
+                score: c.score ?? null,
+                rankPosition: c.rankPosition ?? null,
+                excludeReason: null,
+                capabilities: [],
+                serviceZones: [],
+              }),
+            )
+          : [];
+      setVerifiedSuppliers(list);
+    } catch (e: unknown) {
+      const msg =
+        (e as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Could not load verified suppliers";
+      void message.error(typeof msg === "string" ? msg : "Load failed");
+      setVerifiedSuppliers([]);
+    } finally {
+      setSuppliersLoading(false);
+    }
+  };
+
+  const handleAssignSupplier = async (supplierId: number) => {
+    setAssigningSupplierId(supplierId);
+    try {
+      await apiClient.post(`/ops/matching/${id}/assign`, { supplierId });
+      void message.success("Supplier assigned");
+      setSupplierModalOpen(false);
+      const res = await apiClient.get(`/admin/orders/${id}`);
+      setOrder(normalizeOrder(res.data));
+    } catch (e: unknown) {
+      const msg =
+        (e as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Failed to assign supplier";
+      void message.error(typeof msg === "string" ? msg : "Assign failed");
+    } finally {
+      setAssigningSupplierId(null);
+    }
+  };
+
+  const handleAutoMatchSupplier = async () => {
+    setAssigningSupplierId(-1);
+    try {
+      await apiClient.post(`/ops/matching/${id}/auto-match`);
+      void message.success("Top-ranked supplier auto-matched");
+      setSupplierModalOpen(false);
+      const res = await apiClient.get(`/admin/orders/${id}`);
+      setOrder(normalizeOrder(res.data));
+    } catch (e: unknown) {
+      const msg =
+        (e as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Auto-match failed";
+      void message.error(typeof msg === "string" ? msg : "Auto-match failed");
+    } finally {
+      setAssigningSupplierId(null);
     }
   };
 
@@ -406,6 +503,14 @@ export function OrderShow() {
                     ? `${getOrderTypeLabel(order)} · ${items.length} print jobs`
                     : getOrderTypeLabel(order)}
                 </Text>
+                {assignedSupplierName && (
+                  <Tag color="purple">
+                    Supplier: {assignedSupplierName}
+                    {assignedSupplierDecision
+                      ? ` (${assignedSupplierDecision})`
+                      : ""}
+                  </Tag>
+                )}
                 {assignedRiderName && (
                   <Tag color="green">Assigned rider: {assignedRiderName}</Tag>
                 )}
@@ -424,6 +529,16 @@ export function OrderShow() {
                       value: s,
                     }))}
                   />
+                )}
+                {canAssignSupplier && (
+                  <Button
+                    type="primary"
+                    icon={<ShopOutlined />}
+                    aria-label={`Assign supplier for ${order.order_id}`}
+                    onClick={() => void openSupplierAssign()}
+                  >
+                    Assign Supplier
+                  </Button>
                 )}
                 {canAssignRider && (
                   <Button
@@ -760,6 +875,86 @@ export function OrderShow() {
           )}
         </Card>
       </Space>
+
+      {/* Supplier Assignment Modal */}
+      <Modal
+        title="Assign verified supplier"
+        open={supplierModalOpen}
+        onCancel={() => setSupplierModalOpen(false)}
+        footer={null}
+        width={720}
+      >
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          <Text type="secondary">
+            Showing verified active suppliers. Ranked-eligible shops appear
+            first; you can still assign any verified supplier (ops override).
+          </Text>
+          <Button
+            onClick={() => void handleAutoMatchSupplier()}
+            loading={assigningSupplierId === -1}
+            disabled={suppliersLoading}
+          >
+            Auto-match top ranked
+          </Button>
+          <Table
+            loading={suppliersLoading}
+            dataSource={verifiedSuppliers}
+            rowKey="supplierId"
+            pagination={{ pageSize: 8 }}
+            size="small"
+            locale={{ emptyText: "No verified suppliers available" }}
+            columns={[
+              {
+                title: "Shop",
+                dataIndex: "businessName",
+                render: (name: string, row) => (
+                  <Space direction="vertical" size={0}>
+                    <Text strong>{name}</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      #{row.supplierId}
+                      {row.capabilities?.length
+                        ? ` · ${row.capabilities.join(", ")}`
+                        : ""}
+                    </Text>
+                  </Space>
+                ),
+              },
+              {
+                title: "Match",
+                width: 140,
+                render: (_, row) =>
+                  row.isEligibleCandidate ? (
+                    <Tag color="green">
+                      Ranked
+                      {row.rankPosition != null ? ` #${row.rankPosition}` : ""}
+                      {row.score != null ? ` · ${row.score.toFixed(2)}` : ""}
+                    </Tag>
+                  ) : (
+                    <Tag color="default">
+                      {row.excludeReason
+                        ? humanizeEnumValue(row.excludeReason)
+                        : "Override OK"}
+                    </Tag>
+                  ),
+              },
+              {
+                title: "",
+                width: 100,
+                render: (_, row) => (
+                  <Button
+                    type="primary"
+                    size="small"
+                    loading={assigningSupplierId === row.supplierId}
+                    onClick={() => void handleAssignSupplier(row.supplierId)}
+                  >
+                    Assign
+                  </Button>
+                ),
+              },
+            ]}
+          />
+        </Space>
+      </Modal>
 
       {/* Rider Assignment Modal */}
       <Modal

@@ -58,6 +58,19 @@ export interface AssignedRiderContact {
   delivery_status?: string | null;
 }
 
+export interface AssignedSupplierContact {
+  supplier_id?: number | null;
+  business_name?: string | null;
+  decision?: string | null;
+  acceptance_deadline?: string | null;
+  assignment_id?: number | null;
+  logo_url?: string | null;
+  address?: string | null;
+  broad_address?: string | null;
+  self_qc_evidence_urls?: string[];
+  self_qc_evidence_file_ids?: number[];
+}
+
 export interface DeliveryProof {
   type?: "photo" | "signature" | string | null;
   file_id?: number | null;
@@ -95,6 +108,7 @@ export interface Order {
   delivery_address?: OrderDestination | null;
   assigned_rider_id?: string;
   assigned_rider_contact?: AssignedRiderContact | null;
+  assigned_supplier_contact?: AssignedSupplierContact | null;
   delivery_proof?: DeliveryProof | null;
   estimated_completion_at?: string;
   admin_notes?: string;

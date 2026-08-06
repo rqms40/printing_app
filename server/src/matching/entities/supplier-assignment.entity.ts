@@ -79,6 +79,17 @@ export class SupplierAssignment {
   @Column({ name: 'decided_at', type: 'timestamptz', nullable: true })
   decidedAt: Date | null;
 
+  /**
+   * File metadata ids for supplier self-QC evidence photos (set on
+   * production → supplier_self_qc). Shown to the client under quality check.
+   */
+  @Column({
+    name: 'self_qc_evidence_file_ids',
+    type: 'jsonb',
+    default: () => "'[]'",
+  })
+  selfQcEvidenceFileIds: number[];
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

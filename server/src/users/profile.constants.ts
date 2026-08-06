@@ -1,6 +1,8 @@
 export enum ProfileCategory {
   STUDENT = 'student',
   PROFESSIONAL = 'professional',
+  /** Sign-up lane for print-shop owners (maps to auth role supplier). */
+  SUPPLIER = 'supplier',
 }
 
 /**
@@ -22,6 +24,8 @@ export enum ProfileField {
   ENGINEER_CONTRACTOR = 'engineer_contractor',
   MEDICAL_PROFESSIONAL = 'medical_professional',
   BUSINESS_CORPORATE = 'business_corporate',
+  /** Default field for the supplier sign-up lane. */
+  PRINT_SHOP = 'print_shop',
 }
 
 export enum PrintingPreference {
@@ -51,5 +55,10 @@ export function isProfileComplete({
   profileCategory,
   profileField,
 }: ProfileCompletionFields): boolean {
-  return Boolean(fullName?.trim() && profileCategory && profileField);
+  if (!fullName?.trim() || !profileCategory) return false;
+  // Supplier lane uses service-focus ranks; print_shop is the synthetic field.
+  if (profileCategory === ProfileCategory.SUPPLIER) {
+    return profileField === ProfileField.PRINT_SHOP || Boolean(profileField);
+  }
+  return Boolean(profileField);
 }

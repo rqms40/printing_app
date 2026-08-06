@@ -18,6 +18,8 @@ import {
   DeliveryAssignment,
   DeliveryStatus,
 } from '../riders/entities/delivery-assignment.entity';
+import { SuppliersService } from '../suppliers/suppliers.service';
+import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
 import { In } from 'typeorm';
 import * as userInsights from './user-insights';
 
@@ -42,6 +44,10 @@ describe('AdminController analytics', () => {
   };
   let ordersGateway: jest.Mocked<Partial<OrdersGateway>>;
   let notificationsService: jest.Mocked<Partial<NotificationsService>>;
+  let suppliersService: {
+    findByUserIdOrNull: jest.Mock;
+    toAdminSupplierSnapshot: jest.Mock;
+  };
 
   beforeEach(async () => {
     ordersRepo = mockRepo();
@@ -70,6 +76,10 @@ describe('AdminController analytics', () => {
     notificationsService = {
       create: jest.fn(),
     };
+    suppliersService = {
+      findByUserIdOrNull: jest.fn().mockResolvedValue(null),
+      toAdminSupplierSnapshot: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AdminController],
@@ -82,6 +92,7 @@ describe('AdminController analytics', () => {
         { provide: CreditsService, useValue: creditsService },
         { provide: OrdersGateway, useValue: ordersGateway },
         { provide: NotificationsService, useValue: notificationsService },
+        { provide: SuppliersService, useValue: suppliersService },
         { provide: getRepositoryToken(Order), useValue: ordersRepo },
         { provide: getRepositoryToken(User), useValue: usersRepo },
         {
@@ -91,6 +102,10 @@ describe('AdminController analytics', () => {
         {
           provide: getRepositoryToken(DeliveryAssignment),
           useValue: assignmentsRepo,
+        },
+        {
+          provide: getRepositoryToken(SupplierAssignment),
+          useValue: { find: jest.fn().mockResolvedValue([]) },
         },
         { provide: getRepositoryToken(TamSurvey), useValue: mockRepo() },
         {
@@ -810,7 +825,8 @@ describe('AdminController analytics', () => {
         where: { userId: 42 },
         order: { createdAt: 'DESC' },
       });
-      expect(buildDetailSpy).toHaveBeenCalledWith(user, orders);
+      expect(suppliersService.findByUserIdOrNull).toHaveBeenCalledWith(42);
+      expect(buildDetailSpy).toHaveBeenCalledWith(user, orders, null);
     });
   });
 

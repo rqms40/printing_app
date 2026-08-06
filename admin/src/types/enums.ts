@@ -55,6 +55,7 @@ export type OrderStatus =
   | "picked_up"
   | "out_for_delivery"
   | "delivered"
+  | "delivery_failed"
   | "collected_by_customer"
   | "issue_window_open"
   | "completed"
@@ -87,21 +88,22 @@ export type FileFormat3D = "stl" | "obj" | "three_mf" | "glb" | "gltf";
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   draft: "Draft",
   submitted: "Submitted",
-  needs_qa: "Needs QA",
-  client_correction: "Client Correction",
+  needs_qa: "Under Review",
+  client_correction: "Needs Client Update",
   proof_approval: "Proof Approval",
   approved_for_matching: "Approved for Matching",
   supplier_assigned: "Supplier Assigned",
   supplier_accepted: "Supplier Accepted",
   awaiting_payment: "Awaiting Payment",
   payment_authorized: "Payment Authorized",
-  production: "Production",
-  supplier_self_qc: "Supplier Self-QC",
+  production: "In Production",
+  supplier_self_qc: "Supplier Quality Check",
   ready_for_dispatch: "Ready for Dispatch",
   rider_assigned: "Rider Assigned",
   picked_up: "Picked Up",
   out_for_delivery: "Out for Delivery",
   delivered: "Delivered",
+  delivery_failed: "Delivery Failed",
   collected_by_customer: "Collected by Customer",
   issue_window_open: "Issue Window Open",
   completed: "Completed",

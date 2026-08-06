@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   Param,
@@ -38,11 +39,63 @@ export class SuppliersController {
     return this.suppliersService.getAccessStatus(req.user.sub);
   }
 
-  /** Supplier reads own profile (includes verification status). */
+  /** Supplier reads own profile (includes verification status + logo URL). */
   @Get('me')
   @Roles(UserRole.SUPPLIER)
   getMine(@Request() req: RequestWithUser) {
     return this.suppliersService.findByUserId(req.user.sub);
+  }
+
+  /** Supplier self-edit (verified only): business details, zones, attributes, logo. */
+  @Patch('me')
+  @Roles(UserRole.SUPPLIER)
+  updateMine(
+    @Request() req: RequestWithUser,
+    @Body() dto: UpdateSupplierProfileDto,
+  ) {
+    return this.suppliersService.updateOwnProfile(req.user.sub, dto);
+  }
+
+  /**
+   * Service-focus ranking (onboarding + settings).
+   * Allowed for pending suppliers so first-login setup works before verification.
+   */
+  @Patch('me/service-focus')
+  @Roles(UserRole.SUPPLIER)
+  updateServiceFocus(
+    @Request() req: RequestWithUser,
+    @Body() dto: UpdateSupplierProfileDto,
+  ) {
+    if (!dto.serviceFocusRanks?.length) {
+      return this.suppliersService.updateOwnServiceFocusRanks(req.user.sub, []);
+    }
+    return this.suppliersService.updateOwnServiceFocusRanks(
+      req.user.sub,
+      dto.serviceFocusRanks,
+    );
+  }
+
+  /** Supplier adds a product capability / attribute family. */
+  @Post('me/capabilities')
+  @Roles(UserRole.SUPPLIER)
+  addMineCapability(
+    @Request() req: RequestWithUser,
+    @Body() dto: CreateSupplierCapabilityDto,
+  ) {
+    return this.suppliersService.addOwnCapability(req.user.sub, dto);
+  }
+
+  /** Supplier removes own capability. */
+  @Delete('me/capabilities/:capabilityId')
+  @Roles(UserRole.SUPPLIER)
+  removeMineCapability(
+    @Request() req: RequestWithUser,
+    @Param('capabilityId', ParseIntPipe) capabilityId: number,
+  ) {
+    return this.suppliersService.removeOwnCapability(
+      req.user.sub,
+      capabilityId,
+    );
   }
 
   /** Ops admin + super admin list all supplier profiles. */
@@ -75,14 +128,18 @@ export class SuppliersController {
     return this.suppliersService.createProfile(dto);
   }
 
-  /** Super admin updates profile fields. */
+  /** Super admin updates profile fields (including isActive). */
   @Patch(':id')
   @Roles(UserRole.SUPER_ADMIN)
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateSupplierProfileDto,
+    @Request() req: RequestWithUser,
   ) {
-    return this.suppliersService.updateProfile(id, dto);
+    return this.suppliersService.updateProfile(id, dto, {
+      allowIsActive: true,
+      actorUserId: req.user.sub,
+    });
   }
 
   /**

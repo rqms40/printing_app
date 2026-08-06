@@ -395,7 +395,12 @@ class QueueState {
               (o) =>
                   o.orderStatus == OrderStatus.submitted ||
                   o.orderStatus == OrderStatus.needsQa ||
-                  o.orderStatus == OrderStatus.approvedForMatching,
+                  o.orderStatus == OrderStatus.clientCorrection ||
+                  o.orderStatus == OrderStatus.proofApproval ||
+                  o.orderStatus == OrderStatus.approvedForMatching ||
+                  o.orderStatus == OrderStatus.supplierAssigned ||
+                  o.orderStatus == OrderStatus.supplierAccepted ||
+                  o.orderStatus == OrderStatus.awaitingPayment,
             )
             .toList();
         break;
@@ -405,7 +410,11 @@ class QueueState {
               (o) =>
                   o.orderStatus == OrderStatus.paymentAuthorized ||
                   o.orderStatus == OrderStatus.production ||
-                  o.orderStatus == OrderStatus.supplierSelfQc,
+                  o.orderStatus == OrderStatus.supplierSelfQc ||
+                  o.orderStatus == OrderStatus.readyForDispatch ||
+                  o.orderStatus == OrderStatus.riderAssigned ||
+                  o.orderStatus == OrderStatus.pickedUp ||
+                  o.orderStatus == OrderStatus.outForDelivery,
             )
             .toList();
         break;
@@ -414,7 +423,10 @@ class QueueState {
             .where(
               (o) =>
                   o.orderStatus == OrderStatus.delivered ||
-                  o.orderStatus == OrderStatus.collectedByCustomer,
+                  o.orderStatus == OrderStatus.deliveryFailed ||
+                  o.orderStatus == OrderStatus.collectedByCustomer ||
+                  o.orderStatus == OrderStatus.issueWindowOpen ||
+                  o.orderStatus == OrderStatus.completed,
             )
             .toList();
         break;

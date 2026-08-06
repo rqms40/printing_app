@@ -79,7 +79,9 @@ import 'package:printing_app/features/supplier/screens/supplier_job_detail_scree
 import 'package:printing_app/features/supplier/screens/supplier_jobs_screen.dart';
 import 'package:printing_app/features/supplier/screens/supplier_pending_verification_screen.dart';
 import 'package:printing_app/features/supplier/screens/supplier_payouts_screen.dart';
+import 'package:printing_app/features/supplier/screens/supplier_profile_edit_screen.dart';
 import 'package:printing_app/features/supplier/screens/supplier_profile_screen.dart';
+import 'package:printing_app/features/supplier/screens/supplier_service_focus_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Admin screens
@@ -305,20 +307,30 @@ final routerProvider = Provider<GoRouter>((ref) {
       );
       if (baseRedirect != null) return baseRedirect;
 
-      // Unverified suppliers may only see the pending verification wall.
+      // Supplier access + service-focus onboarding gate.
       if (authState.status == AuthStatus.authenticated &&
           _effectiveRole(authState.user?.role) == 'supplier') {
         final access = ref.read(supplierAccessProvider);
         final path = state.uri.path;
         final onPending = path == '/supplier/pending';
+        final onServiceFocus = path == '/supplier/service-focus';
+        final onOnboarding = path == '/onboarding';
         if (access.isLoading) {
-          // Keep users on pending until we know status; kick refresh if needed.
-          if (!onPending && !access.canAccess) {
+          if (!onPending &&
+              !access.canAccess &&
+              !onServiceFocus &&
+              !onOnboarding) {
             return '/supplier/pending';
           }
           return null;
         }
-        if (!access.canAccess && !onPending) {
+        // Service-focus ranking is allowed even while pending verification.
+        if (access.needsServiceFocusSetup &&
+            !onServiceFocus &&
+            !onOnboarding) {
+          return '/supplier/service-focus?setup=1';
+        }
+        if (!access.canAccess && !onPending && !onServiceFocus) {
           return '/supplier/pending';
         }
         if (access.canAccess && onPending) {
@@ -907,6 +919,21 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/supplier/payouts',
         pageBuilder: (_, state) =>
             slideTransition(const SupplierPayoutsScreen(), state),
+      ),
+      GoRoute(
+        path: '/supplier/profile/edit',
+        pageBuilder: (_, state) =>
+            slideTransition(const SupplierProfileEditScreen(), state),
+      ),
+      GoRoute(
+        path: '/supplier/service-focus',
+        pageBuilder: (_, state) {
+          final setup = state.uri.queryParameters['setup'] == '1';
+          return slideTransition(
+            SupplierServiceFocusScreen(requiredSetup: setup),
+            state,
+          );
+        },
       ),
 
       // -----------------------------------------------------------------------

@@ -31,6 +31,7 @@ import { PaymentsModule } from '../payments/payments.module';
 import { QualityModule } from '../quality/quality.module';
 import { GeoZonesModule } from '../geo-zones/geo-zones.module';
 import { PayoutsModule } from '../payouts/payouts.module';
+import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { PayoutsModule } from '../payouts/payouts.module';
       DeliveryDestination,
       FileMetadata,
       DispatchPlan,
+      SupplierAssignment,
     ]),
     JwtModule.registerAsync({
       inject: [ConfigService],
