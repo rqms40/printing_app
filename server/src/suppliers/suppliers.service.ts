@@ -15,7 +15,10 @@ import {
   SupplierVerificationStatus,
 } from './entities/supplier-verification.entity';
 import { CreateSupplierProfileDto } from './dto/create-supplier-profile.dto';
-import { UpdateSupplierProfileDto } from './dto/update-supplier-profile.dto';
+import {
+  SUPPLIER_SERVICE_FOCUS_KEYS,
+  UpdateSupplierProfileDto,
+} from './dto/update-supplier-profile.dto';
 import { SetSupplierVerificationDto } from './dto/set-supplier-verification.dto';
 import { CreateSupplierCapabilityDto } from './dto/create-supplier-capability.dto';
 import {
@@ -23,9 +26,73 @@ import {
   FilePurpose,
 } from '../files/entities/file-metadata.entity';
 import { FilesService } from '../files/files.service';
+import {
+  SupplierAssignment,
+  SupplierAssignmentDecision,
+} from '../matching/entities/supplier-assignment.entity';
 
 export type SupplierProfileView = SupplierProfile & {
   logoUrl?: string | null;
+};
+
+/** Human labels for onboarding service-focus catalog keys. */
+export const SUPPLIER_SERVICE_FOCUS_LABELS: Record<string, string> = {
+  signages: 'Signages',
+  tarpaulins: 'Tarpaulins',
+  document_printing: 'Document Printing',
+  apparel: 'Apparel / Shirt Printing',
+  stickers_labels: 'Stickers & Labels',
+  large_format: 'Large Format',
+  '3d_printing': '3D Printing',
+  invitations_cards: 'Invitations & Cards',
+};
+
+export type RankedServiceFocus = {
+  rank: number;
+  key: string;
+  label: string;
+};
+
+export type SupplierDirectoryEntry = {
+  id: number;
+  userId: number;
+  businessName: string;
+  description: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  address: string | null;
+  logoUrl: string | null;
+  serviceZones: string[];
+  serviceFocusRanks: string[];
+  rankedServices: RankedServiceFocus[];
+  isActive: boolean;
+  verificationStatus: string | null;
+  ratingAverage: number;
+  ratingCount: number;
+  ordersReceived: number;
+  ordersAccepted: number;
+  capabilities: Array<{
+    id: number;
+    productFamily: string;
+    materials: string[];
+    maxCapacity: number;
+    leadTimeDays: number;
+  }>;
+  updatedAt: Date;
+};
+
+export type SupplierLeaderboardEntry = {
+  rank: number;
+  supplierId: number;
+  userId: number;
+  businessName: string;
+  logoUrl: string | null;
+  verificationStatus: string | null;
+  ratingAverage: number;
+  ratingCount: number;
+  ordersReceived: number;
+  ordersAccepted: number;
+  topService: RankedServiceFocus | null;
 };
 
 @Injectable()
@@ -39,6 +106,8 @@ export class SuppliersService {
     private readonly verificationRepo: Repository<SupplierVerification>,
     @InjectRepository(FileMetadata)
     private readonly fileRepo: Repository<FileMetadata>,
+    @InjectRepository(SupplierAssignment)
+    private readonly assignmentRepo: Repository<SupplierAssignment>,
     @Optional() private readonly filesService?: FilesService,
   ) {}
 
@@ -92,6 +161,162 @@ export class SuppliersService {
     return Promise.all(rows.map((row) => this.withLogoUrl(row)));
   }
 
+  /**
+   * Ops directory: every supplier profile with ranked service focus + order stats.
+   */
+  async listDirectory(): Promise<SupplierDirectoryEntry[]> {
+    const rows = await this.findAll();
+    const stats = await this.loadAssignmentStats(rows.map((r) => r.id));
+    return rows.map((profile) =>
+      this.toDirectoryEntry(profile, stats.get(profile.id)),
+    );
+  }
+
+  /**
+   * Leaderboard by reviews (rating count, then average) or orders received.
+   */
+  async leaderboard(
+    metric: 'reviews' | 'orders' = 'reviews',
+    limit = 20,
+  ): Promise<SupplierLeaderboardEntry[]> {
+    const directory = await this.listDirectory();
+    const sorted = [...directory].sort((a, b) => {
+      if (metric === 'orders') {
+        if (b.ordersReceived !== a.ordersReceived) {
+          return b.ordersReceived - a.ordersReceived;
+        }
+        if (b.ordersAccepted !== a.ordersAccepted) {
+          return b.ordersAccepted - a.ordersAccepted;
+        }
+        return b.ratingCount - a.ratingCount;
+      }
+      // reviews: most ratings, then highest average, then orders as tie-break
+      if (b.ratingCount !== a.ratingCount) {
+        return b.ratingCount - a.ratingCount;
+      }
+      if (Number(b.ratingAverage) !== Number(a.ratingAverage)) {
+        return Number(b.ratingAverage) - Number(a.ratingAverage);
+      }
+      return b.ordersReceived - a.ordersReceived;
+    });
+
+    const take = Math.min(100, Math.max(1, limit));
+    return sorted.slice(0, take).map((entry, index) => ({
+      rank: index + 1,
+      supplierId: entry.id,
+      userId: entry.userId,
+      businessName: entry.businessName,
+      logoUrl: entry.logoUrl,
+      verificationStatus: entry.verificationStatus,
+      ratingAverage: entry.ratingAverage,
+      ratingCount: entry.ratingCount,
+      ordersReceived: entry.ordersReceived,
+      ordersAccepted: entry.ordersAccepted,
+      topService: entry.rankedServices[0] ?? null,
+    }));
+  }
+
+  /** Ranked service-focus list (1-based) from onboarding ranks. */
+  rankedServicesFromKeys(ranks: string[] | null | undefined): RankedServiceFocus[] {
+    const keys = Array.isArray(ranks) ? ranks : [];
+    const seen = new Set<string>();
+    const out: RankedServiceFocus[] = [];
+    for (const raw of keys) {
+      const key = String(raw ?? '').trim();
+      if (!key || seen.has(key)) continue;
+      if (
+        !(SUPPLIER_SERVICE_FOCUS_KEYS as readonly string[]).includes(key) &&
+        !SUPPLIER_SERVICE_FOCUS_LABELS[key]
+      ) {
+        // Still show unknown keys so ops can debug bad data.
+      }
+      seen.add(key);
+      out.push({
+        rank: out.length + 1,
+        key,
+        label: SUPPLIER_SERVICE_FOCUS_LABELS[key] ?? key.replace(/_/g, ' '),
+      });
+    }
+    return out;
+  }
+
+  private async loadAssignmentStats(
+    supplierIds: number[],
+  ): Promise<
+    Map<number, { ordersReceived: number; ordersAccepted: number }>
+  > {
+    const map = new Map<
+      number,
+      { ordersReceived: number; ordersAccepted: number }
+    >();
+    for (const id of supplierIds) {
+      map.set(id, { ordersReceived: 0, ordersAccepted: 0 });
+    }
+    if (supplierIds.length === 0) return map;
+
+    const rows = await this.assignmentRepo
+      .createQueryBuilder('a')
+      .select('a.supplier_id', 'supplierId')
+      .addSelect('COUNT(*)', 'ordersReceived')
+      .addSelect(
+        `SUM(CASE WHEN a.decision = :accepted THEN 1 ELSE 0 END)`,
+        'ordersAccepted',
+      )
+      .where('a.supplier_id IN (:...ids)', { ids: supplierIds })
+      .setParameter('accepted', SupplierAssignmentDecision.ACCEPTED)
+      .groupBy('a.supplier_id')
+      .getRawMany<{
+        supplierId: string;
+        ordersReceived: string;
+        ordersAccepted: string;
+      }>();
+
+    for (const row of rows) {
+      const id = Number(row.supplierId);
+      map.set(id, {
+        ordersReceived: Number(row.ordersReceived) || 0,
+        ordersAccepted: Number(row.ordersAccepted) || 0,
+      });
+    }
+    return map;
+  }
+
+  private toDirectoryEntry(
+    profile: SupplierProfileView,
+    stats?: { ordersReceived: number; ordersAccepted: number },
+  ): SupplierDirectoryEntry {
+    const ranks = Array.isArray(profile.serviceFocusRanks)
+      ? profile.serviceFocusRanks
+      : [];
+    return {
+      id: profile.id,
+      userId: profile.userId,
+      businessName: profile.businessName,
+      description: profile.description ?? null,
+      contactPhone: profile.contactPhone ?? null,
+      contactEmail: profile.contactEmail ?? null,
+      address: profile.address ?? null,
+      logoUrl: profile.logoUrl ?? null,
+      serviceZones: profile.serviceZones ?? [],
+      serviceFocusRanks: ranks,
+      rankedServices: this.rankedServicesFromKeys(ranks),
+      isActive: profile.isActive,
+      verificationStatus: profile.verification?.status ?? null,
+      ratingAverage: Number(profile.ratingAverage ?? 0),
+      ratingCount: Number(profile.ratingCount ?? 0),
+      ordersReceived: stats?.ordersReceived ?? 0,
+      ordersAccepted: stats?.ordersAccepted ?? 0,
+      capabilities: (profile.capabilities ?? []).map((cap) => ({
+        id: cap.id,
+        productFamily: cap.productFamily,
+        materials: cap.materials ?? [],
+        maxCapacity: cap.maxCapacity,
+        leadTimeDays: cap.leadTimeDays,
+      })),
+      updatedAt: profile.updatedAt,
+    };
+  }
+
   async findById(id: number): Promise<SupplierProfileView> {
     const profile = await this.profileRepo.findOne({
       where: { id },
@@ -130,6 +355,9 @@ export class SuppliersService {
 
   /** Admin-facing snapshot of supplier self-edited shop details. */
   toAdminSupplierSnapshot(profile: SupplierProfileView) {
+    const ranks = Array.isArray(profile.serviceFocusRanks)
+      ? profile.serviceFocusRanks
+      : [];
     return {
       id: profile.id,
       user_id: profile.userId,
@@ -142,8 +370,12 @@ export class SuppliersService {
       logo_url: profile.logoUrl ?? null,
       attributes: profile.attributes ?? {},
       service_zones: profile.serviceZones ?? [],
+      service_focus_ranks: ranks,
+      ranked_services: this.rankedServicesFromKeys(ranks),
       is_active: profile.isActive,
       verification_status: profile.verification?.status ?? null,
+      rating_average: Number(profile.ratingAverage ?? 0),
+      rating_count: Number(profile.ratingCount ?? 0),
       capabilities: (profile.capabilities ?? []).map((cap) => ({
         id: cap.id,
         product_family: cap.productFamily,

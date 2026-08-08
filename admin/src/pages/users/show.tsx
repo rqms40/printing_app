@@ -35,6 +35,7 @@ import {
 import { isSuperAdminRole } from "@/types/enums";
 import type { AdminIdentity } from "@/utils/api-normalizers";
 import { updateUserRole } from "@/services/superAdminApi";
+import { rankLabel } from "@/utils/supplier-service-focus";
 
 const { Paragraph, Text, Title } = Typography;
 
@@ -219,12 +220,35 @@ function SupplierShopProfile({
               ? profile.service_zones.join(", ")
               : "No zones listed"}
           </Descriptions.Item>
+          <Descriptions.Item label="Reviews">
+            {(profile.rating_average ?? 0).toFixed(1)} ★ ·{" "}
+            {profile.rating_count ?? 0}
+          </Descriptions.Item>
           <Descriptions.Item label="Shop active">
             <Tag color={profile.is_active ? "green" : "default"}>
               {profile.is_active ? "Active" : "Inactive"}
             </Tag>
           </Descriptions.Item>
         </Descriptions>
+
+        <div>
+          <Text strong>Service focus (onboarding ranks)</Text>
+          <div style={{ marginTop: 8 }}>
+            {(profile.ranked_services ?? []).length > 0 ? (
+              <Space wrap size={[8, 8]}>
+                {profile.ranked_services.map((s) => (
+                  <Tag key={s.key} color={s.rank === 1 ? "blue" : "default"}>
+                    {rankLabel(s.rank)}: {s.label}
+                  </Tag>
+                ))}
+              </Space>
+            ) : (
+              <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                No service focus ranks yet
+              </Paragraph>
+            )}
+          </div>
+        </div>
 
         <div>
           <Text strong>Attributes</Text>

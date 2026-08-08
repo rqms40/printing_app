@@ -7,7 +7,7 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/supplier/models/supplier_job.dart';
 
 /// Banner shown when a job is accepted but production is blocked until
-/// client payment reaches `payment_authorized`.
+/// ops authorizes payment (`payment_authorized`).
 ///
 /// Widget tests assert [SupplierPaymentGateCopy.needsPaymentAuthorized]
 /// and related copy here.

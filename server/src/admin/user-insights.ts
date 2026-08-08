@@ -56,8 +56,12 @@ export type AdminSupplierProfileSnapshot = {
   logo_url: string | null;
   attributes: Record<string, string>;
   service_zones: string[];
+  service_focus_ranks?: string[];
+  ranked_services?: Array<{ rank: number; key: string; label: string }>;
   is_active: boolean;
   verification_status: string | null;
+  rating_average?: number;
+  rating_count?: number;
   capabilities: Array<{
     id: number;
     product_family: string;

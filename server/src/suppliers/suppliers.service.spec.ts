@@ -15,6 +15,7 @@ import {
   SupplierVerificationStatus,
 } from './entities/supplier-verification.entity';
 import { FileMetadata } from '../files/entities/file-metadata.entity';
+import { SupplierAssignment } from '../matching/entities/supplier-assignment.entity';
 
 describe('SuppliersService', () => {
   let service: SuppliersService;
@@ -40,12 +41,23 @@ describe('SuppliersService', () => {
   const fileRepo = {
     findOne: jest.fn(),
   };
+  const assignmentRepo = {
+    createQueryBuilder: jest.fn(),
+  };
 
   beforeEach(async () => {
     jest.resetAllMocks();
     profileRepo.create.mockImplementation((x) => x);
     capabilityRepo.create.mockImplementation((x) => x);
     verificationRepo.create.mockImplementation((x) => x);
+    assignmentRepo.createQueryBuilder.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      setParameter: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([]),
+    });
     const mod = await Test.createTestingModule({
       providers: [
         SuppliersService,
@@ -59,6 +71,10 @@ describe('SuppliersService', () => {
           useValue: verificationRepo,
         },
         { provide: getRepositoryToken(FileMetadata), useValue: fileRepo },
+        {
+          provide: getRepositoryToken(SupplierAssignment),
+          useValue: assignmentRepo,
+        },
       ],
     }).compile();
     service = mod.get(SuppliersService);
@@ -202,6 +218,93 @@ describe('SuppliersService', () => {
           99,
         ),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('rankedServicesFromKeys', () => {
+    it('maps onboarding ranks to 1-based Top N labels', () => {
+      expect(
+        service.rankedServicesFromKeys([
+          'tarpaulins',
+          'apparel',
+          'document_printing',
+        ]),
+      ).toEqual([
+        { rank: 1, key: 'tarpaulins', label: 'Tarpaulins' },
+        { rank: 2, key: 'apparel', label: 'Apparel / Shirt Printing' },
+        { rank: 3, key: 'document_printing', label: 'Document Printing' },
+      ]);
+    });
+  });
+
+  describe('leaderboard', () => {
+    it('orders by rating count for reviews metric', async () => {
+      profileRepo.find
+        .mockResolvedValueOnce([
+          {
+            id: 1,
+            userId: 10,
+            businessName: 'Low Reviews',
+            serviceFocusRanks: ['signages'],
+            serviceZones: [],
+            isActive: true,
+            ratingAverage: 5,
+            ratingCount: 1,
+            capabilities: [],
+            verification: { status: 'verified' },
+            updatedAt: new Date(),
+          },
+          {
+            id: 2,
+            userId: 11,
+            businessName: 'Most Reviews',
+            serviceFocusRanks: ['tarpaulins', 'apparel'],
+            serviceZones: [],
+            isActive: true,
+            ratingAverage: 4.2,
+            ratingCount: 40,
+            capabilities: [],
+            verification: { status: 'verified' },
+            updatedAt: new Date(),
+          },
+        ] as any)
+        .mockResolvedValue([]);
+      // findAll uses find then withLogoUrl which uses findById pattern - actually findAll maps withLogoUrl which may call files
+      // Our find returns rows; withLogoUrl expects full row - mock find once only
+      profileRepo.find.mockResolvedValue([
+        {
+          id: 1,
+          userId: 10,
+          businessName: 'Low Reviews',
+          serviceFocusRanks: ['signages'],
+          serviceZones: [],
+          isActive: true,
+          ratingAverage: 5,
+          ratingCount: 1,
+          capabilities: [],
+          verification: { status: 'verified' },
+          updatedAt: new Date(),
+        },
+        {
+          id: 2,
+          userId: 11,
+          businessName: 'Most Reviews',
+          serviceFocusRanks: ['tarpaulins', 'apparel'],
+          serviceZones: [],
+          isActive: true,
+          ratingAverage: 4.2,
+          ratingCount: 40,
+          capabilities: [],
+          verification: { status: 'verified' },
+          updatedAt: new Date(),
+        },
+      ] as any);
+
+      const board = await service.leaderboard('reviews', 10);
+      expect(board[0].businessName).toBe('Most Reviews');
+      expect(board[0].rank).toBe(1);
+      expect(board[0].topService?.key).toBe('tarpaulins');
+      expect(board[1].businessName).toBe('Low Reviews');
     });
   });
 

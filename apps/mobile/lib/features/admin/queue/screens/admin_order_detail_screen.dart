@@ -8,6 +8,7 @@ import 'package:printing_app/config/theme/app_typography.dart';
 import 'package:printing_app/features/admin/rider_management/widgets/assignment_dialog.dart';
 import 'package:printing_app/features/admin/queue/providers/queue_provider.dart';
 import 'package:printing_app/features/admin/queue/widgets/status_picker.dart';
+import 'package:printing_app/features/customer/orders/widgets/order_status_timeline.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
 import 'package:printing_app/shared/models/order_status_history.dart';
@@ -51,13 +52,26 @@ class _AdminOrderDetailScreenState
     final colors = _colors(context);
     final queueState = ref.watch(queueProvider);
     final order = queueState.orders.firstWhere((o) => o.id == widget.orderId);
-    final history =
-        MockData.orderStatusHistory.where((h) => h.orderId == order.id).toList()
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final history = order.statusHistory.isNotEmpty
+        ? (List.of(order.statusHistory)
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt)))
+        : (MockData.orderStatusHistory
+              .where((h) => h.orderId == order.id)
+              .toList()
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt)));
+    final timelineHistory = order.statusHistory.isNotEmpty
+        ? List.of(order.statusHistory)
+        : (MockData.orderStatusHistory
+              .where((h) => h.orderId == order.id)
+              .toList()
+            ..sort((a, b) => a.createdAt.compareTo(b.createdAt)));
 
     final showAssignRider =
         order.orderStatus == OrderStatus.readyForDispatch ||
         order.orderStatus == OrderStatus.riderAssigned;
+    final showAuthorizePayment =
+        order.orderStatus == OrderStatus.supplierAccepted ||
+        order.orderStatus == OrderStatus.awaitingPayment;
     final lineItems = order.lineItems;
 
     return Scaffold(
@@ -144,6 +158,15 @@ class _AdminOrderDetailScreenState
           const SizedBox(height: AppSpacing.md),
 
           // Action buttons
+          if (showAuthorizePayment) ...[
+            AppButton(
+              label: 'Authorize Payment',
+              icon: HugeIcons.strokeRoundedCreditCard,
+              isFullWidth: true,
+              onTap: () => _confirmAuthorizePayment(context, order),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
           if (showAssignRider) ...[
             AppButton(
               label: 'Assign Rider',
@@ -211,6 +234,16 @@ class _AdminOrderDetailScreenState
                   colors,
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+
+          // Full marketplace + logistics progress (after Ready for Dispatch).
+          const SectionHeader(title: 'Order progress'),
+          AppCard(
+            child: OrderStatusTimeline(
+              order: order,
+              statusHistory: timelineHistory,
             ),
           ),
           const SizedBox(height: AppSpacing.md),
@@ -545,6 +578,35 @@ class _AdminOrderDetailScreenState
       default:
         return 'application/octet-stream';
     }
+  }
+
+  void _confirmAuthorizePayment(BuildContext context, Order order) {
+    ConfirmationDialog.show(
+      context,
+      title: 'Authorize payment',
+      message:
+          'Authorize Pilot Credits or eligible COD for ${order.orderId}? '
+          'Production can start after authorization. Credits charge the customer.',
+      confirmLabel: 'Authorize',
+      cancelLabel: 'Cancel',
+      onConfirm: () async {
+        Navigator.of(context).pop();
+        final ok = await ref
+            .read(queueProvider.notifier)
+            .authorizePayment(order.id);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              ok
+                  ? 'Payment authorized — production can start'
+                  : 'Could not authorize payment',
+            ),
+          ),
+        );
+      },
+      onCancel: () => Navigator.of(context).pop(),
+    );
   }
 
   void _showDeclineDialog(BuildContext context, Order order) {

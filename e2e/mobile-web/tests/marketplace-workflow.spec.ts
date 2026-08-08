@@ -93,11 +93,12 @@ const marketplaceWorkflowSteps: MarketplaceWorkflowStep[] = [
   },
   {
     id: 7,
-    actor: "client",
-    surface: "mobile-client",
-    action: "Authorize payment with Pilot Credits (or eligible COD).",
+    actor: "ops_admin",
+    surface: "admin-web",
+    action:
+      "Authorize payment with Pilot Credits (or eligible COD) after supplier accept.",
     expected:
-      "payment_authorized; production remains gated until authorization.",
+      "payment_authorized; production remains gated until ops authorization.",
   },
   {
     id: 8,

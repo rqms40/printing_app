@@ -36,7 +36,24 @@ List<String> correctionChecklistItems(Order order) {
   return chunks;
 }
 
-/// Client-facing marketplace gates visible after Ops QA (correction / proof / pay).
+/// Material concern categories for post-collection / delivery claims.
+const reportConcernCategories = <({String value, String label})>[
+  (value: 'print_defect', label: 'Print quality defect'),
+  (value: 'damaged', label: 'Damaged item'),
+  (value: 'wrong_item', label: 'Wrong item / specs'),
+  (value: 'incomplete', label: 'Incomplete / missing pieces'),
+  (value: 'delivery_issue', label: 'Delivery / packaging issue'),
+  (value: 'other', label: 'Other concern'),
+];
+
+/// Whether the client can file a post-receipt material concern.
+bool canReportConcern(OrderStatus status) {
+  return status == OrderStatus.collectedByCustomer ||
+      status == OrderStatus.issueWindowOpen ||
+      status == OrderStatus.delivered;
+}
+
+/// Client-facing marketplace gates: correction / proof / pay wait / report concern.
 class MarketplaceOrderActions extends ConsumerStatefulWidget {
   const MarketplaceOrderActions({super.key, required this.order});
 
@@ -52,11 +69,14 @@ class _MarketplaceOrderActionsState
   bool _busy = false;
   final _rejectReasonController = TextEditingController();
   final _correctionNotesController = TextEditingController();
+  final _concernNotesController = TextEditingController();
+  String? _concernCategory;
 
   @override
   void dispose() {
     _rejectReasonController.dispose();
     _correctionNotesController.dispose();
+    _concernNotesController.dispose();
     super.dispose();
   }
 
@@ -174,6 +194,28 @@ class _MarketplaceOrderActionsState
     );
   }
 
+  Future<void> _submitConcern() async {
+    final category = _concernCategory;
+    if (category == null || category.isEmpty) {
+      await _snack('Choose a concern type to continue', error: true);
+      return;
+    }
+    final notes = _concernNotesController.text.trim();
+    await _run(() async {
+      await ref.read(ordersProvider.notifier).reportConcern(
+            widget.order.id,
+            category: category,
+            notes: notes.isEmpty ? null : notes,
+          );
+      if (mounted) {
+        setState(() {
+          _concernCategory = null;
+          _concernNotesController.clear();
+        });
+      }
+    }, 'Concern submitted — GRIDGO ops will review it');
+  }
+
   @override
   Widget build(BuildContext context) {
     final order = widget.order;
@@ -184,28 +226,45 @@ class _MarketplaceOrderActionsState
 
     final showCorrection = status == OrderStatus.clientCorrection;
     final showProof = status == OrderStatus.proofApproval;
-    final showPay =
+    // Payment is authorized by ops/super admin — client only sees wait state.
+    final showPayWait =
         status == OrderStatus.awaitingPayment ||
         status == OrderStatus.supplierAccepted;
+    final showReportConcern = canReportConcern(status);
 
-    if (!showCorrection && !showProof && !showPay) {
+    if (!showCorrection && !showProof && !showPayWait && !showReportConcern) {
       return const SizedBox.shrink();
     }
 
     final title = showCorrection
         ? 'Artwork correction needed'
         : showProof
-        ? 'Proof approval needed'
-        : 'Authorize payment to start production';
+            ? 'Proof approval needed'
+            : showReportConcern
+                ? 'Check your order'
+                : 'Waiting for payment authorization';
     final body = showCorrection
         ? 'Ops listed issues below. Upload a revised file to send the job back to QA.'
         : showProof
-        ? 'Review the proof notes, then approve for matching or request changes.'
-        : 'Supplier accepted this job. You have 24 hours to authorize Pilot Credits or eligible COD before the hold expires.';
+            ? 'Review the proof notes, then approve for matching or request changes.'
+            : showReportConcern
+                ? 'Please inspect your print. If anything is wrong (quality, damage, '
+                    'missing pieces, packaging), report a concern within 24 hours. '
+                    'GRIDGO ops will review claims in the Claims queue.'
+                : 'The supplier accepted this job. GRIDGO ops will authorize payment '
+                    'so production can start. You do not need to take action here.';
 
     final checklist = showCorrection || showProof
         ? correctionChecklistItems(order)
         : const <String>[];
+
+    final icon = showReportConcern
+        ? HugeIcons.strokeRoundedAlert02
+        : showPayWait
+            ? HugeIcons.strokeRoundedClock01
+            : showProof
+                ? HugeIcons.strokeRoundedCheckmarkCircle02
+                : HugeIcons.strokeRoundedFileEdit;
 
     return AppCard(
       child: Column(
@@ -220,11 +279,7 @@ class _MarketplaceOrderActionsState
                   borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
                 child: HugeIcon(
-                  icon: showPay
-                      ? HugeIcons.strokeRoundedCreditCard
-                      : showProof
-                      ? HugeIcons.strokeRoundedCheckmarkCircle02
-                      : HugeIcons.strokeRoundedFileEdit,
+                  icon: icon,
                   size: 22,
                   color: colors.brand,
                 ),
@@ -243,29 +298,99 @@ class _MarketplaceOrderActionsState
             body,
             style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
           ),
-          if (showPay) ...[
+          if (showReportConcern) ...[
             const SizedBox(height: AppSpacing.sm),
             Container(
               padding: const EdgeInsets.all(AppSpacing.sm),
               decoration: BoxDecoration(
-                color: colors.warning.withValues(alpha: 0.12),
+                color: colors.info.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(AppRadius.md),
                 border: Border.all(
-                  color: colors.warning.withValues(alpha: 0.35),
+                  color: colors.info.withValues(alpha: 0.35),
                 ),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   HugeIcon(
-                    icon: HugeIcons.strokeRoundedClock01,
+                    icon: HugeIcons.strokeRoundedInformationCircle,
                     size: 18,
-                    color: colors.warning,
+                    color: colors.info,
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
-                      '24-hour payment window after supplier accept. Authorize now to keep production on schedule.',
+                      'You have 24 hours after collection or delivery to report '
+                      'a material print or delivery concern. Timely reports are '
+                      'reviewed by admin in Claims.',
+                      style: AppTypography.caption.copyWith(
+                        color: colors.onSurface,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              'What went wrong?',
+              style: AppTypography.bodyBold.copyWith(color: colors.onSurface),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              children: [
+                for (final cat in reportConcernCategories)
+                  FilterChip(
+                    selected: _concernCategory == cat.value,
+                    label: Text(cat.label),
+                    onSelected: (_) {
+                      setState(() => _concernCategory = cat.value);
+                    },
+                    selectedColor: colors.brand.withValues(alpha: 0.22),
+                    checkmarkColor: colors.brand,
+                  ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: _concernNotesController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                labelText: 'Describe the issue (optional)',
+                hintText: 'What should ops know? Photos can be added later by support.',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                ),
+              ),
+            ),
+          ],
+          if (showPayWait) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: colors.info.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: Border.all(
+                  color: colors.info.withValues(alpha: 0.35),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  HugeIcon(
+                    icon: HugeIcons.strokeRoundedInformationCircle,
+                    size: 18,
+                    color: colors.info,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      'Ops has a 24-hour window to authorize Pilot Credits or '
+                      'eligible COD after supplier accept. Production starts once authorized.',
                       style: AppTypography.caption.copyWith(
                         color: colors.onSurface,
                         fontWeight: FontWeight.w600,
@@ -376,18 +501,14 @@ class _MarketplaceOrderActionsState
               isFullWidth: true,
               onTap: _promptRejectProof,
             ),
-          ] else if (showPay)
+          ] else if (showReportConcern)
             AppButton(
-              label: 'Authorize payment',
+              label: 'Report a Concern',
               isFullWidth: true,
-              icon: HugeIcons.strokeRoundedCreditCard,
-              onTap: () => _run(() async {
-                await ApiClient.instance.post(
-                  '/orders/${order.id}/authorize-payment',
-                );
-                await ref.read(ordersProvider.notifier).refreshOrders();
-              }, 'Payment authorized — production can start'),
+              icon: HugeIcons.strokeRoundedAlert02,
+              onTap: _submitConcern,
             ),
+          // Payment authorization is ops/super only — no client action button.
         ],
       ),
     );

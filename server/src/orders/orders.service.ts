@@ -88,6 +88,7 @@ import {
 } from './order-status-transition';
 import { AuditService } from '../audit/audit.service';
 import { PayoutsService } from '../payouts/payouts.service';
+import { IssuesService } from '../issues/issues.service';
 
 // Slot definitions live in operator-local time (Asia/Manila, UTC+8). The API
 // server may run in UTC, so we never use server-local Date#getHours/setHours
@@ -209,6 +210,8 @@ export type OrderStatusChangeContext = {
 export type OrderCompletionTransactionResult = {
   previous: Order;
   surveyRequirement: TamSurveyRequirement | null;
+  /** Status string used for client notification copy (may differ from intermediate steps). */
+  publishedStatus?: OrderStatus | string;
 };
 
 function numericChargeComponent(
@@ -279,6 +282,8 @@ export class OrdersService {
     'items',
     'items.destination',
     'items.specValues',
+    // Logistics + marketplace status transitions for client/admin timelines.
+    'statusHistory',
   ];
 
   constructor(
@@ -318,6 +323,7 @@ export class OrdersService {
     private readonly auditService: AuditService,
     @Optional() private readonly geoZonesService?: GeoZonesService,
     @Optional() private readonly payoutsService?: PayoutsService,
+    @Optional() private readonly issuesService?: IssuesService,
   ) {}
 
   async findByUser(userId: number): Promise<Order[]> {
@@ -428,6 +434,11 @@ export class OrdersService {
           });
     const planByRiderId = new Map(plans.map((plan) => [plan.riderId, plan]));
 
+    const claimsByOrderId =
+      this.issuesService != null
+        ? await this.issuesService.listSummariesByOrderIds(orderIds)
+        : new Map();
+
     return Promise.all(
       orders.map(async (order) => {
         const assignment = assignmentByOrderId.get(order.id);
@@ -502,6 +513,7 @@ export class OrdersService {
             order.batchOrderId == null
               ? undefined
               : assignedSlotByBatchOrderId.get(order.batchOrderId),
+          claims: claimsByOrderId.get(order.id) ?? [],
         });
       }),
     );
@@ -1564,7 +1576,7 @@ export class OrdersService {
     return this.ordersRepo.save(frozen);
   }
 
-  /** Default client payment window after supplier accept (PRD §6.3). */
+  /** Default ops payment-authorization window after supplier accept (PRD §6.3). */
   static readonly PAYMENT_AUTH_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
   static creditReserveIdempotencyKey(orderId: number): string {
@@ -1578,8 +1590,10 @@ export class OrdersService {
   /**
    * Authorize payment for production (Task 3.3).
    *
-   * Allowed from `supplier_accepted` or `awaiting_payment`.
+   * Ops/super only — clients cannot authorize. Allowed from
+   * `supplier_accepted` or `awaiting_payment`.
    * - pilot_credit / gridCredits: reserve → spend (idempotent) unless already paid
+   *   (ledger always charges the order owner, not the ops actor)
    * - COD: re-check eligibility; authorize for collection (not cash in hand)
    * Freezes commercial snapshot and transitions to `payment_authorized`.
    */
@@ -1594,7 +1608,7 @@ export class OrdersService {
       throw new BadRequestException('Status change actor is required');
     }
     const reason =
-      context.reason?.trim() || 'Payment authorization';
+      context.reason?.trim() || 'Ops payment authorization';
 
     const precheck = await this.ordersRepo.findOne({ where: { id: orderId } });
     if (!precheck) {
@@ -1606,10 +1620,11 @@ export class OrdersService {
       actorRole === 'ops_admin' ||
       actorRole === 'super_admin' ||
       actorRole === 'system';
-    if (!isOps && precheck.userId !== context.actorUserId) {
+    if (!isOps) {
       throw new ForbiddenException({
-        code: 'not_order_owner',
-        message: 'You can only authorize payment on your own orders',
+        code: 'ops_only_payment_authorization',
+        message:
+          'Only ops or super admin can authorize payment to start production',
       });
     }
 
@@ -1807,9 +1822,9 @@ export class OrdersService {
   }
 
   /**
-   * Expire orders still waiting for client payment after supplier accept (24h).
-   * Releases supplier assignment (stub when matching service absent) and returns
-   * the order to `approved_for_matching` for re-match.
+   * Expire orders still waiting for ops payment authorization after supplier
+   * accept (24h). Releases supplier assignment (stub when matching service
+   * absent) and returns the order to `approved_for_matching` for re-match.
    *
    * Invoked by PaymentTimeoutSchedulerService; also unit-testable with `now`.
    */
@@ -2687,7 +2702,11 @@ export class OrdersService {
         throw new BadRequestException('Order batch changed during update');
       }
       if (locked.orderStatus === orderStatus) {
-        return { previous: null, surveyRequirement: null };
+        return {
+          previous: null,
+          surveyRequirement: null,
+          publishedStatus: orderStatus,
+        };
       }
       if (orderStatus === OrderStatus.CANCELLED) {
         throw new BadRequestException('Use the cancellation workflow');
@@ -2771,11 +2790,29 @@ export class OrdersService {
         },
         manager,
       );
+
+      // Pickup collection opens the same 24h material concern window as delivery.
+      let publishedStatus = orderStatus;
+      if (orderStatus === OrderStatus.COLLECTED_BY_CUSTOMER) {
+        await this.openMaterialIssueWindow(
+          manager,
+          id,
+          OrderStatus.COLLECTED_BY_CUSTOMER,
+          context!.actorUserId,
+          '24h material issue window opened after customer collection',
+        );
+        publishedStatus = OrderStatus.ISSUE_WINDOW_OPEN;
+      }
+
       const surveyRequirement =
         orderStatus === OrderStatus.COLLECTED_BY_CUSTOMER
           ? await this.prepareCompletionRecords(manager, locked)
           : null;
-      return { previous: locked, surveyRequirement };
+      return {
+        previous: locked,
+        surveyRequirement,
+        publishedStatus,
+      };
     });
     if (!completion.previous) {
       const current = await this.findById(id);
@@ -2786,7 +2823,7 @@ export class OrdersService {
       return await this.publishStatusUpdate(
         completion.previous,
         id,
-        status,
+        completion.publishedStatus ?? status,
         completion.surveyRequirement,
       );
     } catch {
@@ -2850,53 +2887,80 @@ export class OrdersService {
     );
 
     // Immediately open 24h material issue window + held payout (Phase 9.2).
-    assertOrderStatusTransition(
+    await this.openMaterialIssueWindow(
+      manager,
+      order.id,
       OrderStatus.DELIVERED,
-      OrderStatus.ISSUE_WINDOW_OPEN,
+      actorUserId,
+      '24h material issue window opened after delivery proof',
     );
+
+    const surveyRequirement = await this.prepareCompletionRecords(
+      manager,
+      order,
+    );
+    // previous snapshot used by publisher — reflect pre-delivery status.
+    // Notify with concern-window copy (final status is issue_window_open).
+    return {
+      previous: order,
+      surveyRequirement,
+      publishedStatus: OrderStatus.ISSUE_WINDOW_OPEN,
+    };
+  }
+
+  /**
+   * Open 24h material concern window after delivery or customer collection.
+   * Sets issueWindowEndsAt, holds supplier payout, and moves to issue_window_open.
+   */
+  private async openMaterialIssueWindow(
+    manager: EntityManager,
+    orderId: number,
+    fromStatus: OrderStatus,
+    actorUserId: number | null,
+    historyNotes: string,
+  ): Promise<Date | null> {
+    assertOrderStatusTransition(fromStatus, OrderStatus.ISSUE_WINDOW_OPEN);
+    const ordersRepo = manager.getRepository(Order);
+
     let issueWindowEndsAt: Date | null = null;
     if (this.payoutsService) {
       try {
         const opened = await this.payoutsService.openIssueWindowOnDelivered(
-          order.id,
+          orderId,
           actorUserId,
           manager,
         );
         issueWindowEndsAt = opened.issueWindowEndsAt;
       } catch (err) {
         this.logger.warn(
-          `Issue-window payout open failed for order ${order.id}: ${err}`,
+          `Issue-window payout open failed for order ${orderId}: ${err}`,
         );
-        // Still open the status window even if payout row fails (e.g. no supplier).
         issueWindowEndsAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        await ordersRepo.update(
-          { id: order.id },
-          { issueWindowEndsAt },
-        );
+        await ordersRepo.update({ id: orderId }, { issueWindowEndsAt });
       }
     } else {
       issueWindowEndsAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      await ordersRepo.update({ id: order.id }, { issueWindowEndsAt });
+      await ordersRepo.update({ id: orderId }, { issueWindowEndsAt });
     }
 
     await ordersRepo.update(
-      { id: order.id, orderStatus: OrderStatus.DELIVERED },
+      { id: orderId, orderStatus: fromStatus },
       {
         orderStatus: OrderStatus.ISSUE_WINDOW_OPEN,
         ...(issueWindowEndsAt ? { issueWindowEndsAt } : {}),
       },
     );
     await manager.getRepository(OrderStatusHistory).insert({
-      orderId: order.id,
-      fromStatus: OrderStatus.DELIVERED,
+      orderId,
+      fromStatus,
       toStatus: OrderStatus.ISSUE_WINDOW_OPEN,
       changedByUserId: 0,
-      notes: '24h material issue window opened after delivery proof',
+      notes: historyNotes,
     });
     await this.auditService.recordOrderStatusTransition(
       {
-        orderId: order.id,
-        fromStatus: OrderStatus.DELIVERED,
+        orderId,
+        fromStatus,
         toStatus: OrderStatus.ISSUE_WINDOW_OPEN,
         actorUserId: 0,
         actorRole: 'system',
@@ -2907,13 +2971,7 @@ export class OrdersService {
       },
       manager,
     );
-
-    const surveyRequirement = await this.prepareCompletionRecords(
-      manager,
-      order,
-    );
-    // previous snapshot used by publisher — reflect pre-delivery status.
-    return { previous: order, surveyRequirement };
+    return issueWindowEndsAt;
   }
 
   private async prepareCompletionRecords(
@@ -3084,16 +3142,16 @@ export class OrdersService {
         body: `Your order ${order.orderId} is out for delivery!`,
       },
       delivered: {
-        title: 'Delivered',
-        body: `Your order ${order.orderId} has been delivered. Thank you!`,
+        title: 'Order Delivered',
+        body: `Your order ${order.orderId} was delivered. You have 24 hours to report a concern if there are any print or delivery issues.`,
       },
       collected_by_customer: {
-        title: 'Collected',
-        body: `Your order ${order.orderId} was collected. Thank you!`,
+        title: 'Order Collected',
+        body: `Your order ${order.orderId} was collected. You have 24 hours to report a concern if there are any print or delivery issues.`,
       },
       issue_window_open: {
-        title: 'Issue Window Open',
-        body: `You can report material issues for order ${order.orderId} within 24 hours.`,
+        title: 'Report a Concern Available',
+        body: `Please check order ${order.orderId}. You can report a concern within 24 hours if there are any print, damage, or delivery issues. Open the order and tap Report a Concern.`,
       },
       completed: {
         title: 'Order Completed',

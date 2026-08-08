@@ -94,7 +94,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   approved_for_matching: "Approved for Matching",
   supplier_assigned: "Supplier Assigned",
   supplier_accepted: "Supplier Accepted",
-  awaiting_payment: "Awaiting Payment",
+  awaiting_payment: "Awaiting Ops Payment Auth",
   payment_authorized: "Payment Authorized",
   production: "In Production",
   supplier_self_qc: "Supplier Quality Check",

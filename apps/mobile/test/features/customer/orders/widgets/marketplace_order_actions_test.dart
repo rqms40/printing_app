@@ -39,7 +39,11 @@ Widget _wrap(Order order) {
       ),
     ],
     child: MaterialApp(
-      home: Scaffold(body: MarketplaceOrderActions(order: order)),
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: MarketplaceOrderActions(order: order),
+        ),
+      ),
     ),
   );
 }
@@ -89,13 +93,18 @@ void main() {
     expect(find.text('Confirm crop marks'), findsOneWidget);
   });
 
-  testWidgets('payment state shows 24h window messaging', (tester) async {
+  testWidgets('payment wait state shows ops authorization messaging', (
+    tester,
+  ) async {
     final order = _order(status: OrderStatus.supplierAccepted);
     await tester.pumpWidget(_wrap(order));
     await tester.pumpAndSettle();
 
+    expect(find.text('Waiting for payment authorization'), findsOneWidget);
+    expect(find.textContaining('ops'), findsWidgets);
     expect(find.textContaining('24'), findsWidgets);
-    expect(find.text('Authorize payment'), findsOneWidget);
+    // Client no longer authorizes payment — ops/super only.
+    expect(find.text('Authorize payment'), findsNothing);
   });
 
   testWidgets('hides when order is not in a client action gate', (tester) async {
@@ -106,5 +115,29 @@ void main() {
     expect(find.text('Authorize payment'), findsNothing);
     expect(find.text('Approve proof'), findsNothing);
     expect(find.text('Upload revised artwork'), findsNothing);
+    expect(find.text('Report a Concern'), findsNothing);
+  });
+
+  testWidgets('collected order shows Report a Concern', (tester) async {
+    final order = _order(status: OrderStatus.collectedByCustomer);
+    await tester.pumpWidget(_wrap(order));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Check your order'), findsOneWidget);
+    expect(find.text('Report a Concern'), findsOneWidget);
+    expect(find.textContaining('24 hours'), findsWidgets);
+    expect(canReportConcern(OrderStatus.collectedByCustomer), isTrue);
+    expect(canReportConcern(OrderStatus.issueWindowOpen), isTrue);
+    expect(canReportConcern(OrderStatus.delivered), isTrue);
+    expect(canReportConcern(OrderStatus.production), isFalse);
+  });
+
+  testWidgets('issue window open shows Report a Concern', (tester) async {
+    final order = _order(status: OrderStatus.issueWindowOpen);
+    await tester.pumpWidget(_wrap(order));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Report a Concern'), findsOneWidget);
+    expect(find.text('Print quality defect'), findsOneWidget);
   });
 }

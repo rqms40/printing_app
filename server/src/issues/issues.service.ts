@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, LessThanOrEqual, Repository } from 'typeorm';
@@ -16,6 +17,7 @@ import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
 import { AuditService } from '../audit/audit.service';
 import { PayoutsService } from '../payouts/payouts.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { OpenIssueDto } from './dto/open-issue.dto';
 import {
   IssueResolvePath,
@@ -27,6 +29,21 @@ import {
 } from '../orders/order-status-transition';
 
 const OPEN_STATUSES = [IssueStatus.OPEN, IssueStatus.UNDER_REVIEW];
+
+/** Client-facing claim summary attached to order payloads. */
+export type OrderClaimSummary = {
+  id: number;
+  orderId: number;
+  category: string;
+  categoryLabel: string;
+  status: IssueStatus;
+  statusLabel: string;
+  actionLabel: string | null;
+  resolutionNotes: string | null;
+  withinWindow: boolean;
+  openedAt: string;
+  resolvedAt: string | null;
+};
 
 @Injectable()
 export class IssuesService {
@@ -42,6 +59,7 @@ export class IssuesService {
     private readonly payoutsService: PayoutsService,
     private readonly auditService: AuditService,
     private readonly dataSource: DataSource,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
   async list(params: {
@@ -67,6 +85,48 @@ export class IssuesService {
     });
     if (!issue) throw new NotFoundException(`Issue ${id} not found`);
     return issue;
+  }
+
+  /** Claims for one or more orders (for order detail enrichment). */
+  async listSummariesByOrderIds(
+    orderIds: number[],
+  ): Promise<Map<number, OrderClaimSummary[]>> {
+    const map = new Map<number, OrderClaimSummary[]>();
+    if (orderIds.length === 0) return map;
+    const rows = await this.issueRepo.find({
+      where: { orderId: In(orderIds) },
+      order: { id: 'DESC' },
+      take: 500,
+    });
+    for (const issue of rows) {
+      const list = map.get(issue.orderId) ?? [];
+      list.push(this.toClientSummary(issue));
+      map.set(issue.orderId, list);
+    }
+    return map;
+  }
+
+  toClientSummary(issue: Issue): OrderClaimSummary {
+    return {
+      id: issue.id,
+      orderId: issue.orderId,
+      category: issue.category,
+      categoryLabel: categoryLabel(issue.category),
+      status: issue.status,
+      statusLabel: statusLabel(issue.status),
+      actionLabel: actionLabelForStatus(issue.status),
+      resolutionNotes: issue.resolutionNotes,
+      withinWindow: issue.withinWindow,
+      openedAt:
+        issue.openedAt instanceof Date
+          ? issue.openedAt.toISOString()
+          : String(issue.openedAt),
+      resolvedAt: issue.resolvedAt
+        ? issue.resolvedAt instanceof Date
+          ? issue.resolvedAt.toISOString()
+          : String(issue.resolvedAt)
+        : null,
+    };
   }
 
   /**
@@ -239,7 +299,57 @@ export class IssuesService {
       },
     });
 
+    await this.notifyCustomerOfClaimResolution(
+      { ...saved, order: issue.order, category: issue.category ?? saved.category },
+      dto.path,
+    );
+
     return saved;
+  }
+
+  /**
+   * In-app (+ WS) notification so the customer sees the ops decision on their concern.
+   */
+  private async notifyCustomerOfClaimResolution(
+    issue: Issue,
+    path: IssueResolvePath,
+  ): Promise<void> {
+    if (!this.notificationsService) return;
+    try {
+      const order =
+        issue.order ??
+        (await this.ordersRepo.findOne({ where: { id: issue.orderId } }));
+      if (!order?.userId) return;
+
+      const orderRef = order.orderId ?? `Order #${order.id}`;
+      const action = actionLabelForPath(path);
+      const category = categoryLabel(issue.category);
+      const notes = issue.resolutionNotes?.trim();
+      const message = notes
+        ? `Your concern (${category}) on ${orderRef}: ${action}. Ops notes: ${notes}`
+        : `Your concern (${category}) on ${orderRef} was updated: ${action}. Open the order to see details.`;
+
+      await this.notificationsService.create({
+        userId: order.userId,
+        title: 'Concern update',
+        message,
+        type: 'claim_resolved',
+        orderRef,
+        metadata: {
+          orderId: order.id,
+          issueId: issue.id,
+          path,
+          status: issue.status,
+          category: issue.category,
+          actionLabel: action,
+          resolutionNotes: notes ?? null,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Customer claim-resolution notification failed for issue ${issue.id}: ${err}`,
+      );
+    }
   }
 
   /**
@@ -375,5 +485,82 @@ function mapResolvePath(path: IssueResolvePath): {
         payoutImpact: IssuePayoutImpact.NONE,
         releaseHold: true,
       };
+  }
+}
+
+export function actionLabelForPath(path: IssueResolvePath): string {
+  switch (path) {
+    case 'reprint':
+      return 'Reprint approved';
+    case 'refund':
+      return 'Refund approved';
+    case 'adjustment':
+      return 'Adjustment approved';
+    case 'release':
+      return 'Released — no defect found';
+    case 'reject':
+      return 'Claim rejected';
+    default:
+      return 'Updated';
+  }
+}
+
+export function actionLabelForStatus(status: IssueStatus): string | null {
+  switch (status) {
+    case IssueStatus.RESOLVED_REPRINT:
+      return 'Reprint approved';
+    case IssueStatus.RESOLVED_REFUND:
+      return 'Refund approved';
+    case IssueStatus.RESOLVED_ADJUSTMENT:
+      return 'Adjustment approved';
+    case IssueStatus.REJECTED:
+      return 'Claim rejected';
+    case IssueStatus.CLOSED:
+      return 'Released — no defect found';
+    case IssueStatus.OPEN:
+    case IssueStatus.UNDER_REVIEW:
+      return null;
+    default:
+      return null;
+  }
+}
+
+export function statusLabel(status: IssueStatus): string {
+  switch (status) {
+    case IssueStatus.OPEN:
+      return 'Open — under review';
+    case IssueStatus.UNDER_REVIEW:
+      return 'Under review';
+    case IssueStatus.RESOLVED_REPRINT:
+      return 'Resolved: reprint';
+    case IssueStatus.RESOLVED_REFUND:
+      return 'Resolved: refund';
+    case IssueStatus.RESOLVED_ADJUSTMENT:
+      return 'Resolved: adjustment';
+    case IssueStatus.REJECTED:
+      return 'Rejected';
+    case IssueStatus.CLOSED:
+      return 'Closed';
+    default:
+      return status;
+  }
+}
+
+export function categoryLabel(category: string): string {
+  switch (category) {
+    case 'print_defect':
+      return 'Print quality defect';
+    case 'damaged':
+      return 'Damaged item';
+    case 'wrong_item':
+      return 'Wrong item / specs';
+    case 'incomplete':
+      return 'Incomplete / missing pieces';
+    case 'delivery_issue':
+      return 'Delivery / packaging issue';
+    case 'other':
+      return 'Other concern';
+    default:
+      return category.replace(/_/g, ' ');
   }
 }

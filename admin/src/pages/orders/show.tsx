@@ -16,6 +16,7 @@ import {
   Tag,
 } from "antd";
 import {
+  DollarOutlined,
   ExclamationCircleOutlined,
   EnvironmentOutlined,
   ShopOutlined,
@@ -48,6 +49,11 @@ import {
 } from "@/utils/api-normalizers";
 import { loadOrderFilePreview, type OrderFilePreview } from "./preview";
 import { ManualStatusCard } from "./components/manual-status-card";
+import {
+  adminOrderProgressPipeline,
+  isPickupDeliveryOption,
+  progressStepState,
+} from "@/utils/order-progress-pipeline";
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -299,6 +305,9 @@ export function OrderShow() {
     order.delivery_option === "delivery" &&
     !order.assigned_rider_contact?.delivery_assignment_id;
   const canAssignSupplier = order.order_status === "approved_for_matching";
+  const canAuthorizePayment =
+    order.order_status === "supplier_accepted" ||
+    order.order_status === "awaiting_payment";
   const assignedRiderName =
     order.assigned_rider_contact?.display_name ??
     order.assigned_rider_contact?.full_name ??
@@ -311,6 +320,10 @@ export function OrderShow() {
   const handleStatusChange = (newStatus: OrderStatus) => {
     if (newStatus === "file_rejected") {
       setDeclineModalOpen(true);
+      return;
+    }
+    if (newStatus === "rider_assigned" && !order.assigned_rider_contact?.delivery_assignment_id) {
+      setRiderModalOpen(true);
       return;
     }
     modal.confirm({
@@ -339,9 +352,36 @@ export function OrderShow() {
       setRiderModalOpen(false);
       const res = await apiClient.get(`/admin/orders/${id}`);
       setOrder(normalizeOrder(res.data));
-    } catch {
-      void message.error("Failed to assign rider");
+    } catch (e: any) {
+      const msg = e?.response?.data?.message ?? "Failed to assign rider";
+      void message.error(Array.isArray(msg) ? msg.join(", ") : String(msg));
     }
+  };
+
+  const handleAuthorizePayment = () => {
+    modal.confirm({
+      title: "Authorize payment",
+      icon: <DollarOutlined />,
+      content:
+        "Authorize Pilot Credits or eligible COD for this order? Production can start after authorization. Credits (if any) are charged to the customer.",
+      okText: "Authorize payment",
+      onOk: async () => {
+        try {
+          await apiClient.post(`/orders/${id}/authorize-payment`);
+          void message.success("Payment authorized — production can start");
+          const res = await apiClient.get(`/admin/orders/${id}`);
+          setOrder(normalizeOrder(res.data));
+        } catch (e: unknown) {
+          const msg =
+            (e as { response?: { data?: { message?: string | string[] } } })
+              ?.response?.data?.message ?? "Failed to authorize payment";
+          void message.error(
+            Array.isArray(msg) ? msg.join(", ") : String(msg),
+          );
+          throw e;
+        }
+      },
+    });
   };
 
   const openSupplierAssign = async () => {
@@ -525,10 +565,22 @@ export function OrderShow() {
                     style={{ width: 200 }}
                     onChange={handleStatusChange}
                     options={validNextStatuses.map((s) => ({
-                      label: ORDER_STATUS_LABELS[s],
+                      label: s === "rider_assigned" && !order.assigned_rider_contact?.delivery_assignment_id 
+                        ? "Assign a Rider" 
+                        : ORDER_STATUS_LABELS[s],
                       value: s,
                     }))}
                   />
+                )}
+                {canAuthorizePayment && (
+                  <Button
+                    type="primary"
+                    icon={<DollarOutlined />}
+                    aria-label={`Authorize payment for ${order.order_id}`}
+                    onClick={handleAuthorizePayment}
+                  >
+                    Authorize Payment
+                  </Button>
                 )}
                 {canAssignSupplier && (
                   <Button
@@ -843,6 +895,66 @@ export function OrderShow() {
             setOrder(normalizeOrder(res.data));
           }}
         />
+
+        {/* Marketplace + logistics progress (always shows steps after Ready for Dispatch) */}
+        <Card
+          title="Order progress"
+          extra={
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Delivery process after Ready for Dispatch: assign rider → pick up
+              → out for delivery → delivered
+            </Text>
+          }
+        >
+          {(() => {
+            const isPickup = isPickupDeliveryOption(order.delivery_option);
+            const historyStatuses = history.flatMap((h) => [
+              h.from_status as OrderStatus,
+              h.to_status as OrderStatus,
+            ]);
+            const pipeline = adminOrderProgressPipeline({
+              isPickup,
+              includeOptional: historyStatuses,
+            });
+            const current = order.order_status as OrderStatus;
+            return (
+              <Timeline
+                items={pipeline.map((step) => {
+                  const state = progressStepState(step, current, pipeline);
+                  const color =
+                    state === "done"
+                      ? "green"
+                      : state === "current"
+                        ? "blue"
+                        : "gray";
+                  const isLogistics =
+                    step === "rider_assigned" ||
+                    step === "picked_up" ||
+                    step === "out_for_delivery" ||
+                    step === "delivered";
+                  return {
+                    color,
+                    children: (
+                      <div>
+                        <Text
+                          strong={state === "current"}
+                          type={state === "todo" ? "secondary" : undefined}
+                        >
+                          {ORDER_STATUS_LABELS[step] ?? statusLabel(step)}
+                          {isLogistics ? " · Delivery process" : ""}
+                          {step === "ready_for_dispatch" &&
+                          current === "ready_for_dispatch"
+                            ? " · Assign rider next"
+                            : ""}
+                        </Text>
+                      </div>
+                    ),
+                  };
+                })}
+              />
+            );
+          })()}
+        </Card>
 
         {/* Status History */}
         <Card title="Status History">

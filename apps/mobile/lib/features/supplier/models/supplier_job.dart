@@ -65,12 +65,12 @@ abstract final class SupplierJobAction {
 
 /// Copy shown when accept succeeded but production is blocked.
 abstract final class SupplierPaymentGateCopy {
-  /// Short banner title for accepted jobs waiting on client payment.
+  /// Short banner title for accepted jobs waiting on ops payment auth.
   static const waitingTitle = 'Waiting for payment authorization';
 
   /// Body explaining the payment_authorized gate before production.
   static const waitingBody =
-      'Production is locked until the client authorizes payment '
+      'Production is locked until GRIDGO ops authorizes payment '
       '(order must reach payment_authorized).';
 
   /// Compact gate line used in action panels / tests.

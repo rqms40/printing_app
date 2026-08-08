@@ -548,6 +548,13 @@ class DeliveriesNotifier extends StateNotifier<DeliveriesState> {
         '/riders/assignments/$assignmentId/status',
         data: data,
       );
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final msg = e.response?.data?['message'] ?? 'Unable to update delivery status';
+      state = state.copyWith(
+        errorMessage: () => msg is List ? msg.join(', ') : msg.toString(),
+      );
+      return;
     } catch (_) {
       if (!mounted) return;
       state = state.copyWith(

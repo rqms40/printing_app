@@ -86,6 +86,12 @@ export interface AdminSupplierCapabilityRecord {
 }
 
 /** Supplier shop profile self-edited fields (admin user detail). */
+export interface AdminSupplierRankedService {
+  rank: number;
+  key: string;
+  label: string;
+}
+
 export interface AdminSupplierProfileRecord {
   id: number;
   user_id: number;
@@ -98,8 +104,12 @@ export interface AdminSupplierProfileRecord {
   logo_url: string | null;
   attributes: Record<string, string>;
   service_zones: string[];
+  service_focus_ranks: string[];
+  ranked_services: AdminSupplierRankedService[];
   is_active: boolean;
   verification_status: string | null;
+  rating_average: number;
+  rating_count: number;
   capabilities: AdminSupplierCapabilityRecord[];
   updated_at: string | null;
 }
@@ -1207,6 +1217,34 @@ export function normalizeAdminSupplierProfile(
     }
   }
 
+  const focusRaw = read(record, "service_focus_ranks", "serviceFocusRanks");
+  const service_focus_ranks = Array.isArray(focusRaw)
+    ? focusRaw.map((z) => String(z)).filter((z) => z.trim().length > 0)
+    : [];
+
+  const rankedRaw = read(record, "ranked_services", "rankedServices");
+  const ranked_services: AdminSupplierRankedService[] = [];
+  if (Array.isArray(rankedRaw)) {
+    for (const item of rankedRaw) {
+      const s = asRecord(item);
+      const key = toOptionalString(s, "key") ?? "";
+      if (!key) continue;
+      ranked_services.push({
+        rank: toNumberValue(s, ranked_services.length + 1, "rank"),
+        key,
+        label: toOptionalString(s, "label") ?? key,
+      });
+    }
+  } else {
+    service_focus_ranks.forEach((key, index) => {
+      ranked_services.push({
+        rank: index + 1,
+        key,
+        label: key.replace(/_/g, " "),
+      });
+    });
+  }
+
   return {
     id: toNumberValue(record, 0, "id"),
     user_id: toNumberValue(record, 0, "user_id", "userId"),
@@ -1230,12 +1268,21 @@ export function normalizeAdminSupplierProfile(
     logo_url: toOptionalString(record, "logo_url", "logoUrl") ?? null,
     attributes,
     service_zones,
+    service_focus_ranks,
+    ranked_services,
     is_active:
       read(record, "is_active", "isActive") === true ||
       read(record, "is_active", "isActive") === "true",
     verification_status:
       toOptionalString(record, "verification_status", "verificationStatus") ??
       null,
+    rating_average: toNumberValue(
+      record,
+      0,
+      "rating_average",
+      "ratingAverage",
+    ),
+    rating_count: toNumberValue(record, 0, "rating_count", "ratingCount"),
     capabilities,
     updated_at:
       toOptionalString(record, "updated_at", "updatedAt") ?? null,

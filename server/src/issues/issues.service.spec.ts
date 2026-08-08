@@ -27,6 +27,7 @@ describe('IssuesService', () => {
     recordOrderStatusTransition: jest.Mock;
   };
   let dataSource: { transaction: jest.Mock };
+  let notificationsService: { create: jest.Mock };
 
   beforeEach(() => {
     issueRepo = {
@@ -51,6 +52,9 @@ describe('IssuesService', () => {
       append: jest.fn(),
       recordOrderStatusTransition: jest.fn(),
     };
+    notificationsService = {
+      create: jest.fn().mockResolvedValue({ id: 1 }),
+    };
     dataSource = {
       transaction: jest.fn(async (fn) =>
         fn({
@@ -70,6 +74,7 @@ describe('IssuesService', () => {
       payoutsService as any,
       auditService as any,
       dataSource as any,
+      notificationsService as any,
     );
   });
 
@@ -136,7 +141,9 @@ describe('IssuesService', () => {
       id: 11,
       orderId: 9,
       status: IssueStatus.OPEN,
+      category: 'print_defect',
       payoutImpact: IssuePayoutImpact.FREEZE,
+      order: { id: 9, userId: 5, orderId: 'ORD-9' },
     });
     const out = await service.resolveIssue(
       11,
@@ -151,6 +158,17 @@ describe('IssuesService', () => {
       'ops_admin',
       'issue_release',
     );
+    expect(notificationsService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 5,
+        type: 'claim_resolved',
+        orderRef: 'ORD-9',
+        metadata: expect.objectContaining({
+          path: 'release',
+          actionLabel: 'Released — no defect found',
+        }),
+      }),
+    );
   });
 
   it('resolve refund keeps hold', async () => {
@@ -158,6 +176,8 @@ describe('IssuesService', () => {
       id: 11,
       orderId: 9,
       status: IssueStatus.OPEN,
+      category: 'damaged',
+      order: { id: 9, userId: 5, orderId: 'ORD-9' },
     });
     const out = await service.resolveIssue(
       11,
@@ -167,6 +187,13 @@ describe('IssuesService', () => {
     );
     expect(out.status).toBe(IssueStatus.RESOLVED_REFUND);
     expect(payoutsService.releaseIssueHold).not.toHaveBeenCalled();
+    expect(notificationsService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 5,
+        type: 'claim_resolved',
+        metadata: expect.objectContaining({ path: 'refund' }),
+      }),
+    );
   });
 
   it('blocks resolve when already closed', async () => {

@@ -230,7 +230,7 @@ extension OrderStatusX on OrderStatus {
       case OrderStatus.supplierAccepted:
         return 'Supplier accepted';
       case OrderStatus.awaitingPayment:
-        return 'Awaiting payment';
+        return 'Awaiting ops payment auth';
       case OrderStatus.paymentAuthorized:
         return 'Payment authorized';
       case OrderStatus.production:
@@ -280,9 +280,9 @@ extension OrderStatusX on OrderStatus {
       case OrderStatus.supplierAssigned:
         return 'A print supplier has been assigned to your order.';
       case OrderStatus.supplierAccepted:
-        return 'The supplier accepted the job and will prepare production.';
+        return 'The supplier accepted the job. Ops will authorize payment next.';
       case OrderStatus.awaitingPayment:
-        return 'Authorize payment so production can start.';
+        return 'Waiting for GRIDGO ops to authorize payment so production can start.';
       case OrderStatus.paymentAuthorized:
         return 'Payment is authorized. Production can begin.';
       case OrderStatus.production:
@@ -302,9 +302,9 @@ extension OrderStatusX on OrderStatus {
       case OrderStatus.deliveryFailed:
         return 'Delivery could not be completed. Support will follow up.';
       case OrderStatus.collectedByCustomer:
-        return 'You collected this order.';
+        return 'You collected this order. You can report a concern within 24 hours if needed.';
       case OrderStatus.issueWindowOpen:
-        return 'You can still report an issue for a limited time.';
+        return 'Please check your order. Tap Report a Concern within 24 hours if anything is wrong.';
       case OrderStatus.completed:
         return 'This order is fully complete.';
       case OrderStatus.cancelled:
@@ -365,10 +365,35 @@ extension OrderStatusX on OrderStatus {
   }
 }
 
+/// Logistics steps after ready for dispatch (admin assigns rider → delivery).
+const List<OrderStatus> deliveryLogisticsPipeline = [
+  OrderStatus.riderAssigned,
+  OrderStatus.pickedUp,
+  OrderStatus.outForDelivery,
+  OrderStatus.delivered,
+];
+
+/// Whether [status] is part of the post-dispatch rider delivery process.
+bool isDeliveryLogisticsStatus(OrderStatus status) {
+  return status == OrderStatus.riderAssigned ||
+      status == OrderStatus.pickedUp ||
+      status == OrderStatus.outForDelivery ||
+      status == OrderStatus.delivered ||
+      status == OrderStatus.deliveryFailed;
+}
+
 /// Builds the customer-visible marketplace status pipeline for an order.
 ///
 /// Always includes supplier matching/payment steps so statuses like
 /// `supplier_assigned` and `supplier_accepted` appear on the timeline.
+///
+/// After [OrderStatus.readyForDispatch], the **delivery logistics process**
+/// is always shown (rider assigned → picked up → out for delivery → delivered).
+/// That path is used for Progress even when [isPickup] is true, so the client
+/// never only sees "Collected by customer" in place of logistics.
+///
+/// If the order truly completed via store pickup, [OrderStatus.collectedByCustomer]
+/// is still mapped onto the final delivery rank for the current-step indicator.
 List<OrderStatus> customerOrderStatusPipeline({
   required bool isPickup,
   Set<OrderStatus> includeOptional = const {},
@@ -393,29 +418,40 @@ List<OrderStatus> customerOrderStatusPipeline({
     OrderStatus.paymentAuthorized,
     OrderStatus.production,
     OrderStatus.supplierSelfQc,
+    // Handoff into logistics — admin assigns a rider from here.
+    OrderStatus.readyForDispatch,
+    // Delivery process (always visible — do not replace with Collected).
+    ...deliveryLogisticsPipeline,
   ]);
 
-  if (isPickup) {
-    steps.add(OrderStatus.collectedByCustomer);
-  } else {
-    steps.addAll([
-      OrderStatus.readyForDispatch,
-      OrderStatus.riderAssigned,
-      OrderStatus.pickedUp,
-      OrderStatus.outForDelivery,
-      OrderStatus.delivered,
-    ]);
-  }
-
   if (includeOptional.contains(OrderStatus.issueWindowOpen) ||
-      includeOptional.contains(OrderStatus.completed)) {
+      includeOptional.contains(OrderStatus.completed) ||
+      includeOptional.contains(OrderStatus.delivered) ||
+      includeOptional.contains(OrderStatus.collectedByCustomer)) {
     steps.add(OrderStatus.issueWindowOpen);
   }
   if (includeOptional.contains(OrderStatus.completed)) {
     steps.add(OrderStatus.completed);
   }
 
+  // isPickup is retained for callers/API symmetry; logistics stay delivery-first.
+  // ignore: unused_local_variable
+  final _ = isPickup;
+
   return steps;
+}
+
+/// Shared marketplace + logistics progress steps for admin/ops surfaces.
+///
+/// Always follows Ready for Dispatch with the rider delivery process.
+List<OrderStatus> adminOrderStatusPipeline({required bool isPickup}) {
+  return customerOrderStatusPipeline(
+    isPickup: isPickup,
+    includeOptional: {
+      OrderStatus.issueWindowOpen,
+      OrderStatus.completed,
+    },
+  );
 }
 
 /// Parse API snake_case (or camelCase) including legacy shop-queue labels.

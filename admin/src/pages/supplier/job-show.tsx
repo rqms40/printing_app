@@ -826,7 +826,7 @@ export function SupplierJobShowPage() {
                   showIcon
                   message={
                     order.orderStatus === 'awaiting_payment'
-                      ? 'Waiting for client payment authorization'
+                      ? 'Waiting for ops payment authorization'
                       : order.orderStatus === 'ready_for_dispatch'
                         ? 'Job is ready for dispatch — no further supplier actions'
                         : `No actions available while status is ${statusLabel(order.orderStatus as OrderStatus)}`

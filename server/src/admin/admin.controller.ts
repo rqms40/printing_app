@@ -793,6 +793,8 @@ export class AdminController {
         'items',
         'items.destination',
         'items.specValues',
+        // Include logistics/marketplace transitions for progress timelines.
+        'statusHistory',
         'user',
         'assignedRider',
       ],

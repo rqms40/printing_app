@@ -24,22 +24,19 @@ import {
   TruckOutlined,
   TeamOutlined,
   ShoppingOutlined,
-  WalletOutlined,
   BellOutlined,
-  FormOutlined,
   AppstoreOutlined,
-  RocketOutlined,
   MessageOutlined,
-  PrinterOutlined,
-  AuditOutlined,
   ShopOutlined,
   SafetyCertificateOutlined,
   EnvironmentOutlined,
   FundOutlined,
   BankOutlined,
   ControlOutlined,
-  AlertOutlined,
   DollarOutlined,
+  CheckSquareOutlined,
+  MoreOutlined,
+  TrophyOutlined,
 } from "@ant-design/icons";
 
 import { gridTheme } from "@/config/theme";
@@ -85,6 +82,9 @@ import { SuperZonesPage } from '@/pages/super/zones';
 import { SuperAuditPage } from '@/pages/super/audit';
 import { SuperFinancePage } from '@/pages/super/finance';
 import { OpsClaimsPage } from '@/pages/ops/claims';
+import { SupplierProfilesListPage } from '@/pages/suppliers/list';
+import { SupplierProfileShowPage } from '@/pages/suppliers/show';
+import { SupplierLeaderboardPage } from '@/pages/suppliers/leaderboard';
 
 /** Home: ops dashboard or supplier jobs inbox. */
 function RoleHomeRedirect() {
@@ -166,20 +166,46 @@ function App() {
                 meta: { label: "Orders", icon: <ShoppingCartOutlined /> },
               },
               {
+                name: "checking",
+                meta: { label: "Checking", icon: <CheckSquareOutlined /> },
+              },
+              {
                 name: "ops-qa",
                 list: "/qa",
                 show: "/qa/workspace/:id",
-                meta: { label: "QA Queue", icon: <AuditOutlined /> },
+                meta: { label: "QA Queue", parent: "checking" },
               },
               {
                 name: "ops-claims",
                 list: "/ops/claims",
-                meta: { label: "Claims", icon: <AlertOutlined /> },
+                meta: { label: "Claims", parent: "checking" },
               },
               {
                 name: "riders",
                 list: "/riders",
                 meta: { label: "Riders", icon: <CarOutlined /> },
+              },
+              {
+                name: "suppliers-ops",
+                meta: { label: "Suppliers", icon: <ShopOutlined /> },
+              },
+              {
+                name: "supplier-profiles",
+                list: "/suppliers",
+                show: "/suppliers/show/:id",
+                meta: {
+                  label: "Profiles",
+                  parent: "suppliers-ops",
+                },
+              },
+              {
+                name: "supplier-leaderboard",
+                list: "/suppliers/leaderboard",
+                meta: {
+                  label: "Leaderboards",
+                  icon: <TrophyOutlined />,
+                  parent: "suppliers-ops",
+                },
               },
               {
                 name: 'delivery-slots',
@@ -212,9 +238,13 @@ function App() {
                 meta: { label: "Users", icon: <TeamOutlined /> },
               },
               {
+                name: "others",
+                meta: { label: "Others", icon: <MoreOutlined /> },
+              },
+              {
                 name: "credit-requests",
                 list: "/credit-requests",
-                meta: { label: "Pilot Credits", icon: <WalletOutlined /> },
+                meta: { label: "Pilot Credits", parent: "others" },
               },
               {
                 name: "products",
@@ -239,7 +269,7 @@ function App() {
                 name: "tam-surveys",
                 list: "/tam-surveys",
                 show: "/tam-surveys/show/:id",
-                meta: { label: "Surveys", icon: <FormOutlined /> },
+                meta: { label: "Surveys", parent: "others" },
               },
               {
                 name: "home-content",
@@ -258,7 +288,7 @@ function App() {
               {
                 name: 'beta-mode',
                 list: '/beta-mode',
-                meta: { label: 'Beta Mode', icon: <RocketOutlined /> },
+                meta: { label: 'Beta Mode', parent: "others" },
               },
               {
                 name: "chat",
@@ -271,7 +301,7 @@ function App() {
               {
                 name: 'printer-profile',
                 list: '/settings/printer',
-                meta: { label: 'Printer Profile', icon: <PrinterOutlined /> },
+                meta: { label: 'Printer Profile', parent: "others" },
               },
               {
                 name: "super-admin",
@@ -360,6 +390,11 @@ function App() {
                 </Route>
                 <Route path="/ops/claims" element={<OpsClaimsPage />} />
                 <Route path="/riders" element={<RiderList />} />
+                <Route path="/suppliers">
+                  <Route index element={<SupplierProfilesListPage />} />
+                  <Route path="leaderboard" element={<SupplierLeaderboardPage />} />
+                  <Route path="show/:id" element={<SupplierProfileShowPage />} />
+                </Route>
                 <Route path="/users">
                   <Route index element={<UserList />} />
                   <Route path="show/:id" element={<UserShow />} />

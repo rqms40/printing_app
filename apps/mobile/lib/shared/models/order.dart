@@ -1,4 +1,5 @@
 import 'enums.dart';
+import 'order_status_history.dart';
 import 'paper_specs.dart';
 import 'three_d_specs.dart';
 import 'route_geometry.dart';
@@ -208,6 +209,80 @@ class OrderLineItem {
   final String? specialInstructions;
 }
 
+/// Client-facing material claim / concern attached to an order.
+class OrderClaim {
+  const OrderClaim({
+    required this.id,
+    required this.orderId,
+    required this.category,
+    required this.categoryLabel,
+    required this.status,
+    required this.statusLabel,
+    this.actionLabel,
+    this.resolutionNotes,
+    required this.withinWindow,
+    required this.openedAt,
+    this.resolvedAt,
+  });
+
+  final int id;
+  final int orderId;
+  final String category;
+  final String categoryLabel;
+  final String status;
+  final String statusLabel;
+  /// Ops action when resolved (e.g. "Reprint approved").
+  final String? actionLabel;
+  final String? resolutionNotes;
+  final bool withinWindow;
+  final DateTime openedAt;
+  final DateTime? resolvedAt;
+
+  bool get isOpen =>
+      status == 'open' || status == 'under_review';
+
+  bool get isResolved => !isOpen;
+
+  factory OrderClaim.fromJson(Map<String, dynamic> json) {
+    DateTime? parseDate(dynamic value) {
+      if (value == null) return null;
+      if (value is DateTime) return value;
+      return DateTime.tryParse(value.toString());
+    }
+
+    int parseInt(dynamic value) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return int.tryParse(value?.toString() ?? '') ?? 0;
+    }
+
+    return OrderClaim(
+      id: parseInt(json['id']),
+      orderId: parseInt(json['orderId'] ?? json['order_id']),
+      category: (json['category'] ?? '').toString(),
+      categoryLabel: (json['categoryLabel'] ??
+              json['category_label'] ??
+              json['category'] ??
+              'Concern')
+          .toString(),
+      status: (json['status'] ?? 'open').toString(),
+      statusLabel: (json['statusLabel'] ??
+              json['status_label'] ??
+              json['status'] ??
+              'Open')
+          .toString(),
+      actionLabel: (json['actionLabel'] ?? json['action_label'])?.toString(),
+      resolutionNotes:
+          (json['resolutionNotes'] ?? json['resolution_notes'])?.toString(),
+      withinWindow: json['withinWindow'] == true ||
+          json['within_window'] == true,
+      openedAt: parseDate(json['openedAt'] ?? json['opened_at']) ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      resolvedAt: parseDate(json['resolvedAt'] ?? json['resolved_at']),
+    );
+  }
+}
+
 class Order {
   const Order({
     required this.id,
@@ -256,6 +331,8 @@ class Order {
     this.trackingLink,
     this.assignedSlot,
     this.items = const [],
+    this.claims = const [],
+    this.statusHistory = const [],
     this.specialInstructions,
     required this.createdAt,
     required this.updatedAt,
@@ -308,6 +385,10 @@ class Order {
   final String? trackingLink;
   final AssignedDeliverySlot? assignedSlot;
   final List<OrderLineItem> items;
+  /// Material concerns / claims reported by the customer (and ops outcomes).
+  final List<OrderClaim> claims;
+  /// Marketplace + logistics status transitions (server-authoritative).
+  final List<OrderStatusHistory> statusHistory;
   final String? specialInstructions;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -410,6 +491,8 @@ class Order {
     String? trackingLink,
     AssignedDeliverySlot? assignedSlot,
     List<OrderLineItem>? items,
+    List<OrderClaim>? claims,
+    List<OrderStatusHistory>? statusHistory,
     String? specialInstructions,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -469,6 +552,8 @@ class Order {
       trackingLink: trackingLink ?? this.trackingLink,
       assignedSlot: assignedSlot ?? this.assignedSlot,
       items: items ?? this.items,
+      claims: claims ?? this.claims,
+      statusHistory: statusHistory ?? this.statusHistory,
       specialInstructions: specialInstructions ?? this.specialInstructions,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

@@ -172,8 +172,15 @@ describe("UserShow", () => {
         logo_url: null,
         attributes: { equipment: "HP Latex" },
         service_zones: ["Davao City"],
+        service_focus_ranks: ["tarpaulins", "apparel"],
+        ranked_services: [
+          { rank: 1, key: "tarpaulins", label: "Tarpaulins" },
+          { rank: 2, key: "apparel", label: "Apparel / Shirt Printing" },
+        ],
         is_active: true,
         verification_status: "verified",
+        rating_average: 4.5,
+        rating_count: 12,
         capabilities: [
           {
             id: 3,

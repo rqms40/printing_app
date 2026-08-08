@@ -58,11 +58,19 @@ class OrderStatusTimeline extends StatelessWidget {
   ///
   /// Exact match first; otherwise map by [OrderStatus.timelineRank] so
   /// intermediate statuses still light the correct step.
+  ///
+  /// Store pickup completion ([OrderStatus.collectedByCustomer]) maps to the
+  /// same end rank as delivered so Progress still highlights the delivery end
+  /// step instead of dropping off the logistics pipeline.
   int _currentIndex(List<OrderStatus> pipeline) {
-    final exact = pipeline.indexOf(order.orderStatus);
+    final status = order.orderStatus == OrderStatus.collectedByCustomer
+        ? OrderStatus.delivered
+        : order.orderStatus;
+
+    final exact = pipeline.indexOf(status);
     if (exact >= 0) return exact;
 
-    final rank = order.orderStatus.timelineRank;
+    final rank = status.timelineRank;
     if (rank == null) return 0;
 
     var best = 0;
@@ -73,6 +81,24 @@ class OrderStatusTimeline extends StatelessWidget {
       }
     }
     return best;
+  }
+
+  String _labelFor(OrderStatus status) {
+    // Keep logistics labels explicit for clients/admins scanning Progress.
+    switch (status) {
+      case OrderStatus.readyForDispatch:
+        return 'Ready for dispatch';
+      case OrderStatus.riderAssigned:
+        return 'Rider assigned';
+      case OrderStatus.pickedUp:
+        return 'Picked up';
+      case OrderStatus.outForDelivery:
+        return 'Out for delivery';
+      case OrderStatus.delivered:
+        return 'Delivered';
+      default:
+        return status.displayName;
+    }
   }
 
   @override
@@ -119,9 +145,10 @@ class OrderStatusTimeline extends StatelessWidget {
     final currentIndex = _currentIndex(pipeline);
 
     // Keep progress labels short — shop name lives in the supplier dropdown card.
+    // Logistics after ready_for_dispatch always use the delivery process labels.
     final steps = pipeline.map((status) {
       return TimelineStep(
-        label: status.displayName,
+        label: _labelFor(status),
         timestamp: _timestampFor(status),
       );
     }).toList();

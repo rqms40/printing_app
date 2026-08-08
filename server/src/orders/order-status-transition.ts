@@ -28,6 +28,12 @@ const SYSTEM_OR_OPS: readonly TransitionActor[] = [
   'super_admin',
 ];
 const RIDER_OR_SYSTEM: readonly TransitionActor[] = ['rider', 'system'];
+const RIDER_OR_SYSTEM_OR_OPS: readonly TransitionActor[] = [
+  'rider',
+  'system',
+  'ops_admin',
+  'super_admin',
+];
 const CLIENT_OR_OPS: readonly TransitionActor[] = [
   'client',
   'ops_admin',
@@ -88,11 +94,11 @@ export const ORDER_STATUS_TRANSITIONS: Record<
   ],
   [OrderStatus.SUPPLIER_ACCEPTED]: [
     { to: OrderStatus.AWAITING_PAYMENT, actors: SYSTEM_OR_OPS },
-    // Money transition: authorizePayment only (client/system). Ops must use
-    // POST /orders/:id/authorize-payment — not generic updateStatus.
+    // Money transition: ops/super authorize via POST /orders/:id/authorize-payment
+    // only — not generic updateStatus (status-only path is hard-blocked).
     {
       to: OrderStatus.PAYMENT_AUTHORIZED,
-      actors: ['client', 'system'],
+      actors: SYSTEM_OR_OPS,
     },
     // 24h payment timeout: release capacity and re-enter matching.
     { to: OrderStatus.APPROVED_FOR_MATCHING, actors: ['system'] },
@@ -101,7 +107,7 @@ export const ORDER_STATUS_TRANSITIONS: Record<
   [OrderStatus.AWAITING_PAYMENT]: [
     {
       to: OrderStatus.PAYMENT_AUTHORIZED,
-      actors: ['client', 'system'],
+      actors: SYSTEM_OR_OPS,
     },
     // 24h payment timeout: release capacity and re-enter matching.
     { to: OrderStatus.APPROVED_FOR_MATCHING, actors: ['system'] },
@@ -123,16 +129,16 @@ export const ORDER_STATUS_TRANSITIONS: Record<
     { to: OrderStatus.COLLECTED_BY_CUSTOMER, actors: OPS },
   ],
   [OrderStatus.RIDER_ASSIGNED]: [
-    { to: OrderStatus.PICKED_UP, actors: RIDER_OR_SYSTEM },
+    { to: OrderStatus.PICKED_UP, actors: RIDER_OR_SYSTEM_OR_OPS },
     { to: OrderStatus.READY_FOR_DISPATCH, actors: SYSTEM_OR_OPS },
   ],
   [OrderStatus.PICKED_UP]: [
-    { to: OrderStatus.OUT_FOR_DELIVERY, actors: RIDER_OR_SYSTEM },
-    { to: OrderStatus.DELIVERY_FAILED, actors: RIDER_OR_SYSTEM },
+    { to: OrderStatus.OUT_FOR_DELIVERY, actors: RIDER_OR_SYSTEM_OR_OPS },
+    { to: OrderStatus.DELIVERY_FAILED, actors: RIDER_OR_SYSTEM_OR_OPS },
   ],
   [OrderStatus.OUT_FOR_DELIVERY]: [
-    { to: OrderStatus.DELIVERED, actors: RIDER_OR_SYSTEM },
-    { to: OrderStatus.DELIVERY_FAILED, actors: RIDER_OR_SYSTEM },
+    { to: OrderStatus.DELIVERED, actors: RIDER_OR_SYSTEM_OR_OPS },
+    { to: OrderStatus.DELIVERY_FAILED, actors: RIDER_OR_SYSTEM_OR_OPS },
   ],
   [OrderStatus.DELIVERED]: [
     { to: OrderStatus.ISSUE_WINDOW_OPEN, actors: ['system'] },
@@ -264,6 +270,9 @@ const ADMIN_OPERABLE_SOURCE_STATUSES = new Set<OrderStatus>([
   OrderStatus.PRODUCTION,
   OrderStatus.SUPPLIER_SELF_QC,
   OrderStatus.READY_FOR_DISPATCH,
+  OrderStatus.RIDER_ASSIGNED,
+  OrderStatus.PICKED_UP,
+  OrderStatus.OUT_FOR_DELIVERY,
 ]);
 
 /**
@@ -283,12 +292,7 @@ export function adminAllowedNextOrderStatuses(
       toStatus !== OrderStatus.CANCELLED &&
       // Money path: use POST /orders/:id/authorize-payment, not status dropdown.
       toStatus !== OrderStatus.PAYMENT_AUTHORIZED &&
-      toStatus !== OrderStatus.RIDER_ASSIGNED &&
-      toStatus !== OrderStatus.PICKED_UP &&
-      toStatus !== OrderStatus.OUT_FOR_DELIVERY &&
-      toStatus !== OrderStatus.DELIVERED &&
-      (toStatus !== OrderStatus.COLLECTED_BY_CUSTOMER ||
-        deliveryOption === 'pickup'),
+      toStatus !== OrderStatus.COLLECTED_BY_CUSTOMER,
   );
 }
 

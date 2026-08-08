@@ -8,6 +8,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   Request,
   UseGuards,
 } from '@nestjs/common';
@@ -103,6 +104,35 @@ export class SuppliersController {
   @Roles(UserRole.OPS_ADMIN, UserRole.SUPER_ADMIN)
   findAll() {
     return this.suppliersService.findAll();
+  }
+
+  /**
+   * Ops directory: profiles + ranked service focus + order/review stats.
+   * Must be declared before :id.
+   */
+  @Get('directory')
+  @Roles(UserRole.OPS_ADMIN, UserRole.SUPER_ADMIN)
+  directory() {
+    return this.suppliersService.listDirectory();
+  }
+
+  /**
+   * Leaderboards: most reviews or most orders received.
+   * Query: ?metric=reviews|orders&limit=20
+   */
+  @Get('leaderboard')
+  @Roles(UserRole.OPS_ADMIN, UserRole.SUPER_ADMIN)
+  leaderboard(
+    @Query('metric') metric?: string,
+    @Query('limit') limitRaw?: string,
+  ) {
+    const by =
+      metric === 'orders' || metric === 'reviews' ? metric : 'reviews';
+    const limit = Math.min(
+      100,
+      Math.max(1, Number.parseInt(limitRaw ?? '20', 10) || 20),
+    );
+    return this.suppliersService.leaderboard(by, limit);
   }
 
   /** Ops/super admin read any; supplier read own only. */

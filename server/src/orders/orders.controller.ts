@@ -99,13 +99,14 @@ export class OrdersController {
   }
 
   /**
-   * Client/ops: authorize payment after supplier_accepted / awaiting_payment.
-   * Pilot Credits: reserve→spend; COD: eligibility approval for collection.
+   * Ops/super only: authorize payment after supplier_accepted / awaiting_payment
+   * so production can start. Client cannot authorize.
+   * Pilot Credits: reserve→spend from the order owner; COD: eligibility for collection.
    * Freezes commercial snapshot and enters payment_authorized.
    */
   @Post(':id/authorize-payment')
   @UseGuards(RolesGuard)
-  @Roles('client', 'ops_admin', 'super_admin')
+  @Roles('ops_admin', 'super_admin')
   authorizePayment(
     @Request() req: RequestWithUser,
     @Param('id', ParseIntPipe) id: number,
@@ -113,7 +114,7 @@ export class OrdersController {
     return this.ordersService.authorizePayment(id, {
       actorUserId: req.user.sub,
       actorRole: req.user.role ?? null,
-      reason: 'Client/ops payment authorization',
+      reason: 'Ops payment authorization',
     });
   }
 

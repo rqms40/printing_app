@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing_app/shared/models/enums.dart';
 import 'package:printing_app/shared/models/order.dart';
+import 'package:printing_app/shared/models/order_status_history.dart';
 import 'package:printing_app/shared/models/paper_specs.dart';
 import 'package:printing_app/shared/models/three_d_specs.dart';
 import 'package:printing_app/shared/providers/mock_data.dart';
@@ -314,12 +315,46 @@ Order _parseOrder(Map<String, dynamic> json) {
       'tracking_link',
     )?.toString(),
     items: items,
+    statusHistory: _parseOrderStatusHistory(json),
     specialInstructions: _normalizeOptionalText(
       _readJsonValue(json, 'specialInstructions', 'special_instructions'),
     ),
     createdAt: _parseDate(_readJsonValue(json, 'createdAt', 'created_at')),
     updatedAt: _parseDate(_readJsonValue(json, 'updatedAt', 'updated_at')),
   );
+}
+
+List<OrderStatusHistory> _parseOrderStatusHistory(Map<String, dynamic> json) {
+  final raw = _readJsonValue(json, 'statusHistory', 'status_history');
+  if (raw is! List) return const [];
+  final rows = <OrderStatusHistory>[];
+  for (final entry in raw.whereType<Map>()) {
+    final map = Map<String, dynamic>.from(entry);
+    final fromRaw =
+        _readJsonValue(map, 'fromStatus', 'from_status')?.toString() ?? '';
+    final toRaw =
+        _readJsonValue(map, 'toStatus', 'to_status')?.toString() ?? '';
+    if (toRaw.isEmpty) continue;
+    rows.add(
+      OrderStatusHistory(
+        id: _readJsonValue(map, 'id')?.toString() ?? '',
+        orderId: _readJsonValue(map, 'orderId', 'order_id')?.toString() ?? '',
+        fromStatus: _parseOrderStatus(
+          fromRaw.isEmpty ? 'submitted' : fromRaw,
+        ),
+        toStatus: _parseOrderStatus(toRaw),
+        changedByUserId:
+            _readJsonValue(map, 'changedByUserId', 'changed_by_user_id')
+                ?.toString(),
+        notes: _readJsonValue(map, 'notes')?.toString(),
+        createdAt: _parseDate(
+          _readJsonValue(map, 'createdAt', 'created_at'),
+        ),
+      ),
+    );
+  }
+  rows.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+  return rows;
 }
 
 OrderLineItem _parseOrderLineItem(Map<String, dynamic> json) {
@@ -507,6 +542,27 @@ class QueueNotifier extends StateNotifier<QueueState> {
     }).toList();
 
     state = state.copyWith(orders: updated);
+  }
+
+  /// Ops/super: authorize payment so production can start.
+  /// Returns true on success.
+  Future<bool> authorizePayment(String orderId) async {
+    try {
+      await ApiClient.instance.post('/orders/$orderId/authorize-payment');
+      final updated = state.orders.map((o) {
+        if (o.id == orderId) {
+          return o.copyWith(
+            orderStatus: OrderStatus.paymentAuthorized,
+            updatedAt: DateTime.now(),
+          );
+        }
+        return o;
+      }).toList();
+      state = state.copyWith(orders: updated);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 }
 

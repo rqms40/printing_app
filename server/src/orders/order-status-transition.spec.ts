@@ -88,7 +88,8 @@ describe('order status transitions (marketplace)', () => {
       ).toThrow(/Cannot transition/);
     });
 
-    it('does not allow status-only ops jump to payment_authorized', () => {
+    it('payment_authorized is ops/system only (not client); use authorize-payment', () => {
+      // No edge from matching → payment_authorized (must go through supplier accept).
       expect(
         canTransition(
           OrderStatus.APPROVED_FOR_MATCHING,
@@ -96,35 +97,43 @@ describe('order status transitions (marketplace)', () => {
           'ops_admin',
         ),
       ).toBe(false);
+      // Graph allows ops/super/system for authorizePayment (status dropdown still excludes it).
       expect(
         canTransition(
           OrderStatus.AWAITING_PAYMENT,
           OrderStatus.PAYMENT_AUTHORIZED,
           'ops_admin',
         ),
-      ).toBe(false);
+      ).toBe(true);
       expect(
         canTransition(
           OrderStatus.SUPPLIER_ACCEPTED,
           OrderStatus.PAYMENT_AUTHORIZED,
-          'ops_admin',
+          'super_admin',
         ),
-      ).toBe(false);
-      // Structure edge still exists for authorizePayment (client/system).
+      ).toBe(true);
+      expect(
+        canTransition(
+          OrderStatus.AWAITING_PAYMENT,
+          OrderStatus.PAYMENT_AUTHORIZED,
+          'system',
+        ),
+      ).toBe(true);
+      // Clients no longer authorize payment.
       expect(
         canTransition(
           OrderStatus.AWAITING_PAYMENT,
           OrderStatus.PAYMENT_AUTHORIZED,
           'client',
         ),
-      ).toBe(true);
+      ).toBe(false);
       expect(
         canTransition(
           OrderStatus.SUPPLIER_ACCEPTED,
           OrderStatus.PAYMENT_AUTHORIZED,
-          'system',
+          'client',
         ),
-      ).toBe(true);
+      ).toBe(false);
     });
   });
 
@@ -163,12 +172,19 @@ describe('order status transitions (marketplace)', () => {
       ).toBe(false);
     });
 
-    it('allows client payment authorization from supplier_accepted / awaiting_payment', () => {
+    it('allows ops payment authorization from supplier_accepted / awaiting_payment', () => {
       expect(
         canTransition(
           OrderStatus.SUPPLIER_ACCEPTED,
           OrderStatus.PAYMENT_AUTHORIZED,
-          'client',
+          'ops_admin',
+        ),
+      ).toBe(true);
+      expect(
+        canTransition(
+          OrderStatus.AWAITING_PAYMENT,
+          OrderStatus.PAYMENT_AUTHORIZED,
+          'super_admin',
         ),
       ).toBe(true);
       expect(
@@ -177,7 +193,7 @@ describe('order status transitions (marketplace)', () => {
           OrderStatus.PAYMENT_AUTHORIZED,
           'client',
         ),
-      ).toBe(true);
+      ).toBe(false);
     });
 
     it('allows system payment-timeout rematch to approved_for_matching', () => {

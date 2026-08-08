@@ -5,6 +5,7 @@ import { Order } from '../orders/entities/order.entity';
 import { OrderStatusHistory } from '../orders/entities/order-status-history.entity';
 import { AuditModule } from '../audit/audit.module';
 import { PayoutsModule } from '../payouts/payouts.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { IssuesService } from './issues.service';
 import { IssuesController } from './issues.controller';
 import { IssueWindowScheduler } from './issue-window.scheduler';
@@ -17,6 +18,7 @@ import { IssueWindowScheduler } from './issue-window.scheduler';
   imports: [
     TypeOrmModule.forFeature([Issue, Order, OrderStatusHistory]),
     AuditModule,
+    NotificationsModule,
     forwardRef(() => PayoutsModule),
   ],
   controllers: [IssuesController],

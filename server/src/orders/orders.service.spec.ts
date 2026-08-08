@@ -633,9 +633,9 @@ describe('OrdersService', () => {
 
   describe('authorizePayment (Task 3.3)', () => {
     const authContext = {
-      actorUserId: 1,
-      actorRole: 'client',
-      reason: 'Client payment authorization',
+      actorUserId: 7,
+      actorRole: 'ops_admin',
+      reason: 'Ops payment authorization',
     };
 
     function awaitingPilotCreditOrder(
@@ -672,6 +672,7 @@ describe('OrdersService', () => {
 
       const result = await service.authorizePayment(42, authContext);
 
+      // Credits always settle against the order owner (userId), not the ops actor.
       expect(creditsService.reserveCredits).toHaveBeenCalledWith(
         1,
         125,
@@ -679,6 +680,7 @@ describe('OrdersService', () => {
         expect.objectContaining({
           manager: expect.anything(),
           referenceId: 'ORD-10042',
+          actorUserId: 7,
         }),
       );
       expect(creditsService.spendCredits).toHaveBeenCalledWith(
@@ -689,6 +691,7 @@ describe('OrdersService', () => {
           reserveIdempotencyKey:
             OrdersService.creditReserveIdempotencyKey(42),
           manager: expect.anything(),
+          actorUserId: 7,
         }),
       );
       expect(creditsService.publishCreditMutation).toHaveBeenCalled();
@@ -783,19 +786,41 @@ describe('OrdersService', () => {
       expect(creditsService.reserveCredits).not.toHaveBeenCalled();
     });
 
-    it('rejects non-owner client', async () => {
-      const order = awaitingPilotCreditOrder({ userId: 99 });
+    it('rejects client authorization (ops/super only)', async () => {
+      const order = awaitingPilotCreditOrder({ userId: 1 });
       repo.findOne.mockResolvedValue(order);
 
       await expect(
         service.authorizePayment(42, {
           actorUserId: 1,
           actorRole: 'client',
-          reason: 'Nope',
+          reason: 'Client attempt',
         }),
       ).rejects.toMatchObject({
-        response: expect.objectContaining({ code: 'not_order_owner' }),
+        response: expect.objectContaining({
+          code: 'ops_only_payment_authorization',
+        }),
       });
+      expect(creditsService.reserveCredits).not.toHaveBeenCalled();
+    });
+
+    it('allows super_admin to authorize payment', async () => {
+      const order = awaitingPilotCreditOrder();
+      repo.findOne.mockResolvedValue(order);
+      repo.findOneOrFail.mockResolvedValue(order);
+      repo.save.mockImplementation(async (o) => o as Order);
+      assignmentRepo.find!.mockResolvedValue([]);
+
+      const result = await service.authorizePayment(42, {
+        actorUserId: 99,
+        actorRole: 'super_admin',
+        reason: 'Super admin auth',
+      });
+
+      expect(result.orderStatus).toBe(OrderStatus.PAYMENT_AUTHORIZED);
+      expect(result.paymentAuthorizationStatus).toBe(
+        PaymentAuthorizationStatus.AUTHORIZED,
+      );
     });
 
     it('is idempotent when already payment_authorized', async () => {
@@ -2112,9 +2137,16 @@ describe('OrdersService', () => {
         statusContext,
       );
 
+      // Collected, then material concern window (issue_window_open).
       expect(repo.update).toHaveBeenCalledWith(
         { id: 1, orderStatus: OrderStatus.READY_FOR_DISPATCH },
         { orderStatus: OrderStatus.COLLECTED_BY_CUSTOMER },
+      );
+      expect(repo.update).toHaveBeenCalledWith(
+        { id: 1, orderStatus: OrderStatus.COLLECTED_BY_CUSTOMER },
+        expect.objectContaining({
+          orderStatus: OrderStatus.ISSUE_WINDOW_OPEN,
+        }),
       );
     });
 
@@ -3183,6 +3215,7 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
     expect(result).toEqual({
       previous: arrived,
       surveyRequirement,
+      publishedStatus: OrderStatus.ISSUE_WINDOW_OPEN,
     });
   });
 
@@ -3298,8 +3331,9 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       ),
     ).resolves.toEqual(completed);
 
-    expect(ordersRepo.update).toHaveBeenCalledTimes(1);
-    expect(transactionHistoryRepo.insert).toHaveBeenCalledTimes(1);
+    // collected + issue-window endsAt + issue_window_open status
+    expect(ordersRepo.update).toHaveBeenCalledTimes(3);
+    expect(transactionHistoryRepo.insert).toHaveBeenCalledTimes(2);
     expect(mockFilesService.stampExpiry).toHaveBeenCalledTimes(1);
     expect(
       mockTamSurveysService.createPostDeliveryRequirementIfNeeded,
@@ -3314,8 +3348,9 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       ),
     ).resolves.toEqual(completed);
 
-    expect(ordersRepo.update).toHaveBeenCalledTimes(1);
-    expect(transactionHistoryRepo.insert).toHaveBeenCalledTimes(1);
+    // Retry is idempotent when already collected/windowed (no extra writes).
+    expect(ordersRepo.update).toHaveBeenCalledTimes(3);
+    expect(transactionHistoryRepo.insert).toHaveBeenCalledTimes(2);
     expect(mockFilesService.stampExpiry).toHaveBeenCalledTimes(1);
     expect(
       mockTamSurveysService.createPostDeliveryRequirementIfNeeded,
@@ -3357,8 +3392,8 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       ),
     ).resolves.toEqual(completed);
 
-    expect(ordersRepo.update).toHaveBeenCalledTimes(1);
-    expect(transactionHistoryRepo.insert).toHaveBeenCalledTimes(1);
+    expect(ordersRepo.update).toHaveBeenCalledTimes(3);
+    expect(transactionHistoryRepo.insert).toHaveBeenCalledTimes(2);
   });
 
   it('keeps pickup completion successful when every post-commit notification channel fails', async () => {
@@ -3399,8 +3434,9 @@ describe('OrdersService.updateStatus — expiresAt stamping', () => {
       ),
     ).resolves.toEqual(completed);
 
-    expect(ordersRepo.update).toHaveBeenCalledTimes(1);
-    expect(transactionHistoryRepo.insert).toHaveBeenCalledTimes(1);
+    // collected + issue window endsAt + issue_window_open
+    expect(ordersRepo.update).toHaveBeenCalledTimes(3);
+    expect(transactionHistoryRepo.insert).toHaveBeenCalledTimes(2);
   });
 
   it('does not repeat completed-pickup expiry writes during publication', async () => {

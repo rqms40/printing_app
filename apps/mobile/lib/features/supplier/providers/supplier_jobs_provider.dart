@@ -238,7 +238,7 @@ class SupplierJobDetailNotifier extends StateNotifier<SupplierJobDetailState> {
           'promisedDate': promisedDate.toUtc().toIso8601String(),
         },
       );
-      return 'Job accepted — waiting for client payment authorization';
+      return 'Job accepted — waiting for ops payment authorization';
     });
   }
 

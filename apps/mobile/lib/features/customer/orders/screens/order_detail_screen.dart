@@ -22,6 +22,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:printing_app/shared/widgets/file_preview_sheet.dart';
 import 'package:printing_app/features/customer/orders/widgets/admin_status_banner.dart';
 import 'package:printing_app/features/customer/orders/widgets/marketplace_order_actions.dart';
+import 'package:printing_app/features/customer/orders/widgets/order_claims_section.dart';
 import 'package:printing_app/features/customer/tracking/widgets/rider_info_card.dart';
 import 'package:printing_app/utils/formatters.dart';
 
@@ -120,9 +121,14 @@ class OrderDetailScreen extends ConsumerWidget {
       );
     }
 
-    final statusHistory =
-        MockData.orderStatusHistory.where((h) => h.orderId == order.id).toList()
-          ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    // Prefer live history from the API (includes logistics: rider assigned →
+    // delivered). Fall back to mock history only for offline demo orders.
+    final statusHistory = order.statusHistory.isNotEmpty
+        ? List.of(order.statusHistory)
+        : (MockData.orderStatusHistory
+              .where((h) => h.orderId == order.id)
+              .toList()
+            ..sort((a, b) => a.createdAt.compareTo(b.createdAt)));
 
     final isCancellable = cancellableStatuses.contains(order.orderStatus);
 
@@ -229,8 +235,20 @@ class OrderDetailScreen extends ConsumerWidget {
                 order.orderStatus == OrderStatus.proofApproval ||
                 order.orderStatus == OrderStatus.awaitingPayment ||
                 order.orderStatus == OrderStatus.supplierAccepted ||
-                order.orderStatus == OrderStatus.supplierAssigned)
+                order.orderStatus == OrderStatus.supplierAssigned ||
+                order.orderStatus == OrderStatus.collectedByCustomer ||
+                order.orderStatus == OrderStatus.issueWindowOpen ||
+                order.orderStatus == OrderStatus.delivered)
               const SizedBox(height: AppSpacing.md),
+
+            // --- Claims / concern outcomes from ops ---
+            if (order.claims.isNotEmpty) ...[
+              OrderClaimsSection(claims: order.claims)
+                  .animate()
+                  .fadeIn(duration: 400.ms, curve: Curves.easeOut)
+                  .slideY(begin: 0.03, duration: 400.ms, curve: Curves.easeOut),
+              const SizedBox(height: AppSpacing.md),
+            ],
 
             // --- Status Timeline ---
             AppCard(
@@ -242,6 +260,14 @@ class OrderDetailScreen extends ConsumerWidget {
                         style: AppTypography.overline.copyWith(
                           color: colors.onSurfaceDim,
                           letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'Delivery process after Ready for dispatch: '
+                        'Rider assigned → Picked up → Out for delivery → Delivered',
+                        style: AppTypography.caption.copyWith(
+                          color: colors.onSurfaceDim,
                         ),
                       ),
                       const SizedBox(height: AppSpacing.md),
@@ -1032,81 +1058,82 @@ class _SelfQcEvidenceSection extends StatelessWidget {
         ? AppColors.dark
         : AppColors.light;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        title: Text(
           'Supplier quality check',
           style: AppTypography.caption.copyWith(
             color: colors.onSurfaceDim,
             letterSpacing: 0.4,
           ),
         ),
-        const SizedBox(height: AppSpacing.sm),
-        Text(
+        subtitle: Text(
           'Evidence submitted by the print shop',
           style: AppTypography.body.copyWith(color: colors.onSurfaceDim),
         ),
-        const SizedBox(height: AppSpacing.sm),
-        SizedBox(
-          height: 120,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: urls.length,
-            separatorBuilder: (context, index) =>
-                const SizedBox(width: AppSpacing.sm),
-            itemBuilder: (context, index) {
-              final url = urls[index];
-              return GestureDetector(
-                onTap: () {
-                  showDialog<void>(
-                    context: context,
-                    builder: (ctx) => Dialog(
-                      backgroundColor: colors.surface,
-                      insetPadding: const EdgeInsets.all(AppSpacing.lg),
-                      child: InteractiveViewer(
-                        child: Image.network(
-                          url,
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Padding(
-                            padding: const EdgeInsets.all(AppSpacing.xl),
-                            child: Text(
-                              'Could not load evidence photo',
-                              style: AppTypography.body.copyWith(
-                                color: colors.onSurfaceDim,
+        children: [
+          SizedBox(
+            height: 120,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: urls.length,
+              separatorBuilder: (context, index) =>
+                  const SizedBox(width: AppSpacing.sm),
+              itemBuilder: (context, index) {
+                final url = urls[index];
+                return GestureDetector(
+                  onTap: () {
+                    showDialog<void>(
+                      context: context,
+                      builder: (ctx) => Dialog(
+                        backgroundColor: colors.surface,
+                        insetPadding: const EdgeInsets.all(AppSpacing.lg),
+                        child: InteractiveViewer(
+                          child: Image.network(
+                            url,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) =>
+                                Padding(
+                              padding: const EdgeInsets.all(AppSpacing.xl),
+                              child: Text(
+                                'Could not load evidence photo',
+                                style: AppTypography.body.copyWith(
+                                  color: colors.onSurfaceDim,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  );
-                },
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: AspectRatio(
-                    aspectRatio: 1,
-                    child: Image.network(
-                      url,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: colors.surfaceVariant,
-                        alignment: Alignment.center,
-                        child: HugeIcon(
-                          icon: HugeIcons.strokeRoundedImage01,
-                          size: 28,
-                          color: colors.onSurfaceDim,
+                    );
+                  },
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: AspectRatio(
+                      aspectRatio: 1,
+                      child: Image.network(
+                        url,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: colors.surfaceVariant,
+                          alignment: Alignment.center,
+                          child: HugeIcon(
+                            icon: HugeIcons.strokeRoundedImage01,
+                            size: 28,
+                            color: colors.onSurfaceDim,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
