@@ -37,7 +37,7 @@ Order _order({
     deliveryFee: 0,
     paymentMethod: paymentMethod,
     paymentStatus: PaymentStatus.pending,
-    orderStatus: OrderStatus.orderPlaced,
+    orderStatus: OrderStatus.submitted,
     deliveryOption: 'delivery',
     deliveryAddress: deliveryAddress,
     createdAt: DateTime(2026, 5, 2, 19),

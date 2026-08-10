@@ -114,6 +114,15 @@ class _OrderCardState extends State<OrderCard> {
     }
   }
 
+  String _priceLabel() {
+    if (widget.order.pricingStatus == PricingStatus.pendingQuote) {
+      return 'Quote pending';
+    }
+    final quoted = widget.order.quotedTotalMinor;
+    if (quoted != null) return formatMinorCurrency(quoted);
+    return formatCurrency(widget.order.totalPrice);
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = _colors(context);
@@ -121,13 +130,14 @@ class _OrderCardState extends State<OrderCard> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isBatch = widget.order.isBatchOrder;
     final typeLabel = widget.order.orderTypeShortLabel.toUpperCase();
+    final priceLabel = _priceLabel();
 
     return Semantics(
       container: true,
       button: widget.onTap != null,
       label:
           'Order ${widget.order.orderId}. $typeLabel. '
-          '${visual.statusLabel}. ${formatCurrency(widget.order.totalPrice)}. '
+          '${visual.statusLabel}. $priceLabel. '
           '${formatDate(widget.order.createdAt)}.',
       onTap: widget.onTap,
       child: ExcludeSemantics(
@@ -272,7 +282,7 @@ class _OrderCardState extends State<OrderCard> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          formatCurrency(widget.order.totalPrice),
+                          priceLabel,
                           style: AppTypography.bodyBold.copyWith(
                             color: colors.onBackground,
                           ),

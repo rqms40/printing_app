@@ -88,6 +88,32 @@ bool _readBool(dynamic value, bool fallback) {
   return fallback;
 }
 
+BigInt? _readMinorUnits(dynamic value) {
+  if (value == null) return null;
+  if (value is String) {
+    final normalized = value.trim();
+    if (!RegExp(r'^\d+$').hasMatch(normalized)) return null;
+    return BigInt.tryParse(normalized);
+  }
+  if (value is int && value.abs() <= 9007199254740991) {
+    return BigInt.from(value);
+  }
+  return null;
+}
+
+PricingStatus _parsePricingStatus(dynamic value) {
+  switch (value?.toString().trim().toLowerCase()) {
+    case 'pending_quote':
+      return PricingStatus.pendingQuote;
+    case 'quoted':
+      return PricingStatus.quoted;
+    case 'accepted':
+      return PricingStatus.accepted;
+    default:
+      return PricingStatus.accepted;
+  }
+}
+
 String? _normalizeOptionalText(dynamic value) {
   final text = value?.toString().trim();
   return text == null || text.isEmpty ? null : text;
@@ -324,7 +350,7 @@ Map<String, dynamic> _parseSpecValues(dynamic raw) {
   final specs = <String, dynamic>{};
   for (final entry in raw.whereType<Map>()) {
     final row = Map<String, dynamic>.from(entry);
-    final key = _readJsonValue(row, 'specKey', 'spec_key')?.toString();
+    final key = _readJsonValue(row, 'specKey', 'spec_key', 'key')?.toString();
     if (key == null || key.isEmpty) continue;
     specs[key] = _readJsonValue(row, 'value');
   }
@@ -336,7 +362,7 @@ Map<String, String> _parseSpecDisplayValues(dynamic raw) {
   final display = <String, String>{};
   for (final entry in raw.whereType<Map>()) {
     final row = Map<String, dynamic>.from(entry);
-    final key = _readJsonValue(row, 'specKey', 'spec_key')?.toString();
+    final key = _readJsonValue(row, 'specKey', 'spec_key', 'key')?.toString();
     if (key == null || key.isEmpty) continue;
     display[key] =
         _readJsonValue(row, 'displayValue', 'display_value')?.toString() ??
@@ -383,7 +409,12 @@ AssignedSupplierContact? _parseAssignedSupplier(Map<String, dynamic> json) {
 Order _parseOrder(Map<String, dynamic> json) {
   final batch = _readJsonValue(json, 'batchOrder', 'batch_order');
   final batchJson = batch is Map ? Map<String, dynamic>.from(batch) : null;
-  final specValuesRaw = _readJsonValue(json, 'specValues', 'spec_values');
+  final specValuesRaw = _readJsonValue(
+    json,
+    'specValues',
+    'spec_values',
+    'specs',
+  );
   final specs = _parseSpecValues(specValuesRaw);
   final specDisplayValues = _parseSpecDisplayValues(specValuesRaw);
   final category = _readJsonValue(json, 'category')?.toString() ?? '';
@@ -394,6 +425,11 @@ Order _parseOrder(Map<String, dynamic> json) {
             .map((item) => _parseOrderLineItem(Map<String, dynamic>.from(item)))
             .toList()
       : const <OrderLineItem>[];
+  final firstItem = items.isEmpty ? null : items.first;
+  final examplesRaw = _readJsonValue(json, 'examples');
+  final examples = examplesRaw is List
+      ? examplesRaw.map((value) => value.toString()).toList(growable: false)
+      : (firstItem?.examples ?? const <String>[]);
   final rawDeliveryGeometry = _readJsonValue(
     json,
     'deliveryRouteGeometry',
@@ -444,6 +480,27 @@ Order _parseOrder(Map<String, dynamic> json) {
             ? null
             : _readJsonValue(batchJson, 'batchRef', 'batch_ref')?.toString()),
     category: category,
+    categoryName:
+        _normalizeOptionalText(
+          _readJsonValue(json, 'categoryName', 'category_name'),
+        ) ??
+        firstItem?.categoryName,
+    groupSlug:
+        _normalizeOptionalText(
+          _readJsonValue(json, 'groupSlug', 'group_slug'),
+        ) ??
+        firstItem?.groupSlug,
+    groupName:
+        _normalizeOptionalText(
+          _readJsonValue(json, 'groupName', 'group_name'),
+        ) ??
+        firstItem?.groupName,
+    groupDescription:
+        _normalizeOptionalText(
+          _readJsonValue(json, 'groupDescription', 'group_description'),
+        ) ??
+        firstItem?.groupDescription,
+    examples: examples,
     fileUrl: _readJsonValue(json, 'fileUrl', 'file_url')?.toString(),
     fileName: _readJsonValue(json, 'fileName', 'file_name')?.toString(),
     fileMetadataId:
@@ -486,6 +543,30 @@ Order _parseOrder(Map<String, dynamic> json) {
               '0',
         ) ??
         0,
+    deliveryFeeMinor: _readMinorUnits(
+      _readJsonValue(json, 'deliveryFeeMinor', 'delivery_fee_minor'),
+    ),
+    pricingStatus: _parsePricingStatus(
+      _readJsonValue(json, 'pricingStatus', 'pricing_status'),
+    ),
+    quotedTotalMinor: _readMinorUnits(
+      _readJsonValue(json, 'quotedTotalMinor', 'quoted_total_minor'),
+    ),
+    quotedAt: _parseDateNullable(_readJsonValue(json, 'quotedAt', 'quoted_at')),
+    quoteAcceptedAt: _parseDateNullable(
+      _readJsonValue(json, 'quoteAcceptedAt', 'quote_accepted_at'),
+    ),
+    promisedCompletionAt: _parseDateNullable(
+      _readJsonValue(json, 'promisedCompletionAt', 'promised_completion_at'),
+    ),
+    quoteAssignmentId: _readBoundedInt(
+      _readJsonValue(json, 'quoteAssignmentId', 'quote_assignment_id'),
+      minimum: 1,
+    ),
+    codEligible: _readBool(
+      _readJsonValue(json, 'codEligible', 'cod_eligible'),
+      false,
+    ),
     paymentMethod: _parsePaymentMethod(
       _readJsonValue(json, 'paymentMethod', 'payment_method')?.toString() ??
           'cod',
@@ -603,7 +684,12 @@ Order _parseOrder(Map<String, dynamic> json) {
 }
 
 List<OrderClaim> _parseOrderClaims(Map<String, dynamic> json) {
-  final raw = _readJsonValue(json, 'claims', 'materialClaims', 'material_claims');
+  final raw = _readJsonValue(
+    json,
+    'claims',
+    'materialClaims',
+    'material_claims',
+  );
   if (raw is! List) return const [];
   return raw
       .whereType<Map>()
@@ -630,13 +716,13 @@ List<OrderStatusHistory> _parseOrderStatusHistory(Map<String, dynamic> json) {
           fromRaw.isEmpty ? 'submitted' : fromRaw,
         ),
         toStatus: parseMarketplaceOrderStatus(toRaw),
-        changedByUserId:
-            _readJsonValue(map, 'changedByUserId', 'changed_by_user_id')
-                ?.toString(),
+        changedByUserId: _readJsonValue(
+          map,
+          'changedByUserId',
+          'changed_by_user_id',
+        )?.toString(),
         notes: _readJsonValue(map, 'notes')?.toString(),
-        createdAt: _parseDate(
-          _readJsonValue(map, 'createdAt', 'created_at'),
-        ),
+        createdAt: _parseDate(_readJsonValue(map, 'createdAt', 'created_at')),
       ),
     );
   }
@@ -645,10 +731,23 @@ List<OrderStatusHistory> _parseOrderStatusHistory(Map<String, dynamic> json) {
 }
 
 OrderLineItem _parseOrderLineItem(Map<String, dynamic> json) {
-  final specValuesRaw = _readJsonValue(json, 'specValues', 'spec_values');
+  final specValuesRaw = _readJsonValue(
+    json,
+    'specValues',
+    'spec_values',
+    'specs',
+  );
   final specs = _parseSpecValues(specValuesRaw);
   final specDisplayValues = _parseSpecDisplayValues(specValuesRaw);
-  final category = _readJsonValue(json, 'category')?.toString() ?? '';
+  final category =
+      _readJsonValue(
+        json,
+        'categorySlug',
+        'category_slug',
+        'category',
+      )?.toString() ??
+      '';
+  final examplesRaw = _readJsonValue(json, 'examples');
   final paperSpecJson =
       (_readJsonValue(json, 'paperSpecs', 'paper_specs') ??
       _readJsonValue(json, 'paperSpec', 'paper_spec'));
@@ -659,6 +758,24 @@ OrderLineItem _parseOrderLineItem(Map<String, dynamic> json) {
     id: _readJsonValue(json, 'id')?.toString() ?? '',
     orderId: _readJsonValue(json, 'orderId', 'order_id')?.toString() ?? '',
     category: category,
+    categoryName: _normalizeOptionalText(
+      _readJsonValue(json, 'categoryName', 'category_name'),
+    ),
+    groupSlug: _normalizeOptionalText(
+      _readJsonValue(json, 'groupSlug', 'group_slug'),
+    ),
+    groupName: _normalizeOptionalText(
+      _readJsonValue(json, 'groupName', 'group_name'),
+    ),
+    groupDescription: _normalizeOptionalText(
+      _readJsonValue(json, 'groupDescription', 'group_description'),
+    ),
+    examples: examplesRaw is List
+        ? examplesRaw.map((value) => value.toString()).toList(growable: false)
+        : const [],
+    pricingModel: _normalizeOptionalText(
+      _readJsonValue(json, 'pricingModel', 'pricing_model'),
+    ),
     fileUrl: _readJsonValue(json, 'fileUrl', 'file_url')?.toString(),
     fileName: _readJsonValue(json, 'fileName', 'file_name')?.toString(),
     fileMetadataId:
@@ -704,6 +821,11 @@ OrderLineItem _lineItemFromOrder(Order order) {
     id: order.id,
     orderId: order.orderId,
     category: order.category,
+    categoryName: order.categoryName,
+    groupSlug: order.groupSlug,
+    groupName: order.groupName,
+    groupDescription: order.groupDescription,
+    examples: order.examples,
     fileUrl: order.fileUrl,
     fileName: order.fileName,
     fileMetadataId: order.fileMetadataId,
@@ -815,6 +937,7 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   bool _sessionNeedsStart = false;
   int _sessionGeneration = 0;
   int _fetchGeneration = 0;
+  final Map<String, Future<void>> _quoteAcceptances = {};
 
   bool _isCurrentSession(int generation) =>
       mounted && generation == _sessionGeneration;
@@ -980,6 +1103,67 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
   }
 
   Future<void> refreshOrders() async => _fetchOrders();
+
+  Future<void> acceptQuote(
+    String orderId,
+    int supplierAssignmentId,
+    PaymentMethod paymentMethod,
+  ) {
+    if (paymentMethod != PaymentMethod.gridCredits &&
+        paymentMethod != PaymentMethod.cod) {
+      return Future.error(
+        ArgumentError.value(
+          paymentMethod,
+          'paymentMethod',
+          'Quote acceptance supports Pilot Credits or COD only',
+        ),
+      );
+    }
+    final key = '$orderId:$supplierAssignmentId';
+    final inFlight = _quoteAcceptances[key];
+    if (inFlight != null) return inFlight;
+    final request =
+        _performQuoteAcceptance(
+          orderId,
+          supplierAssignmentId,
+          paymentMethod,
+        ).whenComplete(() {
+          _quoteAcceptances.remove(key);
+        });
+    _quoteAcceptances[key] = request;
+    return request;
+  }
+
+  Future<void> _performQuoteAcceptance(
+    String orderId,
+    int supplierAssignmentId,
+    PaymentMethod paymentMethod,
+  ) async {
+    try {
+      await ApiClient.instance.post(
+        '/orders/$orderId/accept-quote',
+        data: {
+          'supplierAssignmentId': supplierAssignmentId,
+          'paymentMethod': paymentMethod.orderApiValue,
+        },
+      );
+    } on DioException catch (error) {
+      final responseData = error.response?.data;
+      final payload = responseData is Map ? responseData : const {};
+      final nested = payload['message'];
+      final nestedPayload = nested is Map ? nested : const {};
+      final code = (payload['code'] ?? nestedPayload['code'] ?? 'quote_error')
+          .toString();
+      final message =
+          (payload['message'] is String
+                  ? payload['message']
+                  : nestedPayload['message'])
+              ?.toString() ??
+          'Unable to accept this quote. Please try again.';
+      throw QuoteAcceptanceException(code: code, message: message);
+    }
+    await _fetchOrders();
+  }
 
   void clear() {
     _sessionGeneration += 1;
@@ -1413,6 +1597,21 @@ class OrdersNotifier extends StateNotifier<List<Order>> {
     await ApiClient.instance.patch('/orders/$orderId/confirm-receipt');
     await _fetchOrders();
   }
+}
+
+class QuoteAcceptanceException implements Exception {
+  const QuoteAcceptanceException({required this.code, required this.message});
+
+  final String code;
+  final String message;
+
+  bool get refreshRecommended =>
+      code == 'stale_quote' ||
+      code == 'quote_acceptance_conflict' ||
+      code == 'quote_conflict';
+
+  @override
+  String toString() => message;
 }
 
 Map<String, dynamic> _cartItemPayload(CartItem item) {

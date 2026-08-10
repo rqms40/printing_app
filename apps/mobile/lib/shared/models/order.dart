@@ -4,6 +4,8 @@ import 'paper_specs.dart';
 import 'three_d_specs.dart';
 import 'route_geometry.dart';
 
+enum PricingStatus { pendingQuote, quoted, accepted }
+
 class OrderDeliveryAddress {
   const OrderDeliveryAddress({
     this.label,
@@ -127,9 +129,9 @@ class AssignedSupplierContact {
         : int.tryParse(idRaw?.toString() ?? '') ?? 0;
     final name =
         (read('businessName', 'business_name')?.toString().trim().isNotEmpty ==
-                true
-            ? read('businessName', 'business_name')!.toString().trim()
-            : 'Supplier');
+            true
+        ? read('businessName', 'business_name')!.toString().trim()
+        : 'Supplier');
 
     DateTime? deadline;
     final rawDeadline = read('acceptanceDeadline', 'acceptance_deadline');
@@ -142,8 +144,7 @@ class AssignedSupplierContact {
         ? assignmentRaw
         : int.tryParse(assignmentRaw?.toString() ?? '');
 
-    final urlsRaw =
-        read('selfQcEvidenceUrls', 'self_qc_evidence_urls');
+    final urlsRaw = read('selfQcEvidenceUrls', 'self_qc_evidence_urls');
     final urls = <String>[];
     if (urlsRaw is List) {
       for (final u in urlsRaw) {
@@ -152,8 +153,7 @@ class AssignedSupplierContact {
       }
     }
 
-    final idsRaw =
-        read('selfQcEvidenceFileIds', 'self_qc_evidence_file_ids');
+    final idsRaw = read('selfQcEvidenceFileIds', 'self_qc_evidence_file_ids');
     final ids = <int>[];
     if (idsRaw is List) {
       for (final i in idsRaw) {
@@ -182,6 +182,12 @@ class OrderLineItem {
     required this.id,
     required this.orderId,
     required this.category,
+    this.categoryName,
+    this.groupSlug,
+    this.groupName,
+    this.groupDescription,
+    this.examples = const [],
+    this.pricingModel,
     this.fileUrl,
     this.fileName,
     this.fileMetadataId,
@@ -197,6 +203,12 @@ class OrderLineItem {
   final String id;
   final String orderId;
   final String category;
+  final String? categoryName;
+  final String? groupSlug;
+  final String? groupName;
+  final String? groupDescription;
+  final List<String> examples;
+  final String? pricingModel;
   final String? fileUrl;
   final String? fileName;
   final int? fileMetadataId;
@@ -231,6 +243,7 @@ class OrderClaim {
   final String categoryLabel;
   final String status;
   final String statusLabel;
+
   /// Ops action when resolved (e.g. "Reprint approved").
   final String? actionLabel;
   final String? resolutionNotes;
@@ -238,8 +251,7 @@ class OrderClaim {
   final DateTime openedAt;
   final DateTime? resolvedAt;
 
-  bool get isOpen =>
-      status == 'open' || status == 'under_review';
+  bool get isOpen => status == 'open' || status == 'under_review';
 
   bool get isResolved => !isOpen;
 
@@ -260,23 +272,26 @@ class OrderClaim {
       id: parseInt(json['id']),
       orderId: parseInt(json['orderId'] ?? json['order_id']),
       category: (json['category'] ?? '').toString(),
-      categoryLabel: (json['categoryLabel'] ??
-              json['category_label'] ??
-              json['category'] ??
-              'Concern')
-          .toString(),
+      categoryLabel:
+          (json['categoryLabel'] ??
+                  json['category_label'] ??
+                  json['category'] ??
+                  'Concern')
+              .toString(),
       status: (json['status'] ?? 'open').toString(),
-      statusLabel: (json['statusLabel'] ??
-              json['status_label'] ??
-              json['status'] ??
-              'Open')
-          .toString(),
+      statusLabel:
+          (json['statusLabel'] ??
+                  json['status_label'] ??
+                  json['status'] ??
+                  'Open')
+              .toString(),
       actionLabel: (json['actionLabel'] ?? json['action_label'])?.toString(),
-      resolutionNotes:
-          (json['resolutionNotes'] ?? json['resolution_notes'])?.toString(),
-      withinWindow: json['withinWindow'] == true ||
-          json['within_window'] == true,
-      openedAt: parseDate(json['openedAt'] ?? json['opened_at']) ??
+      resolutionNotes: (json['resolutionNotes'] ?? json['resolution_notes'])
+          ?.toString(),
+      withinWindow:
+          json['withinWindow'] == true || json['within_window'] == true,
+      openedAt:
+          parseDate(json['openedAt'] ?? json['opened_at']) ??
           DateTime.fromMillisecondsSinceEpoch(0),
       resolvedAt: parseDate(json['resolvedAt'] ?? json['resolved_at']),
     );
@@ -291,6 +306,11 @@ class Order {
     this.batchOrderId,
     this.batchId,
     required this.category,
+    this.categoryName,
+    this.groupSlug,
+    this.groupName,
+    this.groupDescription,
+    this.examples = const [],
     this.fileUrl,
     this.fileName,
     this.fileMetadataId,
@@ -301,6 +321,14 @@ class Order {
     required this.quantity,
     required this.totalPrice,
     required this.deliveryFee,
+    this.deliveryFeeMinor,
+    this.pricingStatus = PricingStatus.accepted,
+    this.quotedTotalMinor,
+    this.quotedAt,
+    this.quoteAcceptedAt,
+    this.promisedCompletionAt,
+    this.quoteAssignmentId,
+    this.codEligible = false,
     required this.paymentMethod,
     required this.paymentStatus,
     required this.orderStatus,
@@ -346,6 +374,11 @@ class Order {
   final String? batchOrderId;
   final String? batchId;
   final String category;
+  final String? categoryName;
+  final String? groupSlug;
+  final String? groupName;
+  final String? groupDescription;
+  final List<String> examples;
   final String? fileUrl;
   final String? fileName;
   final int? fileMetadataId;
@@ -356,6 +389,16 @@ class Order {
   final int quantity;
   final double totalPrice;
   final double deliveryFee;
+  final BigInt? deliveryFeeMinor;
+  final PricingStatus pricingStatus;
+  final BigInt? quotedTotalMinor;
+  final DateTime? quotedAt;
+  final DateTime? quoteAcceptedAt;
+  final DateTime? promisedCompletionAt;
+
+  /// The only supplier-assignment token exposed by the customer projection.
+  final int? quoteAssignmentId;
+  final bool codEligible;
   final PaymentMethod paymentMethod;
   final PaymentStatus paymentStatus;
   final OrderStatus orderStatus;
@@ -389,8 +432,10 @@ class Order {
   final String? trackingLink;
   final AssignedDeliverySlot? assignedSlot;
   final List<OrderLineItem> items;
+
   /// Material concerns / claims reported by the customer (and ops outcomes).
   final List<OrderClaim> claims;
+
   /// Marketplace + logistics status transitions (server-authoritative).
   final List<OrderStatusHistory> statusHistory;
   final String? specialInstructions;
@@ -407,7 +452,12 @@ class Order {
       OrderLineItem(
         id: id,
         orderId: orderId,
-        category: category == '3d' ? '3d' : 'paper',
+        category: category,
+        categoryName: categoryName,
+        groupSlug: groupSlug,
+        groupName: groupName,
+        groupDescription: groupDescription,
+        examples: examples,
         fileUrl: fileUrl,
         fileName: fileName,
         fileMetadataId: fileMetadataId,
@@ -431,11 +481,39 @@ class Order {
 
   String get orderTypeShortLabel {
     if (hasMixedItemTypes) return 'Mixed';
-    if (lineItems.any((item) => item.category == '3d')) return '3D';
-    return 'Paper';
+    final item = lineItems.first;
+    if (item.category == '3d') return '3D';
+    if (item.category == 'paper') return 'Paper';
+    final name = item.categoryName?.trim();
+    return name == null || name.isEmpty ? item.category : name;
   }
 
-  String get orderTypeLabel => '$orderTypeShortLabel Printing';
+  String get orderTypeLabel {
+    if (orderTypeShortLabel == 'Mixed' ||
+        orderTypeShortLabel == 'Paper' ||
+        orderTypeShortLabel == '3D') {
+      return '$orderTypeShortLabel Printing';
+    }
+    return orderTypeShortLabel;
+  }
+
+  BigInt? get quotedGoodsMinor {
+    final total = quotedTotalMinor;
+    final delivery = deliveryFeeMinor;
+    if (total == null || delivery == null || delivery < BigInt.zero) {
+      return null;
+    }
+    final goods = total - delivery;
+    return goods < BigInt.zero ? null : goods;
+  }
+
+  bool get hasQuoteLifecycle =>
+      pricingStatus != PricingStatus.accepted ||
+      quotedTotalMinor != null ||
+      quotedAt != null ||
+      quoteAcceptedAt != null ||
+      promisedCompletionAt != null ||
+      quoteAssignmentId != null;
 
   String get itemSummary {
     final names = lineItems
@@ -455,6 +533,11 @@ class Order {
     String? batchOrderId,
     String? batchId,
     String? category,
+    String? categoryName,
+    String? groupSlug,
+    String? groupName,
+    String? groupDescription,
+    List<String>? examples,
     String? fileUrl,
     String? fileName,
     int? fileMetadataId,
@@ -465,6 +548,14 @@ class Order {
     int? quantity,
     double? totalPrice,
     double? deliveryFee,
+    BigInt? deliveryFeeMinor,
+    PricingStatus? pricingStatus,
+    BigInt? quotedTotalMinor,
+    DateTime? quotedAt,
+    DateTime? quoteAcceptedAt,
+    DateTime? promisedCompletionAt,
+    int? quoteAssignmentId,
+    bool? codEligible,
     PaymentMethod? paymentMethod,
     PaymentStatus? paymentStatus,
     OrderStatus? orderStatus,
@@ -510,6 +601,11 @@ class Order {
       batchOrderId: batchOrderId ?? this.batchOrderId,
       batchId: batchId ?? this.batchId,
       category: category ?? this.category,
+      categoryName: categoryName ?? this.categoryName,
+      groupSlug: groupSlug ?? this.groupSlug,
+      groupName: groupName ?? this.groupName,
+      groupDescription: groupDescription ?? this.groupDescription,
+      examples: examples ?? this.examples,
       fileUrl: fileUrl ?? this.fileUrl,
       fileName: fileName ?? this.fileName,
       fileMetadataId: fileMetadataId ?? this.fileMetadataId,
@@ -520,6 +616,14 @@ class Order {
       quantity: quantity ?? this.quantity,
       totalPrice: totalPrice ?? this.totalPrice,
       deliveryFee: deliveryFee ?? this.deliveryFee,
+      deliveryFeeMinor: deliveryFeeMinor ?? this.deliveryFeeMinor,
+      pricingStatus: pricingStatus ?? this.pricingStatus,
+      quotedTotalMinor: quotedTotalMinor ?? this.quotedTotalMinor,
+      quotedAt: quotedAt ?? this.quotedAt,
+      quoteAcceptedAt: quoteAcceptedAt ?? this.quoteAcceptedAt,
+      promisedCompletionAt: promisedCompletionAt ?? this.promisedCompletionAt,
+      quoteAssignmentId: quoteAssignmentId ?? this.quoteAssignmentId,
+      codEligible: codEligible ?? this.codEligible,
       paymentMethod: paymentMethod ?? this.paymentMethod,
       paymentStatus: paymentStatus ?? this.paymentStatus,
       orderStatus: orderStatus ?? this.orderStatus,

@@ -130,10 +130,7 @@ class _MarketplaceOrderActionsState
       if (bytes == null) return null;
       multipart = MultipartFile.fromBytes(bytes, filename: file.name);
     } else {
-      multipart = await MultipartFile.fromFile(
-        file.path!,
-        filename: file.name,
-      );
+      multipart = await MultipartFile.fromFile(file.path!, filename: file.name);
     }
     final formData = FormData.fromMap({'file': multipart});
     // Do not set Content-Type manually — Dio must attach multipart boundary.
@@ -143,7 +140,8 @@ class _MarketplaceOrderActionsState
     );
     final data = response.data;
     if (data is Map) {
-      final id = data['id'] ?? data['fileMetadataId'] ?? data['file_metadata_id'];
+      final id =
+          data['id'] ?? data['fileMetadataId'] ?? data['file_metadata_id'];
       if (id is num) return id.toInt();
       if (id is String) return int.tryParse(id);
     }
@@ -202,7 +200,9 @@ class _MarketplaceOrderActionsState
     }
     final notes = _concernNotesController.text.trim();
     await _run(() async {
-      await ref.read(ordersProvider.notifier).reportConcern(
+      await ref
+          .read(ordersProvider.notifier)
+          .reportConcern(
             widget.order.id,
             category: category,
             notes: notes.isEmpty ? null : notes,
@@ -247,7 +247,9 @@ class _MarketplaceOrderActionsState
                     children: [
                       Text(
                         'Check your order',
-                        style: AppTypography.h3.copyWith(color: colors.onSurface),
+                        style: AppTypography.h3.copyWith(
+                          color: colors.onSurface,
+                        ),
                       ),
                       IconButton(
                         icon: HugeIcon(
@@ -295,7 +297,9 @@ class _MarketplaceOrderActionsState
                   const SizedBox(height: AppSpacing.md),
                   Text(
                     'What went wrong?',
-                    style: AppTypography.bodyBold.copyWith(color: colors.onSurface),
+                    style: AppTypography.bodyBold.copyWith(
+                      color: colors.onSurface,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Wrap(
@@ -320,7 +324,8 @@ class _MarketplaceOrderActionsState
                     maxLines: 3,
                     decoration: InputDecoration(
                       labelText: 'Describe the issue (optional)',
-                      hintText: 'What should ops know? Photos can be added later by support.',
+                      hintText:
+                          'What should ops know? Photos can be added later by support.',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(AppRadius.md),
                       ),
@@ -357,8 +362,9 @@ class _MarketplaceOrderActionsState
     final showProof = status == OrderStatus.proofApproval;
     // Payment is authorized by ops/super admin — client only sees wait state.
     final showPayWait =
-        status == OrderStatus.awaitingPayment ||
-        status == OrderStatus.supplierAccepted;
+        order.pricingStatus == PricingStatus.accepted &&
+        (status == OrderStatus.awaitingPayment ||
+            status == OrderStatus.supplierAccepted);
     final showReportConcern = canReportConcern(status);
 
     if (!showCorrection && !showProof && !showPayWait && !showReportConcern) {
@@ -368,20 +374,20 @@ class _MarketplaceOrderActionsState
     final title = showCorrection
         ? 'Artwork correction needed'
         : showProof
-            ? 'Proof approval needed'
-            : showReportConcern
-                ? 'Check your order'
-                : 'Waiting for payment authorization';
+        ? 'Proof approval needed'
+        : showReportConcern
+        ? 'Check your order'
+        : 'Waiting for payment authorization';
     final body = showCorrection
         ? 'Ops listed issues below. Upload a revised file to send the job back to QA.'
         : showProof
-            ? 'Review the proof notes, then approve for matching or request changes.'
-            : showReportConcern
-                ? 'Please inspect your print. If anything is wrong (quality, damage, '
-                    'missing pieces, packaging), report a concern within 24 hours. '
-                    'GRIDGO ops will review claims in the Claims queue.'
-                : 'The supplier accepted this job. GRIDGO ops will authorize payment '
-                    'so production can start. You do not need to take action here.';
+        ? 'Review the proof notes, then approve for matching or request changes.'
+        : showReportConcern
+        ? 'Please inspect your print. If anything is wrong (quality, damage, '
+              'missing pieces, packaging), report a concern within 24 hours. '
+              'GRIDGO ops will review claims in the Claims queue.'
+        : 'The supplier accepted this job. GRIDGO ops will authorize payment '
+              'so production can start. You do not need to take action here.';
 
     final checklist = showCorrection || showProof
         ? correctionChecklistItems(order)
@@ -390,10 +396,10 @@ class _MarketplaceOrderActionsState
     final icon = showReportConcern
         ? HugeIcons.strokeRoundedAlert02
         : showPayWait
-            ? HugeIcons.strokeRoundedClock01
-            : showProof
-                ? HugeIcons.strokeRoundedCheckmarkCircle02
-                : HugeIcons.strokeRoundedFileEdit;
+        ? HugeIcons.strokeRoundedClock01
+        : showProof
+        ? HugeIcons.strokeRoundedCheckmarkCircle02
+        : HugeIcons.strokeRoundedFileEdit;
 
     return AppCard(
       child: Column(
@@ -407,11 +413,7 @@ class _MarketplaceOrderActionsState
                   color: colors.brand.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
-                child: HugeIcon(
-                  icon: icon,
-                  size: 22,
-                  color: colors.brand,
-                ),
+                child: HugeIcon(icon: icon, size: 22, color: colors.brand),
               ),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
@@ -435,9 +437,7 @@ class _MarketplaceOrderActionsState
               decoration: BoxDecoration(
                 color: colors.info.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(AppRadius.md),
-                border: Border.all(
-                  color: colors.info.withValues(alpha: 0.35),
-                ),
+                border: Border.all(color: colors.info.withValues(alpha: 0.35)),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -538,7 +538,9 @@ class _MarketplaceOrderActionsState
                 final fileId = await _uploadArtwork();
                 if (fileId == null) return;
                 final notes = _correctionNotesController.text.trim();
-                await ref.read(ordersProvider.notifier).resubmitCorrection(
+                await ref
+                    .read(ordersProvider.notifier)
+                    .resubmitCorrection(
                       order.id,
                       fileMetadataId: fileId,
                       notes: notes.isEmpty ? null : notes,
@@ -568,7 +570,8 @@ class _MarketplaceOrderActionsState
               isFullWidth: true,
               icon: HugeIcons.strokeRoundedCheckmarkBadge01,
               onTap: () => _run(
-                () => ref.read(ordersProvider.notifier).confirmReceipt(order.id),
+                () =>
+                    ref.read(ordersProvider.notifier).confirmReceipt(order.id),
                 'Order successfully completed',
               ),
             ),
@@ -580,7 +583,7 @@ class _MarketplaceOrderActionsState
               icon: HugeIcons.strokeRoundedAlert02,
               onTap: _showConcernModal,
             ),
-          ]
+          ],
         ],
       ),
     );

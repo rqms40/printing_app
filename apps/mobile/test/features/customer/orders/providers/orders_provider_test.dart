@@ -32,6 +32,10 @@ void main() {
   var orderByIdFetches = 0;
   final forceBetaLimitPaths = <String>{};
   final force500Paths = <String>{};
+  Map<String, dynamic>? lastAcceptQuotePayload;
+  var acceptQuoteCalls = 0;
+  Completer<void>? acceptQuoteGate;
+  String? acceptQuoteErrorCode;
 
   setUpAll(() {
     const secureStorageChannel = MethodChannel(
@@ -143,6 +147,55 @@ void main() {
             return;
           }
 
+          if (options.path.endsWith('/orders/42/accept-quote') &&
+              options.method == 'POST') {
+            acceptQuoteCalls++;
+            lastAcceptQuotePayload = Map<String, dynamic>.from(
+              options.data as Map,
+            );
+            final errorCode = acceptQuoteErrorCode;
+            if (errorCode != null) {
+              handler.reject(
+                DioException(
+                  requestOptions: options,
+                  response: Response(
+                    requestOptions: options,
+                    statusCode: 400,
+                    data: {
+                      'code': errorCode,
+                      'message': 'The selected quote changed',
+                    },
+                  ),
+                  type: DioExceptionType.badResponse,
+                ),
+              );
+              return;
+            }
+            final gate = acceptQuoteGate;
+            if (gate != null) {
+              unawaited(
+                gate.future.then(
+                  (_) => handler.resolve(
+                    Response(
+                      requestOptions: options,
+                      statusCode: 201,
+                      data: const <String, dynamic>{},
+                    ),
+                  ),
+                ),
+              );
+              return;
+            }
+            handler.resolve(
+              Response(
+                requestOptions: options,
+                statusCode: 201,
+                data: const <String, dynamic>{},
+              ),
+            );
+            return;
+          }
+
           if (options.path == '/orders/batch') {
             lastBatchPayload = Map<String, dynamic>.from(options.data as Map);
             handler.resolve(
@@ -184,6 +237,10 @@ void main() {
     ];
     forceBetaLimitPaths.clear();
     force500Paths.clear();
+    lastAcceptQuotePayload = null;
+    acceptQuoteCalls = 0;
+    acceptQuoteGate = null;
+    acceptQuoteErrorCode = null;
   });
 
   tearDown(() async {
@@ -197,7 +254,7 @@ void main() {
   group('Orders logic — activeOrders filtering', () {
     final terminalStatuses = {
       OrderStatus.delivered,
-      OrderStatus.completedPickup,
+      OrderStatus.collectedByCustomer,
       OrderStatus.cancelled,
     };
 
@@ -214,7 +271,7 @@ void main() {
           .toList();
       for (final o in active) {
         expect(o.orderStatus, isNot(OrderStatus.delivered));
-        expect(o.orderStatus, isNot(OrderStatus.completedPickup));
+        expect(o.orderStatus, isNot(OrderStatus.collectedByCustomer));
         expect(o.orderStatus, isNot(OrderStatus.cancelled));
       }
       expect(active, isNotEmpty);
@@ -228,7 +285,7 @@ void main() {
       for (final o in completed) {
         expect([
           OrderStatus.delivered,
-          OrderStatus.completedPickup,
+          OrderStatus.collectedByCustomer,
           OrderStatus.cancelled,
         ], contains(o.orderStatus));
       }
@@ -247,23 +304,23 @@ void main() {
 
   group('Orders logic — cancellation rules', () {
     final cancellableStatuses = {
-      OrderStatus.orderPlaced,
-      OrderStatus.fileVerified,
+      OrderStatus.submitted,
+      OrderStatus.approvedForMatching,
     };
 
     test('orderPlaced is cancellable', () {
-      expect(cancellableStatuses.contains(OrderStatus.orderPlaced), true);
+      expect(cancellableStatuses.contains(OrderStatus.submitted), true);
     });
 
     test('fileVerified is cancellable', () {
-      expect(cancellableStatuses.contains(OrderStatus.fileVerified), true);
+      expect(
+        cancellableStatuses.contains(OrderStatus.approvedForMatching),
+        true,
+      );
     });
 
     test('printingInProgress is NOT cancellable', () {
-      expect(
-        cancellableStatuses.contains(OrderStatus.printingInProgress),
-        false,
-      );
+      expect(cancellableStatuses.contains(OrderStatus.production), false);
     });
 
     test('delivered is NOT cancellable', () {
@@ -275,7 +332,7 @@ void main() {
 
       // Find an orderPlaced order
       final eligible = orders.firstWhere(
-        (o) => o.orderStatus == OrderStatus.orderPlaced,
+        (o) => o.orderStatus == OrderStatus.submitted,
       );
 
       // Simulate cancelOrder logic from provider
@@ -302,7 +359,7 @@ void main() {
 
       // Find a printingInProgress order
       final nonEligible = orders.firstWhere(
-        (o) => o.orderStatus == OrderStatus.printingInProgress,
+        (o) => o.orderStatus == OrderStatus.production,
       );
 
       // Simulate cancelOrder logic from provider
@@ -320,7 +377,7 @@ void main() {
       ];
 
       final afterCancel = updated.firstWhere((o) => o.id == nonEligible.id);
-      expect(afterCancel.orderStatus, OrderStatus.printingInProgress);
+      expect(afterCancel.orderStatus, OrderStatus.production);
     });
   });
 
@@ -339,7 +396,7 @@ void main() {
         deliveryFee: 0,
         paymentMethod: PaymentMethod.gcash,
         paymentStatus: PaymentStatus.paid,
-        orderStatus: OrderStatus.orderPlaced,
+        orderStatus: OrderStatus.submitted,
         deliveryOption: 'pickup',
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -471,7 +528,7 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 20));
 
       final order = notifier.state.single;
-      expect(order.orderStatus, OrderStatus.arrivedAtDestination);
+      expect(order.orderStatus, OrderStatus.outForDelivery);
       expect(order.deliveryPlanVersion, isNull);
       expect(order.deliveryLegDurationSeconds, isNull);
       expect(order.deliveryLegDistanceMeters, isNull);
@@ -613,7 +670,7 @@ void main() {
 
       var completionRefreshes = 0;
       final initialOrder = MockData.orders.first.copyWith(
-        orderStatus: OrderStatus.orderPlaced,
+        orderStatus: OrderStatus.submitted,
       );
       final notifier = OrdersNotifier(
         initialState: [initialOrder],
@@ -1000,6 +1057,167 @@ void main() {
     });
   });
 
+  group('OrdersNotifier catalog quote lifecycle', () {
+    test('keeps RFQ batch lines independently reviewable', () async {
+      WebSocketService.disableOrdersSocketForTests = true;
+      WebSocketService.instance.disconnect();
+      addTearDown(() {
+        WebSocketService.disableOrdersSocketForTests = false;
+        WebSocketService.instance.disconnect();
+      });
+      ordersGetResponse = [
+        {
+          ..._quotedCatalogOrderJson(),
+          'id': 42,
+          'orderId': 'ORD-10042',
+          'batchOrderId': 9,
+          'batchOrder': {'batchRef': 'BATCH-RFQ-9'},
+          'pricingStatus': 'pending_quote',
+          'quotedTotalMinor': null,
+          'quoteAssignmentId': null,
+        },
+        {
+          ..._quotedCatalogOrderJson(),
+          'id': 43,
+          'orderId': 'ORD-10043',
+          'batchOrderId': 9,
+          'batchOrder': {'batchRef': 'BATCH-RFQ-9'},
+          'pricingStatus': 'quoted',
+          'quotedTotalMinor': '20000',
+          'quoteAssignmentId': 78,
+        },
+      ];
+      final notifier = OrdersNotifier();
+      addTearDown(notifier.dispose);
+
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(notifier.state, hasLength(2));
+      expect(notifier.state.map((order) => order.orderId), {
+        'ORD-10042',
+        'ORD-10043',
+      });
+    });
+
+    test(
+      'parses dynamic leaf metadata, specs, and exact minor strings',
+      () async {
+        WebSocketService.disableOrdersSocketForTests = true;
+        WebSocketService.instance.disconnect();
+        addTearDown(() {
+          WebSocketService.disableOrdersSocketForTests = false;
+          WebSocketService.instance.disconnect();
+        });
+        ordersGetResponse = [_quotedCatalogOrderJson()];
+        final notifier = OrdersNotifier();
+        addTearDown(notifier.dispose);
+
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+
+        final order = notifier.state.single;
+        final item = order.lineItems.single;
+        expect(order.pricingStatus, PricingStatus.quoted);
+        expect(order.quotedTotalMinor.toString(), '90071992547409931234');
+        expect(order.deliveryFeeMinor.toString(), '1234');
+        expect(order.quotedGoodsMinor.toString(), '90071992547409930000');
+        expect(order.quoteAssignmentId, 77);
+        expect(order.promisedCompletionAt, DateTime.utc(2026, 8, 20, 9));
+        expect(item.category, 'future-fabrication');
+        expect(item.categoryName, 'Future Fabrication');
+        expect(item.groupSlug, 'future-services');
+        expect(item.groupName, 'Future Services');
+        expect(item.examples, ['Custom future parts']);
+        expect(item.specs, {'finish': 'matte'});
+        expect(item.specDisplayValues, {'finish': 'Matte finish'});
+        expect(item.paperSpecs, isNull);
+        expect(item.threeDSpecs, isNull);
+      },
+    );
+
+    test(
+      'posts exact quote acceptance body and refreshes on success',
+      () async {
+        ordersGetResponse = [
+          {
+            ..._quotedCatalogOrderJson(),
+            'pricingStatus': 'accepted',
+            'orderStatus': 'awaiting_payment',
+            'paymentMethod': 'pilot_credit',
+            'quoteAcceptedAt': '2026-08-12T10:00:00.000Z',
+          },
+        ];
+        final notifier = OrdersNotifier(
+          initialState: [_quotedCatalogOrderModel()],
+          skipBootstrap: true,
+        );
+        addTearDown(notifier.dispose);
+
+        await notifier.acceptQuote('42', 77, PaymentMethod.gridCredits);
+
+        expect(lastAcceptQuotePayload, {
+          'supplierAssignmentId': 77,
+          'paymentMethod': 'pilot_credit',
+        });
+        expect(acceptQuoteCalls, 1);
+        expect(notifier.state.single.pricingStatus, PricingStatus.accepted);
+        expect(notifier.state.single.orderStatus, OrderStatus.awaitingPayment);
+      },
+    );
+
+    test(
+      'suppresses duplicate quote acceptance while request is in flight',
+      () async {
+        acceptQuoteGate = Completer<void>();
+        ordersGetResponse = [_quotedCatalogOrderJson()];
+        final notifier = OrdersNotifier(
+          initialState: [_quotedCatalogOrderModel()],
+          skipBootstrap: true,
+        );
+        addTearDown(notifier.dispose);
+
+        final first = notifier.acceptQuote('42', 77, PaymentMethod.gridCredits);
+        final replay = notifier.acceptQuote(
+          '42',
+          77,
+          PaymentMethod.cod,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(acceptQuoteCalls, 1);
+        acceptQuoteGate!.complete();
+        await Future.wait([first, replay]);
+        expect(acceptQuoteCalls, 1);
+      },
+    );
+
+    test(
+      'surfaces stale quote conflict without replacing durable state',
+      () async {
+        acceptQuoteErrorCode = 'stale_quote';
+        final quoted = _quotedCatalogOrderModel();
+        final notifier = OrdersNotifier(
+          initialState: [quoted],
+          skipBootstrap: true,
+        );
+        addTearDown(notifier.dispose);
+
+        await expectLater(
+          notifier.acceptQuote('42', 77, PaymentMethod.cod),
+          throwsA(
+            isA<QuoteAcceptanceException>()
+                .having((error) => error.code, 'code', 'stale_quote')
+                .having(
+                  (error) => error.refreshRecommended,
+                  'refreshRecommended',
+                  isTrue,
+                ),
+          ),
+        );
+        expect(notifier.state.single, same(quoted));
+        expect(notifier.state.single.quotedTotalMinor, quoted.quotedTotalMinor);
+      },
+    );
+  });
+
   group('OrdersNotifier — beta order limit', () {
     test(
       'addBatchOrder throws BetaOrderLimitException on 403 with code',
@@ -1083,7 +1301,7 @@ void main() {
           deliveryFee: 0,
           paymentMethod: PaymentMethod.cod,
           paymentStatus: PaymentStatus.pending,
-          orderStatus: OrderStatus.orderPlaced,
+          orderStatus: OrderStatus.submitted,
           deliveryOption: 'delivery',
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
@@ -1122,7 +1340,7 @@ void main() {
         deliveryFee: 0,
         paymentMethod: PaymentMethod.cod,
         paymentStatus: PaymentStatus.pending,
-        orderStatus: OrderStatus.orderPlaced,
+        orderStatus: OrderStatus.submitted,
         deliveryOption: 'delivery',
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -1150,7 +1368,7 @@ void main() {
         deliveryFee: 0,
         paymentMethod: PaymentMethod.gridCredits,
         paymentStatus: PaymentStatus.pending,
-        orderStatus: OrderStatus.orderPlaced,
+        orderStatus: OrderStatus.submitted,
         deliveryOption: 'delivery',
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -1233,6 +1451,84 @@ Map<String, dynamic> _singleItemBatchOrderJson({
   return json;
 }
 
+Map<String, dynamic> _quotedCatalogOrderJson() {
+  final now = DateTime.utc(2026, 8, 12, 8).toIso8601String();
+  return {
+    'id': 42,
+    'orderId': 'ORD-10042',
+    'userId': 1,
+    'category': 'future-fabrication',
+    'quantity': 2,
+    'totalPrice': '0.00',
+    'deliveryFee': '12.34',
+    'deliveryFeeMinor': '1234',
+    'pricingStatus': 'quoted',
+    'quotedTotalMinor': '90071992547409931234',
+    'quotedAt': '2026-08-12T08:30:00.000Z',
+    'promisedCompletionAt': '2026-08-20T09:00:00.000Z',
+    'quoteAssignmentId': 77,
+    'codEligible': true,
+    'paymentMethod': 'pending_quote',
+    'paymentStatus': 'pending_quote',
+    'orderStatus': 'supplier_accepted',
+    'deliveryOption': 'delivery',
+    'createdAt': now,
+    'updatedAt': now,
+    'items': [
+      {
+        'id': 420,
+        'orderId': 'ORD-10042',
+        'category': 'future-fabrication',
+        'categorySlug': 'future-fabrication',
+        'categoryName': 'Future Fabrication',
+        'groupSlug': 'future-services',
+        'groupName': 'Future Services',
+        'groupDescription': 'Products added after this client shipped.',
+        'examples': ['Custom future parts'],
+        'pricingModel': 'quote_required',
+        'quantity': 2,
+        'totalPrice': null,
+        'specs': [
+          {
+            'key': 'finish',
+            'label': 'Finish',
+            'value': 'matte',
+            'displayValue': 'Matte finish',
+          },
+        ],
+      },
+    ],
+  };
+}
+
+Order _quotedCatalogOrderModel() {
+  return Order(
+    id: '42',
+    orderId: 'ORD-10042',
+    userId: '1',
+    category: 'future-fabrication',
+    categoryName: 'Future Fabrication',
+    groupSlug: 'future-services',
+    groupName: 'Future Services',
+    quantity: 2,
+    totalPrice: 0,
+    deliveryFee: 12.34,
+    deliveryFeeMinor: BigInt.from(1234),
+    pricingStatus: PricingStatus.quoted,
+    quotedTotalMinor: BigInt.parse('90071992547409931234'),
+    quotedAt: DateTime.utc(2026, 8, 12, 8, 30),
+    promisedCompletionAt: DateTime.utc(2026, 8, 20, 9),
+    quoteAssignmentId: 77,
+    codEligible: true,
+    paymentMethod: PaymentMethod.gridCredits,
+    paymentStatus: PaymentStatus.pending,
+    orderStatus: OrderStatus.supplierAccepted,
+    deliveryOption: 'delivery',
+    createdAt: DateTime.utc(2026, 8, 12, 8),
+    updatedAt: DateTime.utc(2026, 8, 12, 8),
+  );
+}
+
 Map<String, dynamic> _orderJson({
   required String id,
   required String orderId,
@@ -1281,7 +1577,7 @@ Order _orderFromJson(Map<String, dynamic> json) {
     deliveryFee: (json['deliveryFee'] as num).toDouble(),
     paymentMethod: PaymentMethod.gridCredits,
     paymentStatus: PaymentStatus.pending,
-    orderStatus: OrderStatus.orderPlaced,
+    orderStatus: OrderStatus.submitted,
     deliveryOption: json['deliveryOption'] as String,
     deliveryAddressId: json['deliveryAddressId'].toString(),
     createdAt: now,

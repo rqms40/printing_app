@@ -12,6 +12,19 @@ String formatCurrency(double amount) {
   return formatter.format(amount);
 }
 
+/// Formats exact PHP minor units without converting through a JS/Dart double.
+String formatMinorCurrency(BigInt amountMinor) {
+  final negative = amountMinor.isNegative;
+  final absolute = amountMinor.abs();
+  final major = (absolute ~/ BigInt.from(100)).toString();
+  final minor = (absolute % BigInt.from(100)).toString().padLeft(2, '0');
+  final grouped = major.replaceAllMapped(
+    RegExp(r'\B(?=(\d{3})+(?!\d))'),
+    (_) => ',',
+  );
+  return '${negative ? '-' : ''}₱$grouped.$minor';
+}
+
 /// Formats a DateTime as a short date string.
 ///
 /// Example: `formatDate(DateTime(2026, 3, 27))` returns `'Mar 27, 2026'`

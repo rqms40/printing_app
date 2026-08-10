@@ -43,7 +43,20 @@ void main() {
       container.read(pipelineTutorialProvider.notifier).advance();
       expect(
         container.read(pipelineTutorialProvider).step,
-        PipelineStep.paperCategoryCard,
+        PipelineStep.catalogGroup,
+      );
+    });
+
+    test('catalog tutorial follows group, product, requirements semantics', () {
+      final steps = PipelineStep.values;
+      expect(steps.indexOf(PipelineStep.catalogGroup), 1);
+      expect(
+        steps.indexOf(PipelineStep.catalogProduct),
+        steps.indexOf(PipelineStep.catalogGroup) + 1,
+      );
+      expect(
+        steps.indexOf(PipelineStep.catalogRequirements),
+        steps.indexOf(PipelineStep.catalogProduct) + 1,
       );
     });
 
