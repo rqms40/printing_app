@@ -8,6 +8,8 @@ import {
 } from './catalog-validation.service';
 import { PricingModel, PricingRole } from './enums/catalog.enums';
 
+const PENDING_QUOTE = 'pending_quote' as const;
+
 export interface SpecSnapshotDraft {
   specDefinitionId: number;
   specKey: string;
@@ -23,24 +25,46 @@ export interface SpecSnapshotDraft {
   estimatedQuantity: number | null;
 }
 
-export interface QuoteItemResult {
+interface QuoteItemBase {
   categoryId: number;
   categorySlug: string;
   categoryName: string;
   pricingModel: PricingModel;
   quantity: number;
-  printSubtotal: number;
   specSnapshots: SpecSnapshotDraft[];
+}
+
+export interface PricedQuoteItemResult extends QuoteItemBase {
+  printSubtotal: number;
   pricingBreakdown: { label: string; amount: number }[];
 }
 
-export interface QuoteResult {
-  items: QuoteItemResult[];
+export interface PendingQuoteItemResult extends QuoteItemBase {
+  pricingModel: PricingModel.QUOTE_REQUIRED;
+  printSubtotal: null;
+  pricingBreakdown: [];
+}
+
+export type QuoteItemResult = PricedQuoteItemResult | PendingQuoteItemResult;
+
+export interface PricedQuoteResult {
+  items: PricedQuoteItemResult[];
   subtotal: number;
   deliveryFee: number;
   serviceFee: number;
   total: number;
 }
+
+export interface PendingQuoteResult {
+  pricingStatus: typeof PENDING_QUOTE;
+  items: QuoteItemResult[];
+  subtotal: null;
+  deliveryFee: null;
+  serviceFee: null;
+  total: null;
+}
+
+export type QuoteResult = PricedQuoteResult | PendingQuoteResult;
 
 @Injectable()
 export class CatalogPricingService {
@@ -67,11 +91,23 @@ export class CatalogPricingService {
       );
       return this.priceItem(category, selected, item.quantity);
     });
+    if (items.some((item) => item.printSubtotal == null)) {
+      return {
+        pricingStatus: PENDING_QUOTE,
+        items,
+        subtotal: null,
+        deliveryFee: null,
+        serviceFee: null,
+        total: null,
+      };
+    }
+
+    const pricedItems = items as PricedQuoteItemResult[];
     const subtotal = this.roundMoney(
-      items.reduce((sum, item) => sum + item.printSubtotal, 0),
+      pricedItems.reduce((sum, item) => sum + item.printSubtotal, 0),
     );
     return {
-      items,
+      items: pricedItems,
       subtotal,
       deliveryFee: 0,
       serviceFee: 0,
@@ -84,6 +120,18 @@ export class CatalogPricingService {
     selected: SelectedSpec[],
     quantity: number,
   ): QuoteItemResult {
+    if (category.pricingModel === PricingModel.QUOTE_REQUIRED) {
+      return {
+        categoryId: category.id,
+        categorySlug: category.slug,
+        categoryName: category.name,
+        pricingModel: PricingModel.QUOTE_REQUIRED,
+        quantity,
+        printSubtotal: null,
+        specSnapshots: selected.map((entry) => this.toSnapshot(entry)),
+        pricingBreakdown: [],
+      };
+    }
     if (category.pricingModel === PricingModel.PER_PAGE_MODIFIERS) {
       return this.pricePerPage(category, selected, quantity);
     }
@@ -99,7 +147,7 @@ export class CatalogPricingService {
     category: CatalogCategory,
     selected: SelectedSpec[],
     quantity: number,
-  ): QuoteItemResult {
+  ): PricedQuoteItemResult {
     const pageCount = Number(
       selected.find((entry) => entry.spec.key === 'page_count')?.value ?? 1,
     );
@@ -134,7 +182,7 @@ export class CatalogPricingService {
     category: CatalogCategory,
     selected: SelectedSpec[],
     quantity: number,
-  ): QuoteItemResult {
+  ): PricedQuoteItemResult {
     const material = selected.find(
       (entry) =>
         entry.spec.pricingRole === PricingRole.UNIT_COST && entry.option,

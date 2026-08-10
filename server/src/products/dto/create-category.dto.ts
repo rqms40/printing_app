@@ -8,6 +8,8 @@ import {
   IsOptional,
   IsBoolean,
   IsEnum,
+  IsArray,
+  Min,
   MaxLength,
   Matches,
   IsNotEmpty,
@@ -39,11 +41,42 @@ export class CreateCategoryDto {
   @IsString()
   description?: string;
 
+  @ApiPropertyOptional({ example: 'marketing-promo' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  @Matches(/^[a-z0-9-]+$/, {
+    message: 'groupSlug must be lowercase alphanumeric with hyphens',
+  })
+  groupSlug?: string;
+
+  @ApiPropertyOptional({ example: 'Marketing & Promotional Collateral' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  groupName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  groupDescription?: string;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsInt()
+  groupSortOrder?: number;
+
   @ApiPropertyOptional({ example: 'Print documents, handouts, and posters.' })
   @IsOptional()
   @IsString()
   @MaxLength(160)
   mobileDescription?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  examples?: string[];
 
   @ApiPropertyOptional({ example: 'FileTextOutlined' })
   @IsOptional()
@@ -63,7 +96,7 @@ export class CreateCategoryDto {
 
   @ApiProperty({ example: 2.0 })
   @IsNumber()
-  @IsPositive()
+  @Min(0)
   baseRate: number;
 
   @ApiPropertyOptional({ example: 'page' })

@@ -88,11 +88,23 @@ export class ProductsService {
       name: category.name,
       slug: category.slug,
       description: category.description,
+      group_slug: category.groupSlug,
+      group_name: category.groupName,
+      group_description: category.groupDescription,
+      group_sort_order: category.groupSortOrder,
       mobile_description: category.mobileDescription,
+      examples: category.examples,
       icon: category.icon,
       file_processing_type: category.fileProcessingType,
       pricing_model: category.pricingModel,
-      base_rate: Number(category.baseRate),
+      pricing_status:
+        category.pricingModel === PricingModel.QUOTE_REQUIRED
+          ? 'pending_quote'
+          : undefined,
+      base_rate:
+        category.pricingModel === PricingModel.QUOTE_REQUIRED
+          ? null
+          : Number(category.baseRate),
       quantity_unit: category.quantityUnit,
       max_file_size_mb: category.maxFileSizeMb,
       allowed_extensions: category.allowedExtensions,
@@ -107,7 +119,9 @@ export class ProductsService {
     if (existing) {
       throw new ConflictException(`Slug '${dto.slug}' is already in use`);
     }
-    const category = this.catRepo.create(this.normalizeCategoryDto(dto));
+    const normalized = this.normalizeCategoryDto(dto);
+    this.validateCategoryConfiguration(normalized);
+    const category = this.catRepo.create(normalized);
     return this.catRepo.save(category);
   }
 
@@ -115,7 +129,7 @@ export class ProductsService {
     id: number,
     dto: UpdateCategoryDto,
   ): Promise<ProductCategory> {
-    await this.catRepo.findOneOrFail({ where: { id } });
+    const existing = await this.catRepo.findOneOrFail({ where: { id } });
     if (dto.slug) {
       const conflict = await this.catRepo.findOne({
         where: { slug: dto.slug },
@@ -124,7 +138,9 @@ export class ProductsService {
         throw new ConflictException(`Slug '${dto.slug}' is already in use`);
       }
     }
-    await this.catRepo.update(id, this.normalizeCategoryDto(dto) as any);
+    const normalized = this.normalizeCategoryDto(dto, true);
+    this.validateCategoryConfiguration({ ...existing, ...normalized });
+    await this.catRepo.update(id, normalized as any);
     return this.catRepo.findOneOrFail({ where: { id } });
   }
 
@@ -394,22 +410,69 @@ export class ProductsService {
     return spec;
   }
 
-  private normalizeCategoryDto(dto: CategoryInput): Partial<ProductCategory> {
+  private normalizeCategoryDto(
+    dto: CategoryInput,
+    partial = false,
+  ): Partial<ProductCategory> {
     const allowedExtensions =
       dto.allowedExtensions == null
         ? undefined
         : this.normalizeAllowedExtensions(dto.allowedExtensions);
-    return {
+    const normalized: Partial<ProductCategory> = {
       ...dto,
       allowedExtensions,
       fileProcessingType:
         (dto as Partial<ProductCategory>).fileProcessingType ??
-        this.defaultFileProcessingType(dto.slug),
+        (partial ? undefined : this.defaultFileProcessingType(dto.slug)),
       pricingModel:
         (dto as Partial<ProductCategory>).pricingModel ??
-        this.defaultPricingModel(dto.slug),
-      quantityUnit: (dto as Partial<ProductCategory>).quantityUnit ?? 'copy',
+        (partial ? undefined : this.defaultPricingModel(dto.slug)),
+      quantityUnit:
+        (dto as Partial<ProductCategory>).quantityUnit ??
+        (partial ? undefined : 'copy'),
     };
+    if (!partial) return normalized;
+    return Object.fromEntries(
+      Object.entries(normalized).filter(([, value]) => value !== undefined),
+    ) as Partial<ProductCategory>;
+  }
+
+  private validateCategoryConfiguration(
+    category: Partial<ProductCategory>,
+  ): void {
+    const baseRate = Number(category.baseRate);
+    if (!Number.isFinite(baseRate) || baseRate < 0) {
+      throw new BadRequestException('baseRate must be at least 0');
+    }
+    if (
+      category.pricingModel !== PricingModel.QUOTE_REQUIRED &&
+      baseRate <= 0
+    ) {
+      throw new BadRequestException(
+        'baseRate must be greater than 0 for numeric pricing models',
+      );
+    }
+
+    const active = category.isActive ?? true;
+    if (!active || category.pricingModel !== PricingModel.QUOTE_REQUIRED) {
+      return;
+    }
+    const completeGroupMetadata =
+      this.hasText(category.groupSlug) &&
+      this.hasText(category.groupName) &&
+      this.hasText(category.groupDescription) &&
+      Number.isInteger(category.groupSortOrder);
+    if (!completeGroupMetadata) {
+      throw new BadRequestException({
+        code: 'RFQ_GROUP_METADATA_REQUIRED',
+        message:
+          'Active quote-required products require complete group metadata',
+      });
+    }
+  }
+
+  private hasText(value: string | null | undefined): boolean {
+    return typeof value === 'string' && value.trim().length > 0;
   }
 
   private normalizeAllowedExtensions(value: string | string[]): string[] {

@@ -8,6 +8,8 @@ import {
   IsOptional,
   IsBoolean,
   IsEnum,
+  IsArray,
+  Min,
   MaxLength,
   Matches,
 } from 'class-validator';
@@ -30,8 +32,29 @@ export class UpdateCategoryDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(50)
+  @Matches(/^[a-z0-9-]+$/)
+  groupSlug?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  groupName?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  groupDescription?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() groupSortOrder?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   @MaxLength(160)
   mobileDescription?: string;
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  examples?: string[];
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) icon?: string;
   @ApiPropertyOptional({ enum: FileProcessingType })
   @IsOptional()
@@ -44,7 +67,7 @@ export class UpdateCategoryDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
-  @IsPositive()
+  @Min(0)
   baseRate?: number;
   @ApiPropertyOptional()
   @IsOptional()

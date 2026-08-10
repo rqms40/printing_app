@@ -1074,6 +1074,40 @@ describe('OrdersService', () => {
   });
 
   describe('create', () => {
+    it('rejects quote-required products on the legacy create path', async () => {
+      catalogPricingService.quote.mockResolvedValueOnce({
+        pricingStatus: 'pending_quote',
+        items: [
+          {
+            categoryId: 10,
+            categorySlug: 'flyers',
+            categoryName: 'Flyers',
+            pricingModel: 'quote_required',
+            quantity: 100,
+            printSubtotal: null,
+            specSnapshots: [],
+            pricingBreakdown: [],
+          },
+        ],
+        subtotal: null,
+        deliveryFee: null,
+        serviceFee: null,
+        total: null,
+      });
+
+      await expect(
+        service.create({
+          userId: 1,
+          category: 'flyers',
+          quantity: 100,
+          specs: {},
+        } as Partial<Order> & { specs: Record<string, unknown> }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'RFQ_ENDPOINT_REQUIRED' }),
+      });
+      expect(repo.create).not.toHaveBeenCalled();
+    });
+
     it('should generate orderId, save order', async () => {
       repo.count.mockResolvedValue(0);
       repo.create.mockReturnValue(mockOrder);
@@ -1412,6 +1446,47 @@ describe('OrdersService', () => {
       await expect(
         (service as any).createBatch(1, { ...batchDto, items: [] }),
       ).rejects.toThrow('Batch order requires at least one item');
+    });
+
+    it('rejects quote-required products on the legacy batch path', async () => {
+      catalogPricingService.quote.mockResolvedValueOnce({
+        pricingStatus: 'pending_quote',
+        items: [
+          {
+            categoryId: 10,
+            categorySlug: 'flyers',
+            categoryName: 'Flyers',
+            pricingModel: 'quote_required',
+            quantity: 100,
+            printSubtotal: null,
+            specSnapshots: [],
+            pricingBreakdown: [],
+          },
+        ],
+        subtotal: null,
+        deliveryFee: null,
+        serviceFee: null,
+        total: null,
+      });
+
+      await expect(
+        (service as any).createBatch(1, {
+          ...batchDto,
+          deliveryOption: 'pickup',
+          deliveryAddressId: undefined,
+          items: [
+            {
+              ...batchDto.items[0],
+              category: 'flyers',
+              quantity: 100,
+              specs: {},
+            },
+          ],
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'RFQ_ENDPOINT_REQUIRED' }),
+      });
+      expect(batchRepo.create).not.toHaveBeenCalled();
     });
 
     it('rejects delivery addresses that do not belong to the user', async () => {

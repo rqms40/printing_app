@@ -144,6 +144,15 @@ const paperCategory = {
   addons: [],
 };
 
+const rfqCategory = {
+  ...paperCategory,
+  id: 2,
+  name: 'Flyers',
+  slug: 'flyers',
+  pricingModel: PricingModel.QUOTE_REQUIRED,
+  baseRate: 0,
+};
+
 describe('CatalogPricingService', () => {
   const readService = {
     getPublicCatalog: jest.fn().mockResolvedValue({
@@ -195,5 +204,68 @@ describe('CatalogPricingService', () => {
         items: [{ categorySlug: 'unknown', quantity: 1, specs: {} }],
       }),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  it('returns a pending quote without fabricated money for quote-required products', async () => {
+    readService.getPublicCatalog.mockResolvedValueOnce({
+      categories: [rfqCategory],
+    });
+
+    const quote = await service.quote({
+      items: [
+        {
+          categorySlug: 'flyers',
+          quantity: 100,
+          specs: {
+            paper_size: 'a4',
+            binding: 'none',
+            page_count: 1,
+          },
+        },
+      ],
+    });
+
+    expect(quote).toMatchObject({
+      pricingStatus: 'pending_quote',
+      subtotal: null,
+      deliveryFee: null,
+      serviceFee: null,
+      total: null,
+    });
+    expect(quote.items[0]).toMatchObject({
+      categorySlug: 'flyers',
+      pricingModel: 'quote_required',
+      quantity: 100,
+      printSubtotal: null,
+      pricingBreakdown: [],
+    });
+    expect(quote.items[0].specSnapshots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ specKey: 'paper_size', value: 'a4' }),
+      ]),
+    );
+  });
+
+  it('validates required specs before returning a pending quote', async () => {
+    readService.getPublicCatalog.mockResolvedValueOnce({
+      categories: [rfqCategory],
+    });
+
+    await expect(
+      service.quote({
+        items: [
+          {
+            categorySlug: 'flyers',
+            quantity: 100,
+            specs: { binding: 'none', page_count: 1 },
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'SPEC_REQUIRED',
+        specKey: 'paper_size',
+      }),
+    });
   });
 });

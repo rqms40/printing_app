@@ -75,7 +75,11 @@ import { GeoZonesService } from '../geo-zones/geo-zones.service';
 import { PrinterProfileService } from '../printer-profile/printer-profile.service';
 import { TamSurveysService } from '../tam-surveys/tam-surveys.service';
 import { TamSurveyRequirement } from '../tam-surveys/entities/tam-survey-requirement.entity';
-import { CatalogPricingService } from '../products/catalog-pricing.service';
+import {
+  CatalogPricingService,
+  PricedQuoteResult,
+  QuoteResult,
+} from '../products/catalog-pricing.service';
 import {
   DispatchPlan,
   DispatchPlanStatus,
@@ -808,17 +812,19 @@ export class OrdersService {
       paperSpecs,
       threeDSpecs,
     });
-    const quote = await this.catalogPricingService.quote({
-      items: [
-        {
-          categorySlug: String(orderData.category ?? ''),
-          quantity: Number(orderData.quantity ?? 1),
-          specs: selectedSpecs,
-          addonIds: addonIds ?? [],
-        },
-      ],
-      deliveryOption: orderData.deliveryOption,
-    });
+    const quote = this.requireLegacyPricedQuote(
+      await this.catalogPricingService.quote({
+        items: [
+          {
+            categorySlug: String(orderData.category ?? ''),
+            quantity: Number(orderData.quantity ?? 1),
+            specs: selectedSpecs,
+            addonIds: addonIds ?? [],
+          },
+        ],
+        deliveryOption: orderData.deliveryOption,
+      }),
+    );
     const quoteItem = quote.items[0];
     orderData.totalPrice = quote.subtotal;
     orderData.category = quoteItem.categorySlug;
@@ -942,6 +948,17 @@ export class OrdersService {
     return this.catalogPricingService.quote(dto);
   }
 
+  private requireLegacyPricedQuote(quote: QuoteResult): PricedQuoteResult {
+    if ('pricingStatus' in quote) {
+      throw new BadRequestException({
+        code: 'RFQ_ENDPOINT_REQUIRED',
+        message:
+          'Quote-required products must be submitted through the RFQ endpoint',
+      });
+    }
+    return quote;
+  }
+
   async createBatch(
     userId: number,
     dto: CreateBatchOrderDto,
@@ -980,16 +997,18 @@ export class OrdersService {
       fileMetadataById.set(file.id, file);
     }
 
-    const quote = await this.catalogPricingService.quote({
-      items: normalizedItems.map((item) => ({
-        categorySlug: item.category,
-        quantity: item.quantity,
-        specs: this.selectedSpecsFromLegacy(item),
-        addonIds: item.addonIds ?? [],
-      })),
-      deliveryOption: dto.deliveryOption,
-      speedTier: dto.speedTier,
-    });
+    const quote = this.requireLegacyPricedQuote(
+      await this.catalogPricingService.quote({
+        items: normalizedItems.map((item) => ({
+          categorySlug: item.category,
+          quantity: item.quantity,
+          specs: this.selectedSpecsFromLegacy(item),
+          addonIds: item.addonIds ?? [],
+        })),
+        deliveryOption: dto.deliveryOption,
+        speedTier: dto.speedTier,
+      }),
+    );
     const subtotal = quote.subtotal;
     // Client totals are display hints only. Checkout charges are authoritative
     // on the server so a direct request cannot underpay a credit order.

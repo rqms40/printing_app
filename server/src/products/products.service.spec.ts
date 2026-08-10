@@ -2,12 +2,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, ConflictException } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { ProductsService } from './products.service';
 import { CatalogReadService } from './catalog-read.service';
+import { CreateCategoryDto } from './dto/create-category.dto';
 import { ProductCategory } from './entities/product-category.entity';
 import { ProductSpecDefinition } from './entities/product-spec-definition.entity';
 import { ProductSpecOption } from './entities/product-spec-option.entity';
 import { ServiceAddon } from './entities/service-addon.entity';
+import { PricingModel } from './enums/catalog.enums';
 
 const mockCatRepo = () => ({
   find: jest.fn(),
@@ -52,6 +56,7 @@ describe('ProductsService', () => {
   let optRepo: ReturnType<typeof mockOptRepo>;
   let catRepo: ReturnType<typeof mockCatRepo>;
   let specRepo: ReturnType<typeof mockSpecRepo>;
+  let catalogReadService: { getPublicCategoryBySlug: jest.Mock };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -75,7 +80,10 @@ describe('ProductsService', () => {
         },
         {
           provide: CatalogReadService,
-          useValue: { getPublicCatalog: jest.fn() },
+          useValue: {
+            getPublicCatalog: jest.fn(),
+            getPublicCategoryBySlug: jest.fn(),
+          },
         },
       ],
     }).compile();
@@ -84,6 +92,46 @@ describe('ProductsService', () => {
     catRepo = module.get(getRepositoryToken(ProductCategory));
     specRepo = module.get(getRepositoryToken(ProductSpecDefinition));
     optRepo = module.get(getRepositoryToken(ProductSpecOption));
+    catalogReadService = module.get(CatalogReadService);
+  });
+
+  describe('getCategoryPricing', () => {
+    it('returns pending pricing metadata instead of exposing an RFQ zero base rate', async () => {
+      catalogReadService.getPublicCategoryBySlug.mockResolvedValue({
+        id: 10,
+        name: 'Flyers',
+        slug: 'flyers',
+        description: 'Single-sheet promotional printing.',
+        mobileDescription: 'Single-sheet promotional printing.',
+        examples: ['Single sheets', 'Event promos'],
+        groupSlug: 'marketing-promo',
+        groupName: 'Marketing & Promotional Collateral',
+        groupDescription: 'Best for businesses, startups, and events.',
+        groupSortOrder: 1,
+        icon: null,
+        fileProcessingType: 'document',
+        pricingModel: PricingModel.QUOTE_REQUIRED,
+        baseRate: 0,
+        quantityUnit: 'copy',
+        maxFileSizeMb: 100,
+        allowedExtensions: ['pdf'],
+        specs: [],
+        addons: [],
+      });
+
+      const result = await service.getCategoryPricing('flyers');
+
+      expect(result).toMatchObject({
+        group_slug: 'marketing-promo',
+        group_name: 'Marketing & Promotional Collateral',
+        group_description: 'Best for businesses, startups, and events.',
+        group_sort_order: 1,
+        examples: ['Single sheets', 'Event promos'],
+        pricing_model: 'quote_required',
+        pricing_status: 'pending_quote',
+        base_rate: null,
+      });
+    });
   });
 
   describe('createCategory', () => {
@@ -113,6 +161,107 @@ describe('ProductsService', () => {
       });
       expect(result.slug).toBe('paper');
       expect(catRepo.save).toHaveBeenCalledTimes(1);
+    });
+
+    it('accepts complete active RFQ group metadata and an internal zero base rate', async () => {
+      const dto = {
+        slug: 'flyers',
+        name: 'Flyers',
+        description: 'Single-sheet promotional printing.',
+        groupSlug: 'marketing-promo',
+        groupName: 'Marketing & Promotional Collateral',
+        groupDescription: 'Best for businesses, startups, and events.',
+        groupSortOrder: 1,
+        examples: ['Single sheets', 'Event promos'],
+        pricingModel: PricingModel.QUOTE_REQUIRED,
+        baseRate: 0,
+        maxFileSizeMb: 100,
+        allowedExtensions: '["pdf","png"]',
+        isActive: true,
+        sortOrder: 1,
+      };
+      const validationErrors = await validate(
+        plainToInstance(CreateCategoryDto, dto),
+      );
+      expect(validationErrors).toEqual([]);
+      catRepo.findOne.mockResolvedValue(null);
+      catRepo.create.mockReturnValue(dto);
+      catRepo.save.mockResolvedValue({ id: 10, ...dto });
+
+      const result = await service.createCategory(dto);
+
+      expect(result).toMatchObject({
+        pricingModel: PricingModel.QUOTE_REQUIRED,
+        baseRate: 0,
+        groupSlug: 'marketing-promo',
+        groupName: 'Marketing & Promotional Collateral',
+        groupDescription: 'Best for businesses, startups, and events.',
+        groupSortOrder: 1,
+        examples: ['Single sheets', 'Event promos'],
+      });
+    });
+
+    it('rejects a new active RFQ product with incomplete group metadata', async () => {
+      catRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.createCategory({
+          slug: 'flyers',
+          name: 'Flyers',
+          groupSlug: 'marketing-promo',
+          pricingModel: PricingModel.QUOTE_REQUIRED,
+          baseRate: 0,
+          maxFileSizeMb: 100,
+          allowedExtensions: '["pdf"]',
+          isActive: true,
+        } as any),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'RFQ_GROUP_METADATA_REQUIRED',
+        }),
+      });
+      expect(catRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('keeps numeric pricing models on a positive base rate', async () => {
+      catRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.createCategory({
+          slug: 'paper-v2',
+          name: 'Paper v2',
+          pricingModel: PricingModel.PER_PAGE_MODIFIERS,
+          baseRate: 0,
+          maxFileSizeMb: 50,
+          allowedExtensions: '["pdf"]',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('updateCategory', () => {
+    it('rejects activating an RFQ product whose resulting group metadata is incomplete', async () => {
+      catRepo.findOneOrFail.mockResolvedValue({
+        id: 10,
+        slug: 'flyers',
+        name: 'Flyers',
+        pricingModel: PricingModel.QUOTE_REQUIRED,
+        baseRate: 0,
+        isActive: false,
+        groupSlug: null,
+        groupName: null,
+        groupDescription: null,
+        groupSortOrder: null,
+      });
+
+      await expect(
+        service.updateCategory(10, { isActive: true }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          code: 'RFQ_GROUP_METADATA_REQUIRED',
+        }),
+      });
+      expect(catRepo.update).not.toHaveBeenCalled();
     });
   });
 
