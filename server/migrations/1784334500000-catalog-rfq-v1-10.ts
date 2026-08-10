@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { upsertCatalogV110 } from '../src/products/catalog-v1-10.persistence';
 
 type DuplicateCapabilityRow = {
   id: number | string;
@@ -16,9 +17,9 @@ type CapabilityDuplicateGroup = {
 /**
  * Add the v1.10 browsing-group and RFQ persistence contract.
  *
- * Catalog rows/specs are intentionally left to the deterministic persistence
- * helper introduced in Task 3. This migration only prepares the schema and
- * retires the two legacy entry points without deleting historical records.
+ * Catalog rows/specs are persisted through the same deterministic helper used
+ * by the fresh seed. Historical records are retained and retired entry points
+ * are deactivated rather than deleted.
  */
 export class CatalogRfqV1101784334500000 implements MigrationInterface {
   name = 'CatalogRfqV1101784334500000';
@@ -132,6 +133,13 @@ export class CatalogRfqV1101784334500000 implements MigrationInterface {
             `ALTER TABLE "product_categories" ADD COLUMN "${column}" ${definition}`,
           );
         }
+      }
+
+      if (
+        (await queryRunner.hasTable('product_spec_definitions')) &&
+        (await queryRunner.hasTable('product_spec_options'))
+      ) {
+        await upsertCatalogV110(queryRunner);
       }
 
       await queryRunner.query(`
@@ -340,6 +348,17 @@ export class CatalogRfqV1101784334500000 implements MigrationInterface {
     }
 
     if (await queryRunner.hasTable('product_categories')) {
+      await queryRunner.query(`
+        UPDATE "product_categories"
+        SET "is_active" = false
+        WHERE "group_slug" IN (
+          'marketing-promo',
+          'corporate-merch',
+          'awards-signages',
+          'specialized-prototyping'
+        )
+      `);
+
       if (
         await queryRunner.hasTable('catalog_v1_10_legacy_activation_snapshot')
       ) {

@@ -162,24 +162,16 @@ describe('seed script', () => {
     expect(seedSource).toContain('[\n    false,\n  ]');
   });
 
-  it('seeds dynamic product catalog tables', () => {
+  it('delegates catalog persistence to the versioned v1.10 upsert', () => {
     const seedSource = readFileSync(join(__dirname, 'seed.ts'), 'utf8');
 
-    expect(seedSource).toContain('product_categories');
-    expect(seedSource).toContain('product_spec_definitions');
-    expect(seedSource).toContain('product_spec_options');
-    expect(seedSource).toContain('order_item_spec_values');
-    expect(seedSource).toContain('per_page_modifiers');
-    expect(seedSource).toContain('base_plus_material_estimate');
-    expect(seedSource).toContain('"tif","tiff"');
-  });
-
-  it('seeds print scaling as a paper catalog option', () => {
-    const seedSource = readFileSync(join(__dirname, 'seed.ts'), 'utf8');
-
-    expect(seedSource).toContain("label: 'Print Mode'");
-    expect(seedSource).toContain("label: 'Fit to Scale'");
-    expect(seedSource).toContain("label: 'Actual Size'");
+    expect(seedSource).toContain('import { upsertCatalogV110 }');
+    expect(seedSource).toContain('await upsertCatalogV110(ds)');
+    expect(seedSource).not.toContain("slug, 'paper'");
+    expect(seedSource).not.toContain("slug, '3d'");
+    expect(seedSource).not.toContain("category: 'paper'");
+    expect(seedSource).not.toContain("category: '3d'");
+    expect(seedSource.match(/subtitle: 'Quote required'/g)).toHaveLength(5);
   });
 
   it('seeds accounts with zero orders and no delivery fixtures', () => {
