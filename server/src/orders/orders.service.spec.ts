@@ -5793,6 +5793,7 @@ describe('OrdersService.submitRfq', () => {
           inputType: InputType.TEXT,
           valueType: ValueType.STRING,
           isRequired: true,
+          isActive: true,
           pricingRole: PricingRole.NONE,
           defaultValue: null,
           minValue: null,
@@ -5936,7 +5937,12 @@ describe('OrdersService.submitRfq', () => {
           ProductSpecOption: {
             findBy: jest.fn(async () =>
               products.flatMap((entry) =>
-                entry.specs.flatMap((spec) => spec.options),
+                entry.specs.flatMap((spec) =>
+                  spec.options.map((option) => ({
+                    ...option,
+                    specDefinitionId: spec.id,
+                  })),
+                ),
               ),
             ),
           },
@@ -5959,7 +5965,16 @@ describe('OrdersService.submitRfq', () => {
                 })),
               );
             }
-            if (sql.includes('FROM product_spec_options')) return [];
+            if (sql.includes('FROM product_spec_options')) {
+              return products.flatMap((entry) =>
+                entry.specs.flatMap((spec) =>
+                  spec.options.map((option) => ({
+                    id: option.id,
+                    spec_definition_id: spec.id,
+                  })),
+                ),
+              );
+            }
             if (sql.includes('pg_advisory_xact_lock')) return [];
             return [{ max_batch_ref: 10020, max_order_ref: 10030 }];
           }),
@@ -6266,5 +6281,75 @@ describe('OrdersService.submitRfq', () => {
     );
     expect(harness.files.resolveCatalogArtwork).not.toHaveBeenCalled();
     expect(harness.durable.orders).toEqual([]);
+  });
+
+  it('omits a required spec deactivated after prevalidation', async () => {
+    const locked = makeProduct(11, 'flyers', 'size');
+    locked.specs[0].isActive = false;
+    const harness = buildHarness([locked], [flyers]);
+
+    const result = await harness.service.submitRfq(1, request());
+
+    expect(result.orders[0].items[0].specValues).toEqual([]);
+    expect(harness.durable.specs).toEqual([]);
+  });
+
+  it('rejects an option deactivated after prevalidation without a snapshot', async () => {
+    const makeSelectProduct = (optionActive: boolean) =>
+      makeProduct(11, 'flyers', 'size', {
+        specs: [
+          {
+            ...flyers.specs[0],
+            inputType: InputType.SELECT,
+            options: [
+              {
+                id: 111,
+                value: 'A5',
+                label: 'A5 paper',
+                isActive: optionActive,
+              } as never,
+            ],
+          },
+        ],
+      });
+    const harness = buildHarness(
+      [makeSelectProduct(false)],
+      [makeSelectProduct(true)],
+    );
+
+    await expect(harness.service.submitRfq(1, request())).rejects.toMatchObject(
+      {
+        response: expect.objectContaining({ code: 'SPEC_OPTION_INACTIVE' }),
+      },
+    );
+    expect(harness.durable.specs).toEqual([]);
+  });
+
+  it('preserves deterministic active spec order and exact snapshots', async () => {
+    const product = makeProduct(11, 'flyers', 'later', {
+      specs: [
+        { ...flyers.specs[0], id: 112, key: 'later', label: 'Later' },
+        { ...flyers.specs[0], id: 111, key: 'earlier', label: 'Earlier' },
+      ],
+    });
+    const harness = buildHarness([product], [product]);
+
+    await harness.service.submitRfq(
+      1,
+      request([{ ...firstItem(), specs: { earlier: 'one', later: 'two' } }]),
+    );
+
+    expect(harness.durable.specs).toEqual([
+      expect.objectContaining({
+        specDefinitionId: 111,
+        specKey: 'earlier',
+        value: 'one',
+      }),
+      expect.objectContaining({
+        specDefinitionId: 112,
+        specKey: 'later',
+        value: 'two',
+      }),
+    ]);
   });
 });

@@ -75,6 +75,7 @@ export async function lockRfqCatalog(
 
   const optionsBySpec = new Map<number, ProductSpecOption[]>();
   for (const option of options.sort((a, b) => a.id - b.id)) {
+    if (!option.isActive) continue;
     const list = optionsBySpec.get(option.specDefinitionId) ?? [];
     list.push(option);
     optionsBySpec.set(option.specDefinitionId, list);
@@ -82,6 +83,7 @@ export async function lockRfqCatalog(
   const specsByCategory = new Map<number, ProductSpecDefinition[]>();
   for (const spec of specs.sort((a, b) => a.id - b.id)) {
     spec.options = optionsBySpec.get(spec.id) ?? [];
+    if (!spec.isActive) continue;
     const list = specsByCategory.get(spec.categoryId) ?? [];
     list.push(spec);
     specsByCategory.set(spec.categoryId, list);

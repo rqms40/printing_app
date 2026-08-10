@@ -39,12 +39,12 @@ describe('RFQ deterministic locking', () => {
             ];
           if (entity.name === 'ProductSpecDefinition')
             return [
-              { id: 10, categoryId: 1 },
-              { id: 20, categoryId: 2 },
+              { id: 10, categoryId: 1, isActive: true },
+              { id: 20, categoryId: 2, isActive: true },
             ];
           return [
-            { id: 100, specDefinitionId: 10 },
-            { id: 200, specDefinitionId: 20 },
+            { id: 100, specDefinitionId: 10, isActive: true },
+            { id: 200, specDefinitionId: 20, isActive: true },
           ];
         }),
       })),
@@ -68,6 +68,49 @@ describe('RFQ deterministic locking', () => {
       expect(sql).not.toMatch(/\bJOIN\b/i);
     }
     expect(result.get('flyers')?.specs[0].options[0].id).toBe(100);
+  });
+
+  it('locks inactive rows but excludes them from the validation graph', async () => {
+    const query = jest
+      .fn()
+      .mockResolvedValueOnce([{ id: 1, slug: 'flyers' }])
+      .mockResolvedValueOnce([
+        { id: 10, category_id: 1 },
+        { id: 11, category_id: 1 },
+      ])
+      .mockResolvedValueOnce([
+        { id: 100, spec_definition_id: 10 },
+        { id: 101, spec_definition_id: 10 },
+        { id: 110, spec_definition_id: 11 },
+      ]);
+    const manager = {
+      query,
+      getRepository: jest.fn((entity: { name: string }) => ({
+        findBy: jest.fn(async () => {
+          if (entity.name === 'ProductCategory')
+            return [{ id: 1, slug: 'flyers' }];
+          if (entity.name === 'ProductSpecDefinition')
+            return [
+              { id: 11, categoryId: 1, key: 'retired', isActive: false },
+              { id: 10, categoryId: 1, key: 'size', isActive: true },
+            ];
+          return [
+            { id: 101, specDefinitionId: 10, value: 'old', isActive: false },
+            { id: 110, specDefinitionId: 11, value: 'retired', isActive: true },
+            { id: 100, specDefinitionId: 10, value: 'a5', isActive: true },
+          ];
+        }),
+      })),
+    };
+
+    const result = await lockRfqCatalog(manager as never, ['flyers']);
+
+    expect(query).toHaveBeenNthCalledWith(2, RFQ_SPEC_LOCK_SQL, [[1]]);
+    expect(query).toHaveBeenNthCalledWith(3, RFQ_OPTION_LOCK_SQL, [[10, 11]]);
+    expect(result.get('flyers')?.specs.map(({ id }) => id)).toEqual([10]);
+    expect(result.get('flyers')?.specs[0].options.map(({ id }) => id)).toEqual([
+      100,
+    ]);
   });
 
   it('deduplicates artwork and resolves unique files in numeric order', async () => {

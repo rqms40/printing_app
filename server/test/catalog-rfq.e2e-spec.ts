@@ -47,6 +47,14 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
       expect(result.get('rfq-round-flyers')?.specs[0].options[0].value).toBe(
         'a5',
       );
+      expect(
+        result.get('rfq-round-flyers')?.specs.map(({ key }) => key),
+      ).toEqual(['size']);
+      expect(
+        result
+          .get('rfq-round-flyers')
+          ?.specs[0].options.map(({ value }) => value),
+      ).toEqual(['a5']);
     } finally {
       await dataSource.destroy();
     }
@@ -146,12 +154,17 @@ describe('catalog RFQ PostgreSQL locks (e2e)', () => {
     await dataSource.query(`
       INSERT INTO product_spec_definitions
         (id, category_id, key, label, input_type, value_type, is_required, is_active)
-      VALUES (900003, 900002, 'size', 'Size', 'select', 'string', true, true)
+      VALUES
+        (900003, 900002, 'size', 'Size', 'select', 'string', true, true),
+        (900005, 900002, 'retired', 'Retired required', 'text', 'string', true, false)
     `);
     await dataSource.query(`
       INSERT INTO product_spec_options
         (id, spec_definition_id, label, value, is_active)
-      VALUES (900004, 900003, 'A5', 'a5', true)
+      VALUES
+        (900004, 900003, 'A5', 'a5', true),
+        (900006, 900003, 'Old size', 'old', false),
+        (900007, 900005, 'Retired', 'retired', true)
     `);
   }
 });
