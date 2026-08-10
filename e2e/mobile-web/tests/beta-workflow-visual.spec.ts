@@ -749,6 +749,52 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     );
   });
 
+  test("uses the grouped catalog tutorial without weakening the beta evidence contract", () => {
+    const source = readFileSync(fileURLToPath(import.meta.url), "utf8");
+    const orderFlow = source.slice(
+      source.lastIndexOf("async function placeCustomerOrder"),
+      source.lastIndexOf("async function advanceProductionAndAssign"),
+    );
+    expect(orderFlow).toContain("Browse by product group");
+    expect(orderFlow).toContain("Marketing & Promotional Collateral");
+    expect(orderFlow).toContain("Flyers");
+    expect(orderFlow).toContain("Flyers requirements");
+    expect(orderFlow).not.toContain("Pick Paper Printing");
+    expect(orderFlow).not.toContain("Paper Specs");
+    expect(betaEvidenceSteps).toHaveLength(29);
+    expect(betaEvidenceSteps.slice(20).map(({ id }) => id)).toEqual([
+      21, 22, 23, 24, 25, 26, 27, 28, 29,
+    ]);
+  });
+
+  test("publishes an exact-SHA catalog RFQ visual evidence gate", () => {
+    const e2eRoot = path.resolve(dirname, "..");
+    const repoRoot = path.resolve(e2eRoot, "../..");
+    const packageJson = JSON.parse(
+      readFileSync(path.join(e2eRoot, "package.json"), "utf8"),
+    ) as { scripts: Record<string, string> };
+    const config = readFileSync(
+      path.join(e2eRoot, "playwright.config.ts"),
+      "utf8",
+    );
+    const catalogVisual = readFileSync(
+      path.join(e2eRoot, "tests/catalog-rfq-visual.spec.ts"),
+      "utf8",
+    );
+    const workflow = readFileSync(
+      path.join(repoRoot, ".github/workflows/visual-evidence.yml"),
+      "utf8",
+    );
+    expect(packageJson.scripts["test:catalog:visual"]).toContain(
+      "catalog-rfq-visual.spec.ts",
+    );
+    expect(config).toContain("GRIDGO_RUN_CATALOG_RFQ_VISUAL");
+    expect(catalogVisual).toContain("GRIDGO_RUN_CATALOG_RFQ_VISUAL");
+    expect(workflow).toContain('GRIDGO_RUN_CATALOG_RFQ_VISUAL: "1"');
+    expect(workflow).toContain("npm run test:catalog:visual");
+    expect(workflow).toContain('"commitSha": os.environ["EXPECTED_SHA"]');
+  });
+
   test("accepts only the intended later-stop privacy denial", () => {
     expect(() =>
       assertExpectedPrivacyDenial(
@@ -968,9 +1014,7 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
       path.resolve(dirname, "../playwright.config.ts"),
       "utf8",
     );
-    expect(config).toContain(
-      "timeout: visualWorkflow ? 30 * 60_000 : 60_000",
-    );
+    expect(config).toContain("timeout: visualWorkflow ? 30 * 60_000 : 60_000");
     const source = readFileSync(fileURLToPath(import.meta.url), "utf8");
     const liveJourney = source.slice(
       source.lastIndexOf(
@@ -1003,9 +1047,7 @@ test.describe("GRIDGO visual beta workflow harness contract", () => {
     expect(restoredFlow).toContain(
       "/Good morning|Catch the next batch|GRIDGO Credits|Delivery Status/i",
     );
-    expect(restoredFlow).toMatch(
-      /toHaveURL\(\s*\/#\\\/customer\\\/home/,
-    );
+    expect(restoredFlow).toMatch(/toHaveURL\(\s*\/#\\\/customer\\\/home/);
     expect(restoredFlow).not.toContain("/Home|Orders|Hello|Hi/i");
   });
 });
@@ -1468,10 +1510,9 @@ async function assertLiveTrackingUi(actor: BetaActorRuntime): Promise<void> {
   // failure screenshot. Bring the customer context forward before asserting
   // the map so the accessibility tree and rendered state describe the same UI.
   await foregroundFlutterPage(actor.page);
-  await expect(actor.page.locator("body")).toContainText(
-    LIVE_TRACKING_STATUS,
-    { timeout: 30_000 },
-  );
+  await expect(actor.page.locator("body")).toContainText(LIVE_TRACKING_STATUS, {
+    timeout: 30_000,
+  });
   const map = actor.page.getByRole("group", {
     name: /^LIVE MAP(?:\s+~\d+\s+min)?$/i,
   });
@@ -1761,9 +1802,12 @@ async function registerCustomerThroughUi(options: {
     // batch tile, the next-batch dialog, or the first-order invitation — and
     // accept whichever one the customer would actually be looking at.
     await expect
-      .poll(async () => (await actor.page.locator("body").textContent()) ?? "", {
-        message: "customer home settled after registration",
-      })
+      .poll(
+        async () => (await actor.page.locator("body").textContent()) ?? "",
+        {
+          message: "customer home settled after registration",
+        },
+      )
       .toMatch(/TODAY|NEXT BATCH|Let's print something/i);
     await capture(run, actor, 3, /TODAY|NEXT BATCH|Let's print something/i, {
       userId,
@@ -1952,18 +1996,31 @@ async function placeCustomerOrder(options: {
   }
   await clickNamed(actor.page, /Got it/);
   await expect(actor.page.locator("body")).toContainText(
-    /Pick Paper Printing for documents, photos, and posters/i,
+    /Browse by product group/i,
   );
-  await clickNamed(actor.page, /Got it/);
+  await clickNamed(actor.page, "Marketing & Promotional Collateral");
+  await expect(actor.page.locator("body")).toContainText(/Choose a product/i);
+  await clickNamed(actor.page, "Flyers");
   await expect(actor.page.locator("body")).toContainText(
-    /Set your paper size, color mode, and copies/i,
+    /Flyers requirements/i,
   );
-  if (name === "Mark") await capture(run, actor, 7, /Paper Specs/i, { userId });
-  await clickNamed(actor.page, /Got it/);
-  await expect(actor.page.locator("body")).toContainText(
-    /Tap Continue when your specs look right/i,
-  );
-  await clickNamed(actor.page, /Got it/);
+  if (name === "Mark")
+    await capture(run, actor, 7, /Flyers requirements/i, { userId });
+  const requiredDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  for (const [label, value] of [
+    ["Dimensions or standard size", "A5"],
+    ["Stock or material", "C2S 100gsm"],
+    ["Color", "Full color"],
+    ["Sides", "2"],
+    ["Finish", "Soft-touch matte"],
+    ["Quantity", "100"],
+    ["Required date", requiredDate],
+  ] as const) {
+    await actor.page.getByLabel(new RegExp(`^${label} \\*`)).fill(value);
+  }
+  await clickNamed(actor.page, "Continue to artwork");
   await expect(actor.page.locator("body")).toContainText(/Upload your file/i);
   // The upload screen heading can paint one frame before its tutorial bubble.
   // Let the overlay mount, then dismiss it when this account receives it.

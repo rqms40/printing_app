@@ -128,3 +128,25 @@ enabled Flutter semantics DOM, but not CanvasKit pixels; every manifest entry
 for an Axe screen records that limitation. Screenshot assertions separately
 cover nonblank content, title/URL identity, overlays, console errors, viewport
 overflow, PNG dimensions, and step-specific durable state.
+
+## Catalog RFQ visual evidence
+
+`tests/catalog-rfq-visual.spec.ts` is the opt-in v1.10 catalog audit. It
+captures Light and Dark group grids, product examples, requirements, pending
+RFQ review, customer quote acceptance, grouped Admin catalog, and dynamic
+Admin order pricing. The Browser plugin is unavailable in this environment,
+so this workflow uses repository Playwright Chromium.
+
+```sh
+GRIDGO_RUN_CATALOG_RFQ_VISUAL=1 \
+MOBILE_WEB_E2E_NO_SERVER=1 \
+MOBILE_WEB_E2E_URL=http://127.0.0.1:8088 \
+GRIDGO_ADMIN_URL=http://127.0.0.1:8189 \
+GRIDGO_ADMIN_PASSWORD=<dev-admin-password> \
+GRIDGO_SEED_CUSTOMER_PASSWORD=<dev-customer-password> \
+npm run test:catalog:visual
+```
+
+Screenshots, sanitized URLs/titles, SHA-256 hashes, the JSON manifest, and
+videos default to `/tmp/gridgo-catalog-rfq-visual/<run-id>`. Override with
+`GRIDGO_CATALOG_RFQ_EVIDENCE_DIR`; never point it into committed source.

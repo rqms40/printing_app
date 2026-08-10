@@ -80,9 +80,9 @@ export const betaEvidenceSteps: readonly BetaEvidenceStep[] = [
   },
   {
     id: 7,
-    slug: "paper-print-selected",
+    slug: "catalog-flyers-selected",
     actor: "mark",
-    assertion: "Paper-print category selected",
+    assertion: "Marketing group and Flyers leaf selected",
   },
   {
     id: 8,
@@ -93,9 +93,9 @@ export const betaEvidenceSteps: readonly BetaEvidenceStep[] = [
   },
   {
     id: 9,
-    slug: "mark-paper-specifications",
+    slug: "mark-catalog-requirements",
     actor: "mark",
-    assertion: "Mark paper specifications completed",
+    assertion: "Mark catalog requirements completed",
   },
   {
     id: 10,
@@ -603,10 +603,10 @@ export async function captureStep(options: {
     )
     .toBe(0);
   await expect
-    .poll(
-      () => visibleCount(".ant-message-notice, .ant-notification-notice"),
-      { message: "accepted evidence transient notifications", timeout: 15_000 },
-    )
+    .poll(() => visibleCount(".ant-message-notice, .ant-notification-notice"), {
+      message: "accepted evidence transient notifications",
+      timeout: 15_000,
+    })
     .toBe(0);
   expect(
     relevantConsoleErrors(console),

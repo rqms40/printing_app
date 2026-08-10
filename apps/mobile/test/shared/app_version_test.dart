@@ -12,7 +12,9 @@ void main() {
     ).firstMatch(pubspec);
 
     expect(match, isNotNull);
-    expect(AppVersion.version, match!.group(1));
+    expect(match!.group(1), '1.10.0');
+    expect(match.group(2), '26');
+    expect(AppVersion.version, match.group(1));
     expect(AppVersion.buildNumber, match.group(2));
     expect(AppVersion.display, 'Version ${match.group(1)}');
   });
