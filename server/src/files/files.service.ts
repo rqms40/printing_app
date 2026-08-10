@@ -36,6 +36,7 @@ import {
 import { removeUploadedTempFile } from './upload-temp-file';
 import { ProductCategory } from '../products/entities/product-category.entity';
 import { CatalogUploadPolicyService } from './catalog-upload-policy.service';
+import { PendingUploadCleanupService } from './pending-upload-cleanup.service';
 
 @Injectable()
 export class FilesService {
@@ -49,6 +50,7 @@ export class FilesService {
     private readonly storageService: StorageService,
     private readonly analysisService: FileAnalysisService,
     private readonly catalogUploadPolicy: CatalogUploadPolicyService,
+    private readonly pendingUploadCleanup: PendingUploadCleanupService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -62,6 +64,7 @@ export class FilesService {
     try {
       const normalizedPurpose = this.normalizeUploadPurpose(purpose);
       const fileExt = extname(file.originalname).toLowerCase();
+      const isThreeDFile = THREE_D_EXTENSIONS.includes(fileExt);
       let catalogProductSlug: string | null = null;
       if (normalizedPurpose === FilePurpose.CATALOG_ARTWORK) {
         if (!Number.isInteger(uploadedBy)) {
@@ -87,7 +90,6 @@ export class FilesService {
         if (!fileTypeAllowed) {
           throw new BadRequestException('File type not allowed');
         }
-        const isThreeDFile = THREE_D_EXTENSIONS.includes(fileExt);
         const maxSizeBytes = isThreeDFile
           ? THREE_D_MAX_FILE_SIZE_BYTES
           : PAPER_MAX_FILE_SIZE_BYTES;
@@ -106,6 +108,11 @@ export class FilesService {
         normalizedPurpose === FilePurpose.PROOF_OF_DELIVERY ||
         normalizedPurpose === FilePurpose.BETA_TESTIMONIAL
       ) {
+        if (isThreeDFile) {
+          throw new BadRequestException(
+            'Evidence upload must contain a valid image',
+          );
+        }
         try {
           const buffer = await this.readUploadBuffer(file);
           evidenceAnalysis = await this.analysisService.analyze(
@@ -133,6 +140,7 @@ export class FilesService {
       const datePath = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
       const objectKey = `uploads/${normalizedPurpose}/${datePath}/${randomUUID()}${fileExt}`;
       createdObjectKeys.push(objectKey);
+      await this.pendingUploadCleanup.plan(objectKey);
 
       // Run the original-file upload concurrently with content analysis.
       // Disk-backed uploads stream to object storage so large files do not sit
@@ -156,7 +164,10 @@ export class FilesService {
       });
 
       const analysisPromise =
-        normalizedPurpose === FilePurpose.CATALOG_ARTWORK
+        // Synchronous 3D analysis can fully materialize/decompress archives.
+        // Keep storage/metadata available, but do not generate bounds/previews
+        // for any 3D upload path until analysis itself is streaming/bounded.
+        isThreeDFile || normalizedPurpose === FilePurpose.CATALOG_ARTWORK
           ? Promise.resolve(null)
           : evidenceAnalysis !== undefined
             ? Promise.resolve(evidenceAnalysis)
@@ -186,6 +197,7 @@ export class FilesService {
       if (analysis?.glbBuffer && analysis.glbBuffer.length > 0) {
         const previewKey = `${objectKey}.preview.glb`;
         createdObjectKeys.push(previewKey);
+        await this.pendingUploadCleanup.plan(previewKey);
         try {
           await this.storageService.upload(
             analysis.glbBuffer,
@@ -197,7 +209,10 @@ export class FilesService {
           this.logger.warn(
             `Preview GLB upload failed for ${objectKey}: ${err}`,
           );
-          await this.compensateCreatedObjects([previewKey]);
+          await this.pendingUploadCleanup.queueCleanupAndReconcile(
+            [previewKey],
+            err,
+          );
           createdObjectKeys.splice(createdObjectKeys.indexOf(previewKey), 1);
         }
       }
@@ -226,6 +241,7 @@ export class FilesService {
       });
       try {
         const saved = await this.fileRepo.save(meta);
+        await this.pendingUploadCleanup.complete(createdObjectKeys);
         createdObjectKeys.length = 0;
         return saved;
       } catch (saveError) {
@@ -234,6 +250,7 @@ export class FilesService {
             where: { objectKey },
           });
           if (committed) {
+            await this.pendingUploadCleanup.complete(createdObjectKeys);
             createdObjectKeys.length = 0;
             return committed;
           }
@@ -241,12 +258,14 @@ export class FilesService {
           this.logger.error(
             `Could not resolve ambiguous metadata save for ${objectKey}; retaining objects for reconciliation (${this.errorLabel(lookupError)})`,
           );
-          createdObjectKeys.length = 0;
         }
         throw saveError;
       }
     } catch (error) {
-      await this.compensateCreatedObjects(createdObjectKeys);
+      await this.pendingUploadCleanup.queueCleanupAndReconcile(
+        createdObjectKeys,
+        error,
+      );
       throw error;
     } finally {
       await removeUploadedTempFile(file);
@@ -304,18 +323,6 @@ export class FilesService {
       'Could not verify catalog artwork storage',
     );
     return file;
-  }
-
-  private async compensateCreatedObjects(objectKeys: string[]): Promise<void> {
-    for (const objectKey of [...objectKeys].reverse()) {
-      try {
-        await this.storageService.delete(objectKey);
-      } catch (cleanupError) {
-        this.logger.error(
-          `Orphan upload cleanup failed for ${objectKey} (${this.errorLabel(cleanupError)})`,
-        );
-      }
-    }
   }
 
   async resolveDeliveryProofFile(

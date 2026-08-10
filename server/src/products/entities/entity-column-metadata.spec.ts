@@ -11,6 +11,7 @@ import { SupplierCapability } from '../../suppliers/entities/supplier-capability
 import { ProductCategory } from './product-category.entity';
 import { ServiceAddon } from './service-addon.entity';
 import { PricingModel } from '../enums/catalog.enums';
+import { PendingFileUpload } from '../../files/entities/pending-file-upload.entity';
 
 function columnOptions(target: object, propertyName: string) {
   return getMetadataArgsStorage().columns.find(
@@ -111,6 +112,24 @@ describe('product entity column metadata', () => {
     expect(columnOptions(OrderItemSpecValue, 'displayValue')?.length).toBe(
       1000,
     );
+  });
+
+  it('maps durable pending upload cleanup state', () => {
+    expect(columnOptions(PendingFileUpload, 'objectKey')).toMatchObject({
+      name: 'object_key',
+      type: 'varchar',
+      length: 512,
+      primary: true,
+    });
+    expect(columnOptions(PendingFileUpload, 'attemptCount')).toMatchObject({
+      name: 'attempt_count',
+      type: 'int',
+      default: 0,
+    });
+    expect(columnOptions(PendingFileUpload, 'nextAttemptAt')).toMatchObject({
+      name: 'next_attempt_at',
+      type: 'timestamptz',
+    });
   });
 
   it('enforces one capability record per supplier/product pair', () => {

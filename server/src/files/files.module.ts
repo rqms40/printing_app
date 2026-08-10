@@ -10,10 +10,16 @@ import { PaperSizeValidatorService } from './paper-size-validator.service';
 import { PrinterProfileModule } from '../printer-profile/printer-profile.module';
 import { ProductCategory } from '../products/entities/product-category.entity';
 import { CatalogUploadPolicyService } from './catalog-upload-policy.service';
+import { PendingFileUpload } from './entities/pending-file-upload.entity';
+import { PendingUploadCleanupService } from './pending-upload-cleanup.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([FileMetadata, ProductCategory]),
+    TypeOrmModule.forFeature([
+      FileMetadata,
+      ProductCategory,
+      PendingFileUpload,
+    ]),
     PrinterProfileModule,
   ],
   controllers: [FilesController],
@@ -24,6 +30,7 @@ import { CatalogUploadPolicyService } from './catalog-upload-policy.service';
     Model3dAnalysisService,
     PaperSizeValidatorService,
     CatalogUploadPolicyService,
+    PendingUploadCleanupService,
   ],
   exports: [FilesService, FileAnalysisService, PaperSizeValidatorService],
 })

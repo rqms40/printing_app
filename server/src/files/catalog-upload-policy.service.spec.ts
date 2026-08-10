@@ -99,28 +99,56 @@ const makeBinaryStl = (extraBytes = 0) => {
 async function make3mf(
   options: {
     modelXml?: string;
+    contentTypesXml?: string;
+    relationshipsXml?: string;
     extras?: Record<string, string>;
     compression?: 'STORE' | 'DEFLATE';
+    comment?: string;
   } = {},
 ): Promise<Buffer> {
   const zip = new JSZip();
   zip.file(
     '[Content_Types].xml',
-    '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>',
+    options.contentTypesXml ??
+      '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>',
   );
   zip.file(
     '_rels/.rels',
-    '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>',
+    options.relationshipsXml ??
+      '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>',
   );
   zip.file('3D/3dmodel.model', options.modelXml ?? VALID_MODEL_XML);
   for (const [name, value] of Object.entries(options.extras ?? {})) {
     zip.file(name, value);
   }
+  zip.comment = options.comment ?? null;
   return zip.generateAsync({
     type: 'nodebuffer',
     compression: options.compression ?? 'DEFLATE',
   });
 }
+
+const findZipRecord = (
+  archive: Buffer,
+  signature: number,
+  entryName?: string,
+): number => {
+  for (let offset = 0; offset <= archive.length - 4; offset += 1) {
+    if (archive.readUInt32LE(offset) !== signature) continue;
+    if (!entryName) return offset;
+    const nameLengthOffset = signature === 0x02014b50 ? 28 : 26;
+    const nameOffset = signature === 0x02014b50 ? 46 : 30;
+    const nameLength = archive.readUInt16LE(offset + nameLengthOffset);
+    if (
+      archive
+        .subarray(offset + nameOffset, offset + nameOffset + nameLength)
+        .toString('utf8') === entryName
+    ) {
+      return offset;
+    }
+  }
+  throw new Error(`ZIP record not found: ${entryName ?? signature}`);
+};
 
 describe('CatalogUploadPolicyService', () => {
   const policy = new CatalogUploadPolicyService();
@@ -209,6 +237,205 @@ describe('CatalogUploadPolicyService', () => {
         makeUpload('model.3mf', 'application/zip', archive),
       ),
     ).not.toThrow();
+  });
+
+  it.each([
+    [
+      'large ASCII STL',
+      model,
+      makeUpload(
+        'large.stl',
+        'model/stl',
+        Buffer.from(
+          `solid large\n${'facet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\n'.repeat(12_000)}endsolid large\n`,
+        ),
+      ),
+    ],
+    [
+      'large OBJ with faces after 1 MiB',
+      model,
+      makeUpload(
+        'large.obj',
+        'model/obj',
+        Buffer.from(
+          `v 0 0 0\nv 1 0 0\nv 0 1 0\n${'# ordinary model comment\n'.repeat(50_000)}f 1 2 3\n`,
+        ),
+      ),
+    ],
+    [
+      'large DXF with EOF after 1 MiB',
+      cad,
+      makeUpload(
+        'large.dxf',
+        'image/vnd.dxf',
+        Buffer.from(
+          `0\nSECTION\n2\nENTITIES\n${'999\nordinary drawing comment\n'.repeat(45_000)}0\nENDSEC\n0\nEOF\n`,
+        ),
+      ),
+    ],
+  ])('accepts structurally valid %s', (_case, category, upload) => {
+    expect(() => policy.validate(category, upload)).not.toThrow();
+  });
+
+  it.each([
+    [
+      'model tags hidden in comments',
+      {
+        modelXml:
+          '<model xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><!-- <resources><object><mesh><vertices><vertex/><vertex/><vertex/></vertices><triangles><triangle/></triangles></mesh></object></resources><build><item/></build> --></model>',
+      },
+    ],
+    [
+      'content-type root hidden in a comment',
+      {
+        contentTypesXml:
+          '<Bogus xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><!-- <Types><Default ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types> --></Bogus>',
+      },
+    ],
+    [
+      'relationship root hidden in a comment',
+      {
+        relationshipsXml:
+          '<Bogus xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><!-- <Relationships><Relationship Target="/3D/3dmodel.model" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships> --></Bogus>',
+      },
+    ],
+    [
+      'DTD and entity declarations',
+      {
+        modelXml: `<!DOCTYPE model [<!ENTITY payload "model">]>${VALID_MODEL_XML}`,
+      },
+    ],
+    [
+      'a model content type mapped to the wrong extension',
+      {
+        contentTypesXml:
+          '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="bogus" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>',
+      },
+    ],
+    [
+      'a model relationship without an Id',
+      {
+        relationshipsXml:
+          '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>',
+      },
+    ],
+    [
+      'a build item referencing a missing mesh object',
+      {
+        modelXml: VALID_MODEL_XML.replace('objectid="1"', 'objectid="999"'),
+      },
+    ],
+  ])('rejects 3MF XML with %s', async (_case, options) => {
+    const archive = await make3mf(options);
+    expect(() =>
+      policy.validate(model, makeUpload('bad.3mf', 'application/zip', archive)),
+    ).toThrow('File content does not match its type');
+  });
+
+  it('accepts a valid ZIP comment containing an EOCD signature', async () => {
+    const archive = await make3mf({
+      comment: `comment-PK\u0005\u0006-${'x'.repeat(40)}`,
+    });
+    expect(() =>
+      policy.validate(
+        model,
+        makeUpload('commented.3mf', 'application/zip', archive),
+      ),
+    ).not.toThrow();
+  });
+
+  it.each([
+    [
+      'trailing polyglot bytes',
+      async () => Buffer.concat([await make3mf(), Buffer.from('MZpolyglot')]),
+    ],
+    [
+      'gap between central directory and EOCD',
+      async () => {
+        const archive = await make3mf();
+        const eocd = findZipRecord(archive, 0x06054b50);
+        return Buffer.concat([
+          archive.subarray(0, eocd),
+          Buffer.from('UNTRACKED-GAP'),
+          archive.subarray(eocd),
+        ]);
+      },
+    ],
+    [
+      'case-folded duplicate entry names',
+      () => make3mf({ extras: { '3d/3DMODEL.MODEL': VALID_MODEL_XML } }),
+    ],
+    [
+      'local and central flag mismatch',
+      async () => {
+        const archive = await make3mf();
+        const local = findZipRecord(archive, 0x04034b50, '[Content_Types].xml');
+        archive.writeUInt16LE(
+          archive.readUInt16LE(local + 6) | 0x0800,
+          local + 6,
+        );
+        return archive;
+      },
+    ],
+    [
+      'unreferenced local and central metadata mismatch',
+      async () => {
+        const archive = await make3mf({
+          extras: { 'Metadata/info.txt': 'ok' },
+        });
+        const local = findZipRecord(archive, 0x04034b50, 'Metadata/info.txt');
+        archive.writeUInt16LE(
+          archive.readUInt16LE(local + 6) | 0x0800,
+          local + 6,
+        );
+        return archive;
+      },
+    ],
+    [
+      'required entry CRC mismatch',
+      async () => {
+        const archive = await make3mf();
+        const central = findZipRecord(archive, 0x02014b50, '3D/3dmodel.model');
+        archive.writeUInt32LE(
+          archive.readUInt32LE(central + 16) ^ 0xffffffff,
+          central + 16,
+        );
+        return archive;
+      },
+    ],
+    [
+      'local and central size mismatch',
+      async () => {
+        const archive = await make3mf();
+        const local = findZipRecord(archive, 0x04034b50, '[Content_Types].xml');
+        archive.writeUInt32LE(archive.readUInt32LE(local + 18) + 1, local + 18);
+        return archive;
+      },
+    ],
+    [
+      'data-descriptor flag without a matching descriptor',
+      async () => {
+        const archive = await make3mf();
+        const entryName = '[Content_Types].xml';
+        const local = findZipRecord(archive, 0x04034b50, entryName);
+        const central = findZipRecord(archive, 0x02014b50, entryName);
+        archive.writeUInt16LE(
+          archive.readUInt16LE(local + 6) | 0x0008,
+          local + 6,
+        );
+        archive.writeUInt16LE(
+          archive.readUInt16LE(central + 8) | 0x0008,
+          central + 8,
+        );
+        archive.fill(0, local + 14, local + 26);
+        return archive;
+      },
+    ],
+  ])('rejects 3MF ZIP with %s', async (_case, archiveFactory) => {
+    const archive = await archiveFactory();
+    expect(() =>
+      policy.validate(model, makeUpload('bad.3mf', 'application/zip', archive)),
+    ).toThrow('File content does not match its type');
   });
 
   it.each([

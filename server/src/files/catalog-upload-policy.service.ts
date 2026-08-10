@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
 import { basename, extname } from 'node:path';
 import { inflateRawSync } from 'node:zlib';
+import { XMLParser, XMLValidator } from 'fast-xml-parser';
 
 import {
   catalogV110ProductPolicy,
@@ -64,10 +65,14 @@ type ZipEntry = {
   name: string;
   flags: number;
   method: number;
+  crc32: number;
   compressedSize: number;
   uncompressedSize: number;
   localOffset: number;
+  centralOffset: number;
 };
+
+type XmlRecord = Record<string, unknown>;
 
 class BoundedReader {
   readonly size: number;
@@ -106,6 +111,20 @@ class BoundedReader {
       throw new BadRequestException('Uploaded file is missing content');
     }
     return result;
+  }
+
+  readHeadAndTail(windowBytes = CONTENT_INSPECTION_BYTES): {
+    head: Buffer;
+    tail: Buffer;
+  } {
+    const headLength = Math.min(this.size, windowBytes);
+    const head = this.read(0, headLength);
+    if (this.size <= headLength) return { head, tail: Buffer.alloc(0) };
+    const tailLength = Math.min(this.size - headLength, windowBytes);
+    return {
+      head,
+      tail: this.read(this.size - tailLength, tailLength),
+    };
   }
 
   close(): void {
@@ -230,10 +249,7 @@ export class CatalogUploadPolicyService {
     if (reader.size === 0) return false;
     if (extension === '.3mf') return this.isValid3mf(reader);
 
-    const content = reader.read(
-      0,
-      Math.min(reader.size, CONTENT_INSPECTION_BYTES),
-    );
+    const { head: content, tail } = reader.readHeadAndTail();
     const ascii = content.toString('latin1');
     switch (extension) {
       case '.pdf':
@@ -263,13 +279,13 @@ export class CatalogUploadPolicyService {
       case '.psd':
         return this.isValidPsd(content);
       case '.stl':
-        return this.isValidStl(content, reader.size);
+        return this.isValidStl(content, tail, reader.size);
       case '.obj':
-        return this.isValidObj(ascii);
+        return this.isValidObj(`${ascii}\n${tail.toString('latin1')}`);
       case '.dwg':
         return /^AC10\d{2}/.test(ascii);
       case '.dxf':
-        return this.isValidDxf(content);
+        return this.isValidDxf(content, tail);
       default:
         return false;
     }
@@ -293,12 +309,15 @@ export class CatalogUploadPolicyService {
     );
   }
 
-  private isValidStl(content: Buffer, size: number): boolean {
+  private isValidStl(content: Buffer, tail: Buffer, size: number): boolean {
     if (size >= 84 && content.length >= 84) {
       const triangles = content.readUInt32LE(80);
       if (triangles > 0 && 84 + triangles * 50 === size) return true;
     }
-    const ascii = content.toString('latin1');
+    const ascii =
+      tail.length > 0
+        ? `${content.toString('latin1')}\n${tail.toString('latin1')}`
+        : content.toString('latin1');
     if (/^\s*solid\b/i.test(ascii)) {
       const facets = ascii.match(/^\s*facet\s+normal\s+/gim)?.length ?? 0;
       const vertices = ascii.match(/^\s*vertex\s+/gim)?.length ?? 0;
@@ -326,12 +345,26 @@ export class CatalogUploadPolicyService {
     return (vertices?.length ?? 0) >= 3 && face === true;
   }
 
-  private isValidDxf(content: Buffer): boolean {
+  private isValidDxf(content: Buffer, tail: Buffer): boolean {
     if (content.subarray(0, BINARY_DXF_MAGIC.length).equals(BINARY_DXF_MAGIC)) {
       return true;
     }
-    const lines = content
-      .toString('latin1')
+    const ascii =
+      tail.length > 0
+        ? `${content.toString('latin1')}\n${tail.toString('latin1')}`
+        : content.toString('latin1');
+    if (tail.length > 0) {
+      return (
+        /(?:^|\r?\n)\s*0\s*\r?\n\s*SECTION\s*(?:\r?\n|$)/i.test(
+          content.toString('latin1'),
+        ) &&
+        /(?:^|\r?\n)\s*0\s*\r?\n\s*ENDSEC\s*(?:\r?\n|$)/i.test(
+          tail.toString('latin1'),
+        ) &&
+        /(?:^|\r?\n)\s*0\s*\r?\n\s*EOF\s*$/i.test(tail.toString('latin1'))
+      );
+    }
+    const lines = ascii
       .replace(/\r/g, '')
       .split('\n')
       .map((line) => line.trim());
@@ -365,39 +398,129 @@ export class CatalogUploadPolicyService {
         entries.get('_rels/.rels'),
         MAX_XML_BYTES,
       ).toString('utf8');
+      const contentTypeRoot = this.xmlRoot(contentTypes, 'Types');
       if (
-        !/<Types\b/i.test(contentTypes) ||
-        !/3dmanufacturing-3dmodel\+xml/i.test(contentTypes) ||
-        !/<Relationships\b/i.test(relationships)
+        contentTypeRoot['@_xmlns'] !==
+        'http://schemas.openxmlformats.org/package/2006/content-types'
       ) {
         return false;
       }
-      const relationship = relationships
-        .match(/<Relationship\b[^>]*>/gi)
-        ?.find((tag) => /Type=["'][^"']*\/3dmodel["']/i.test(tag));
-      const target = relationship?.match(/Target=["']([^"']+)["']/i)?.[1];
-      if (!target) return false;
+      const modelContentType =
+        'application/vnd.ms-package.3dmanufacturing-3dmodel+xml';
+      const relationshipRoot = this.xmlRoot(relationships, 'Relationships');
+      if (
+        relationshipRoot['@_xmlns'] !==
+        'http://schemas.openxmlformats.org/package/2006/relationships'
+      ) {
+        return false;
+      }
+      const relationship = this.xmlArray(relationshipRoot.Relationship).find(
+        (entry) => {
+          const record = this.xmlRecord(entry);
+          return (
+            typeof record?.['@_Id'] === 'string' &&
+            record['@_Id'].trim().length > 0 &&
+            record?.['@_Type'] ===
+              'http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel'
+          );
+        },
+      );
+      const target = this.xmlRecord(relationship)?.['@_Target'];
+      if (typeof target !== 'string') return false;
       const modelName = target.replace(/^\//, '');
       if (!this.isSafeZipName(modelName)) return false;
+      const modelExtension = extname(modelName).slice(1).toLowerCase();
+      const declaresModel =
+        this.xmlArray(contentTypeRoot.Default).some((entry) => {
+          const record = this.xmlRecord(entry);
+          return (
+            record?.['@_ContentType'] === modelContentType &&
+            typeof record['@_Extension'] === 'string' &&
+            record['@_Extension'].toLowerCase() === modelExtension
+          );
+        }) ||
+        this.xmlArray(contentTypeRoot.Override).some((entry) => {
+          const record = this.xmlRecord(entry);
+          return (
+            record?.['@_ContentType'] === modelContentType &&
+            record['@_PartName'] === `/${modelName}`
+          );
+        });
+      if (!declaresModel) return false;
       const model = this.readZipEntry(
         reader,
         entries.get(modelName),
         MAX_MODEL_XML_BYTES,
       ).toString('utf8');
       if (Date.now() - started > MAX_INSPECTION_MS) return false;
-      return (
-        /<model\b[^>]*xmlns=["'][^"']*3dmanufacturing\/core\//i.test(model) &&
-        /<resources\b/i.test(model) &&
-        /<object\b/i.test(model) &&
-        /<mesh\b/i.test(model) &&
-        (model.match(/<vertex\b/gi)?.length ?? 0) >= 3 &&
-        /<triangle\b/i.test(model) &&
-        /<build\b/i.test(model) &&
-        /<item\b/i.test(model)
-      );
+      const modelRoot = this.xmlRoot(model, 'model');
+      if (
+        modelRoot['@_xmlns'] !==
+        'http://schemas.microsoft.com/3dmanufacturing/core/2015/02'
+      ) {
+        return false;
+      }
+      const resources = this.xmlRecord(modelRoot.resources);
+      const build = this.xmlRecord(modelRoot.build);
+      if (!resources || !build || this.xmlArray(build.item).length < 1) {
+        return false;
+      }
+      const meshObjectIds = new Set<string>();
+      for (const object of this.xmlArray(resources.object)) {
+        const objectRecord = this.xmlRecord(object);
+        const objectId = objectRecord?.['@_id'];
+        const mesh = this.xmlRecord(this.xmlRecord(object)?.mesh);
+        const vertices = this.xmlRecord(mesh?.vertices);
+        const triangles = this.xmlRecord(mesh?.triangles);
+        if (
+          typeof objectId === 'string' &&
+          objectId.trim().length > 0 &&
+          this.xmlArray(vertices?.vertex).length >= 3 &&
+          this.xmlArray(triangles?.triangle).length >= 1
+        ) {
+          meshObjectIds.add(objectId);
+        }
+      }
+      return this.xmlArray(build.item).some((item) => {
+        const objectId = this.xmlRecord(item)?.['@_objectid'];
+        return typeof objectId === 'string' && meshObjectIds.has(objectId);
+      });
     } catch {
       return false;
     }
+  }
+
+  private xmlRoot(xml: string, expectedRoot: string): XmlRecord {
+    if (/<!DOCTYPE\b|<!ENTITY\b/i.test(xml)) throw new Error('Unsafe XML');
+    if (XMLValidator.validate(xml) !== true) throw new Error('Invalid XML');
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: '@_',
+      processEntities: false,
+      parseTagValue: false,
+      trimValues: true,
+      maxNestedTags: 64,
+    });
+    const document = this.xmlRecord(parser.parse(xml));
+    if (!document) throw new Error('Invalid XML');
+    const rootNames = Object.keys(document).filter((name) => name !== '?xml');
+    if (rootNames.length !== 1 || rootNames[0] !== expectedRoot) {
+      throw new Error('Unexpected XML root');
+    }
+    const root = this.xmlRecord(document[expectedRoot]);
+    if (!root) throw new Error('Invalid XML root');
+    return root;
+  }
+
+  private xmlRecord(value: unknown): XmlRecord | null {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
+      ? (value as XmlRecord)
+      : null;
+  }
+
+  private xmlArray(value: unknown): unknown[] {
+    if (value == null) return [];
+    return Array.isArray(value) ? value : [value];
   }
 
   private readZipDirectory(reader: BoundedReader): Map<string, ZipEntry> {
@@ -405,7 +528,16 @@ export class CatalogUploadPolicyService {
     const tail = reader.read(reader.size - tailLength, tailLength);
     let eocd = -1;
     for (let index = tail.length - 22; index >= 0; index -= 1) {
-      if (tail.readUInt32LE(index) === ZIP_EOCD_SIGNATURE) {
+      if (
+        tail.readUInt32LE(index) === ZIP_EOCD_SIGNATURE &&
+        index + 22 <= tail.length &&
+        reader.size -
+          tailLength +
+          index +
+          22 +
+          tail.readUInt16LE(index + 20) ===
+          reader.size
+      ) {
         eocd = index;
         break;
       }
@@ -414,6 +546,7 @@ export class CatalogUploadPolicyService {
     const entryCount = tail.readUInt16LE(eocd + 10);
     const centralSize = tail.readUInt32LE(eocd + 12);
     const centralOffset = tail.readUInt32LE(eocd + 16);
+    const absoluteEocdOffset = reader.size - tailLength + eocd;
     if (
       tail.readUInt16LE(eocd + 4) !== 0 ||
       tail.readUInt16LE(eocd + 6) !== 0 ||
@@ -421,12 +554,14 @@ export class CatalogUploadPolicyService {
       entryCount < 1 ||
       entryCount > MAX_ENTRY_COUNT ||
       centralSize > MAX_CENTRAL_DIRECTORY_BYTES ||
-      centralOffset + centralSize > reader.size
+      !Number.isSafeInteger(centralOffset + centralSize) ||
+      centralOffset + centralSize !== absoluteEocdOffset
     ) {
       throw new Error('Unsafe ZIP');
     }
     const central = reader.read(centralOffset, centralSize);
     const entries = new Map<string, ZipEntry>();
+    const normalizedNames = new Set<string>();
     let cursor = 0;
     let totalUncompressed = 0;
     for (let index = 0; index < entryCount; index += 1) {
@@ -438,6 +573,7 @@ export class CatalogUploadPolicyService {
       }
       const flags = central.readUInt16LE(cursor + 8);
       const method = central.readUInt16LE(cursor + 10);
+      const crc32 = central.readUInt32LE(cursor + 16);
       const compressedSize = central.readUInt32LE(cursor + 20);
       const uncompressedSize = central.readUInt32LE(cursor + 24);
       const nameLength = central.readUInt16LE(cursor + 28);
@@ -449,16 +585,20 @@ export class CatalogUploadPolicyService {
       const name = central
         .subarray(cursor + 46, cursor + 46 + nameLength)
         .toString('utf8');
+      const normalizedName = this.normalizedZipName(name);
       totalUncompressed += uncompressedSize;
       const ratio =
         compressedSize === 0 ? Infinity : uncompressedSize / compressedSize;
       if (
         (flags & 1) !== 0 ||
+        (flags & ~(0x0008 | 0x0800)) !== 0 ||
         ![0, 8].includes(method) ||
         !this.isSafeZipName(name) ||
         entries.has(name) ||
+        normalizedNames.has(normalizedName) ||
         uncompressedSize > MAX_ENTRY_UNCOMPRESSED_BYTES ||
         totalUncompressed > MAX_TOTAL_UNCOMPRESSED_BYTES ||
+        localOffset + 30 > centralOffset ||
         (uncompressedSize > 64 * 1024 && ratio > MAX_COMPRESSION_RATIO)
       ) {
         throw new Error('Unsafe ZIP entry');
@@ -467,13 +607,32 @@ export class CatalogUploadPolicyService {
         name,
         flags,
         method,
+        crc32,
         compressedSize,
         uncompressedSize,
         localOffset,
+        centralOffset,
       });
+      normalizedNames.add(normalizedName);
       cursor = end;
     }
     if (cursor !== central.length) throw new Error('Invalid central directory');
+    const localRanges = [...entries.values()]
+      .map((entry) => ({
+        start: entry.localOffset,
+        end: this.validateZipLocalEntry(reader, entry).recordEnd,
+      }))
+      .sort((left, right) => left.start - right.start);
+    if (
+      localRanges[0]?.start !== 0 ||
+      localRanges.at(-1)?.end !== centralOffset ||
+      localRanges.some(
+        (range, index) =>
+          index > 0 && localRanges[index - 1].end !== range.start,
+      )
+    ) {
+      throw new Error('Invalid local ZIP layout');
+    }
     return entries;
   }
 
@@ -484,10 +643,30 @@ export class CatalogUploadPolicyService {
   ): Buffer {
     if (!entry || entry.uncompressedSize > outputLimit)
       throw new Error('Missing ZIP entry');
+    const { dataOffset } = this.validateZipLocalEntry(reader, entry);
+    const compressed = reader.read(dataOffset, entry.compressedSize);
+    const result =
+      entry.method === 0
+        ? compressed
+        : inflateRawSync(compressed, { maxOutputLength: outputLimit + 1 });
+    if (
+      result.length !== entry.uncompressedSize ||
+      result.length > outputLimit ||
+      this.crc32(result) !== entry.crc32
+    ) {
+      throw new Error('Invalid ZIP entry');
+    }
+    return result;
+  }
+
+  private validateZipLocalEntry(
+    reader: BoundedReader,
+    entry: ZipEntry,
+  ): { dataOffset: number; recordEnd: number } {
     const header = reader.read(entry.localOffset, 30);
     if (
       header.readUInt32LE(0) !== ZIP_LOCAL_SIGNATURE ||
-      (header.readUInt16LE(6) & 1) !== 0 ||
+      header.readUInt16LE(6) !== entry.flags ||
       header.readUInt16LE(8) !== entry.method
     ) {
       throw new Error('Invalid ZIP entry');
@@ -499,21 +678,76 @@ export class CatalogUploadPolicyService {
       .read(entry.localOffset + 30, nameLength)
       .toString('utf8');
     if (name !== entry.name) throw new Error('Invalid ZIP entry');
-    const compressed = reader.read(
-      entry.localOffset + 30 + nameLength + extraLength,
-      entry.compressedSize,
-    );
-    const result =
-      entry.method === 0
-        ? compressed
-        : inflateRawSync(compressed, { maxOutputLength: outputLimit + 1 });
+    const dataOffset = entry.localOffset + 30 + nameLength + extraLength;
+    const dataEnd = dataOffset + entry.compressedSize;
     if (
-      result.length !== entry.uncompressedSize ||
-      result.length > outputLimit
+      !Number.isSafeInteger(dataOffset) ||
+      !Number.isSafeInteger(dataEnd) ||
+      dataEnd > entry.centralOffset
     ) {
-      throw new Error('Invalid ZIP entry');
+      throw new Error('Invalid ZIP entry range');
     }
-    return result;
+    const usesDescriptor = (entry.flags & 0x0008) !== 0;
+    const localCrc = header.readUInt32LE(14);
+    const localCompressedSize = header.readUInt32LE(18);
+    const localUncompressedSize = header.readUInt32LE(22);
+    if (
+      (!usesDescriptor &&
+        (localCrc !== entry.crc32 ||
+          localCompressedSize !== entry.compressedSize ||
+          localUncompressedSize !== entry.uncompressedSize)) ||
+      (usesDescriptor &&
+        (![0, entry.crc32].includes(localCrc) ||
+          ![0, entry.compressedSize].includes(localCompressedSize) ||
+          ![0, entry.uncompressedSize].includes(localUncompressedSize)))
+    ) {
+      throw new Error('Inconsistent ZIP entry');
+    }
+    const descriptorLength = usesDescriptor
+      ? this.validateDataDescriptor(reader, entry, dataEnd)
+      : 0;
+    return { dataOffset, recordEnd: dataEnd + descriptorLength };
+  }
+
+  private validateDataDescriptor(
+    reader: BoundedReader,
+    entry: ZipEntry,
+    offset: number,
+  ): number {
+    if (offset + 12 > entry.centralOffset) {
+      throw new Error('Missing ZIP data descriptor');
+    }
+    const first = reader.read(offset, 4).readUInt32LE(0);
+    const hasSignature = first === 0x08074b50;
+    const length = hasSignature ? 16 : 12;
+    if (offset + length > entry.centralOffset) {
+      throw new Error('Invalid ZIP data descriptor');
+    }
+    const descriptor = reader.read(offset, length);
+    const valuesOffset = hasSignature ? 4 : 0;
+    if (
+      descriptor.readUInt32LE(valuesOffset) !== entry.crc32 ||
+      descriptor.readUInt32LE(valuesOffset + 4) !== entry.compressedSize ||
+      descriptor.readUInt32LE(valuesOffset + 8) !== entry.uncompressedSize
+    ) {
+      throw new Error('Invalid ZIP data descriptor');
+    }
+    return length;
+  }
+
+  private crc32(content: Buffer): number {
+    let crc = 0xffffffff;
+    for (const byte of content) {
+      crc ^= byte;
+      for (let bit = 0; bit < 8; bit += 1) {
+        crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+      }
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  private normalizedZipName(name: string): string {
+    return name.normalize('NFC').toLocaleLowerCase('en-US');
   }
 
   private isSafeZipName(name: string): boolean {

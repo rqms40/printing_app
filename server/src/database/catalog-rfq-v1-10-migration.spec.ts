@@ -49,6 +49,8 @@ describe('CatalogRfqV1101784334500000', () => {
     expect(source).toContain('catalog_product_slug');
     expect(source).toContain('catalog_artwork');
     expect(source).toContain('uq_file_metadata_object_key');
+    expect(source).toContain('pending_file_uploads');
+    expect(source).toContain('idx_pending_file_uploads_due');
     expect(source).toContain('uq_supplier_capability_product');
   });
 
@@ -206,6 +208,7 @@ describe('CatalogRfqV1101784334500000', () => {
     expect(sql).toContain('TYPE varchar(120)');
     expect(sql).toContain('activation_snapshot."was_active"');
     expect(sql).toContain('DROP COLUMN "examples"');
+    expect(sql).toContain('DROP TABLE IF EXISTS "pending_file_uploads"');
     expect(sql).toContain(
       `CREATE TYPE "public"."file_metadata_purpose_enum" AS ENUM ('general', 'paper', 'proof_of_delivery', 'beta_testimonial', 'legacy')`,
     );

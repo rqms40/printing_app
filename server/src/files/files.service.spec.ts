@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import JSZip from 'jszip';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import {
   BadRequestException,
@@ -21,6 +22,7 @@ import {
   PricingModel,
 } from '../products/enums/catalog.enums';
 import { CatalogUploadPolicyService } from './catalog-upload-policy.service';
+import { PendingUploadCleanupService } from './pending-upload-cleanup.service';
 
 const mockFileRepo = {
   create: jest.fn(),
@@ -45,6 +47,12 @@ const mockAnalysisService = {
 
 const mockCategoryRepo = {
   findOne: jest.fn(),
+};
+
+const mockPendingUploadCleanup = {
+  plan: jest.fn(),
+  complete: jest.fn(),
+  queueCleanupAndReconcile: jest.fn(),
 };
 
 const makeFile = (
@@ -97,6 +105,11 @@ describe('FilesService', () => {
     mockAnalysisService.analyze.mockResolvedValue(null);
     mockStorageService.objectExists.mockResolvedValue(true);
     mockCategoryRepo.findOne.mockResolvedValue(null);
+    mockPendingUploadCleanup.plan.mockResolvedValue(undefined);
+    mockPendingUploadCleanup.complete.mockResolvedValue(undefined);
+    mockPendingUploadCleanup.queueCleanupAndReconcile.mockResolvedValue(
+      undefined,
+    );
     transactionQuery = jest.fn().mockResolvedValue([{ referenced: false }]);
     transactionManager = {
       getRepository: jest.fn(() => mockFileRepo),
@@ -119,6 +132,10 @@ describe('FilesService', () => {
         { provide: StorageService, useValue: mockStorageService },
         { provide: FileAnalysisService, useValue: mockAnalysisService },
         CatalogUploadPolicyService,
+        {
+          provide: PendingUploadCleanupService,
+          useValue: mockPendingUploadCleanup,
+        },
         { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
@@ -168,6 +185,9 @@ describe('FilesService', () => {
         ),
         'image/jpeg',
       );
+      expect(
+        mockPendingUploadCleanup.plan.mock.invocationCallOrder[0],
+      ).toBeLessThan(mockStorageService.upload.mock.invocationCallOrder[0]);
       expect(mockFileRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           originalName: 'photo.jpg',
@@ -393,6 +413,25 @@ describe('FilesService', () => {
       },
     );
 
+    it.each(['proof_of_delivery', 'beta_testimonial'])(
+      'rejects a 3MF submitted as %s without reading or analyzing it',
+      async (purpose) => {
+        const file = makeFile({
+          originalname: 'archive.3mf',
+          mimetype: 'application/zip',
+          buffer: Buffer.from('PK\u0003\u0004'),
+        });
+
+        await expect(service.storeMetadata(file, 7, purpose)).rejects.toThrow(
+          'Evidence upload must contain a valid image',
+        );
+
+        expect(mockAnalysisService.analyze).not.toHaveBeenCalled();
+        expect(mockStorageService.upload).not.toHaveBeenCalled();
+        expect(mockPendingUploadCleanup.plan).not.toHaveBeenCalled();
+      },
+    );
+
     it('rejects an arbitrary purpose before writing an object', async () => {
       const file = makeFile();
 
@@ -551,51 +590,71 @@ describe('FilesService', () => {
       );
     });
 
-    it('persists 3D bounds when analyzer returns model3d result', async () => {
+    it.each([
+      ['model.stl', 'application/octet-stream', undefined],
+      ['model.obj', 'model/obj', 'general'],
+      ['model.3mf', 'application/zip', undefined],
+      ['model.glb', 'model/gltf-binary', 'general'],
+      ['model.gltf', 'model/gltf+json', undefined],
+    ])(
+      'never synchronously analyzes accepted 3D upload %s regardless of purpose',
+      async (originalname, mimetype, purpose) => {
+        const file = makeFile({ originalname, mimetype });
+        mockStorageService.upload.mockResolvedValue(`http://x/${originalname}`);
+        mockAnalysisService.analyze.mockResolvedValue({
+          model3dTriangleCount: 12,
+          glbBuffer: Buffer.from('preview'),
+        });
+        mockFileRepo.create.mockImplementation(
+          (value: Partial<FileMetadata>) => value as FileMetadata,
+        );
+        mockFileRepo.save.mockImplementation(
+          async (value: FileMetadata) => value,
+        );
+
+        await service.storeMetadata(file, 1, purpose);
+
+        expect(mockAnalysisService.analyze).not.toHaveBeenCalled();
+        expect(mockFileRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            model3dTriangleCount: null,
+            previewGlbObjectKey: null,
+          }),
+        );
+        expect(mockStorageService.upload).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('stores a high-ratio general 3MF without invoking the ZIP analyzer', async () => {
+      const archive = await new JSZip()
+        .file('payload.txt', 'A'.repeat(6 * 1024 * 1024))
+        .generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
       const file = makeFile({
-        mimetype: 'application/octet-stream',
-        originalname: 'thing.stl',
+        originalname: 'bomb.3mf',
+        mimetype: 'application/zip',
+        buffer: archive,
+        size: archive.length,
       });
-      mockStorageService.upload.mockResolvedValue('http://x/y');
-      mockAnalysisService.analyze.mockResolvedValue({
-        widthPt: null,
-        heightPt: null,
-        widthPx: null,
-        heightPx: null,
-        colorSpace: null,
-        pageCount: null,
-        dpi: null,
-        model3dWidthMm: 50,
-        model3dDepthMm: 60,
-        model3dHeightMm: 70,
-        model3dTriangleCount: 12,
-      });
-      mockFileRepo.create.mockReturnValue({ id: 1 });
-      mockFileRepo.save.mockResolvedValue({ id: 1 });
+      mockStorageService.upload.mockResolvedValue('http://x/bomb.3mf');
+      mockFileRepo.create.mockImplementation(
+        (value: Partial<FileMetadata>) => value as FileMetadata,
+      );
+      mockFileRepo.save.mockImplementation(
+        async (value: FileMetadata) => value,
+      );
 
       await service.storeMetadata(file, 1);
 
-      expect(mockFileRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model3dWidthMm: 50,
-          model3dDepthMm: 60,
-          model3dHeightMm: 70,
-          model3dTriangleCount: 12,
-        }),
-      );
+      expect(mockAnalysisService.analyze).not.toHaveBeenCalled();
+      expect(mockStorageService.upload).toHaveBeenCalledTimes(1);
     });
 
-    it('removes original and preview objects when metadata save fails', async () => {
+    it('removes the original object when metadata save fails', async () => {
       const file = makeFile({
         originalname: 'thing.stl',
         mimetype: 'application/octet-stream',
       });
-      mockStorageService.upload
-        .mockResolvedValueOnce('http://x/thing.stl')
-        .mockResolvedValueOnce('http://x/thing.glb');
-      mockAnalysisService.analyze.mockResolvedValue({
-        glbBuffer: Buffer.from('glb'),
-      });
+      mockStorageService.upload.mockResolvedValue('http://x/thing.stl');
       mockFileRepo.create.mockImplementation(
         (value: Partial<FileMetadata>) => value as FileMetadata,
       );
@@ -607,10 +666,9 @@ describe('FilesService', () => {
       );
 
       const originalKey = mockFileRepo.create.mock.calls[0][0].objectKey;
-      expect(mockStorageService.delete).toHaveBeenCalledWith(
-        `${originalKey}.preview.glb`,
-      );
-      expect(mockStorageService.delete).toHaveBeenCalledWith(originalKey);
+      expect(
+        mockPendingUploadCleanup.queueCleanupAndReconcile,
+      ).toHaveBeenCalledWith([originalKey], expect.any(Error));
     });
 
     it('keeps objects when an ambiguous save actually committed metadata', async () => {
@@ -624,6 +682,7 @@ describe('FilesService', () => {
 
       await expect(service.storeMetadata(makeFile(), 42)).resolves.toBe(saved);
       expect(mockStorageService.delete).not.toHaveBeenCalled();
+      expect(mockPendingUploadCleanup.complete).toHaveBeenCalled();
     });
 
     it('does not delete an ambiguously saved object when reconciliation is unavailable', async () => {
@@ -638,6 +697,9 @@ describe('FilesService', () => {
         'connection lost',
       );
       expect(mockStorageService.delete).not.toHaveBeenCalled();
+      expect(
+        mockPendingUploadCleanup.queueCleanupAndReconcile,
+      ).toHaveBeenCalled();
     });
 
     it('does not mask the save error when cleanup also fails', async () => {
@@ -647,12 +709,16 @@ describe('FilesService', () => {
       );
       mockFileRepo.save.mockRejectedValue(new Error('primary save failure'));
       mockFileRepo.findOne.mockResolvedValue(null);
-      mockStorageService.delete.mockRejectedValue(new Error('cleanup failure'));
+      mockPendingUploadCleanup.queueCleanupAndReconcile.mockResolvedValue(
+        undefined,
+      );
 
       await expect(service.storeMetadata(makeFile(), 42)).rejects.toThrow(
         'primary save failure',
       );
-      expect(mockStorageService.delete).toHaveBeenCalled();
+      expect(
+        mockPendingUploadCleanup.queueCleanupAndReconcile,
+      ).toHaveBeenCalled();
     });
   });
 

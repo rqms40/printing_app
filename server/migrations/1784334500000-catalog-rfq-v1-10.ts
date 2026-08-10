@@ -102,6 +102,24 @@ export class CatalogRfqV1101784334500000 implements MigrationInterface {
   }
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS "pending_file_uploads" (
+        "object_key" varchar(512) PRIMARY KEY,
+        "state" varchar(32) NOT NULL,
+        "attempt_count" integer NOT NULL DEFAULT 0,
+        "last_error" text,
+        "next_attempt_at" TIMESTAMPTZ NOT NULL,
+        "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT "chk_pending_file_uploads_state"
+          CHECK ("state" IN ('planned', 'cleanup_pending'))
+      )
+    `);
+    await queryRunner.query(`
+      CREATE INDEX IF NOT EXISTS "idx_pending_file_uploads_due"
+      ON "pending_file_uploads" ("next_attempt_at")
+    `);
+
     if (await queryRunner.hasTable('product_categories')) {
       await queryRunner.query(`
         CREATE TABLE IF NOT EXISTS "catalog_v1_10_legacy_activation_snapshot" (
@@ -305,6 +323,10 @@ export class CatalogRfqV1101784334500000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
+      DROP TABLE IF EXISTS "pending_file_uploads"
+    `);
+
     if (await queryRunner.hasTable('supplier_capabilities')) {
       await queryRunner.query(`
         ALTER TABLE "supplier_capabilities"
